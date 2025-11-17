@@ -12,7 +12,7 @@ export default function Navbar() {
         <div className="flex items-center justify-center">
           <Image
             src="/logo.svg"
-            alt="Qatchup Logo"
+            alt="Convy Logo"
             width={32}
             height={32}
             className="max-h-6 sm:max-h-8 w-auto object-contain"
