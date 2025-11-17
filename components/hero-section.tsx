@@ -1,3 +1,7 @@
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
+import MacWindow from "./mac-window";
+
 export default function HeroSection() {
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
@@ -19,6 +23,21 @@ export default function HeroSection() {
           <p className="text-[#696969] text-[24px] font-[500] leading-[33.6px] max-w-3xl">
           Convy replaces rigid forms with dynamic chat flows that move like a real convo and feel built just for you.
           </p>
+
+          {/* Create form button */}
+          <div className="flex flex-col items-center mt-6">
+            <Link
+              href="/create"
+              className="rounded-full bg-[#292929] px-[16px] py-[10px] text-[18px] font-medium tracking-[-0.28px] text-[#FAFAFA] transition-colors hover:bg-[#3a3a3a] whitespace-nowrap flex items-center gap-2"
+            >
+              Create a free form
+              <ArrowUpRight size={18} />
+            </Link>
+            <p className="text-sm text-[#696969] mt-2">no credit card required</p>
+          </div>
+
+          {/* Mac Window Demo */}
+          <MacWindow />
         </div>
       </section>
     </div>
