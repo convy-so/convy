@@ -25,9 +25,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="bg-[#FAFAFA]">
       <body
-        className={`${aspekta.variable} font-sans antialiased`}
+        className={`${aspekta.variable} font-sans antialiased bg-[#FAFAFA]`}
       >
         <Navbar />
         {children}
