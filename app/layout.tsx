@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { Fasthand } from "next/font/google";
 import "./globals.css";
-import Navbar from "@/components/navbar";
 
 const aspekta = localFont({
   src: [
@@ -12,6 +12,12 @@ const aspekta = localFont({
     },
   ],
   variable: "--font-aspekta",
+});
+
+const fasthand = Fasthand({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-fasthand",
 });
 
 export const metadata: Metadata = {
@@ -27,9 +33,8 @@ export default function RootLayout({
   return (
     <html lang="en" className="bg-[#FAFAFA]">
       <body
-        className={`${aspekta.variable} font-sans antialiased bg-[#FAFAFA]`}
+        className={`${aspekta.variable} ${fasthand.variable} font-sans antialiased bg-[#FAFAFA]`}
       >
-        <Navbar />
         {children}
       </body>
     </html>

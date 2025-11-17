@@ -4,7 +4,7 @@ import Image from "next/image";
 export default function Navbar() {
   return (
     <nav className="sticky top-0 z-50 w-full bg-[#FAFAFA] pt-4 sm:pt-6">
-      <div className="mx-auto max-w-[1824px] grid h-14 sm:h-16 grid-cols-3 items-center px-4 sm:px-6 lg:px-12">
+      <div className="mx-auto max-w-[1824px] grid h-14 sm:h-16 grid-cols-3 items-center px-[30px]">
         <Link href="/" className="flex items-center">
           <span className="text-lg sm:text-xl font-bold text-foreground">convy</span>
         </Link>
