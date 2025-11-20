@@ -2,12 +2,11 @@ import "server-only";
 import { betterAuth, InferSession, InferUser } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
-import { z } from "zod";
 
 import { db } from "@/db";
 import { authSchema } from "@/db/schema";
 import { env } from "@/lib/env";
-import { sendVerificationEmail } from "@/lib/email";
+import { sendPasswordResetEmail, sendVerificationEmail } from "@/lib/email";
 
 export const auth = betterAuth({
   appName: "Convy",
@@ -23,6 +22,15 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     maxPasswordLength: 64,
     requireEmailVerification: true,
+    resetPasswordTokenExpiresIn: 60 * 60, // 1 hour
+    revokeSessionsOnPasswordReset: true,
+    sendResetPassword: async ({ user, url }) => {
+      await sendPasswordResetEmail({
+        email: user.email,
+        username: user.name,
+        url,
+      });
+    },
   },
   emailVerification: {
     sendOnSignUp: true,
