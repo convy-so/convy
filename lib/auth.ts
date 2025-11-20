@@ -1,4 +1,5 @@
 import "server-only";
+
 import { betterAuth, InferSession, InferUser } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
@@ -22,7 +23,7 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     maxPasswordLength: 64,
     requireEmailVerification: true,
-    resetPasswordTokenExpiresIn: 60 * 60, // 1 hour
+    resetPasswordTokenExpiresIn: 60 * 60,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
       await sendPasswordResetEmail({

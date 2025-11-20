@@ -44,7 +44,6 @@ const redirectToSchema = z
   .min(1)
   .refine((value) => {
     try {
-      // Absolute URLs are valid
       new URL(value);
       return true;
     } catch {
