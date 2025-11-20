@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Authentication & Authorization
 
-## Getting Started
+The project now uses [Better Auth](https://better-auth.com) with the Drizzle adapter on PostgreSQL. Users can:
 
-First, run the development server:
+- Sign up with username + email + password. A verification link is emailed via Resend and they cannot sign in until the email is confirmed.
+- Sign in with email/password or with Google OAuth.
+- Stay signed out of protected areas until `emailVerified` is true. Use the helpers in `lib/auth/session.ts` to gate any server component, route handler or server action.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+### Project structure
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+| File | Purpose |
+| --- | --- |
+| `db/schema.ts` | Drizzle models consumed by Better Auth. Includes unique usernames, roles, accounts, sessions, verification tokens. |
+| `db/index.ts` | Node Postgres pool + Drizzle client singleton. |
+| `lib/auth.ts` | Better Auth initialization (email/password + Google + verification rules + Next.js cookies). |
+| `lib/email.ts` | Resend integration used by Better Auth to deliver verification emails. |
+| `lib/auth/session.ts` | Cached helpers to get the current session or require a verified user. |
+| `app/actions/auth.ts` | Server actions that the UI can call for sign-up, sign-in, Google OAuth, resend verification, and sign-out. |
+| `app/api/auth/[...better-auth]/route.ts` | RSC-compatible API route that proxies Better Auth’s HTTP handler. |
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Copy the sample env file and fill it in:
+   ```bash
+   cp env.sample .env.local
+   ```
+   Required variables:
+   - `DATABASE_URL` – PostgreSQL connection string.
+   - `BETTER_AUTH_SECRET` – long random string used for encryption/cookies.
+   - `BETTER_AUTH_URL` – public HTTPS origin (used when generating email links).
+   - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` – from the Google Cloud OAuth consent screen.
+   - `RESEND_API_KEY`, `EMAIL_FROM` – credentials for sending emails.
 
-## Learn More
+2. Generate SQL from the Drizzle schema and run it against your database:
+   ```bash
+   pnpm drizzle-kit generate
+   pnpm drizzle-kit push
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+3. Start the dev server:
+   ```bash
+   pnpm dev
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Using the server actions
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+All auth interactions happen on the server via Next.js server actions in `app/actions/auth.ts`:
 
-## Deploy on Vercel
+- `emailSignUpAction({ name, username, email, password, rememberMe? })`
+- `emailSignInAction({ email, password, rememberMe? })`
+- `googleSignInAction({ callbackURL?, newUserCallbackURL?, errorCallbackURL? })`
+- `signOutAction()`
+- `resendVerificationEmailAction()`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Each action returns `{ success: boolean, data?: unknown, error?: string }` so the UI can branch without throwing. The UI layer should call these actions, then update routing/UI state.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Protecting routes/features
+
+- Use `getCurrentSession()` for optional hydration-free session access in server components.
+- Use `getVerifiedSession()` to crash early (and surface a 500 or custom error boundary) when an unverified user accesses protected server code. Your UI teammate can wrap this helper to render friendly messaging or redirect elsewhere.
+
+## Testing checklist
+
+- Email password sign-up sends verification (check Resend dashboard or console).
+- Attempting to sign in before verification should fail with `EMAIL_NOT_VERIFIED`.
+- Google sign-in flow redirects to Google and returns with the session cookie set.
+- Hitting the verification link signs the user in automatically (per `autoSignInAfterVerification: true`).
+
+For automated coverage, stub Better Auth by calling the server actions directly and asserting on their JSON responses. Need to test UI flows manually once the frontend is ready.
