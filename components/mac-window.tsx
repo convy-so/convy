@@ -17,7 +17,7 @@ export default function MacWindow() {
           {/* System Message */}
           <div className="flex justify-start">
             <div className="bg-gray-200 rounded-[18px] rounded-tl-[4px] px-3 py-2 max-w-[75%] ">
-              <p className="text-[18px] font-normal text-gray-900 leading-[1.4]">Hi! Ready to register? What's your name?</p>
+              <p className="text-[18px] font-normal text-gray-900 leading-[1.4]">Hi! Ready to register? What&apos;s your name?</p>
             </div>
           </div>
 
@@ -31,7 +31,7 @@ export default function MacWindow() {
           {/* System Message */}
           <div className="flex justify-start">
             <div className="bg-gray-200 rounded-[18px] rounded-tl-[4px] px-3 py-2 max-w-[75%] ">
-              <p className="text-[18px] font-normal text-gray-900 leading-[1.4]">Nice to meet you Sarah! What's your email?</p>
+              <p className="text-[18px] font-normal text-gray-900 leading-[1.4]">Nice to meet you Sarah! What&apos;s your email?</p>
             </div>
           </div>
 
@@ -94,14 +94,14 @@ export default function MacWindow() {
           {/* User Message */}
           <div className="flex justify-end">
             <div className="bg-[#007AFF] rounded-[18px] rounded-tr-[4px] px-3 py-2 max-w-[75%] ">
-              <p className="text-[18px] font-normal text-white leading-[1.4]">Through a friend's recommendation</p>
+              <p className="text-[18px] font-normal text-white leading-[1.4]">Through a friend&apos;s recommendation</p>
             </div>
           </div>
 
           {/* System Message */}
           <div className="flex justify-start">
             <div className="bg-gray-200 rounded-[18px] rounded-tl-[4px] px-3 py-2 max-w-[75%] ">
-              <p className="text-[18px] font-normal text-gray-900 leading-[1.4]">All set! We'll send a confirmation email shortly. See you there! 🎉</p>
+              <p className="text-[18px] font-normal text-gray-900 leading-[1.4]">All set! We&apos;ll send a confirmation email shortly. See you there! 🎉</p>
             </div>
           </div>
 
