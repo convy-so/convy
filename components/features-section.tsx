@@ -9,7 +9,7 @@ import {
 export default function FeaturesSection() {
   return (
     <section className="p-[12px] bg-[#FAFAFA]">
-      <div className="mx-auto max-w-[1920px] py-16 sm:py-20 px-4 sm:px-6 lg:px-12">
+      <div className="mx-auto max-w-[1920px] py-10 sm:py-12 px-4 sm:px-6 lg:px-12">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="text-center mb-12 md:mb-16">
