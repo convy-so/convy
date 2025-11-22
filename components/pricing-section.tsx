@@ -19,14 +19,16 @@ export default function PricingSection() {
           </div>
 
           {/* Pricing Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
             {/* Free Plan Card */}
             <div className="bg-white rounded-[32px] p-8 border border-gray-200">
               <h3 className="text-2xl font-bold text-[#080808] mb-2">Free Plan</h3>
-              <p className="text-sm text-gray-600 mb-4">Get started for free</p>
+              <p className="text-sm text-gray-600 mb-4">
+                Try Convy’s AI magic and see how chat-native forms change your flow.
+              </p>
               <div className="mb-6">
                 <span className="text-5xl font-bold text-[#292929]">$0</span>
-                <span className="text-lg text-gray-600 ml-2">/ per month</span>
+                <span className="text-lg text-gray-600 ml-2">/ mo</span>
               </div>
               <button className="w-full bg-gray-200 text-gray-700 py-3 px-6 rounded-lg font-medium mb-8 hover:bg-gray-300 transition-colors">
                 Get started
@@ -34,97 +36,92 @@ export default function PricingSection() {
               <ul className="space-y-4">
                 <li className="flex items-start gap-3">
                   <FaCheck className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Up to 50 responses per month</span>
+                  <span className="text-[16px] font-medium text-[#26272B]">Limited conversations</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <FaCheck className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Basic form customization</span>
+                  <span className="text-[16px] font-medium text-[#26272B]">
+                    Unlimited responses
+                  </span>
                 </li>
                 <li className="flex items-start gap-3">
                   <FaCheck className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Email notifications</span>
+                  <span className="text-[16px] font-medium text-[#26272B]">AI Form Builder</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <FaCheck className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Basic analytics</span>
+                  <span className="text-[16px] font-medium text-[#26272B]">Chat with Data</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <FaCheck className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
+                  <span className="text-[16px] font-medium text-[#26272B]">Convy branding</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <FaCheck className="w-5 h-5 text-green-500 opacity-60 mt-0.5 flex-shrink-0" />
+                  <span className="text-[16px] font-medium text-gray-400">No integrations</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <FaCheck className="w-5 h-5 text-green-500 opacity-60 mt-0.5 flex-shrink-0" />
+                  <span className="text-[16px] font-medium text-gray-400">
+                    No community support
+                  </span>
                 </li>
               </ul>
             </div>
 
             {/* Pro Plan Card */}
-            <div className="bg-white rounded-[32px] p-8 border-2 border-t-4 border-t-gray-800 border-gray-200">
-              <h3 className="text-2xl font-bold text-[#080808] mb-2">Pro Plan</h3>
-              <p className="text-sm text-gray-600 mb-4">Free trial for 7 days</p>
-              <div className="mb-6">
-                <span className="text-5xl font-bold text-[#292929]">$29</span>
-                <span className="text-lg text-gray-600 ml-2">/ per month</span>
-              </div>
-              <button className="w-full bg-gray-200 text-gray-700 py-3 px-6 rounded-lg font-medium mb-8 hover:bg-gray-300 transition-colors">
-                Coming soon
-              </button>
-              <ul className="space-y-4">
-                <li className="flex items-start gap-3">
-                  <FaCheck className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">All included from Free Plan</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <FaCheck className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Unlimited responses</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <FaCheck className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Advanced customization</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <FaCheck className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">AI-powered insights</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <FaCheck className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Slack integration</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <FaCheck className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Priority support</span>
-                </li>
-              </ul>
-            </div>
-
-            {/* Business Plan Card */}
             <div className="bg-white rounded-[32px] p-8 border border-gray-200">
-              <h3 className="text-2xl font-bold text-[#080808] mb-2">Business Plan</h3>
-              <p className="text-sm text-gray-600 mb-4">Free trial for 7 days</p>
+              <h3 className="text-2xl font-bold text-[#080808] mb-2">Pro Plan</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Go pro to own your chat experience — fully branded, unlimited, and powered by AI.
+              </p>
               <div className="mb-6">
-                <span className="text-5xl font-bold text-[#292929]">$99</span>
-                <span className="text-lg text-gray-600 ml-2">/ per month</span>
+                <span className="text-5xl font-bold text-[#292929]">$25</span>
+                <span className="text-lg text-gray-600 ml-2">/ mo</span>
               </div>
               <button className="w-full bg-gray-200 text-gray-700 py-3 px-6 rounded-lg font-medium mb-8 hover:bg-gray-300 transition-colors">
                 Coming soon
               </button>
               <ul className="space-y-4">
                 <li className="flex items-start gap-3">
-                  <FaCheck className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">All included from Pro Plan</span>
+                  <FaCheck className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                  <span className="text-[16px] font-medium text-[#26272B]">
+                    Unlimited conversations
+                  </span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <FaCheck className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Custom integrations</span>
+                  <FaCheck className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                  <span className="text-[16px] font-medium text-[#26272B]">
+                    Custom domain &amp; email
+                  </span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <FaCheck className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Advanced analytics & reporting</span>
+                  <FaCheck className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                  <span className="text-[16px] font-medium text-[#26272B]">
+                    Unique branding
+                  </span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <FaCheck className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">White-label options</span>
+                  <FaCheck className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                  <span className="text-[16px] font-medium text-[#26272B]">
+                    Unlimited file uploads
+                  </span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <FaCheck className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Dedicated account manager</span>
+                  <FaCheck className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                  <span className="text-[16px] font-medium text-[#26272B]">Voice mode</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <FaCheck className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">24/7 priority support</span>
+                  <FaCheck className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                  <span className="text-[16px] font-medium text-[#26272B]">
+                    Full integrations (Zapier, Notion, Slack, etc.)
+                  </span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <FaCheck className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                  <span className="text-[16px] font-medium text-[#26272B]">
+                    Priority support
+                  </span>
                 </li>
               </ul>
             </div>
