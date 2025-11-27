@@ -1,0 +1,2 @@
+export const MAX_SAMPLE_CONVERSATIONS = 2;
+

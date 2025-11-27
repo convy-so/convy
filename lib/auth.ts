@@ -28,7 +28,7 @@ export const auth = betterAuth({
     sendResetPassword: async ({ user, url }) => {
       await sendPasswordResetEmail({
         email: user.email,
-        username: (user as { username?: string }).username ?? user.name,
+        name: user.name,
         url,
       });
     },
@@ -40,7 +40,7 @@ export const auth = betterAuth({
     sendVerificationEmail: async ({ user, url }) => {
       await sendVerificationEmail({
         email: user.email,
-        username: (user as { username?: string }).username ?? user.name,
+        name: user.name,
         url,
       });
     },
@@ -55,15 +55,6 @@ export const auth = betterAuth({
   user: {
     modelName: "users",
     additionalFields: {
-      username: {
-        type: "string",
-        required: true,
-        sortable: true,
-        transform: {
-          input: (value) =>
-            typeof value === "string" ? value.trim().toLowerCase() : value,
-        },
-      },
       role: {
         type: "string",
         defaultValue: "user",

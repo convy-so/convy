@@ -6,34 +6,41 @@ import { and, eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
-import { generateAIResponse } from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/session";
-import {
-  getSampleConversationSystemPrompt,
-  type SurveyConfig,
-} from "@/lib/prompts";
+import { MAX_SAMPLE_CONVERSATIONS } from "@/lib/surveys";
 
 type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
-const generateSampleConversationSchema = z.object({
+const messageSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string().min(1),
+});
+
+const saveSampleConversationSchema = z.object({
   surveyId: z.string().min(1),
-  feedback: z.string().optional(), // Optional feedback from previous conversation
-  previousConversationNumber: z.number().int().min(1).max(2).optional(),
+  conversationNumber: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_SAMPLE_CONVERSATIONS)
+    .optional(),
+  messages: z.array(messageSchema).min(2),
 });
 
 const confirmSampleConversationSchema = z.object({
   surveyId: z.string().min(1),
-  conversationNumber: z.number().int().min(1).max(3),
+  conversationNumber: z.number().int().min(1).max(MAX_SAMPLE_CONVERSATIONS),
 });
 
 /**
- * Generate a sample conversation for the survey maker to review
- * Maximum of 3 sample conversations allowed
+ * Save the latest sample conversation the survey maker just had with the AI.
+ * The conversation itself is conducted through the streaming endpoint so that
+ * the survey maker experiences the exact same flow as participants.
  */
 export async function generateSampleConversationAction(
-  input: z.infer<typeof generateSampleConversationSchema>
+  input: z.infer<typeof saveSampleConversationSchema>
 ): Promise<
   ActionResult<{
     id: string;
@@ -43,7 +50,7 @@ export async function generateSampleConversationAction(
 > {
   try {
     const session = await getVerifiedSession();
-    const body = generateSampleConversationSchema.parse(input);
+    const body = saveSampleConversationSchema.parse(input);
 
     // Get survey and verify ownership
     const [survey] = await db
@@ -59,96 +66,62 @@ export async function generateSampleConversationAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    // Check if we've reached the maximum number of sample conversations
-    if (survey.sampleConversationCount >= 3) {
+    const conversationNumber =
+      body.conversationNumber ?? survey.sampleConversationCount + 1;
+
+    if (conversationNumber > MAX_SAMPLE_CONVERSATIONS) {
       return {
         success: false,
-        error: "Maximum number of sample conversations (3) has been reached",
+        error: `Maximum number of sample conversations (${MAX_SAMPLE_CONVERSATIONS}) has been reached`,
       };
     }
 
-    // Determine the conversation number
-    const conversationNumber = survey.sampleConversationCount + 1;
-
-    // Get previous conversation feedback if this is not the first one
-    let feedback: string | undefined = body.feedback;
-    if (!feedback && conversationNumber > 1) {
-      const [previousConversation] = await db
-        .select()
-        .from(sampleConversations)
-        .where(
-          and(
-            eq(sampleConversations.surveyId, body.surveyId),
-            eq(sampleConversations.conversationNumber, conversationNumber - 1)
-          )
-        );
-
-      feedback = previousConversation?.feedback ?? undefined;
+    if (conversationNumber > survey.sampleConversationCount + 1) {
+      return {
+        success: false,
+        error: "Sample conversations must be completed sequentially",
+      };
     }
 
-    // Prepare survey config
-    const surveyConfig: SurveyConfig = {
-      goal: survey.goal,
-      type: survey.type,
-      information: survey.information,
-      requiredQuestions: survey.requiredQuestions,
-      metrics: survey.metrics || [],
-    };
+    const [existingConversation] = await db
+      .select()
+      .from(sampleConversations)
+      .where(
+        and(
+          eq(sampleConversations.surveyId, body.surveyId),
+          eq(sampleConversations.conversationNumber, conversationNumber)
+        )
+      );
 
-    // Generate system prompt
-    const systemPrompt = getSampleConversationSystemPrompt(
-      surveyConfig,
-      feedback,
-      conversationNumber
-    );
+    const conversationId = existingConversation?.id ?? nanoid();
 
-    // Generate the sample conversation
-    // We'll simulate a conversation by having the AI generate both sides
-    // Request JSON format for easier parsing
-    const conversationPrompt = `Generate a complete sample conversation between an interviewer (you) and a participant. The conversation should be natural and cover all the required questions organically.
+    if (existingConversation) {
+      await db
+        .update(sampleConversations)
+        .set({
+          messages: body.messages,
+          confirmed: false, // force re-confirmation whenever conversation changes
+        })
+        .where(eq(sampleConversations.id, existingConversation.id));
+    } else {
+      await db.insert(sampleConversations).values({
+        id: conversationId,
+        surveyId: body.surveyId,
+        conversationNumber,
+        messages: body.messages,
+        feedback: null,
+        confirmed: false,
+      });
+    }
 
-IMPORTANT: Return the conversation as a JSON array of message objects. Each message should have:
-- "role": either "user" (for participant) or "assistant" (for interviewer)
-- "content": the message text
-
-Example format:
-[
-  {"role": "assistant", "content": "Hello! Thank you for participating..."},
-  {"role": "user", "content": "Hi, happy to help!"},
-  ...
-]
-
-Make it realistic and engaging, with 8-15 messages total.`;
-
-    const conversationText = await generateAIResponse(
-      conversationPrompt,
-      systemPrompt,
-      {
-        temperature: 0.8,
-        maxTokens: 3000,
-      }
-    );
-
-    // Parse the conversation text into messages
-    const messages = parseConversationText(conversationText);
-
-    // Save the sample conversation
-    const conversationId = nanoid();
-    await db.insert(sampleConversations).values({
-      id: conversationId,
-      surveyId: body.surveyId,
-      conversationNumber,
-      messages,
-      feedback: body.feedback ?? null,
-      confirmed: false,
-    });
-
-    // Update survey status and conversation count
     await db
       .update(surveys)
       .set({
         status: "sample_review",
-        sampleConversationCount: conversationNumber,
+        sampleConversationCount: Math.max(
+          survey.sampleConversationCount,
+          conversationNumber
+        ),
       })
       .where(eq(surveys.id, body.surveyId));
 
@@ -157,15 +130,21 @@ Make it realistic and engaging, with 8-15 messages total.`;
       data: {
         id: conversationId,
         conversationNumber,
-        messages,
+        messages: body.messages,
       },
     };
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return { success: false, error: error.errors[0]?.message ?? "Validation error" };
+      return {
+        success: false,
+        error: error.errors[0]?.message ?? "Validation error",
+      };
     }
     if (error instanceof Error) {
-      if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
         return { success: false, error: error.message };
       }
       return { success: false, error: error.message };
@@ -199,6 +178,20 @@ export async function provideSampleConversationFeedbackAction(
       return { success: false, error: "Unauthorized" };
     }
 
+    const [conversation] = await db
+      .select()
+      .from(sampleConversations)
+      .where(
+        and(
+          eq(sampleConversations.surveyId, surveyId),
+          eq(sampleConversations.conversationNumber, conversationNumber)
+        )
+      );
+
+    if (!conversation) {
+      return { success: false, error: "Conversation not found" };
+    }
+
     // Update the conversation with feedback
     await db
       .update(sampleConversations)
@@ -213,7 +206,10 @@ export async function provideSampleConversationFeedbackAction(
     return { success: true, data: { id: surveyId } };
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
         return { success: false, error: error.message };
       }
       return { success: false, error: error.message };
@@ -257,20 +253,27 @@ export async function confirmSampleConversationAction(
         )
       );
 
-    // Check if all sample conversations are confirmed
-    const confirmedCount = await db
-      .select({ count: sampleConversations.id })
-      .from(sampleConversations)
-      .where(
-        and(
-          eq(sampleConversations.surveyId, body.surveyId),
-          eq(sampleConversations.confirmed, true)
-        )
-      );
+    const [allConversations, confirmedConversations] = await Promise.all([
+      db
+        .select({ id: sampleConversations.id })
+        .from(sampleConversations)
+        .where(eq(sampleConversations.surveyId, body.surveyId)),
+      db
+        .select({ id: sampleConversations.id })
+        .from(sampleConversations)
+        .where(
+          and(
+            eq(sampleConversations.surveyId, body.surveyId),
+            eq(sampleConversations.confirmed, true)
+          )
+        ),
+    ]);
 
-    const canConfirmSurvey = confirmedCount.length === survey.sampleConversationCount;
+    const canConfirmSurvey =
+      allConversations.length > 0 &&
+      confirmedConversations.length === allConversations.length &&
+      allConversations.length <= MAX_SAMPLE_CONVERSATIONS;
 
-    // If all are confirmed, mark survey as confirmed
     if (canConfirmSurvey) {
       await db
         .update(surveys)
@@ -284,10 +287,16 @@ export async function confirmSampleConversationAction(
     };
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return { success: false, error: error.errors[0]?.message ?? "Validation error" };
+      return {
+        success: false,
+        error: error.errors[0]?.message ?? "Validation error",
+      };
     }
     if (error instanceof Error) {
-      if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
         return { success: false, error: error.message };
       }
       return { success: false, error: error.message };
@@ -299,9 +308,7 @@ export async function confirmSampleConversationAction(
 /**
  * Get all sample conversations for a survey
  */
-export async function getSampleConversationsAction(
-  surveyId: string
-): Promise<
+export async function getSampleConversationsAction(surveyId: string): Promise<
   ActionResult<
     Array<{
       id: string;
@@ -338,7 +345,10 @@ export async function getSampleConversationsAction(
     return { success: true, data: conversations };
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
         return { success: false, error: error.message };
       }
       return { success: false, error: error.message };
@@ -352,87 +362,3 @@ export async function getSampleConversationsAction(
  * This is a simplified parser - in production, you might want to use
  * structured output from the AI or a more sophisticated parsing approach
  */
-function parseConversationText(
-  text: string
-): Array<{ role: "user" | "assistant"; content: string }> {
-  // Try to parse JSON format first
-  try {
-    // Look for JSON array in the response
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (
-        Array.isArray(parsed) &&
-        parsed.every(
-          (msg: unknown) =>
-            typeof msg === "object" &&
-            msg !== null &&
-            "role" in msg &&
-            "content" in msg &&
-            (msg.role === "user" || msg.role === "assistant")
-        )
-      ) {
-        return parsed as Array<{ role: "user" | "assistant"; content: string }>;
-      }
-    }
-  } catch {
-    // Fall through to text parsing
-  }
-
-  // Fallback: parse text format
-  // Look for patterns like "Interviewer:" or "Participant:" or "Assistant:" or "User:"
-  const lines = text.split("\n").filter((line) => line.trim());
-  const messages: Array<{ role: "user" | "assistant"; content: string }> = [];
-  let currentRole: "user" | "assistant" | null = null;
-  let currentContent: string[] = [];
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.match(/^(Interviewer|Assistant|AI):/i)) {
-      if (currentRole && currentContent.length > 0) {
-        messages.push({
-          role: currentRole,
-          content: currentContent.join("\n").trim(),
-        });
-      }
-      currentRole = "assistant";
-      currentContent = [trimmed.replace(/^(Interviewer|Assistant|AI):\s*/i, "")];
-    } else if (trimmed.match(/^(Participant|User):/i)) {
-      if (currentRole && currentContent.length > 0) {
-        messages.push({
-          role: currentRole,
-          content: currentContent.join("\n").trim(),
-        });
-      }
-      currentRole = "user";
-      currentContent = [trimmed.replace(/^(Participant|User):\s*/i, "")];
-    } else if (currentRole) {
-      currentContent.push(trimmed);
-    }
-  }
-
-  // Add the last message
-  if (currentRole && currentContent.length > 0) {
-    messages.push({
-      role: currentRole,
-      content: currentContent.join("\n").trim(),
-    });
-  }
-
-  // If parsing failed, create a simple structure
-  if (messages.length === 0) {
-    return [
-      {
-        role: "assistant" as const,
-        content: "Hello! Thank you for participating in this survey. Let's get started.",
-      },
-      {
-        role: "user" as const,
-        content: text.substring(0, 200) || "Sample response",
-      },
-    ];
-  }
-
-  return messages;
-}
-

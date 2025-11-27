@@ -7,6 +7,7 @@ This document explains the server-side implementation of the AI-powered survey a
 ## Architecture
 
 ### Technology Stack
+
 - **Framework**: Next.js 16 (App Router)
 - **Database**: PostgreSQL with Drizzle ORM
 - **AI**: Vercel AI SDK with Google Gemini 2.0 Flash
@@ -14,6 +15,7 @@ This document explains the server-side implementation of the AI-powered survey a
 - **Language**: TypeScript
 
 ### Key Design Principles
+
 1. **Server-Side Only**: All AI processing and data management happens on the server
 2. **Streaming Responses**: Real-time conversation streaming using Vercel AI SDK
 3. **Type Safety**: Full TypeScript with Zod validation
@@ -27,7 +29,7 @@ app/
 ├── actions/                    # Server actions (Next.js server functions)
 │   ├── auth.ts                # Authentication actions (existing)
 │   ├── survey.ts              # Survey CRUD operations
-│   ├── sample-conversation.ts  # Sample conversation generation & feedback
+│   ├── sample-conversation.ts  # Sample conversation storage & feedback
 │   ├── conversation.ts        # Conversation storage & insight generation
 │   ├── analytics.ts           # Analytics generation & retrieval
 │   └── survey-public.ts       # Public survey access (no auth)
@@ -59,9 +61,9 @@ lib/
    - Includes participant limits and shareable links
 
 2. **sample_conversations**
-   - Stores up to 3 sample conversations for survey maker review
-   - Includes feedback and confirmation status
-   - Used to refine the AI's conversation style
+   - Stores up to 2 recorded sample conversations for survey maker review
+   - Includes the actual transcript, feedback, and confirmation status
+   - Used to refine the AI's conversation style before the survey goes live
 
 3. **survey_conversations**
    - Stores actual conversations between AI and participants
@@ -91,33 +93,35 @@ confirmSurveyAction() → Activates survey (draft → active)
 ```
 
 **Process**:
+
 1. Survey maker creates survey with goal, type, information, required questions, metrics
 2. Survey is created with unique shareable link
 3. Status starts as `draft`
 
-### 2. Sample Conversation Generation
+### 2. Sample Conversation Rehearsals
 
-**File**: `app/actions/sample-conversation.ts`
+**Files**: `app/api/surveys/[surveyId]/sample/route.ts`, `app/actions/sample-conversation.ts`
 
 **Process**:
-1. Survey maker requests sample conversation (max 3)
-2. AI generates conversation using survey config + any feedback
-3. Conversation is saved and survey status → `sample_review`
-4. Survey maker can:
-   - Provide feedback on what's missing/needs improvement
-   - Confirm the conversation
-5. After all sample conversations are confirmed → survey can be activated
+
+1. Survey maker launches conversation #1 (same streaming endpoint as participants, but gated by auth and `conversationNumber`)
+2. After finishing the chat, the UI calls `generateSampleConversationAction()` with the recorded transcript to save it
+3. Maker leaves feedback via `provideSampleConversationFeedbackAction()` (e.g., “add follow-ups on pricing”)
+4. Conversation #2 can now be started; the streaming endpoint automatically injects all previous feedback into the system prompt
+5. Once a conversation transcript feels good, the maker confirms it; when all stored rehearsals (max 2) are confirmed the survey is marked as ready
 
 **Key Features**:
-- Iterative refinement (up to 3 iterations)
-- Feedback incorporation
-- JSON-structured conversation parsing
+
+- Interactive rehearsals identical to real participant experience
+- Feedback automatically influences the next rehearsal
+- Hard limit of 2 conversations keeps costs predictable
 
 ### 3. Survey Taking (Participant Flow)
 
 **File**: `app/api/surveys/[surveyId]/chat/route.ts`
 
 **Process**:
+
 1. Participant accesses survey via shareable link
 2. System checks:
    - Survey is `active`
@@ -127,6 +131,7 @@ confirmSurveyAction() → Activates survey (draft → active)
 5. Conversation marked complete when finished
 
 **Streaming**:
+
 - Uses `streamText()` from Vercel AI SDK
 - Returns `DataStreamResponse` for real-time updates
 - Conversation ID tracked in response headers
@@ -136,6 +141,7 @@ confirmSurveyAction() → Activates survey (draft → active)
 **File**: `app/actions/conversation.ts`
 
 **Process**:
+
 1. After conversation completes → `completeConversationAction()`
 2. AI generates:
    - **Summary**: Brief overview of conversation
@@ -144,6 +150,7 @@ confirmSurveyAction() → Activates survey (draft → active)
 3. Data stored in `conversation_insights` table
 
 **AI Models Used**:
+
 - **Conversations**: Gemini 2.0 Flash (fast, cost-effective)
 - **Analysis**: Gemini 2.0 Flash (same model, optimized prompts)
 
@@ -152,6 +159,7 @@ confirmSurveyAction() → Activates survey (draft → active)
 **File**: `app/actions/analytics.ts`
 
 **Process**:
+
 1. Aggregates all completed conversations
 2. AI generates:
    - Overall summary
@@ -166,6 +174,7 @@ confirmSurveyAction() → Activates survey (draft → active)
 **File**: `app/actions/analytics.ts` → `getDashboardDataAction()`
 
 **Returns**:
+
 - Survey metadata
 - Analytics (if generated)
 - Conversation counts
@@ -174,18 +183,21 @@ confirmSurveyAction() → Activates survey (draft → active)
 ## AI Configuration
 
 ### Model Setup
+
 **File**: `lib/ai.ts`
 
 - **Provider**: Google Gemini 2.0 Flash (`@ai-sdk/google`)
 - **Model**: `gemini-2.0-flash-exp`
-- **Configuration**: 
+- **Configuration**:
   - Temperature: 0.7-0.8 (conversations), 0.5 (analysis)
   - Max tokens: 2000-3000 depending on task
 
 ### Prompt Engineering
+
 **File**: `lib/prompts.ts`
 
 **Key Prompts**:
+
 1. **Sample Conversation**: Includes survey config + feedback
 2. **Survey Conversation**: System prompt for actual interviews
 3. **Summary Generation**: Extracts key information
@@ -193,6 +205,7 @@ confirmSurveyAction() → Activates survey (draft → active)
 5. **Overall Analytics**: Aggregated analysis
 
 **Design Principles**:
+
 - Clear instructions for natural conversation
 - Emphasis on covering required questions organically
 - Feedback incorporation for iterative improvement
@@ -211,13 +224,14 @@ confirmSurveyAction() → Activates survey (draft → active)
    - Accepts: `{ conversationId, messages, completed }`
 
 3. **POST `/api/surveys/[surveyId]/sample`**
-   - Streams sample conversations for survey maker
+   - Streams rehearsal conversations for the survey maker (same UX as participants)
    - Requires authentication
-   - Accepts: `{ messages, feedback?, conversationNumber? }`
+   - Accepts: `{ messages, conversationNumber, feedback? }`
 
 ## Server Actions
 
 ### Survey Management
+
 - `createSurveyAction()` - Create new survey
 - `updateSurveyAction()` - Update survey details
 - `getSurveysAction()` - List user's surveys
@@ -225,38 +239,45 @@ confirmSurveyAction() → Activates survey (draft → active)
 - `confirmSurveyAction()` - Activate survey
 
 ### Sample Conversations
-- `generateSampleConversationAction()` - Generate sample (max 3)
+
+- `generateSampleConversationAction()` - Save sample transcript (max 2)
 - `provideSampleConversationFeedbackAction()` - Submit feedback
 - `confirmSampleConversationAction()` - Approve sample
 - `getSampleConversationsAction()` - List all samples
 
 ### Conversations
+
 - `completeConversationAction()` - Mark conversation done + generate insights
 - `generateConversationInsightsAction()` - Generate insights for conversation
 - `getSurveyConversationsAction()` - List all conversations for survey
 - `getConversationAction()` - Get single conversation with insights
 
 ### Analytics
+
 - `generateSurveyAnalyticsAction()` - Generate overall analytics
 - `getSurveyAnalyticsAction()` - Get analytics
 - `getDashboardDataAction()` - Get all dashboard data
 
 ### Public
+
 - `getSurveyByLinkAction()` - Get survey by shareable link (no auth)
 
 ## Data Flow
 
 ### Survey Creation → Activation
+
 ```
 1. createSurveyAction() → draft
-2. generateSampleConversationAction() → sample_review (1st sample)
-3. provideSampleConversationFeedbackAction() → feedback saved
-4. generateSampleConversationAction() → sample_review (2nd sample, with feedback)
-5. confirmSampleConversationAction() → all confirmed
-6. confirmSurveyAction() → active
+2. Stream rehearsal #1 via POST /api/surveys/[id]/sample
+3. generateSampleConversationAction() → store transcript + set status sample_review
+4. provideSampleConversationFeedbackAction() → capture improvement notes
+5. Stream rehearsal #2 (feedback auto-applied) and save it
+6. confirmSampleConversationAction() on every stored rehearsal
+7. confirmSurveyAction() → active
 ```
 
 ### Participant Flow
+
 ```
 1. getSurveyByLinkAction() → verify survey active
 2. POST /api/surveys/[id]/chat → stream conversation
@@ -265,6 +286,7 @@ confirmSurveyAction() → Activates survey (draft → active)
 ```
 
 ### Analytics Flow
+
 ```
 1. Multiple conversations complete
 2. generateSurveyAnalyticsAction() → aggregate all
@@ -291,6 +313,7 @@ confirmSurveyAction() → Activates survey (draft → active)
 ## Environment Variables
 
 Required in `.env`:
+
 ```bash
 DATABASE_URL=...
 BETTER_AUTH_SECRET=...
@@ -305,15 +328,15 @@ GOOGLE_GENERATIVE_AI_API_KEY=...  # New: For Gemini API
 ## Next Steps for UI Integration
 
 1. **Survey Creation Form**: Call `createSurveyAction()`
-2. **Sample Conversation UI**: 
-   - Call `generateSampleConversationAction()`
-   - Display conversation
-   - Collect feedback → `provideSampleConversationFeedbackAction()`
+2. **Sample Conversation UI**:
+   - Use `/api/surveys/[id]/sample` with `conversationNumber` (1 or 2) to run rehearsals
+   - After finishing each rehearsal, call `generateSampleConversationAction()` with the transcript
+   - Collect improvement notes → `provideSampleConversationFeedbackAction()`
    - Confirm → `confirmSampleConversationAction()`
 3. **Survey Activation**: Call `confirmSurveyAction()`
-4. **Participant Chat**: 
+4. **Participant Chat**:
    - Use `/api/surveys/[id]/chat` with `useChat` hook from `@ai-sdk/react`
-5. **Dashboard**: 
+5. **Dashboard**:
    - Call `getDashboardDataAction()`
    - Display analytics, conversations, insights
 
@@ -321,7 +344,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=...  # New: For Gemini API
 
 1. **Streaming**: Real-time responses reduce perceived latency
 2. **Participant Limits**: Prevent cost overruns
-3. **Efficient AI Usage**: 
+3. **Efficient AI Usage**:
    - Gemini 2.0 Flash for cost-effectiveness
    - Appropriate token limits
    - Temperature tuning for quality vs. creativity
@@ -336,4 +359,3 @@ GOOGLE_GENERATIVE_AI_API_KEY=...  # New: For Gemini API
 4. **Rate Limiting**: Add rate limits to API endpoints
 5. **Webhooks**: Notify survey makers of new conversations
 6. **Export**: CSV/JSON export of conversations and analytics
-

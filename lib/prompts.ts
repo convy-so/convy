@@ -18,38 +18,23 @@ export interface SurveyConfig {
 export function getSampleConversationSystemPrompt(
   config: SurveyConfig,
   feedback?: string,
-  previousConversationNumber?: number
+  conversationNumber?: number
 ): string {
-  const feedbackSection = feedback
-    ? `\n\nPrevious feedback from the survey creator:\n${feedback}\n\nPlease incorporate this feedback into the new conversation.`
-    : "";
-
-  const previousNote =
-    previousConversationNumber && previousConversationNumber > 1
-      ? `\n\nNote: This is sample conversation #${previousConversationNumber}. Make it natural and engaging, similar to a real interview or conversation.`
+  const basePrompt = getSurveyConversationSystemPrompt(config);
+  const iterationNote =
+    conversationNumber && conversationNumber > 1
+      ? `\n- This is rehearsal conversation #${conversationNumber}. Adjust your tone and pacing based on previous feedback.`
       : "";
 
-  return `You are conducting a ${config.type} survey. Your goal is to have a natural, conversational interview with the participant.
+  const feedbackSection = feedback
+    ? `\n- Apply the survey creator's latest feedback precisely:\n${feedback}`
+    : "";
 
-Survey Goal: ${config.goal}
+  return `${basePrompt}
 
-Information to Collect: ${config.information}
-
-Required Questions (these must be covered naturally in the conversation but you can also ask other questions no problem but those are the required ones):
-${config.requiredQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}
-
-${config.metrics.length > 0 ? `Metrics to track: ${config.metrics.join(", ")}` : ""}
-
-Instructions:
-- Conduct the conversation naturally, like a friendly interviewer
-- Don't ask questions in a rigid, survey-like manner
-- Cover all required questions organically during the conversation
-- Be conversational and engaging
-- Ask follow-up questions based on the participant's responses
-- Make the participant feel comfortable and heard
-${previousNote}${feedbackSection}
-
-Start the conversation by introducing yourself and explaining the purpose of the survey in a friendly way.`;
+Additional guidance for this rehearsal with the survey creator:
+- Treat the survey creator exactly like a participant so they can experience the real flow
+- After covering every required topic, wrap up politely just as you would with a participant${iterationNote}${feedbackSection}`;
 }
 
 /**
@@ -90,7 +75,10 @@ export function getConversationSummaryPrompt(
   config: SurveyConfig
 ): string {
   const conversationText = conversation
-    .map((msg) => `${msg.role === "user" ? "Participant" : "Interviewer"}: ${msg.content}`)
+    .map(
+      (msg) =>
+        `${msg.role === "user" ? "Participant" : "Interviewer"}: ${msg.content}`
+    )
     .join("\n\n");
 
   return `Analyze the following conversation from a ${config.type} survey and provide a comprehensive summary.
@@ -120,7 +108,10 @@ export function getConversationInsightsPrompt(
   config: SurveyConfig
 ): string {
   const conversationText = conversation
-    .map((msg) => `${msg.role === "user" ? "Participant" : "Interviewer"}: ${msg.content}`)
+    .map(
+      (msg) =>
+        `${msg.role === "user" ? "Participant" : "Interviewer"}: ${msg.content}`
+    )
     .join("\n\n");
 
   return `Analyze the following conversation and extract structured insights.
@@ -180,4 +171,3 @@ Please provide:
 
 Format your response as a comprehensive analytics report.`;
 }
-

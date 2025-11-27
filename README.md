@@ -2,7 +2,7 @@
 
 The project now uses [Better Auth](https://better-auth.com) with the Drizzle adapter on PostgreSQL. Users can:
 
-- Sign up with username + email + password. A verification link is emailed via Resend and they cannot sign in until the email is confirmed.
+- Sign up with name + email + password. A verification link is emailed via Resend and they cannot sign in until the email is confirmed.
 - Sign in with email/password or with Google OAuth.
 - Stay signed out of protected areas until `emailVerified` is true. Use the helpers in `lib/auth/session.ts` to gate any server component, route handler or server action.
 
@@ -10,7 +10,7 @@ The project now uses [Better Auth](https://better-auth.com) with the Drizzle ada
 
 | File | Purpose |
 | --- | --- |
-| `db/schema.ts` | Drizzle models consumed by Better Auth. Includes unique usernames, roles, accounts, sessions, verification tokens. |
+| `db/schema.ts` | Drizzle models consumed by Better Auth. Includes user profiles, roles, accounts, sessions, verification tokens. |
 | `db/index.ts` | Node Postgres pool + Drizzle client singleton. |
 | `lib/auth.ts` | Better Auth initialization (email/password + Google + verification rules + Next.js cookies). |
 | `lib/email.ts` | Resend integration used by Better Auth to deliver verification emails. |
@@ -46,7 +46,7 @@ The project now uses [Better Auth](https://better-auth.com) with the Drizzle ada
 
 All auth interactions happen on the server via Next.js server actions in `app/actions/auth.ts`:
 
-- `emailSignUpAction({ name, username, email, password, rememberMe? })`
+- `emailSignUpAction({ name, email, password, rememberMe? })`
 - `emailSignInAction({ email, password, rememberMe? })`
 - `googleSignInAction({ callbackURL?, newUserCallbackURL?, errorCallbackURL? })`
 - `signOutAction()`

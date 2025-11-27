@@ -24,10 +24,6 @@ const strongPasswordSchema = z
 
 const signUpSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  username: z
-    .string()
-    .min(3, "Username must be at least 3 characters long")
-    .max(32, "Username must be at most 32 characters long"),
   email: emailSchema,
   password: strongPasswordSchema,
   rememberMe: z.boolean().optional().default(false),

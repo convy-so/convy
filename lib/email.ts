@@ -9,7 +9,7 @@ const resend = new Resend(env.RESEND_API_KEY);
 type EmailPayload = {
   email: string;
   url: string;
-  username?: string | null;
+  name?: string | null;
 };
 
 export async function sendVerificationEmail(payload: EmailPayload) {
@@ -18,7 +18,7 @@ export async function sendVerificationEmail(payload: EmailPayload) {
     to: payload.email,
     subject: "Verify your Convy account",
     text: [
-      `Hi ${payload.username ?? "there"},`,
+      `Hi ${payload.name ?? "there"},`,
       "",
       "Please confirm your email address to start using Convy.",
       payload.url,
@@ -34,7 +34,7 @@ export async function sendPasswordResetEmail(payload: EmailPayload) {
     to: payload.email,
     subject: "Reset your Convy password",
     text: [
-      `Hi ${payload.username ?? "there"},`,
+      `Hi ${payload.name ?? "there"},`,
       "",
       "You recently requested to reset your Convy password.",
       "Click the link below to choose a new one:",

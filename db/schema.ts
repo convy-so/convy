@@ -39,7 +39,6 @@ export const users = pgTable(
     emailVerified: boolean("email_verified").default(false).notNull(),
     name: text("name").notNull(),
     image: text("image"),
-    username: text("username").notNull(),
     role: userRoleEnum("role").default("user").notNull(),
   },
   (table) => [unique("users_email_unique").on(table.email)]
