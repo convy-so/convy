@@ -1,12 +1,11 @@
-     "use server";
+"use server";
 
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
   conversationInsights,
-  surveyAnalytics,
   surveyConversations,
   surveys,
 } from "@/db/schema";
@@ -15,7 +14,6 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import {
   getConversationInsightsPrompt,
   getConversationSummaryPrompt,
-  getOverallAnalyticsPrompt,
   type SurveyConfig,
 } from "@/lib/prompts";
 

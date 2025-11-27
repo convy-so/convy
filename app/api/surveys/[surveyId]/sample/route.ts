@@ -1,14 +1,15 @@
 import { streamText } from "ai";
+import { and, eq, lt } from "drizzle-orm";
 
 import { db } from "@/db";
-import { surveys } from "@/db/schema";
+import { sampleConversations, surveys } from "@/db/schema";
 import { defaultModel } from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
   getSampleConversationSystemPrompt,
   type SurveyConfig,
 } from "@/lib/prompts";
-import { eq } from "drizzle-orm";
+import { MAX_SAMPLE_CONVERSATIONS } from "@/lib/surveys";
 
 export const maxDuration = 300;
 
@@ -34,6 +35,14 @@ export async function POST(
       return new Response("Invalid messages", { status: 400 });
     }
 
+    if (
+      !conversationNumber ||
+      conversationNumber < 1 ||
+      conversationNumber > MAX_SAMPLE_CONVERSATIONS
+    ) {
+      return new Response("Invalid conversation number", { status: 400 });
+    }
+
     const [survey] = await db
       .select()
       .from(surveys)
@@ -47,6 +56,12 @@ export async function POST(
       return new Response("Unauthorized", { status: 403 });
     }
 
+    if (conversationNumber > survey.sampleConversationCount + 1) {
+      return new Response("Sample conversations must be sequential", {
+        status: 400,
+      });
+    }
+
     const surveyConfig: SurveyConfig = {
       goal: survey.goal,
       type: survey.type,
@@ -55,9 +70,28 @@ export async function POST(
       metrics: survey.metrics || [],
     };
 
+    const previousFeedbackRows = await db
+      .select({ feedback: sampleConversations.feedback })
+      .from(sampleConversations)
+      .where(
+        and(
+          eq(sampleConversations.surveyId, surveyId),
+          lt(sampleConversations.conversationNumber, conversationNumber)
+        )
+      );
+
+    const aggregatedFeedback = previousFeedbackRows
+      .map((row) => row.feedback)
+      .filter((value): value is string => !!value)
+      .join("\n");
+
+    const combinedFeedback = [aggregatedFeedback, feedback]
+      .filter((value): value is string => !!value && value.trim().length > 0)
+      .join("\n\n");
+
     const systemPrompt = getSampleConversationSystemPrompt(
       surveyConfig,
-      feedback,
+      combinedFeedback || undefined,
       conversationNumber
     );
 
@@ -72,7 +106,10 @@ export async function POST(
     return result.toTextStreamResponse();
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
         return new Response(error.message, { status: 401 });
       }
     }
@@ -80,4 +117,3 @@ export async function POST(
     return new Response("Internal server error", { status: 500 });
   }
 }
-
