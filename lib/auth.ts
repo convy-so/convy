@@ -28,7 +28,7 @@ export const auth = betterAuth({
     sendResetPassword: async ({ user, url }) => {
       await sendPasswordResetEmail({
         email: user.email,
-        username: user.name,
+        username: (user as { username?: string }).username ?? user.name,
         url,
       });
     },
@@ -40,7 +40,7 @@ export const auth = betterAuth({
     sendVerificationEmail: async ({ user, url }) => {
       await sendVerificationEmail({
         email: user.email,
-        username: user.name,
+        username: (user as { username?: string }).username ?? user.name,
         url,
       });
     },

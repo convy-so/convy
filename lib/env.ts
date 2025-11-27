@@ -17,6 +17,7 @@ export const env = {
   GOOGLE_CLIENT_SECRET: required("GOOGLE_CLIENT_SECRET"),
   RESEND_API_KEY: required("RESEND_API_KEY"),
   EMAIL_FROM: required("EMAIL_FROM"),
+  GOOGLE_GENERATIVE_AI_API_KEY: required("GOOGLE_GENERATIVE_AI_API_KEY"),
 };
 
 export type Env = typeof env;
