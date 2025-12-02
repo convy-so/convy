@@ -10,6 +10,7 @@ import {
   type SurveyConfig,
 } from "@/lib/prompts";
 import { MAX_SAMPLE_CONVERSATIONS } from "@/lib/surveys";
+import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
 
 export const maxDuration = 300;
 
@@ -22,6 +23,29 @@ export async function POST(
   { params }: { params: Promise<{ surveyId: string }> }
 ) {
   try {
+    // Rate limiting check
+    const clientIP = getClientIP(request);
+    const rateLimitResult = await apiRateLimiter.limit(clientIP);
+    
+    if (!rateLimitResult.success) {
+      return new Response(
+        JSON.stringify({
+          error: "Rate limit exceeded",
+          retryAfter: rateLimitResult.reset,
+        }),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": rateLimitResult.reset.toString(),
+            "X-RateLimit-Limit": "100",
+            "X-RateLimit-Remaining": rateLimitResult.remaining.toString(),
+            "X-RateLimit-Reset": rateLimitResult.reset.toString(),
+          },
+        }
+      );
+    }
+
     const session = await getVerifiedSession();
     const { surveyId } = await params;
     const body = await request.json();

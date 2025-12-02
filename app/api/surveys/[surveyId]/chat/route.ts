@@ -6,6 +6,8 @@ import { db } from "@/db";
 import { surveyConversations, surveys } from "@/db/schema";
 import { defaultModel } from "@/lib/ai";
 import { getSurveyConversationSystemPrompt, type SurveyConfig } from "@/lib/prompts";
+import { chatRateLimiter, getClientIP } from "@/lib/ratelimit";
+import { logPromptInjectionAttempt, sanitizeUserInput } from "@/lib/prompt-injection-detection";
 
 export const maxDuration = 300; 
 
@@ -14,6 +16,29 @@ export async function POST(
   { params }: { params: Promise<{ surveyId: string }> }
 ) {
   try {
+    // Rate limiting check
+    const clientIP = getClientIP(request);
+    const rateLimitResult = await chatRateLimiter.limit(clientIP);
+    
+    if (!rateLimitResult.success) {
+      return new Response(
+        JSON.stringify({
+          error: "Rate limit exceeded",
+          retryAfter: rateLimitResult.reset,
+        }),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": rateLimitResult.reset.toString(),
+            "X-RateLimit-Limit": "20",
+            "X-RateLimit-Remaining": rateLimitResult.remaining.toString(),
+            "X-RateLimit-Reset": rateLimitResult.reset.toString(),
+          },
+        }
+      );
+    }
+
     const { surveyId } = await params;
     const body = await request.json();
     const { messages, conversationId } = body as {
@@ -24,6 +49,23 @@ export async function POST(
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response("Invalid messages", { status: 400 });
     }
+
+    // Sanitize and monitor user messages for prompt injection attempts
+    const sanitizedMessages = messages.map((msg) => {
+      if (msg.role === "user") {
+        // Log potential injection attempts (for monitoring, not blocking)
+        logPromptInjectionAttempt(msg.content, {
+          surveyId,
+          conversationId,
+        });
+        // Sanitize user input
+        return {
+          ...msg,
+          content: sanitizeUserInput(msg.content),
+        };
+      }
+      return msg;
+    });
 
     const [survey] = await db
       .select()
@@ -55,7 +97,7 @@ export async function POST(
 
     const result = streamText({
       model: defaultModel,
-      messages,
+      messages: sanitizedMessages,
       system: systemPrompt,
       temperature: 0.7,
       maxOutputTokens: 2000,
@@ -70,7 +112,7 @@ export async function POST(
       await db.insert(surveyConversations).values({
         id: convId,
         surveyId: survey.id,
-        rawConversation: messages.map((msg) => ({
+        rawConversation: sanitizedMessages.map((msg) => ({
           ...msg,
           timestamp: new Date().toISOString(),
         })),
@@ -86,9 +128,12 @@ export async function POST(
         .where(eq(surveys.id, survey.id));
     }
 
-    // Return streaming response with conversation ID in headers
+    // Return streaming response with conversation ID and rate limit headers
     const response = result.toTextStreamResponse();
     response.headers.set("X-Conversation-Id", convId);
+    response.headers.set("X-RateLimit-Limit", "20");
+    response.headers.set("X-RateLimit-Remaining", rateLimitResult.remaining.toString());
+    response.headers.set("X-RateLimit-Reset", rateLimitResult.reset.toString());
     return response;
   } catch (error) {
     console.error("Error in chat route:", error);

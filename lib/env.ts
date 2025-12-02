@@ -18,6 +18,8 @@ export const env = {
   RESEND_API_KEY: required("RESEND_API_KEY"),
   EMAIL_FROM: required("EMAIL_FROM"),
   GOOGLE_GENERATIVE_AI_API_KEY: required("GOOGLE_GENERATIVE_AI_API_KEY"),
+  UPSTASH_REDIS_REST_URL: required("UPSTASH_REDIS_REST_URL"),
+  UPSTASH_REDIS_REST_TOKEN: required("UPSTASH_REDIS_REST_TOKEN"),
 };
 
 export type Env = typeof env;
