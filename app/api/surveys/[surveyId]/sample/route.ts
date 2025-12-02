@@ -68,6 +68,7 @@ export async function POST(
       information: survey.information,
       requiredQuestions: survey.requiredQuestions,
       metrics: survey.metrics || [],
+      language: survey.language,
     };
 
     const previousFeedbackRows = await db
@@ -92,7 +93,8 @@ export async function POST(
     const systemPrompt = getSampleConversationSystemPrompt(
       surveyConfig,
       combinedFeedback || undefined,
-      conversationNumber
+      conversationNumber,
+      survey.language
     );
 
     const result = streamText({

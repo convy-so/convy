@@ -4,8 +4,8 @@ import { google } from "@ai-sdk/google";
 import { generateText, streamText } from "ai";
 
 
-export const defaultModel = google("gemini-2.0-flash-exp"); // Cost-effective for conversations
-export const analysisModel = google("gemini-2.0-flash-exp"); // Same model for analysis (Gemini 2.0 Flash is capable for both)
+export const defaultModel = google("gemini-2.5-flash-lite");
+export const analysisModel = google("gemini-2.5-flash-lite");
 
 /**
  * Generate text using AI (for non-streaming tasks like summaries, insights)
