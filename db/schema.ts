@@ -30,6 +30,8 @@ export const surveyStatusEnum = pgEnum("survey_status", [
   "archived",
 ]);
 
+export const languageEnum = pgEnum("language", ["en", "fr", "de"]);
+
 export const users = pgTable(
   "users",
   {
@@ -145,12 +147,15 @@ export const surveys = pgTable(
     information: text("information").notNull(), // Information to collect
     requiredQuestions: jsonb("required_questions").$type<string[]>().notNull(), // Questions that must not be missed
     metrics: jsonb("metrics").$type<string[]>().default([]), // Desired metrics
-    status: surveyStatusEnum("status").default("draft").notNull(), 
+    status: surveyStatusEnum("status").default("draft").notNull(),
     shareableLink: text("shareable_link").unique(), // Unique link for survey
     participantLimit: integer("participant_limit").default(50).notNull(), // Limit on number of users
     currentParticipants: integer("current_participants").default(0).notNull(),
-    sampleConversationCount: integer("sample_conversation_count").default(0).notNull(), // Track sample conversations (max 3)
+    sampleConversationCount: integer("sample_conversation_count")
+      .default(0)
+      .notNull(), // Track sample conversations (max 3)
     confirmed: boolean("confirmed").default(false).notNull(), // Whether survey maker confirmed
+    language: languageEnum("language").default("en").notNull(), // en, fr, or de
   },
   (table) => [
     index("surveys_user_id_idx").on(table.userId),
@@ -168,9 +173,9 @@ export const sampleConversations = pgTable(
       .notNull()
       .references(() => surveys.id, { onDelete: "cascade" }),
     conversationNumber: integer("conversation_number").notNull(), // 1, 2, or 3
-    messages: jsonb("messages").$type<
-      Array<{ role: "user" | "assistant"; content: string }>
-    >().notNull(),
+    messages: jsonb("messages")
+      .$type<Array<{ role: "user" | "assistant"; content: string }>>()
+      .notNull(),
     feedback: text("feedback"),
     confirmed: boolean("confirmed").default(false).notNull(),
   },
@@ -192,9 +197,15 @@ export const surveyConversations = pgTable(
       .notNull()
       .references(() => surveys.id, { onDelete: "cascade" }),
     participantId: text("participant_id"),
-    rawConversation: jsonb("raw_conversation").$type<
-      Array<{ role: "user" | "assistant"; content: string; timestamp: string }>
-    >().notNull(),
+    rawConversation: jsonb("raw_conversation")
+      .$type<
+        Array<{
+          role: "user" | "assistant";
+          content: string;
+          timestamp: string;
+        }>
+      >()
+      .notNull(),
     summary: text("summary"),
     completed: boolean("completed").default(false).notNull(),
   },
@@ -216,9 +227,7 @@ export const conversationInsights = pgTable(
     keyFindings: text("key_findings"),
   },
   (table) => [
-    index("conversation_insights_conversation_id_idx").on(
-      table.conversationId
-    ),
+    index("conversation_insights_conversation_id_idx").on(table.conversationId),
   ]
 );
 
@@ -234,17 +243,15 @@ export const surveyAnalytics = pgTable(
     overallSummary: text("overall_summary").notNull(),
     metrics: jsonb("metrics").$type<Record<string, unknown>>().notNull(),
     totalConversations: integer("total_conversations").default(0).notNull(),
-    averageConversationLength: integer("average_conversation_length").default(
-      0
-    ).notNull(),
+    averageConversationLength: integer("average_conversation_length")
+      .default(0)
+      .notNull(),
     lastUpdated: timestamp("last_updated", {
       withTimezone: true,
       mode: "date",
     }).defaultNow(),
   },
-  (table) => [
-    index("survey_analytics_survey_id_idx").on(table.surveyId),
-  ]
+  (table) => [index("survey_analytics_survey_id_idx").on(table.surveyId)]
 );
 
 // Relations
@@ -295,12 +302,15 @@ export const conversationInsightsRelations = relations(
   })
 );
 
-export const surveyAnalyticsRelations = relations(surveyAnalytics, ({ one }) => ({
-  survey: one(surveys, {
-    fields: [surveyAnalytics.surveyId],
-    references: [surveys.id],
-  }),
-}));
+export const surveyAnalyticsRelations = relations(
+  surveyAnalytics,
+  ({ one }) => ({
+    survey: one(surveys, {
+      fields: [surveyAnalytics.surveyId],
+      references: [surveys.id],
+    }),
+  })
+);
 
 export const usersRelations = relations(users, ({ many }) => ({
   accounts: many(accounts),

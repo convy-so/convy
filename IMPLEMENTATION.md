@@ -347,7 +347,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=...  # New: For Gemini API
 3. **Efficient AI Usage**:
    - Gemini 2.0 Flash for cost-effectiveness
    - Appropriate token limits
-   - Temperature tuning for quality vs. creativity
+   - Temperature tuning for quality vs.creativity
 4. **Database Indexing**: Indexes on foreign keys and frequently queried fields
 5. **Async Processing**: Insight generation can be moved to background jobs (future)
 

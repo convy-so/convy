@@ -48,9 +48,10 @@ export async function POST(
       information: survey.information,
       requiredQuestions: survey.requiredQuestions,
       metrics: survey.metrics || [],
+      language: survey.language,
     };
 
-    const systemPrompt = getSurveyConversationSystemPrompt(surveyConfig);
+    const systemPrompt = getSurveyConversationSystemPrompt(surveyConfig, survey.language);
 
     const result = streamText({
       model: defaultModel,

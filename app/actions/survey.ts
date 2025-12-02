@@ -20,6 +20,7 @@ const createSurveySchema = z.object({
   requiredQuestions: z.array(z.string()).min(1, "At least one required question is needed"),
   metrics: z.array(z.string()).optional().default([]),
   participantLimit: z.number().int().positive().max(10000).optional().default(100),
+  language: z.enum(["en", "fr", "de"]).optional().default("en"),
 });
 
 const updateSurveySchema = z.object({
@@ -31,6 +32,7 @@ const updateSurveySchema = z.object({
   requiredQuestions: z.array(z.string()).optional(),
   metrics: z.array(z.string()).optional(),
   participantLimit: z.number().int().positive().max(10000).optional(),
+  language: z.enum(["en", "fr", "de"]).optional(),
 });
 
 export async function createSurveyAction(
@@ -57,6 +59,7 @@ export async function createSurveyAction(
         participantLimit: body.participantLimit ?? 100,
         shareableLink,
         status: "draft",
+        language: body.language ?? "en",
       })
       .returning({ id: surveys.id, shareableLink: surveys.shareableLink });
 
@@ -112,6 +115,7 @@ export async function updateSurveyAction(
     if (body.requiredQuestions !== undefined) updateData.requiredQuestions = body.requiredQuestions;
     if (body.metrics !== undefined) updateData.metrics = body.metrics;
     if (body.participantLimit !== undefined) updateData.participantLimit = body.participantLimit;
+    if (body.language !== undefined) updateData.language = body.language;
 
     await db.update(surveys).set(updateData).where(eq(surveys.id, body.id));
 

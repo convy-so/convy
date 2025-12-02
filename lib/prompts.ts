@@ -10,6 +10,7 @@ export interface SurveyConfig {
   information: string;
   requiredQuestions: string[];
   metrics: string[];
+  language?: "en" | "fr" | "de";
 }
 
 /**
@@ -18,9 +19,10 @@ export interface SurveyConfig {
 export function getSampleConversationSystemPrompt(
   config: SurveyConfig,
   feedback?: string,
-  conversationNumber?: number
+  conversationNumber?: number,
+  language?: "en" | "fr" | "de"
 ): string {
-  const basePrompt = getSurveyConversationSystemPrompt(config);
+  const basePrompt = getSurveyConversationSystemPrompt(config, language);
   const iterationNote =
     conversationNumber && conversationNumber > 1
       ? `\n- This is rehearsal conversation #${conversationNumber}. Adjust your tone and pacing based on previous feedback.`
@@ -41,9 +43,22 @@ Additional guidance for this rehearsal with the survey creator:
  * System prompt for actual survey conversations with users
  */
 export function getSurveyConversationSystemPrompt(
-  config: SurveyConfig
+  config: SurveyConfig,
+  language?: "en" | "fr" | "de"
 ): string {
+  const lang = language || config.language || "en";
+  
+  const languageInstructions: Record<string, string> = {
+    en: "You must conduct this entire conversation in English. All your responses must be in English.",
+    fr: "Vous devez mener toute cette conversation en français. Toutes vos réponses doivent être en français.",
+    de: "Sie müssen dieses gesamte Gespräch auf Deutsch führen. Alle Ihre Antworten müssen auf Deutsch sein.",
+  };
+
+  const langInstruction = languageInstructions[lang] || languageInstructions.en;
+
   return `You are conducting a ${config.type} survey. Your goal is to have a natural, conversational interview with the participant.
+
+${langInstruction}
 
 Survey Goal: ${config.goal}
 
