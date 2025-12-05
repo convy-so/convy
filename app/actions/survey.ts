@@ -12,74 +12,25 @@ type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
-const createSurveySchema = z.object({
-  title: z.string().min(1, "Title is required"),
-  goal: z.string().min(1, "Goal is required"),
-  type: z.string().min(1, "Type is required"),
-  information: z.string().min(1, "Information to collect is required"),
-  requiredQuestions: z.array(z.string()).min(1, "At least one required question is needed"),
-  metrics: z.array(z.string()).optional().default([]),
-  participantLimit: z.number().int().positive().max(10000).optional().default(100),
-  language: z.enum(["en", "fr", "de"]).optional().default("en"),
-});
-
+/**
+ * Schema for updating survey settings
+ * Note: Auto-generated fields (goal, type, information, requiredQuestions) cannot be manually edited
+ * These are generated from the conversational creation flow
+ */
 const updateSurveySchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1).optional(),
-  goal: z.string().min(1).optional(),
-  type: z.string().min(1).optional(),
-  information: z.string().min(1).optional(),
-  requiredQuestions: z.array(z.string()).optional(),
-  metrics: z.array(z.string()).optional(),
   participantLimit: z.number().int().positive().max(10000).optional(),
   language: z.enum(["en", "fr", "de"]).optional(),
+  // Note: goal, type, information, requiredQuestions, metrics are auto-generated
+  // and should not be manually edited after creation
 });
 
-export async function createSurveyAction(
-  input: z.infer<typeof createSurveySchema>
-): Promise<ActionResult<{ id: string; shareableLink: string | null }>> {
-  try {
-    const session = await getVerifiedSession();
-    const body = createSurveySchema.parse(input);
-
-    const surveyId = nanoid();
-    const shareableLink = `survey-${nanoid(12)}`;
-
-    const [survey] = await db
-      .insert(surveys)
-      .values({
-        id: surveyId,
-        userId: session.user.id,
-        title: body.title,
-        goal: body.goal,
-        type: body.type,
-        information: body.information,
-        requiredQuestions: body.requiredQuestions,
-        metrics: body.metrics ?? [],
-        participantLimit: body.participantLimit ?? 100,
-        shareableLink,
-        status: "draft",
-        language: body.language ?? "en",
-      })
-      .returning({ id: surveys.id, shareableLink: surveys.shareableLink });
-
-    return { success: true, data: survey };
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return { success: false, error: error.errors[0]?.message ?? "Validation error" };
-    }
-    if (error instanceof Error) {
-      if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
-        return { success: false, error: error.message };
-      }
-      return { success: false, error: error.message };
-    }
-    return { success: false, error: "Failed to create survey" };
-  }
-}
-
 /**
- * Update a survey (only if it's in draft or sample_review status)
+ * Update survey settings (only if it's in draft or sample_review status)
+ * Note: This only allows updating basic settings like title and participant limit.
+ * Survey content (goal, questions, metrics) is generated from the conversational creation flow
+ * and cannot be manually edited. Use the conversational creation flow to make content changes.
  */
 export async function updateSurveyAction(
   input: z.infer<typeof updateSurveySchema>
@@ -103,18 +54,21 @@ export async function updateSurveyAction(
     }
 
     // Only allow updates if survey is in draft or sample_review status
-    if (existingSurvey.status !== "draft" && existingSurvey.status !== "sample_review") {
-      return { success: false, error: "Cannot update survey in current status" };
+    if (
+      existingSurvey.status !== "draft" &&
+      existingSurvey.status !== "sample_review"
+    ) {
+      return {
+        success: false,
+        error: "Cannot update survey in current status",
+      };
     }
 
+    // Only allow updating basic settings, not auto-generated content
     const updateData: Partial<typeof surveys.$inferInsert> = {};
     if (body.title !== undefined) updateData.title = body.title;
-    if (body.goal !== undefined) updateData.goal = body.goal;
-    if (body.type !== undefined) updateData.type = body.type;
-    if (body.information !== undefined) updateData.information = body.information;
-    if (body.requiredQuestions !== undefined) updateData.requiredQuestions = body.requiredQuestions;
-    if (body.metrics !== undefined) updateData.metrics = body.metrics;
-    if (body.participantLimit !== undefined) updateData.participantLimit = body.participantLimit;
+    if (body.participantLimit !== undefined)
+      updateData.participantLimit = body.participantLimit;
     if (body.language !== undefined) updateData.language = body.language;
 
     await db.update(surveys).set(updateData).where(eq(surveys.id, body.id));
@@ -122,10 +76,16 @@ export async function updateSurveyAction(
     return { success: true, data: { id: body.id } };
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return { success: false, error: error.errors[0]?.message ?? "Validation error" };
+      return {
+        success: false,
+        error: error.errors[0]?.message ?? "Validation error",
+      };
     }
     if (error instanceof Error) {
-      if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
         return { success: false, error: error.message };
       }
       return { success: false, error: error.message };
@@ -170,7 +130,10 @@ export async function getSurveysAction(): Promise<
     return { success: true, data: userSurveys };
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
         return { success: false, error: error.message };
       }
       return { success: false, error: error.message };
@@ -204,7 +167,10 @@ export async function getSurveyAction(
     return { success: true, data: survey };
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
         return { success: false, error: error.message };
       }
       return { success: false, error: error.message };
@@ -219,7 +185,9 @@ export async function getSurveyAction(
  */
 export async function confirmSurveyAction(
   surveyId: string
-): Promise<ActionResult<{ id: string; shareableLink: string }>> {
+): Promise<
+  ActionResult<{ id: string; shareableLink: string; publicUrl: string }>
+> {
   try {
     const session = await getVerifiedSession();
 
@@ -236,28 +204,67 @@ export async function confirmSurveyAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    if (survey.status !== "sample_review") {
-      return { success: false, error: "Survey must be in sample_review status to confirm" };
+    // Allow confirmation from either draft or sample_review status
+    if (survey.status !== "sample_review" && survey.status !== "draft") {
+      return {
+        success: false,
+        error: "Survey must be in draft or sample_review status to confirm",
+      };
     }
 
-    if (!survey.confirmed) {
-      return { success: false, error: "Survey must have confirmed sample conversations" };
+    // Check if survey has necessary structured configuration
+    // Required fields: objective, targetAudience, scope, successCriteria, constraints
+    if (
+      !survey.objective ||
+      !survey.targetAudience ||
+      !survey.scope ||
+      !survey.successCriteria ||
+      !survey.constraints
+    ) {
+      return {
+        success: false,
+        error:
+          "Survey is missing required configuration. Please complete the creation conversation.",
+      };
+    }
+
+    if (survey.status === "sample_review" && !survey.confirmed) {
+      return {
+        success: false,
+        error:
+          "Please confirm at least one sample conversation before activating the survey",
+      };
+    }
+
+    let shareableLink = survey.shareableLink;
+    if (!shareableLink) {
+      shareableLink = `survey-${nanoid(12)}`;
     }
 
     await db
       .update(surveys)
       .set({
         status: "active",
+        shareableLink,
       })
       .where(eq(surveys.id, surveyId));
 
+    const publicUrl = `/s/${shareableLink}`;
+
     return {
       success: true,
-      data: { id: surveyId, shareableLink: survey.shareableLink! },
+      data: {
+        id: surveyId,
+        shareableLink,
+        publicUrl,
+      },
     };
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
         return { success: false, error: error.message };
       }
       return { success: false, error: error.message };
@@ -266,3 +273,155 @@ export async function confirmSurveyAction(
   }
 }
 
+/**
+ * Get the shareable link for a survey
+ */
+export async function getShareableLinkAction(
+  surveyId: string
+): Promise<
+  ActionResult<{ shareableLink: string; publicUrl: string; isActive: boolean }>
+> {
+  try {
+    const session = await getVerifiedSession();
+
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    if (survey.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    if (!survey.shareableLink) {
+      return {
+        success: false,
+        error: "Survey does not have a shareable link yet",
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        shareableLink: survey.shareableLink,
+        publicUrl: `/s/${survey.shareableLink}`,
+        isActive: survey.status === "active",
+      },
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Failed to get shareable link" };
+  }
+}
+
+/**
+ * Deactivate a survey (pause it from receiving new responses)
+ */
+export async function deactivateSurveyAction(
+  surveyId: string
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const session = await getVerifiedSession();
+
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    if (survey.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    if (survey.status !== "active") {
+      return { success: false, error: "Survey is not active" };
+    }
+
+    await db
+      .update(surveys)
+      .set({ status: "completed" })
+      .where(eq(surveys.id, surveyId));
+
+    return { success: true, data: { id: surveyId } };
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Failed to deactivate survey" };
+  }
+}
+
+/**
+ * Reactivate a completed survey
+ */
+export async function reactivateSurveyAction(
+  surveyId: string
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const session = await getVerifiedSession();
+
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    if (survey.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    if (survey.status !== "completed") {
+      return { success: false, error: "Survey is not completed" };
+    }
+
+    if (survey.currentParticipants >= survey.participantLimit) {
+      return {
+        success: false,
+        error:
+          "Survey has reached participant limit. Increase the limit to reactivate.",
+      };
+    }
+
+    await db
+      .update(surveys)
+      .set({ status: "active" })
+      .where(eq(surveys.id, surveyId));
+
+    return { success: true, data: { id: surveyId } };
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Failed to reactivate survey" };
+  }
+}

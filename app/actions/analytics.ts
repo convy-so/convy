@@ -3,38 +3,24 @@
 import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
-import {
-  conversationInsights,
-  surveyAnalytics,
-  surveyConversations,
-  surveys,
-} from "@/db/schema";
-import { analysisModel, generateAIResponse } from "@/lib/ai";
+import { surveyAnalytics, surveyConversations, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getOverallAnalyticsPrompt, type SurveyConfig } from "@/lib/prompts";
+import { enqueueSurveyAnalytics } from "@/lib/queue";
 
 type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
 /**
- * Generate overall analytics for a survey
+ * Generate overall analytics for a survey (via background job)
  * This aggregates all conversations and generates comprehensive analytics
  */
 export async function generateSurveyAnalyticsAction(
   surveyId: string
-): Promise<
-  ActionResult<{
-    overallSummary: string;
-    metrics: Record<string, unknown>;
-    totalConversations: number;
-    averageConversationLength: number;
-  }>
-> {
+): Promise<ActionResult<{ jobId: string }>> {
   try {
     const session = await getVerifiedSession();
 
-    // Verify survey ownership
     const [survey] = await db
       .select()
       .from(surveys)
@@ -48,145 +34,52 @@ export async function generateSurveyAnalyticsAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    // Get all completed conversations with their summaries and insights
     const conversations = await db
       .select({
         id: surveyConversations.id,
         summary: surveyConversations.summary,
-        rawConversation: surveyConversations.rawConversation,
-        insights: conversationInsights.keyFindings,
       })
       .from(surveyConversations)
-      .leftJoin(
-        conversationInsights,
-        eq(conversationInsights.conversationId, surveyConversations.id)
-      )
-      .where(
-        eq(surveyConversations.surveyId, surveyId)
-      );
+      .where(eq(surveyConversations.surveyId, surveyId));
 
     const completedConversations = conversations.filter((c) => c.summary);
 
     if (completedConversations.length === 0) {
       return {
         success: false,
-        error: "No completed conversations found. Generate insights for conversations first.",
+        error:
+          "No completed conversations found. Generate insights for conversations first.",
       };
     }
-
-    // Prepare survey config
-    const surveyConfig: SurveyConfig = {
-      goal: survey.goal,
-      type: survey.type,
-      information: survey.information,
-      requiredQuestions: survey.requiredQuestions,
-      metrics: survey.metrics || [],
-    };
-
-    // Prepare conversation data for analytics
-    const conversationsData = completedConversations.map((conv) => ({
-      id: conv.id,
-      summary: conv.summary || "",
-      insights: conv.insights || "",
-    }));
-
-    // Generate overall analytics
-    const analyticsPrompt = getOverallAnalyticsPrompt(conversationsData, surveyConfig);
-    const analyticsText = await generateAIResponse(analyticsPrompt, undefined, {
-      model: analysisModel,
-      temperature: 0.5,
-      maxTokens: 3000,
+    const job = await enqueueSurveyAnalytics({
+      surveyId,
+      userId: session.user.id,
     });
-
-    // Parse analytics (try to extract structured data)
-    let metrics: Record<string, unknown>;
-    let overallSummary: string;
-
-    try {
-      // Try to extract JSON metrics if present
-      const jsonMatch = analyticsText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        metrics = JSON.parse(jsonMatch[0]);
-        overallSummary = analyticsText.replace(jsonMatch[0], "").trim();
-      } else {
-        // Extract summary (usually first paragraph or section)
-        const summaryMatch = analyticsText.match(/^([\s\S]*?)(?:\n\n|$)/);
-        overallSummary = summaryMatch ? summaryMatch[1] : analyticsText;
-        metrics = {
-          raw: analyticsText,
-        };
-      }
-    } catch {
-      overallSummary = analyticsText;
-      metrics = {
-        raw: analyticsText,
-      };
-    }
-
-    // Calculate statistics
-    const totalConversations = completedConversations.length;
-    const totalMessages = completedConversations.reduce(
-      (sum, conv) => sum + (conv.rawConversation?.length || 0),
-      0
-    );
-    const averageConversationLength = totalConversations > 0
-      ? Math.round(totalMessages / totalConversations)
-      : 0;
-
-    // Save or update analytics
-    const [existingAnalytics] = await db
-      .select()
-      .from(surveyAnalytics)
-      .where(eq(surveyAnalytics.surveyId, surveyId));
-
-    if (existingAnalytics) {
-      await db
-        .update(surveyAnalytics)
-        .set({
-          overallSummary,
-          metrics,
-          totalConversations,
-          averageConversationLength,
-          lastUpdated: new Date(),
-        })
-        .where(eq(surveyAnalytics.surveyId, surveyId));
-    } else {
-      await db.insert(surveyAnalytics).values({
-        id: crypto.randomUUID(),
-        surveyId,
-        overallSummary,
-        metrics,
-        totalConversations,
-        averageConversationLength,
-      });
-    }
 
     return {
       success: true,
       data: {
-        overallSummary,
-        metrics,
-        totalConversations,
-        averageConversationLength,
+        jobId: job.id!,
       },
     };
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
         return { success: false, error: error.message };
       }
       return { success: false, error: error.message };
     }
-    return { success: false, error: "Failed to generate analytics" };
+    return { success: false, error: "Failed to enqueue analytics generation" };
   }
 }
 
 /**
  * Get analytics for a survey
  */
-export async function getSurveyAnalyticsAction(
-  surveyId: string
-): Promise<
+export async function getSurveyAnalyticsAction(surveyId: string): Promise<
   ActionResult<{
     overallSummary: string;
     metrics: Record<string, unknown>;
@@ -198,7 +91,6 @@ export async function getSurveyAnalyticsAction(
   try {
     const session = await getVerifiedSession();
 
-    // Verify survey ownership
     const [survey] = await db
       .select()
       .from(surveys)
@@ -212,7 +104,6 @@ export async function getSurveyAnalyticsAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    // Get analytics
     const [analytics] = await db
       .select()
       .from(surveyAnalytics)
@@ -237,7 +128,10 @@ export async function getSurveyAnalyticsAction(
     };
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
         return { success: false, error: error.message };
       }
       return { success: false, error: error.message };
@@ -249,9 +143,7 @@ export async function getSurveyAnalyticsAction(
 /**
  * Get dashboard data for a survey (all data needed for the dashboard)
  */
-export async function getDashboardDataAction(
-  surveyId: string
-): Promise<
+export async function getDashboardDataAction(surveyId: string): Promise<
   ActionResult<{
     survey: {
       id: string;
@@ -276,7 +168,6 @@ export async function getDashboardDataAction(
   try {
     const session = await getVerifiedSession();
 
-    // Verify survey ownership
     const [survey] = await db
       .select()
       .from(surveys)
@@ -290,13 +181,11 @@ export async function getDashboardDataAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    // Get analytics
     const [analytics] = await db
       .select()
       .from(surveyAnalytics)
       .where(eq(surveyAnalytics.surveyId, surveyId));
 
-    // Get conversation counts
     const allConversations = await db
       .select({ completed: surveyConversations.completed })
       .from(surveyConversations)
@@ -334,7 +223,10 @@ export async function getDashboardDataAction(
     };
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
         return { success: false, error: error.message };
       }
       return { success: false, error: error.message };
@@ -342,4 +234,3 @@ export async function getDashboardDataAction(
     return { success: false, error: "Failed to fetch dashboard data" };
   }
 }
-

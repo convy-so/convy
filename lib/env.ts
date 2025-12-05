@@ -8,6 +8,10 @@ const required = (key: string): string => {
   return value;
 };
 
+const optional = (key: string): string | undefined => {
+  return process.env[key];
+};
+
 export const env = {
   NODE_ENV: process.env.NODE_ENV ?? "development",
   DATABASE_URL: required("DATABASE_URL"),
@@ -18,8 +22,15 @@ export const env = {
   RESEND_API_KEY: required("RESEND_API_KEY"),
   EMAIL_FROM: required("EMAIL_FROM"),
   GOOGLE_GENERATIVE_AI_API_KEY: required("GOOGLE_GENERATIVE_AI_API_KEY"),
+  UPSTASH_REDIS_URL: required("UPSTASH_REDIS_URL"),
   UPSTASH_REDIS_REST_URL: required("UPSTASH_REDIS_REST_URL"),
   UPSTASH_REDIS_REST_TOKEN: required("UPSTASH_REDIS_REST_TOKEN"),
+  NEXT_PUBLIC_SUPABASE_URL: required("NEXT_PUBLIC_SUPABASE_URL"),
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: required(
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
+  ),
+  // Notion Integration (Optional)
+  NOTION_API_KEY: optional("NOTION_API_KEY"),
 };
 
 export type Env = typeof env;

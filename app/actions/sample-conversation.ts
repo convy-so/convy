@@ -7,6 +7,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
+import { getSampleConversationFeedbackPrompt } from "@/lib/prompts";
 import { MAX_SAMPLE_CONVERSATIONS } from "@/lib/surveys";
 
 type ActionResult<T> =
@@ -27,6 +28,7 @@ const saveSampleConversationSchema = z.object({
     .max(MAX_SAMPLE_CONVERSATIONS)
     .optional(),
   messages: z.array(messageSchema).min(2),
+  generateInsights: z.boolean().optional().default(true),
 });
 
 const confirmSampleConversationSchema = z.object({
@@ -34,10 +36,27 @@ const confirmSampleConversationSchema = z.object({
   conversationNumber: z.number().int().min(1).max(MAX_SAMPLE_CONVERSATIONS),
 });
 
+const finalCommentsSchema = z.object({
+  surveyId: z.string().min(1),
+  conversationNumber: z.number().int().min(1).max(MAX_SAMPLE_CONVERSATIONS),
+  comments: z.string(),
+});
+
+// Schema for sample conversation insights
+export interface SampleConversationInsights {
+  summary: string;
+  keyFindings: string[];
+  coveredTopics: string[];
+  missedTopics: string[];
+  suggestedImprovements: string[];
+  toneAssessment?: string;
+}
+
 /**
  * Save the latest sample conversation the survey maker just had with the AI.
  * The conversation itself is conducted through the streaming endpoint so that
  * the survey maker experiences the exact same flow as participants.
+ * Now generates AI insights for the sample conversation.
  */
 export async function generateSampleConversationAction(
   input: z.infer<typeof saveSampleConversationSchema>
@@ -46,13 +65,16 @@ export async function generateSampleConversationAction(
     id: string;
     conversationNumber: number;
     messages: Array<{ role: "user" | "assistant"; content: string }>;
+    insights: SampleConversationInsights | null;
+    feedbackPrompt: string;
+    remainingSamples: number;
+    jobId?: string;
   }>
 > {
   try {
     const session = await getVerifiedSession();
     const body = saveSampleConversationSchema.parse(input);
 
-    // Get survey and verify ownership
     const [survey] = await db
       .select()
       .from(surveys)
@@ -95,12 +117,32 @@ export async function generateSampleConversationAction(
 
     const conversationId = existingConversation?.id ?? nanoid();
 
+    let jobId: string | undefined;
+
+    if (body.generateInsights !== false) {
+      try {
+        const { enqueueSampleConversationInsights } = await import(
+          "@/lib/queue"
+        );
+        const job = await enqueueSampleConversationInsights({
+          surveyId: body.surveyId,
+          conversationNumber,
+          messages: body.messages,
+          userId: session.user.id,
+        });
+        jobId = job.id;
+      } catch (insightsError) {
+        console.error("Error enqueuing sample insights job:", insightsError);
+      }
+    }
+
     if (existingConversation) {
       await db
         .update(sampleConversations)
         .set({
           messages: body.messages,
-          confirmed: false, // force re-confirmation whenever conversation changes
+          confirmed: false,
+          insights: null,
         })
         .where(eq(sampleConversations.id, existingConversation.id));
     } else {
@@ -111,6 +153,8 @@ export async function generateSampleConversationAction(
         messages: body.messages,
         feedback: null,
         confirmed: false,
+        insights: null,
+        finalComments: null,
       });
     }
 
@@ -125,12 +169,23 @@ export async function generateSampleConversationAction(
       })
       .where(eq(surveys.id, body.surveyId));
 
+    const remainingSamples = MAX_SAMPLE_CONVERSATIONS - conversationNumber;
+
+    const feedbackPrompt = getSampleConversationFeedbackPrompt(
+      conversationNumber,
+      remainingSamples
+    );
+
     return {
       success: true,
       data: {
         id: conversationId,
         conversationNumber,
         messages: body.messages,
+        insights: null,
+        feedbackPrompt,
+        remainingSamples,
+        jobId,
       },
     };
   } catch (error) {
@@ -164,7 +219,6 @@ export async function provideSampleConversationFeedbackAction(
   try {
     const session = await getVerifiedSession();
 
-    // Verify survey ownership
     const [survey] = await db
       .select()
       .from(surveys)
@@ -192,7 +246,6 @@ export async function provideSampleConversationFeedbackAction(
       return { success: false, error: "Conversation not found" };
     }
 
-    // Update the conversation with feedback
     await db
       .update(sampleConversations)
       .set({ feedback })
@@ -228,7 +281,6 @@ export async function confirmSampleConversationAction(
     const session = await getVerifiedSession();
     const body = confirmSampleConversationSchema.parse(input);
 
-    // Verify survey ownership
     const [survey] = await db
       .select()
       .from(surveys)
@@ -241,8 +293,6 @@ export async function confirmSampleConversationAction(
     if (survey.userId !== session.user.id) {
       return { success: false, error: "Unauthorized" };
     }
-
-    // Mark conversation as confirmed
     await db
       .update(sampleConversations)
       .set({ confirmed: true })
@@ -306,7 +356,72 @@ export async function confirmSampleConversationAction(
 }
 
 /**
+ * Add final comments after a sample conversation
+ * These are the survey maker's thoughts on what to add, emphasize, or change
+ */
+export async function addSampleConversationFinalCommentsAction(
+  input: z.infer<typeof finalCommentsSchema>
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const session = await getVerifiedSession();
+    const body = finalCommentsSchema.parse(input);
+
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, body.surveyId));
+
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    if (survey.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const [conversation] = await db
+      .select()
+      .from(sampleConversations)
+      .where(
+        and(
+          eq(sampleConversations.surveyId, body.surveyId),
+          eq(sampleConversations.conversationNumber, body.conversationNumber)
+        )
+      );
+
+    if (!conversation) {
+      return { success: false, error: "Conversation not found" };
+    }
+
+    await db
+      .update(sampleConversations)
+      .set({ finalComments: body.comments })
+      .where(eq(sampleConversations.id, conversation.id));
+
+    return { success: true, data: { id: conversation.id } };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return {
+        success: false,
+        error: error.errors[0]?.message ?? "Validation error",
+      };
+    }
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Failed to add final comments" };
+  }
+}
+
+/**
  * Get all sample conversations for a survey
+ * Now includes insights and final comments
  */
 export async function getSampleConversationsAction(surveyId: string): Promise<
   ActionResult<
@@ -316,13 +431,14 @@ export async function getSampleConversationsAction(surveyId: string): Promise<
       messages: Array<{ role: "user" | "assistant"; content: string }>;
       feedback: string | null;
       confirmed: boolean;
+      insights: SampleConversationInsights | null;
+      finalComments: string | null;
     }>
   >
 > {
   try {
     const session = await getVerifiedSession();
 
-    // Verify survey ownership
     const [survey] = await db
       .select()
       .from(surveys)
@@ -342,7 +458,17 @@ export async function getSampleConversationsAction(surveyId: string): Promise<
       .where(eq(sampleConversations.surveyId, surveyId))
       .orderBy(sampleConversations.conversationNumber);
 
-    return { success: true, data: conversations };
+    const formattedConversations = conversations.map((conv) => ({
+      id: conv.id,
+      conversationNumber: conv.conversationNumber,
+      messages: conv.messages,
+      feedback: conv.feedback,
+      confirmed: conv.confirmed,
+      insights: conv.insights as SampleConversationInsights | null,
+      finalComments: conv.finalComments,
+    }));
+
+    return { success: true, data: formattedConversations };
   } catch (error) {
     if (error instanceof Error) {
       if (
@@ -358,7 +484,80 @@ export async function getSampleConversationsAction(surveyId: string): Promise<
 }
 
 /**
- * Helper function to parse conversation text into structured messages
- * This is a simplified parser - in production, you might want to use
- * structured output from the AI or a more sophisticated parsing approach
+ * Get sample conversation status for a survey
+ * Returns information about sample conversation progress
  */
+export async function getSampleConversationStatusAction(
+  surveyId: string
+): Promise<
+  ActionResult<{
+    totalSamples: number;
+    maxSamples: number;
+    confirmedSamples: number;
+    remainingSamples: number;
+    canConfirmSurvey: boolean;
+    feedbackPrompt: string | null;
+  }>
+> {
+  try {
+    const session = await getVerifiedSession();
+
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    if (survey.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const conversations = await db
+      .select()
+      .from(sampleConversations)
+      .where(eq(sampleConversations.surveyId, surveyId));
+
+    const totalSamples = conversations.length;
+    const confirmedSamples = conversations.filter((c) => c.confirmed).length;
+    const remainingSamples = MAX_SAMPLE_CONVERSATIONS - totalSamples;
+    const canConfirmSurvey =
+      totalSamples > 0 && confirmedSamples === totalSamples;
+
+    let feedbackPrompt: string | null = null;
+    if (remainingSamples > 0 && totalSamples > 0) {
+      feedbackPrompt = getSampleConversationFeedbackPrompt(
+        totalSamples,
+        remainingSamples
+      );
+    }
+
+    return {
+      success: true,
+      data: {
+        totalSamples,
+        maxSamples: MAX_SAMPLE_CONVERSATIONS,
+        confirmedSamples,
+        remainingSamples,
+        canConfirmSurvey,
+        feedbackPrompt,
+      },
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return {
+      success: false,
+      error: "Failed to get sample conversation status",
+    };
+  }
+}

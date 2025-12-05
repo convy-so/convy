@@ -27,7 +27,6 @@ export async function requireRole(role: Role): Promise<AuthSessionWithUser> {
 
   return session;
 }
-
 export async function canAccess(role: Role) {
   try {
     await requireRole(role);
