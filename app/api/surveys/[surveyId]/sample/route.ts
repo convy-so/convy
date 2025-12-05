@@ -7,9 +7,8 @@ import { defaultModel } from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
   getSampleConversationSystemPrompt,
-  type SurveyConfig,
 } from "@/lib/prompts";
-import { MAX_SAMPLE_CONVERSATIONS } from "@/lib/surveys";
+import { MAX_SAMPLE_CONVERSATIONS, buildCompleteSurveyConfig } from "@/lib/surveys";
 import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
 
 export const maxDuration = 300;
@@ -17,6 +16,7 @@ export const maxDuration = 300;
 /**
  * Stream a sample conversation for the survey maker to review
  * This allows interactive testing of the conversation flow
+ * Now supports extended survey configuration including tone and images
  */
 export async function POST(
   request: Request,
@@ -26,7 +26,7 @@ export async function POST(
     // Rate limiting check
     const clientIP = getClientIP(request);
     const rateLimitResult = await apiRateLimiter.limit(clientIP);
-    
+
     if (!rateLimitResult.success) {
       return new Response(
         JSON.stringify({
@@ -64,7 +64,10 @@ export async function POST(
       conversationNumber < 1 ||
       conversationNumber > MAX_SAMPLE_CONVERSATIONS
     ) {
-      return new Response("Invalid conversation number", { status: 400 });
+      return new Response(
+        `Invalid conversation number. Must be between 1 and ${MAX_SAMPLE_CONVERSATIONS}`,
+        { status: 400 }
+      );
     }
 
     const [survey] = await db
@@ -80,23 +83,29 @@ export async function POST(
       return new Response("Unauthorized", { status: 403 });
     }
 
+    // Allow sample conversations for surveys in draft or sample_review status
+    if (survey.status !== "draft" && survey.status !== "sample_review") {
+      return new Response(
+        "Survey must be in draft or sample_review status for sample conversations",
+        { status: 400 }
+      );
+    }
+
     if (conversationNumber > survey.sampleConversationCount + 1) {
       return new Response("Sample conversations must be sequential", {
         status: 400,
       });
     }
 
-    const surveyConfig: SurveyConfig = {
-      goal: survey.goal,
-      type: survey.type,
-      information: survey.information,
-      requiredQuestions: survey.requiredQuestions,
-      metrics: survey.metrics || [],
-      language: survey.language,
-    };
+    // Build complete survey config with all extended fields
+    const surveyConfig = buildCompleteSurveyConfig(survey);
 
+    // Get previous feedback from earlier sample conversations
     const previousFeedbackRows = await db
-      .select({ feedback: sampleConversations.feedback })
+      .select({
+        feedback: sampleConversations.feedback,
+        finalComments: sampleConversations.finalComments,
+      })
       .from(sampleConversations)
       .where(
         and(
@@ -105,12 +114,13 @@ export async function POST(
         )
       );
 
-    const aggregatedFeedback = previousFeedbackRows
-      .map((row) => row.feedback)
-      .filter((value): value is string => !!value)
+    // Combine all previous feedback
+    const previousFeedback = previousFeedbackRows
+      .flatMap((row) => [row.feedback, row.finalComments])
+      .filter((value): value is string => !!value && value.trim().length > 0)
       .join("\n");
 
-    const combinedFeedback = [aggregatedFeedback, feedback]
+    const combinedFeedback = [previousFeedback, feedback]
       .filter((value): value is string => !!value && value.trim().length > 0)
       .join("\n\n");
 
@@ -129,7 +139,16 @@ export async function POST(
       maxOutputTokens: 2000,
     });
 
-    return result.toTextStreamResponse();
+    // Include remaining sample count in response headers
+    const remainingSamples = MAX_SAMPLE_CONVERSATIONS - conversationNumber;
+    const response = result.toTextStreamResponse();
+    response.headers.set("X-Remaining-Samples", remainingSamples.toString());
+    response.headers.set(
+      "X-Conversation-Number",
+      conversationNumber.toString()
+    );
+
+    return response;
   } catch (error) {
     if (error instanceof Error) {
       if (

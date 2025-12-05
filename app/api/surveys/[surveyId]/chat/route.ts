@@ -5,21 +5,24 @@ import { streamText } from "ai";
 import { db } from "@/db";
 import { surveyConversations, surveys } from "@/db/schema";
 import { defaultModel } from "@/lib/ai";
-import { getSurveyConversationSystemPrompt, type SurveyConfig } from "@/lib/prompts";
+import { getSurveyConversationSystemPrompt } from "@/lib/prompts";
 import { chatRateLimiter, getClientIP } from "@/lib/ratelimit";
-import { logPromptInjectionAttempt, sanitizeUserInput } from "@/lib/prompt-injection-detection";
+import {
+  logPromptInjectionAttempt,
+  sanitizeUserInput,
+} from "@/lib/prompt-injection-detection";
+import { buildCompleteSurveyConfig } from "@/lib/surveys";
 
-export const maxDuration = 300; 
+export const maxDuration = 300;
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ surveyId: string }> }
 ) {
   try {
-    // Rate limiting check
     const clientIP = getClientIP(request);
     const rateLimitResult = await chatRateLimiter.limit(clientIP);
-    
+
     if (!rateLimitResult.success) {
       return new Response(
         JSON.stringify({
@@ -50,15 +53,12 @@ export async function POST(
       return new Response("Invalid messages", { status: 400 });
     }
 
-    // Sanitize and monitor user messages for prompt injection attempts
     const sanitizedMessages = messages.map((msg) => {
       if (msg.role === "user") {
-        // Log potential injection attempts (for monitoring, not blocking)
         logPromptInjectionAttempt(msg.content, {
           surveyId,
           conversationId,
         });
-        // Sanitize user input
         return {
           ...msg,
           content: sanitizeUserInput(msg.content),
@@ -81,19 +81,17 @@ export async function POST(
     }
 
     if (survey.currentParticipants >= survey.participantLimit) {
-      return new Response("Survey has reached participant limit", { status: 403 });
+      return new Response("Survey has reached participant limit", {
+        status: 403,
+      });
     }
 
-    const surveyConfig: SurveyConfig = {
-      goal: survey.goal,
-      type: survey.type,
-      information: survey.information,
-      requiredQuestions: survey.requiredQuestions,
-      metrics: survey.metrics || [],
-      language: survey.language,
-    };
+    const surveyConfig = buildCompleteSurveyConfig(survey);
 
-    const systemPrompt = getSurveyConversationSystemPrompt(surveyConfig, survey.language);
+    const systemPrompt = getSurveyConversationSystemPrompt(
+      surveyConfig,
+      survey.language
+    );
 
     const result = streamText({
       model: defaultModel,
@@ -103,12 +101,10 @@ export async function POST(
       maxOutputTokens: 2000,
     });
 
-    // Create or get conversation ID
     let convId = conversationId;
     if (!convId) {
       convId = nanoid();
 
-      // Create conversation record
       await db.insert(surveyConversations).values({
         id: convId,
         surveyId: survey.id,
@@ -119,7 +115,6 @@ export async function POST(
         completed: false,
       });
 
-      // Increment participant count if this is a new conversation
       await db
         .update(surveys)
         .set({
@@ -128,11 +123,13 @@ export async function POST(
         .where(eq(surveys.id, survey.id));
     }
 
-    // Return streaming response with conversation ID and rate limit headers
     const response = result.toTextStreamResponse();
     response.headers.set("X-Conversation-Id", convId);
     response.headers.set("X-RateLimit-Limit", "20");
-    response.headers.set("X-RateLimit-Remaining", rateLimitResult.remaining.toString());
+    response.headers.set(
+      "X-RateLimit-Remaining",
+      rateLimitResult.remaining.toString()
+    );
     response.headers.set("X-RateLimit-Reset", rateLimitResult.reset.toString());
     return response;
   } catch (error) {
@@ -153,7 +150,11 @@ export async function PUT(
     const body = await request.json();
     const { conversationId, messages, completed } = body as {
       conversationId: string;
-      messages: Array<{ role: "user" | "assistant"; content: string; timestamp?: string }>;
+      messages: Array<{
+        role: "user" | "assistant";
+        content: string;
+        timestamp?: string;
+      }>;
       completed?: boolean;
     };
 
@@ -161,7 +162,6 @@ export async function PUT(
       return new Response("Invalid request", { status: 400 });
     }
 
-    // Verify survey exists
     const [survey] = await db
       .select()
       .from(surveys)
@@ -171,7 +171,6 @@ export async function PUT(
       return new Response("Survey not found", { status: 404 });
     }
 
-    // Update conversation
     await db
       .update(surveyConversations)
       .set({
@@ -193,4 +192,3 @@ export async function PUT(
     return new Response("Internal server error", { status: 500 });
   }
 }
-

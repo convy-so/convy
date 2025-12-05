@@ -16,6 +16,7 @@ import {
   getConversationSummaryPrompt,
   type SurveyConfig,
 } from "@/lib/prompts";
+import { buildCompleteSurveyConfig } from "@/lib/surveys";
 
 type ActionResult<T> =
   | { success: true; data: T }
@@ -42,7 +43,6 @@ export async function generateConversationInsightsAction(
     const session = await getVerifiedSession();
     const body = generateInsightsSchema.parse(input);
 
-    // Get conversation
     const [conversation] = await db
       .select()
       .from(surveyConversations)
@@ -52,7 +52,6 @@ export async function generateConversationInsightsAction(
       return { success: false, error: "Conversation not found" };
     }
 
-    // Get survey to verify ownership
     const [survey] = await db
       .select()
       .from(surveys)
@@ -66,16 +65,8 @@ export async function generateConversationInsightsAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    // Prepare survey config
-    const surveyConfig: SurveyConfig = {
-      goal: survey.goal,
-      type: survey.type,
-      information: survey.information,
-      requiredQuestions: survey.requiredQuestions,
-      metrics: survey.metrics || [],
-    };
+    const surveyConfig: SurveyConfig = buildCompleteSurveyConfig(survey);
 
-    // Generate summary
     const summaryPrompt = getConversationSummaryPrompt(
       conversation.rawConversation,
       surveyConfig
@@ -86,7 +77,6 @@ export async function generateConversationInsightsAction(
       maxTokens: 1000,
     });
 
-    // Generate insights
     const insightsPrompt = getConversationInsightsPrompt(
       conversation.rawConversation,
       surveyConfig
@@ -97,7 +87,6 @@ export async function generateConversationInsightsAction(
       maxTokens: 1500,
     });
 
-    // Parse insights (try JSON first, then fallback to text)
     let insights: Record<string, unknown>;
     let keyFindings: string;
 
@@ -115,13 +104,11 @@ export async function generateConversationInsightsAction(
       keyFindings = insightsText;
     }
 
-    // Update conversation with summary
     await db
       .update(surveyConversations)
       .set({ summary })
       .where(eq(surveyConversations.id, body.conversationId));
 
-    // Save or update insights
     const [existingInsight] = await db
       .select()
       .from(conversationInsights)
@@ -154,10 +141,16 @@ export async function generateConversationInsightsAction(
     };
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return { success: false, error: error.errors[0]?.message ?? "Validation error" };
+      return {
+        success: false,
+        error: error.errors[0]?.message ?? "Validation error",
+      };
     }
     if (error instanceof Error) {
-      if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
         return { success: false, error: error.message };
       }
       return { success: false, error: error.message };
@@ -168,12 +161,12 @@ export async function generateConversationInsightsAction(
 
 /**
  * Mark a conversation as completed and trigger insight generation
+ * Insight generation is now handled asynchronously via background job
  */
 export async function completeConversationAction(
   conversationId: string
-): Promise<ActionResult<{ id: string }>> {
+): Promise<ActionResult<{ id: string; jobId?: string }>> {
   try {
-    // Get conversation
     const [conversation] = await db
       .select()
       .from(surveyConversations)
@@ -182,19 +175,34 @@ export async function completeConversationAction(
     if (!conversation) {
       return { success: false, error: "Conversation not found" };
     }
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, conversation.surveyId));
 
-    // Mark as completed
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
     await db
       .update(surveyConversations)
       .set({ completed: true })
       .where(eq(surveyConversations.id, conversationId));
 
-    // Trigger insight generation (this can be done asynchronously)
-    // For now, we'll generate it synchronously, but in production you might want
-    // to use a background job queue
-    await generateConversationInsightsAction({ conversationId });
+    const { enqueueConversationInsights } = await import("@/lib/queue");
+    const job = await enqueueConversationInsights({
+      conversationId,
+      surveyId: conversation.surveyId,
+      userId: survey.userId,
+    });
 
-    return { success: true, data: { id: conversationId } };
+    return {
+      success: true,
+      data: {
+        id: conversationId,
+        jobId: job.id,
+      },
+    };
   } catch (error) {
     if (error instanceof Error) {
       return { success: false, error: error.message };
@@ -206,9 +214,7 @@ export async function completeConversationAction(
 /**
  * Get all conversations for a survey
  */
-export async function getSurveyConversationsAction(
-  surveyId: string
-): Promise<
+export async function getSurveyConversationsAction(surveyId: string): Promise<
   ActionResult<
     Array<{
       id: string;
@@ -230,7 +236,6 @@ export async function getSurveyConversationsAction(
   try {
     const session = await getVerifiedSession();
 
-    // Verify survey ownership
     const [survey] = await db
       .select()
       .from(surveys)
@@ -244,7 +249,6 @@ export async function getSurveyConversationsAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    // Get conversations with insights
     const conversations = await db
       .select({
         id: surveyConversations.id,
@@ -280,7 +284,10 @@ export async function getSurveyConversationsAction(
     return { success: true, data: formattedConversations };
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
         return { success: false, error: error.message };
       }
       return { success: false, error: error.message };
@@ -292,9 +299,7 @@ export async function getSurveyConversationsAction(
 /**
  * Get a single conversation with insights
  */
-export async function getConversationAction(
-  conversationId: string
-): Promise<
+export async function getConversationAction(conversationId: string): Promise<
   ActionResult<{
     id: string;
     rawConversation: Array<{
@@ -314,7 +319,6 @@ export async function getConversationAction(
   try {
     const session = await getVerifiedSession();
 
-    // Get conversation
     const [conversation] = await db
       .select()
       .from(surveyConversations)
@@ -324,7 +328,6 @@ export async function getConversationAction(
       return { success: false, error: "Conversation not found" };
     }
 
-    // Verify survey ownership
     const [survey] = await db
       .select()
       .from(surveys)
@@ -338,7 +341,6 @@ export async function getConversationAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    // Get insights
     const [insights] = await db
       .select()
       .from(conversationInsights)
@@ -362,7 +364,10 @@ export async function getConversationAction(
     };
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
         return { success: false, error: error.message };
       }
       return { success: false, error: error.message };
@@ -370,4 +375,3 @@ export async function getConversationAction(
     return { success: false, error: "Failed to fetch conversation" };
   }
 }
-

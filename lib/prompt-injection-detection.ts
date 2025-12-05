@@ -35,19 +35,15 @@ export function detectPromptInjectionAttempt(content: string): boolean {
   }
 
   const normalizedContent = content.trim();
-
-  // Check against known patterns
   for (const pattern of PROMPT_INJECTION_PATTERNS) {
     if (pattern.test(normalizedContent)) {
       return true;
     }
   }
-
-  // Check for excessive use of special formatting that might be trying to break context
   const suspiciousFormatting = [
-    (normalizedContent.match(/```/g) || []).length > 2, // Multiple code blocks
-    (normalizedContent.match(/\[\[/g) || []).length > 3, // Multiple brackets
-    (normalizedContent.match(/---/g) || []).length > 3, // Multiple separators
+    (normalizedContent.match(/```/g) || []).length > 2,
+    (normalizedContent.match(/\[\[/g) || []).length > 3,
+    (normalizedContent.match(/---/g) || []).length > 3,
   ];
 
   if (suspiciousFormatting.some(Boolean)) {
@@ -65,15 +61,10 @@ export function sanitizeUserInput(content: string): string {
   if (!content || typeof content !== "string") {
     return "";
   }
-
-  // Remove null bytes and other control characters that could break parsing
   let sanitized = content.replace(/[\x00-\x1F\x7F]/g, "");
-
-  // Limit extremely long inputs (potential DoS)
   if (sanitized.length > 10000) {
     sanitized = sanitized.substring(0, 10000) + "... [truncated]";
   }
-
   return sanitized;
 }
 
