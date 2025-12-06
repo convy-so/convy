@@ -244,7 +244,36 @@ export function formatConversationForNotion(conversation: {
     },
   ]);
 
-  const blocks = [
+  const blocks: Array<
+    | {
+        object: "block";
+        type: "heading_1";
+        heading_1: {
+          rich_text: Array<{ type: "text"; text: { content: string } }>;
+        };
+      }
+    | {
+        object: "block";
+        type: "heading_2";
+        heading_2: {
+          rich_text: Array<{ type: "text"; text: { content: string } }>;
+        };
+      }
+    | {
+        object: "block";
+        type: "heading_3";
+        heading_3: {
+          rich_text: Array<{ type: "text"; text: { content: string } }>;
+        };
+      }
+    | {
+        object: "block";
+        type: "paragraph";
+        paragraph: {
+          rich_text: Array<{ type: "text"; text: { content: string } }>;
+        };
+      }
+  > = [
     {
       object: "block" as const,
       type: "heading_1" as const,

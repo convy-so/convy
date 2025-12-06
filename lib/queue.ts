@@ -38,6 +38,22 @@ export interface ImageUploadJobData {
   userId: string;
 }
 
+export interface NotionSyncJobData {
+  userId: string;
+  surveyId?: string;
+  syncType: "survey" | "analytics" | "conversation" | "full";
+  targetId?: string; // conversation ID if syncing single conversation
+  forceUpdate?: boolean; // overwrite existing
+}
+
+export interface NotionBulkOperationJobData {
+  operationId: string;
+  userId: string;
+  operationType: "sync_all" | "sync_selected" | "resync" | "archive" | "delete";
+  surveyIds: string[];
+  batchSize?: number;
+}
+
 export const conversationInsightsQueue = new Queue<ConversationInsightsJobData>(
   "conversation-insights",
   {
@@ -166,6 +182,17 @@ export const imageUploadQueueEvents = new QueueEvents("image-upload", {
   connection: createBlockingClient(),
 });
 
+export const notionSyncQueueEvents = new QueueEvents("notion-sync", {
+  connection: createBlockingClient(),
+});
+
+export const notionBulkOperationQueueEvents = new QueueEvents(
+  "notion-bulk-operation",
+  {
+    connection: createBlockingClient(),
+  }
+);
+
 export async function enqueueConversationInsights(
   data: ConversationInsightsJobData
 ) {
@@ -208,6 +235,22 @@ export async function enqueueImageUpload(data: ImageUploadJobData) {
   });
 }
 
+export async function enqueueNotionSync(data: NotionSyncJobData) {
+  const jobId =
+    data.syncType === "conversation" && data.targetId
+      ? `notion-sync-conversation-${data.targetId}`
+      : data.syncType === "analytics" && data.surveyId
+        ? `notion-sync-analytics-${data.surveyId}`
+        : data.syncType === "survey" && data.surveyId
+          ? `notion-sync-survey-${data.surveyId}`
+          : `notion-sync-full-${data.userId}-${Date.now()}`;
+
+  return await notionSyncQueue.add(`sync-${data.syncType}`, data, {
+    jobId,
+    priority: 3,
+  });
+}
+
 export async function closeQueues() {
   const { closeRedisConnections } = await import("@/lib/redis");
 
@@ -217,11 +260,15 @@ export async function closeQueues() {
     sampleConversationInsightsQueue.close(),
     emailQueue.close(),
     imageUploadQueue.close(),
+    notionSyncQueue.close(),
+    notionBulkOperationQueue.close(),
     conversationInsightsQueueEvents.close(),
     surveyAnalyticsQueueEvents.close(),
     sampleConversationInsightsQueueEvents.close(),
     emailQueueEvents.close(),
     imageUploadQueueEvents.close(),
+    notionSyncQueueEvents.close(),
+    notionBulkOperationQueueEvents.close(),
   ]);
 
   await closeRedisConnections();

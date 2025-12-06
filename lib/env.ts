@@ -29,8 +29,14 @@ export const env = {
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: required(
     "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
   ),
-  // Notion Integration (Optional)
+  // Notion Integration (Optional - for fallback)
   NOTION_API_KEY: optional("NOTION_API_KEY"),
+  // Notion OAuth Integration
+  NOTION_CLIENT_ID: optional("NOTION_CLIENT_ID"),
+  NOTION_CLIENT_SECRET: optional("NOTION_CLIENT_SECRET"),
+  NOTION_REDIRECT_URI: optional("NOTION_REDIRECT_URI"),
+  // Encryption for tokens
+  ENCRYPTION_KEY: optional("ENCRYPTION_KEY"),
 };
 
 export type Env = typeof env;
