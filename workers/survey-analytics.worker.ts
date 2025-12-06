@@ -156,6 +156,22 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
       `[Survey Analytics Worker] Completed job ${job.id} for survey ${surveyId}`
     );
 
+    // Trigger Notion sync for analytics
+    try {
+      const { enqueueNotionSync } = await import("@/lib/queue");
+      await enqueueNotionSync({
+        userId: job.data.userId,
+        surveyId,
+        syncType: "analytics",
+      });
+      console.log(
+        `[Survey Analytics Worker] Notion sync queued for survey ${surveyId}`
+      );
+    } catch (error) {
+      console.error("Failed to enqueue Notion sync:", error);
+      // Don't fail the job if Notion sync fails
+    }
+
     return {
       surveyId,
       overallSummary,

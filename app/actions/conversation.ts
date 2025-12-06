@@ -189,12 +189,26 @@ export async function completeConversationAction(
       .set({ completed: true })
       .where(eq(surveyConversations.id, conversationId));
 
-    const { enqueueConversationInsights } = await import("@/lib/queue");
+    const { enqueueConversationInsights, enqueueNotionSync } =
+      await import("@/lib/queue");
     const job = await enqueueConversationInsights({
       conversationId,
       surveyId: conversation.surveyId,
       userId: survey.userId,
     });
+
+    // Trigger Notion sync for this conversation
+    try {
+      await enqueueNotionSync({
+        userId: survey.userId,
+        surveyId: conversation.surveyId,
+        syncType: "conversation",
+        targetId: conversationId,
+      });
+    } catch (error) {
+      console.error("Failed to enqueue Notion sync:", error);
+      // Don't fail the request if Notion sync fails
+    }
 
     return {
       success: true,

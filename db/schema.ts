@@ -403,6 +403,8 @@ export const surveysRelations = relations(surveys, ({ one, many }) => ({
     fields: [surveys.id],
     references: [surveyAnalytics.surveyId],
   }),
+  teamMembers: many(surveyTeamMembers),
+  slackDistributions: many(slackSurveyDistributions),
 }));
 
 export const surveyCreationConversationsRelations = relations(
@@ -468,10 +470,44 @@ export const notionIntegrations = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" })
       .unique(),
-    notionToken: text("notion_token").notNull(),
+
+    // OAuth tokens (encrypted)
+    accessToken: text("access_token").notNull(),
+    accessTokenIv: text("access_token_iv").notNull(),
+    accessTokenTag: text("access_token_tag").notNull(),
+
+    // Legacy token support (for backwards compatibility)
+    notionToken: text("notion_token"),
+
+    // OAuth metadata
+    botId: text("bot_id"),
+    workspaceId: text("workspace_id"),
     workspaceName: text("workspace_name"),
+    workspaceIcon: text("workspace_icon"),
+    tokenType: text("token_type").default("bearer"),
+    owner: jsonb("owner").$type<{
+      type: string;
+      user?: { id: string; name?: string; email?: string };
+    }>(),
+    duplicatedTemplateId: text("duplicated_template_id"),
+    requestId: text("request_id"),
+
+    // Notion structure
     parentPageId: text("parent_page_id"),
     surveyDatabaseId: text("survey_database_id"),
+
+    // Auto-sync settings
+    autoSync: boolean("auto_sync").default(true).notNull(),
+    syncOnNewConversation: boolean("sync_on_new_conversation")
+      .default(true)
+      .notNull(),
+    syncOnAnalyticsUpdate: boolean("sync_on_analytics_update")
+      .default(true)
+      .notNull(),
+    lastSyncedAt: timestamp("last_synced_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
   },
   (table) => [index("notion_integrations_user_id_idx").on(table.userId)]
 );
@@ -488,12 +524,43 @@ export const notionExports = pgTable(
       onDelete: "cascade",
     }),
     exportType: text("export_type").notNull(), // 'survey', 'analytics', 'conversation'
+    relatedId: text("related_id"), // conversation ID for conversation exports
     notionPageId: text("notion_page_id").notNull(),
     notionUrl: text("notion_url"),
   },
   (table) => [
     index("notion_exports_user_id_idx").on(table.userId),
     index("notion_exports_survey_id_idx").on(table.surveyId),
+    index("notion_exports_related_id_idx").on(table.relatedId),
+  ]
+);
+
+export const notionSyncStatus = pgTable(
+  "notion_sync_status",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    surveyId: text("survey_id").references(() => surveys.id, {
+      onDelete: "cascade",
+    }),
+    syncType: text("sync_type").notNull(), // 'survey' | 'analytics' | 'conversation' | 'full'
+    status: text("status").notNull().default("pending"), // 'pending' | 'processing' | 'completed' | 'failed'
+    error: text("error"),
+    jobId: text("job_id"),
+    targetId: text("target_id"), // specific conversation ID if applicable
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+  },
+  (table) => [
+    index("notion_sync_status_user_id_idx").on(table.userId),
+    index("notion_sync_status_survey_id_idx").on(table.surveyId),
+    index("notion_sync_status_status_idx").on(table.status),
+    index("notion_sync_status_job_id_idx").on(table.jobId),
   ]
 );
 
@@ -503,6 +570,12 @@ export const usersRelations = relations(users, ({ many }) => ({
   surveys: many(surveys),
   notionIntegration: many(notionIntegrations),
   notionExports: many(notionExports),
+  notionSyncStatuses: many(notionSyncStatus),
+  notionBulkOperations: many(notionBulkOperations),
+  surveyTeamMemberships: many(surveyTeamMembers),
+  notionPagePermissions: many(notionPagePermissions),
+  notionSyncConflicts: many(notionSyncConflicts),
+  slackIntegration: many(slackIntegrations),
 }));
 
 export const notionIntegrationsRelations = relations(
@@ -525,6 +598,382 @@ export const notionExportsRelations = relations(notionExports, ({ one }) => ({
     references: [surveys.id],
   }),
 }));
+
+export const notionSyncStatusRelations = relations(
+  notionSyncStatus,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [notionSyncStatus.userId],
+      references: [users.id],
+    }),
+    survey: one(surveys, {
+      fields: [notionSyncStatus.surveyId],
+      references: [surveys.id],
+    }),
+  })
+);
+
+// Bulk Operations
+export const notionBulkOperations = pgTable(
+  "notion_bulk_operations",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    operationType: text("operation_type").notNull(), // 'sync_all' | 'sync_selected' | 'resync' | 'archive' | 'delete'
+    targetSurveyIds: text("target_survey_ids").array(), // Array of survey IDs
+    totalItems: integer("total_items").default(0).notNull(),
+    processedItems: integer("processed_items").default(0).notNull(),
+    successCount: integer("success_count").default(0).notNull(),
+    failCount: integer("fail_count").default(0).notNull(),
+    warningCount: integer("warning_count").default(0).notNull(),
+    status: text("status").notNull().default("pending"), // 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
+    errors:
+      jsonb("errors").$type<
+        Array<{ surveyId: string; error: string; timestamp: string }>
+      >(),
+    startedAt: timestamp("started_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    estimatedCompletion: timestamp("estimated_completion", {
+      withTimezone: true,
+      mode: "date",
+    }),
+  },
+  (table) => [
+    index("notion_bulk_operations_user_id_idx").on(table.userId),
+    index("notion_bulk_operations_status_idx").on(table.status),
+  ]
+);
+
+// Team Collaboration
+export const surveyTeamMembers = pgTable(
+  "survey_team_members",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    surveyId: text("survey_id")
+      .notNull()
+      .references(() => surveys.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    invitedBy: text("invited_by")
+      .notNull()
+      .references(() => users.id),
+    role: text("role").notNull().default("viewer"), // 'owner' | 'editor' | 'viewer'
+    notionAccess: boolean("notion_access").default(true).notNull(),
+    canSync: boolean("can_sync").default(false).notNull(),
+    canInvite: boolean("can_invite").default(false).notNull(),
+    acceptedAt: timestamp("accepted_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    invitationToken: text("invitation_token"),
+  },
+  (table) => [
+    index("survey_team_members_survey_id_idx").on(table.surveyId),
+    index("survey_team_members_user_id_idx").on(table.userId),
+    unique("survey_team_members_survey_user_unique").on(
+      table.surveyId,
+      table.userId
+    ),
+  ]
+);
+
+export const notionPagePermissions = pgTable(
+  "notion_page_permissions",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    notionPageId: text("notion_page_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    surveyId: text("survey_id").references(() => surveys.id, {
+      onDelete: "cascade",
+    }),
+    permissionType: text("permission_type").notNull(), // 'read' | 'edit' | 'comment'
+    notionUserId: text("notion_user_id"), // User's Notion ID if different
+    syncedAt: timestamp("synced_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    syncStatus: text("sync_status").default("pending"), // 'pending' | 'synced' | 'failed'
+  },
+  (table) => [
+    index("notion_page_permissions_page_id_idx").on(table.notionPageId),
+    index("notion_page_permissions_user_id_idx").on(table.userId),
+    index("notion_page_permissions_survey_id_idx").on(table.surveyId),
+  ]
+);
+
+// Sync Conflict Resolution
+export const notionSyncConflicts = pgTable(
+  "notion_sync_conflicts",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    resourceType: text("resource_type").notNull(), // 'survey' | 'analytics' | 'conversation'
+    resourceId: text("resource_id").notNull(),
+    notionPageId: text("notion_page_id").notNull(),
+    conflictType: text("conflict_type").notNull(), // 'edit' | 'delete' | 'permission' | 'structure'
+    appVersion: jsonb("app_version").$type<Record<string, unknown>>(),
+    notionVersion: jsonb("notion_version").$type<Record<string, unknown>>(),
+    conflictDetails: jsonb("conflict_details").$type<{
+      changedFields?: string[];
+      appLastModified?: string;
+      notionLastModified?: string;
+      deletedInNotion?: boolean;
+    }>(),
+    resolution: text("resolution").default("pending"), // 'pending' | 'app_wins' | 'notion_wins' | 'merged' | 'manual' | 'ignored'
+    resolutionStrategy: text("resolution_strategy"), // 'last_write_wins' | 'app_priority' | 'notion_priority' | 'merge' | 'user_choice'
+    resolvedBy: text("resolved_by").references(() => users.id),
+    resolvedAt: timestamp("resolved_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    autoResolved: boolean("auto_resolved").default(false),
+  },
+  (table) => [
+    index("notion_sync_conflicts_user_id_idx").on(table.userId),
+    index("notion_sync_conflicts_resource_idx").on(
+      table.resourceType,
+      table.resourceId
+    ),
+    index("notion_sync_conflicts_resolution_idx").on(table.resolution),
+    index("notion_sync_conflicts_page_id_idx").on(table.notionPageId),
+  ]
+);
+
+export const notionBulkOperationsRelations = relations(
+  notionBulkOperations,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [notionBulkOperations.userId],
+      references: [users.id],
+    }),
+  })
+);
+
+export const surveyTeamMembersRelations = relations(
+  surveyTeamMembers,
+  ({ one }) => ({
+    survey: one(surveys, {
+      fields: [surveyTeamMembers.surveyId],
+      references: [surveys.id],
+    }),
+    user: one(users, {
+      fields: [surveyTeamMembers.userId],
+      references: [users.id],
+    }),
+    inviter: one(users, {
+      fields: [surveyTeamMembers.invitedBy],
+      references: [users.id],
+    }),
+  })
+);
+
+export const notionPagePermissionsRelations = relations(
+  notionPagePermissions,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [notionPagePermissions.userId],
+      references: [users.id],
+    }),
+    survey: one(surveys, {
+      fields: [notionPagePermissions.surveyId],
+      references: [surveys.id],
+    }),
+  })
+);
+
+export const notionSyncConflictsRelations = relations(
+  notionSyncConflicts,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [notionSyncConflicts.userId],
+      references: [users.id],
+    }),
+    resolver: one(users, {
+      fields: [notionSyncConflicts.resolvedBy],
+      references: [users.id],
+    }),
+  })
+);
+
+// Slack Integration Tables
+export const slackIntegrations = pgTable(
+  "slack_integrations",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" })
+      .unique(),
+
+    // Encrypted OAuth tokens
+    accessToken: text("access_token").notNull(),
+    accessTokenIv: text("access_token_iv").notNull(),
+    accessTokenTag: text("access_token_tag").notNull(),
+
+    // Slack workspace information
+    teamId: text("team_id").notNull().unique(),
+    teamName: text("team_name").notNull(),
+    teamIcon: text("team_icon"),
+    botUserId: text("bot_user_id").notNull(),
+
+    // OAuth metadata
+    scope: text("scope").notNull(),
+    tokenType: text("token_type").default("bot"),
+
+    // Settings
+    autoPostNewSurveys: boolean("auto_post_new_surveys")
+      .default(false)
+      .notNull(),
+    defaultChannelId: text("default_channel_id"),
+
+    // Tracking
+    lastUsedAt: timestamp("last_used_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+  },
+  (table) => [
+    index("slack_integrations_user_id_idx").on(table.userId),
+    index("slack_integrations_team_id_idx").on(table.teamId),
+  ]
+);
+
+export const slackSurveyDistributions = pgTable(
+  "slack_survey_distributions",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    surveyId: text("survey_id")
+      .notNull()
+      .references(() => surveys.id, { onDelete: "cascade" }),
+    slackIntegrationId: text("slack_integration_id")
+      .notNull()
+      .references(() => slackIntegrations.id, { onDelete: "cascade" }),
+
+    channelId: text("channel_id").notNull(),
+    channelName: text("channel_name"),
+    messageTs: text("message_ts"),
+
+    customMessage: text("custom_message"),
+    distributedBy: text("distributed_by")
+      .notNull()
+      .references(() => users.id),
+
+    responsesCount: integer("responses_count").default(0).notNull(),
+    lastResponseAt: timestamp("last_response_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+  },
+  (table) => [
+    index("slack_survey_distributions_survey_id_idx").on(table.surveyId),
+    index("slack_survey_distributions_integration_id_idx").on(
+      table.slackIntegrationId
+    ),
+    index("slack_survey_distributions_channel_id_idx").on(table.channelId),
+  ]
+);
+
+export const slackSurveyResponses = pgTable(
+  "slack_survey_responses",
+  {
+    id: text("id").primaryKey(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+
+    surveyId: text("survey_id")
+      .notNull()
+      .references(() => surveys.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => surveyConversations.id, { onDelete: "cascade" }),
+    distributionId: text("distribution_id").references(
+      () => slackSurveyDistributions.id,
+      { onDelete: "set null" }
+    ),
+
+    slackUserId: text("slack_user_id").notNull(),
+    slackTeamId: text("slack_team_id").notNull(),
+  },
+  (table) => [
+    unique("slack_survey_responses_unique").on(
+      table.surveyId,
+      table.slackUserId
+    ),
+    index("slack_survey_responses_survey_id_idx").on(table.surveyId),
+    index("slack_survey_responses_slack_user_idx").on(
+      table.slackUserId,
+      table.slackTeamId
+    ),
+  ]
+);
+
+// Slack Relations
+export const slackIntegrationsRelations = relations(
+  slackIntegrations,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [slackIntegrations.userId],
+      references: [users.id],
+    }),
+    distributions: many(slackSurveyDistributions),
+  })
+);
+
+export const slackSurveyDistributionsRelations = relations(
+  slackSurveyDistributions,
+  ({ one }) => ({
+    survey: one(surveys, {
+      fields: [slackSurveyDistributions.surveyId],
+      references: [surveys.id],
+    }),
+    integration: one(slackIntegrations, {
+      fields: [slackSurveyDistributions.slackIntegrationId],
+      references: [slackIntegrations.id],
+    }),
+    distributedByUser: one(users, {
+      fields: [slackSurveyDistributions.distributedBy],
+      references: [users.id],
+    }),
+  })
+);
+
+export const slackSurveyResponsesRelations = relations(
+  slackSurveyResponses,
+  ({ one }) => ({
+    survey: one(surveys, {
+      fields: [slackSurveyResponses.surveyId],
+      references: [surveys.id],
+    }),
+    conversation: one(surveyConversations, {
+      fields: [slackSurveyResponses.conversationId],
+      references: [surveyConversations.id],
+    }),
+    distribution: one(slackSurveyDistributions, {
+      fields: [slackSurveyResponses.distributionId],
+      references: [slackSurveyDistributions.id],
+    }),
+  })
+);
 
 export const authSchema = {
   user: users,
