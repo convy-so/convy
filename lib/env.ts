@@ -37,6 +37,22 @@ export const env = {
   NOTION_REDIRECT_URI: optional("NOTION_REDIRECT_URI"),
   // Encryption for tokens
   ENCRYPTION_KEY: optional("ENCRYPTION_KEY"),
+
+  // Slack OAuth Integration
+  SLACK_CLIENT_ID: optional("SLACK_CLIENT_ID"),
+  SLACK_CLIENT_SECRET: optional("SLACK_CLIENT_SECRET"),
+  SLACK_REDIRECT_URI: optional("SLACK_REDIRECT_URI"),
+
+  // Voice/WebSocket Configuration
+  WEBSOCKET_PORT: optional("WEBSOCKET_PORT") || "3001",
+  OPENAI_API_KEY: required("OPENAI_API_KEY"),
+  GOOGLE_CLOUD_PROJECT_ID: optional("GOOGLE_CLOUD_PROJECT_ID"),
+  GOOGLE_APPLICATION_CREDENTIALS: optional("GOOGLE_APPLICATION_CREDENTIALS"),
+  
+  // Voice Feature Toggles
+  ENABLE_VOICE_FEATURES: optional("ENABLE_VOICE_FEATURES") === "true",
+  VAD_SENSITIVITY: optional("VAD_SENSITIVITY") || "0.5",
+  MAX_AUDIO_DURATION_MS: optional("MAX_AUDIO_DURATION_MS") || "300000", // 5 minutes
 };
 
 export type Env = typeof env;

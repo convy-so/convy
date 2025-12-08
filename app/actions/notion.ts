@@ -329,7 +329,6 @@ export async function exportAnalyticsToNotionAction(
       }
     );
 
-    // Save export record
     await db.insert(notionExports).values({
       id: crypto.randomUUID(),
       userId: session.user.id,
