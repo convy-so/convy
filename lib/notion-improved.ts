@@ -5,7 +5,6 @@
 
 import { Client, isNotionClientError, APIErrorCode } from "@notionhq/client";
 import type {
-  CreatePageParameters,
   BlockObjectRequest,
 } from "@notionhq/client/build/src/api-endpoints";
 import { env } from "./env";
@@ -45,8 +44,8 @@ export async function withRetry<T>(
     } catch (error: unknown) {
       if (isNotionClientError(error)) {
         if (error.code === APIErrorCode.RateLimited) {
-          // Respect Retry-After header
-          const retryAfter = error.headers?.['retry-after'];
+          const headers = error.headers as Record<string, string> | undefined;
+          const retryAfter = headers?.["retry-after"];
           const delay = retryAfter
             ? parseInt(retryAfter, 10) * 1000
             : initialDelay * Math.pow(2, i);
@@ -59,13 +58,11 @@ export async function withRetry<T>(
           continue;
         }
 
-        // Don't retry other Notion errors
         throw error;
       }
 
       lastError = error as Error;
 
-      // Retry on network errors
       if (i < maxRetries - 1) {
         const delay = initialDelay * Math.pow(2, i);
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -80,10 +77,7 @@ export async function withRetry<T>(
 /**
  * FIXED: Split text into chunks to respect 2000 char limit
  */
-export function splitTextIntoChunks(
-  text: string,
-  maxLength = 1900
-): string[] {
+export function splitTextIntoChunks(text: string, maxLength = 1900): string[] {
   if (text.length <= maxLength) {
     return [text];
   }
@@ -91,7 +85,6 @@ export function splitTextIntoChunks(
   const chunks: string[] = [];
   let currentChunk = "";
 
-  // Split by sentences to avoid breaking mid-sentence
   const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
 
   for (const sentence of sentences) {
@@ -101,7 +94,6 @@ export function splitTextIntoChunks(
         currentChunk = "";
       }
 
-      // If single sentence exceeds limit, force split by words
       if (sentence.length > maxLength) {
         const words = sentence.split(" ");
         for (const word of words) {
@@ -162,7 +154,6 @@ export function formatSurveyForNotion(survey: {
   createdAt: Date;
   updatedAt: Date;
 }) {
-  // Ensure title doesn't exceed limits
   const title = survey.title.substring(0, 2000);
 
   return {
@@ -242,7 +233,6 @@ export function formatAnalyticsForNotion(analytics: {
     },
   ];
 
-  // FIXED: Split long summaries into multiple paragraphs
   const summaryChunks = splitTextIntoChunks(analytics.overallSummary);
   for (const chunk of summaryChunks) {
     blocks.push({
@@ -320,7 +310,6 @@ export function formatAnalyticsForNotion(analytics: {
     }
   );
 
-  // FIXED: Split large JSON into chunks
   const metricsJson = JSON.stringify(analytics.metrics, null, 2);
   const jsonChunks = splitTextIntoChunks(metricsJson);
 
@@ -462,7 +451,7 @@ export function formatConversationForNotion(conversation: {
             content: "Conversation Messages",
           },
         },
-      },
+      ],
     },
   });
 
@@ -528,30 +517,32 @@ export async function createSurveyDatabase(
           },
         },
       ],
-      properties: {
-        Name: {
-          title: {},
-        },
-        Status: {
-          select: {
-            options: [
-              { name: "draft", color: "gray" },
-              { name: "creating", color: "yellow" },
-              { name: "sample_review", color: "orange" },
-              { name: "active", color: "green" },
-              { name: "completed", color: "blue" },
-              { name: "archived", color: "red" },
-            ],
+      initial_data_source: {
+        properties: {
+          Name: {
+            title: {},
           },
-        },
-        "Survey ID": {
-          rich_text: {},
-        },
-        "Created At": {
-          date: {},
-        },
-        "Updated At": {
-          date: {},
+          Status: {
+            select: {
+              options: [
+                { name: "draft", color: "gray" },
+                { name: "creating", color: "yellow" },
+                { name: "sample_review", color: "orange" },
+                { name: "active", color: "green" },
+                { name: "completed", color: "blue" },
+                { name: "archived", color: "red" },
+              ],
+            },
+          },
+          "Survey ID": {
+            rich_text: {},
+          },
+          "Created At": {
+            date: {},
+          },
+          "Updated At": {
+            date: {},
+          },
         },
       },
     })
@@ -662,11 +653,9 @@ export async function exportConversationToNotion(
 ) {
   const blocks = formatConversationForNotion(conversation);
 
-  // Split into batches of 100
   const initialBlocks = blocks.slice(0, 100);
   const remainingBlocks = blocks.slice(100);
 
-  // Create page with first 100 blocks
   const response = await withRetry(() =>
     notion.pages.create({
       parent: {
@@ -688,7 +677,6 @@ export async function exportConversationToNotion(
     })
   );
 
-  // Append remaining blocks in batches of 100
   if (remainingBlocks.length > 0) {
     for (let i = 0; i < remainingBlocks.length; i += 100) {
       const batch = remainingBlocks.slice(i, i + 100);
@@ -729,7 +717,10 @@ export async function validateNotionToken(
         case APIErrorCode.RestrictedResource:
           return { valid: false, error: "Insufficient permissions" };
         case APIErrorCode.RateLimited:
-          return { valid: false, error: "Rate limit exceeded. Try again later" };
+          return {
+            valid: false,
+            error: "Rate limit exceeded. Try again later",
+          };
         default:
           return { valid: false, error: `Notion error: ${error.message}` };
       }

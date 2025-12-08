@@ -42,8 +42,8 @@ export interface NotionSyncJobData {
   userId: string;
   surveyId?: string;
   syncType: "survey" | "analytics" | "conversation" | "full";
-  targetId?: string; // conversation ID if syncing single conversation
-  forceUpdate?: boolean; // overwrite existing
+  targetId?: string;
+  forceUpdate?: boolean;
 }
 
 export interface NotionBulkOperationJobData {
@@ -150,6 +150,45 @@ export const imageUploadQueue = new Queue<ImageUploadJobData>("image-upload", {
     },
   },
 });
+
+export const notionSyncQueue = new Queue<NotionSyncJobData>("notion-sync", {
+  connection: sharedConnection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: "exponential",
+      delay: 2000,
+    },
+    removeOnComplete: {
+      age: 24 * 3600,
+      count: 1000,
+    },
+    removeOnFail: {
+      age: 7 * 24 * 3600,
+    },
+  },
+});
+
+export const notionBulkOperationQueue = new Queue<NotionBulkOperationJobData>(
+  "notion-bulk-operation",
+  {
+    connection: sharedConnection,
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: {
+        type: "exponential",
+        delay: 2000,
+      },
+      removeOnComplete: {
+        age: 24 * 3600,
+        count: 1000,
+      },
+      removeOnFail: {
+        age: 7 * 24 * 3600,
+      },
+    },
+  }
+);
 
 /**
  * Queue Events for monitoring

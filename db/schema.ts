@@ -404,7 +404,6 @@ export const surveysRelations = relations(surveys, ({ one, many }) => ({
     references: [surveyAnalytics.surveyId],
   }),
   teamMembers: many(surveyTeamMembers),
-  slackDistributions: many(slackSurveyDistributions),
 }));
 
 export const surveyCreationConversationsRelations = relations(
@@ -575,7 +574,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   surveyTeamMemberships: many(surveyTeamMembers),
   notionPagePermissions: many(notionPagePermissions),
   notionSyncConflicts: many(notionSyncConflicts),
-  slackIntegration: many(slackIntegrations),
+  slackIntegrations: many(slackIntegrations),
 }));
 
 export const notionIntegrationsRelations = relations(
@@ -829,23 +828,30 @@ export const slackIntegrations = pgTable(
     accessTokenTag: text("access_token_tag").notNull(),
 
     // Slack workspace information
-    teamId: text("team_id").notNull().unique(),
+    teamId: text("team_id").notNull(),
     teamName: text("team_name").notNull(),
     teamIcon: text("team_icon"),
-    botUserId: text("bot_user_id").notNull(),
+    botUserId: text("bot_user_id"),
 
     // OAuth metadata
-    scope: text("scope").notNull(),
+    scope: text("scope"),
     tokenType: text("token_type").default("bot"),
 
-    // Settings
+    // Default channel for posting
+    defaultChannelId: text("default_channel_id"),
+    defaultChannelName: text("default_channel_name"),
+
+    // Auto-post settings
     autoPostNewSurveys: boolean("auto_post_new_surveys")
       .default(false)
       .notNull(),
-    defaultChannelId: text("default_channel_id"),
+    autoPostAnalytics: boolean("auto_post_analytics").default(false).notNull(),
+    autoPostOnConversation: boolean("auto_post_on_conversation")
+      .default(false)
+      .notNull(),
 
     // Tracking
-    lastUsedAt: timestamp("last_used_at", {
+    lastPostedAt: timestamp("last_posted_at", {
       withTimezone: true,
       mode: "date",
     }),
@@ -856,74 +862,45 @@ export const slackIntegrations = pgTable(
   ]
 );
 
-export const slackSurveyDistributions = pgTable(
-  "slack_survey_distributions",
+export const slackPosts = pgTable(
+  "slack_posts",
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    surveyId: text("survey_id")
+    userId: text("user_id")
       .notNull()
-      .references(() => surveys.id, { onDelete: "cascade" }),
+      .references(() => users.id, { onDelete: "cascade" }),
     slackIntegrationId: text("slack_integration_id")
       .notNull()
       .references(() => slackIntegrations.id, { onDelete: "cascade" }),
 
+    // What was posted
+    postType: text("post_type").notNull(), // 'survey_created' | 'new_conversation' | 'analytics_update' | 'manual'
+    surveyId: text("survey_id").references(() => surveys.id, {
+      onDelete: "cascade",
+    }),
+    conversationId: text("conversation_id").references(
+      () => surveyConversations.id,
+      { onDelete: "cascade" }
+    ),
+
+    // Where it was posted
     channelId: text("channel_id").notNull(),
     channelName: text("channel_name"),
-    messageTs: text("message_ts"),
+    messageTs: text("message_ts"), // Slack message timestamp
 
-    customMessage: text("custom_message"),
-    distributedBy: text("distributed_by")
-      .notNull()
-      .references(() => users.id),
+    // Content
+    messageContent: text("message_content"),
 
-    responsesCount: integer("responses_count").default(0).notNull(),
-    lastResponseAt: timestamp("last_response_at", {
-      withTimezone: true,
-      mode: "date",
-    }),
+    // Status
+    status: text("status").default("success").notNull(), // 'success' | 'failed'
+    error: text("error"),
   },
   (table) => [
-    index("slack_survey_distributions_survey_id_idx").on(table.surveyId),
-    index("slack_survey_distributions_integration_id_idx").on(
-      table.slackIntegrationId
-    ),
-    index("slack_survey_distributions_channel_id_idx").on(table.channelId),
-  ]
-);
-
-export const slackSurveyResponses = pgTable(
-  "slack_survey_responses",
-  {
-    id: text("id").primaryKey(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
-      .defaultNow()
-      .notNull(),
-
-    surveyId: text("survey_id")
-      .notNull()
-      .references(() => surveys.id, { onDelete: "cascade" }),
-    conversationId: text("conversation_id")
-      .notNull()
-      .references(() => surveyConversations.id, { onDelete: "cascade" }),
-    distributionId: text("distribution_id").references(
-      () => slackSurveyDistributions.id,
-      { onDelete: "set null" }
-    ),
-
-    slackUserId: text("slack_user_id").notNull(),
-    slackTeamId: text("slack_team_id").notNull(),
-  },
-  (table) => [
-    unique("slack_survey_responses_unique").on(
-      table.surveyId,
-      table.slackUserId
-    ),
-    index("slack_survey_responses_survey_id_idx").on(table.surveyId),
-    index("slack_survey_responses_slack_user_idx").on(
-      table.slackUserId,
-      table.slackTeamId
-    ),
+    index("slack_posts_user_id_idx").on(table.userId),
+    index("slack_posts_survey_id_idx").on(table.surveyId),
+    index("slack_posts_integration_id_idx").on(table.slackIntegrationId),
+    index("slack_posts_post_type_idx").on(table.postType),
   ]
 );
 
@@ -935,42 +912,144 @@ export const slackIntegrationsRelations = relations(
       fields: [slackIntegrations.userId],
       references: [users.id],
     }),
-    distributions: many(slackSurveyDistributions),
+    posts: many(slackPosts),
   })
 );
 
-export const slackSurveyDistributionsRelations = relations(
-  slackSurveyDistributions,
-  ({ one }) => ({
-    survey: one(surveys, {
-      fields: [slackSurveyDistributions.surveyId],
-      references: [surveys.id],
+export const slackPostsRelations = relations(slackPosts, ({ one }) => ({
+  user: one(users, {
+    fields: [slackPosts.userId],
+    references: [users.id],
+  }),
+  integration: one(slackIntegrations, {
+    fields: [slackPosts.slackIntegrationId],
+    references: [slackIntegrations.id],
+  }),
+  survey: one(surveys, {
+    fields: [slackPosts.surveyId],
+    references: [surveys.id],
+  }),
+  conversation: one(surveyConversations, {
+    fields: [slackPosts.conversationId],
+    references: [surveyConversations.id],
+  }),
+}));
+
+// Voice feature tables
+export const voiceSessionStatusEnum = pgEnum("voice_session_status", [
+  "active",
+  "completed",
+  "abandoned",
+  "error",
+]);
+
+export const voiceSessionTypeEnum = pgEnum("voice_session_type", [
+  "survey_creation",
+  "survey_response",
+]);
+
+export const voiceChunkTypeEnum = pgEnum("voice_chunk_type", [
+  "audio_in",
+  "audio_out",
+]);
+
+export const voiceSessions = pgTable(
+  "voice_sessions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+    surveyId: text("survey_id").references(() => surveys.id, {
+      onDelete: "cascade",
     }),
-    integration: one(slackIntegrations, {
-      fields: [slackSurveyDistributions.slackIntegrationId],
-      references: [slackIntegrations.id],
-    }),
-    distributedByUser: one(users, {
-      fields: [slackSurveyDistributions.distributedBy],
+    conversationId: text("conversation_id"),
+    sessionType: voiceSessionTypeEnum("session_type").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true, mode: "date" }),
+    durationMs: integer("duration_ms").default(0),
+    audioDurationMs: integer("audio_duration_ms").default(0),
+    totalCost: text("total_cost").default("0"), // Store as text to avoid precision issues
+    sttCost: text("stt_cost").default("0"),
+    ttsCost: text("tts_cost").default("0"),
+    status: voiceSessionStatusEnum("status").default("active"),
+    ...timestamps,
+  },
+  (table) => [
+    index("voice_sessions_user_id_idx").on(table.userId),
+    index("voice_sessions_survey_id_idx").on(table.surveyId),
+    index("voice_sessions_started_at_idx").on(table.startedAt),
+  ]
+);
+
+export const voiceChunks = pgTable(
+  "voice_chunks",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => voiceSessions.id, { onDelete: "cascade" }),
+    chunkType: voiceChunkTypeEnum("chunk_type").notNull(),
+    durationMs: integer("duration_ms").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    transcription: text("transcription"),
+    synthesisText: text("synthesis_text"),
+    cost: text("cost").default("0"),
+    hadSpeech: boolean("had_speech").default(true),
+    vadProbability: text("vad_probability"),
+    processingTimeMs: integer("processing_time_ms"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("voice_chunks_session_id_idx").on(table.sessionId)]
+);
+
+export const voiceQualityMetrics = pgTable(
+  "voice_quality_metrics",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => voiceSessions.id, { onDelete: "cascade" }),
+    metricType: text("metric_type").notNull(),
+    metricValue: text("metric_value").notNull(),
+    timestamp: timestamp("timestamp", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("voice_quality_metrics_session_id_idx").on(table.sessionId)]
+);
+
+export const voiceSessionsRelations = relations(
+  voiceSessions,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [voiceSessions.userId],
       references: [users.id],
     }),
+    survey: one(surveys, {
+      fields: [voiceSessions.surveyId],
+      references: [surveys.id],
+    }),
+    chunks: many(voiceChunks),
+    metrics: many(voiceQualityMetrics),
   })
 );
 
-export const slackSurveyResponsesRelations = relations(
-  slackSurveyResponses,
+export const voiceChunksRelations = relations(voiceChunks, ({ one }) => ({
+  session: one(voiceSessions, {
+    fields: [voiceChunks.sessionId],
+    references: [voiceSessions.id],
+  }),
+}));
+
+export const voiceQualityMetricsRelations = relations(
+  voiceQualityMetrics,
   ({ one }) => ({
-    survey: one(surveys, {
-      fields: [slackSurveyResponses.surveyId],
-      references: [surveys.id],
-    }),
-    conversation: one(surveyConversations, {
-      fields: [slackSurveyResponses.conversationId],
-      references: [surveyConversations.id],
-    }),
-    distribution: one(slackSurveyDistributions, {
-      fields: [slackSurveyResponses.distributionId],
-      references: [slackSurveyDistributions.id],
+    session: one(voiceSessions, {
+      fields: [voiceQualityMetrics.sessionId],
+      references: [voiceSessions.id],
     }),
   })
 );

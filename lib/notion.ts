@@ -407,30 +407,32 @@ export async function createSurveyDatabase(
         },
       },
     ],
-    properties: {
-      Name: {
-        title: {},
-      },
-      Status: {
-        select: {
-          options: [
-            { name: "draft", color: "gray" },
-            { name: "creating", color: "yellow" },
-            { name: "sample_review", color: "orange" },
-            { name: "active", color: "green" },
-            { name: "completed", color: "blue" },
-            { name: "archived", color: "red" },
-          ],
+    initial_data_source: {
+      properties: {
+        Name: {
+          title: {},
         },
-      },
-      "Survey ID": {
-        rich_text: {},
-      },
-      "Created At": {
-        date: {},
-      },
-      "Updated At": {
-        date: {},
+        Status: {
+          select: {
+            options: [
+              { name: "draft", color: "gray" },
+              { name: "creating", color: "yellow" },
+              { name: "sample_review", color: "orange" },
+              { name: "active", color: "green" },
+              { name: "completed", color: "blue" },
+              { name: "archived", color: "red" },
+            ],
+          },
+        },
+        "Survey ID": {
+          rich_text: {},
+        },
+        "Created At": {
+          date: {},
+        },
+        "Updated At": {
+          date: {},
+        },
       },
     },
   });
