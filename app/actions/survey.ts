@@ -249,6 +249,17 @@ export async function confirmSurveyAction(
       })
       .where(eq(surveys.id, surveyId));
 
+    // Trigger Slack auto-post for survey creation (async, don't wait)
+    try {
+      const { autoPostSurveyCreated } = await import("@/app/actions/slack");
+      autoPostSurveyCreated(session.user.id, surveyId).catch((error) => {
+        console.error("Failed to auto-post survey to Slack:", error);
+        // Don't fail the survey confirmation if Slack post fails
+      });
+    } catch (error) {
+      console.error("Failed to import Slack auto-post function:", error);
+    }
+
     const publicUrl = `/s/${shareableLink}`;
 
     return {

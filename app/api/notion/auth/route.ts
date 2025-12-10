@@ -4,16 +4,15 @@
  * This endpoint redirects users to Notion's authorization page
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { env } from "@/lib/env";
+import { getRedisClient } from "@/lib/redis";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    // Verify user is authenticated
     const session = await getVerifiedSession();
 
-    // Check if OAuth is configured
     if (!env.NOTION_CLIENT_ID || !env.NOTION_REDIRECT_URI) {
       return NextResponse.json(
         {
@@ -25,11 +24,19 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Generate state for CSRF protection
     const state = crypto.randomUUID();
 
-    // TODO: Store state in Redis with user ID for verification
-    // For now, we'll verify the session exists on callback
+    // Store state in Redis with user ID for verification (10 minute TTL)
+    // This prevents CSRF attacks and ensures the callback is for the correct user
+    const redis = getRedisClient();
+    await redis.setex(
+      `notion:oauth:state:${state}`,
+      600,
+      JSON.stringify({
+        userId: session.user.id,
+        createdAt: new Date().toISOString(),
+      })
+    );
 
     // Build Notion authorization URL
     const authUrl = new URL("https://api.notion.com/v1/oauth/authorize");

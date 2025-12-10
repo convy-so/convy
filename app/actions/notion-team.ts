@@ -16,7 +16,7 @@ import {
   notionPagePermissions,
   notionExports,
 } from "@/db/schema";
-import { eq, and, or } from "drizzle-orm";
+import { eq, and, or, isNotNull } from "drizzle-orm";
 import { getNotionOAuthClient } from "@/lib/notion-oauth";
 
 /**
@@ -41,7 +41,7 @@ export async function checkSurveyAccess(surveyId: string, userId: string) {
       and(
         eq(surveyTeamMembers.surveyId, surveyId),
         eq(surveyTeamMembers.userId, userId),
-        eq(surveyTeamMembers.acceptedAt, null) // TODO: Fix - should check if NOT null
+        isNotNull(surveyTeamMembers.acceptedAt) // Check if invitation has been accepted
       )
     );
 

@@ -822,35 +822,25 @@ export const slackIntegrations = pgTable(
       .references(() => users.id, { onDelete: "cascade" })
       .unique(),
 
-    // Encrypted OAuth tokens
     accessToken: text("access_token").notNull(),
     accessTokenIv: text("access_token_iv").notNull(),
     accessTokenTag: text("access_token_tag").notNull(),
-
-    // Slack workspace information
     teamId: text("team_id").notNull(),
     teamName: text("team_name").notNull(),
     teamIcon: text("team_icon"),
     botUserId: text("bot_user_id"),
-
-    // OAuth metadata
     scope: text("scope"),
     tokenType: text("token_type").default("bot"),
-
-    // Default channel for posting
     defaultChannelId: text("default_channel_id"),
     defaultChannelName: text("default_channel_name"),
-
-    // Auto-post settings
     autoPostNewSurveys: boolean("auto_post_new_surveys")
-      .default(false)
+      .default(true)
       .notNull(),
-    autoPostAnalytics: boolean("auto_post_analytics").default(false).notNull(),
+    autoPostAnalytics: boolean("auto_post_analytics").default(true).notNull(),
     autoPostOnConversation: boolean("auto_post_on_conversation")
-      .default(false)
+      .default(true)
       .notNull(),
 
-    // Tracking
     lastPostedAt: timestamp("last_posted_at", {
       withTimezone: true,
       mode: "date",
@@ -874,8 +864,7 @@ export const slackPosts = pgTable(
       .notNull()
       .references(() => slackIntegrations.id, { onDelete: "cascade" }),
 
-    // What was posted
-    postType: text("post_type").notNull(), // 'survey_created' | 'new_conversation' | 'analytics_update' | 'manual'
+    postType: text("post_type").notNull(),
     surveyId: text("survey_id").references(() => surveys.id, {
       onDelete: "cascade",
     }),
@@ -883,16 +872,11 @@ export const slackPosts = pgTable(
       () => surveyConversations.id,
       { onDelete: "cascade" }
     ),
-
-    // Where it was posted
     channelId: text("channel_id").notNull(),
     channelName: text("channel_name"),
-    messageTs: text("message_ts"), // Slack message timestamp
+    messageTs: text("message_ts"),
 
-    // Content
     messageContent: text("message_content"),
-
-    // Status
     status: text("status").default("success").notNull(), // 'success' | 'failed'
     error: text("error"),
   },

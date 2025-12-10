@@ -5,6 +5,7 @@
  */
 
 import type { surveys, surveyAnalytics } from "@/db/schema";
+import type { Block, KnownBlock } from "@slack/web-api";
 
 /**
  * Format survey created message
@@ -12,32 +13,32 @@ import type { surveys, surveyAnalytics } from "@/db/schema";
 export function formatSurveyCreatedMessage(
   survey: typeof surveys.$inferSelect
 ) {
-  const blocks = [
+  const blocks: (Block | KnownBlock)[] = [
     {
-      type: "header",
+      type: "header" as const,
       text: {
-        type: "plain_text",
+        type: "plain_text" as const,
         text: `🎯 New Survey Created: ${survey.title}`,
         emoji: true,
       },
     },
     {
-      type: "section",
+      type: "section" as const,
       fields: [
         {
-          type: "mrkdwn",
+          type: "mrkdwn" as const,
           text: `*Status:*\n${survey.status === "active" ? "✅ Active" : "⏸️ Inactive"}`,
         },
         {
-          type: "mrkdwn",
+          type: "mrkdwn" as const,
           text: `*Participant Limit:*\n${survey.participantLimit}`,
         },
         {
-          type: "mrkdwn",
+          type: "mrkdwn" as const,
           text: `*Language:*\n${survey.language.toUpperCase()}`,
         },
         {
-          type: "mrkdwn",
+          type: "mrkdwn" as const,
           text: `*Current Participants:*\n${survey.currentParticipants}`,
         },
       ],
@@ -46,9 +47,9 @@ export function formatSurveyCreatedMessage(
 
   if (survey.objective?.goal) {
     blocks.push({
-      type: "section",
+      type: "section" as const,
       text: {
-        type: "mrkdwn",
+        type: "mrkdwn" as const,
         text: `*Goal:*\n${survey.objective.goal}`,
       },
     });
@@ -57,12 +58,12 @@ export function formatSurveyCreatedMessage(
   if (survey.requiredQuestions && survey.requiredQuestions.length > 0) {
     blocks.push(
       {
-        type: "divider",
+        type: "divider" as const,
       },
       {
-        type: "section",
+        type: "section" as const,
         text: {
-          type: "mrkdwn",
+          type: "mrkdwn" as const,
           text: `*Required Questions:*\n${survey.requiredQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}`,
         },
       }
@@ -88,31 +89,31 @@ export function formatNewConversationMessage(data: {
     text: `New survey response received for ${data.surveyTitle}`,
     blocks: [
       {
-        type: "header",
+        type: "header" as const,
         text: {
-          type: "plain_text",
+          type: "plain_text" as const,
           text: `💬 New Survey Response`,
           emoji: true,
         },
       },
       {
-        type: "section",
+        type: "section" as const,
         fields: [
           {
-            type: "mrkdwn",
+            type: "mrkdwn" as const,
             text: `*Survey:*\n${data.surveyTitle}`,
           },
           {
-            type: "mrkdwn",
+            type: "mrkdwn" as const,
             text: `*Total Responses:*\n${data.totalConversations}`,
           },
         ],
       },
       {
-        type: "context",
+        type: "context" as const,
         elements: [
           {
-            type: "mrkdwn",
+            type: "mrkdwn" as const,
             text: `Conversation ID: \`${data.conversationId}\``,
           },
         ],
@@ -130,24 +131,24 @@ export function formatAnalyticsUpdateMessage(data: {
 }) {
   const { analytics } = data;
 
-  const blocks = [
+  const blocks: (Block | KnownBlock)[] = [
     {
-      type: "header",
+      type: "header" as const,
       text: {
-        type: "plain_text",
+        type: "plain_text" as const,
         text: `📊 Survey Analytics Updated: ${data.surveyTitle}`,
         emoji: true,
       },
     },
     {
-      type: "section",
+      type: "section" as const,
       fields: [
         {
-          type: "mrkdwn",
+          type: "mrkdwn" as const,
           text: `*Total Conversations:*\n${analytics.totalConversations}`,
         },
         {
-          type: "mrkdwn",
+          type: "mrkdwn" as const,
           text: `*Avg. Length:*\n${analytics.averageConversationLength?.toFixed(1) || "N/A"} messages`,
         },
       ],
@@ -156,29 +157,36 @@ export function formatAnalyticsUpdateMessage(data: {
 
   if (analytics.overallSummary) {
     blocks.push({
-      type: "section",
+      type: "section" as const,
       text: {
-        type: "mrkdwn",
+        type: "mrkdwn" as const,
         text: `*Summary:*\n${analytics.overallSummary.slice(0, 500)}${analytics.overallSummary.length > 500 ? "..." : ""}`,
       },
     });
   }
 
-  // Add top insights
-  if (analytics.insights && analytics.insights.length > 0) {
-    const topInsights = analytics.insights.slice(0, 3);
-    blocks.push(
-      {
-        type: "divider",
-      },
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `*Top Insights:*\n${topInsights.map((insight, i) => `${i + 1}. ${insight}`).join("\n")}`,
+  // Add top insights from metrics if available
+  if (
+    analytics.metrics &&
+    typeof analytics.metrics === "object" &&
+    "insights" in analytics.metrics
+  ) {
+    const insights = analytics.metrics.insights;
+    if (Array.isArray(insights) && insights.length > 0) {
+      const topInsights = insights.slice(0, 3);
+      blocks.push(
+        {
+          type: "divider" as const,
         },
-      }
-    );
+        {
+          type: "section" as const,
+          text: {
+            type: "mrkdwn" as const,
+            text: `*Top Insights:*\n${topInsights.map((insight: unknown, i: number) => `${i + 1}. ${String(insight)}`).join("\n")}`,
+          },
+        }
+      );
+    }
   }
 
   // Add metrics if available
@@ -190,9 +198,9 @@ export function formatAnalyticsUpdateMessage(data: {
 
     if (metricsText) {
       blocks.push({
-        type: "section",
+        type: "section" as const,
         text: {
-          type: "mrkdwn",
+          type: "mrkdwn" as const,
           text: `*Key Metrics:*\n${metricsText}`,
         },
       });
@@ -200,10 +208,10 @@ export function formatAnalyticsUpdateMessage(data: {
   }
 
   blocks.push({
-    type: "context",
+    type: "context" as const,
     elements: [
       {
-        type: "mrkdwn",
+        type: "mrkdwn" as const,
         text: `Last updated: <!date^${Math.floor(analytics.updatedAt.getTime() / 1000)}^{date_short_pretty} at {time}|${analytics.updatedAt.toLocaleString()}>`,
       },
     ],
@@ -223,19 +231,19 @@ export function formatManualPostMessage(data: {
   content: string;
   fields?: Array<{ name: string; value: string }>;
 }) {
-  const blocks = [
+  const blocks: (Block | KnownBlock)[] = [
     {
-      type: "header",
+      type: "header" as const,
       text: {
-        type: "plain_text",
+        type: "plain_text" as const,
         text: data.title,
         emoji: true,
       },
     },
     {
-      type: "section",
+      type: "section" as const,
       text: {
-        type: "mrkdwn",
+        type: "mrkdwn" as const,
         text: data.content,
       },
     },
@@ -243,7 +251,7 @@ export function formatManualPostMessage(data: {
 
   if (data.fields && data.fields.length > 0) {
     blocks.push({
-      type: "section",
+      type: "section" as const,
       fields: data.fields.map((field) => ({
         type: "mrkdwn" as const,
         text: `*${field.name}:*\n${field.value}`,

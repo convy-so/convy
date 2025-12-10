@@ -2,7 +2,12 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { surveys, notionIntegrations, notionExports } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getNotionClient, exportSurveyToNotion } from "@/lib/notion";
+import {
+  getNotionClient,
+  exportSurveyToNotion,
+  getNotionPageUrl,
+} from "@/lib/notion";
+import { decrypt } from "@/lib/encryption";
 
 /**
  * Export a survey to Notion
@@ -54,8 +59,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Export to Notion
-    const notion = getNotionClient(integration.notionToken);
+    // Export to Notion - decrypt the access token
+    const accessToken = decrypt(
+      integration.accessToken,
+      integration.accessTokenIv,
+      integration.accessTokenTag
+    );
+    const notion = getNotionClient(accessToken);
 
     try {
       const notionPage = await exportSurveyToNotion(
@@ -65,20 +75,21 @@ export async function POST(request: Request) {
       );
 
       // Save the export record
+      const notionUrl = getNotionPageUrl(notionPage);
       await db.insert(notionExports).values({
         id: crypto.randomUUID(),
         userId: session.user.id,
         surveyId: survey.id,
         exportType: "survey",
         notionPageId: notionPage.id,
-        notionUrl: notionPage.url,
+        notionUrl,
       });
 
       return new Response(
         JSON.stringify({
           success: true,
           message: "Survey exported to Notion successfully",
-          notionUrl: notionPage.url,
+          notionUrl,
           notionPageId: notionPage.id,
         }),
         {

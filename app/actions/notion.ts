@@ -16,7 +16,9 @@ import {
   exportAnalyticsToNotion,
   exportConversationToNotion,
   createSurveyDatabase,
+  getNotionPageUrl,
 } from "@/lib/notion";
+import { encrypt, decrypt } from "@/lib/encryption";
 
 /**
  * Get user's Notion integration status
@@ -105,11 +107,16 @@ export async function configureNotionIntegration(data: {
       }
     }
 
+    // Encrypt the token for secure storage (required by schema)
+    const encryptedToken = encrypt(notionToken);
+
     if (existingIntegration) {
       await db
         .update(notionIntegrations)
         .set({
-          notionToken,
+          accessToken: encryptedToken.encrypted,
+          accessTokenIv: encryptedToken.iv,
+          accessTokenTag: encryptedToken.tag,
           parentPageId: parentPageId || existingIntegration.parentPageId,
           workspaceName: workspaceName || existingIntegration.workspaceName,
           surveyDatabaseId:
@@ -120,7 +127,9 @@ export async function configureNotionIntegration(data: {
       await db.insert(notionIntegrations).values({
         id: crypto.randomUUID(),
         userId: session.user.id,
-        notionToken,
+        accessToken: encryptedToken.encrypted,
+        accessTokenIv: encryptedToken.iv,
+        accessTokenTag: encryptedToken.tag,
         parentPageId: parentPageId || null,
         workspaceName: workspaceName || null,
         surveyDatabaseId: surveyDatabaseId,
@@ -217,8 +226,13 @@ export async function exportSurveyToNotionAction(
       };
     }
 
-    // Export to Notion
-    const notion = getNotionClient(integration.notionToken);
+    // Export to Notion - decrypt the access token
+    const accessToken = decrypt(
+      integration.accessToken,
+      integration.accessTokenIv,
+      integration.accessTokenTag
+    );
+    const notion = getNotionClient(accessToken);
     const notionPage = await exportSurveyToNotion(
       notion,
       targetDatabaseId,
@@ -226,19 +240,20 @@ export async function exportSurveyToNotionAction(
     );
 
     // Save export record
+    const notionUrl = getNotionPageUrl(notionPage);
     await db.insert(notionExports).values({
       id: crypto.randomUUID(),
       userId: session.user.id,
       surveyId: survey.id,
       exportType: "survey",
       notionPageId: notionPage.id,
-      notionUrl: notionPage.url,
+      notionUrl,
     });
 
     return {
       success: true,
       message: "Survey exported to Notion successfully",
-      notionUrl: notionPage.url,
+      notionUrl,
       notionPageId: notionPage.id,
     };
   } catch (error) {
@@ -315,8 +330,13 @@ export async function exportAnalyticsToNotionAction(
       };
     }
 
-    // Export to Notion
-    const notion = getNotionClient(integration.notionToken);
+    // Export to Notion - decrypt the access token
+    const accessToken = decrypt(
+      integration.accessToken,
+      integration.accessTokenIv,
+      integration.accessTokenTag
+    );
+    const notion = getNotionClient(accessToken);
     const notionPage = await exportAnalyticsToNotion(
       notion,
       targetParentPageId,
@@ -329,19 +349,20 @@ export async function exportAnalyticsToNotionAction(
       }
     );
 
+    const notionUrl = getNotionPageUrl(notionPage);
     await db.insert(notionExports).values({
       id: crypto.randomUUID(),
       userId: session.user.id,
       surveyId: survey.id,
       exportType: "analytics",
       notionPageId: notionPage.id,
-      notionUrl: notionPage.url,
+      notionUrl,
     });
 
     return {
       success: true,
       message: "Analytics exported to Notion successfully",
-      notionUrl: notionPage.url,
+      notionUrl,
       notionPageId: notionPage.id,
     };
   } catch (error) {
@@ -418,8 +439,13 @@ export async function exportConversationToNotionAction(
       };
     }
 
-    // Export to Notion
-    const notion = getNotionClient(integration.notionToken);
+    // Export to Notion - decrypt the access token
+    const accessToken = decrypt(
+      integration.accessToken,
+      integration.accessTokenIv,
+      integration.accessTokenTag
+    );
+    const notion = getNotionClient(accessToken);
     const notionPage = await exportConversationToNotion(
       notion,
       targetParentPageId,
@@ -434,19 +460,20 @@ export async function exportConversationToNotionAction(
     );
 
     // Save export record
+    const notionUrl = getNotionPageUrl(notionPage);
     await db.insert(notionExports).values({
       id: crypto.randomUUID(),
       userId: session.user.id,
       surveyId: survey.id,
       exportType: "conversation",
       notionPageId: notionPage.id,
-      notionUrl: notionPage.url,
+      notionUrl,
     });
 
     return {
       success: true,
       message: "Conversation exported to Notion successfully",
-      notionUrl: notionPage.url,
+      notionUrl,
       notionPageId: notionPage.id,
     };
   } catch (error) {

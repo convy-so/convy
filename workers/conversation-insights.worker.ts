@@ -134,6 +134,21 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
       `[Conversation Insights Worker] Completed job ${job.id} for conversation ${conversationId}`
     );
 
+    // After insights are generated, use the analytics scheduler to handle
+    // the two-stage approach (accumulation + debouncing)
+    try {
+      const { scheduleAnalyticsOnNewResponse } = await import(
+        "@/lib/analytics-scheduler"
+      );
+      await scheduleAnalyticsOnNewResponse(surveyId, job.data.userId);
+    } catch (error) {
+      console.error(
+        `[Conversation Insights Worker] Failed to schedule analytics:`,
+        error
+      );
+      // Don't fail the insights job if analytics scheduling fails
+    }
+
     return {
       conversationId,
       summary,
