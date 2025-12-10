@@ -1,6 +1,6 @@
 import "server-only";
 
-import { redis } from "@/lib/redis";
+import { getRedisClient } from "@/lib/redis";
 
 /**
  * Cost Tracking and Monitoring for Voice Features
@@ -138,6 +138,7 @@ export class CostTracker {
     key: string,
     metrics: Partial<CostMetrics>
   ): Promise<void> {
+    const redis = getRedisClient();
     const pipeline = redis.pipeline();
 
     if (metrics.sttCost) {
@@ -179,6 +180,7 @@ export class CostTracker {
     const date = now.toISOString().split("T")[0];
     const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
+    const redis = getRedisClient();
     const [dailyMetrics, monthlyMetrics] = await Promise.all([
       redis.hgetall(this.KEYS.USER_DAILY(userId, date)),
       redis.hgetall(this.KEYS.USER_MONTHLY(userId, month)),
@@ -205,6 +207,7 @@ export class CostTracker {
    * Get session cost
    */
   static async getSessionCost(sessionId: string): Promise<number> {
+    const redis = getRedisClient();
     const metrics = await redis.hgetall(this.KEYS.SESSION(sessionId));
     const sttCost = parseFloat(metrics.sttCost || "0");
     const ttsCost = parseFloat(metrics.ttsCost || "0");
@@ -272,6 +275,7 @@ export class CostTracker {
     requestCount: number;
   }> {
     const date = new Date().toISOString().split("T")[0];
+    const redis = getRedisClient();
     const metrics = await redis.hgetall(this.KEYS.GLOBAL_DAILY(date));
 
     const sttCost = parseFloat(metrics.sttCost || "0");
@@ -318,6 +322,7 @@ export class CostTracker {
     const date = now.toISOString().split("T")[0];
     const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
+    const redis = getRedisClient();
     await Promise.all([
       redis.del(this.KEYS.USER_DAILY(userId, date)),
       redis.del(this.KEYS.USER_MONTHLY(userId, month)),
@@ -335,6 +340,7 @@ export class CostTracker {
     const report: Array<{ date: string; cost: number; requests: number }> = [];
     const currentDate = new Date(startDate);
 
+    const redis = getRedisClient();
     while (currentDate <= endDate) {
       const dateStr = currentDate.toISOString().split("T")[0];
       const metrics = await redis.hgetall(

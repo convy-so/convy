@@ -7,7 +7,12 @@ import {
   notionExports,
 } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getNotionClient, exportAnalyticsToNotion } from "@/lib/notion";
+import {
+  getNotionClient,
+  exportAnalyticsToNotion,
+  getNotionPageUrl,
+} from "@/lib/notion";
+import { decrypt } from "@/lib/encryption";
 
 /**
  * Export survey analytics to Notion
@@ -35,7 +40,6 @@ export async function POST(request: Request) {
       return new Response("Notion integration not configured", { status: 400 });
     }
 
-    // Get the survey
     const [survey] = await db
       .select()
       .from(surveys)
@@ -49,7 +53,6 @@ export async function POST(request: Request) {
       return new Response("Unauthorized", { status: 403 });
     }
 
-    // Get the analytics
     const [analytics] = await db
       .select()
       .from(surveyAnalytics)
@@ -60,8 +63,6 @@ export async function POST(request: Request) {
         status: 404,
       });
     }
-
-    // Use provided parent page ID or the one from integration
     const targetParentPageId = parentPageId || integration.parentPageId;
 
     if (!targetParentPageId) {
@@ -71,8 +72,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Export to Notion
-    const notion = getNotionClient(integration.notionToken);
+    const accessToken = decrypt(
+      integration.accessToken,
+      integration.accessTokenIv,
+      integration.accessTokenTag
+    );
+    const notion = getNotionClient(accessToken);
 
     try {
       const notionPage = await exportAnalyticsToNotion(
@@ -87,21 +92,21 @@ export async function POST(request: Request) {
         }
       );
 
-      // Save the export record
+      const notionUrl = getNotionPageUrl(notionPage);
       await db.insert(notionExports).values({
         id: crypto.randomUUID(),
         userId: session.user.id,
         surveyId: survey.id,
         exportType: "analytics",
         notionPageId: notionPage.id,
-        notionUrl: notionPage.url,
+        notionUrl,
       });
 
       return new Response(
         JSON.stringify({
           success: true,
           message: "Analytics exported to Notion successfully",
-          notionUrl: notionPage.url,
+          notionUrl,
           notionPageId: notionPage.id,
         }),
         {

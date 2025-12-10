@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { notionIntegrations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getNotionClient, createSurveyDatabase } from "@/lib/notion";
+import { encrypt } from "@/lib/encryption";
 
 /**
  * Configure Notion integration for the user
@@ -59,12 +60,17 @@ export async function POST(request: Request) {
       }
     }
 
+    // Encrypt the token for secure storage (required by schema)
+    const encryptedToken = encrypt(notionToken);
+
     if (existingIntegration) {
       // Update existing integration
       await db
         .update(notionIntegrations)
         .set({
-          notionToken,
+          accessToken: encryptedToken.encrypted,
+          accessTokenIv: encryptedToken.iv,
+          accessTokenTag: encryptedToken.tag,
           parentPageId: parentPageId || existingIntegration.parentPageId,
           workspaceName: workspaceName || existingIntegration.workspaceName,
           surveyDatabaseId:
@@ -76,7 +82,9 @@ export async function POST(request: Request) {
       await db.insert(notionIntegrations).values({
         id: crypto.randomUUID(),
         userId: session.user.id,
-        notionToken,
+        accessToken: encryptedToken.encrypted,
+        accessTokenIv: encryptedToken.iv,
+        accessTokenTag: encryptedToken.tag,
         parentPageId: parentPageId || null,
         workspaceName: workspaceName || null,
         surveyDatabaseId: surveyDatabaseId,
@@ -108,7 +116,7 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const session = await getVerifiedSession();
 
@@ -159,7 +167,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function DELETE(request: Request) {
+export async function DELETE() {
   try {
     const session = await getVerifiedSession();
 

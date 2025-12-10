@@ -51,6 +51,19 @@ export async function generateSurveyAnalyticsAction(
           "No completed conversations found. Generate insights for conversations first.",
       };
     }
+    
+    // Manual trigger: Reset counter and generate immediately
+    // This bypasses the automatic scheduling system
+    try {
+      const { resetAnalyticsCounterAfterGeneration } = await import(
+        "@/lib/analytics-scheduler"
+      );
+      await resetAnalyticsCounterAfterGeneration(surveyId);
+    } catch (error) {
+      console.error("Failed to reset analytics counter for manual trigger:", error);
+      // Continue anyway
+    }
+    
     const job = await enqueueSurveyAnalytics({
       surveyId,
       userId: session.user.id,
@@ -109,10 +122,47 @@ export async function getSurveyAnalyticsAction(surveyId: string): Promise<
       .from(surveyAnalytics)
       .where(eq(surveyAnalytics.surveyId, surveyId));
 
+    // If analytics don't exist, check if there are completed conversations
+    // If so, automatically trigger analytics generation
     if (!analytics) {
+      const conversations = await db
+        .select({
+          id: surveyConversations.id,
+          summary: surveyConversations.summary,
+        })
+        .from(surveyConversations)
+        .where(eq(surveyConversations.surveyId, surveyId));
+
+      const completedConversations = conversations.filter((c) => c.summary);
+
+      if (completedConversations.length > 0) {
+        // Auto-trigger analytics generation using the scheduler
+        // This will respect the accumulation/debouncing logic
+        try {
+          const { scheduleAnalyticsOnNewResponse } = await import(
+            "@/lib/analytics-scheduler"
+          );
+          await scheduleAnalyticsOnNewResponse(surveyId, session.user.id);
+          console.log(
+            `[Analytics Action] Scheduled analytics generation for survey ${surveyId}`
+          );
+        } catch (error) {
+          console.error(
+            "[Analytics Action] Failed to schedule analytics generation:",
+            error
+          );
+        }
+
+        // Return a message indicating analytics are being generated
+        return {
+          success: false,
+          error: "Analytics are being generated. Please refresh in a moment.",
+        };
+      }
+
       return {
         success: false,
-        error: "Analytics not found. Generate analytics first.",
+        error: "No completed conversations found. Analytics will be generated automatically once conversations are completed.",
       };
     }
 
@@ -187,7 +237,10 @@ export async function getDashboardDataAction(surveyId: string): Promise<
       .where(eq(surveyAnalytics.surveyId, surveyId));
 
     const allConversations = await db
-      .select({ completed: surveyConversations.completed })
+      .select({ 
+        completed: surveyConversations.completed,
+        summary: surveyConversations.summary,
+      })
       .from(surveyConversations)
       .where(eq(surveyConversations.surveyId, surveyId));
 
@@ -195,6 +248,31 @@ export async function getDashboardDataAction(surveyId: string): Promise<
     const completedConversationsCount = allConversations.filter(
       (c) => c.completed
     ).length;
+
+    // If analytics don't exist but there are completed conversations with summaries,
+    // auto-trigger analytics generation
+    if (!analytics) {
+      const completedWithSummaries = allConversations.filter(
+        (c) => c.completed && c.summary
+      );
+
+      if (completedWithSummaries.length > 0) {
+        try {
+          const { scheduleAnalyticsOnNewResponse } = await import(
+            "@/lib/analytics-scheduler"
+          );
+          await scheduleAnalyticsOnNewResponse(surveyId, session.user.id);
+          console.log(
+            `[Dashboard Action] Scheduled analytics generation for survey ${surveyId}`
+          );
+        } catch (error) {
+          console.error(
+            "[Dashboard Action] Failed to schedule analytics generation:",
+            error
+          );
+        }
+      }
+    }
 
     return {
       success: true,

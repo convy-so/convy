@@ -183,6 +183,43 @@ export async function PUT(
       })
       .where(eq(surveyConversations.id, conversationId));
 
+    // Trigger conversation insights generation and Slack auto-post (if completed)
+    if (completed) {
+      // Trigger conversation insights generation (auto-generates analytics after insights are done)
+      try {
+        const { enqueueConversationInsights } = await import("@/lib/queue");
+        await enqueueConversationInsights({
+          conversationId,
+          surveyId: survey.id,
+          userId: survey.userId,
+        });
+        console.log(
+          `[Chat Route] Enqueued conversation insights for conversation ${conversationId}`
+        );
+      } catch (error) {
+        console.error(
+          "Failed to enqueue conversation insights:",
+          error
+        );
+        // Don't fail the conversation save if insights enqueue fails
+      }
+
+      // Trigger Slack auto-post for new conversation
+      try {
+        const { autoPostNewConversation } = await import("@/app/actions/slack");
+        autoPostNewConversation(
+          survey.userId,
+          survey.id,
+          conversationId
+        ).catch((error) => {
+          console.error("Failed to auto-post conversation to Slack:", error);
+          // Don't fail the conversation save if Slack post fails
+        });
+      } catch (error) {
+        console.error("Failed to import Slack auto-post function:", error);
+      }
+    }
+
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },

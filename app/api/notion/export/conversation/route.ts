@@ -7,7 +7,12 @@ import {
   notionExports,
 } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getNotionClient, exportConversationToNotion } from "@/lib/notion";
+import {
+  getNotionClient,
+  exportConversationToNotion,
+  getNotionPageUrl,
+} from "@/lib/notion";
+import { decrypt } from "@/lib/encryption";
 
 /**
  * Export a survey conversation to Notion
@@ -69,8 +74,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Export to Notion
-    const notion = getNotionClient(integration.notionToken);
+    // Export to Notion - decrypt the access token
+    const accessToken = decrypt(
+      integration.accessToken,
+      integration.accessTokenIv,
+      integration.accessTokenTag
+    );
+    const notion = getNotionClient(accessToken);
 
     try {
       const notionPage = await exportConversationToNotion(
@@ -87,20 +97,21 @@ export async function POST(request: Request) {
       );
 
       // Save the export record
+      const notionUrl = getNotionPageUrl(notionPage);
       await db.insert(notionExports).values({
         id: crypto.randomUUID(),
         userId: session.user.id,
         surveyId: survey.id,
         exportType: "conversation",
         notionPageId: notionPage.id,
-        notionUrl: notionPage.url,
+        notionUrl,
       });
 
       return new Response(
         JSON.stringify({
           success: true,
           message: "Conversation exported to Notion successfully",
-          notionUrl: notionPage.url,
+          notionUrl,
           notionPageId: notionPage.id,
         }),
         {

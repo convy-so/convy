@@ -8,8 +8,9 @@
  */
 
 import { getVerifiedSession } from "@/lib/auth/session";
+import crypto from "crypto";
 import { db } from "@/db";
-import { notionIntegrations, notionSyncStatus, surveys } from "@/db/schema";
+import { notionSyncStatus, notionBulkOperations, surveys } from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import {
   getNotionIntegration,
@@ -17,7 +18,13 @@ import {
   disconnectOAuthIntegration,
   hasOAuthIntegration,
 } from "@/lib/notion-oauth";
-import { enqueueNotionSync } from "@/lib/queue";
+import {
+  enqueueNotionSync,
+  enqueueBulkOperation,
+  ensureDefaultScheduledSync,
+  scheduleNotionSyncRepeating,
+  NotionSyncScheduleMode,
+} from "@/lib/queue";
 
 /**
  * Get Notion OAuth integration status
@@ -27,6 +34,16 @@ export async function getNotionOAuthStatus() {
     const session = await getVerifiedSession();
 
     const integration = await getNotionIntegration(session.user.id);
+
+    // Ensure a default hourly scheduled sync exists
+    try {
+      await ensureDefaultScheduledSync(session.user.id);
+    } catch (scheduleError) {
+      console.warn(
+        "Failed to ensure default Notion sync schedule:",
+        scheduleError
+      );
+    }
 
     return {
       success: true,
@@ -110,7 +127,7 @@ export async function disconnectNotionOAuth() {
  */
 export async function triggerSurveySync(
   surveyId: string,
-  syncType: "survey" | "analytics" | "conversations" | "full" = "full"
+  syncType: "survey" | "analytics" | "conversation" | "full" = "full"
 ) {
   try {
     const session = await getVerifiedSession();
@@ -143,7 +160,6 @@ export async function triggerSurveySync(
       };
     }
 
-
     const job = await enqueueNotionSync({
       userId: session.user.id,
       surveyId,
@@ -166,6 +182,45 @@ export async function triggerSurveySync(
 }
 
 /**
+ * Update scheduled sync cadence
+ */
+export async function updateNotionSyncSchedule(params: {
+  mode: NotionSyncScheduleMode;
+  hourOfDay?: number;
+  forceUpdate?: boolean;
+}) {
+  try {
+    const session = await getVerifiedSession();
+
+    const hasIntegration = await hasOAuthIntegration(session.user.id);
+    if (!hasIntegration) {
+      return {
+        success: false,
+        error: "Notion integration not configured",
+      };
+    }
+
+    await scheduleNotionSyncRepeating({
+      userId: session.user.id,
+      mode: params.mode,
+      hourOfDay: params.hourOfDay,
+      forceUpdate: params.forceUpdate ?? false,
+    });
+
+    return {
+      success: true,
+      message: "Notion sync schedule updated",
+    };
+  } catch (error) {
+    console.error("Error updating Notion sync schedule:", error);
+    return {
+      success: false,
+      error: "Failed to update sync schedule",
+    };
+  }
+}
+
+/**
  * Trigger full sync for all surveys
  */
 export async function triggerFullSync() {
@@ -181,16 +236,48 @@ export async function triggerFullSync() {
       };
     }
 
-    // Queue full sync job
-    const job = await enqueueNotionSync({
+    // Get all surveys for the user
+    const userSurveys = await db
+      .select({ id: surveys.id })
+      .from(surveys)
+      .where(eq(surveys.userId, session.user.id));
+
+    if (userSurveys.length === 0) {
+      return {
+        success: false,
+        error: "No surveys found to sync",
+      };
+    }
+
+    const surveyIds = userSurveys.map((s) => s.id);
+
+    // Create bulk operation record
+    const operationId = crypto.randomUUID();
+    await db.insert(notionBulkOperations).values({
+      id: operationId,
       userId: session.user.id,
-      syncType: "full",
-      forceUpdate: true,
+      operationType: "sync_all",
+      targetSurveyIds: surveyIds,
+      totalItems: surveyIds.length,
+      processedItems: 0,
+      successCount: 0,
+      failCount: 0,
+      warningCount: 0,
+      status: "pending",
+    });
+
+    // Queue bulk operation job (uses notion-bulk-operation.worker)
+    const job = await enqueueBulkOperation({
+      operationId,
+      userId: session.user.id,
+      operationType: "sync_all",
+      surveyIds,
     });
 
     return {
       success: true,
-      message: "Full sync triggered successfully",
+      message: `Bulk sync started for all ${surveyIds.length} surveys`,
+      operationId,
       jobId: job.id,
     };
   } catch (error) {
@@ -209,7 +296,15 @@ export async function getNotionSyncHistory(surveyId?: string, limit = 20) {
   try {
     const session = await getVerifiedSession();
 
-    let query = db
+    const conditions = [eq(notionSyncStatus.userId, session.user.id)];
+    if (surveyId) {
+      conditions.push(eq(notionSyncStatus.surveyId, surveyId));
+    }
+
+    const whereClause =
+      conditions.length > 1 ? and(...conditions) : conditions[0];
+
+    const query = db
       .select({
         id: notionSyncStatus.id,
         surveyId: notionSyncStatus.surveyId,
@@ -221,16 +316,7 @@ export async function getNotionSyncHistory(surveyId?: string, limit = 20) {
         completedAt: notionSyncStatus.completedAt,
       })
       .from(notionSyncStatus)
-      .where(eq(notionSyncStatus.userId, session.user.id));
-
-    if (surveyId) {
-      query = query.where(
-        and(
-          eq(notionSyncStatus.userId, session.user.id),
-          eq(notionSyncStatus.surveyId, surveyId)
-        )
-      );
-    }
+      .where(whereClause);
 
     const statuses = await query
       .orderBy(desc(notionSyncStatus.createdAt))

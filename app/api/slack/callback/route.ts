@@ -6,6 +6,7 @@ import { slackIntegrations } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { encrypt } from "@/lib/encryption";
 import { getSlackWorkspaceInfo } from "@/lib/slack/client";
+import { getRedisClient } from "@/lib/redis";
 
 /**
  * GET /api/slack/callback
@@ -27,11 +28,61 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    if (!code || !state) {
+    if (!code) {
+      console.error("No authorization code received");
       return NextResponse.redirect(
-        `${env.BETTER_AUTH_URL}/dashboard?slack_error=missing_params`
+        `${env.BETTER_AUTH_URL}/dashboard?slack_error=no_code`
       );
     }
+
+    if (!state) {
+      console.error("No state parameter received");
+      return NextResponse.redirect(
+        `${env.BETTER_AUTH_URL}/dashboard?slack_error=no_state`
+      );
+    }
+
+    // Verify state matches stored state for CSRF protection
+    const redis = getRedisClient();
+    const stateKey = `slack:oauth:state:${state}`;
+    const storedStateData = await redis.get(stateKey);
+
+    if (!storedStateData) {
+      console.error("Invalid or expired state parameter:", {
+        state,
+        userId: session.user.id,
+      });
+      return NextResponse.redirect(
+        `${env.BETTER_AUTH_URL}/dashboard?slack_error=invalid_state`
+      );
+    }
+
+    let stateData: { userId: string; createdAt: string };
+    try {
+      stateData = JSON.parse(storedStateData);
+    } catch (error) {
+      console.error("Failed to parse stored state data:", error);
+      return NextResponse.redirect(
+        `${env.BETTER_AUTH_URL}/dashboard?slack_error=invalid_state`
+      );
+    }
+
+    // Verify the state belongs to the current user
+    if (stateData.userId !== session.user.id) {
+      console.error("State user ID mismatch:", {
+        stateUserId: stateData.userId,
+        sessionUserId: session.user.id,
+        state,
+      });
+      // Delete the state to prevent reuse
+      await redis.del(stateKey);
+      return NextResponse.redirect(
+        `${env.BETTER_AUTH_URL}/dashboard?slack_error=user_mismatch`
+      );
+    }
+
+    // Delete the state after successful verification (one-time use)
+    await redis.del(stateKey);
 
     // Exchange code for access token
     const tokenResponse = await fetch("https://slack.com/api/oauth.v2.access", {

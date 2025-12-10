@@ -320,7 +320,6 @@ async function syncConversation(
     );
 
   if (existingExport && !job.data.forceUpdate) {
-    // Check for conflicts before updating
     const conflictCheck = await detectPageConflict(
       notion,
       existingExport.notionPageId,

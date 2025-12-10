@@ -2,6 +2,29 @@ import { Client } from "@notionhq/client";
 import { env } from "./env";
 
 /**
+ * Helper function to safely get URL from Notion page response
+ * Handles both PageObjectResponse and PartialPageObjectResponse types
+ */
+export function getNotionPageUrl(
+  page: { id: string } & { url?: string }
+): string {
+  // Type guard: check if url property exists
+  if ("url" in page && page.url) {
+    return page.url;
+  }
+  // Construct URL from page ID if not provided
+  // Format: https://www.notion.so/{page-id-with-hyphens}
+  const pageIdWithHyphens = [
+    page.id.slice(0, 8),
+    page.id.slice(8, 12),
+    page.id.slice(12, 16),
+    page.id.slice(16, 20),
+    page.id.slice(20, 32),
+  ].join("-");
+  return `https://www.notion.so/${pageIdWithHyphens}`;
+}
+
+/**
  * Initialize the Notion client
  * This client is used to interact with the Notion API
  */

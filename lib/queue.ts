@@ -54,6 +54,12 @@ export interface NotionBulkOperationJobData {
   batchSize?: number;
 }
 
+export type NotionSyncScheduleMode =
+  | "hourly"
+  | "every3h"
+  | "every5h"
+  | "daily_hour";
+
 export const conversationInsightsQueue = new Queue<ConversationInsightsJobData>(
   "conversation-insights",
   {
@@ -288,6 +294,100 @@ export async function enqueueNotionSync(data: NotionSyncJobData) {
     jobId,
     priority: 3,
   });
+}
+
+/**
+ * Build BullMQ repeat options based on schedule mode
+ */
+function buildRepeatOptions(
+  mode: NotionSyncScheduleMode,
+  hourOfDay?: number
+): { every?: number; cron?: string } {
+  switch (mode) {
+    case "hourly":
+      return { every: 60 * 60 * 1000 }; // 1h
+    case "every3h":
+      return { every: 3 * 60 * 60 * 1000 }; // 3h
+    case "every5h":
+      return { every: 5 * 60 * 60 * 1000 }; // 5h
+    case "daily_hour": {
+      const safeHour =
+        typeof hourOfDay === "number" && hourOfDay >= 0 && hourOfDay < 24
+          ? hourOfDay
+          : 0;
+      // Run at the top of the specified hour (UTC)
+      return { cron: `0 ${safeHour} * * *` };
+    }
+    default:
+      return { every: 60 * 60 * 1000 };
+  }
+}
+
+/**
+ * Remove existing scheduled full-sync jobs for a user
+ */
+export async function clearScheduledNotionSync(userId: string) {
+  const repeats = await notionSyncQueue.getRepeatableJobs();
+  for (const r of repeats) {
+    if (r.id === `notion-schedule-${userId}`) {
+      await notionSyncQueue.removeRepeatableByKey(r.key);
+    }
+  }
+}
+
+/**
+ * Schedule a repeating full sync for a user
+ */
+export async function scheduleNotionSyncRepeating(params: {
+  userId: string;
+  mode: NotionSyncScheduleMode;
+  hourOfDay?: number;
+  forceUpdate?: boolean;
+}) {
+  await clearScheduledNotionSync(params.userId);
+
+  const repeat = buildRepeatOptions(params.mode, params.hourOfDay);
+
+  return await notionSyncQueue.add(
+    "scheduled-full-sync",
+    {
+      userId: params.userId,
+      syncType: "full",
+      forceUpdate: params.forceUpdate ?? false,
+    },
+    {
+      jobId: `notion-schedule-${params.userId}`,
+      repeat,
+      priority: 2,
+      removeOnComplete: true,
+      removeOnFail: true,
+    }
+  );
+}
+
+/**
+ * Ensure a default hourly schedule exists for the user
+ */
+export async function ensureDefaultScheduledSync(userId: string) {
+  const repeats = await notionSyncQueue.getRepeatableJobs();
+  const existing = repeats.some((r) => r.id === `notion-schedule-${userId}`);
+  if (existing) return;
+  await scheduleNotionSyncRepeating({
+    userId,
+    mode: "hourly",
+    forceUpdate: false,
+  });
+}
+
+export async function enqueueBulkOperation(data: NotionBulkOperationJobData) {
+  return await notionBulkOperationQueue.add(
+    `bulk-${data.operationType}`,
+    data,
+    {
+      jobId: `bulk-operation-${data.operationId}`,
+      priority: 2, // Lower than individual syncs to allow real-time syncs to process first
+    }
+  );
 }
 
 export async function closeQueues() {

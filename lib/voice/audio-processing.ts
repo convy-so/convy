@@ -51,16 +51,35 @@ export class OpusDecoder extends Transform {
       channels: AUDIO_CONFIG.CHANNELS,
       frameSize: AUDIO_CONFIG.FRAME_SIZE,
     });
+
+    // Pipe decoder output to this transform's output
+    this.decoder.on("data", (chunk: Buffer) => {
+      this.push(chunk);
+    });
+
+    this.decoder.on("error", (error: Error) => {
+      this.emit("error", error);
+    });
+
+    this.decoder.on("end", () => {
+      this.push(null);
+    });
   }
 
   _transform(
     chunk: Buffer,
     encoding: BufferEncoding,
-    callback: (error?: Error | null, data?: Buffer) => void
+    callback: (error?: Error | null) => void
   ): void {
     try {
-      const decoded = this.decoder.decode(chunk);
-      callback(null, decoded);
+      // Write chunk to decoder - it will emit 'data' events that we handle above
+      if (!this.decoder.write(chunk)) {
+        // If write returns false, the decoder is backpressured
+        // Wait for 'drain' event before continuing
+        this.decoder.once("drain", callback);
+      } else {
+        callback();
+      }
     } catch (error) {
       callback(error as Error);
     }

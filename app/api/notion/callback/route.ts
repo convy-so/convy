@@ -13,18 +13,16 @@ import { notionIntegrations } from "@/db/schema";
 import { encrypt } from "@/lib/encryption";
 import { eq } from "drizzle-orm";
 import { initializeNotionStructure } from "@/lib/notion-oauth";
+import { getRedisClient } from "@/lib/redis";
 
 export async function GET(req: NextRequest) {
   try {
-    // Verify user is authenticated
     const session = await getVerifiedSession();
 
-    // Get OAuth parameters
     const code = req.nextUrl.searchParams.get("code");
     const state = req.nextUrl.searchParams.get("state");
     const error = req.nextUrl.searchParams.get("error");
 
-    // Handle OAuth errors
     if (error) {
       console.error("Notion OAuth error:", error);
       return NextResponse.redirect(
@@ -32,7 +30,6 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Validate code
     if (!code) {
       console.error("No authorization code received");
       return NextResponse.redirect(
@@ -40,12 +37,62 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // TODO: Verify state matches stored state
+    if (!state) {
+      console.error("No state parameter received");
+      return NextResponse.redirect(
+        `${env.BETTER_AUTH_URL}/dashboard?notion_error=no_state`
+      );
+    }
 
-    console.log("Exchanging code for access token:", {
-      userId: session.user.id,
-      hasCode: !!code,
-    });
+    // Verify state matches stored state for CSRF protection
+    const redis = getRedisClient();
+    const stateKey = `notion:oauth:state:${state}`;
+    const storedStateData = await redis.get(stateKey);
+
+    if (!storedStateData) {
+      console.error("Invalid or expired state parameter:", {
+        state,
+        userId: session.user.id,
+      });
+      return NextResponse.redirect(
+        `${env.BETTER_AUTH_URL}/dashboard?notion_error=invalid_state`
+      );
+    }
+
+    let stateData: { userId: string; createdAt: string };
+    try {
+      stateData = JSON.parse(storedStateData);
+    } catch (error) {
+      console.error("Failed to parse stored state data:", error);
+      return NextResponse.redirect(
+        `${env.BETTER_AUTH_URL}/dashboard?notion_error=invalid_state`
+      );
+    }
+
+    // Verify the state belongs to the current user
+    if (stateData.userId !== session.user.id) {
+      console.error("State user ID mismatch:", {
+        stateUserId: stateData.userId,
+        sessionUserId: session.user.id,
+        state,
+      });
+      // Delete the state to prevent reuse
+      await redis.del(stateKey);
+      return NextResponse.redirect(
+        `${env.BETTER_AUTH_URL}/dashboard?notion_error=user_mismatch`
+      );
+    }
+
+    // Delete the state after successful verification (one-time use)
+    await redis.del(stateKey);
+
+    console.log(
+      "State verified successfully, exchanging code for access token:",
+      {
+        userId: session.user.id,
+        hasCode: !!code,
+      }
+    );
 
     // Exchange authorization code for access token
     const tokenResponse = await fetch("https://api.notion.com/v1/oauth/token", {
@@ -113,7 +160,6 @@ export async function GET(req: NextRequest) {
         })
         .where(eq(notionIntegrations.userId, session.user.id));
     } else {
-      // Create new integration
       console.log("Creating new Notion integration:", {
         userId: session.user.id,
       });

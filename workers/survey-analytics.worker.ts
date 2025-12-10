@@ -156,6 +156,21 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
       `[Survey Analytics Worker] Completed job ${job.id} for survey ${surveyId}`
     );
 
+    // Reset the analytics counter after successful generation
+    // This allows the system to return to accumulation mode
+    try {
+      const { resetAnalyticsCounterAfterGeneration } = await import(
+        "@/lib/analytics-scheduler"
+      );
+      await resetAnalyticsCounterAfterGeneration(surveyId);
+    } catch (error) {
+      console.error(
+        "[Survey Analytics Worker] Failed to reset analytics counter:",
+        error
+      );
+      // Don't fail the job if counter reset fails
+    }
+
     // Trigger Notion sync for analytics
     try {
       const { enqueueNotionSync } = await import("@/lib/queue");
@@ -170,6 +185,44 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
     } catch (error) {
       console.error("Failed to enqueue Notion sync:", error);
       // Don't fail the job if Notion sync fails
+    }
+
+    // Trigger Slack auto-post for analytics update
+    try {
+      const { autoPostAnalyticsUpdate } = await import("@/app/actions/slack");
+      autoPostAnalyticsUpdate(job.data.userId, surveyId).catch((error) => {
+        console.error(
+          `[Survey Analytics Worker] Failed to auto-post analytics to Slack:`,
+          error
+        );
+        // Don't fail the job if Slack post fails
+      });
+    } catch (error) {
+      console.error("Failed to import Slack auto-post function:", error);
+      // Don't fail the job if import fails
+    }
+
+    // Publish analytics completion event to Redis pub/sub
+    // This enables real-time updates via WebSocket
+    try {
+      const redis = getRedisClient();
+      const channel = `analytics:complete:${surveyId}:${job.data.userId}`;
+      const message = JSON.stringify({
+        surveyId,
+        userId: job.data.userId,
+        completedAt: new Date().toISOString(),
+      });
+
+      await redis.publish(channel, message);
+      console.log(
+        `[Survey Analytics Worker] Published analytics completion event to channel: ${channel}`
+      );
+    } catch (error) {
+      console.error(
+        "[Survey Analytics Worker] Failed to publish analytics event to Redis:",
+        error
+      );
+      // Don't fail the job if Redis publish fails
     }
 
     return {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { env } from "@/lib/env";
+import { getRedisClient } from "@/lib/redis";
 
 /**
  * GET /api/slack/auth
@@ -21,6 +22,18 @@ export async function GET(req: NextRequest) {
     }
 
     const state = crypto.randomUUID();
+
+    // Store state in Redis with user ID for verification (10 minute TTL)
+    // This prevents CSRF attacks and ensures the callback is for the correct user
+    const redis = getRedisClient();
+    await redis.setex(
+      `slack:oauth:state:${state}`,
+      600,
+      JSON.stringify({
+        userId: session.user.id,
+        createdAt: new Date().toISOString(),
+      })
+    );
 
     // Slack OAuth 2.0 authorization URL
     const authUrl = new URL("https://slack.com/oauth/v2/authorize");
