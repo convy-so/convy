@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createServer } from "http";
+import { createServer, IncomingMessage } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { parse } from "url";
 import { env } from "@/lib/env";
@@ -29,13 +29,19 @@ import { getRedisSubscriber } from "@/lib/redis";
 const PORT = parseInt(env.WEBSOCKET_PORT);
 
 // Track active connections
-const activeConnections = new Map<string, { handler: any; userId?: string }>();
+const activeConnections = new Map<
+  string,
+  {
+    handler:
+      | SurveyCreationVoiceHandler
+      | SurveyResponseVoiceHandler
+      | AnalyticsHandler;
+    userId?: string;
+  }
+>();
 
 // Track analytics connections: userId -> surveyId -> handler
-const analyticsConnections = new Map<
-  string,
-  Map<string, AnalyticsHandler>
->();
+const analyticsConnections = new Map<string, Map<string, AnalyticsHandler>>();
 
 // Redis pub/sub subscriber for analytics events
 let redisSubscriber: ReturnType<typeof getRedisSubscriber> | null = null;
@@ -109,11 +115,11 @@ wss.on("connection", async (ws: WebSocket, req) => {
   try {
     // Route based on pathname
     if (pathname === "/voice/survey-creation") {
-      await handleSurveyCreation(ws, req, clientIP);
+      await handleSurveyCreation(ws, req);
     } else if (pathname === "/voice/survey-response") {
-      await handleSurveyResponse(ws, req, clientIP);
+      await handleSurveyResponse(ws, req);
     } else if (pathname === "/analytics") {
-      await handleAnalytics(ws, req, clientIP);
+      await handleAnalytics(ws, req);
     } else {
       ws.send(
         JSON.stringify({
@@ -140,8 +146,7 @@ wss.on("connection", async (ws: WebSocket, req) => {
  */
 async function handleSurveyCreation(
   ws: WebSocket,
-  req: any,
-  clientIP: string
+  req: IncomingMessage
 ): Promise<void> {
   // Authenticate connection
   const authResult = await authenticateWebSocket(ws, req);
@@ -213,8 +218,7 @@ async function handleSurveyCreation(
  */
 async function handleSurveyResponse(
   ws: WebSocket,
-  req: any,
-  clientIP: string
+  req: IncomingMessage
 ): Promise<void> {
   // Verify public access
   const accessResult = await verifyPublicAccess(req);
@@ -283,8 +287,7 @@ async function handleSurveyResponse(
  */
 async function handleAnalytics(
   ws: WebSocket,
-  req: any,
-  clientIP: string
+  req: IncomingMessage
 ): Promise<void> {
   // Authenticate connection
   const authResult = await authenticateWebSocket(ws, req);
@@ -394,7 +397,11 @@ function initializeRedisSubscriber(): void {
       try {
         // Parse channel: analytics:complete:{surveyId}:{userId}
         const parts = channel.split(":");
-        if (parts.length === 4 && parts[0] === "analytics" && parts[1] === "complete") {
+        if (
+          parts.length === 4 &&
+          parts[0] === "analytics" &&
+          parts[1] === "complete"
+        ) {
           const surveyId = parts[2];
           const userId = parts[3];
 
@@ -487,8 +494,12 @@ process.on("SIGTERM", async () => {
   // Close all active connections
   for (const [connectionId, { handler }] of activeConnections.entries()) {
     try {
-      if (handler && typeof handler.cleanup === "function") {
-        await handler.cleanup();
+      if (
+        handler &&
+        typeof (handler as { cleanup?: () => Promise<void> }).cleanup ===
+          "function"
+      ) {
+        await (handler as { cleanup: () => Promise<void> }).cleanup();
       }
     } catch (error) {
       console.error(
@@ -518,7 +529,7 @@ process.on("SIGTERM", async () => {
 
 process.on("SIGINT", async () => {
   console.log("[WebSocket] Received SIGINT, shutting down...");
-  process.emit("SIGTERM" as any);
+  process.emit("SIGTERM");
 });
 
 // Handle uncaught errors

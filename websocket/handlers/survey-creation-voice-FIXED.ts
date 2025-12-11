@@ -9,11 +9,7 @@ import {
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { AuthenticatedConnection } from "../middleware/auth";
-import {
-  AudioBufferManager,
-  bufferToWav,
-  estimateDuration,
-} from "@/lib/voice/audio-processing";
+import { AudioBufferManager } from "@/lib/voice/audio-processing";
 import { getVAD } from "@/lib/voice/vad";
 import { getWhisperService } from "@/lib/voice/whisper-stt";
 import { getTTSService } from "@/lib/voice/google-tts";
@@ -33,7 +29,8 @@ import {
 
 interface VoiceMessage {
   type: string;
-  [key: string]: any;
+  language?: "en" | "fr" | "de";
+  [key: string]: unknown;
 }
 
 interface CreationState {
@@ -57,7 +54,7 @@ export class SurveyCreationVoiceHandler {
   private sessionId: string;
   private audioBuffer: AudioBufferManager;
   private state: CreationState;
-  private vad: Awaited<ReturnType<typeof getVAD>>;
+  private vad!: Awaited<ReturnType<typeof getVAD>>;
   private whisper: ReturnType<typeof getWhisperService>;
   private tts: ReturnType<typeof getTTSService>;
   private isActive: boolean = true;
@@ -169,7 +166,7 @@ export class SurveyCreationVoiceHandler {
   private async handleControlMessage(message: VoiceMessage): Promise<void> {
     switch (message.type) {
       case "start":
-        await this.handleStart(message);
+        await this.handleStart();
         break;
 
       case "stop_speaking":
@@ -178,7 +175,14 @@ export class SurveyCreationVoiceHandler {
         break;
 
       case "language":
-        this.state.language = message.language || "en";
+        {
+          const lang = message.language;
+          if (lang === "en" || lang === "fr" || lang === "de") {
+            this.state.language = lang;
+          } else {
+            this.state.language = "en";
+          }
+        }
         break;
 
       case "finalize":
@@ -196,7 +200,7 @@ export class SurveyCreationVoiceHandler {
   /**
    * Handle start of survey creation
    */
-  private async handleStart(message: VoiceMessage): Promise<void> {
+  private async handleStart(): Promise<void> {
     try {
       // Create survey
       const surveyId = nanoid();
@@ -208,7 +212,6 @@ export class SurveyCreationVoiceHandler {
         title: "Untitled Survey",
         status: "creating",
         language: this.state.language,
-        voiceEnabled: true,
       });
 
       await db.insert(surveyCreationConversations).values({
@@ -216,7 +219,6 @@ export class SurveyCreationVoiceHandler {
         surveyId,
         messages: [],
         status: "in_progress",
-        voiceSessionId: this.state.voiceSessionId,
         collectedInfo: this.state.collectedInfo,
         extractedData: {},
       });
@@ -441,7 +443,9 @@ export class SurveyCreationVoiceHandler {
         }
 
         // Update extracted data (excluding collectedInfo)
-        const { collectedInfo, ...dataWithoutCollectedInfo } = parsed;
+        const dataWithoutCollectedInfo = { ...parsed };
+        delete (dataWithoutCollectedInfo as Record<string, unknown>)
+          .collectedInfo;
         this.state.extractedData = {
           ...this.state.extractedData,
           ...dataWithoutCollectedInfo,
@@ -609,7 +613,7 @@ export class SurveyCreationVoiceHandler {
   /**
    * Send message to client
    */
-  private send(message: any): void {
+  private send(message: Record<string, unknown>): void {
     if (this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
     }

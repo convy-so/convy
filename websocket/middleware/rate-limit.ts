@@ -1,10 +1,11 @@
 import { Ratelimit } from "@upstash/ratelimit";
-import { redis } from "@/lib/redis";
+import { Redis } from "@upstash/redis";
+import { env } from "@/lib/env";
 import { IncomingMessage } from "http";
 
 /**
  * WebSocket Rate Limiting with Upstash Redis
- * 
+ *
  * Implements multiple rate limit strategies:
  * 1. Connection rate limiting (new connections per minute)
  * 2. Concurrent connection limiting (active connections)
@@ -41,6 +42,11 @@ const RATE_LIMIT_CONFIG = {
  * Connection Rate Limiter
  * Limits how many NEW connections a user/IP can make per minute
  */
+const redis = new Redis({
+  url: env.UPSTASH_REDIS_REST_URL,
+  token: env.UPSTASH_REDIS_REST_TOKEN,
+});
+
 export const connectionRateLimiter = new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(
@@ -178,8 +184,9 @@ export async function getConcurrentConnections(
   identifier: string
 ): Promise<number> {
   const key = `${CONCURRENT_CONNECTION_KEY}:${identifier}`;
-  const count = await redis.get<number>(key);
-  return count || 0;
+  const count = await redis.get(key);
+  const parsed = typeof count === "string" ? parseInt(count, 10) : 0;
+  return Number.isNaN(parsed) ? 0 : parsed;
 }
 
 // ============================================================================
@@ -339,9 +346,7 @@ export function getClientIdentifier(
 /**
  * Get rate limit analytics
  */
-export async function getRateLimitStats(
-  identifier: string
-): Promise<{
+export async function getRateLimitStats(identifier: string): Promise<{
   concurrentConnections: number;
   limits: typeof RATE_LIMIT_CONFIG;
 }> {

@@ -21,7 +21,6 @@ import {
   checkAudioChunkAllowed,
   checkSTTAllowed,
   checkTTSAllowed,
-  getClientIdentifier,
 } from "../middleware/rate-limit";
 
 /**
@@ -31,7 +30,8 @@ import {
 
 interface VoiceMessage {
   type: string;
-  [key: string]: any;
+  language?: "en" | "fr" | "de";
+  [key: string]: unknown;
 }
 
 interface ResponseState {
@@ -44,7 +44,7 @@ interface ResponseState {
     timestamp: string;
   }>;
   isProcessing: boolean;
-  survey: any;
+  survey: typeof surveys.$inferSelect | null;
   language: "en" | "fr" | "de";
 }
 
@@ -54,7 +54,7 @@ export class SurveyResponseVoiceHandler {
   private identifier: string; // For rate limiting
   private audioBuffer: AudioBufferManager;
   private state: ResponseState;
-  private vad: Awaited<ReturnType<typeof getVAD>>;
+  private vad!: Awaited<ReturnType<typeof getVAD>>;
   private whisper: ReturnType<typeof getWhisperService>;
   private tts: ReturnType<typeof getTTSService>;
   private isActive: boolean = true;
@@ -141,7 +141,6 @@ export class SurveyResponseVoiceHandler {
       await db.insert(surveyConversations).values({
         id: conversationId,
         surveyId: survey.id,
-        voiceSessionId: this.state.voiceSessionId,
         rawConversation: [],
         completed: false,
       });
@@ -370,6 +369,9 @@ export class SurveyResponseVoiceHandler {
   private async generateResponse(): Promise<void> {
     try {
       // Build survey config
+      if (!this.state.survey) {
+        throw new Error("Survey data unavailable");
+      }
       const surveyConfig = buildCompleteSurveyConfig(this.state.survey);
       const systemPrompt = getSurveyConversationSystemPrompt(
         surveyConfig,
@@ -437,7 +439,9 @@ export class SurveyResponseVoiceHandler {
       const startTime = Date.now();
 
       // Get survey tone
-      const tone = this.state.survey.tone || "casual";
+      const tone = this.state.survey
+        ? this.state.survey.tone || "casual"
+        : "casual";
 
       // Synthesize audio
       const synthesis = await this.tts.synthesizeForSurvey(
@@ -501,7 +505,8 @@ export class SurveyResponseVoiceHandler {
    */
   private async sendWelcomeMessage(): Promise<void> {
     const welcomeText =
-      this.state.survey.welcomeMessage || this.getDefaultWelcomeMessage();
+      (this.state.survey as { welcomeMessage?: string } | null)
+        ?.welcomeMessage || this.getDefaultWelcomeMessage();
 
     await this.synthesizeAndSendAudio(welcomeText);
 
@@ -564,7 +569,7 @@ export class SurveyResponseVoiceHandler {
   /**
    * Send message to client
    */
-  private send(message: any): void {
+  private send(message: Record<string, unknown>): void {
     if (this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
     }

@@ -7,7 +7,6 @@ import {
   estimateDuration,
   isValidAudioBuffer,
 } from "./audio-processing";
-import { Readable } from "stream";
 
 /**
  * OpenAI Whisper Speech-to-Text Service
@@ -15,9 +14,9 @@ import { Readable } from "stream";
  */
 
 export interface TranscriptionOptions {
-  language?: string; // ISO-639-1 code (e.g., 'en', 'fr', 'de')
-  prompt?: string; // Context to improve accuracy
-  temperature?: number; // 0-1 (lower = more conservative)
+  language?: string;
+  prompt?: string;
+  temperature?: number;
   model?: "whisper-1";
 }
 
@@ -25,7 +24,7 @@ export interface TranscriptionResult {
   text: string;
   language?: string;
   duration: number;
-  cost: number; // Estimated cost in USD
+  cost: number;
 }
 
 export interface TranscriptionError {
@@ -56,7 +55,6 @@ export class WhisperSTTService {
     options: TranscriptionOptions = {}
   ): Promise<TranscriptionResult | TranscriptionError> {
     try {
-      // Validate audio buffer
       if (!isValidAudioBuffer(audioBuffer)) {
         return {
           error: "Invalid audio buffer",
@@ -65,10 +63,9 @@ export class WhisperSTTService {
         };
       }
 
-      // Convert to WAV format required by Whisper
+
       const wavBuffer = bufferToWav(audioBuffer);
 
-      // Estimate duration for cost calculation
       const durationMs = estimateDuration(audioBuffer.length);
       const durationMinutes = durationMs / 60000;
 
@@ -99,11 +96,11 @@ export class WhisperSTTService {
 
       return {
         text: transcription.text,
-        language: transcription.language,
+        language: options.language,
         duration: durationMs,
         cost,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("[Whisper STT] Transcription error:", error);
 
       return this.handleError(error);
@@ -182,16 +179,23 @@ export class WhisperSTTService {
    * Convert buffer to File-like object for OpenAI API
    */
   private bufferToFile(buffer: Buffer, filename: string): File {
-    const blob = new Blob([buffer], { type: "audio/wav" });
+    const copy = new Uint8Array(buffer.byteLength);
+    copy.set(buffer);
+    const blob = new Blob([copy.buffer], { type: "audio/wav" });
     return new File([blob], filename, { type: "audio/wav" });
   }
 
   /**
    * Handle API errors and determine if retryable
    */
-  private handleError(error: any): TranscriptionError {
+  private handleError(error: unknown): TranscriptionError {
+    const err = error as {
+      status?: number;
+      message?: string;
+      code?: string;
+    };
     // Rate limit error
-    if (error?.status === 429) {
+    if (err?.status === 429) {
       return {
         error: "Rate limit exceeded",
         code: "RATE_LIMIT",
@@ -200,16 +204,16 @@ export class WhisperSTTService {
     }
 
     // Invalid request
-    if (error?.status === 400) {
+    if (err?.status === 400) {
       return {
-        error: error?.message || "Invalid request",
+        error: err?.message || "Invalid request",
         code: "INVALID_REQUEST",
         retryable: false,
       };
     }
 
     // Server error
-    if (error?.status >= 500) {
+    if (err?.status && err.status >= 500) {
       return {
         error: "OpenAI service error",
         code: "SERVER_ERROR",
@@ -218,7 +222,7 @@ export class WhisperSTTService {
     }
 
     // Network error
-    if (error?.code === "ECONNREFUSED" || error?.code === "ETIMEDOUT") {
+    if (err?.code === "ECONNREFUSED" || err?.code === "ETIMEDOUT") {
       return {
         error: "Network error",
         code: "NETWORK_ERROR",
@@ -228,7 +232,7 @@ export class WhisperSTTService {
 
     // Unknown error
     return {
-      error: error?.message || "Unknown transcription error",
+      error: err?.message || "Unknown transcription error",
       code: "UNKNOWN_ERROR",
       retryable: false,
     };
