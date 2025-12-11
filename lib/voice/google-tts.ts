@@ -1,6 +1,6 @@
 import "server-only";
 
-import * as textToSpeech from "@google-cloud/text-to-speech";
+import * as googleTTS from "@google-cloud/text-to-speech";
 import { env } from "@/lib/env";
 
 /**
@@ -101,14 +101,14 @@ export const VOICE_PROFILES = {
  * Google TTS Service Class
  */
 export class GoogleTTSService {
-  private client: textToSpeech.TextToSpeechClient;
+  private client: googleTTS.TextToSpeechClient;
   private totalCost: number = 0;
   private totalCharacters: number = 0;
   private requestCount: number = 0;
 
   constructor() {
     // Initialize with credentials from environment
-    const config: any = {};
+    const config: { keyFilename?: string; projectId?: string } = {};
 
     if (env.GOOGLE_APPLICATION_CREDENTIALS) {
       config.keyFilename = env.GOOGLE_APPLICATION_CREDENTIALS;
@@ -118,7 +118,7 @@ export class GoogleTTSService {
       config.projectId = env.GOOGLE_CLOUD_PROJECT_ID;
     }
 
-    this.client = new textToSpeech.TextToSpeechClient(config);
+    this.client = new googleTTS.TextToSpeechClient(config);
   }
 
   /**
@@ -140,7 +140,7 @@ export class GoogleTTSService {
       const characterCount = text.length;
 
       // Build request
-      const request: textToSpeech.protos.google.cloud.texttospeech.v1.ISynthesizeSpeechRequest =
+      const request: googleTTS.protos.google.cloud.texttospeech.v1.ISynthesizeSpeechRequest =
         {
           input: { text },
           voice: {
@@ -189,7 +189,7 @@ export class GoogleTTSService {
         characterCount,
         duration: estimatedDuration,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("[Google TTS] Synthesis error:", error);
       return this.handleError(error);
     }
@@ -225,7 +225,10 @@ export class GoogleTTSService {
 
     // Fallback to casual if profile doesn't exist
     if (!VOICE_PROFILES[profileKey]) {
-      return this.synthesizeWithProfile(text, `${language}-casual` as any);
+      return this.synthesizeWithProfile(
+        text,
+        `${language}-casual` as keyof typeof VOICE_PROFILES
+      );
     }
 
     return this.synthesizeWithProfile(text, profileKey);
@@ -334,9 +337,10 @@ export class GoogleTTSService {
   /**
    * Handle API errors
    */
-  private handleError(error: any): TTSError {
+  private handleError(error: unknown): TTSError {
+    const err = error as { code?: number | string; message?: string };
     // Quota exceeded
-    if (error?.code === 8 || error?.code === "RESOURCE_EXHAUSTED") {
+    if (err?.code === 8 || err?.code === "RESOURCE_EXHAUSTED") {
       return {
         error: "Quota exceeded",
         code: "QUOTA_EXCEEDED",
@@ -345,16 +349,16 @@ export class GoogleTTSService {
     }
 
     // Invalid request
-    if (error?.code === 3 || error?.code === "INVALID_ARGUMENT") {
+    if (err?.code === 3 || err?.code === "INVALID_ARGUMENT") {
       return {
-        error: error?.message || "Invalid request",
+        error: err?.message || "Invalid request",
         code: "INVALID_REQUEST",
         retryable: false,
       };
     }
 
     // Unavailable
-    if (error?.code === 14 || error?.code === "UNAVAILABLE") {
+    if (err?.code === 14 || err?.code === "UNAVAILABLE") {
       return {
         error: "Service unavailable",
         code: "UNAVAILABLE",
@@ -363,7 +367,7 @@ export class GoogleTTSService {
     }
 
     // Authentication error
-    if (error?.code === 16 || error?.code === "UNAUTHENTICATED") {
+    if (err?.code === 16 || err?.code === "UNAUTHENTICATED") {
       return {
         error: "Authentication failed",
         code: "UNAUTHENTICATED",
@@ -373,7 +377,7 @@ export class GoogleTTSService {
 
     // Unknown error
     return {
-      error: error?.message || "Unknown synthesis error",
+      error: err?.message || "Unknown synthesis error",
       code: "UNKNOWN_ERROR",
       retryable: false,
     };

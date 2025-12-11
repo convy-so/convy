@@ -1,6 +1,6 @@
 import "server-only";
 
-import { MicVAD, utils } from "@ricky0123/vad-node";
+import { NonRealTimeVAD } from "@ricky0123/vad-node";
 import { env } from "@/lib/env";
 import { AUDIO_CONFIG, hasEnergyBasedSpeech } from "./audio-processing";
 
@@ -16,17 +16,25 @@ export interface VADConfig {
   frameSizeMs?: number; // size of each audio frame in ms
 }
 
+export interface VADSpeechSegment {
+  startMs: number;
+  endMs: number;
+  durationMs: number;
+}
+
 export interface VADResult {
   hasSpeech: boolean;
+  /** Ratio (0-1) of speech duration to total audio duration */
   probability: number;
   timestamp: number;
+  speechSegments: VADSpeechSegment[];
 }
 
 /**
  * Voice Activity Detector using Silero VAD
  */
 export class VoiceActivityDetector {
-  private vad: MicVAD | null = null;
+  private vad: NonRealTimeVAD | null = null;
   private sensitivity: number;
   private isInitialized: boolean = false;
   private speechCallbacks: Set<(result: VADResult) => void> = new Set();
@@ -44,41 +52,8 @@ export class VoiceActivityDetector {
     if (this.isInitialized) return;
 
     try {
-      this.vad = await MicVAD.new({
-        // Model configuration
-        positiveSpeechThreshold: this.sensitivity,
-        negativeSpeechThreshold: this.sensitivity - 0.15,
-        redemptionFrames: 8, // ~250ms of silence before marking as end
-
-        // Frame configuration for optimal latency
+      this.vad = await NonRealTimeVAD.new({
         frameSamples: AUDIO_CONFIG.FRAME_SIZE,
-
-        // Audio configuration
-        sampleRate: AUDIO_CONFIG.SAMPLE_RATE,
-
-        // Callbacks
-        onSpeechStart: () => {
-          this.lastSpeechTime = Date.now();
-          this.notifySpeech({
-            hasSpeech: true,
-            probability: 1.0,
-            timestamp: Date.now(),
-          });
-        },
-
-        onSpeechEnd: (audio) => {
-          const silenceDuration = Date.now() - this.lastSpeechTime;
-          this.notifySilence(silenceDuration);
-        },
-
-        onVADMisfire: () => {
-          // Handle false positives
-          this.notifySpeech({
-            hasSpeech: false,
-            probability: 0.0,
-            timestamp: Date.now(),
-          });
-        },
       });
 
       this.isInitialized = true;
@@ -100,14 +75,38 @@ export class VoiceActivityDetector {
     try {
       // Convert buffer to Float32Array for VAD processing
       const audioData = this.bufferToFloat32(audioBuffer);
+      const totalSamples = audioData.length;
+      const totalDurationMs = (totalSamples / AUDIO_CONFIG.SAMPLE_RATE) * 1000;
 
-      // Process with Silero VAD
-      const probability = await this.processAudioFrame(audioData);
+      const speechSegments: VADSpeechSegment[] = [];
+
+      if (this.vad) {
+        const iterator = this.vad.run(audioData, AUDIO_CONFIG.SAMPLE_RATE);
+        for await (const segment of iterator) {
+          const startMs = (segment.start / AUDIO_CONFIG.SAMPLE_RATE) * 1000;
+          const endMs = (segment.end / AUDIO_CONFIG.SAMPLE_RATE) * 1000;
+          speechSegments.push({
+            startMs,
+            endMs,
+            durationMs: Math.max(0, endMs - startMs),
+          });
+        }
+      }
+
+      const speechDurationMs = speechSegments.reduce(
+        (sum, seg) => sum + seg.durationMs,
+        0
+      );
+      const probability =
+        totalDurationMs > 0
+          ? Math.min(1, Math.max(0, speechDurationMs / totalDurationMs))
+          : 0;
 
       const result: VADResult = {
         hasSpeech: probability > this.sensitivity,
         probability,
         timestamp: Date.now(),
+        speechSegments,
       };
 
       if (result.hasSpeech) {
@@ -154,6 +153,7 @@ export class VoiceActivityDetector {
       hasSpeech,
       probability: hasSpeech ? 0.8 : 0.2,
       timestamp: Date.now(),
+      speechSegments: [],
     };
   }
 
@@ -215,9 +215,15 @@ export class VoiceActivityDetector {
   /**
    * Remove callback
    */
-  removeCallback(callback: Function): void {
-    this.speechCallbacks.delete(callback as any);
-    this.silenceCallbacks.delete(callback as any);
+  removeCallback(
+    callback: ((result: VADResult) => void) | ((duration: number) => void)
+  ): void {
+    this.speechCallbacks.delete(
+      callback as unknown as (result: VADResult) => void
+    );
+    this.silenceCallbacks.delete(
+      callback as unknown as (duration: number) => void
+    );
   }
 
   /**
@@ -238,10 +244,7 @@ export class VoiceActivityDetector {
    * Clean up resources
    */
   async destroy(): Promise<void> {
-    if (this.vad) {
-      await this.vad.destroy();
-      this.vad = null;
-    }
+    this.vad = null;
     this.speechCallbacks.clear();
     this.silenceCallbacks.clear();
     this.isInitialized = false;
