@@ -515,12 +515,15 @@ export async function getSlackPostHistory(limit = 50) {
 /**
  * Auto-post functions (called by workers/events)
  * Production-ready with proper error handling and logging
+ * Optimized to reduce duplicate database queries
  */
 export async function autoPostSurveyCreated(userId: string, surveyId: string) {
+  // Cache integration to avoid duplicate queries in error handler
+  let integration: Awaited<ReturnType<typeof getSlackIntegration>> = null;
   let postId: string | null = null;
 
   try {
-    const integration = await getSlackIntegration(userId);
+    integration = await getSlackIntegration(userId);
 
     if (
       !integration ||
@@ -585,38 +588,42 @@ export async function autoPostSurveyCreated(userId: string, surveyId: string) {
   } catch (error) {
     console.error("[Slack Auto-Post] Error posting survey:", error);
 
-    // Update post record with failure
+    // Update post record with failure - use cached integration
     if (postId) {
-      await db
-        .update(slackPosts)
-        .set({
-          status: "failed",
-          error:
-            error instanceof Error
-              ? error.message.substring(0, 500)
-              : "Unknown error",
-        })
-        .where(eq(slackPosts.id, postId));
-    } else {
-      // Create failed post record if we didn't get to create one
       try {
-        const integration = await getSlackIntegration(userId);
-        if (integration) {
-          await db.insert(slackPosts).values({
-            id: crypto.randomUUID(),
-            userId,
-            slackIntegrationId: integration.id,
-            postType: "survey_created",
-            surveyId,
-            channelId: integration.defaultChannelId || "",
-            channelName: integration.defaultChannelName || null,
+        await db
+          .update(slackPosts)
+          .set({
             status: "failed",
             error:
               error instanceof Error
                 ? error.message.substring(0, 500)
                 : "Unknown error",
-          });
-        }
+          })
+          .where(eq(slackPosts.id, postId));
+      } catch (dbError) {
+        console.error(
+          "[Slack Auto-Post] Failed to update post record:",
+          dbError
+        );
+      }
+    } else if (integration) {
+      // Create failed post record using cached integration (no duplicate query)
+      try {
+        await db.insert(slackPosts).values({
+          id: crypto.randomUUID(),
+          userId,
+          slackIntegrationId: integration.id,
+          postType: "survey_created",
+          surveyId,
+          channelId: integration.defaultChannelId || "",
+          channelName: integration.defaultChannelName || null,
+          status: "failed",
+          error:
+            error instanceof Error
+              ? error.message.substring(0, 500)
+              : "Unknown error",
+        });
       } catch (dbError) {
         console.error("[Slack Auto-Post] Failed to record error:", dbError);
       }
@@ -629,10 +636,12 @@ export async function autoPostNewConversation(
   surveyId: string,
   conversationId: string
 ) {
+  // Cache integration to avoid duplicate queries in error handler
+  let integration: Awaited<ReturnType<typeof getSlackIntegration>> = null;
   let postId: string | null = null;
 
   try {
-    const integration = await getSlackIntegration(userId);
+    integration = await getSlackIntegration(userId);
 
     if (
       !integration ||
@@ -703,38 +712,43 @@ export async function autoPostNewConversation(
   } catch (error) {
     console.error("[Slack Auto-Post] Error posting conversation:", error);
 
-    // Update post record with failure
+    // Update post record with failure - use cached integration
     if (postId) {
-      await db
-        .update(slackPosts)
-        .set({
-          status: "failed",
-          error:
-            error instanceof Error
-              ? error.message.substring(0, 500)
-              : "Unknown error",
-        })
-        .where(eq(slackPosts.id, postId));
-    } else {
       try {
-        const integration = await getSlackIntegration(userId);
-        if (integration) {
-          await db.insert(slackPosts).values({
-            id: crypto.randomUUID(),
-            userId,
-            slackIntegrationId: integration.id,
-            postType: "new_conversation",
-            surveyId,
-            conversationId,
-            channelId: integration.defaultChannelId || "",
-            channelName: integration.defaultChannelName || null,
+        await db
+          .update(slackPosts)
+          .set({
             status: "failed",
             error:
               error instanceof Error
                 ? error.message.substring(0, 500)
                 : "Unknown error",
-          });
-        }
+          })
+          .where(eq(slackPosts.id, postId));
+      } catch (dbError) {
+        console.error(
+          "[Slack Auto-Post] Failed to update post record:",
+          dbError
+        );
+      }
+    } else if (integration) {
+      // Use cached integration (no duplicate query)
+      try {
+        await db.insert(slackPosts).values({
+          id: crypto.randomUUID(),
+          userId,
+          slackIntegrationId: integration.id,
+          postType: "new_conversation",
+          surveyId,
+          conversationId,
+          channelId: integration.defaultChannelId || "",
+          channelName: integration.defaultChannelName || null,
+          status: "failed",
+          error:
+            error instanceof Error
+              ? error.message.substring(0, 500)
+              : "Unknown error",
+        });
       } catch (dbError) {
         console.error("[Slack Auto-Post] Failed to record error:", dbError);
       }
@@ -746,10 +760,12 @@ export async function autoPostAnalyticsUpdate(
   userId: string,
   surveyId: string
 ) {
+  // Cache integration to avoid duplicate queries in error handler
+  let integration: Awaited<ReturnType<typeof getSlackIntegration>> = null;
   let postId: string | null = null;
 
   try {
-    const integration = await getSlackIntegration(userId);
+    integration = await getSlackIntegration(userId);
 
     if (
       !integration ||
@@ -827,37 +843,42 @@ export async function autoPostAnalyticsUpdate(
   } catch (error) {
     console.error("[Slack Auto-Post] Error posting analytics:", error);
 
-    // Update post record with failure
+    // Update post record with failure - use cached integration
     if (postId) {
-      await db
-        .update(slackPosts)
-        .set({
-          status: "failed",
-          error:
-            error instanceof Error
-              ? error.message.substring(0, 500)
-              : "Unknown error",
-        })
-        .where(eq(slackPosts.id, postId));
-    } else {
       try {
-        const integration = await getSlackIntegration(userId);
-        if (integration) {
-          await db.insert(slackPosts).values({
-            id: crypto.randomUUID(),
-            userId,
-            slackIntegrationId: integration.id,
-            postType: "analytics_update",
-            surveyId,
-            channelId: integration.defaultChannelId || "",
-            channelName: integration.defaultChannelName || null,
+        await db
+          .update(slackPosts)
+          .set({
             status: "failed",
             error:
               error instanceof Error
                 ? error.message.substring(0, 500)
                 : "Unknown error",
-          });
-        }
+          })
+          .where(eq(slackPosts.id, postId));
+      } catch (dbError) {
+        console.error(
+          "[Slack Auto-Post] Failed to update post record:",
+          dbError
+        );
+      }
+    } else if (integration) {
+      // Use cached integration (no duplicate query)
+      try {
+        await db.insert(slackPosts).values({
+          id: crypto.randomUUID(),
+          userId,
+          slackIntegrationId: integration.id,
+          postType: "analytics_update",
+          surveyId,
+          channelId: integration.defaultChannelId || "",
+          channelName: integration.defaultChannelName || null,
+          status: "failed",
+          error:
+            error instanceof Error
+              ? error.message.substring(0, 500)
+              : "Unknown error",
+        });
       } catch (dbError) {
         console.error("[Slack Auto-Post] Failed to record error:", dbError);
       }

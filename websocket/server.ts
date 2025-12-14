@@ -37,6 +37,7 @@ const activeConnections = new Map<
       | SurveyResponseVoiceHandler
       | AnalyticsHandler;
     userId?: string;
+    createdAt: number; // Track when connection was created for cleanup
   }
 >();
 
@@ -45,6 +46,72 @@ const analyticsConnections = new Map<string, Map<string, AnalyticsHandler>>();
 
 // Redis pub/sub subscriber for analytics events
 let redisSubscriber: ReturnType<typeof getRedisSubscriber> | null = null;
+let redisSubscriberReconnectAttempts = 0;
+const MAX_REDIS_RECONNECT_ATTEMPTS = 10;
+const REDIS_RECONNECT_DELAY_MS = 5000;
+
+// Cleanup interval for stale connections
+const CLEANUP_INTERVAL_MS = 60000; // Every minute
+const MAX_CONNECTION_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours max connection age
+
+/**
+ * Cleanup stale connections that may have leaked
+ * This catches connections where the close event was missed
+ */
+function cleanupStaleConnections(): void {
+  const now = Date.now();
+  let cleanedCount = 0;
+
+  for (const [connectionId, connection] of activeConnections) {
+    try {
+      // Check if WebSocket is closed by accessing private ws property
+      // Cast to unknown first to bypass private property TypeScript check
+      const ws =
+        connection.handler && "ws" in connection.handler
+          ? (connection.handler as unknown as { ws: WebSocket }).ws
+          : null;
+
+      const isClosed = ws && ws.readyState === WebSocket.CLOSED;
+      const isTooOld = now - connection.createdAt > MAX_CONNECTION_AGE_MS;
+
+      if (isClosed || isTooOld) {
+        activeConnections.delete(connectionId);
+        cleanedCount++;
+
+        // Also clean up from analyticsConnections if applicable
+        if (connection.userId) {
+          const userConnections = analyticsConnections.get(connection.userId);
+          if (userConnections) {
+            for (const [surveyId, handler] of userConnections) {
+              if (handler === connection.handler) {
+                userConnections.delete(surveyId);
+              }
+            }
+            if (userConnections.size === 0) {
+              analyticsConnections.delete(connection.userId);
+            }
+          }
+        }
+      }
+    } catch {
+      // If we can't check the connection, remove it to be safe
+      activeConnections.delete(connectionId);
+      cleanedCount++;
+    }
+  }
+
+  if (cleanedCount > 0) {
+    console.log(
+      `[WebSocket] Cleaned up ${cleanedCount} stale connections. Active: ${activeConnections.size}`
+    );
+  }
+}
+
+// Start periodic cleanup
+const cleanupInterval = setInterval(
+  cleanupStaleConnections,
+  CLEANUP_INTERVAL_MS
+);
 
 /**
  * Create HTTP server
@@ -148,7 +215,6 @@ async function handleSurveyCreation(
   ws: WebSocket,
   req: IncomingMessage
 ): Promise<void> {
-  // Authenticate connection
   const authResult = await authenticateWebSocket(ws, req);
 
   if ("code" in authResult) {
@@ -181,11 +247,12 @@ async function handleSurveyCreation(
     const handler = new SurveyCreationVoiceHandler(connection);
     await handler.initialize();
 
-    // Track connection
+    // Track connection with timestamp for cleanup
     const connectionId = `creation-${connection.userId}-${Date.now()}`;
     activeConnections.set(connectionId, {
       handler,
       userId: connection.userId,
+      createdAt: Date.now(),
     });
 
     // Handle disconnection
@@ -220,7 +287,6 @@ async function handleSurveyResponse(
   ws: WebSocket,
   req: IncomingMessage
 ): Promise<void> {
-  // Verify public access
   const accessResult = await verifyPublicAccess(req);
 
   if ("code" in accessResult) {
@@ -253,9 +319,9 @@ async function handleSurveyResponse(
     const handler = new SurveyResponseVoiceHandler(ws, surveyId, identifier);
     await handler.initialize();
 
-    // Track connection
+    // Track connection with timestamp for cleanup
     const connectionId = `response-${surveyId}-${Date.now()}`;
-    activeConnections.set(connectionId, { handler });
+    activeConnections.set(connectionId, { handler, createdAt: Date.now() });
 
     // Handle disconnection
     ws.on("close", async () => {
@@ -337,11 +403,12 @@ async function handleAnalytics(
     const handler = new AnalyticsHandler(connection, surveyId);
     await handler.initialize();
 
-    // Track connection
+    // Track connection with timestamp for cleanup
     const connectionId = `analytics-${connection.userId}-${surveyId}-${Date.now()}`;
     activeConnections.set(connectionId, {
       handler,
       userId: connection.userId,
+      createdAt: Date.now(),
     });
 
     // Track analytics connection for Redis pub/sub routing
@@ -384,9 +451,20 @@ async function handleAnalytics(
 
 /**
  * Initialize Redis pub/sub subscriber for analytics events
+ * Includes automatic reconnection on failure
  */
 function initializeRedisSubscriber(): void {
   try {
+    // Clean up existing subscriber if any
+    if (redisSubscriber) {
+      try {
+        redisSubscriber.quit().catch(() => {});
+      } catch {
+        // Ignore cleanup errors
+      }
+      redisSubscriber = null;
+    }
+
     redisSubscriber = getRedisSubscriber();
 
     // Subscribe to all analytics completion channels using pattern matching
@@ -427,15 +505,57 @@ function initializeRedisSubscriber(): void {
 
     redisSubscriber.on("error", (error) => {
       console.error("[Redis Pub/Sub] Subscriber error:", error);
+
+      // Attempt reconnection with exponential backoff
+      if (redisSubscriberReconnectAttempts < MAX_REDIS_RECONNECT_ATTEMPTS) {
+        const delay =
+          REDIS_RECONNECT_DELAY_MS *
+          Math.pow(2, redisSubscriberReconnectAttempts);
+        redisSubscriberReconnectAttempts++;
+
+        console.log(
+          `[Redis Pub/Sub] Attempting reconnection in ${delay}ms (attempt ${redisSubscriberReconnectAttempts}/${MAX_REDIS_RECONNECT_ATTEMPTS})`
+        );
+
+        setTimeout(() => {
+          initializeRedisSubscriber();
+        }, delay);
+      } else {
+        console.error(
+          "[Redis Pub/Sub] Max reconnection attempts reached. Analytics updates will not be delivered in real-time."
+        );
+      }
     });
 
     redisSubscriber.on("connect", () => {
+      // Reset reconnect counter on successful connection
+      redisSubscriberReconnectAttempts = 0;
       console.log("[Redis Pub/Sub] Subscriber connected");
+    });
+
+    redisSubscriber.on("end", () => {
+      console.log("[Redis Pub/Sub] Subscriber connection ended");
+
+      // Attempt reconnection if not shutting down
+      if (redisSubscriberReconnectAttempts < MAX_REDIS_RECONNECT_ATTEMPTS) {
+        redisSubscriberReconnectAttempts++;
+        console.log(
+          "[Redis Pub/Sub] Connection ended, attempting reconnection..."
+        );
+        setTimeout(initializeRedisSubscriber, REDIS_RECONNECT_DELAY_MS);
+      }
     });
 
     console.log("[Redis Pub/Sub] Subscribed to analytics completion events");
   } catch (error) {
     console.error("[Redis Pub/Sub] Failed to initialize subscriber:", error);
+
+    // Attempt reconnection
+    if (redisSubscriberReconnectAttempts < MAX_REDIS_RECONNECT_ATTEMPTS) {
+      redisSubscriberReconnectAttempts++;
+      console.log("[Redis Pub/Sub] Retrying initialization...");
+      setTimeout(initializeRedisSubscriber, REDIS_RECONNECT_DELAY_MS);
+    }
   }
 }
 
@@ -479,6 +599,12 @@ server.listen(PORT, () => {
  */
 process.on("SIGTERM", async () => {
   console.log("[WebSocket] Received SIGTERM, shutting down gracefully...");
+
+  // Stop the cleanup interval
+  clearInterval(cleanupInterval);
+
+  // Prevent Redis reconnection attempts during shutdown
+  redisSubscriberReconnectAttempts = MAX_REDIS_RECONNECT_ATTEMPTS;
 
   // Unsubscribe from Redis channels
   if (redisSubscriber) {

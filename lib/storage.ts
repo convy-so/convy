@@ -21,6 +21,8 @@ const supabase = createClient(
 );
 
 export const SURVEY_IMAGES_BUCKET = "survey-images";
+export const SURVEY_AUDIO_BUCKET = "survey-audio";
+export const SURVEY_VIDEO_BUCKET = "survey-video";
 
 /**
  * Upload an image to Supabase Storage
@@ -36,21 +38,46 @@ export async function uploadSurveyImage(
   imageId: string,
   contentType: string
 ): Promise<{ url: string; path: string }> {
-  const ext = contentType.split("/")[1] || "png";
-  const filePath = `${surveyId}/${imageId}.${ext}`;
+  return uploadSurveyAsset(file, surveyId, imageId, contentType, "image");
+}
+
+/**
+ * Upload a media asset (image/audio/video) to Supabase Storage
+ * @param file - The file to upload (Buffer or Blob)
+ * @param surveyId - The survey this media belongs to
+ * @param assetId - Unique identifier for the media
+ * @param contentType - MIME type
+ * @param kind - "image" | "audio" | "video"
+ */
+export async function uploadSurveyAsset(
+  file: Buffer | Blob,
+  surveyId: string,
+  assetId: string,
+  contentType: string,
+  kind: "image" | "audio" | "video"
+): Promise<{ url: string; path: string }> {
+  const ext = contentType.split("/")[1] || "bin";
+  const filePath = `${surveyId}/${kind}/${assetId}.${ext}`;
+
+  const bucket =
+    kind === "audio"
+      ? SURVEY_AUDIO_BUCKET
+      : kind === "video"
+      ? SURVEY_VIDEO_BUCKET
+      : SURVEY_IMAGES_BUCKET;
 
   const { data, error } = await supabase.storage
-    .from(SURVEY_IMAGES_BUCKET)
+    .from(bucket)
     .upload(filePath, file, {
       contentType,
       upsert: true,
     });
 
   if (error) {
-    throw new Error(`Failed to upload image: ${error.message}`);
+    throw new Error(`Failed to upload ${kind}: ${error.message}`);
   }
   const { data: urlData } = supabase.storage
-    .from(SURVEY_IMAGES_BUCKET)
+    .from(bucket)
     .getPublicUrl(data.path);
 
   return {
@@ -70,6 +97,28 @@ export async function deleteSurveyImage(path: string): Promise<void> {
 
   if (error) {
     throw new Error(`Failed to delete image: ${error.message}`);
+  }
+}
+
+/**
+ * Delete a media asset from Supabase Storage
+ * @param path - The storage path of the asset (e.g., "surveyId/video/{id}.mp4")
+ */
+export async function deleteSurveyAsset(
+  path: string,
+  kind: "image" | "audio" | "video"
+): Promise<void> {
+  const bucket =
+    kind === "audio"
+      ? SURVEY_AUDIO_BUCKET
+      : kind === "video"
+      ? SURVEY_VIDEO_BUCKET
+      : SURVEY_IMAGES_BUCKET;
+
+  const { error } = await supabase.storage.from(bucket).remove([path]);
+
+  if (error) {
+    throw new Error(`Failed to delete media: ${error.message}`);
   }
 }
 

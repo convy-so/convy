@@ -8,6 +8,33 @@ import { env } from "@/lib/env";
  * Cost: $4 per 1M characters for Standard voices (cost-effective)
  */
 
+// Cost constant for reuse
+export const TTS_COST_PER_MILLION_CHARS = 4;
+
+/**
+ * Check if Google Cloud credentials are properly configured
+ * Throws an error with helpful message if not configured
+ */
+export function validateGoogleCloudCredentials(): void {
+  const hasCredentialsFile = !!env.GOOGLE_APPLICATION_CREDENTIALS;
+  const hasProjectId = !!env.GOOGLE_CLOUD_PROJECT_ID;
+
+  if (!hasCredentialsFile && !hasProjectId) {
+    throw new Error(
+      `Google Cloud credentials not configured. Voice features require either:
+      1. GOOGLE_APPLICATION_CREDENTIALS - Path to service account JSON key file (recommended for local dev)
+      2. GOOGLE_CLOUD_PROJECT_ID - Project ID when using Application Default Credentials (for GCP deployment)
+      
+      Please set these environment variables and ensure the service account has 'Cloud Text-to-Speech API User' role.
+      See .env.example for configuration details.`
+    );
+  }
+
+  console.log(
+    `[Google TTS] Credentials configured: file=${hasCredentialsFile}, projectId=${hasProjectId}`
+  );
+}
+
 export interface TTSOptions {
   language?: string; // BCP-47 code (e.g., 'en-US', 'fr-FR', 'de-DE')
   voice?: string; // Voice name (e.g., 'en-US-Standard-A')
@@ -105,8 +132,12 @@ export class GoogleTTSService {
   private totalCost: number = 0;
   private totalCharacters: number = 0;
   private requestCount: number = 0;
+  private isInitialized: boolean = false;
 
   constructor() {
+    // Validate credentials before initializing
+    validateGoogleCloudCredentials();
+
     // Initialize with credentials from environment
     const config: { keyFilename?: string; projectId?: string } = {};
 
@@ -119,6 +150,15 @@ export class GoogleTTSService {
     }
 
     this.client = new googleTTS.TextToSpeechClient(config);
+    this.isInitialized = true;
+    console.log("[Google TTS] Service initialized successfully");
+  }
+
+  /**
+   * Check if service is properly initialized
+   */
+  isReady(): boolean {
+    return this.isInitialized;
   }
 
   /**
@@ -149,8 +189,8 @@ export class GoogleTTSService {
             ssmlGender: options.gender || "NEUTRAL",
           },
           audioConfig: {
-            audioEncoding: "LINEAR16", // PCM16 for consistency
-            sampleRateHertz: 16000, // Match Whisper sample rate
+            audioEncoding: "LINEAR16",
+            sampleRateHertz: 16000,
             speakingRate: options.speakingRate || 1.0,
             pitch: options.pitch || 0.0,
             volumeGainDb: options.volumeGainDb || 0.0,
@@ -170,7 +210,7 @@ export class GoogleTTSService {
       }
 
       // Calculate cost: $4 per 1M characters for Standard voices
-      const cost = (characterCount / 1000000) * 4;
+      const cost = (characterCount / 1000000) * TTS_COST_PER_MILLION_CHARS;
       this.totalCost += cost;
       this.totalCharacters += characterCount;
       this.requestCount++;
@@ -298,7 +338,6 @@ export class GoogleTTSService {
 
       lastError = result;
 
-      // Exponential backoff
       if (attempt < maxRetries) {
         const delayMs = Math.pow(2, attempt) * 1000;
         console.log(
@@ -375,7 +414,6 @@ export class GoogleTTSService {
       };
     }
 
-    // Unknown error
     return {
       error: err?.message || "Unknown synthesis error",
       code: "UNKNOWN_ERROR",
@@ -455,5 +493,5 @@ export async function textToSpeech(
  * Calculate estimated cost for text
  */
 export function estimateTTSCost(characterCount: number): number {
-  return (characterCount / 1000000) * 4; // $4 per 1M characters
+  return (characterCount / 1000000) * TTS_COST_PER_MILLION_CHARS;
 }

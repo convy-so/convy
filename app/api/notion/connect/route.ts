@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { notionIntegrations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getNotionClient, createSurveyDatabase } from "@/lib/notion";
+import { getNotionClient, createSurveyDatabase } from "@/lib/notion-improved";
 import { encrypt } from "@/lib/encryption";
 
 /**

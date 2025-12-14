@@ -114,9 +114,12 @@ export async function postToSlackChannel(
 
 /**
  * Get list of channels in Slack workspace
- * Includes rate limiting and retry logic
+ * Includes rate limiting, retry logic, and pagination for large workspaces
  */
-export async function getSlackChannels(userId: string) {
+export async function getSlackChannels(
+  userId: string,
+  options?: { maxChannels?: number }
+) {
   // Rate limit check
   const rateLimitResult = await slackRateLimiter.limit(`user:${userId}`);
 
@@ -132,23 +135,52 @@ export async function getSlackChannels(userId: string) {
     throw new Error("Slack integration not found");
   }
 
+  const maxChannels = options?.maxChannels || 500; // Default limit to prevent huge responses
+  const allChannels: Array<{
+    id: string;
+    name: string;
+    isPrivate: boolean;
+    isMember: boolean;
+  }> = [];
+
+  let cursor: string | undefined;
+
   return await withRetry(async () => {
-    const result = await client.conversations.list({
-      types: "public_channel,private_channel",
-      exclude_archived: true,
-      limit: 200,
-    });
+    // Paginate through all channels
+    do {
+      const result = await client.conversations.list({
+        types: "public_channel,private_channel",
+        exclude_archived: true,
+        limit: 200, // Max per request
+        cursor,
+      });
 
-    if (!result.ok) {
-      throw new Error(`Failed to fetch channels: ${result.error}`);
-    }
+      if (!result.ok) {
+        throw new Error(`Failed to fetch channels: ${result.error}`);
+      }
 
-    return (result.channels || []).map((channel) => ({
-      id: channel.id!,
-      name: channel.name!,
-      isPrivate: channel.is_private || false,
-      isMember: channel.is_member || false,
-    }));
+      const channels = (result.channels || []).map((channel) => ({
+        id: channel.id!,
+        name: channel.name!,
+        isPrivate: channel.is_private || false,
+        isMember: channel.is_member || false,
+      }));
+
+      allChannels.push(...channels);
+
+      // Get next cursor for pagination
+      cursor = result.response_metadata?.next_cursor;
+
+      // Stop if we've reached the max
+      if (allChannels.length >= maxChannels) {
+        console.log(
+          `[Slack] Reached max channels limit (${maxChannels}), stopping pagination`
+        );
+        break;
+      }
+    } while (cursor);
+
+    return allChannels;
   });
 }
 

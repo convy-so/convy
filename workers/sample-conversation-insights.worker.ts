@@ -59,7 +59,7 @@ const sampleConversationInsightsWorker =
       }
 
       await job.updateProgress(25);
-        
+
       const surveyConfig: SurveyConfig = buildCompleteSurveyConfig(survey);
 
       const insightsPrompt = getSampleConversationInsightsPrompt(
@@ -157,20 +157,7 @@ sampleConversationInsightsWorker.on("error", (err) => {
   console.error("[Sample Conversation Insights Worker] Worker error:", err);
 });
 
-process.on("SIGTERM", async () => {
-  console.log(
-    "[Sample Conversation Insights Worker] Shutting down gracefully..."
-  );
-  await sampleConversationInsightsWorker.close();
-  process.exit(0);
-});
-
-process.on("SIGINT", async () => {
-  console.log(
-    "[Sample Conversation Insights Worker] Shutting down gracefully..."
-  );
-  await sampleConversationInsightsWorker.close();
-  process.exit(0);
-});
+// Note: Signal handlers are managed by the main index.ts when running all workers together
+// Individual signal handlers removed to prevent conflicts
 
 export default sampleConversationInsightsWorker;

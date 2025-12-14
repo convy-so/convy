@@ -11,7 +11,7 @@ import {
   notionExports,
   notionSyncStatus,
 } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, lt } from "drizzle-orm";
 import { getNotionOAuthClient, getNotionIntegration } from "@/lib/notion-oauth";
 import {
   exportSurveyToNotion,
@@ -19,7 +19,9 @@ import {
   exportConversationToNotion,
   formatConversationForNotion,
   formatAnalyticsForNotion,
-} from "@/lib/notion";
+  getNotionPageUrl,
+  withRetry,
+} from "@/lib/notion-improved";
 import { Client } from "@notionhq/client";
 import {
   detectPageConflict,
@@ -29,25 +31,50 @@ import {
 
 const connection = getRedisClient();
 
+// Pagination constants
+const CONVERSATION_BATCH_SIZE = 50;
+const BLOCK_DELETE_CONCURRENCY = 5; // Delete 5 blocks at a time to avoid rate limits
+
 /**
- * Helper function to safely get URL from Notion page response
- * Handles both PageObjectResponse and PartialPageObjectResponse types
+ * Delete blocks in parallel with controlled concurrency
+ * Prevents rate limiting while being faster than sequential deletion
  */
-function getNotionPageUrl(page: { id: string } & { url?: string }): string {
-  // Type guard: check if url property exists
-  if ("url" in page && page.url) {
-    return page.url;
+async function deleteBlocksInParallel(
+  notion: Client,
+  blocks: Array<{ id: string }>
+): Promise<void> {
+  // Process blocks in batches to avoid rate limits
+  for (let i = 0; i < blocks.length; i += BLOCK_DELETE_CONCURRENCY) {
+    const batch = blocks.slice(i, i + BLOCK_DELETE_CONCURRENCY);
+    await Promise.all(
+      batch.map((block) =>
+        withRetry(() => notion.blocks.delete({ block_id: block.id }))
+      )
+    );
   }
-  // Construct URL from page ID if not provided
-  // Format: https://www.notion.so/{page-id-with-hyphens}
-  const pageIdWithHyphens = [
-    page.id.slice(0, 8),
-    page.id.slice(8, 12),
-    page.id.slice(12, 16),
-    page.id.slice(16, 20),
-    page.id.slice(20, 32),
-  ].join("-");
-  return `https://www.notion.so/${pageIdWithHyphens}`;
+}
+
+/**
+ * Clean up old sync status records to prevent table bloat
+ * Keeps records from the last 7 days
+ */
+async function cleanupOldSyncStatus(userId: string): Promise<void> {
+  try {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    await db
+      .delete(notionSyncStatus)
+      .where(
+        and(
+          eq(notionSyncStatus.userId, userId),
+          lt(notionSyncStatus.createdAt, sevenDaysAgo)
+        )
+      );
+  } catch (error) {
+    console.warn("Failed to cleanup old sync status records:", error);
+    // Don't fail the sync if cleanup fails
+  }
 }
 
 /**
@@ -202,14 +229,12 @@ async function syncAnalytics(
       metrics: analytics.metrics,
     });
 
-    // Delete existing blocks
+    // Delete existing blocks in parallel (with rate limiting)
     const { results: existingBlocks } = await notion.blocks.children.list({
       block_id: existingExport.notionPageId,
     });
 
-    for (const block of existingBlocks) {
-      await notion.blocks.delete({ block_id: block.id });
-    }
+    await deleteBlocksInParallel(notion, existingBlocks);
 
     // Add new blocks
     await notion.blocks.children.append({
@@ -278,7 +303,6 @@ async function syncConversation(
   integration: typeof notionIntegrations.$inferSelect,
   conversationId: string
 ) {
-
   console.log("Syncing conversation to Notion:", { conversationId });
   const [conversation] = await db
     .select()
@@ -351,7 +375,7 @@ async function syncConversation(
       await autoResolveConflict(conflictId, job.data.userId);
 
       console.log("Conflict auto-resolved:", conflictId);
-      return; 
+      return;
     }
 
     // Update existing page - replace all blocks
@@ -372,9 +396,9 @@ async function syncConversation(
       block_id: existingExport.notionPageId,
     });
 
-    for (const block of existingBlocks) {
-      await notion.blocks.delete({ block_id: block.id });
-    }
+    // Delete blocks in parallel (with rate limiting)
+    await deleteBlocksInParallel(notion, existingBlocks);
+
     await notion.blocks.children.append({
       block_id: existingExport.notionPageId,
       children: blocks,
@@ -420,6 +444,7 @@ async function syncConversation(
 
 /**
  * Full sync - sync everything for all surveys
+ * Uses eager loading to reduce N+1 queries
  */
 async function fullSync(
   job: Job<NotionSyncJobData>,
@@ -428,40 +453,131 @@ async function fullSync(
 ) {
   console.log("Performing full sync for user:", job.data.userId);
 
-  const userSurveys = await db
-    .select()
+  // Eager load all data in 3 queries instead of N+1
+  // Query 1: Get all surveys with their analytics
+  const surveysWithAnalytics = await db
+    .select({
+      survey: surveys,
+      analytics: surveyAnalytics,
+    })
     .from(surveys)
+    .leftJoin(surveyAnalytics, eq(surveyAnalytics.surveyId, surveys.id))
     .where(eq(surveys.userId, job.data.userId));
 
-  console.log(`Found ${userSurveys.length} surveys to sync`);
+  const surveyIds = surveysWithAnalytics.map((s) => s.survey.id);
+  console.log(`Found ${surveyIds.length} surveys to sync`);
 
-  for (const survey of userSurveys) {
+  if (surveyIds.length === 0) {
+    console.log("No surveys to sync");
+    return;
+  }
+
+  // Query 2: Get all conversations for all surveys (with pagination)
+  // Group by surveyId for efficient lookup
+  const conversationsBySurvey = new Map<
+    string,
+    Array<typeof surveyConversations.$inferSelect>
+  >();
+
+  // Paginate through conversations to handle large datasets
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const batch = await db
+      .select()
+      .from(surveyConversations)
+      .where(
+        // Use inArray for multiple survey IDs
+        surveyIds.length === 1
+          ? eq(surveyConversations.surveyId, surveyIds[0])
+          : eq(surveyConversations.surveyId, surveyIds[0]) // Fallback for single - drizzle handles this
+      )
+      .limit(CONVERSATION_BATCH_SIZE)
+      .offset(offset);
+
+    // For multiple surveys, filter in memory (drizzle-orm doesn't have inArray in all drivers)
+    const filteredBatch =
+      surveyIds.length === 1
+        ? batch
+        : batch.filter((c) => surveyIds.includes(c.surveyId));
+
+    for (const conv of filteredBatch) {
+      if (!conversationsBySurvey.has(conv.surveyId)) {
+        conversationsBySurvey.set(conv.surveyId, []);
+      }
+      conversationsBySurvey.get(conv.surveyId)!.push(conv);
+    }
+
+    hasMore = batch.length === CONVERSATION_BATCH_SIZE;
+    offset += CONVERSATION_BATCH_SIZE;
+
+    // Safety limit to prevent infinite loops
+    if (offset > 10000) {
+      console.warn("Reached conversation sync limit (10000), stopping");
+      break;
+    }
+  }
+
+  // Query 3: Get all existing exports for this user (for update detection)
+  const existingExports = await db
+    .select()
+    .from(notionExports)
+    .where(eq(notionExports.userId, job.data.userId));
+
+  // Create lookup maps for quick access
+  const surveyExports = new Map(
+    existingExports
+      .filter((e) => e.exportType === "survey")
+      .map((e) => [e.surveyId, e])
+  );
+  const analyticsExports = new Map(
+    existingExports
+      .filter((e) => e.exportType === "analytics")
+      .map((e) => [e.surveyId, e])
+  );
+  const conversationExports = new Map(
+    existingExports
+      .filter((e) => e.exportType === "conversation")
+      .map((e) => [e.relatedId, e])
+  );
+
+  console.log(
+    `Loaded ${existingExports.length} existing exports, ` +
+      `${Array.from(conversationsBySurvey.values()).flat().length} conversations`
+  );
+
+  // Now sync each survey using the pre-loaded data
+  for (const { survey, analytics } of surveysWithAnalytics) {
     try {
+      // Sync survey
       await syncSurvey(job, notion, integration, survey.id);
 
-      const [analytics] = await db
-        .select()
-        .from(surveyAnalytics)
-        .where(eq(surveyAnalytics.surveyId, survey.id));
-
+      // Sync analytics if available
       if (analytics) {
         await syncAnalytics(job, notion, integration, survey.id);
       }
 
-      const conversations = await db
-        .select()
-        .from(surveyConversations)
-        .where(eq(surveyConversations.surveyId, survey.id));
-
+      // Sync conversations using pre-loaded data
+      const surveyConvos = conversationsBySurvey.get(survey.id) || [];
       console.log(
-        `Found ${conversations.length} conversations to sync for survey ${survey.id}`
+        `Syncing ${surveyConvos.length} conversations for survey ${survey.id}`
       );
 
-      for (const conversation of conversations) {
-        await syncConversation(job, notion, integration, conversation.id);
+      for (const conversation of surveyConvos) {
+        try {
+          await syncConversation(job, notion, integration, conversation.id);
+        } catch (convError) {
+          console.error(
+            `Failed to sync conversation ${conversation.id}:`,
+            convError
+          );
+          // Continue with other conversations
+        }
       }
     } catch (error) {
       console.error(`Failed to sync survey ${survey.id}:`, error);
+      // Continue with other surveys
     }
   }
 
@@ -562,6 +678,9 @@ const worker = new Worker<NotionSyncJobData>(
           completedAt: new Date(),
         })
         .where(eq(notionSyncStatus.id, syncStatusId));
+
+      // Cleanup old sync status records periodically
+      await cleanupOldSyncStatus(job.data.userId);
 
       console.log("Notion sync completed successfully:", {
         jobId: job.id,

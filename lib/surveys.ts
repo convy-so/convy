@@ -6,7 +6,7 @@ import type {
   SurveySuccessCriteria,
   SurveyConstraints,
   SurveyHypotheses,
-  SurveyImage,
+  SurveyMedia,
 } from "@/db/schema";
 
 export const MAX_SAMPLE_CONVERSATIONS = 3;
@@ -29,7 +29,7 @@ export function buildCompleteSurveyConfig(
   hypotheses?: SurveyHypotheses;
   tone?: ToneProfile;
   additionalContext?: string;
-  images?: SurveyImage[];
+  media?: SurveyMedia[];
 }{
   const informationParts: string[] = [];
   if (survey.objective?.context)
@@ -56,7 +56,7 @@ export function buildCompleteSurveyConfig(
     hypotheses: survey.hypotheses ?? undefined,
     tone: (survey.tone as ToneProfile) ?? "casual",
     additionalContext: survey.additionalContext ?? undefined,
-    images: survey.images ?? undefined,
+    media: survey.media ?? undefined,
   };
 }
 

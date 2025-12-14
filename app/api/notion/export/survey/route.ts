@@ -6,7 +6,7 @@ import {
   getNotionClient,
   exportSurveyToNotion,
   getNotionPageUrl,
-} from "@/lib/notion";
+} from "@/lib/notion-improved";
 import { decrypt } from "@/lib/encryption";
 
 /**

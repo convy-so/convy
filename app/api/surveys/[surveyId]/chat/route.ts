@@ -4,16 +4,151 @@ import { streamText } from "ai";
 
 import { db } from "@/db";
 import { surveyConversations, surveys } from "@/db/schema";
-import { defaultModel } from "@/lib/ai";
-import { getSurveyConversationSystemPrompt } from "@/lib/prompts";
+import { defaultModel, analysisModel, generateAIResponse } from "@/lib/ai";
+import {
+  getSurveyConversationSystemPrompt,
+  type SurveyConfig,
+} from "@/lib/prompts";
 import { chatRateLimiter, getClientIP } from "@/lib/ratelimit";
 import {
   logPromptInjectionAttempt,
   sanitizeUserInput,
 } from "@/lib/prompt-injection-detection";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
+import {
+  type RollingContext,
+  createRollingContext,
+  buildCompressedContext,
+  calculateQualitySignals,
+  detectParticipantStyle,
+  calculateProgress,
+  determineConversationState,
+  getMemoryUpdatePrompt,
+  applyMemoryUpdate,
+} from "@/lib/conversation-memory";
+import { getRedisClient } from "@/lib/redis";
 
 export const maxDuration = 300;
+
+// Redis keys for conversation context
+const getContextKey = (conversationId: string) =>
+  `conv:context:${conversationId}`;
+const getStartTimeKey = (conversationId: string) =>
+  `conv:start:${conversationId}`;
+
+/**
+ * Load or create rolling context for a conversation
+ */
+async function loadOrCreateContext(
+  conversationId: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  config: SurveyConfig
+): Promise<RollingContext> {
+  const redis = getRedisClient();
+  const contextKey = getContextKey(conversationId);
+  const startTimeKey = getStartTimeKey(conversationId);
+
+  // Try to load existing context
+  const existingContext = await redis.get(contextKey);
+  const startTimeStr = await redis.get(startTimeKey);
+  const startTime = startTimeStr ? new Date(startTimeStr) : new Date();
+
+  let context: RollingContext;
+
+  if (existingContext) {
+    try {
+      context = JSON.parse(existingContext) as RollingContext;
+    } catch {
+      context = createRollingContext(config, startTime);
+    }
+  } else {
+    context = createRollingContext(config, startTime);
+    // Store start time for new conversations
+    await redis.set(startTimeKey, startTime.toISOString(), "EX", 7200); // 2 hour expiry
+  }
+
+  // Update context with current messages
+  context = buildCompressedContext(messages, context);
+
+  // Calculate quality signals
+  context.qualitySignals = calculateQualitySignals(messages);
+
+  // Detect participant style
+  context.memory.participantStyle = detectParticipantStyle(messages);
+
+  // Calculate progress
+  context.progress = calculateProgress(
+    messages,
+    config,
+    startTime,
+    context.memory.topicsCovered
+  );
+
+  // Update conversation state
+  context.stateContext = {
+    ...context.stateContext,
+    previousState: context.stateContext.currentState,
+    currentState: determineConversationState(
+      context.progress,
+      messages.length,
+      config
+    ),
+    stateEnteredAt: messages.length,
+    transitionReason: null,
+  };
+
+  return context;
+}
+
+/**
+ * Update conversation memory using AI analysis (async, non-blocking)
+ */
+async function updateMemoryAsync(
+  conversationId: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  config: SurveyConfig,
+  existingContext: RollingContext
+): Promise<void> {
+  try {
+    // Only update every 2-3 exchanges to save costs
+    if (messages.length < 4 || messages.length % 2 !== 0) return;
+
+    const memoryPrompt = getMemoryUpdatePrompt(
+      messages,
+      config,
+      existingContext.memory
+    );
+
+    const memoryUpdateText = await generateAIResponse(memoryPrompt, undefined, {
+      model: analysisModel,
+      temperature: 0.3,
+      maxTokens: 1000,
+    });
+
+    // Parse the memory update
+    const jsonMatch = memoryUpdateText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const update = JSON.parse(jsonMatch[0]);
+      const updatedMemory = applyMemoryUpdate(
+        existingContext.memory,
+        update,
+        config
+      );
+
+      // Save updated context to Redis
+      const redis = getRedisClient();
+      const contextKey = getContextKey(conversationId);
+      const updatedContext: RollingContext = {
+        ...existingContext,
+        memory: updatedMemory,
+      };
+      await redis.set(contextKey, JSON.stringify(updatedContext), "EX", 7200);
+    }
+  } catch (error) {
+    console.error("[Chat Route] Memory update error:", error);
+    // Non-critical - continue without memory update
+  }
+}
 
 export async function POST(
   request: Request,
@@ -88,19 +223,6 @@ export async function POST(
 
     const surveyConfig = buildCompleteSurveyConfig(survey);
 
-    const systemPrompt = getSurveyConversationSystemPrompt(
-      surveyConfig,
-      survey.language
-    );
-
-    const result = streamText({
-      model: defaultModel,
-      messages: sanitizedMessages,
-      system: systemPrompt,
-      temperature: 0.7,
-      maxOutputTokens: 2000,
-    });
-
     let convId = conversationId;
     if (!convId) {
       convId = nanoid();
@@ -123,8 +245,53 @@ export async function POST(
         .where(eq(surveys.id, survey.id));
     }
 
+    // Load or create rolling context for this conversation
+    const context = await loadOrCreateContext(
+      convId,
+      sanitizedMessages,
+      surveyConfig
+    );
+
+    // Generate system prompt with context injection
+    const systemPrompt = getSurveyConversationSystemPrompt(
+      surveyConfig,
+      survey.language,
+      context
+    );
+
+    // Use the compressed messages for the AI call
+    const messagesForAI =
+      context.recentMessages.length > 0
+        ? context.recentMessages
+        : sanitizedMessages;
+
+    const result = streamText({
+      model: defaultModel,
+      messages: messagesForAI,
+      system: systemPrompt,
+      temperature: 0.7,
+      maxOutputTokens: 2000,
+    });
+
+    // Trigger async memory update (non-blocking)
+    updateMemoryAsync(convId, sanitizedMessages, surveyConfig, context).catch(
+      console.error
+    );
+
+    // Save updated context to Redis
+    const redis = getRedisClient();
+    await redis.set(getContextKey(convId), JSON.stringify(context), "EX", 7200);
+
     const response = result.toTextStreamResponse();
     response.headers.set("X-Conversation-Id", convId);
+    response.headers.set(
+      "X-Conversation-Progress",
+      context.progress.completionPercentage.toString()
+    );
+    response.headers.set(
+      "X-Conversation-State",
+      context.stateContext.currentState
+    );
     response.headers.set("X-RateLimit-Limit", "20");
     response.headers.set(
       "X-RateLimit-Remaining",
@@ -197,24 +364,19 @@ export async function PUT(
           `[Chat Route] Enqueued conversation insights for conversation ${conversationId}`
         );
       } catch (error) {
-        console.error(
-          "Failed to enqueue conversation insights:",
-          error
-        );
+        console.error("Failed to enqueue conversation insights:", error);
         // Don't fail the conversation save if insights enqueue fails
       }
 
       // Trigger Slack auto-post for new conversation
       try {
         const { autoPostNewConversation } = await import("@/app/actions/slack");
-        autoPostNewConversation(
-          survey.userId,
-          survey.id,
-          conversationId
-        ).catch((error) => {
-          console.error("Failed to auto-post conversation to Slack:", error);
-          // Don't fail the conversation save if Slack post fails
-        });
+        autoPostNewConversation(survey.userId, survey.id, conversationId).catch(
+          (error) => {
+            console.error("Failed to auto-post conversation to Slack:", error);
+            // Don't fail the conversation save if Slack post fails
+          }
+        );
       } catch (error) {
         console.error("Failed to import Slack auto-post function:", error);
       }

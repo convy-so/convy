@@ -17,7 +17,7 @@ import {
   exportConversationToNotion,
   createSurveyDatabase,
   getNotionPageUrl,
-} from "@/lib/notion";
+} from "@/lib/notion-improved";
 import { encrypt, decrypt } from "@/lib/encryption";
 
 /**

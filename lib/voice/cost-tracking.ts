@@ -303,9 +303,9 @@ export class CostTracker {
     const filteredDurationMs = totalAudioDurationMs - processedAudioDurationMs;
     const savingsPercent = (filteredDurationMs / totalAudioDurationMs) * 100;
 
-    // Calculate saved cost for STT (Whisper: $0.006 per minute)
+    // Calculate saved cost for STT (Google STT: $0.016 per minute)
     const savedMinutes = filteredDurationMs / 60000;
-    const savedCost = savedMinutes * 0.006;
+    const savedCost = savedMinutes * 0.016;
 
     return {
       savingsPercent: Math.round(savingsPercent * 100) / 100,

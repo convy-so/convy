@@ -177,13 +177,32 @@ export type SurveyHypotheses = {
   assumptions: string[];
 };
 
-export type SurveyImage = {
+export type SurveyMedia = {
   id: string;
   url: string;
+  type: "image" | "audio" | "video";
   description: string;
   contextForUse: string;
-  placementInConversation: string;
+  contentSummary?: string;
+  infoToGather?: string;
+  durationMs?: number | null;
+  mimeType?: string;
+
+  // Enhanced fields for better AI integration and analytics
+  /** How important it is to show this media (higher = more important) */
+  priority?: "high" | "medium" | "low";
+  /** Specific questions that MUST be asked about this media */
+  requiredQuestions?: string[];
+  /** What type of insights we expect from this media */
+  expectedInsights?: ("emotional" | "behavioral" | "rational")[];
+  /** Alternative text for accessibility */
+  altText?: string;
+  /** Thumbnail URL for video/audio preview */
+  thumbnailUrl?: string;
 };
+
+// Legacy alias for backward compatibility in type signatures only
+export type SurveyImage = SurveyMedia;
 
 export const surveys = pgTable(
   "surveys",
@@ -204,7 +223,7 @@ export const surveys = pgTable(
     additionalContext: text("additional_context"),
     requiredQuestions: text("required_questions").array().default([]),
     metrics: text("metrics").array().default([]),
-    images: jsonb("images").$type<SurveyImage[]>().default([]),
+    media: jsonb("media").$type<SurveyMedia[]>().default([]),
     status: surveyStatusEnum("status").default("creating").notNull(),
     shareableLink: text("shareable_link").unique(),
     participantLimit: integer("participant_limit").default(50).notNull(),
