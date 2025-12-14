@@ -10,7 +10,7 @@ import { db } from "@/db";
 import { notionIntegrations } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { decrypt } from "@/lib/encryption";
-import { createSurveyDatabase } from "@/lib/notion";
+import { createSurveyDatabase } from "@/lib/notion-improved";
 
 /**
  * Get Notion client with decrypted OAuth token

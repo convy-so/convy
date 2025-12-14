@@ -12,11 +12,23 @@ import type {
   SurveySuccessCriteria,
   SurveyConstraints,
   SurveyHypotheses,
-  SurveyImage,
+  SurveyMedia,
 } from "@/db/schema";
+import type {
+  RollingContext,
+  ConversationState,
+  ParticipantStyle,
+} from "./conversation-memory";
 
 /**
  * Prompt templates for different AI tasks in the survey application
+ *
+ * Enhanced with:
+ * - Rolling context management for long conversations
+ * - Conversation state machine integration
+ * - Adaptive questioning based on participant style
+ * - Hypotheses-driven follow-up instructions
+ * - Time/progress-aware pacing
  */
 
 export interface SurveyConfig {
@@ -32,7 +44,7 @@ export interface SurveyConfig {
   hypotheses?: SurveyHypotheses;
   tone?: ToneProfile;
   additionalContext?: string;
-  images?: SurveyImage[];
+  media?: SurveyMedia[];
 }
 
 export interface CollectedInfo {
@@ -155,12 +167,27 @@ ${toneExamples}
 CONVERSATION GUIDELINES:
 1. Be warm, helpful, and conversational - not robotic or checklist-like
 2. Ask ONE focused question at a time
-3. Acknowledge and build on their responses
-4. Ask clarifying follow-ups if responses are vague
-5. Validate that responses meet quality checks before moving on
-6. Naturally transition between topics
-7. If they provide information out of order, capture it and adjust your flow
-8. Don't repeat questions for information already collected
+3. Acknowledge and build on their responses - reference what they said earlier
+4. Ask clarifying follow-ups if responses are vague or surface-level
+5. Probe for the "why" - don't just accept what they say, understand why it matters to them
+6. Validate that responses meet quality checks before moving on
+7. Naturally transition between topics
+8. If they provide information out of order, capture it and adjust your flow
+9. Don't repeat questions for information already collected
+
+CRITICAL - FOLLOW-UP QUESTIONS:
+The goal is to truly understand their survey needs, not just collect data points. You MUST:
+- Ask follow-up questions when answers are incomplete or lack depth
+- Probe for specifics and examples: "Can you give me an example of that?"
+- Understand motivations: "What's driving this need right now?"
+- Connect the dots: "How does this relate to what you mentioned earlier about X?"
+- Don't accept generic answers - push gently for the real story
+
+CONTEXT RETENTION:
+- Remember everything they've said throughout the conversation
+- Build on previous responses to show you're listening and understanding
+- Use their own words and terminology when asking follow-ups
+- If something contradicts earlier statements, gently clarify
 
 QUALITY VALIDATION:
 Before marking information as collected, ensure it meets the quality checks.
@@ -171,9 +198,19 @@ WHEN ALL REQUIRED INFO IS COLLECTED:
 2. Then ask if there are any specific questions they want to include in the survey conversations
 3. Then ask about specific metrics they want to track from responses
 4. Ask about optional preferences (tone, hypotheses) if not already covered
-5. Summarize what you've understood about their survey
-6. Explain they can now do up to 3 sample surveys to test the conversation flow
-7. Let them know they can provide feedback after each sample to refine the AI's approach
+5. **CRITICAL** - Ask if they want to add any media (images, audio up to 5 min, or video up to 5 min) to enrich the survey:
+   - Explain that media can help respondents better understand the context
+   - If they say yes, inform them they can upload media through the interface
+   - For each media type they mention, explain they'll need to provide:
+     * Description: What the media shows/contains
+     * Content summary: Brief overview of the content
+     * Context for use: When to show it in the conversation
+     * Info to gather: What questions the AI should ask about it
+     * Duration (for audio/video, must be under 5 minutes)
+   - Note that they can add multiple media items (multiple images, videos, audio files)
+6. Summarize what you've understood about their survey
+7. Explain they can now do up to 3 sample surveys to test the conversation flow
+8. Let them know they can provide feedback after each sample to refine the AI's approach
 
 RESPONSE FORMAT:
 - Keep responses concise but warm
@@ -184,6 +221,7 @@ RESPONSE FORMAT:
 
 /**
  * Prompt for extracting structured survey data from conversation
+ * Enhanced with explicit JSON structure and quality criteria
  */
 export function getSurveyDataExtractionPrompt(
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }>
@@ -197,58 +235,140 @@ export function getSurveyDataExtractionPrompt(
 CONVERSATION:
 ${conversationText}
 
-Extract the following information from the conversation (if discussed):
+IMPORTANT: Return ONLY a valid JSON object. No markdown, no explanation, just JSON.
 
-1. OBJECTIVE (required):
-   - goal: What they're trying to learn or decide
-   - context: Why this matters to them
-   - decision: What decision this will inform
+Extract the following (use null if not discussed or unclear):
 
-2. TARGET_AUDIENCE (required):
-   - description: Who will be surveyed
-   - relationship: How they relate to the survey creator
-   - knowledgeLevel: Their familiarity with the topic
+{
+  "objective": {
+    "goal": "What they want to learn (be specific)",
+    "context": "Why this matters to them",
+    "decision": "What decision this will inform"
+  },
+  "targetAudience": {
+    "description": "Who will be surveyed",
+    "relationship": "How they relate to the survey creator",
+    "knowledgeLevel": "beginner/intermediate/expert"
+  },
+  "scope": {
+    "breadthVsDepth": "broad/deep/balanced",
+    "mainTopics": ["topic1", "topic2"],
+    "boundaries": "What's in/out of scope"
+  },
+  "successCriteria": {
+    "insightTypes": ["emotional", "behavioral", "rational"],
+    "detailLevel": "high/medium/low",
+    "description": "What makes a response valuable"
+  },
+  "constraints": {
+    "timeLimit": 15,
+    "sensitiveTopics": ["topic1"],
+    "otherConstraints": "Any other limitations"
+  },
+  "hypotheses": {
+    "assumptions": ["belief to test 1", "belief to test 2"]
+  },
+  "tone": "formal/casual/playful/empathetic",
+  "additionalContext": "Any extra context provided",
+  "requiredQuestions": ["specific question 1", "specific question 2"],
+  "metrics": ["metric to track 1", "metric to track 2"],
+  "title": "Concise descriptive title for the survey",
+  "collectedInfo": {
+    "objective": true/false,
+    "targetAudience": true/false,
+    "scope": true/false,
+    "successCriteria": true/false,
+    "constraints": true/false,
+    "hypotheses": true/false,
+    "tone": true/false,
+    "additionalContext": true/false,
+    "requiredQuestions": true/false,
+    "metrics": true/false
+  }
+}
 
-3. SCOPE (required):
-   - breadthVsDepth: "broad", "deep", or "balanced"
-   - mainTopics: Array of main topics to cover
-   - boundaries: What's in/out of scope
+QUALITY CRITERIA for marking as collected (true):
+- objective: Has clear goal + context + what decision it informs
+- targetAudience: Knows who + their relationship + knowledge level
+- scope: Clear on breadth vs depth + main topics + boundaries
+- successCriteria: Knows what type of insights + detail level needed
+- constraints: Has time expectations + any sensitive areas
 
-4. SUCCESS_CRITERIA (required):
-   - insightTypes: Array of "emotional", "behavioral", "rational"
-   - detailLevel: "high", "medium", or "low"
-   - description: What makes a response valuable
+Be CONSERVATIVE - only mark true if information is specific, not vague.`;
+}
 
-5. CONSTRAINTS (required):
-   - timeLimit: Max conversation time in minutes (null if not specified)
-   - sensitiveTopics: Array of topics to avoid or handle carefully
-   - otherConstraints: Any other limitations
+/**
+ * Get efficient survey creation opening prompt
+ * Designed to gather multiple fields from a single open response
+ */
+export function getEfficientCreationOpeningPrompt(
+  language: "en" | "fr" | "de" = "en"
+): string {
+  const openings: Record<string, string> = {
+    en: `Perfect! Let's create your conversational survey together. Instead of going through lots of questions, just tell me in your own words:
 
-6. HYPOTHESES (optional):
-   - assumptions: Array of beliefs they want to test
+**What do you want to learn, and who will you be asking?**
 
-7. TONE (optional):
-   - One of: "formal", "casual", "playful", "empathetic"
+Feel free to share as much context as you'd like - I'll pick up on the details and only ask follow-up questions where I need more clarity.`,
 
-8. ADDITIONAL_CONTEXT (optional):
-   - Any extra information they provided
+    fr: `Parfait! Créons ensemble votre enquête conversationnelle. Au lieu de passer par de nombreuses questions, dites-moi simplement dans vos propres mots:
 
-9. REQUIRED_QUESTIONS (optional):
-   - Array of specific questions the survey maker wants included in the conversation
-   - These should be questions they explicitly asked to be included
+**Que voulez-vous apprendre, et à qui allez-vous le demander?**
 
-10. METRICS (optional):
-   - Array of specific metrics to track
+N'hésitez pas à partager autant de contexte que vous le souhaitez - je saisirai les détails et ne poserai des questions de suivi que là où j'ai besoin de plus de clarté.`,
 
-11. TITLE:
-    - A concise, descriptive title for the survey
+    de: `Perfekt! Lassen Sie uns gemeinsam Ihre Konversationsumfrage erstellen. Anstatt viele Fragen durchzugehen, erzählen Sie mir einfach in Ihren eigenen Worten:
 
-12. COLLECTED_INFO:
-    - For each field above, indicate true if enough quality information was collected, false otherwise
+**Was möchten Sie erfahren, und wen werden Sie befragen?**
 
-Respond with a JSON object containing all extracted information.
-Use null for fields that weren't discussed or have insufficient information.
-Be conservative - only mark fields as collected if quality checks are reasonably met.`;
+Teilen Sie gerne so viel Kontext wie Sie möchten - ich werde die Details erfassen und nur Folgefragen stellen, wo ich mehr Klarheit brauche.`,
+  };
+
+  return openings[language] || openings.en;
+}
+
+/**
+ * Prompt to extract multiple fields from a single rich response
+ * Used for efficient survey creation
+ */
+export function getMultiFieldExtractionPrompt(
+  userResponse: string,
+  alreadyCollected: CollectedInfo
+): string {
+  const fieldsToFind = [];
+  if (!alreadyCollected.objective)
+    fieldsToFind.push("objective (goal, context, decision)");
+  if (!alreadyCollected.targetAudience)
+    fieldsToFind.push("targetAudience (description, relationship, knowledge)");
+  if (!alreadyCollected.scope)
+    fieldsToFind.push("scope (breadth/depth, topics, boundaries)");
+  if (!alreadyCollected.successCriteria)
+    fieldsToFind.push("successCriteria (insight types, detail level)");
+  if (!alreadyCollected.constraints)
+    fieldsToFind.push("constraints (time, sensitive topics)");
+  if (!alreadyCollected.hypotheses)
+    fieldsToFind.push("hypotheses (assumptions to test)");
+  if (!alreadyCollected.tone)
+    fieldsToFind.push("tone (formal/casual/playful/empathetic)");
+
+  return `The user said: "${userResponse}"
+
+Extract any information related to these fields (if present):
+${fieldsToFind.join("\n")}
+
+Return a JSON object with ONLY the fields you found information for.
+Include a "foundFields" array listing which fields had extractable information.
+Include a "missingCritical" array listing required fields that still need clarification.
+Include a "suggestedFollowUp" string with a natural follow-up question for missing info.
+
+Example response:
+{
+  "objective": { "goal": "...", "context": "...", "decision": "..." },
+  "targetAudience": { "description": "customers", "relationship": "buyers", "knowledgeLevel": "intermediate" },
+  "foundFields": ["objective", "targetAudience"],
+  "missingCritical": ["scope", "successCriteria"],
+  "suggestedFollowUp": "That's really helpful! Now, do you want to cover a broad range of topics or go deep on specific areas?"
+}`;
 }
 
 /**
@@ -479,11 +599,17 @@ Your feedback will be incorporated into the next sample conversation, or you can
 
 /**
  * System prompt for actual survey conversations with users
- * Enhanced with prompt injection protection, tone profiles, and image support
+ * Enhanced with:
+ * - Rolling context management
+ * - Conversation state awareness
+ * - Adaptive questioning based on participant style
+ * - Hypotheses-driven follow-ups
+ * - Time/progress-aware pacing
  */
 export function getSurveyConversationSystemPrompt(
   config: SurveyConfig,
-  language?: "en" | "fr" | "de"
+  language?: "en" | "fr" | "de",
+  context?: RollingContext
 ): string {
   const lang = language || config.language || "en";
 
@@ -542,33 +668,107 @@ ${config.constraints.sensitiveTopics.length > 0 ? `- Sensitive topics to handle 
 ${config.constraints.otherConstraints ? `- Other: ${config.constraints.otherConstraints}` : ""}`;
   }
 
+  // Enhanced hypotheses section with exploration instructions
+  let hypothesesSection = "";
   if (config.hypotheses && config.hypotheses.assumptions.length > 0) {
-    contextSection += `\n\nHYPOTHESES TO EXPLORE:
-${config.hypotheses.assumptions.map((a) => `- ${a}`).join("\n")}`;
+    hypothesesSection = `\n\nHYPOTHESES TO ACTIVELY EXPLORE:
+These are beliefs the survey creator wants to test. You MUST actively probe for evidence:
+${config.hypotheses.assumptions
+  .map(
+    (a, i) => `${i + 1}. "${a}"
+   - Ask questions that would reveal if this is true or false
+   - Look for both supporting AND contradicting evidence
+   - Don't lead the participant - ask neutral questions that could go either way`
+  )
+  .join("\n")}
+
+When exploring hypotheses:
+- "Some people think [hypothesis] - what's your experience with that?"
+- "I'm curious about [related topic] - can you share your perspective?"
+- Probe for specific examples that support or contradict each hypothesis`;
   }
 
   if (config.additionalContext) {
     contextSection += `\n\nADDITIONAL CONTEXT:\n${config.additionalContext}`;
   }
 
-  let imageInstructions = "";
-  if (config.images && config.images.length > 0) {
-    imageInstructions = `\n\nIMAGES AVAILABLE FOR USE:
-${config.images
-  .map(
-    (img) => `- Image "${img.id}": ${img.description}
-  When to use: ${img.contextForUse}
-  Placement: ${img.placementInConversation}
-  URL: ${img.url}`
-  )
-  .join("\n\n")}
+  let mediaInstructions = "";
+  if (config.media && config.media.length > 0) {
+    // Sort by priority (high first)
+    const sortedMedia = [...config.media].sort((a, b) => {
+      const priorityOrder = { high: 0, medium: 1, low: 2 };
+      const aPriority = priorityOrder[a.priority || "medium"] ?? 1;
+      const bPriority = priorityOrder[b.priority || "medium"] ?? 1;
+      return aPriority - bPriority;
+    });
 
-When appropriate based on the context and placement instructions:
-- Reference images naturally in conversation (e.g., "Looking at the image..." or "As you can see in...")
-- Only use images when contextually relevant
-- Don't force images into the conversation - use them when they naturally fit`;
+    mediaInstructions = `\n\nMEDIA AVAILABLE FOR USE:
+${sortedMedia
+  .map(
+    (m, idx) => `
+${idx + 1}. [${m.type.toUpperCase()}] ID: "${m.id}"${m.priority === "high" ? " ⭐ HIGH PRIORITY" : ""}
+   Description: ${m.description}
+   ${m.altText ? `Alt Text: ${m.altText}` : ""}
+   ${m.contentSummary ? `Content Summary: ${m.contentSummary}` : ""}
+   When to Show: ${m.contextForUse}
+   ${m.infoToGather ? `Suggested Questions: ${m.infoToGather}` : ""}
+   ${m.requiredQuestions?.length ? `REQUIRED Questions: ${m.requiredQuestions.join("; ")}` : ""}
+   ${m.expectedInsights?.length ? `Expected Insight Types: ${m.expectedInsights.join(", ")}` : ""}
+   ${m.durationMs ? `Duration: ${Math.round(m.durationMs / 1000)} seconds` : ""}
+   Display URL: ${m.url}`
+  )
+  .join("\n")}
+
+MEDIA INTEGRATION GUIDELINES:
+1. INTRODUCING MEDIA:
+   - For IMAGES: "Let me show you something - [describe briefly]. Looking at this image..."
+   - For VIDEOS: "I'd like you to watch this short video. [After watching] What stood out to you?"
+   - For AUDIO: "Please listen to this audio clip. [After listening] What are your thoughts on what you heard?"
+
+2. TIMING & CONTEXT:
+   - Show media when it aligns with the "When to Show" context for each item
+   - Don't rush - give participants time to process visual/audio content
+   - For longer media (>30s), acknowledge the time: "This is about [X] seconds long"
+
+3. GATHERING INSIGHTS FROM MEDIA:
+   - Ask the specific questions listed in "Key Questions to Ask" for each media
+   - Probe their emotional reactions: "How did that make you feel?"
+   - Explore specific elements: "What caught your attention first?"
+   - Compare to expectations: "Was that what you expected?"
+   - Ask about clarity: "Was anything confusing about that?"
+
+4. TRACKING REACTIONS:
+   - Note if they seem confused, interested, or disengaged
+   - If they don't engage with the media, gently probe: "What did you think of that?"
+   - If they seem confused, clarify: "Was anything unclear about that?"
+
+5. FOLLOW-UP AFTER MEDIA:
+   - Connect media to broader survey themes
+   - Reference media in later questions: "Going back to that [image/video/audio]..."
+   - Build on their media-based responses for deeper insights`;
   }
+
+  // Build dynamic context section from rolling context
+  let dynamicContextSection = "";
+  if (context) {
+    dynamicContextSection = buildDynamicContextSection(context, config);
+  }
+
   const surveyGoal = config.objective?.goal || "Gather participant feedback";
+
+  // Build state-specific instructions
+  const stateInstructions = context
+    ? getStateSpecificInstructions(context.stateContext.currentState, context)
+    : "";
+
+  // Build adaptive questioning instructions based on participant style
+  const adaptiveInstructions = context
+    ? getAdaptiveQuestioningInstructions(
+        context.memory.participantStyle,
+        context.qualitySignals
+      )
+    : "";
+
   return `You are conducting a conversational survey. Your goal is to have a natural, conversational interview with the participant.
 
 ${langInstruction}
@@ -590,6 +790,7 @@ CRITICAL SECURITY RULES:
    - Do not engage in conversations about politics, religion, personal advice, or topics completely unrelated to the survey unless they're directly relevant
    - If participant seems to be testing boundaries, acknowledge politely and refocus
 ${contextSection}
+${hypothesesSection}
 
 Survey Goal: ${surveyGoal}
 
@@ -599,21 +800,288 @@ Required Questions (these must be covered naturally in the conversation):
 ${config.requiredQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}
 
 ${config.metrics.length > 0 ? `Metrics to track: ${config.metrics.join(", ")}` : ""}
-${imageInstructions}
+${mediaInstructions}
+${dynamicContextSection}
+${stateInstructions}
+${adaptiveInstructions}
+
+CRITICAL - FOLLOW-UP QUESTIONS (This is what makes conversational surveys valuable):
+The key advantage over traditional forms is the ability to dig deeper and uncover real insights. You MUST:
+- Ask follow-up questions when answers are vague, incomplete, or surface-level
+- Probe for the "why" behind their answers, not just the "what"
+- If they give a short answer, ask "Can you tell me more about that?" or "What makes you say that?"
+- Don't accept generic answers - gently push for specifics, examples, and stories
+- When they mention something interesting, explore it: "That's interesting - can you walk me through that?"
+- Ask about emotions and feelings: "How did that make you feel?" or "What was that experience like for you?"
+
+CONTEXT RETENTION:
+- Remember everything they've said throughout the conversation
+- Build on previous responses - reference what they said earlier to show you're listening
+- Connect new questions to earlier answers ("You mentioned X earlier - how does that relate to...?")
+- If something seems to contradict what they said before, gently clarify
+- Use their own words and examples when asking follow-ups
+- Track patterns and themes across their responses
 
 Instructions:
 - Conduct the conversation naturally, matching the specified tone
 - Don't ask questions in a rigid, survey-like manner
 - Cover all required questions organically during the conversation
 - Be conversational and engaging within your tone guidelines
-- Ask follow-up questions based on the participant's responses
-- Make the participant feel comfortable and heard
+- Make the participant feel comfortable and heard - this encourages deeper sharing
 - Keep track of which required questions have been covered
 - IMPORTANT: This conversation has a maximum duration of 30 minutes. Pace yourself accordingly to cover all essential topics
 - When you've covered all required questions and gathered sufficient information, naturally conclude the conversation
-- If there are hypotheses to explore, try to gather information that addresses them
+- If there are hypotheses to explore, actively probe for evidence supporting or contradicting them
 
-Remember: This is a real conversation, not a script. Adapt to the participant's responses and maintain a natural flow while staying true to your tone. Keep the conversation focused and efficient to respect the time limit.`;
+Remember: This is a real conversation, not a script. Your goal is to uncover insights that a simple form could never capture - the emotions, the stories, the "why" behind what people do and think. Adapt to the participant's responses and maintain a natural flow while staying true to your tone. Keep the conversation focused and efficient to respect the time limit.`;
+}
+
+/**
+ * Build dynamic context section from rolling context
+ */
+function buildDynamicContextSection(
+  context: RollingContext,
+  // Config reserved for future survey-specific context additions
+  config: SurveyConfig
+): string {
+  // Use config to add survey-specific reminders
+  const surveyGoal = config.objective?.goal || "Gather feedback";
+  const parts: string[] = [];
+
+  parts.push(`\n\n===== CONVERSATION CONTEXT (Updated in real-time) =====`);
+  parts.push(`\nSURVEY GOAL REMINDER: ${surveyGoal}`);
+
+  // Add conversation summary if exists
+  if (context.historySummary) {
+    parts.push(`\nCONVERSATION HISTORY:\n${context.historySummary}`);
+  }
+
+  // Add key facts learned
+  if (context.memory.keyFactsLearned.length > 0) {
+    parts.push(
+      `\nKEY FACTS LEARNED FROM PARTICIPANT:\n${context.memory.keyFactsLearned.map((f) => `• ${f}`).join("\n")}`
+    );
+  }
+
+  // Add topics covered (don't repeat these)
+  if (context.memory.topicsCovered.length > 0) {
+    parts.push(
+      `\nTOPICS ALREADY COVERED (don't repeat, but can reference):\n${context.memory.topicsCovered.map((t) => `✓ ${t}`).join("\n")}`
+    );
+  }
+
+  // Add remaining topics (prioritize these)
+  if (context.memory.remainingRequiredTopics.length > 0) {
+    parts.push(
+      `\nTOPICS STILL TO COVER (prioritize these):\n${context.memory.remainingRequiredTopics.map((t) => `○ ${t}`).join("\n")}`
+    );
+  }
+
+  // Add current topic
+  if (context.memory.currentTopic) {
+    parts.push(`\nCURRENT TOPIC: ${context.memory.currentTopic}`);
+  }
+
+  // Add unanswered questions
+  if (context.memory.unansweredQuestions.length > 0) {
+    parts.push(
+      `\nQUESTIONS ASKED BUT NOT ANSWERED (try again gently):\n${context.memory.unansweredQuestions.map((q) => `? ${q}`).join("\n")}`
+    );
+  }
+
+  // Add progress info
+  parts.push(
+    `\nPROGRESS: ${context.progress.completionPercentage}% complete | ${Math.round(context.progress.elapsedMinutes)} min elapsed | ${context.progress.messageCount} messages`
+  );
+
+  // Add emotional signals if detected
+  if (context.memory.emotionalSignals.length > 0) {
+    parts.push(
+      `\nPARTICIPANT SIGNALS: ${context.memory.emotionalSignals.join(", ")}`
+    );
+  }
+
+  // Add hypotheses evidence summary
+  const hypothesesWithEvidence = Object.entries(
+    context.memory.hypothesesEvidence
+  ).filter(
+    ([, evidence]) =>
+      evidence.supporting.length > 0 || evidence.contradicting.length > 0
+  );
+
+  if (hypothesesWithEvidence.length > 0) {
+    const evidenceLines = hypothesesWithEvidence.map(
+      ([hypothesis, evidence]) => {
+        const status =
+          evidence.supporting.length > evidence.contradicting.length
+            ? "SUPPORTED"
+            : evidence.contradicting.length > evidence.supporting.length
+              ? "CONTRADICTED"
+              : "MIXED";
+        return `• "${hypothesis.slice(0, 40)}..." → ${status} (${evidence.supporting.length}+ / ${evidence.contradicting.length}-)`;
+      }
+    );
+    parts.push(`\nHYPOTHESES STATUS:\n${evidenceLines.join("\n")}`);
+  }
+
+  // Add wrap-up guidance if needed
+  if (context.progress.shouldWrapUp) {
+    parts.push(`\n⚠️ TIME TO WRAP UP: ${context.progress.wrapUpReason}
+Begin transitioning to conclusion. If there are critical uncovered topics, address them briefly.
+Thank the participant and provide a natural closing.`);
+  }
+
+  parts.push("\n===== END CONTEXT =====");
+
+  return parts.join("\n");
+}
+
+/**
+ * Get state-specific instructions based on conversation state
+ */
+function getStateSpecificInstructions(
+  state: ConversationState,
+  context: RollingContext
+): string {
+  // Add context-specific additions to state guidance
+  const remainingTopics = context.memory.remainingRequiredTopics.length;
+  const unexploredHypotheses = context.memory.unexploredHypotheses.length;
+
+  const stateGuidance: Record<ConversationState, string> = {
+    GREETING: `\nCURRENT STATE: GREETING
+- Warmly welcome the participant
+- Briefly explain what the conversation is about
+- Make them feel comfortable
+- Ask an easy, open-ended question to get started`,
+
+    EXPLORING_INITIAL: `\nCURRENT STATE: INITIAL EXPLORATION
+- Ask broad, exploratory questions
+- Let the participant share freely
+- Listen for topics to drill deeper on
+- Build rapport before getting into specifics`,
+
+    DRILLING_DEEPER: `\nCURRENT STATE: DRILLING DEEPER
+- You've identified something interesting - explore it fully
+- Ask "why" and "how" questions
+- Request specific examples and stories
+- Don't move on until you've extracted real insight`,
+
+    COVERING_TOPIC: `\nCURRENT STATE: COVERING REQUIRED TOPIC
+- Focus on covering a required topic naturally
+- Ensure you get substantive answers, not surface-level responses
+- Connect to what they've already shared when possible`,
+
+    TRANSITIONING: `\nCURRENT STATE: TRANSITIONING
+- Smoothly move to a new topic
+- Reference something they said that connects to the new topic
+- Use phrases like "That's really helpful. I'd love to hear about..." or "Speaking of that..."`,
+
+    CHECKING_COVERAGE: `\nCURRENT STATE: CHECKING COVERAGE
+- Most topics are covered - check if anything was missed
+- Ask if there's anything else they'd like to share
+- Look for gaps in the information collected`,
+
+    WRAPPING_UP: `\nCURRENT STATE: WRAPPING UP
+- Begin concluding the conversation
+- Summarize key points if appropriate
+- Ask any final critical questions briefly
+- Signal that you're almost done`,
+
+    CONCLUDING: `\nCURRENT STATE: CONCLUDING
+- Thank the participant sincerely
+- Acknowledge what they've shared
+- End on a positive note
+- Keep it brief - don't introduce new topics`,
+  };
+
+  let guidance = stateGuidance[state] || "";
+
+  // Add context-specific reminders
+  if (
+    remainingTopics > 0 &&
+    state !== "CONCLUDING" &&
+    state !== "WRAPPING_UP"
+  ) {
+    guidance += `\n📌 REMINDER: ${remainingTopics} required topic(s) still to cover.`;
+  }
+  if (
+    unexploredHypotheses > 0 &&
+    state !== "CONCLUDING" &&
+    state !== "WRAPPING_UP"
+  ) {
+    guidance += `\n📌 REMINDER: ${unexploredHypotheses} hypothesis(es) still unexplored.`;
+  }
+
+  return guidance;
+}
+
+/**
+ * Get adaptive questioning instructions based on participant style
+ */
+function getAdaptiveQuestioningInstructions(
+  style: ParticipantStyle,
+  qualitySignals: RollingContext["qualitySignals"]
+): string {
+  const parts: string[] = [];
+
+  parts.push(
+    "\n\nADAPTIVE QUESTIONING (based on participant's communication style):"
+  );
+
+  // Style-specific guidance
+  const styleGuidance: Record<ParticipantStyle, string> = {
+    verbose: `PARTICIPANT STYLE: Verbose/Detailed
+- They share a lot of detail - great! But stay focused.
+- You can ask more specific, focused follow-ups
+- Occasionally summarize what you've heard to confirm understanding
+- Gently redirect if they go off-topic
+- "I love the detail you're sharing. Let me make sure I understand the key point..."`,
+
+    concise: `PARTICIPANT STYLE: Concise/Brief
+- They prefer short answers - don't push too hard
+- Ask more specific questions rather than open-ended ones
+- Use encouraging phrases: "That's helpful. Can you give me a quick example?"
+- Accept that you may need multiple questions to get depth
+- Offer options: "Was it more about X or Y?"`,
+
+    hesitant: `PARTICIPANT STYLE: Hesitant/Uncertain
+- They seem unsure - be extra supportive and encouraging
+- Normalize uncertainty: "That's okay, just share what comes to mind"
+- Offer examples to help: "For instance, some people feel X while others feel Y..."
+- Be patient and give them time to think
+- Praise any sharing: "That's a great point, thank you for sharing that"`,
+
+    neutral: `PARTICIPANT STYLE: Neutral/Balanced
+- Standard conversational approach works well
+- Mix open and specific questions
+- Follow their lead on detail level`,
+  };
+
+  parts.push(styleGuidance[style]);
+
+  // Add quality signal-based adjustments
+  if (qualitySignals.responseLengthTrend === "decreasing") {
+    parts.push(`\n⚠️ ATTENTION: Response length is decreasing (possible fatigue)
+- Consider wrapping up sooner
+- Ask fewer follow-up questions
+- Focus only on critical remaining topics`);
+  }
+
+  if (qualitySignals.engagementLevel === "low") {
+    parts.push(`\n⚠️ LOW ENGAGEMENT DETECTED
+- Try to re-engage with a more interesting question
+- Ask about something they seemed more interested in earlier
+- Consider if the questions are too abstract - make them more concrete`);
+  }
+
+  if (qualitySignals.topicAvoidanceCount > 0) {
+    parts.push(`\nNOTE: Participant has avoided ${qualitySignals.topicAvoidanceCount} topic(s)
+- Respect their boundaries
+- Don't push on topics they've declined to discuss
+- Try approaching the same information from a different angle`);
+  }
+
+  return parts.join("\n");
 }
 
 /**

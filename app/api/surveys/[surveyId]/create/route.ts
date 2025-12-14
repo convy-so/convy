@@ -3,10 +3,11 @@ import { streamText } from "ai";
 
 import { db } from "@/db";
 import { surveys, surveyCreationConversations } from "@/db/schema";
-import { defaultModel } from "@/lib/ai";
+import { defaultModel, analysisModel, generateAIResponse } from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
   getSurveyCreationSystemPrompt,
+  getSurveyDataExtractionPrompt,
   type CollectedInfo,
 } from "@/lib/prompts";
 import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
@@ -14,8 +15,77 @@ import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
 export const maxDuration = 300;
 
 /**
+ * Perform incremental extraction of survey data from conversation
+ * This runs async after each exchange to keep extracted data current
+ */
+async function performIncrementalExtraction(
+  surveyId: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>
+): Promise<void> {
+  try {
+    // Only extract every 2 exchanges to save costs
+    if (messages.length < 4 || messages.length % 2 !== 0) return;
+
+    const extractionPrompt = getSurveyDataExtractionPrompt(messages);
+
+    const extractedText = await generateAIResponse(
+      extractionPrompt,
+      undefined,
+      {
+        model: analysisModel,
+        temperature: 0.3,
+        maxTokens: 2000,
+      }
+    );
+
+    const jsonMatch = extractedText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return;
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    // Extract collectedInfo and data
+    const { collectedInfo, ...dataWithoutCollectedInfo } = parsed;
+
+    // Get current conversation to merge data
+    const [currentConv] = await db
+      .select()
+      .from(surveyCreationConversations)
+      .where(eq(surveyCreationConversations.surveyId, surveyId));
+
+    if (!currentConv) return;
+
+    // Merge new data with existing (don't overwrite with nulls)
+    const existingData = currentConv.extractedData || {};
+    const mergedData: Record<string, unknown> = { ...existingData };
+
+    for (const [key, value] of Object.entries(dataWithoutCollectedInfo)) {
+      if (value !== null && value !== undefined) {
+        mergedData[key] = value;
+      }
+    }
+
+    // Update conversation with incremental extraction
+    await db
+      .update(surveyCreationConversations)
+      .set({
+        extractedData: mergedData,
+        collectedInfo: collectedInfo || currentConv.collectedInfo,
+      })
+      .where(eq(surveyCreationConversations.surveyId, surveyId));
+
+    console.log(
+      `[Create Route] Incremental extraction completed for survey ${surveyId}`
+    );
+  } catch (error) {
+    console.error("[Create Route] Incremental extraction error:", error);
+    // Non-critical - continue without extraction update
+  }
+}
+
+/**
  * Stream a survey creation conversation
  * This guides the survey maker through providing all necessary information
+ * Now includes incremental data extraction for better reliability
  */
 export async function POST(
   request: Request,
@@ -106,6 +176,9 @@ export async function POST(
       temperature: 0.7,
       maxOutputTokens: 1500,
     });
+
+    // Trigger incremental extraction in the background (non-blocking)
+    performIncrementalExtraction(surveyId, messages).catch(console.error);
 
     return result.toTextStreamResponse();
   } catch (error) {

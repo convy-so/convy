@@ -105,16 +105,7 @@ emailWorker.on("error", (err) => {
   console.error("[Email Worker] Worker error:", err);
 });
 
-process.on("SIGTERM", async () => {
-  console.log("[Email Worker] Shutting down gracefully...");
-  await emailWorker.close();
-  process.exit(0);
-});
-
-process.on("SIGINT", async () => {
-  console.log("[Email Worker] Shutting down gracefully...");
-  await emailWorker.close();
-  process.exit(0);
-});
+// Note: Signal handlers are managed by the main index.ts when running all workers together
+// Individual signal handlers removed to prevent conflicts
 
 export default emailWorker;

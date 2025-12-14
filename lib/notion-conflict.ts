@@ -290,52 +290,185 @@ export async function applyConflictResolution(
 
 /**
  * Overwrite Notion page with app data
+ * Handles conversation, survey, and analytics resource types
  */
 async function overwriteNotionWithAppData(
   notion: Client,
   notionPageId: string,
   appData: Record<string, unknown>
 ) {
-  // Delete all existing blocks
+  // Import formatting functions dynamically to avoid circular imports
+  const { formatConversationForNotion, formatAnalyticsForNotion, withRetry } =
+    await import("./notion-improved");
+
+  // Delete all existing blocks with controlled concurrency
   const { results: existingBlocks } = await notion.blocks.children.list({
     block_id: notionPageId,
   });
 
-  for (const block of existingBlocks) {
-    await notion.blocks.delete({ block_id: block.id });
+  // Delete blocks in batches of 5 to avoid rate limiting
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < existingBlocks.length; i += BATCH_SIZE) {
+    const batch = existingBlocks.slice(i, i + BATCH_SIZE);
+    await Promise.all(
+      batch.map((block) =>
+        withRetry(() => notion.blocks.delete({ block_id: block.id }))
+      )
+    );
   }
 
-  // Add new blocks from app data
-  // TODO: Format app data into Notion blocks
-  // This would depend on the specific data structure
+  // Format and add new blocks based on data type
+  let newBlocks;
+
+  // Detect data type and format accordingly
+  if (
+    appData.conversation &&
+    "rawConversation" in (appData.conversation as Record<string, unknown>)
+  ) {
+    // It's a conversation
+    const conv = appData.conversation as {
+      id: string;
+      rawConversation: Array<{
+        role: string;
+        content: string;
+        timestamp?: string;
+      }>;
+      summary?: string | null;
+      completed: boolean;
+      createdAt: Date;
+    };
+    newBlocks = formatConversationForNotion({
+      id: conv.id,
+      messages: conv.rawConversation,
+      summary: conv.summary,
+      completed: conv.completed,
+      createdAt: conv.createdAt,
+    });
+  } else if ("overallSummary" in appData && "totalConversations" in appData) {
+    // It's analytics
+    newBlocks = formatAnalyticsForNotion({
+      overallSummary: appData.overallSummary as string,
+      totalConversations: appData.totalConversations as number,
+      averageConversationLength: appData.averageConversationLength as number,
+      metrics: (appData.metrics as Record<string, unknown>) || {},
+    });
+  } else {
+    // Unknown type - create a simple info block
+    newBlocks = [
+      {
+        object: "block" as const,
+        type: "paragraph" as const,
+        paragraph: {
+          rich_text: [
+            {
+              type: "text" as const,
+              text: {
+                content:
+                  "Data synced from Convy at " + new Date().toISOString(),
+              },
+            },
+          ],
+        },
+      },
+    ];
+  }
+
+  // Add new blocks in batches of 100 (Notion's limit)
+  if (newBlocks && newBlocks.length > 0) {
+    for (let i = 0; i < newBlocks.length; i += 100) {
+      const batch = newBlocks.slice(i, i + 100);
+      await withRetry(() =>
+        notion.blocks.children.append({
+          block_id: notionPageId,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          children: batch as any,
+        })
+      );
+    }
+  }
 }
 
 /**
  * Update app database with Notion data
+ * Primarily used for syncing user notes/annotations from Notion back to app
  */
 async function updateAppWithNotionData(
   resourceType: string,
   resourceId: string,
   notionData: Record<string, unknown>
 ) {
-  // TODO: Update app database with Notion data
-  // This would depend on the specific resource type
-  console.log("Updating app data:", { resourceType, resourceId, notionData });
+  // Import db dynamically to avoid circular imports
+  const { db } = await import("@/db");
+  const { surveyConversations, surveys } = await import("@/db/schema");
+  const { eq } = await import("drizzle-orm");
+
+  console.log("Updating app data from Notion:", { resourceType, resourceId });
+
+  try {
+    switch (resourceType) {
+      case "conversation":
+        // For conversations, we might want to sync back any notes added in Notion
+        // However, we don't overwrite the core conversation data
+        // This is a placeholder for future enhancement
+        console.log(
+          `[Notion Conflict] Conversation ${resourceId}: Notion priority selected, but conversation data is read-only`
+        );
+        break;
+
+      case "survey":
+        // Survey metadata could potentially be updated from Notion
+        // But this is risky - we generally want app to be source of truth
+        console.log(
+          `[Notion Conflict] Survey ${resourceId}: Notion priority selected, but survey data is managed in app`
+        );
+        break;
+
+      case "analytics":
+        // Analytics are always generated by the app, never from Notion
+        console.log(
+          `[Notion Conflict] Analytics ${resourceId}: Analytics are read-only, generated by app`
+        );
+        break;
+
+      default:
+        console.warn(
+          `[Notion Conflict] Unknown resource type: ${resourceType}`
+        );
+    }
+  } catch (error) {
+    console.error(`[Notion Conflict] Failed to update app data:`, error);
+    throw error;
+  }
 }
 
 /**
  * Merge two versions of data
+ * Strategy: Keep app data as source of truth, but preserve Notion annotations
  */
 function mergeVersions(
   appVersion: Record<string, unknown>,
   notionVersion: Record<string, unknown>
 ): Record<string, unknown> {
-  // Simple merge strategy: keep app data, add Notion additions
+  // Extract any user-added content from Notion that we want to preserve
+  const notionAnnotations: Record<string, unknown> = {};
+
+  // Preserve common Notion user additions
+  if (notionVersion.userNotes) {
+    notionAnnotations.userNotes = notionVersion.userNotes;
+  }
+  if (notionVersion.tags) {
+    notionAnnotations.tags = notionVersion.tags;
+  }
+  if (notionVersion.annotations) {
+    notionAnnotations.annotations = notionVersion.annotations;
+  }
+
+  // Merge: app data takes priority, but preserve Notion annotations
   return {
     ...appVersion,
-    // Add any Notion-specific additions
-    notionNotes: notionVersion.notionNotes || undefined,
-    notionTags: notionVersion.notionTags || undefined,
+    _notionAnnotations:
+      Object.keys(notionAnnotations).length > 0 ? notionAnnotations : undefined,
+    _lastMerged: new Date().toISOString(),
   };
 }
 

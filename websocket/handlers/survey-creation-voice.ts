@@ -9,9 +9,14 @@ import {
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { AuthenticatedConnection } from "../middleware/auth";
-import { AudioBufferManager } from "@/lib/voice/audio-processing";
-import { getVAD } from "@/lib/voice/vad";
-import { getWhisperService } from "@/lib/voice/whisper-stt";
+import { AudioBufferManager, AUDIO_CONFIG } from "@/lib/voice/audio-processing";
+import {
+  getGoogleSTTService,
+  GoogleSTTStreamingSession,
+  type TranscriptionResult,
+  type VoiceActivityEvent,
+  STT_COST_PER_MINUTE,
+} from "@/lib/voice/google-stt";
 import { getTTSService } from "@/lib/voice/google-tts";
 import { CostTracker } from "@/lib/voice/cost-tracking";
 import { generateAIResponse } from "@/lib/ai";
@@ -23,9 +28,12 @@ import {
 import {
   checkMessageAllowed,
   checkAudioChunkAllowed,
-  checkSTTAllowed,
   checkTTSAllowed,
 } from "../middleware/rate-limit";
+
+// Configuration constants
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes idle timeout
+const SPEECH_PROCESSING_DELAY_MS = 800; // Wait 800ms after speech ends for final results
 
 /**
  * WebSocket Handler for Voice-Enabled Survey Creation
@@ -49,7 +57,7 @@ interface CreationState {
     timestamp: string;
   }>;
   collectedInfo: CollectedInfo; // ← FIXED: Now uses proper type
-  extractedData: Record<string, unknown>; // ← FIXED: Added extracted data
+  extractedData: Record<string, unknown>;
   isProcessing: boolean;
   language: "en" | "fr" | "de";
 }
@@ -61,10 +69,25 @@ export class SurveyCreationVoiceHandler {
   private identifier: string; // For rate limiting
   private audioBuffer: AudioBufferManager;
   private state: CreationState;
-  private vad!: Awaited<ReturnType<typeof getVAD>>;
-  private whisper: ReturnType<typeof getWhisperService>;
+  private sttService: ReturnType<typeof getGoogleSTTService>;
+  private sttSession: GoogleSTTStreamingSession | null = null;
   private tts: ReturnType<typeof getTTSService>;
   private isActive: boolean = true;
+  private pendingTranscription: string = "";
+  private speechProcessingTimeout: NodeJS.Timeout | null = null;
+
+  // VAD state tracking - tracks if Google STT detects speech
+  private isSpeechActive: boolean = false;
+
+  // Idle timeout management
+  private idleTimeout: NodeJS.Timeout | null = null;
+  private lastActivityTime: number = Date.now();
+
+  // Session metrics
+  private sessionStartTime: number = Date.now();
+  private totalAudioDurationMs: number = 0;
+  private totalSttCost: number = 0;
+  private totalTtsCost: number = 0;
 
   constructor(connection: AuthenticatedConnection) {
     this.ws = connection.ws;
@@ -72,7 +95,7 @@ export class SurveyCreationVoiceHandler {
     this.sessionId = connection.sessionId;
     this.identifier = `user:${connection.userId}`; // For rate limiting
     this.audioBuffer = new AudioBufferManager();
-    this.whisper = getWhisperService();
+    this.sttService = getGoogleSTTService();
     this.tts = getTTSService();
 
     // FIXED: Initialize with proper CollectedInfo structure
@@ -107,8 +130,7 @@ export class SurveyCreationVoiceHandler {
    */
   async initialize(): Promise<void> {
     try {
-      // Initialize VAD
-      this.vad = await getVAD({ sensitivity: 0.5 });
+      this.sessionStartTime = Date.now();
 
       // Create voice session in database
       await db.insert(voiceSessions).values({
@@ -118,6 +140,12 @@ export class SurveyCreationVoiceHandler {
         status: "active",
         startedAt: new Date(),
       });
+
+      // Initialize Google STT streaming session with built-in VAD
+      this.initializeSTTSession();
+
+      // Start idle timeout monitoring
+      this.resetIdleTimeout();
 
       // Send ready message
       this.send({
@@ -134,6 +162,210 @@ export class SurveyCreationVoiceHandler {
         error: "Failed to initialize voice session",
       });
       this.ws.close();
+    }
+  }
+
+  /**
+   * Reset idle timeout - call on any activity
+   */
+  private resetIdleTimeout(): void {
+    this.lastActivityTime = Date.now();
+
+    // Clear existing timeout
+    if (this.idleTimeout) {
+      clearTimeout(this.idleTimeout);
+    }
+
+    // Set new timeout
+    this.idleTimeout = setTimeout(() => {
+      this.handleIdleTimeout();
+    }, IDLE_TIMEOUT_MS);
+  }
+
+  /**
+   * Handle idle timeout - close session gracefully
+   */
+  private async handleIdleTimeout(): Promise<void> {
+    console.log(
+      `[Survey Creation Voice] Session ${this.state.voiceSessionId} idle timeout after ${IDLE_TIMEOUT_MS / 1000}s`
+    );
+
+    this.send({
+      type: "idle_timeout",
+      message:
+        "Session closed due to inactivity. Please reconnect to continue.",
+    });
+
+    // Clean up and close
+    this.isActive = false;
+    await this.cleanup();
+    this.ws.close(1000, "Idle timeout");
+  }
+
+  /**
+   * Initialize Google STT streaming session with VAD events
+   */
+  private initializeSTTSession(): void {
+    // Create new streaming session with VAD configuration
+    this.sttSession = this.sttService.createStreamingSession({
+      language: this.state.language,
+      enableInterimResults: true,
+      enableAutoPunctuation: true,
+      // VAD timeouts - wait 1.5s of silence before considering speech ended
+      speechEndTimeout: 1.5,
+      singleUtterance: false, // Keep stream open for continuous conversation
+    });
+
+    // Handle transcription results
+    this.sttSession.on("transcription", (result: TranscriptionResult) => {
+      this.handleTranscriptionResult(result);
+    });
+
+    // Handle voice activity events (built-in VAD)
+    this.sttSession.on("voiceActivity", (event: VoiceActivityEvent) => {
+      this.handleVoiceActivity(event);
+    });
+
+    // Handle errors
+    this.sttSession.on("error", (error: Error) => {
+      console.error("[Survey Creation Voice] STT session error:", error);
+      // Restart session on error
+      this.restartSTTSession();
+    });
+
+    // Handle session end
+    this.sttSession.on("end", () => {
+      console.log("[Survey Creation Voice] STT session ended");
+      // Restart session if still active
+      if (this.isActive && !this.state.isProcessing) {
+        this.restartSTTSession();
+      }
+    });
+
+    // Handle max restarts reached
+    this.sttSession.on("maxRestartsReached", (attempts: number) => {
+      console.error(
+        `[Survey Creation Voice] STT max restarts reached after ${attempts} attempts`
+      );
+      this.send({
+        type: "warning",
+        message:
+          "Voice recognition is experiencing issues. You can continue with text input.",
+        code: "STT_UNSTABLE",
+      });
+    });
+
+    // Start the session
+    this.sttSession.start();
+    console.log("[Survey Creation Voice] Google STT session started with VAD");
+  }
+
+  /**
+   * Restart STT session with retry mechanism
+   */
+  private async restartSTTSession(): Promise<void> {
+    if (!this.isActive) return;
+
+    // Use the session's built-in retry mechanism
+    if (this.sttSession) {
+      const success = await this.sttSession.attemptRestart();
+
+      if (!success) {
+        // Max retries reached - notify client and close
+        console.error(
+          "[Survey Creation Voice] STT session restart failed after max attempts"
+        );
+        this.send({
+          type: "error",
+          error:
+            "Voice recognition service unavailable. Please try again later.",
+          code: "STT_RESTART_FAILED",
+        });
+        // Don't close the connection - allow text fallback
+        return;
+      }
+    } else {
+      // No existing session - create a new one
+      this.initializeSTTSession();
+    }
+  }
+
+  /**
+   * Handle transcription results from Google STT
+   */
+  private handleTranscriptionResult(result: TranscriptionResult): void {
+    // Reset idle timeout on transcription activity
+    this.resetIdleTimeout();
+
+    if (result.isFinal) {
+      // Accumulate final transcription
+      this.pendingTranscription +=
+        (this.pendingTranscription ? " " : "") + result.text;
+
+      // Track costs in Redis for rate limiting and analytics
+      // Note: Database cost tracking happens in processAccumulatedTranscription
+      // This tracks session-level costs for monitoring
+      if (result.cost > 0) {
+        CostTracker.trackSTT(
+          this.userId,
+          result.cost,
+          result.duration,
+          this.state.voiceSessionId
+        ).catch(console.error);
+      }
+
+      // Send final transcription to client
+      this.send({
+        type: "transcription",
+        text: result.text,
+        isFinal: true,
+        confidence: result.confidence,
+      });
+    } else {
+      // Send interim results for real-time feedback
+      this.send({
+        type: "transcription_interim",
+        text: result.text,
+        stability: result.stability,
+      });
+    }
+  }
+
+  /**
+   * Handle voice activity events from Google STT's built-in VAD
+   */
+  private handleVoiceActivity(event: VoiceActivityEvent): void {
+    // Reset idle timeout on any voice activity
+    this.resetIdleTimeout();
+
+    switch (event.type) {
+      case "SPEECH_START":
+        // Update VAD state - speech is now active
+        this.isSpeechActive = true;
+
+        // Clear any pending processing timeout
+        if (this.speechProcessingTimeout) {
+          clearTimeout(this.speechProcessingTimeout);
+          this.speechProcessingTimeout = null;
+        }
+        this.send({ type: "speech_start" });
+        break;
+
+      case "SPEECH_END":
+      case "END_OF_UTTERANCE":
+        // Update VAD state - speech has ended
+        this.isSpeechActive = false;
+
+        this.send({ type: "speech_end" });
+
+        // Wait a brief moment for final transcription, then process
+        if (this.speechProcessingTimeout) {
+          clearTimeout(this.speechProcessingTimeout);
+        }
+        this.speechProcessingTimeout = setTimeout(() => {
+          this.processAccumulatedTranscription();
+        }, SPEECH_PROCESSING_DELAY_MS);
+        break;
     }
   }
 
@@ -220,6 +452,19 @@ export class SurveyCreationVoiceHandler {
    * Handle start of survey creation
    */
   private async handleStart(): Promise<void> {
+    // Prevent duplicate survey creation
+    if (this.state.surveyId) {
+      console.warn(
+        `[Survey Creation Voice] Survey already created: ${this.state.surveyId}`
+      );
+      this.send({
+        type: "already_started",
+        surveyId: this.state.surveyId,
+        conversationId: this.state.conversationId,
+      });
+      return;
+    }
+
     try {
       // Create survey
       const surveyId = nanoid();
@@ -271,6 +516,9 @@ export class SurveyCreationVoiceHandler {
   private async handleAudioData(audioData: Buffer): Promise<void> {
     if (!this.isActive || this.state.isProcessing) return;
 
+    // Reset idle timeout on audio activity
+    this.resetIdleTimeout();
+
     // Check audio chunk rate limit
     const audioCheck = await checkAudioChunkAllowed(this.identifier);
     if (!audioCheck.allowed) {
@@ -282,107 +530,99 @@ export class SurveyCreationVoiceHandler {
     }
 
     try {
-      // Detect speech using VAD
-      const vadResult = await this.vad.detectSpeech(audioData);
-
-      // Add to buffer only if speech detected (cost optimization)
-      this.audioBuffer.addChunk(audioData, vadResult.hasSpeech);
-
-      // Check if we should process the buffer
-      if (this.audioBuffer.shouldFlush()) {
-        await this.processAudioBuffer();
+      // Stream audio directly to Google STT (VAD is handled by Google)
+      if (this.sttSession) {
+        const success = this.sttSession.write(audioData);
+        if (!success) {
+          // Session might have ended, restart it
+          await this.restartSTTSession();
+          // Try writing again after restart
+          if (this.sttSession) {
+            this.sttSession.write(audioData);
+          }
+        }
       }
+
+      // Track audio duration using AUDIO_CONFIG constants
+      const bytesPerSample = AUDIO_CONFIG.BIT_DEPTH / 8;
+      const chunkDurationMs =
+        (audioData.length /
+          (AUDIO_CONFIG.SAMPLE_RATE * AUDIO_CONFIG.CHANNELS * bytesPerSample)) *
+        1000;
+      this.totalAudioDurationMs += chunkDurationMs;
+
+      // Buffer for database storage - only buffer when speech is active (from Google STT VAD)
+      // This saves memory by not buffering silence
+      this.audioBuffer.addChunk(audioData, this.isSpeechActive);
     } catch (error) {
       console.error("[Survey Creation Voice] Audio processing error:", error);
     }
   }
 
   /**
-   * Process accumulated audio buffer
+   * Process accumulated transcription after speech ends
    */
-  private async processAudioBuffer(): Promise<void> {
+  private async processAccumulatedTranscription(): Promise<void> {
     if (this.state.isProcessing) return;
 
-    const audioBuffer = this.audioBuffer.flush();
-    if (!audioBuffer) return;
+    const transcriptionText = this.pendingTranscription.trim();
+    if (!transcriptionText) return;
 
-    // Check STT rate limit
-    const sttCheck = await checkSTTAllowed(this.identifier);
-    if (!sttCheck.allowed) {
-      this.send({
-        type: "rate_limit",
-        error: sttCheck.reason,
-        retryAfter: sttCheck.retryAfter,
-      });
-      return;
-    }
+    // Clear pending transcription
+    this.pendingTranscription = "";
 
     this.state.isProcessing = true;
 
     try {
-      // Transcribe audio
-      const startTime = Date.now();
-      const transcription = await this.whisper.transcribeWithContext(
-        audioBuffer,
-        this.state.messages.map((m) => m.content).join(" "),
-        this.state.language
-      );
+      // Flush audio buffer for storage
+      const audioBuffer = this.audioBuffer.flush();
 
-      if ("error" in transcription) {
-        console.error(
-          "[Survey Creation Voice] Transcription error:",
-          transcription.error
-        );
-        this.send({
-          type: "error",
-          error: "Failed to transcribe audio",
+      // Calculate duration using AUDIO_CONFIG constants
+      const bytesPerSample = AUDIO_CONFIG.BIT_DEPTH / 8;
+      const audioDurationMs = audioBuffer
+        ? (audioBuffer.length /
+            (AUDIO_CONFIG.SAMPLE_RATE *
+              AUDIO_CONFIG.CHANNELS *
+              bytesPerSample)) *
+          1000
+        : 0;
+
+      // Calculate cost using the constant
+      const chunkCost = (audioDurationMs / 60000) * STT_COST_PER_MINUTE;
+      this.totalSttCost += chunkCost;
+
+      // Save audio chunk to database
+      if (audioBuffer) {
+        await db.insert(voiceChunks).values({
+          id: nanoid(),
+          sessionId: this.state.voiceSessionId,
+          chunkType: "audio_in",
+          durationMs: Math.round(audioDurationMs),
+          sizeBytes: audioBuffer.length,
+          transcription: transcriptionText,
+          cost: chunkCost.toString(),
+          hadSpeech: true, // Only speech chunks are saved
+          processingTimeMs: 0, // Streaming - no separate processing time
         });
-        this.state.isProcessing = false;
-        return;
       }
-
-      const processingTime = Date.now() - startTime;
-
-      // Track costs
-      await CostTracker.trackSTT(
-        this.userId,
-        transcription.cost,
-        transcription.duration,
-        this.state.voiceSessionId
-      );
-
-      // Save audio chunk
-      await db.insert(voiceChunks).values({
-        id: nanoid(),
-        sessionId: this.state.voiceSessionId,
-        chunkType: "audio_in",
-        durationMs: Math.round(transcription.duration),
-        sizeBytes: audioBuffer.length,
-        transcription: transcription.text,
-        cost: transcription.cost.toString(),
-        processingTimeMs: processingTime,
-      });
-
-      // Send transcription to client
-      this.send({
-        type: "transcription",
-        text: transcription.text,
-      });
 
       // Add user message
       this.state.messages.push({
         role: "user",
-        content: transcription.text,
+        content: transcriptionText,
         timestamp: new Date().toISOString(),
       });
 
       // Generate AI response
-      await this.generateResponse(transcription.text);
+      await this.generateResponse(transcriptionText);
     } catch (error) {
-      console.error("[Survey Creation Voice] Buffer processing error:", error);
+      console.error(
+        "[Survey Creation Voice] Transcription processing error:",
+        error
+      );
       this.send({
         type: "error",
-        error: "Failed to process audio",
+        error: "Failed to process transcription",
       });
     } finally {
       this.state.isProcessing = false;
@@ -538,7 +778,9 @@ export class SurveyCreationVoiceHandler {
 
       const processingTime = Date.now() - startTime;
 
-      // Track costs
+      // Track costs (both in Redis and locally)
+      this.totalTtsCost += synthesis.cost;
+
       await CostTracker.trackTTS(
         this.userId,
         synthesis.cost,
@@ -637,12 +879,20 @@ export class SurveyCreationVoiceHandler {
           .where(eq(surveyCreationConversations.id, this.state.conversationId));
       }
 
-      // Update voice session status
+      // Calculate final session metrics
+      const sessionDurationMs = Date.now() - this.sessionStartTime;
+
+      // Update voice session status with metrics
       await db
         .update(voiceSessions)
         .set({
           status: "completed",
           endedAt: new Date(),
+          durationMs: sessionDurationMs,
+          audioDurationMs: Math.round(this.totalAudioDurationMs),
+          totalCost: (this.totalSttCost + this.totalTtsCost).toString(),
+          sttCost: this.totalSttCost.toString(),
+          ttsCost: this.totalTtsCost.toString(),
         })
         .where(eq(voiceSessions.id, this.state.voiceSessionId));
 
@@ -676,30 +926,63 @@ export class SurveyCreationVoiceHandler {
    */
   private async cleanup(): Promise<void> {
     try {
-      // Flush any remaining audio
-      if (this.audioBuffer.hasContent()) {
-        await this.processAudioBuffer();
+      // Clear any pending timeouts
+      if (this.speechProcessingTimeout) {
+        clearTimeout(this.speechProcessingTimeout);
+        this.speechProcessingTimeout = null;
       }
 
-      // Update session status if not completed
+      // Clear idle timeout
+      if (this.idleTimeout) {
+        clearTimeout(this.idleTimeout);
+        this.idleTimeout = null;
+      }
+
+      // Process any remaining transcription
+      if (this.pendingTranscription.trim()) {
+        await this.processAccumulatedTranscription();
+      }
+
+      // Clear audio buffer to free memory
+      this.audioBuffer.clear();
+
+      // Calculate final session duration
+      const sessionDurationMs = Date.now() - this.sessionStartTime;
+
+      // Update session status and metrics
       const [session] = await db
         .select()
         .from(voiceSessions)
         .where(eq(voiceSessions.id, this.state.voiceSessionId));
 
-      if (session && session.status === "active") {
+      if (session) {
+        const newStatus =
+          session.status === "active" ? "abandoned" : session.status;
+
         await db
           .update(voiceSessions)
           .set({
-            status: "abandoned",
+            status: newStatus,
             endedAt: new Date(),
+            durationMs: sessionDurationMs,
+            audioDurationMs: Math.round(this.totalAudioDurationMs),
+            totalCost: (this.totalSttCost + this.totalTtsCost).toString(),
+            sttCost: this.totalSttCost.toString(),
+            ttsCost: this.totalTtsCost.toString(),
           })
           .where(eq(voiceSessions.id, this.state.voiceSessionId));
+
+        console.log(
+          `[Survey Creation Voice] Session ${this.state.voiceSessionId} cleaned up: ` +
+            `duration=${sessionDurationMs}ms, audioDuration=${this.totalAudioDurationMs}ms, ` +
+            `sttCost=$${this.totalSttCost.toFixed(4)}, ttsCost=$${this.totalTtsCost.toFixed(4)}`
+        );
       }
 
-      // Cleanup VAD
-      if (this.vad) {
-        await this.vad.destroy();
+      // Cleanup Google STT session
+      if (this.sttSession) {
+        this.sttSession.destroy();
+        this.sttSession = null;
       }
     } catch (error) {
       console.error("[Survey Creation Voice] Cleanup error:", error);

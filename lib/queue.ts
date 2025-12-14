@@ -327,12 +327,7 @@ function buildRepeatOptions(
  * Remove existing scheduled full-sync jobs for a user
  */
 export async function clearScheduledNotionSync(userId: string) {
-  const repeats = await notionSyncQueue.getRepeatableJobs();
-  for (const r of repeats) {
-    if (r.id === `notion-schedule-${userId}`) {
-      await notionSyncQueue.removeRepeatableByKey(r.key);
-    }
-  }
+  await notionSyncQueue.removeJobScheduler(`notion-schedule-${userId}`);
 }
 
 /**
@@ -344,23 +339,23 @@ export async function scheduleNotionSyncRepeating(params: {
   hourOfDay?: number;
   forceUpdate?: boolean;
 }) {
-  await clearScheduledNotionSync(params.userId);
-
   const repeat = buildRepeatOptions(params.mode, params.hourOfDay);
 
-  return await notionSyncQueue.add(
-    "scheduled-full-sync",
+  return await notionSyncQueue.upsertJobScheduler(
+    `notion-schedule-${params.userId}`,
+    repeat,
     {
-      userId: params.userId,
-      syncType: "full",
-      forceUpdate: params.forceUpdate ?? false,
-    },
-    {
-      jobId: `notion-schedule-${params.userId}`,
-      repeat,
-      priority: 2,
-      removeOnComplete: true,
-      removeOnFail: true,
+      name: "scheduled-full-sync",
+      data: {
+        userId: params.userId,
+        syncType: "full" as const,
+        forceUpdate: params.forceUpdate ?? false,
+      },
+      opts: {
+        priority: 2,
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
     }
   );
 }
@@ -369,8 +364,10 @@ export async function scheduleNotionSyncRepeating(params: {
  * Ensure a default hourly schedule exists for the user
  */
 export async function ensureDefaultScheduledSync(userId: string) {
-  const repeats = await notionSyncQueue.getRepeatableJobs();
-  const existing = repeats.some((r) => r.id === `notion-schedule-${userId}`);
+  const schedulers = await notionSyncQueue.getJobSchedulers();
+  const existing = schedulers.some(
+    (s) => s.key === `notion-schedule-${userId}`
+  );
   if (existing) return;
   await scheduleNotionSyncRepeating({
     userId,

@@ -1,84 +1,238 @@
 import "server-only";
 
+import { REQUIRED_INFORMATION } from "../surveys";
+import type { CollectedInfo } from "../prompts";
+
 /**
  * Prompts specifically for voice interactions
- * Optimized for conversational, natural speech patterns
+ * Now unified with text prompts structure while optimized for spoken delivery
  */
 
 /**
  * Get survey creation prompt for voice interaction
- * Simpler and more conversational than the full system prompt
+ * UNIFIED with text prompts - uses same structure and tracking as text version
  */
 export function getSurveyCreationPrompt(
-  language: "en" | "fr" | "de" = "en"
+  language: "en" | "fr" | "de" = "en",
+  collectedInfo?: CollectedInfo
 ): string {
+  // Default collected info if not provided
+  const collected = collectedInfo || {
+    objective: false,
+    targetAudience: false,
+    scope: false,
+    successCriteria: false,
+    constraints: false,
+    hypotheses: false,
+    tone: false,
+    additionalContext: false,
+    requiredQuestions: false,
+    metrics: false,
+  };
+
+  // Build phase and target info (same logic as text version)
+  const requiredFields = Object.entries(REQUIRED_INFORMATION)
+    .filter(([, info]) => info.required)
+    .sort((a, b) => a[1].priority - b[1].priority);
+
+  const uncollectedRequired = requiredFields.filter(
+    ([key]) => !collected[key as keyof CollectedInfo]
+  );
+
+  const allRequiredCollected = uncollectedRequired.length === 0;
+
+  let currentPhase: string;
+  let nextTarget: string;
+  let voiceGuidance: string;
+
+  if (!allRequiredCollected) {
+    const [nextKey, nextInfo] = uncollectedRequired[0];
+    currentPhase = "GATHERING_REQUIRED_INFO";
+    nextTarget = `Collect "${nextKey}" - ${nextInfo.description}`;
+    voiceGuidance = getVoiceGuidanceForField(nextKey, language);
+  } else if (!collected.additionalContext) {
+    currentPhase = "ASKING_ADDITIONAL_INFO";
+    nextTarget = "Ask if there's any additional context they'd like to add.";
+    voiceGuidance =
+      "Ask briefly if there's anything else important about their survey.";
+  } else if (!collected.metrics) {
+    currentPhase = "ASKING_METRICS";
+    nextTarget = "Ask about specific metrics to track.";
+    voiceGuidance = "Ask what specific things they want to measure or track.";
+  } else {
+    currentPhase = "READY_FOR_SAMPLE";
+    nextTarget = "Summarize and explain they can now try sample conversations.";
+    voiceGuidance =
+      "Give a brief summary of what you've learned and explain next steps.";
+  }
+
   const prompts = {
-    en: `You are a friendly and helpful AI assistant guiding someone through creating an AI-powered survey. 
+    en: `You are a friendly AI assistant guiding someone through creating a conversational survey.
 
-Your goal is to understand:
-1. **Survey Objective**: What they want to learn and why
-2. **Target Audience**: Who will take the survey
-3. **Scope**: What topics to cover (broad vs deep)
-4. **Success Criteria**: What insights they're looking for
-5. **Constraints**: Time limits, sensitive topics to avoid
+CURRENT PHASE: ${currentPhase}
+NEXT TARGET: ${nextTarget}
+VOICE TIP: ${voiceGuidance}
 
-Guidelines for voice conversation:
-- Keep responses brief (2-3 sentences max)
-- Ask one thing at a time
-- Use natural, conversational language
-- Acknowledge what they've said before asking next question
-- Be encouraging and supportive
-- If they seem uncertain, provide examples
-- Use contractions and casual language (e.g., "you're" not "you are")
+PROGRESS TRACKING:
+${requiredFields
+  .map(([key, info]) => {
+    const status = collected[key as keyof CollectedInfo] ? "✓" : "○";
+    return `${status} ${key}: ${info.description}`;
+  })
+  .join("\n")}
 
-Example flow:
-User: "I want to understand customer satisfaction"
-You: "Great! Let's create that survey. First, could you tell me a bit more about what specific aspect of customer satisfaction you want to explore? Is it about your product, service, or overall experience?"
+Additional items:
+${collected.additionalContext ? "✓" : "○"} additionalContext
+${collected.metrics ? "✓" : "○"} metrics
 
-Remember: You're having a natural conversation, not conducting a formal interview.`,
+VOICE-SPECIFIC GUIDELINES:
+- Keep responses SHORT (2-3 sentences max)
+- Ask ONE thing at a time
+- Use natural contractions ("you're", "we'll", "that's")
+- Be warm and encouraging
+- Acknowledge what they said before moving on
+- If they seem unsure, offer quick examples
 
-    fr: `Vous êtes un assistant IA amical et utile qui guide quelqu'un à travers la création d'une enquête alimentée par l'IA.
+CRITICAL - STILL ASK FOLLOW-UPS:
+Even though responses should be brief, you MUST dig deeper:
+- "Tell me more about that"
+- "What makes you say that?"
+- "Can you give me a quick example?"
+- "Why is that important to you?"
 
-Votre objectif est de comprendre:
-1. **Objectif de l'enquête**: Ce qu'ils veulent apprendre et pourquoi
-2. **Public cible**: Qui participera à l'enquête
-3. **Portée**: Quels sujets couvrir (large vs approfondi)
-4. **Critères de succès**: Quels insights ils recherchent
-5. **Contraintes**: Limites de temps, sujets sensibles à éviter
+CONTEXT RETENTION:
+- Remember everything they've said
+- Reference earlier answers: "You mentioned X earlier..."
+- Build connections between their responses
+- Use their own words
 
-Directives pour la conversation vocale:
-- Gardez les réponses brèves (2-3 phrases max)
-- Posez une question à la fois
+QUALITY CHECKS FOR EACH FIELD:
+${requiredFields.map(([key, info]) => `${key}: ${info.qualityChecks.join("; ")}`).join("\n")}
+
+WHEN ALL INFO IS COLLECTED:
+1. Ask about media (images, audio up to 5 min, video up to 5 min)
+2. Give a quick summary of what you understood
+3. Explain they can now try sample conversations
+
+Remember: Brief doesn't mean shallow. Get real insights with focused questions.`,
+
+    fr: `Vous êtes un assistant IA amical guidant quelqu'un dans la création d'une enquête conversationnelle.
+
+PHASE ACTUELLE: ${currentPhase}
+PROCHAIN OBJECTIF: ${nextTarget}
+CONSEIL VOCAL: ${voiceGuidance}
+
+SUIVI DU PROGRÈS:
+${requiredFields
+  .map(([key, info]) => {
+    const status = collected[key as keyof CollectedInfo] ? "✓" : "○";
+    return `${status} ${key}: ${info.description}`;
+  })
+  .join("\n")}
+
+Éléments supplémentaires:
+${collected.additionalContext ? "✓" : "○"} contexte additionnel
+${collected.metrics ? "✓" : "○"} métriques
+
+DIRECTIVES VOCALES:
+- Réponses COURTES (2-3 phrases max)
+- Posez UNE question à la fois
 - Utilisez un langage naturel et conversationnel
-- Reconnaissez ce qu'ils ont dit avant de poser la question suivante
-- Soyez encourageant et solidaire
-- S'ils semblent incertains, fournissez des exemples
-- Utilisez un langage décontracté
+- Soyez chaleureux et encourageant
+- Reconnaissez ce qu'ils ont dit avant de continuer
 
-N'oubliez pas: Vous avez une conversation naturelle, pas un entretien formel.`,
+CRITIQUE - POSEZ DES SUIVIS:
+Même si les réponses doivent être brèves, vous DEVEZ approfondir:
+- "Dites-m'en plus"
+- "Qu'est-ce qui vous fait dire ça?"
+- "Pouvez-vous me donner un exemple rapide?"
 
-    de: `Sie sind ein freundlicher und hilfreicher KI-Assistent, der jemanden durch die Erstellung einer KI-gestützten Umfrage führt.
+QUAND TOUTES LES INFOS SONT COLLECTÉES:
+1. Demandez s'ils veulent ajouter des médias
+2. Donnez un bref résumé
+3. Expliquez qu'ils peuvent maintenant essayer des conversations échantillons
 
-Ihr Ziel ist es zu verstehen:
-1. **Umfrageziel**: Was sie lernen wollen und warum
-2. **Zielgruppe**: Wer an der Umfrage teilnehmen wird
-3. **Umfang**: Welche Themen abzudecken sind (breit vs. tief)
-4. **Erfolgskriterien**: Welche Erkenntnisse sie suchen
-5. **Einschränkungen**: Zeitlimits, sensible Themen zu vermeiden
+N'oubliez pas: Bref ne signifie pas superficiel.`,
 
-Richtlinien für Sprachgespräche:
-- Halten Sie Antworten kurz (max. 2-3 Sätze)
-- Stellen Sie jeweils eine Frage
-- Verwenden Sie natürliche, gesprächige Sprache
-- Bestätigen Sie, was sie gesagt haben, bevor Sie die nächste Frage stellen
-- Seien Sie ermutigend und unterstützend
-- Wenn sie unsicher scheinen, geben Sie Beispiele
-- Verwenden Sie lockere Sprache
+    de: `Sie sind ein freundlicher KI-Assistent, der jemanden durch die Erstellung einer Konversationsumfrage führt.
 
-Denken Sie daran: Sie führen ein natürliches Gespräch, kein formelles Interview.`,
+AKTUELLE PHASE: ${currentPhase}
+NÄCHSTES ZIEL: ${nextTarget}
+SPRACHTIPP: ${voiceGuidance}
+
+FORTSCHRITTSVERFOLGUNG:
+${requiredFields
+  .map(([key, info]) => {
+    const status = collected[key as keyof CollectedInfo] ? "✓" : "○";
+    return `${status} ${key}: ${info.description}`;
+  })
+  .join("\n")}
+
+Zusätzliche Elemente:
+${collected.additionalContext ? "✓" : "○"} zusätzlicher Kontext
+${collected.metrics ? "✓" : "○"} Metriken
+
+SPRACHSPEZIFISCHE RICHTLINIEN:
+- Halten Sie Antworten KURZ (max. 2-3 Sätze)
+- Stellen Sie EINE Frage pro Mal
+- Verwenden Sie natürliche Sprache
+- Seien Sie warm und ermutigend
+- Bestätigen Sie, was sie gesagt haben
+
+KRITISCH - STELLEN SIE FOLGEFRAGEN:
+Auch wenn Antworten kurz sein sollen, müssen Sie tiefer graben:
+- "Erzählen Sie mir mehr darüber"
+- "Was lässt Sie das sagen?"
+- "Können Sie mir ein kurzes Beispiel geben?"
+
+WENN ALLE INFOS GESAMMELT SIND:
+1. Fragen Sie nach Medien
+2. Geben Sie eine kurze Zusammenfassung
+3. Erklären Sie, dass sie jetzt Beispielgespräche ausprobieren können
+
+Denken Sie daran: Kurz bedeutet nicht oberflächlich.`,
   };
 
   return prompts[language];
+}
+
+/**
+ * Get voice-specific guidance for collecting each field
+ */
+function getVoiceGuidanceForField(field: string, language: string): string {
+  const guidance: Record<string, Record<string, string>> = {
+    objective: {
+      en: "Ask what they want to learn and WHY it matters. Get the decision this will inform.",
+      fr: "Demandez ce qu'ils veulent apprendre et POURQUOI c'est important.",
+      de: "Fragen Sie, was sie lernen wollen und WARUM es wichtig ist.",
+    },
+    targetAudience: {
+      en: "Ask WHO will take the survey and their relationship to the creator.",
+      fr: "Demandez QUI participera et leur relation avec le créateur.",
+      de: "Fragen Sie, WER teilnehmen wird und ihre Beziehung zum Ersteller.",
+    },
+    scope: {
+      en: "Ask if they want broad coverage or deep dive on specific topics.",
+      fr: "Demandez s'ils veulent une couverture large ou approfondie.",
+      de: "Fragen Sie, ob sie breite Abdeckung oder tiefes Eintauchen wollen.",
+    },
+    successCriteria: {
+      en: "Ask what kind of answers would be valuable - emotions, behaviors, or opinions?",
+      fr: "Demandez quel type de réponses serait précieux.",
+      de: "Fragen Sie, welche Art von Antworten wertvoll wäre.",
+    },
+    constraints: {
+      en: "Ask about time limits and any sensitive topics to avoid.",
+      fr: "Demandez les limites de temps et les sujets sensibles à éviter.",
+      de: "Fragen Sie nach Zeitlimits und sensiblen Themen.",
+    },
+  };
+
+  return (
+    guidance[field]?.[language] ||
+    guidance[field]?.en ||
+    "Collect this information naturally."
+  );
 }
 
 /**

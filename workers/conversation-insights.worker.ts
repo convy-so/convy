@@ -9,14 +9,20 @@ import {
   surveys,
 } from "@/db/schema";
 import { analysisModel, generateAIResponse } from "@/lib/ai";
-import {
-  getConversationInsightsPrompt,
-  getConversationSummaryPrompt,
-  type SurveyConfig,
-} from "@/lib/prompts";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import type { ConversationInsightsJobData } from "@/lib/queue";
 import { getRedisClient } from "@/lib/redis";
+import {
+  getStructuredConversationInsightsPrompt,
+  getImprovedConversationSummaryPrompt,
+  type ConversationInsightsAIResponse,
+} from "@/lib/analytics-prompts";
+import {
+  calculateConversationMetrics,
+  determineEngagementLevel,
+  createFallbackConversationInsights,
+  type ConversationInsightData,
+} from "@/lib/analytics";
 
 const jobDataSchema = z.object({
   conversationId: z.string().min(1),
@@ -25,8 +31,117 @@ const jobDataSchema = z.object({
 });
 
 /**
+ * Parse AI response for conversation insights
+ * Returns structured data or creates fallback
+ */
+function parseConversationInsightsResponse(
+  response: string,
+  conversationId: string,
+  messages: Array<{
+    role: "user" | "assistant";
+    content: string;
+    timestamp?: string;
+  }>,
+  fallbackSummary: string
+): ConversationInsightData {
+  try {
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.warn(
+        `[Conversation Insights Worker] No JSON found in response for ${conversationId}`
+      );
+      return createFallbackConversationInsights(
+        conversationId,
+        messages,
+        fallbackSummary
+      );
+    }
+
+    const parsed: ConversationInsightsAIResponse = JSON.parse(jsonMatch[0]);
+    const metrics = calculateConversationMetrics(messages);
+
+    // Transform AI response to our structured format
+    const insights: ConversationInsightData = {
+      conversationId,
+      summary: parsed.summary || fallbackSummary,
+      keyFindings: parsed.keyFindings || [fallbackSummary],
+
+      // Use calculated metrics (more reliable than AI estimation)
+      messageCount: metrics.messageCount,
+      participantResponseCount: metrics.participantResponseCount,
+      averageResponseLength: metrics.averageResponseLength,
+      durationMinutes: metrics.durationMinutes,
+      followUpDepth: metrics.followUpDepth,
+
+      // AI-determined quality metrics
+      engagementLevel:
+        parsed.engagementLevel ||
+        determineEngagementLevel(
+          metrics.averageResponseLength,
+          metrics.followUpDepth,
+          metrics.participantResponseCount
+        ),
+      responseQuality: Math.min(10, Math.max(1, parsed.responseQuality || 5)),
+
+      // Coverage
+      topicsCovered: parsed.topicsCovered || [],
+      requiredQuestionsCovered: parsed.requiredQuestionsCovered || [],
+      requiredQuestionsMissed: parsed.requiredQuestionsMissed || [],
+
+      // Sentiment
+      sentiment: {
+        overall: parsed.sentiment?.overall || "neutral",
+        score: Math.min(1, Math.max(-1, parsed.sentiment?.score || 0)),
+        confidence: Math.min(
+          1,
+          Math.max(0, parsed.sentiment?.confidence || 0.5)
+        ),
+      },
+
+      // Extracted data
+      extractedMetrics: parsed.extractedMetrics || {},
+      notableQuotes: (parsed.notableQuotes || []).map((q) => ({
+        text: q.text,
+        conversationId,
+        context: q.context,
+        sentiment: q.sentiment,
+      })),
+      hypothesisEvidence: parsed.hypothesisEvidence || [],
+
+      // Media interactions
+      mediaInteractions: (parsed.mediaInteractions || []).map((m) => ({
+        mediaId: m.mediaId,
+        mediaType: m.mediaType,
+        description: m.description || "",
+        wasReferenced: m.wasReferenced ?? false,
+        participantEngaged: m.participantEngaged ?? false,
+        participantReaction: m.participantReaction || "not_shown",
+        clarityScore: Math.min(10, Math.max(1, m.clarityScore || 5)),
+        insightQuality: m.insightQuality || "none",
+        responsesAboutMedia: m.responsesAboutMedia || [],
+        insightsGenerated: m.insightsGenerated || [],
+        issuesIdentified: m.issuesIdentified || [],
+      })),
+    };
+
+    return insights;
+  } catch (error) {
+    console.error(
+      `[Conversation Insights Worker] Failed to parse AI response for ${conversationId}:`,
+      error
+    );
+    return createFallbackConversationInsights(
+      conversationId,
+      messages,
+      fallbackSummary
+    );
+  }
+}
+
+/**
  * Worker for generating conversation insights
  * Processes AI-powered analysis of completed survey conversations
+ * Enhanced with structured analytics extraction
  */
 const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
   "conversation-insights",
@@ -38,6 +153,7 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
       `[Conversation Insights Worker] Processing job ${job.id} for conversation ${conversationId}`
     );
 
+    // Fetch conversation
     const [conversation] = await db
       .select()
       .from(surveyConversations)
@@ -47,6 +163,7 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
       throw new Error(`Conversation ${conversationId} not found`);
     }
 
+    // Fetch survey config
     const [survey] = await db
       .select()
       .from(surveys)
@@ -56,75 +173,111 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
       throw new Error(`Survey ${surveyId} not found`);
     }
 
-    const surveyConfig: SurveyConfig = buildCompleteSurveyConfig(survey);
+    const surveyConfig = buildCompleteSurveyConfig(survey);
 
-    await job.updateProgress(25);
+    await job.updateProgress(15);
 
-    const summaryPrompt = getConversationSummaryPrompt(
+    // Step 1: Generate a quick summary first (for fallback and basic display)
+    const summaryPrompt = getImprovedConversationSummaryPrompt(
       conversation.rawConversation,
       surveyConfig
     );
-    const summary = await generateAIResponse(summaryPrompt, undefined, {
+
+    const summaryText = await generateAIResponse(summaryPrompt, undefined, {
       model: analysisModel,
-      temperature: 0.5,
-      maxTokens: 1000,
+      temperature: 0.3,
+      maxTokens: 500,
     });
 
-    await job.updateProgress(50);
+    await job.updateProgress(35);
 
-    const insightsPrompt = getConversationInsightsPrompt(
+    // Step 2: Generate detailed structured insights
+    const insightsPrompt = getStructuredConversationInsightsPrompt(
       conversation.rawConversation,
       surveyConfig
     );
-    const insightsText = await generateAIResponse(insightsPrompt, undefined, {
-      model: analysisModel,
-      temperature: 0.5,
-      maxTokens: 1500,
-    });
 
-    await job.updateProgress(75);
-
-    let insights: Record<string, unknown>;
-    let keyFindings: string;
-
-    try {
-      const jsonMatch = insightsText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        insights = JSON.parse(jsonMatch[0]);
-        keyFindings = insightsText.replace(jsonMatch[0], "").trim();
-      } else {
-        insights = { raw: insightsText };
-        keyFindings = insightsText;
+    const insightsResponse = await generateAIResponse(
+      insightsPrompt,
+      undefined,
+      {
+        model: analysisModel,
+        temperature: 0.3,
+        maxTokens: 3000,
       }
-    } catch {
-      insights = { raw: insightsText };
-      keyFindings = insightsText;
-    }
+    );
 
+    await job.updateProgress(70);
+
+    // Step 3: Parse and structure the response
+    const structuredInsights = parseConversationInsightsResponse(
+      insightsResponse,
+      conversationId,
+      conversation.rawConversation,
+      summaryText
+    );
+
+    await job.updateProgress(85);
+
+    // Step 4: Save to database
+    // Update conversation with summary
     await db
       .update(surveyConversations)
-      .set({ summary })
+      .set({ summary: structuredInsights.summary })
       .where(eq(surveyConversations.id, conversationId));
 
+    // Upsert conversation insights
     const [existingInsight] = await db
       .select()
       .from(conversationInsights)
       .where(eq(conversationInsights.conversationId, conversationId));
 
+    // Prepare insights data for storage
+    const insightsData = {
+      // Core metrics (for easy querying)
+      engagementLevel: structuredInsights.engagementLevel,
+      responseQuality: structuredInsights.responseQuality,
+      messageCount: structuredInsights.messageCount,
+      durationMinutes: structuredInsights.durationMinutes,
+
+      // Sentiment
+      sentiment: structuredInsights.sentiment,
+
+      // Coverage
+      topicsCovered: structuredInsights.topicsCovered,
+      requiredQuestionsCovered: structuredInsights.requiredQuestionsCovered,
+      requiredQuestionsMissed: structuredInsights.requiredQuestionsMissed,
+
+      // Extracted data
+      extractedMetrics: structuredInsights.extractedMetrics,
+      notableQuotes: structuredInsights.notableQuotes,
+      hypothesisEvidence: structuredInsights.hypothesisEvidence,
+
+      // Media interactions
+      mediaInteractions: structuredInsights.mediaInteractions,
+
+      // Metadata
+      version: "2.1",
+      generatedAt: new Date().toISOString(),
+    };
+
+    // Key findings as separate field for backward compatibility
+    const keyFindingsText = structuredInsights.keyFindings.join("\n\n");
+
     if (existingInsight) {
       await db
         .update(conversationInsights)
         .set({
-          insights,
-          keyFindings,
+          insights: insightsData,
+          keyFindings: keyFindingsText,
         })
         .where(eq(conversationInsights.conversationId, conversationId));
     } else {
       await db.insert(conversationInsights).values({
         id: crypto.randomUUID(),
         conversationId,
-        insights,
-        keyFindings,
+        insights: insightsData,
+        keyFindings: keyFindingsText,
       });
     }
 
@@ -133,13 +286,17 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
     console.log(
       `[Conversation Insights Worker] Completed job ${job.id} for conversation ${conversationId}`
     );
+    console.log(
+      `[Conversation Insights Worker] Extracted ${structuredInsights.notableQuotes.length} quotes, ` +
+        `${Object.keys(structuredInsights.extractedMetrics).length} metrics, ` +
+        `${structuredInsights.mediaInteractions.length} media interactions, ` +
+        `engagement: ${structuredInsights.engagementLevel}`
+    );
 
-    // After insights are generated, use the analytics scheduler to handle
-    // the two-stage approach (accumulation + debouncing)
+    // Schedule analytics generation via scheduler
     try {
-      const { scheduleAnalyticsOnNewResponse } = await import(
-        "@/lib/analytics-scheduler"
-      );
+      const { scheduleAnalyticsOnNewResponse } =
+        await import("@/lib/analytics-scheduler");
       await scheduleAnalyticsOnNewResponse(surveyId, job.data.userId);
     } catch (error) {
       console.error(
@@ -151,9 +308,11 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
 
     return {
       conversationId,
-      summary,
-      insights,
-      keyFindings,
+      summary: structuredInsights.summary,
+      insights: insightsData,
+      keyFindings: keyFindingsText,
+      engagementLevel: structuredInsights.engagementLevel,
+      responseQuality: structuredInsights.responseQuality,
     };
   },
   {
@@ -181,17 +340,7 @@ conversationInsightsWorker.on("error", (err) => {
   console.error("[Conversation Insights Worker] Worker error:", err);
 });
 
-process.on("SIGTERM", async () => {
-  console.log("[Conversation Insights Worker] Shutting down gracefully...");
-  await conversationInsightsWorker.close();
-  process.exit(0);
-});
-
-process.on("SIGINT", async () => {
-  console.log("[Conversation Insights Worker] Shutting down gracefully...");
-  await conversationInsightsWorker.close();
-  process.exit(0);
-});
+// Note: Signal handlers are managed by the main index.ts when running all workers together
+// Individual signal handlers removed to prevent conflicts
 
 export default conversationInsightsWorker;
-
