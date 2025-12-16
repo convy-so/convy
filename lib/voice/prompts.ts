@@ -28,6 +28,7 @@ export function getSurveyCreationPrompt(
     additionalContext: false,
     requiredQuestions: false,
     metrics: false,
+    personalInfo: false,
   };
 
   // Build phase and target info (same logic as text version)
@@ -84,6 +85,7 @@ ${requiredFields
 Additional items:
 ${collected.additionalContext ? "✓" : "○"} additionalContext
 ${collected.metrics ? "✓" : "○"} metrics
+${collected.personalInfo ? "✓" : "○"} personalInfo
 
 VOICE-SPECIFIC GUIDELINES:
 - Keep responses SHORT (2-3 sentences max)
@@ -110,9 +112,10 @@ QUALITY CHECKS FOR EACH FIELD:
 ${requiredFields.map(([key, info]) => `${key}: ${info.qualityChecks.join("; ")}`).join("\n")}
 
 WHEN ALL INFO IS COLLECTED:
-1. Ask about media (images, audio up to 5 min, video up to 5 min)
-2. Give a quick summary of what you understood
-3. Explain they can now try sample conversations
+1. Ask if they want to collect personal information (email, name, phone, etc.) from survey takers at the end
+2. Ask about media (images, audio up to 5 min, video up to 5 min)
+3. Give a quick summary of what you understood
+4. Explain they can now try sample conversations
 
 Remember: Brief doesn't mean shallow. Get real insights with focused questions.`,
 

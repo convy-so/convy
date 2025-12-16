@@ -467,8 +467,8 @@ export async function resampleAudioFFmpeg(
   // Higher filter_size = better quality but slower processing
   const qualitySettings = {
     fast: { filter_size: 16, phase_shift: 10, cutoff: 0.97 },
-    medium: { filter_size: 32, phase_shift: 10, cutoff: 0.97 }, // Good balance
-    high: { filter_size: 64, phase_shift: 10, cutoff: 0.97 }, // Best quality
+    medium: { filter_size: 32, phase_shift: 10, cutoff: 0.97 },
+    high: { filter_size: 64, phase_shift: 10, cutoff: 0.97 },
   };
 
   const { filter_size, phase_shift, cutoff } = qualitySettings[quality];

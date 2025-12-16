@@ -433,7 +433,6 @@ export function createEmptyMemory(config: SurveyConfig): ConversationMemory {
     hypothesesEvidence,
     conversationSummary: "",
     lastUpdated: new Date().toISOString(),
-    // New fields initialized
     followUpDepthByTopic: {},
     specificExamples: [],
     unexploredHypotheses,

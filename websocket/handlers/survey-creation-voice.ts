@@ -115,6 +115,7 @@ export class SurveyCreationVoiceHandler {
         additionalContext: false,
         requiredQuestions: false,
         metrics: false,
+        personalInfo: false,
       },
       extractedData: {},
       isProcessing: false,

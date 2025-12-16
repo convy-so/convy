@@ -162,6 +162,7 @@ export async function POST(
         additionalContext: false,
         requiredQuestions: false,
         metrics: false,
+        personalInfo: false,
       };
 
     const systemPrompt = getSurveyCreationSystemPrompt(
@@ -276,6 +277,7 @@ export async function PUT(
           additionalContext: false,
           requiredQuestions: false,
           metrics: false,
+          personalInfo: false,
         },
         extractedData: extractedData || {},
       });

@@ -224,6 +224,7 @@ export const surveys = pgTable(
     requiredQuestions: text("required_questions").array().default([]),
     metrics: text("metrics").array().default([]),
     media: jsonb("media").$type<SurveyMedia[]>().default([]),
+    personalInfo: text("personal_info").array().default([]),
     status: surveyStatusEnum("status").default("creating").notNull(),
     shareableLink: text("shareable_link").unique(),
     participantLimit: integer("participant_limit").default(50).notNull(),
@@ -275,6 +276,7 @@ export const surveyCreationConversations = pgTable(
         additionalContext: boolean;
         requiredQuestions: boolean;
         metrics: boolean;
+        personalInfo: boolean;
       }>()
       .default({
         objective: false,
@@ -287,6 +289,7 @@ export const surveyCreationConversations = pgTable(
         additionalContext: false,
         requiredQuestions: false,
         metrics: false,
+        personalInfo: false,
       }),
     extractedData: jsonb("extracted_data")
       .$type<{
@@ -299,6 +302,7 @@ export const surveyCreationConversations = pgTable(
         tone?: "formal" | "casual" | "playful" | "empathetic";
         additionalContext?: string;
         metrics?: string[];
+        personalInfo?: string[];
         title?: string;
       }>()
       .default({}),

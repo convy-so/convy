@@ -118,6 +118,9 @@ export async function GET(
           hypothesisEvidence:
             (stored.hypothesisEvidence as ConversationInsightData["hypothesisEvidence"]) ||
             [],
+          mediaInteractions:
+            (stored.mediaInteractions as ConversationInsightData["mediaInteractions"]) ||
+            [],
         };
 
         return insightData;
@@ -306,6 +309,9 @@ export async function getConversationDetail(
       (stored.notableQuotes as ConversationInsightData["notableQuotes"]) || [],
     hypothesisEvidence:
       (stored.hypothesisEvidence as ConversationInsightData["hypothesisEvidence"]) ||
+      [],
+    mediaInteractions:
+      (stored.mediaInteractions as ConversationInsightData["mediaInteractions"]) ||
       [],
   };
 }

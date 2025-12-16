@@ -17,7 +17,6 @@ import {
 import { eq, desc, and } from "drizzle-orm";
 import {
   getSlackIntegration,
-  hasSlackIntegration,
   disconnectSlackIntegration,
   updateSlackSettings,
 } from "@/lib/slack/oauth";
@@ -401,11 +400,9 @@ export async function postCustomMessageToSlack(data: {
   fields?: Array<{ name: string; value: string }>;
 }) {
   let postId: string | null = null;
-  let userId: string | null = null;
 
   try {
     const session = await getVerifiedSession();
-    userId = session.user.id;
 
     const message = formatManualPostMessage(data);
 
@@ -519,7 +516,8 @@ export async function getSlackPostHistory(limit = 50) {
  */
 export async function autoPostSurveyCreated(userId: string, surveyId: string) {
   // Cache integration to avoid duplicate queries in error handler
-  let integration: Awaited<ReturnType<typeof getSlackIntegration>> = null;
+  let integration: Awaited<ReturnType<typeof getSlackIntegration>> | null =
+    null;
   let postId: string | null = null;
 
   try {
@@ -637,7 +635,8 @@ export async function autoPostNewConversation(
   conversationId: string
 ) {
   // Cache integration to avoid duplicate queries in error handler
-  let integration: Awaited<ReturnType<typeof getSlackIntegration>> = null;
+  let integration: Awaited<ReturnType<typeof getSlackIntegration>> | null =
+    null;
   let postId: string | null = null;
 
   try {
@@ -761,7 +760,8 @@ export async function autoPostAnalyticsUpdate(
   surveyId: string
 ) {
   // Cache integration to avoid duplicate queries in error handler
-  let integration: Awaited<ReturnType<typeof getSlackIntegration>> = null;
+  let integration: Awaited<ReturnType<typeof getSlackIntegration>> | null =
+    null;
   let postId: string | null = null;
 
   try {
