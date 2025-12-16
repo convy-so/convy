@@ -45,6 +45,7 @@ export interface SurveyConfig {
   tone?: ToneProfile;
   additionalContext?: string;
   media?: SurveyMedia[];
+  personalInfo?: string[];
 }
 
 export interface CollectedInfo {
@@ -58,6 +59,7 @@ export interface CollectedInfo {
   additionalContext: boolean;
   requiredQuestions: boolean;
   metrics: boolean;
+  personalInfo: boolean;
 }
 
 /**
@@ -160,6 +162,7 @@ ${optionalFields
 Additional items:
 - additionalContext [${collectedInfo.additionalContext ? "✓" : "○"}]: Any extra information about the survey
 - metrics [${collectedInfo.metrics ? "✓" : "○"}]: Specific metrics to track
+- personalInfo [${collectedInfo.personalInfo ? "✓" : "○"}]: Personal information to collect (e.g., email, name, phone number)
 
 TONE OPTIONS (explain when asking about tone):
 ${toneExamples}
@@ -198,7 +201,12 @@ WHEN ALL REQUIRED INFO IS COLLECTED:
 2. Then ask if there are any specific questions they want to include in the survey conversations
 3. Then ask about specific metrics they want to track from responses
 4. Ask about optional preferences (tone, hypotheses) if not already covered
-5. **CRITICAL** - Ask if they want to add any media (images, audio up to 5 min, or video up to 5 min) to enrich the survey:
+5. **IMPORTANT** - Ask if they want to collect any personal information from survey takers (e.g., email, name, phone number):
+   - Explain that this information will be collected at the END of the conversation with survey takers
+   - Ask what specific information they want to collect (email, name, phone number, company, job title, etc.)
+   - List all the types they mention so they can confirm
+   - If they say no or don't want to collect any, mark personalInfo as collected with an empty list
+6. **CRITICAL** - Ask if they want to add any media (images, audio up to 5 min, or video up to 5 min) to enrich the survey:
    - Explain that media can help respondents better understand the context
    - If they say yes, inform them they can upload media through the interface
    - For each media type they mention, explain they'll need to provide:
@@ -272,6 +280,7 @@ Extract the following (use null if not discussed or unclear):
   "additionalContext": "Any extra context provided",
   "requiredQuestions": ["specific question 1", "specific question 2"],
   "metrics": ["metric to track 1", "metric to track 2"],
+  "personalInfo": ["email", "name", "phone number"],
   "title": "Concise descriptive title for the survey",
   "collectedInfo": {
     "objective": true/false,
@@ -283,7 +292,8 @@ Extract the following (use null if not discussed or unclear):
     "tone": true/false,
     "additionalContext": true/false,
     "requiredQuestions": true/false,
-    "metrics": true/false
+    "metrics": true/false,
+    "personalInfo": true/false
   }
 }
 
@@ -293,6 +303,7 @@ QUALITY CRITERIA for marking as collected (true):
 - scope: Clear on breadth vs depth + main topics + boundaries
 - successCriteria: Knows what type of insights + detail level needed
 - constraints: Has time expectations + any sensitive areas
+- personalInfo: Has been asked about and either a list of types provided or explicitly declined
 
 Be CONSERVATIVE - only mark true if information is specific, not vague.`;
 }
@@ -440,6 +451,7 @@ export const surveyDataExtractionSchema = {
     },
     additionalContext: { type: ["string", "null"] },
     metrics: { type: ["array", "null"], items: { type: "string" } },
+    personalInfo: { type: ["array", "null"], items: { type: "string" } },
     title: { type: "string" },
     collectedInfo: {
       type: "object",
@@ -453,6 +465,7 @@ export const surveyDataExtractionSchema = {
         tone: { type: "boolean" },
         additionalContext: { type: "boolean" },
         metrics: { type: "boolean" },
+        personalInfo: { type: "boolean" },
       },
       required: [
         "objective",
@@ -464,6 +477,7 @@ export const surveyDataExtractionSchema = {
         "tone",
         "additionalContext",
         "metrics",
+        "personalInfo",
       ],
     },
   },
@@ -832,6 +846,21 @@ Instructions:
 - IMPORTANT: This conversation has a maximum duration of 30 minutes. Pace yourself accordingly to cover all essential topics
 - When you've covered all required questions and gathered sufficient information, naturally conclude the conversation
 - If there are hypotheses to explore, actively probe for evidence supporting or contradicting them
+${
+  config.personalInfo && config.personalInfo.length > 0
+    ? `\n\nCRITICAL - PERSONAL INFORMATION COLLECTION:
+At the END of the conversation, AFTER you've covered all required topics and are wrapping up, you MUST collect the following personal information from the participant:
+${config.personalInfo.map((info) => `- ${info}`).join("\n")}
+
+IMPORTANT RULES FOR COLLECTING PERSONAL INFO:
+1. ONLY ask for personal information at the very end, after all survey questions are complete
+2. Be polite and explain why you're asking: "Before we finish, I'd like to collect some contact information so we can follow up if needed"
+3. Ask for each piece of information naturally and one at a time
+4. Validate the format when appropriate (e.g., email format)
+5. If they decline to provide any information, respect their choice and thank them
+6. After collecting all requested information (or if they decline), thank them and conclude the conversation`
+    : ""
+}
 
 Remember: This is a real conversation, not a script. Your goal is to uncover insights that a simple form could never capture - the emotions, the stories, the "why" behind what people do and think. Adapt to the participant's responses and maintain a natural flow while staying true to your tone. Keep the conversation focused and efficient to respect the time limit.`;
 }

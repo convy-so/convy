@@ -88,6 +88,7 @@ const extractedDataSchema = z.object({
   additionalContext: z.string().optional().nullable(),
   requiredQuestions: z.array(z.string()).optional().nullable(),
   metrics: z.array(z.string()).optional().nullable(),
+  personalInfo: z.array(z.string()).optional().nullable(),
   title: z.string().optional(),
   collectedInfo: z.object({
     objective: z.boolean(),
@@ -100,6 +101,7 @@ const extractedDataSchema = z.object({
     additionalContext: z.boolean(),
     requiredQuestions: z.boolean(),
     metrics: z.boolean(),
+    personalInfo: z.boolean(),
   }),
 });
 
@@ -443,6 +445,7 @@ export async function finalizeSurveyCreationAction(
       additionalContext?: string;
       requiredQuestions?: string[];
       metrics?: string[];
+      personalInfo?: string[];
       title?: string;
     };
 
@@ -462,6 +465,7 @@ export async function finalizeSurveyCreationAction(
         additionalContext: data.additionalContext,
         requiredQuestions: data.requiredQuestions || [],
         metrics: data.metrics || [],
+        personalInfo: data.personalInfo || [],
         status: "draft",
         shareableLink,
       })

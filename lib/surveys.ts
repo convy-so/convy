@@ -12,14 +12,14 @@ import type {
 export const MAX_SAMPLE_CONVERSATIONS = 3;
 
 /**
- * Build complete survey configuration from structured data in the database schema  
+ * Build complete survey configuration from structured data in the database schema
  */
 export function buildCompleteSurveyConfig(
   survey: typeof surveys.$inferSelect
 ): {
-  information: string; 
-  requiredQuestions: string[]; 
-  metrics: string[]; 
+  information: string;
+  requiredQuestions: string[];
+  metrics: string[];
   language: "en" | "fr" | "de";
   objective?: SurveyObjective;
   targetAudience?: SurveyTargetAudience;
@@ -30,7 +30,8 @@ export function buildCompleteSurveyConfig(
   tone?: ToneProfile;
   additionalContext?: string;
   media?: SurveyMedia[];
-}{
+  personalInfo?: string[];
+} {
   const informationParts: string[] = [];
   if (survey.objective?.context)
     informationParts.push(survey.objective.context);
@@ -57,6 +58,7 @@ export function buildCompleteSurveyConfig(
     tone: (survey.tone as ToneProfile) ?? "casual",
     additionalContext: survey.additionalContext ?? undefined,
     media: survey.media ?? undefined,
+    personalInfo: survey.personalInfo ?? undefined,
   };
 }
 

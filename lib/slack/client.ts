@@ -148,23 +148,23 @@ export async function getSlackChannels(
   return await withRetry(async () => {
     // Paginate through all channels
     do {
-      const result = await client.conversations.list({
-        types: "public_channel,private_channel",
-        exclude_archived: true,
+    const result = await client.conversations.list({
+      types: "public_channel,private_channel",
+      exclude_archived: true,
         limit: 200, // Max per request
         cursor,
-      });
+    });
 
-      if (!result.ok) {
-        throw new Error(`Failed to fetch channels: ${result.error}`);
-      }
+    if (!result.ok) {
+      throw new Error(`Failed to fetch channels: ${result.error}`);
+    }
 
       const channels = (result.channels || []).map((channel) => ({
-        id: channel.id!,
-        name: channel.name!,
-        isPrivate: channel.is_private || false,
-        isMember: channel.is_member || false,
-      }));
+      id: channel.id!,
+      name: channel.name!,
+      isPrivate: channel.is_private || false,
+      isMember: channel.is_member || false,
+    }));
 
       allChannels.push(...channels);
 

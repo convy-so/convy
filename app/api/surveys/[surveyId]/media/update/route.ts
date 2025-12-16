@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { updateSurveyMediaAction } from "@/app/actions/survey-images";
 
-export const runtime = "nodejs";
+// export const runtime = "nodejs";
 
 export async function POST(
   request: NextRequest,

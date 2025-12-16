@@ -11,7 +11,6 @@ import {
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
   createDashboardWidgets,
-  aggregateConversationInsights,
   ANALYTICS_DATA_VERSION,
   type SurveyAnalyticsData,
   type ConversationInsightData,
@@ -430,6 +429,9 @@ export async function getConversationInsights(
           [],
         hypothesisEvidence:
           (stored.hypothesisEvidence as ConversationInsightData["hypothesisEvidence"]) ||
+          [],
+        mediaInteractions:
+          (stored.mediaInteractions as ConversationInsightData["mediaInteractions"]) ||
           [],
       };
     });
