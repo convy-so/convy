@@ -380,6 +380,18 @@ export async function PUT(
       } catch (error) {
         console.error("Failed to import Slack auto-post function:", error);
       }
+
+      // Trigger Zapier webhook for new conversation
+      try {
+        const { triggerNewConversationWebhook } = await import("@/lib/zapier/webhook-delivery");
+        triggerNewConversationWebhook(conversationId, survey.id, survey.userId).catch(
+          (error) => {
+            console.error("Failed to trigger Zapier new conversation webhook:", error);
+          }
+        );
+      } catch (error) {
+        console.error("Failed to import Zapier webhook function:", error);
+      }
     }
 
     return new Response(JSON.stringify({ success: true }), {

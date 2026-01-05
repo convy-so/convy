@@ -22,6 +22,10 @@ import {
   type CollectedInfo,
 } from "@/lib/prompts";
 import type { ToneProfile } from "@/lib/surveys";
+import {
+  assertCanCreateTextSurvey,
+  PlanLimitError,
+} from "@/lib/billing/entitlements";
 
 type ActionResult<T> =
   | { success: true; data: T }
@@ -116,12 +120,41 @@ export async function startSurveyCreationAction(
     const session = await getVerifiedSession();
     const body = startSurveyCreationSchema.parse(input);
 
+    // Enforce plan limits: text survey creation
+    try {
+      await assertCanCreateTextSurvey({
+        userId: session.user.id,
+      });
+    } catch (error) {
+      if (error instanceof PlanLimitError) {
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+      throw error;
+    }
+
+    // Get active workspace if available
+    let organizationId: string | undefined;
+    try {
+      const { getActiveWorkspace } = await import("@/app/actions/workspace");
+      const activeWorkspaceResult = await getActiveWorkspace();
+      if (activeWorkspaceResult.success && activeWorkspaceResult.data) {
+        organizationId = activeWorkspaceResult.data.id;
+      }
+    } catch (error) {
+      // Workspace feature might not be fully set up, continue without it
+      console.warn("Could not get active workspace:", error);
+    }
+
     const surveyId = nanoid();
     const conversationId = nanoid();
 
     await db.insert(surveys).values({
       id: surveyId,
       userId: session.user.id,
+      organizationId,
       title: "Untitled Survey",
       status: "creating",
       language: body.language,
@@ -475,6 +508,16 @@ export async function finalizeSurveyCreationAction(
       .update(surveyCreationConversations)
       .set({ status: "completed" })
       .where(eq(surveyCreationConversations.surveyId, surveyId));
+
+    // Trigger Zapier webhook for survey created
+    try {
+      const { triggerSurveyCreatedWebhook } = await import("@/lib/zapier/webhook-delivery");
+      triggerSurveyCreatedWebhook(surveyId, session.user.id).catch((error) => {
+        console.error("Failed to trigger Zapier survey created webhook:", error);
+      });
+    } catch (error) {
+      console.error("Failed to import Zapier webhook function:", error);
+    }
 
     return {
       success: true,

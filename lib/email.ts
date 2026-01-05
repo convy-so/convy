@@ -33,3 +33,24 @@ export async function sendPasswordResetEmail(payload: EmailPayload) {
     name: payload.name,
   });
 }
+
+/**
+ * Queue workspace invitation email for background sending
+ */
+export async function sendWorkspaceInvitationEmail(payload: {
+  email: string;
+  invitedBy: string;
+  workspaceName: string;
+  inviteLink: string;
+}) {
+  await enqueueEmail({
+    type: "workspace-invitation",
+    email: payload.email,
+    url: payload.inviteLink,
+    name: payload.workspaceName,
+    metadata: {
+      invitedBy: payload.invitedBy,
+      workspaceName: payload.workspaceName,
+    },
+  });
+}

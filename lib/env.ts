@@ -53,6 +53,25 @@ export const env = {
   ENABLE_VOICE_FEATURES: optional("ENABLE_VOICE_FEATURES") === "true",
   VAD_SENSITIVITY: optional("VAD_SENSITIVITY") || "0.5",
   MAX_AUDIO_DURATION_MS: optional("MAX_AUDIO_DURATION_MS") || "300000", // 5 minutes
+
+  // Zapier Integration
+  ZAPIER_EMBED_ID: optional("ZAPIER_EMBED_ID"),
+
+  // Billing / Payments - Stripe
+  STRIPE_SECRET_KEY: required("STRIPE_SECRET_KEY"),
+  STRIPE_WEBHOOK_SECRET: required("STRIPE_WEBHOOK_SECRET"),
+
+  // Billing / Payments - Coinbase Commerce
+  COINBASE_COMMERCE_API_KEY: required("COINBASE_COMMERCE_API_KEY"),
+  COINBASE_COMMERCE_WEBHOOK_SECRET: required(
+    "COINBASE_COMMERCE_WEBHOOK_SECRET"
+  ),
+
+  // Application base URL (for public links & embeds), e.g. https://app.convy.com
+  APP_BASE_URL: required("APP_BASE_URL"),
+
+  // Better Auth Client URL (for frontend)
+  NEXT_PUBLIC_BETTER_AUTH_URL: optional("NEXT_PUBLIC_BETTER_AUTH_URL") || env.BETTER_AUTH_URL,
 };
 
 export type Env = typeof env;

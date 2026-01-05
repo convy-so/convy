@@ -779,6 +779,19 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
       console.error("Failed to import Slack auto-post function:", error);
     }
 
+    // Trigger Zapier webhook for analytics updated
+    try {
+      const { triggerAnalyticsUpdatedWebhook } = await import("@/lib/zapier/webhook-delivery");
+      triggerAnalyticsUpdatedWebhook(surveyId, job.data.userId).catch((error) => {
+        console.error(
+          `[Survey Analytics Worker] Failed to trigger Zapier analytics webhook:`,
+          error
+        );
+      });
+    } catch (error) {
+      console.error("Failed to import Zapier webhook function:", error);
+    }
+
     // Publish completion event to Redis pub/sub
     try {
       const redis = getRedisClient();
