@@ -105,6 +105,9 @@ export const sessions = pgTable(
     token: text("token").notNull(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
+    // Workspace/Organization support (added by Better Auth organization plugin)
+    activeOrganizationId: text("active_organization_id"),
+    activeTeamId: text("active_team_id"),
   },
   (table) => [
     unique("sessions_token_unique").on(table.token),
@@ -212,6 +215,10 @@ export const surveys = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    // Workspace/Organization support - surveys can belong to a workspace
+    organizationId: text("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
     title: text("title").notNull(),
     objective: jsonb("objective").$type<SurveyObjective>(),
     targetAudience: jsonb("target_audience").$type<SurveyTargetAudience>(),
@@ -227,6 +234,8 @@ export const surveys = pgTable(
     personalInfo: text("personal_info").array().default([]),
     status: surveyStatusEnum("status").default("creating").notNull(),
     shareableLink: text("shareable_link").unique(),
+    // Optional human-friendly custom URL slug (Typeform-style)
+    customSlug: text("custom_slug").unique(),
     participantLimit: integer("participant_limit").default(50).notNull(),
     currentParticipants: integer("current_participants").default(0).notNull(),
     sampleConversationCount: integer("sample_conversation_count")
@@ -237,7 +246,9 @@ export const surveys = pgTable(
   },
   (table) => [
     index("surveys_user_id_idx").on(table.userId),
+    index("surveys_organization_id_idx").on(table.organizationId),
     index("surveys_shareable_link_idx").on(table.shareableLink),
+    index("surveys_custom_slug_idx").on(table.customSlug),
     index("surveys_status_idx").on(table.status),
   ]
 );
@@ -416,6 +427,10 @@ export const surveysRelations = relations(surveys, ({ one, many }) => ({
     fields: [surveys.userId],
     references: [users.id],
   }),
+  organization: one(organizations, {
+    fields: [surveys.organizationId],
+    references: [organizations.id],
+  }),
   creationConversation: one(surveyCreationConversations, {
     fields: [surveys.id],
     references: [surveyCreationConversations.surveyId],
@@ -586,6 +601,157 @@ export const notionSyncStatus = pgTable(
   ]
 );
 
+// Zapier Integration Tables
+export const zapierIntegrations = pgTable(
+  "zapier_integrations",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" })
+      .unique(),
+    // Zapier Embed configuration
+    embedId: text("embed_id"),
+    enabled: boolean("enabled").default(true).notNull(),
+    lastUsedAt: timestamp("last_used_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+  },
+  (table) => [
+    index("zapier_integrations_user_id_idx").on(table.userId),
+  ]
+);
+
+export const zapierWebhookSubscriptions = pgTable(
+  "zapier_webhook_subscriptions",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    zapierIntegrationId: text("zapier_integration_id")
+      .notNull()
+      .references(() => zapierIntegrations.id, { onDelete: "cascade" }),
+    // Zapier subscription details
+    targetUrl: text("target_url").notNull(), // Zapier webhook URL
+    eventType: text("event_type").notNull(), // 'survey_created' | 'new_conversation' | 'analytics_updated'
+    // Optional filters
+    surveyId: text("survey_id").references(() => surveys.id, {
+      onDelete: "cascade",
+    }),
+    // Subscription status
+    active: boolean("active").default(true).notNull(),
+    // Zapier subscription ID (for unsubscribe)
+    zapierSubscriptionId: text("zapier_subscription_id"),
+    // Metadata
+    lastTriggeredAt: timestamp("last_triggered_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    triggerCount: integer("trigger_count").default(0).notNull(),
+    errorCount: integer("error_count").default(0).notNull(),
+    lastError: text("last_error"),
+  },
+  (table) => [
+    index("zapier_webhook_subscriptions_user_id_idx").on(table.userId),
+    index("zapier_webhook_subscriptions_integration_id_idx").on(
+      table.zapierIntegrationId
+    ),
+    index("zapier_webhook_subscriptions_event_type_idx").on(table.eventType),
+    index("zapier_webhook_subscriptions_survey_id_idx").on(table.surveyId),
+    index("zapier_webhook_subscriptions_active_idx").on(table.active),
+  ]
+);
+
+export const zapierWebhookDeliveries = pgTable(
+  "zapier_webhook_deliveries",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    subscriptionId: text("subscription_id")
+      .notNull()
+      .references(() => zapierWebhookSubscriptions.id, { onDelete: "cascade" }),
+    eventType: text("event_type").notNull(),
+    // Event data reference
+    surveyId: text("survey_id").references(() => surveys.id, {
+      onDelete: "cascade",
+    }),
+    conversationId: text("conversation_id").references(
+      () => surveyConversations.id,
+      { onDelete: "cascade" }
+    ),
+    // Delivery status
+    status: text("status").notNull().default("pending"), // 'pending' | 'success' | 'failed'
+    statusCode: integer("status_code"),
+    responseBody: text("response_body"),
+    error: text("error"),
+    retryCount: integer("retry_count").default(0).notNull(),
+    deliveredAt: timestamp("delivered_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+  },
+  (table) => [
+    index("zapier_webhook_deliveries_subscription_id_idx").on(
+      table.subscriptionId
+    ),
+    index("zapier_webhook_deliveries_status_idx").on(table.status),
+    index("zapier_webhook_deliveries_event_type_idx").on(table.eventType),
+    index("zapier_webhook_deliveries_created_at_idx").on(table.createdAt),
+  ]
+);
+
+export const zapierIntegrationsRelations = relations(
+  zapierIntegrations,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [zapierIntegrations.userId],
+      references: [users.id],
+    }),
+    subscriptions: many(zapierWebhookSubscriptions),
+  })
+);
+
+export const zapierWebhookSubscriptionsRelations = relations(
+  zapierWebhookSubscriptions,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [zapierWebhookSubscriptions.userId],
+      references: [users.id],
+    }),
+    integration: one(zapierIntegrations, {
+      fields: [zapierWebhookSubscriptions.zapierIntegrationId],
+      references: [zapierIntegrations.id],
+    }),
+    survey: one(surveys, {
+      fields: [zapierWebhookSubscriptions.surveyId],
+      references: [surveys.id],
+    }),
+    deliveries: many(zapierWebhookDeliveries),
+  })
+);
+
+export const zapierWebhookDeliveriesRelations = relations(
+  zapierWebhookDeliveries,
+  ({ one }) => ({
+    subscription: one(zapierWebhookSubscriptions, {
+      fields: [zapierWebhookDeliveries.subscriptionId],
+      references: [zapierWebhookSubscriptions.id],
+    }),
+    survey: one(surveys, {
+      fields: [zapierWebhookDeliveries.surveyId],
+      references: [surveys.id],
+    }),
+    conversation: one(surveyConversations, {
+      fields: [zapierWebhookDeliveries.conversationId],
+      references: [surveyConversations.id],
+    }),
+  })
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   accounts: many(accounts),
   sessions: many(sessions),
@@ -598,6 +764,11 @@ export const usersRelations = relations(users, ({ many }) => ({
   notionPagePermissions: many(notionPagePermissions),
   notionSyncConflicts: many(notionSyncConflicts),
   slackIntegrations: many(slackIntegrations),
+  zapierIntegrations: many(zapierIntegrations),
+  zapierWebhookSubscriptions: many(zapierWebhookSubscriptions),
+  subscriptions: many(subscriptions),
+  payments: many(payments),
+  usageTracking: many(usageTracking),
 }));
 
 export const notionIntegrationsRelations = relations(
@@ -1061,9 +1232,364 @@ export const voiceQualityMetricsRelations = relations(
   })
 );
 
+// Organization/Workspace tables (managed by Better Auth organization plugin)
+// These will be created by Better Auth migrations, but we define them here for type safety
+export const organizations = pgTable("organization", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  logo: text("logo"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+    .defaultNow()
+    .notNull(),
+});
+
+export const members = pgTable("member", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  role: text("role").notNull(), // 'owner' | 'member'
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+    .defaultNow()
+    .notNull(),
+});
+
+export const invitations = pgTable("invitation", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull(),
+  inviterId: text("inviter_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
+  status: text("status").notNull(), // 'pending' | 'accepted' | 'rejected' | 'cancelled'
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+    .defaultNow()
+    .notNull(),
+  expiresAt: timestamp("expires_at", {
+    withTimezone: true,
+    mode: "date",
+  }).notNull(),
+});
+
+export const organizationsRelations = relations(organizations, ({ many }) => ({
+  members: many(members),
+  invitations: many(invitations),
+}));
+
+export const membersRelations = relations(members, ({ one }) => ({
+  user: one(users, {
+    fields: [members.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [members.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+export const invitationsRelations = relations(invitations, ({ one }) => ({
+  inviter: one(users, {
+    fields: [invitations.inviterId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [invitations.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+// Subscription Plans and Billing Tables
+export const subscriptionPlanEnum = pgEnum("subscription_plan", [
+  "free",
+  "pro",
+  "premium",
+  "enterprise",
+]);
+
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "active",
+  "canceled",
+  "past_due",
+  "unpaid",
+  "trialing",
+  "incomplete",
+  "incomplete_expired",
+]);
+
+export const paymentProviderEnum = pgEnum("payment_provider", [
+  "stripe",
+  "coinbase_commerce",
+]);
+
+export const paymentStatusEnum = pgEnum("payment_status", [
+  "pending",
+  "processing",
+  "succeeded",
+  "failed",
+  "canceled",
+  "refunded",
+  "partially_refunded",
+]);
+
+export const paymentCurrencyEnum = pgEnum("payment_currency", [
+  "USD",
+  "EUR",
+  "GBP",
+]);
+
+export const cryptoCurrencyEnum = pgEnum("crypto_currency", [
+  "USDC",
+  "USDT",
+  "BTC",
+  "ETH",
+  "SOL",
+]);
+
+// Subscription Plans (static reference data)
+export const subscriptionPlans = pgTable("subscription_plans", {
+  id: text("id").primaryKey(), // 'free', 'pro', 'premium', 'enterprise'
+  name: text("name").notNull(),
+  priceMonthly: integer("price_monthly").notNull(), // in cents (USD)
+  priceYearly: integer("price_yearly"), // in cents (USD), null for free/enterprise
+  currency: text("currency").default("USD").notNull(),
+  interval: text("interval").notNull(), // 'month' | 'year'
+  stripePriceIdMonthly: text("stripe_price_id_monthly"),
+  stripePriceIdYearly: text("stripe_price_id_yearly"),
+  features: jsonb("features").$type<{
+    maxTextSurveys: number | null; // null = unlimited
+    maxVoiceSurveys: number | null;
+    maxTextResponses: number | null; // per survey or total
+    maxVoiceResponses: number | null; // per survey
+    maxConcurrentParticipants: number | null; // for voice surveys
+    maxWorkspaceMembers: number | null;
+    advancedAnalytics: boolean;
+    customBranding: boolean;
+    customDomain: boolean;
+    embeddableWidget: boolean;
+    uiCustomization: boolean;
+    removeConvyBranding: boolean;
+    customIntegrations: boolean;
+    sso: boolean;
+    dedicatedSupport: boolean;
+    sla: boolean;
+  }>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
+    .defaultNow()
+    .notNull(),
+});
+
+// User Subscriptions
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }), // For organization-level subscriptions
+    planId: text("plan_id")
+      .notNull()
+      .references(() => subscriptionPlans.id),
+    status: subscriptionStatusEnum("status").default("active").notNull(),
+    currentPeriodStart: timestamp("current_period_start", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    currentPeriodEnd: timestamp("current_period_end", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false).notNull(),
+    canceledAt: timestamp("canceled_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    trialStart: timestamp("trial_start", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    trialEnd: timestamp("trial_end", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    // Payment provider references
+    stripeSubscriptionId: text("stripe_subscription_id").unique(),
+    stripeCustomerId: text("stripe_customer_id"),
+    // Metadata
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  },
+  (table) => [
+    index("subscriptions_user_id_idx").on(table.userId),
+    index("subscriptions_organization_id_idx").on(table.organizationId),
+    index("subscriptions_status_idx").on(table.status),
+    index("subscriptions_stripe_subscription_id_idx").on(
+      table.stripeSubscriptionId
+    ),
+    index("subscriptions_stripe_customer_id_idx").on(table.stripeCustomerId),
+  ]
+);
+
+// Payments (for both Stripe and Coinbase Commerce)
+export const payments = pgTable(
+  "payments",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subscriptionId: text("subscription_id").references(() => subscriptions.id, {
+      onDelete: "set null",
+    }),
+    planId: text("plan_id")
+      .notNull()
+      .references(() => subscriptionPlans.id),
+    provider: paymentProviderEnum("provider").notNull(),
+    status: paymentStatusEnum("status").default("pending").notNull(),
+    // Amounts (all stored in USD cents for consistency)
+    amountUsdCents: integer("amount_usd_cents").notNull(),
+    amountOriginal: integer("amount_original").notNull(), // Original amount in original currency
+    currency: paymentCurrencyEnum("currency").default("USD").notNull(),
+    // Crypto payment details (if applicable)
+    cryptoCurrency: cryptoCurrencyEnum("crypto_currency"),
+    cryptoAmount: text("crypto_amount"), // Store as text to avoid precision issues
+    exchangeRate: text("exchange_rate"), // Rate used for conversion
+    // Provider-specific IDs
+    stripePaymentIntentId: text("stripe_payment_intent_id").unique(),
+    stripeInvoiceId: text("stripe_invoice_id"),
+    coinbaseChargeId: text("coinbase_charge_id").unique(),
+    // Payment metadata
+    description: text("description"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    // Timestamps
+    paidAt: timestamp("paid_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    failedAt: timestamp("failed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+  },
+  (table) => [
+    index("payments_user_id_idx").on(table.userId),
+    index("payments_subscription_id_idx").on(table.subscriptionId),
+    index("payments_status_idx").on(table.status),
+    index("payments_provider_idx").on(table.provider),
+    index("payments_stripe_payment_intent_id_idx").on(
+      table.stripePaymentIntentId
+    ),
+    index("payments_coinbase_charge_id_idx").on(table.coinbaseChargeId),
+  ]
+);
+
+// Usage Tracking (for enforcing plan limits)
+export const usageTracking = pgTable(
+  "usage_tracking",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    // Usage metrics (reset based on subscription period)
+    periodStart: timestamp("period_start", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    periodEnd: timestamp("period_end", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    // Counts
+    textSurveysCount: integer("text_surveys_count").default(0).notNull(),
+    voiceSurveysCount: integer("voice_surveys_count").default(0).notNull(),
+    textResponsesCount: integer("text_responses_count").default(0).notNull(),
+    voiceResponsesCount: integer("voice_responses_count").default(0).notNull(),
+    // Per-survey tracking (stored as JSONB for flexibility)
+    surveyUsage: jsonb("survey_usage").$type<
+      Record<
+        string,
+        {
+          textResponses: number;
+          voiceResponses: number;
+          concurrentParticipants?: number;
+        }
+      >
+    >().default({}),
+  },
+  (table) => [
+    index("usage_tracking_user_id_idx").on(table.userId),
+    index("usage_tracking_organization_id_idx").on(table.organizationId),
+    index("usage_tracking_period_idx").on(table.periodStart, table.periodEnd),
+  ]
+);
+
+// Relations
+export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
+  user: one(users, {
+    fields: [subscriptions.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [subscriptions.organizationId],
+    references: [organizations.id],
+  }),
+  plan: one(subscriptionPlans, {
+    fields: [subscriptions.planId],
+    references: [subscriptionPlans.id],
+  }),
+}));
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  user: one(users, {
+    fields: [payments.userId],
+    references: [users.id],
+  }),
+  subscription: one(subscriptions, {
+    fields: [payments.subscriptionId],
+    references: [subscriptions.id],
+  }),
+  plan: one(subscriptionPlans, {
+    fields: [payments.planId],
+    references: [subscriptionPlans.id],
+  }),
+}));
+
+export const usageTrackingRelations = relations(usageTracking, ({ one }) => ({
+  user: one(users, {
+    fields: [usageTracking.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [usageTracking.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
 export const authSchema = {
   user: users,
   account: accounts,
   session: sessions,
   verification: verificationTokens,
+  organization: organizations,
+  member: members,
+  invitation: invitations,
 };

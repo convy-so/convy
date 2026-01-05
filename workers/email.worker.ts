@@ -8,10 +8,11 @@ import { getRedisClient } from "@/lib/redis";
 const resend = new Resend(process.env.RESEND_API_KEY!);
 
 const jobDataSchema = z.object({
-  type: z.enum(["verification", "password-reset"]),
+  type: z.enum(["verification", "password-reset", "workspace-invitation"]),
   email: z.string().email(),
   url: z.string().url(),
   name: z.string().nullable().optional(),
+  metadata: z.record(z.unknown()).optional(),
 });
 
 /**
@@ -53,6 +54,22 @@ const emailWorker = new Worker<EmailJobData>(
         url,
         "",
         "This link will expire soon. If you didn't request a reset, you can ignore this email.",
+      ].join("\n");
+    } else if (type === "workspace-invitation") {
+      const workspaceName =
+        (validatedData.metadata?.workspaceName as string) || "a workspace";
+      const invitedBy =
+        (validatedData.metadata?.invitedBy as string) || "someone";
+      subject = `You've been invited to join ${workspaceName} on Convy`;
+      text = [
+        `Hi ${name ?? "there"},`,
+        "",
+        `${invitedBy} has invited you to join ${workspaceName} on Convy.`,
+        "",
+        "Click the link below to accept the invitation:",
+        url,
+        "",
+        "If you didn't expect this invitation, you can ignore this email.",
       ].join("\n");
     } else {
       throw new Error(`Unknown email type: ${type}`);

@@ -2,11 +2,17 @@
 
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq, ne, or } from "drizzle-orm";
 
 import { db } from "@/db";
 import { surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
+import { env } from "@/lib/env";
+import {
+  assertCanUseCustomUrl,
+  assertCanUseEmbedWidget,
+  PlanLimitError,
+} from "@/lib/billing/entitlements";
 
 type ActionResult<T> =
   | { success: true; data: T }
@@ -334,6 +340,314 @@ export async function getShareableLinkAction(
       return { success: false, error: error.message };
     }
     return { success: false, error: "Failed to get shareable link" };
+  }
+}
+
+/**
+ * Set or update a human-friendly custom slug for a survey
+ * (Typeform-style custom URL). Gated by plan entitlements.
+ */
+export async function setSurveyCustomSlugAction(input: {
+  surveyId: string;
+  slug: string;
+}): Promise<
+  ActionResult<{ customSlug: string; publicUrl: string; shareableLink: string }>
+> {
+  try {
+    const session = await getVerifiedSession();
+
+    const schema = z.object({
+      surveyId: z.string().min(1),
+      slug: z
+        .string()
+        .min(3)
+        .max(64)
+        .regex(
+          /^[a-z0-9-]+$/,
+          "Slug can only contain lowercase letters, numbers, and hyphens"
+        ),
+    });
+
+    const body = schema.parse(input);
+
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, body.surveyId));
+
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    if (survey.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    // Plan gating
+    try {
+      await assertCanUseCustomUrl({ userId: session.user.id });
+    } catch (error) {
+      if (error instanceof PlanLimitError) {
+        return { success: false, error: error.message };
+      }
+      throw error;
+    }
+
+    // Check uniqueness against other surveys' customSlug and shareableLink
+    const [conflict] = await db
+      .select({ id: surveys.id })
+      .from(surveys)
+      .where(
+        and(
+          ne(surveys.id, survey.id),
+          or(
+            eq(surveys.customSlug, body.slug),
+            eq(surveys.shareableLink, body.slug)
+          )
+        )
+      );
+
+    if (conflict) {
+      return {
+        success: false,
+        error: "This URL is already in use by another survey",
+      };
+    }
+
+    await db
+      .update(surveys)
+      .set({ customSlug: body.slug })
+      .where(eq(surveys.id, survey.id));
+
+    const identifier = body.slug;
+    const publicPath = `/s/${identifier}`;
+
+    return {
+      success: true,
+      data: {
+        customSlug: body.slug,
+        publicUrl: publicPath,
+        shareableLink: survey.shareableLink ?? "",
+      },
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return {
+        success: false,
+        error: error.errors[0]?.message ?? "Validation error",
+      };
+    }
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Failed to set custom URL" };
+  }
+}
+
+/**
+ * Clear the custom slug for a survey, falling back to random shareable link
+ */
+export async function clearSurveyCustomSlugAction(
+  surveyId: string
+): Promise<ActionResult<{ success: boolean }>> {
+  try {
+    const session = await getVerifiedSession();
+
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    if (survey.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    await db
+      .update(surveys)
+      .set({ customSlug: null })
+      .where(eq(surveys.id, survey.id));
+
+    return { success: true, data: { success: true } };
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Failed to clear custom URL" };
+  }
+}
+
+/**
+ * Get public URLs for a survey (default random link + optional custom slug)
+ */
+export async function getSurveyPublicUrlsAction(
+  surveyId: string
+): Promise<
+  ActionResult<{
+    shareableLink: string | null;
+    shareableUrl: string | null;
+    customSlug: string | null;
+    customUrl: string | null;
+  }>
+> {
+  try {
+    const session = await getVerifiedSession();
+
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    if (survey.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const baseUrl = env.APP_BASE_URL.replace(/\/+$/, "");
+
+    const shareableUrl = survey.shareableLink
+      ? `${baseUrl}/s/${survey.shareableLink}`
+      : null;
+
+    const customUrl = survey.customSlug
+      ? `${baseUrl}/s/${survey.customSlug}`
+      : null;
+
+    return {
+      success: true,
+      data: {
+        shareableLink: survey.shareableLink ?? null,
+        shareableUrl,
+        customSlug: survey.customSlug ?? null,
+        customUrl,
+      },
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Failed to get survey URLs" };
+  }
+}
+
+/**
+ * Generate embeddable widget code (Typeform-style iframe) for a survey.
+ * This does not create any UI route; it only returns HTML snippets your
+ * frontend can display to users on eligible plans.
+ */
+export async function getSurveyEmbedCodeAction(
+  surveyId: string
+): Promise<
+  ActionResult<{
+    iframeCode: string;
+    inlineScriptSnippet: string;
+    url: string;
+  }>
+> {
+  try {
+    const session = await getVerifiedSession();
+
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    if (survey.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    if (survey.status !== "active") {
+      return {
+        success: false,
+        error: "Survey must be active to generate an embed widget",
+      };
+    }
+
+    // Plan gating
+    try {
+      await assertCanUseEmbedWidget({ userId: session.user.id });
+    } catch (error) {
+      if (error instanceof PlanLimitError) {
+        return { success: false, error: error.message };
+      }
+      throw error;
+    }
+
+    const baseUrl = env.APP_BASE_URL.replace(/\/+$/, "");
+
+    const identifier = survey.customSlug ?? survey.shareableLink;
+
+    if (!identifier) {
+      return {
+        success: false,
+        error: "Survey does not have a public link yet",
+      };
+    }
+
+    const url = `${baseUrl}/s/${identifier}`;
+
+    const iframeCode = `<iframe src="${url}" width="100%" height="600" frameborder="0" style="border:0;" allow="microphone; camera; autoplay; encrypted-media"></iframe>`;
+
+    const inlineScriptSnippet = `<script>
+  (function() {
+    var iframe = document.createElement('iframe');
+    iframe.src = '${url}';
+    iframe.style.width = '100%';
+    iframe.style.height = '600px';
+    iframe.style.border = '0';
+    iframe.allow = 'microphone; camera; autoplay; encrypted-media';
+    var container = document.currentScript.parentElement;
+    container.appendChild(iframe);
+  })();
+</script>`;
+
+    return {
+      success: true,
+      data: {
+        iframeCode,
+        inlineScriptSnippet,
+        url,
+      },
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Failed to generate embed code" };
   }
 }
 

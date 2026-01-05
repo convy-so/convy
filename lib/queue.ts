@@ -24,10 +24,11 @@ export interface SampleConversationInsightsJobData {
 }
 
 export interface EmailJobData {
-  type: "verification" | "password-reset";
+  type: "verification" | "password-reset" | "workspace-invitation";
   email: string;
   url: string;
   name?: string | null;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ImageUploadJobData {
