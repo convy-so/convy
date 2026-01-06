@@ -7,23 +7,16 @@ import {
 } from "@/db/schema";
 import { and, desc, eq, gte, lte } from "drizzle-orm";
 
-export type PlanId = "free" | "pro" | "premium" | "enterprise";
+import { PlanId, BillingInterval, PLAN_PRICES_USD_CENTS } from "./types";
 
-export type BillingInterval = "month" | "year";
+export type { PlanId, BillingInterval };
+export { PLAN_PRICES_USD_CENTS };
 
 export type PlanFeatures =
   typeof subscriptionPlans.$inferSelect["features"] & {
     id: PlanId;
     name: string;
   };
-
-export const PLAN_PRICES_USD_CENTS: Record<
-  Exclude<PlanId, "free" | "enterprise">,
-  { monthly: number; yearly: number }
-> = {
-  pro: { monthly: 2900, yearly: 2500 * 12 }, // $29 / $25*12
-  premium: { monthly: 9900, yearly: 8500 * 12 }, // $99 / $85*12
-};
 
 export const DEFAULT_PLAN_FEATURES: Record<PlanId, SubscriptionPlanTable["features"]> =
   {

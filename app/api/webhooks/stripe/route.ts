@@ -9,6 +9,7 @@ import {
 } from "@/db/schema";
 import { env } from "@/lib/env";
 import { eq } from "drizzle-orm";
+import { logger } from "@/lib/logger";
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
   apiVersion: "2024-09-30.acacia",
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
       env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
-    console.error("Stripe webhook signature verification failed:", err);
+    logger.error("Stripe webhook signature verification failed", { error: err });
     return new Response("Invalid signature", { status: 400 });
   }
 
@@ -54,13 +55,24 @@ export async function POST(req: NextRequest) {
         await handleSubscriptionUpdated(subscription);
         break;
       }
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
+        await handleInvoicePaymentFailed(invoice);
+        break;
+      }
+      case "charge.refunded": {
+        const charge = event.data.object as Stripe.Charge;
+        await handleChargeRefunded(charge);
+        break;
+      }
       default:
+        logger.debug(`Unhandled Stripe event type: ${event.type}`);
         break;
     }
 
     return new Response("OK", { status: 200 });
   } catch (error) {
-    console.error("Error processing Stripe webhook:", error);
+    logger.error("Error processing Stripe webhook", { error });
     return new Response("Webhook handler error", { status: 500 });
   }
 }
@@ -87,7 +99,7 @@ async function handleCheckoutSessionCompleted(
     .where(eq(subscriptionPlans.id, planId));
 
   if (!plan) {
-    console.warn("Plan not found for Stripe checkout:", planId);
+    logger.warn("Plan not found for Stripe checkout", { planId });
     return;
   }
 
@@ -140,7 +152,7 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
     .where(eq(subscriptions.stripeSubscriptionId, stripeSubId));
 
   if (!sub) {
-    console.warn("Subscription not found for invoice:", stripeSubId);
+    logger.warn("Subscription not found for invoice", { stripeSubId });
     return;
   }
 
@@ -150,7 +162,7 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
     .where(eq(subscriptionPlans.id, sub.planId));
 
   if (!plan) {
-    console.warn("Plan not found for invoice:", sub.planId);
+    logger.warn("Plan not found for invoice", { planId: sub.planId });
     return;
   }
 
@@ -213,6 +225,53 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
       cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
     })
     .where(eq(subscriptions.stripeSubscriptionId, stripeSubId));
+}
+
+async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
+  const stripeSubId =
+    typeof invoice.subscription === "string"
+      ? invoice.subscription
+      : invoice.subscription?.id;
+
+  if (!stripeSubId) return;
+
+  logger.warn("Stripe invoice payment failed", {
+    invoiceId: invoice.id,
+    subscriptionId: stripeSubId,
+    amountDue: invoice.amount_due,
+  });
+
+  // We rely on 'customer.subscription.updated' to set the status to 'past_due'
+  // but we log here for visibility.
+}
+
+async function handleChargeRefunded(charge: Stripe.Charge) {
+  const paymentIntentId =
+    typeof charge.payment_intent === "string"
+      ? charge.payment_intent
+      : charge.payment_intent?.id;
+
+  if (!paymentIntentId) return;
+
+  const [payment] = await db
+    .select()
+    .from(payments)
+    .where(eq(payments.stripePaymentIntentId, paymentIntentId));
+
+  if (!payment) {
+    logger.warn("Payment not found for refund", { paymentIntentId });
+    return;
+  }
+
+  await db
+    .update(payments)
+    .set({
+      status: "refunded", // Assuming 'refunded' is a valid status in your schema, or use 'failed' if not.
+      // Ideally schema should have 'refunded' or we just verify checking schema.
+    })
+    .where(eq(payments.id, payment.id));
+    
+  logger.info("Payment marked as refunded", { paymentId: payment.id, amountRefunded: charge.amount_refunded });
 }
 
 

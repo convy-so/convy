@@ -2,7 +2,7 @@
 
 import { nanoid } from "nanoid";
 import Stripe from "stripe";
-import { Client, resources } from "coinbase-commerce-node";
+// import { CommerceSDK } from "commerce-node";
 
 import { db } from "@/db";
 import { payments, subscriptions } from "@/db/schema";
@@ -11,69 +11,27 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { ensurePlansSeeded, getPlanById, PLAN_PRICES_USD_CENTS } from "@/lib/billing/plans";
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
-  apiVersion: "2024-09-30.acacia",
+  apiVersion: "2024-06-20",
 });
-
-Client.init(env.COINBASE_COMMERCE_API_KEY);
-const { Charge } = resources;
 
 type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
-export async function getPlansAction(): Promise<
-  ActionResult<
-    Array<{
-      id: string;
-      name: string;
-      priceMonthlyUsdCents: number;
-      priceYearlyUsdCents: number | null;
-    }>
-  >
-> {
-  await ensurePlansSeeded();
+// Initialize Coinbase Commerce SDK - REMOVED
+// const commerce = new CommerceSDK({
+//   apiKey: env.COINBASE_COMMERCE_API_KEY,
+// });
+import { coinbase } from "@/lib/billing/coinbase";
 
-  const freeMonthly = 0;
-  const premium = PLAN_PRICES_USD_CENTS.premium;
-  const pro = PLAN_PRICES_USD_CENTS.pro;
+// ... existing types ...
 
-  return {
-    success: true,
-    data: [
-      {
-        id: "free",
-        name: "Free",
-        priceMonthlyUsdCents: freeMonthly,
-        priceYearlyUsdCents: freeMonthly,
-      },
-      {
-        id: "pro",
-        name: "Pro",
-        priceMonthlyUsdCents: pro.monthly,
-        priceYearlyUsdCents: pro.yearly,
-      },
-      {
-        id: "premium",
-        name: "Premium",
-        priceMonthlyUsdCents: premium.monthly,
-        priceYearlyUsdCents: premium.yearly,
-      },
-      {
-        id: "enterprise",
-        name: "Enterprise",
-        priceMonthlyUsdCents: 0,
-        priceYearlyUsdCents: null,
-      },
-    ],
-  };
-}
-
-export async function createStripeCheckoutSessionAction(input: {
+export async function createStripeCheckoutAction(input: {
   planId: "pro" | "premium";
   interval: "month" | "year";
-  successUrl: string;
   cancelUrl: string;
-}): Promise<ActionResult<{ checkoutUrl: string }>> {
+  successUrl: string;
+}): Promise<ActionResult<{ url: string }>> {
   try {
     const session = await getVerifiedSession();
     await ensurePlansSeeded();
@@ -84,45 +42,45 @@ export async function createStripeCheckoutSessionAction(input: {
       return { success: false, error: "Invalid plan" };
     }
 
-    const priceId =
-      input.interval === "month"
-        ? plan.stripePriceIdMonthly
-        : plan.stripePriceIdYearly;
+    const priceMap = PLAN_PRICES_USD_CENTS[input.planId];
+    const amountUsdCents =
+      input.interval === "month" ? priceMap.monthly : priceMap.yearly;
 
-    if (!priceId) {
-      return {
-        success: false,
-        error:
-          "Stripe price is not configured for this plan. Please contact support.",
-      };
-    }
-
-    const checkout = await stripe.checkout.sessions.create({
+    const checkoutSession = await stripe.checkout.sessions.create({
       mode: "subscription",
+      payment_method_types: ["card"], // card supports automatic currency conversion usually
       line_items: [
         {
-          price: priceId,
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: `${plan.name} (${input.interval})`,
+              description: `${plan.name} subscription`,
+            },
+            unit_amount: amountUsdCents,
+            recurring: {
+              interval: input.interval,
+            },
+          },
           quantity: 1,
         },
       ],
-      success_url: input.successUrl,
-      cancel_url: input.cancelUrl,
-      customer_email: session.user.email,
       metadata: {
         userId: session.user.id,
         planId: input.planId,
         interval: input.interval,
       },
+      client_reference_id: session.user.id,
+      success_url: input.successUrl,
+      cancel_url: input.cancelUrl,
+      customer_email: session.user.email,
     });
 
-    if (!checkout.url) {
-      return {
-        success: false,
-        error: "Failed to create Stripe Checkout session",
-      };
+    if (!checkoutSession.url) {
+       return { success: false, error: "Failed to create Stripe Checkout URL" };
     }
 
-    return { success: true, data: { checkoutUrl: checkout.url } };
+    return { success: true, data: { url: checkoutSession.url } };
   } catch (error) {
     console.error("Error creating Stripe Checkout session:", error);
     return {
@@ -130,7 +88,7 @@ export async function createStripeCheckoutSessionAction(input: {
       error:
         error instanceof Error
           ? error.message
-          : "Failed to create Stripe Checkout session",
+          : "Failed to create Stripe payment session",
     };
   }
 }
@@ -157,7 +115,7 @@ export async function createCoinbaseChargeAction(input: {
 
     const amountUsd = (amountUsdCents / 100).toFixed(2);
 
-    const charge = await Charge.create({
+    const charge = await coinbase.charges.create({
       name: `${plan.name} (${input.interval})`,
       description: `${plan.name} subscription via Coinbase Commerce`,
       pricing_type: "fixed_price",
