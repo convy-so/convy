@@ -24,7 +24,11 @@ export interface SampleConversationInsightsJobData {
 }
 
 export interface EmailJobData {
-  type: "verification" | "password-reset" | "workspace-invitation";
+  type:
+    | "verification"
+    | "password-reset"
+    | "workspace-invitation"
+    | "subscription-expiration";
   email: string;
   url: string;
   name?: string | null;
@@ -53,6 +57,10 @@ export interface NotionBulkOperationJobData {
   operationType: "sync_all" | "sync_selected" | "resync" | "archive" | "delete";
   surveyIds: string[];
   batchSize?: number;
+}
+
+export interface SubscriptionMonitorJobData {
+  checkDate?: string;
 }
 
 export type NotionSyncScheduleMode =
@@ -202,6 +210,17 @@ export const notionBulkOperationQueue = new Queue<NotionBulkOperationJobData>(
  * Each QueueEvents needs its own dedicated connection for blocking operations
  */
 
+export const subscriptionMonitorQueue = new Queue<SubscriptionMonitorJobData>(
+  "subscription-monitor",
+  {
+    connection: sharedConnection,
+    defaultJobOptions: {
+      removeOnComplete: { count: 100 },
+      removeOnFail: { count: 100 },
+    },
+  }
+);
+
 export const conversationInsightsQueueEvents = new QueueEvents(
   "conversation-insights",
   {
@@ -237,6 +256,11 @@ export const notionBulkOperationQueueEvents = new QueueEvents(
   {
     connection: createBlockingClient(),
   }
+);
+
+export const subscriptionMonitorQueueEvents = new QueueEvents(
+  "subscription-monitor",
+  { connection: createBlockingClient() }
 );
 
 export async function enqueueConversationInsights(
@@ -388,6 +412,24 @@ export async function enqueueBulkOperation(data: NotionBulkOperationJobData) {
   );
 }
 
+export async function scheduleSubscriptionMonitor() {
+  // Run every day at 10 AM UTC
+  return await subscriptionMonitorQueue.upsertJobScheduler(
+    "subscription-monitor-daily",
+    {
+      pattern: "0 10 * * *",
+    },
+    {
+      name: "daily-check",
+      data: {},
+      opts: {
+         removeOnComplete: true,
+         removeOnFail: true,
+      }
+    }
+  );
+}
+
 export async function closeQueues() {
   const { closeRedisConnections } = await import("@/lib/redis");
 
@@ -406,6 +448,8 @@ export async function closeQueues() {
     imageUploadQueueEvents.close(),
     notionSyncQueueEvents.close(),
     notionBulkOperationQueueEvents.close(),
+    subscriptionMonitorQueue.close(),
+    subscriptionMonitorQueueEvents.close(),
   ]);
 
   await closeRedisConnections();
