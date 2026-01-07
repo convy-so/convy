@@ -14,6 +14,7 @@ import {
   type SurveySuccessCriteria,
   type SurveyConstraints,
   type SurveyHypotheses,
+  projects,
 } from "@/db/schema";
 import { analysisModel, generateAIResponse } from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/session";
@@ -33,6 +34,7 @@ type ActionResult<T> =
 
 const startSurveyCreationSchema = z.object({
   language: z.enum(["en", "fr", "de"]).optional().default("en"),
+  projectId: z.string().optional(),
 });
 
 const extractedDataSchema = z.object({
@@ -148,6 +150,32 @@ export async function startSurveyCreationAction(
       console.warn("Could not get active workspace:", error);
     }
 
+    // Validate project if provided
+    if (body.projectId) {
+      const [project] = await db
+        .select()
+        .from(projects)
+        .where(eq(projects.id, body.projectId));
+
+      if (!project) {
+        return { success: false, error: "Project not found" };
+      }
+
+      // Project must belong to the active workspace (if any) or user (if personal)
+      if (organizationId) {
+        if (project.organizationId !== organizationId) {
+           return { success: false, error: "Project does not belong to this workspace" };
+        }
+      } else {
+        if (project.userId !== session.user.id || project.organizationId) {
+           return { success: false, error: "Unauthorized project access" };
+        }
+      }
+    }
+
+    // Assign projectId if valid
+    const projectId = body.projectId;
+
     const surveyId = nanoid();
     const conversationId = nanoid();
 
@@ -155,6 +183,7 @@ export async function startSurveyCreationAction(
       id: surveyId,
       userId: session.user.id,
       organizationId,
+      projectId, // Add projectId
       title: "Untitled Survey",
       status: "creating",
       language: body.language,

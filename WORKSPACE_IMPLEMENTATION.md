@@ -155,12 +155,26 @@ Better Auth provides the following organization endpoints:
 3. **Invitation Expiry**: Invitations expire after 48 hours (configurable)
 4. **Email Verification**: Users must verify their email before accepting invitations (if enabled)
 
-## Future Enhancements
+## Future Enhancements (Implemented)
 
-Potential improvements:
-- Team/Project sub-grouping within workspaces
-- Custom roles with granular permissions
-- Workspace-level settings and preferences
-- Workspace analytics and usage tracking
-- Workspace billing and subscription management
+### Data Sharing & Access Control
+- **Workspace-Wide Visibility**: Surveys, analytics, and insights are now automatically shared with all workspace members.
+- **Role-Based Permissions**: 
+  - **Owners**: Full access (Create, Edit, Delete, Share).
+  - **Members**: View-only access to surveys and analytics.
+- **Implementation**: Access control logic is centralized in `lib/workspace-access.ts` and applied across all server actions.
 
+### Project Organization (Folders)
+- **Projects**: Surveys can now be organized into projects (folders).
+- **Structure**: Projects act as containers within a workspace or personal account.
+- **Database**: New `projects` table and `projectId` on surveys.
+
+### Integration Security
+- **Owner-Scoped Integrations**: Integrations (Notion, Slack, Zapier) are tightly scoped to the workspace owner.
+- **Inheritance**: Workspace members can *use* these integrations (e.g., trigger a sync, auto-post) but cannot *manage* or *connect* them.
+- **Enforcement**: strict ownership checks in `notion-oauth.ts`, `zapier.ts`, and `slack.ts`.
+
+### Workspace Billing
+- **Plan Inheritance**: Billing is tied to the workspace user. Members inherit the plan limits and features of the workspace owner.
+- **Management**: Only the workspace owner can access the billing portal or make purchases.
+- **Entitlements**: The `assertCanCreate...` checks now aggregate usage across the entire workspace to enforce plan limits correctly.

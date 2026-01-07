@@ -2,11 +2,12 @@
 
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { and, eq, ne, or } from "drizzle-orm";
+import { and, eq, ne, or, sql, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
-import { surveys } from "@/db/schema";
+import { surveys, users } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
+import { getSurveyAccessLevel } from "@/lib/workspace-access";
 import { env } from "@/lib/env";
 import {
   assertCanUseCustomUrl,
@@ -55,8 +56,9 @@ export async function updateSurveyAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (existingSurvey.userId !== session.user.id) {
-      return { success: false, error: "Unauthorized" };
+    const access = await getSurveyAccessLevel(session.user.id, existingSurvey.id);
+    if (access !== "owner" && access !== "editor") {
+      return { success: false, error: "Unauthorized: Editor access required" };
     }
 
     // Only allow updates if survey is in draft or sample_review status
@@ -113,27 +115,64 @@ export async function getSurveysAction(): Promise<
       currentParticipants: number;
       participantLimit: number;
       shareableLink: string | null;
+      projectId: string | null;
+      creatorName: string | null;
+      isOwner: boolean;
     }>
   >
 > {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
 
-    const userSurveys = await db
-      .select({
-        id: surveys.id,
-        title: surveys.title,
-        status: surveys.status,
-        createdAt: surveys.createdAt,
-        currentParticipants: surveys.currentParticipants,
-        participantLimit: surveys.participantLimit,
-        shareableLink: surveys.shareableLink,
-      })
-      .from(surveys)
-      .where(eq(surveys.userId, session.user.id))
-      .orderBy(surveys.createdAt);
+    if (activeOrgId) {
+      // Workspace context: Get all surveys in the workspace
+      const workspaceSurveys = await db
+        .select({
+          id: surveys.id,
+          title: surveys.title,
+          status: surveys.status,
+          createdAt: surveys.createdAt,
+          currentParticipants: surveys.currentParticipants,
+          participantLimit: surveys.participantLimit,
+          shareableLink: surveys.shareableLink,
+          projectId: surveys.projectId,
+          creatorName: users.name,
+          isOwner: sql<boolean>`${surveys.userId} = ${session.user.id}`,
+        })
+        .from(surveys)
+        .leftJoin(users, eq(surveys.userId, users.id))
+        .where(eq(surveys.organizationId, activeOrgId))
+        .orderBy(surveys.createdAt);
 
-    return { success: true, data: userSurveys };
+      return { success: true, data: workspaceSurveys };
+    } else {
+      // Personal context: Get only user's personal surveys (no organizationId)
+      const personalSurveys = await db
+        .select({
+          id: surveys.id,
+          title: surveys.title,
+          status: surveys.status,
+          createdAt: surveys.createdAt,
+          currentParticipants: surveys.currentParticipants,
+          participantLimit: surveys.participantLimit,
+          shareableLink: surveys.shareableLink,
+          projectId: surveys.projectId,
+          creatorName: users.name,
+          isOwner: sql<boolean>`${surveys.userId} = ${session.user.id}`,
+        })
+        .from(surveys)
+        .leftJoin(users, eq(surveys.userId, users.id))
+        .where(
+          and(
+            eq(surveys.userId, session.user.id),
+            isNull(surveys.organizationId)
+          )
+        )
+        .orderBy(surveys.createdAt);
+
+      return { success: true, data: personalSurveys };
+    }
   } catch (error) {
     if (error instanceof Error) {
       if (
@@ -166,10 +205,13 @@ export async function getSurveyAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const accessLevel = await getSurveyAccessLevel(session.user.id, surveyId);
+
+    if (accessLevel === "none") {
       return { success: false, error: "Unauthorized" };
     }
 
+    // Access granted (owner or workspace-member)
     return { success: true, data: survey };
   } catch (error) {
     if (error instanceof Error) {
@@ -206,8 +248,9 @@ export async function confirmSurveyAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
-      return { success: false, error: "Unauthorized" };
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access !== "owner" && access !== "editor") {
+      return { success: false, error: "Unauthorized: Editor access required" };
     }
 
     // Allow confirmation from either draft or sample_review status
@@ -310,7 +353,8 @@ export async function getShareableLinkAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access === "none") {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -379,7 +423,8 @@ export async function setSurveyCustomSlugAction(input: {
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access !== "owner" && access !== "editor") {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -468,7 +513,8 @@ export async function clearSurveyCustomSlugAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access !== "owner" && access !== "editor") {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -517,7 +563,8 @@ export async function getSurveyPublicUrlsAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access === "none") {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -580,7 +627,8 @@ export async function getSurveyEmbedCodeAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access === "none") {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -669,7 +717,8 @@ export async function deactivateSurveyAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access !== "owner" && access !== "editor") {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -715,7 +764,8 @@ export async function reactivateSurveyAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access !== "owner" && access !== "editor") {
       return { success: false, error: "Unauthorized" };
     }
 

@@ -22,6 +22,11 @@ import {
 } from "@/lib/slack/oauth";
 import { getSlackChannels, postToSlackChannel } from "@/lib/slack/client";
 import {
+  getWorkspaceOwnerId,
+  isWorkspaceOwner,
+  getSurveyAccessLevel,
+} from "@/lib/workspace-access";
+import {
   formatSurveyCreatedMessage,
   formatNewConversationMessage,
   formatAnalyticsUpdateMessage,
@@ -34,8 +39,15 @@ import {
 export async function getSlackIntegrationStatus() {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+    let targetUserId = session.user.id;
 
-    const integration = await getSlackIntegration(session.user.id);
+    if (activeOrgId) {
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) targetUserId = ownerId;
+    }
+
+    const integration = await getSlackIntegration(targetUserId);
 
     if (!integration) {
       return {
@@ -74,6 +86,14 @@ export async function getSlackIntegrationStatus() {
 export async function disconnectSlack() {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+
+    if (activeOrgId) {
+      const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
+      if (!isOwner) {
+        return { success: false, error: "Only workspace owner can manage integrations" };
+      }
+    }
 
     await disconnectSlackIntegration(session.user.id);
 
@@ -96,8 +116,15 @@ export async function disconnectSlack() {
 export async function getSlackChannelList() {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+    let targetUserId = session.user.id;
 
-    const channels = await getSlackChannels(session.user.id);
+    if (activeOrgId) {
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) targetUserId = ownerId;
+    }
+
+    const channels = await getSlackChannels(targetUserId);
 
     return {
       success: true,
@@ -125,6 +152,14 @@ export async function updateSlackIntegrationSettings(settings: {
 }) {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+
+    if (activeOrgId) {
+      const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
+      if (!isOwner) {
+        return { success: false, error: "Only workspace owner can manage integrations" };
+      }
+    }
 
     await updateSlackSettings(session.user.id, settings);
 
@@ -148,20 +183,21 @@ export async function postSurveyToSlack(surveyId: string, channelId: string) {
   let session: Awaited<ReturnType<typeof getVerifiedSession>> | undefined;
   try {
     session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
 
-    // Verify survey ownership
+    // Verify survey access
+    const access = await getSurveyAccessLevel(session.user.id, surveyId);
+    if (access === "none") {
+      return { success: false, error: "Unauthorized" };
+    }
+
     const [survey] = await db
       .select()
       .from(surveys)
-      .where(
-        and(eq(surveys.id, surveyId), eq(surveys.userId, session.user.id))
-      );
+      .where(eq(surveys.id, surveyId));
 
     if (!survey) {
-      return {
-        success: false,
-        error: "Survey not found",
-      };
+       return { success: false, error: "Survey not found" };
     }
 
     // Format message
@@ -169,7 +205,14 @@ export async function postSurveyToSlack(surveyId: string, channelId: string) {
 
     // Create post record first
     const postId = crypto.randomUUID();
-    const integration = await getSlackIntegration(session.user.id);
+    
+    let targetUserId = session.user.id;
+    if (activeOrgId) {
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) targetUserId = ownerId;
+    }
+
+    const integration = await getSlackIntegration(targetUserId);
     if (!integration) {
       return {
         success: false,
@@ -189,7 +232,7 @@ export async function postSurveyToSlack(surveyId: string, channelId: string) {
     });
 
     // Post to Slack
-    const result = await postToSlackChannel(session.user.id, channelId, {
+    const result = await postToSlackChannel(targetUserId, channelId, {
       text: message.text,
       blocks: message.blocks,
     });
@@ -266,20 +309,21 @@ export async function postAnalyticsToSlack(
   let session: Awaited<ReturnType<typeof getVerifiedSession>> | undefined;
   try {
     session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
 
-    // Verify survey ownership
+    // Verify survey access
+    const access = await getSurveyAccessLevel(session.user.id, surveyId);
+    if (access === "none") {
+      return { success: false, error: "Unauthorized" };
+    }
+
     const [survey] = await db
       .select()
       .from(surveys)
-      .where(
-        and(eq(surveys.id, surveyId), eq(surveys.userId, session.user.id))
-      );
-
+      .where(eq(surveys.id, surveyId));
+    
     if (!survey) {
-      return {
-        success: false,
-        error: "Survey not found",
-      };
+       return { success: false, error: "Survey not found" };
     }
 
     // Get analytics
@@ -303,7 +347,14 @@ export async function postAnalyticsToSlack(
 
     // Create post record first
     const postId = crypto.randomUUID();
-    const integration = await getSlackIntegration(session.user.id);
+    
+    let targetUserId = session.user.id;
+    if (activeOrgId) {
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) targetUserId = ownerId;
+    }
+
+    const integration = await getSlackIntegration(targetUserId);
     if (!integration) {
       return {
         success: false,
@@ -322,7 +373,7 @@ export async function postAnalyticsToSlack(
       status: "pending",
     });
 
-    const result = await postToSlackChannel(session.user.id, channelId, {
+    const result = await postToSlackChannel(targetUserId, channelId, {
       text: message.text,
       blocks: message.blocks,
     });

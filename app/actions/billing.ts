@@ -2,13 +2,16 @@
 
 import { nanoid } from "nanoid";
 import Stripe from "stripe";
-// import { CommerceSDK } from "commerce-node";
+import { eq, and } from "drizzle-orm";
 
 import { db } from "@/db";
-import { payments, subscriptions } from "@/db/schema";
+import { payments } from "@/db/schema";
 import { env } from "@/lib/env";
 import { getVerifiedSession } from "@/lib/auth/session";
+import { isWorkspaceOwner } from "@/lib/workspace-access";
 import { ensurePlansSeeded, getPlanById, PLAN_PRICES_USD_CENTS } from "@/lib/billing/plans";
+import { coinbase } from "@/lib/billing/coinbase";
+import { logger } from "@/lib/logger";
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
   apiVersion: "2024-06-20",
@@ -18,14 +21,6 @@ type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
-// Initialize Coinbase Commerce SDK - REMOVED
-// const commerce = new CommerceSDK({
-//   apiKey: env.COINBASE_COMMERCE_API_KEY,
-// });
-import { coinbase } from "@/lib/billing/coinbase";
-
-// ... existing types ...
-
 export async function createStripeCheckoutAction(input: {
   planId: "pro" | "premium";
   interval: "month" | "year";
@@ -34,6 +29,14 @@ export async function createStripeCheckoutAction(input: {
 }): Promise<ActionResult<{ url: string }>> {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+
+    if (activeOrgId) {
+      const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
+      if (!isOwner) {
+        return { success: false, error: "Only workspace owner can manage billing" };
+      }
+    }
     await ensurePlansSeeded();
 
     const plan = await getPlanById(input.planId);
@@ -48,7 +51,7 @@ export async function createStripeCheckoutAction(input: {
 
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "subscription",
-      payment_method_types: ["card"], // card supports automatic currency conversion usually
+      payment_method_types: ["card"],
       line_items: [
         {
           price_data: {
@@ -69,6 +72,7 @@ export async function createStripeCheckoutAction(input: {
         userId: session.user.id,
         planId: input.planId,
         interval: input.interval,
+        organizationId: activeOrgId ?? "",
       },
       client_reference_id: session.user.id,
       success_url: input.successUrl,
@@ -82,7 +86,7 @@ export async function createStripeCheckoutAction(input: {
 
     return { success: true, data: { url: checkoutSession.url } };
   } catch (error) {
-    console.error("Error creating Stripe Checkout session:", error);
+    logger.error("Error creating Stripe Checkout session", { error });
     return {
       success: false,
       error:
@@ -101,6 +105,14 @@ export async function createCoinbaseChargeAction(input: {
 }): Promise<ActionResult<{ hostedUrl: string; chargeId: string }>> {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+
+    if (activeOrgId) {
+      const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
+      if (!isOwner) {
+        return { success: false, error: "Only workspace owner can manage billing" };
+      }
+    }
     await ensurePlansSeeded();
 
     const plan = await getPlanById(input.planId);
@@ -112,6 +124,49 @@ export async function createCoinbaseChargeAction(input: {
     const priceMap = PLAN_PRICES_USD_CENTS[input.planId];
     const amountUsdCents =
       input.interval === "month" ? priceMap.monthly : priceMap.yearly;
+
+    // Deduplication: Check for existing pending payment for this user/plan/interval
+    // that was created in the last 60 minutes (Coinbase charges expire after ~1 hour)
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    
+    const existingPendingPayment = await db.query.payments.findFirst({
+      where: (p, { eq, and, gte }) => and(
+        eq(p.userId, session.user.id),
+        eq(p.planId, input.planId),
+        eq(p.status, "pending"),
+        eq(p.provider, "coinbase_commerce"),
+        gte(p.createdAt, oneHourAgo)
+      ),
+    });
+
+    if (existingPendingPayment && existingPendingPayment.coinbaseChargeId) {
+      // Try to retrieve the existing charge to get its hosted URL
+      try {
+        const existingCharge = await coinbase.charges.retrieve(
+          existingPendingPayment.coinbaseChargeId
+        );
+        
+        if (existingCharge && existingCharge.hosted_url) {
+          logger.info("Returning existing pending Coinbase charge", { 
+            chargeId: existingCharge.id,
+            userId: session.user.id 
+          });
+          return { 
+            success: true, 
+            data: { 
+              hostedUrl: existingCharge.hosted_url, 
+              chargeId: existingCharge.id 
+            } 
+          };
+        }
+      } catch (retrieveError) {
+        // If retrieval fails, the charge may have expired - continue to create new one
+        logger.warn("Failed to retrieve existing Coinbase charge, creating new one", { 
+          chargeId: existingPendingPayment.coinbaseChargeId,
+          error: retrieveError
+        });
+      }
+    }
 
     const amountUsd = (amountUsdCents / 100).toFixed(2);
 
@@ -129,6 +184,7 @@ export async function createCoinbaseChargeAction(input: {
         userId: session.user.id,
         planId: input.planId,
         interval: input.interval,
+        organizationId: activeOrgId ?? "",
       },
     });
 
@@ -155,12 +211,13 @@ export async function createCoinbaseChargeAction(input: {
         userId: session.user.id,
         planId: input.planId,
         interval: input.interval,
+        organizationId: activeOrgId ?? "",
       },
     });
 
     return { success: true, data: { hostedUrl: charge.hosted_url, chargeId: charge.id } };
   } catch (error) {
-    console.error("Error creating Coinbase Commerce charge:", error);
+    logger.error("Error creating Coinbase Commerce charge", { error });
     return {
       success: false,
       error:
@@ -170,5 +227,6 @@ export async function createCoinbaseChargeAction(input: {
     };
   }
 }
+
 
 

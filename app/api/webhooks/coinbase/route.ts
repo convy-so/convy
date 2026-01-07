@@ -106,7 +106,7 @@ async function handleChargeConfirmed(event: CoinbaseEvent) {
   const interval = (metadata.interval as "month" | "year") || "month";
 
   if (!userId || !planId) {
-    console.warn("Coinbase charge missing userId or planId metadata");
+    logger.warn("Coinbase charge missing userId or planId metadata", { chargeId: charge.id });
     return;
   }
 
@@ -124,15 +124,15 @@ async function handleChargeConfirmed(event: CoinbaseEvent) {
   const localPrice = charge.pricing?.local;
 
   if (!localPrice || localPrice.currency !== "USD") {
-    console.warn("Unexpected Coinbase local price:", localPrice);
+    logger.warn("Unexpected Coinbase local price", { chargeId: charge.id, localPrice });
     return;
   }
 
   const amountUsd = parseFloat(localPrice.amount);
   const amountUsdCents = Math.round(amountUsd * 100);
 
-  // Amount Validation
-  const validation = validateCoinbasePrice(planId, interval, amountUsdCents);
+  // Amount Validation (now async, uses database prices)
+  const validation = await validateCoinbasePrice(planId, interval, amountUsdCents);
   
   if (!validation.isValid) {
      logger.error("Coinbase charge amount mismatch", { 
@@ -143,7 +143,9 @@ async function handleChargeConfirmed(event: CoinbaseEvent) {
      });
      
      // Fail safely if it's a significant mismatch (>1 USD) or explicit error
-     if (validation.error === "Unknown plan" || Math.abs(amountUsdCents - validation.expected) > 100) {
+     if (validation.error === "Unknown plan" || 
+         validation.error === "Plan not available for purchase" ||
+         Math.abs(amountUsdCents - validation.expected) > 100) {
         return; 
      }
   }
@@ -178,49 +180,128 @@ async function handleChargeConfirmed(event: CoinbaseEvent) {
         coinbaseChargeId: charge.id,
         description: `Coinbase Commerce payment for ${plan.name}`,
         paidAt: new Date(),
-        // Link to subscription will be added below if created
       });
     }
 
-    // 2. Handle Subscription
-    // Check if user already has an active subscription for this plan (unlikely for new checkout, but possible)
-    // Or if we need to create a new one.
-    // Logic: If there is no active subscription for this user, create one.
-    // If there is an existing one that is canceled/expired, create a new one.
-    
-    // Calculate period dates
-    const startDate = new Date();
-    const endDate = new Date(startDate);
-    if (interval === "year") {
-      endDate.setFullYear(endDate.getFullYear() + 1);
-    } else {
-      endDate.setMonth(endDate.getMonth() + 1);
-    }
-
-    const newSubscriptionId = nanoid();
-
-    await tx.insert(subscriptions).values({
-      id: newSubscriptionId,
-      userId,
-      planId: plan.id,
-      status: "active",
-      currentPeriodStart: startDate,
-      currentPeriodEnd: endDate,
-      metadata: {
-        provider: "coinbase_commerce",
-        chargeId: charge.id,
-        interval,
-      },
+    // 2. Handle Subscription - Check for existing active subscription
+    const existingSubscription = await tx.query.subscriptions.findFirst({
+      where: (s, { eq, and, gte }) => and(
+        eq(s.userId, userId),
+        eq(s.status, "active"),
+        gte(s.currentPeriodEnd, new Date())
+      ),
     });
 
+    let targetSubscriptionId: string;
+
+    if (existingSubscription) {
+      // Renewal or upgrade/downgrade scenario
+      const existingMetadata = (existingSubscription.metadata as Record<string, unknown>) || {};
+      
+      // Check if this is the same plan (renewal) or different plan (upgrade/downgrade)
+      const isSamePlan = existingSubscription.planId === plan.id;
+      
+      if (isSamePlan) {
+        // Renewal: Extend the current period from the existing end date
+        const newEndDate = new Date(existingSubscription.currentPeriodEnd);
+        if (interval === "year") {
+          newEndDate.setFullYear(newEndDate.getFullYear() + 1);
+        } else {
+          newEndDate.setMonth(newEndDate.getMonth() + 1);
+        }
+        
+        await tx.update(subscriptions)
+          .set({ 
+            currentPeriodEnd: newEndDate,
+            cancelAtPeriodEnd: false, // Clear any pending cancellation
+            metadata: {
+              ...existingMetadata,
+              provider: "coinbase_commerce",
+              lastChargeId: charge.id,
+              interval,
+              lastRenewalAt: new Date().toISOString(),
+            }
+          })
+          .where(eq(subscriptions.id, existingSubscription.id));
+        
+        targetSubscriptionId = existingSubscription.id;
+        
+        logger.info("Coinbase subscription renewed", { 
+          subscriptionId: existingSubscription.id, 
+          newEndDate: newEndDate.toISOString() 
+        });
+      } else {
+        // Plan change (upgrade/downgrade): Update plan and reset period
+        const startDate = new Date();
+        const endDate = new Date(startDate);
+        if (interval === "year") {
+          endDate.setFullYear(endDate.getFullYear() + 1);
+        } else {
+          endDate.setMonth(endDate.getMonth() + 1);
+        }
+        
+        await tx.update(subscriptions)
+          .set({ 
+            planId: plan.id,
+            currentPeriodStart: startDate,
+            currentPeriodEnd: endDate,
+            cancelAtPeriodEnd: false,
+            metadata: {
+              ...existingMetadata,
+              provider: "coinbase_commerce",
+              lastChargeId: charge.id,
+              interval,
+              previousPlanId: existingSubscription.planId,
+              planChangedAt: new Date().toISOString(),
+            }
+          })
+          .where(eq(subscriptions.id, existingSubscription.id));
+        
+        targetSubscriptionId = existingSubscription.id;
+        
+        logger.info("Coinbase subscription plan changed", { 
+          subscriptionId: existingSubscription.id, 
+          fromPlan: existingSubscription.planId,
+          toPlan: plan.id
+        });
+      }
+    } else {
+      // New subscription: No active subscription exists
+      const startDate = new Date();
+      const endDate = new Date(startDate);
+      if (interval === "year") {
+        endDate.setFullYear(endDate.getFullYear() + 1);
+      } else {
+        endDate.setMonth(endDate.getMonth() + 1);
+      }
+
+      const newSubscriptionId = nanoid();
+
+      await tx.insert(subscriptions).values({
+        id: newSubscriptionId,
+        userId,
+        planId: plan.id,
+        status: "active",
+        currentPeriodStart: startDate,
+        currentPeriodEnd: endDate,
+        metadata: {
+          provider: "coinbase_commerce",
+          chargeId: charge.id,
+          interval,
+        },
+      });
+      
+      targetSubscriptionId = newSubscriptionId;
+      
+      logger.info("New Coinbase subscription created", { 
+        subscriptionId: newSubscriptionId 
+      });
+    }
+
     // 3. Link payment to subscription
-    // If we just created the payment (implied by !existingPayment or even if we updated it), 
-    // we should make sure it points to this new subscription.
-    // However, if the payment was already created in the action, it might not have subscriptionId yet.
-    
     await tx
       .update(payments)
-      .set({ subscriptionId: newSubscriptionId })
+      .set({ subscriptionId: targetSubscriptionId })
       .where(eq(payments.coinbaseChargeId, charge.id));
   });
 }

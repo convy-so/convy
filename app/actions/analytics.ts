@@ -12,6 +12,7 @@ import {
   type SurveyAnalyticsData,
   type DashboardWidget,
 } from "@/lib/analytics";
+import { getSurveyAccessLevel } from "@/lib/workspace-access";
 
 type ActionResult<T> =
   | { success: true; data: T }
@@ -36,7 +37,8 @@ export async function generateSurveyAnalyticsAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const access = await getSurveyAccessLevel(session.user.id, surveyId);
+    if (access === "none") {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -121,7 +123,8 @@ export async function getSurveyAnalyticsAction(surveyId: string): Promise<
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const access = await getSurveyAccessLevel(session.user.id, surveyId);
+    if (access === "none") {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -235,7 +238,8 @@ export async function getDashboardDataAction(surveyId: string): Promise<
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const access = await getSurveyAccessLevel(session.user.id, surveyId);
+    if (access === "none") {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -349,7 +353,8 @@ export async function getComprehensiveAnalyticsAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const access = await getSurveyAccessLevel(session.user.id, surveyId);
+    if (access === "none") {
       return { success: false, error: "Unauthorized" };
     }
 

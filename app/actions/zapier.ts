@@ -13,6 +13,10 @@ import {
   zapierWebhookSubscriptions,
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import {
+  getWorkspaceOwnerId,
+  isWorkspaceOwner,
+} from "@/lib/workspace-access";
 
 /**
  * Get Zapier integration status
@@ -20,11 +24,18 @@ import { eq } from "drizzle-orm";
 export async function getZapierIntegrationStatus() {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+    let targetUserId = session.user.id;
+
+    if (activeOrgId) {
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) targetUserId = ownerId;
+    }
 
     const [integration] = await db
       .select()
       .from(zapierIntegrations)
-      .where(eq(zapierIntegrations.userId, session.user.id));
+      .where(eq(zapierIntegrations.userId, targetUserId));
 
     if (!integration) {
       return {
@@ -68,11 +79,18 @@ export async function getZapierIntegrationStatus() {
 export async function getZapierSubscriptions() {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+    let targetUserId = session.user.id;
+
+    if (activeOrgId) {
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) targetUserId = ownerId;
+    }
 
     const [integration] = await db
       .select()
       .from(zapierIntegrations)
-      .where(eq(zapierIntegrations.userId, session.user.id));
+      .where(eq(zapierIntegrations.userId, targetUserId));
 
     if (!integration) {
       return {
@@ -125,6 +143,14 @@ export async function updateZapierIntegrationSettings(settings: {
 }) {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+
+    if (activeOrgId) {
+      const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
+      if (!isOwner) {
+        return { success: false, error: "Only workspace owner can manage integrations" };
+      }
+    }
 
     const [integration] = await db
       .select()
@@ -175,6 +201,14 @@ export async function updateZapierIntegrationSettings(settings: {
 export async function disconnectZapierIntegration() {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+
+    if (activeOrgId) {
+      const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
+      if (!isOwner) {
+        return { success: false, error: "Only workspace owner can manage integrations" };
+      }
+    }
 
     await db
       .delete(zapierIntegrations)

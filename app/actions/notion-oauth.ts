@@ -25,6 +25,10 @@ import {
   scheduleNotionSyncRepeating,
   NotionSyncScheduleMode,
 } from "@/lib/queue";
+import {
+  getWorkspaceOwnerId,
+  isWorkspaceOwner,
+} from "@/lib/workspace-access";
 
 /**
  * Get Notion OAuth integration status
@@ -32,12 +36,21 @@ import {
 export async function getNotionOAuthStatus() {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+    let targetUserId = session.user.id;
 
-    const integration = await getNotionIntegration(session.user.id);
+    if (activeOrgId) {
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) {
+        targetUserId = ownerId;
+      }
+    }
+
+    const integration = await getNotionIntegration(targetUserId);
 
     // Ensure a default hourly scheduled sync exists
     try {
-      await ensureDefaultScheduledSync(session.user.id);
+      await ensureDefaultScheduledSync(targetUserId);
     } catch (scheduleError) {
       console.warn(
         "Failed to ensure default Notion sync schedule:",
@@ -84,6 +97,15 @@ export async function updateNotionSyncSettings(settings: {
 }) {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+
+    if (activeOrgId) {
+      const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
+      if (!isOwner) {
+        return { success: false, error: "Only workspace owner can manage integrations" };
+      }
+      // If owner, proceed. Note we use session.user.id as they ARE the owner.
+    }
 
     await updateSyncSettings(session.user.id, settings);
 
@@ -106,6 +128,14 @@ export async function updateNotionSyncSettings(settings: {
 export async function disconnectNotionOAuth() {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+
+    if (activeOrgId) {
+      const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
+      if (!isOwner) {
+        return { success: false, error: "Only workspace owner can manage integrations" };
+      }
+    }
 
     await disconnectOAuthIntegration(session.user.id);
 
@@ -131,37 +161,46 @@ export async function triggerSurveySync(
 ) {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
 
-    // Verify survey ownership
+    // Verify survey ownership or workspace access
     const [survey] = await db
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
     if (!survey) {
-      return {
-        success: false,
-        error: "Survey not found",
-      };
+      return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
-      return {
-        success: false,
-        error: "Unauthorized",
-      };
+    // Check access
+    if (activeOrgId) {
+        // Must be in the same workspace
+        if (survey.organizationId !== activeOrgId) {
+             return { success: false, error: "Unauthorized" };
+        }
+    } else {
+        if (survey.userId !== session.user.id) {
+             return { success: false, error: "Unauthorized" };
+        }
     }
 
-    const hasIntegration = await hasOAuthIntegration(session.user.id);
+    let targetUserId = session.user.id;
+    if (activeOrgId) {
+       const ownerId = await getWorkspaceOwnerId(activeOrgId);
+       if (ownerId) targetUserId = ownerId;
+    }
+
+    const hasIntegration = await hasOAuthIntegration(targetUserId);
     if (!hasIntegration) {
       return {
         success: false,
-        error: "Notion integration not configured",
+        error: "Notion integration not configured for this workspace",
       };
     }
 
     const job = await enqueueNotionSync({
-      userId: session.user.id,
+      userId: targetUserId,
       surveyId,
       syncType,
       forceUpdate: true,
@@ -295,8 +334,15 @@ export async function triggerFullSync() {
 export async function getNotionSyncHistory(surveyId?: string, limit = 20) {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+    let targetUserId = session.user.id;
 
-    const conditions = [eq(notionSyncStatus.userId, session.user.id)];
+    if (activeOrgId) {
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) targetUserId = ownerId;
+    }
+
+    const conditions = [eq(notionSyncStatus.userId, targetUserId)];
     if (surveyId) {
       conditions.push(eq(notionSyncStatus.surveyId, surveyId));
     }
@@ -342,11 +388,18 @@ export async function getNotionSyncHistory(surveyId?: string, limit = 20) {
 export async function getNotionSyncStats() {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+    let targetUserId = session.user.id;
+
+    if (activeOrgId) {
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) targetUserId = ownerId;
+    }
 
     const allStatuses = await db
       .select()
       .from(notionSyncStatus)
-      .where(eq(notionSyncStatus.userId, session.user.id));
+      .where(eq(notionSyncStatus.userId, targetUserId));
 
     const stats = {
       total: allStatuses.length,
@@ -356,7 +409,7 @@ export async function getNotionSyncStats() {
       processing: allStatuses.filter((s) => s.status === "processing").length,
     };
 
-    const integration = await getNotionIntegration(session.user.id);
+    const integration = await getNotionIntegration(targetUserId);
 
     return {
       success: true,

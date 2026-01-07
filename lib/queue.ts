@@ -28,7 +28,9 @@ export interface EmailJobData {
     | "verification"
     | "password-reset"
     | "workspace-invitation"
-    | "subscription-expiration";
+    | "subscription-expiration"
+    | "workspace-welcome"
+    | "secondary-verification";
   email: string;
   url: string;
   name?: string | null;

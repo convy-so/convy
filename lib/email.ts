@@ -54,3 +54,39 @@ export async function sendWorkspaceInvitationEmail(payload: {
     },
   });
 }
+
+/**
+ * Queue workspace welcome email (direct add)
+ */
+export async function sendWorkspaceWelcomeEmail(payload: {
+  email: string;
+  workspaceName: string;
+  url: string;
+  name?: string | null;
+}) {
+  await enqueueEmail({
+    type: "workspace-welcome",
+    email: payload.email,
+    url: payload.url,
+    name: payload.name,
+    metadata: {
+      workspaceName: payload.workspaceName,
+    },
+  });
+}
+
+/**
+ * Queue secondary email verification
+ */
+export async function sendSecondaryEmailVerification(payload: {
+  email: string;
+  url: string;
+  name?: string | null;
+}) {
+  await enqueueEmail({
+    type: "secondary-verification",
+    email: payload.email,
+    url: payload.url,
+    name: payload.name,
+  });
+}

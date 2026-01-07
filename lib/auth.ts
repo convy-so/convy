@@ -29,6 +29,8 @@ export const auth = betterAuth({
       membershipLimit: Infinity,
       // Allow unlimited invitations
       invitationLimit: Infinity,
+      // 7 days expiration for invitations
+      invitationExpiresIn: 60 * 60 * 24 * 7,
       // Creator gets owner role
       creatorRole: "owner",
       // Send invitation emails

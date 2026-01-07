@@ -69,7 +69,21 @@ const worker = new Worker<SubscriptionMonitorJobData>(
              daysUntilExpiry: daysUntilExpiry.toFixed(2)
         });
 
-        // Queue Email
+        // Update metadata FIRST to mark notification sent (idempotency)
+        // This prevents duplicate emails if the job is retried after email enqueue succeeds
+        // but before processedCount++ or if the job runs again while email is pending
+        await db.update(subscriptions)
+            .set({
+                metadata: {
+                    ...metadata,
+                    lastExpiryNotificationAt: now.toISOString()
+                }
+            })
+            .where(eq(subscriptions.id, subscription.id));
+
+        // Queue Email after marking as notified
+        // If this fails, the job will throw and BullMQ will retry
+        // On retry, the idempotency check above will prevent re-processing
         await enqueueEmail({
              type: "subscription-expiration",
              email: user.email,
@@ -81,16 +95,6 @@ const worker = new Worker<SubscriptionMonitorJobData>(
                  planId: subscription.planId
              }
         });
-
-        // Update metadata to record notification for this period
-        await db.update(subscriptions)
-            .set({
-                metadata: {
-                    ...metadata,
-                    lastExpiryNotificationAt: now.toISOString()
-                }
-            })
-            .where(eq(subscriptions.id, subscription.id));
              
         processedCount++;
       }
