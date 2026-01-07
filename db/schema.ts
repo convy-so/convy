@@ -57,6 +57,24 @@ export const users = pgTable(
   (table) => [unique("users_email_unique").on(table.email)]
 );
 
+export const userEmails = pgTable(
+  "user_emails",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    emailVerified: boolean("email_verified").default(false).notNull(),
+    verificationToken: text("verification_token"), // For verifying this specific email
+  },
+  (table) => [
+    unique("user_emails_email_unique").on(table.email),
+    index("user_emails_user_id_idx").on(table.userId),
+  ]
+);
+
 export const accounts = pgTable(
   "accounts",
   {
@@ -217,6 +235,10 @@ export const surveys = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     // Workspace/Organization support - surveys can belong to a workspace
     organizationId: text("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    // Project/Folder support (optional, can be null if not in a project)
+    projectId: text("project_id").references(() => projects.id, {
       onDelete: "cascade",
     }),
     title: text("title").notNull(),
@@ -1306,6 +1328,43 @@ export const invitationsRelations = relations(invitations, ({ one }) => ({
   }),
 }));
 
+// Projects table - organizational folders for grouping surveys and related content
+export const projects = pgTable(
+  "projects",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    name: text("name").notNull(),
+    description: text("description"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // Projects can belong to a workspace (null = personal project)
+    organizationId: text("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    // UI customization
+    color: text("color"), // hex color for UI display
+    icon: text("icon"), // emoji or icon name
+  },
+  (table) => [
+    index("projects_user_id_idx").on(table.userId),
+    index("projects_organization_id_idx").on(table.organizationId),
+  ]
+);
+
+export const projectsRelations = relations(projects, ({ one, many }) => ({
+  user: one(users, {
+    fields: [projects.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [projects.organizationId],
+    references: [organizations.id],
+  }),
+  surveys: many(surveys),
+}));
+
 // Subscription Plans and Billing Tables
 export const subscriptionPlanEnum = pgEnum("subscription_plan", [
   "free",
@@ -1543,6 +1602,22 @@ export const usageTracking = pgTable(
 );
 
 // Relations
+export const surveysRelations = relations(surveys, ({ one, many }) => ({
+  user: one(users, {
+    fields: [surveys.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [surveys.organizationId],
+    references: [organizations.id],
+  }),
+  project: one(projects, {
+    fields: [surveys.projectId],
+    references: [projects.id],
+  }),
+  conversations: many(surveyConversations),
+}));
+
 export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
   user: one(users, {
     fields: [subscriptions.userId],

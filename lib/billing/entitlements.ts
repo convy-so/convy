@@ -5,7 +5,8 @@ import {
 } from "./plans";
 import { db } from "@/db";
 import { surveys } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
+import { getWorkspaceOwnerId } from "@/lib/workspace-access";
 
 type EntitlementContext = {
   userId: string;
@@ -29,8 +30,17 @@ export async function getEntitlements(
 ): Promise<Entitlements> {
   await ensurePlansSeeded();
 
+  let targetUserId = ctx.userId;
+  
+  if (ctx.organizationId) {
+    const ownerId = await getWorkspaceOwnerId(ctx.organizationId);
+    if (ownerId) {
+      targetUserId = ownerId;
+    }
+  }
+
   const subscription = await getActiveSubscriptionForUser(
-    ctx.userId,
+    targetUserId,
     ctx.organizationId
   );
 
@@ -55,10 +65,23 @@ export async function assertCanCreateTextSurvey(ctx: EntitlementContext) {
     return;
   }
 
+  let conditions;
+
+  if (ctx.organizationId) {
+    // Count surveys in the workspace
+    conditions = eq(surveys.organizationId, ctx.organizationId);
+  } else {
+    // Count personal surveys
+    conditions = and(
+      eq(surveys.userId, ctx.userId), 
+      isNull(surveys.organizationId)
+    );
+  }
+
   const rows = await db
     .select({ id: surveys.id })
     .from(surveys)
-    .where(eq(surveys.userId, ctx.userId));
+    .where(conditions);
 
   const count = rows.length;
 

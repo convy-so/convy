@@ -11,6 +11,7 @@ import {
 } from "@/db/schema";
 import { analysisModel, generateAIResponse } from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/session";
+import { getSurveyAccessLevel } from "@/lib/workspace-access";
 import {
   getConversationInsightsPrompt,
   getConversationSummaryPrompt,
@@ -61,8 +62,9 @@ export async function generateConversationInsightsAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
-      return { success: false, error: "Unauthorized" };
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access !== "owner" && access !== "editor") {
+      return { success: false, error: "Unauthorized: Editor access required to generate insights" };
     }
 
     const surveyConfig: SurveyConfig = buildCompleteSurveyConfig(survey);
@@ -259,7 +261,8 @@ export async function getSurveyConversationsAction(surveyId: string): Promise<
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access === "none") {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -351,7 +354,8 @@ export async function getConversationAction(conversationId: string): Promise<
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access === "none") {
       return { success: false, error: "Unauthorized" };
     }
 

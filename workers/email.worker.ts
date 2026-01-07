@@ -8,9 +8,16 @@ import { getRedisClient } from "@/lib/redis";
 const resend = new Resend(process.env.RESEND_API_KEY!);
 
 const jobDataSchema = z.object({
-  type: z.enum(["verification", "password-reset", "workspace-invitation"]),
+  type: z.enum([
+    "verification",
+    "password-reset",
+    "workspace-invitation",
+    "subscription-expiration",
+    "workspace-welcome",
+    "secondary-verification",
+  ]),
   email: z.string().email(),
-  url: z.string().url(),
+  url: z.string(), // Removed .url() validation because invites might be relative paths or complex URLs
   name: z.string().nullable().optional(),
   metadata: z.record(z.unknown()).optional(),
 });
@@ -71,7 +78,54 @@ const emailWorker = new Worker<EmailJobData>(
         "",
         "If you didn't expect this invitation, you can ignore this email.",
       ].join("\n");
-    } else {
+    } else if (type === "subscription-expiration") {
+      const planId = (validatedData.metadata?.planId as string) || "your plan";
+      const expiryDate = validatedData.metadata?.expiryDate as string;
+      const formattedDate = expiryDate 
+        ? new Date(expiryDate).toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          })
+        : "soon";
+      
+      subject = "Your Convy subscription is expiring soon";
+      text = [
+        `Hi ${name ?? "there"},`,
+        "",
+        `Your ${planId} subscription will expire on ${formattedDate}.`,
+        "",
+        "To continue enjoying Convy's features, please renew your subscription:",
+        url,
+        "",
+        "If you have any questions, feel free to reach out to our support team.",
+        "",
+        "Thank you for using Convy!",
+      ].join("\n");
+    } else if (type === "workspace-welcome") {
+      const workspaceName = (validatedData.metadata?.workspaceName as string) || "the workspace";
+      subject = `Welcome to ${workspaceName} on Convy`;
+     text = [
+        `Hi ${name ?? "there"},`,
+        "",
+        `You have been added to ${workspaceName} on Convy.`,
+        "",
+        "Click the link below to access the workspace:",
+        url,
+        "",
+        "We're excited to have you on board!",
+      ].join("\n");
+   } else if (type === "secondary-verification") {
+      subject = "Verify your secondary email address";
+      text = [
+        `Hi ${name ?? "there"},`,
+        "",
+        "Please confirm this email address to add it to your Convy account.",
+        url,
+        "",
+        "If you didn't request this, you can ignore this email.",
+      ].join("\n");
+   } else {
       throw new Error(`Unknown email type: ${type}`);
     }
 
