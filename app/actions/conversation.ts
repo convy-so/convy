@@ -209,7 +209,31 @@ export async function completeConversationAction(
       });
     } catch (error) {
       console.error("Failed to enqueue Notion sync:", error);
-      // Don't fail the request if Notion sync fails
+    }
+
+    // Trigger Zapier Webhook
+    try {
+      const { triggerNewConversationWebhook } = await import("@/lib/zapier/webhook-delivery");
+      triggerNewConversationWebhook(conversationId, conversation.surveyId, survey.userId).catch(console.error);
+    } catch (e) {
+      console.error("Failed to trigger Zapier webhook:", e);
+    }
+
+    // Enqueue Slack Notification (New Conversation)
+    try {
+      const { enqueueNotification } = await import("@/lib/queue");
+      await enqueueNotification({
+        type: "slack",
+        userId: survey.userId,
+        message: "New Response",
+        metadata: {
+          event: "new_conversation",
+          surveyId: conversation.surveyId,
+          conversationId,
+        },
+      });
+    } catch (e) {
+      console.error("Failed to enqueue Slack notification:", e);
     }
 
     return {

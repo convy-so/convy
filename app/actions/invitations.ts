@@ -10,7 +10,7 @@ import { nanoid } from "nanoid";
 import { headers } from "next/headers";
 import { addSecondaryEmail } from "./user-emails";
 
-export async function inviteMember(email: string, role: string, workspaceId: string) {
+export async function inviteMember(email: string, role: "admin" | "member" | "owner", workspaceId: string) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) throw new Error("Unauthorized");
 

@@ -3,9 +3,16 @@
   "compilerOptions": {
     "outDir": "../dist/websocket",
     "rootDir": "..",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext"
+    "module": "esnext",
+    "moduleResolution": "bundler"
   },
-  "include": ["./**/*", "../lib/**/*"],
-  "exclude": ["node_modules", "../dist"]
+  "include": [
+    "./**/*",
+    "../lib/**/*",
+    "../app/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "../dist"
+  ]
 }

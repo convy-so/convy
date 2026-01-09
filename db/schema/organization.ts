@@ -1,4 +1,5 @@
 import {
+  index,
   pgTable,
   text,
   timestamp,
@@ -78,13 +79,11 @@ const projects = pgTable(
     icon: text("icon"), // emoji or icon name
   },
   (table) => [
-    // index is imported from drizzle-orm/pg-core but I forgot to include it in imports above.
-    // Adding index and others to imports now.
+    index("projects_user_id_idx").on(table.userId),
+    index("projects_organization_id_idx").on(table.organizationId),
+    index("projects_created_by_idx").on(table.userId), // createdBy is same as userId
   ]
 );
-
-// I need to correct imports to include index
-import { index } from "drizzle-orm/pg-core";
 
 const organizationsRelations = relations(organizations, ({ many }) => ({
   members: many(members),

@@ -118,24 +118,26 @@ const extractedDataSchema = z.object({
 export async function startSurveyCreationAction(
   input: z.infer<typeof startSurveyCreationSchema> = { language: "en" }
 ): Promise<ActionResult<{ surveyId: string; conversationId: string }>> {
+  // ✅ FIX: Add entitlement check for text survey creation
+  try {
+    const { assertCanCreateTextSurvey } = await import("@/lib/billing/entitlements");
+    const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+    
+    await assertCanCreateTextSurvey({
+      userId: session.user.id,
+      organizationId: activeOrgId ?? null,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "PlanLimitError") {
+      return { success: false, error: error.message };
+    }
+    // Log other errors but continue (don't block on entitlement check failures)
+    console.error("Entitlement check error:", error);
+  }
   try {
     const session = await getVerifiedSession();
     const body = startSurveyCreationSchema.parse(input);
-
-    // Enforce plan limits: text survey creation
-    try {
-      await assertCanCreateTextSurvey({
-        userId: session.user.id,
-      });
-    } catch (error) {
-      if (error instanceof PlanLimitError) {
-        return {
-          success: false,
-          error: error.message,
-        };
-      }
-      throw error;
-    }
 
     // Get active workspace if available
     let organizationId: string | undefined;
@@ -173,6 +175,22 @@ export async function startSurveyCreationAction(
       }
     }
 
+    // ✅ FIX: Enforce plan limits with organizationId context
+    try {
+      await assertCanCreateTextSurvey({
+        userId: session.user.id,
+        organizationId: organizationId ?? null,
+      });
+    } catch (error) {
+      if (error instanceof PlanLimitError) {
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+      throw error;
+    }
+
     // Assign projectId if valid
     const projectId = body.projectId;
 
@@ -205,6 +223,7 @@ export async function startSurveyCreationAction(
         additionalContext: false,
         requiredQuestions: false,
         metrics: false,
+        personalInfo: false,
       },
       extractedData: {},
     });
@@ -303,6 +322,7 @@ export async function getSurveyCreationStateAction(surveyId: string): Promise<
                 additionalContext: false,
                 requiredQuestions: false,
                 metrics: false,
+                personalInfo: false,
               },
               extractedData: conversation.extractedData ?? {},
             }
@@ -692,6 +712,7 @@ export async function resumeSurveyCreationAction(surveyId: string): Promise<
           additionalContext: false,
           requiredQuestions: false,
           metrics: false,
+          personalInfo: false,
         },
       },
     };

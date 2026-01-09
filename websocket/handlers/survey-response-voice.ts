@@ -7,7 +7,7 @@ import {
   voiceSessions,
   voiceChunks,
 } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { AudioBufferManager, AUDIO_CONFIG } from "@/lib/voice/audio-processing";
 import {
   getGoogleSTTService,
@@ -40,6 +40,7 @@ import {
   getMemoryUpdatePrompt,
   applyMemoryUpdate,
 } from "@/lib/conversation-memory";
+import { UsageService } from "@/lib/billing/usage";
 
 // Configuration constants
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes idle timeout
@@ -99,6 +100,11 @@ export class SurveyResponseVoiceHandler {
   private totalAudioDurationMs: number = 0;
   private totalSttCost: number = 0;
   private totalTtsCost: number = 0;
+  
+  // Billing & State context
+  private ownerId: string | null = null; // The survey owner (who pays)
+  private organizationId: string | null = null;
+  private memoryMutex: Promise<void> = Promise.resolve();
 
   constructor(ws: WebSocket, surveyId: string, identifier: string) {
     this.ws = ws;
@@ -154,6 +160,40 @@ export class SurveyResponseVoiceHandler {
         return;
       }
 
+      // ✅ FIX: Check plan-based concurrent participant limit
+      try {
+        const { assertCanAddVoiceParticipant } = await import("../../lib/billing/entitlements");
+        const { getWorkspaceOwnerId } = await import("../../lib/workspace-access");
+        
+        // Get workspace owner for entitlement check
+        let targetUserId = survey.userId;
+        if (survey.organizationId) {
+          const ownerId = await getWorkspaceOwnerId(survey.organizationId);
+          if (ownerId) targetUserId = ownerId;
+        }
+        
+        // Store for usage tracking
+        this.ownerId = targetUserId;
+        this.organizationId = survey.organizationId ?? null;
+
+        await assertCanAddVoiceParticipant(
+          { userId: targetUserId, organizationId: survey.organizationId ?? null },
+          survey.currentParticipants
+        );
+      } catch (error) {
+        if (error instanceof Error && error.name === "PlanLimitError") {
+          this.send({
+            type: "error",
+            error: error.message,
+          });
+          this.ws.close();
+          return;
+        }
+        // Log but continue with survey's own limit check
+        console.error("[Survey Response Voice] Entitlement check error:", error);
+      }
+
+      // Also check survey's own participant limit
       if (survey.currentParticipants >= survey.participantLimit) {
         this.send({
           type: "error",
@@ -166,7 +206,6 @@ export class SurveyResponseVoiceHandler {
       this.state.survey = survey;
       this.state.language = survey.language;
 
-      // Build survey config and initialize context
       this.state.surveyConfig = buildCompleteSurveyConfig(survey);
       this.state.context = createRollingContext(
         this.state.surveyConfig,
@@ -193,13 +232,23 @@ export class SurveyResponseVoiceHandler {
 
       this.state.conversationId = conversationId;
 
-      // Increment participant count
+      // ✅ FIX: Use atomic SQL increment to prevent race condition
       await db
         .update(surveys)
         .set({
-          currentParticipants: survey.currentParticipants + 1,
+          currentParticipants: sql`current_participants + 1`,
         })
         .where(eq(surveys.id, survey.id));
+        
+      // Track usage (Response Count)
+      // We charge the owner of the survey
+      if (this.ownerId) {
+          await UsageService.incrementUsage(
+              this.ownerId,
+              this.organizationId,
+              "voiceResponsesCount"
+          );
+      }
 
       // Initialize Google STT streaming session with built-in VAD
       this.initializeSTTSession();
@@ -712,8 +761,10 @@ export class SurveyResponseVoiceHandler {
         });
       }
 
-      // Trigger async memory update for longer conversations
-      this.updateMemoryAsync().catch(console.error);
+      // Trigger async memory update for longer conversations (SEQUENTIAL)
+      this.memoryMutex = this.memoryMutex
+        .then(() => this.updateMemoryAsync())
+        .catch(err => console.error("Memory update error:", err));
 
       // Synthesize speech
       await this.synthesizeAndSendAudio(response);
@@ -995,6 +1046,20 @@ export class SurveyResponseVoiceHandler {
             `duration=${sessionDurationMs}ms, audioDuration=${this.totalAudioDurationMs}ms, ` +
             `sttCost=$${this.totalSttCost.toFixed(4)}, ttsCost=$${this.totalTtsCost.toFixed(4)}`
         );
+        
+        // Track usage (Minutes)
+        // We charge the owner of the survey
+        if (this.ownerId) {
+             const minutes = this.totalAudioDurationMs / 60000;
+             if (minutes > 0) {
+                 await UsageService.incrementUsage(
+                    this.ownerId,
+                    this.organizationId,
+                    "voiceMinutesUsed",
+                    minutes
+                 );
+             }
+        }
       }
 
       // Cleanup Google STT session

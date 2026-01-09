@@ -15,30 +15,15 @@ import {
   disconnectZapierIntegration,
 } from "@/app/actions/zapier";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "zapier-mcp": React.DetailedHTMLProps<
-        React.HTMLAttributes<HTMLElement> & {
-          "embed-id"?: string;
-          width?: string;
-          height?: string;
-          "sign-up-email"?: string;
-          "sign-up-first-name"?: string;
-          "sign-up-last-name"?: string;
-        },
-        HTMLElement
-      >;
-    }
-  }
-}
+
 
 export default function ZapierSettingsPage() {
   const [status, setStatus] = useState<{
     connected: boolean;
     integrationId?: string;
     enabled?: boolean;
-    embedId?: string;
+    embedId?: string | null;
+    lastUsedAt?: Date | null;
     totalSubscriptions?: number;
     activeSubscriptions?: number;
   } | null>(null);

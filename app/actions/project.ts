@@ -2,7 +2,7 @@
 
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { eq, and, isNull, sql } from "drizzle-orm";
+import { eq, and, isNull, sql, or } from "drizzle-orm";
 
 import { db } from "@/db";
 import { projects, surveys } from "@/db/schema";
@@ -87,8 +87,7 @@ export async function getProjectsAction(): Promise<
         .where(
           and(
             eq(projects.userId, session.user.id),
-            // isNull(projects.organizationId) // Drizzle-orm 0.30+
-             or(eq(projects.organizationId, null as any), db.execute(sql`${projects.organizationId} IS NULL`) as any)
+            isNull(projects.organizationId)
           )
         )
         .orderBy(projects.createdAt);

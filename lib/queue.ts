@@ -2,6 +2,9 @@ import "server-only";
 
 import { Queue, QueueEvents } from "bullmq";
 import { getRedisClient, createBlockingClient } from "@/lib/redis";
+import type { WebhookPayload } from "@/lib/zapier/types";
+
+
 
 const sharedConnection = getRedisClient();
 
@@ -432,6 +435,75 @@ export async function scheduleSubscriptionMonitor() {
   );
 }
 
+export const webhookQueue = new Queue<{
+  subscriptionId: string;
+  payload: WebhookPayload;
+  deliveryId?: string;
+}>("webhooks", {
+
+  connection: sharedConnection,
+  defaultJobOptions: {
+    attempts: 5,
+    backoff: {
+      type: "exponential",
+      delay: 1000,
+    },
+    removeOnComplete: { age: 3600, count: 1000 },
+    removeOnFail: { age: 24 * 3600 },
+  },
+});
+
+export const notificationQueue = new Queue<{
+  type: "slack" | "email" | "in_app";
+  userId: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+}>("notifications", {
+  connection: sharedConnection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: "exponential",
+      delay: 2000,
+    },
+    removeOnComplete: { age: 3600, count: 1000 },
+    removeOnFail: { age: 24 * 3600 },
+  },
+});
+
+export const webhookQueueEvents = new QueueEvents("webhooks", {
+  connection: createBlockingClient(),
+});
+
+export const notificationQueueEvents = new QueueEvents("notifications", {
+  connection: createBlockingClient(),
+});
+
+// Helper for enqueuing webhooks
+export async function enqueueWebhook(data: {
+  subscriptionId: string;
+  payload: WebhookPayload;
+  deliveryId?: string;
+}) {
+
+  return await webhookQueue.add("deliver", data, {
+    jobId: data.deliveryId, // Use deliveryId for deduplication if provided
+    priority: 1,
+  });
+}
+
+// Helper for enqueuing notifications
+export async function enqueueNotification(data: {
+  type: "slack" | "email" | "in_app";
+  userId: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+}) {
+  return await notificationQueue.add("notify", data, {
+    priority: 2,
+  });
+}
+
 export async function closeQueues() {
   const { closeRedisConnections } = await import("@/lib/redis");
 
@@ -443,6 +515,10 @@ export async function closeQueues() {
     imageUploadQueue.close(),
     notionSyncQueue.close(),
     notionBulkOperationQueue.close(),
+    webhookQueue.close(),
+    notificationQueue.close(),
+    subscriptionMonitorQueue.close(),
+    
     conversationInsightsQueueEvents.close(),
     surveyAnalyticsQueueEvents.close(),
     sampleConversationInsightsQueueEvents.close(),
@@ -450,7 +526,8 @@ export async function closeQueues() {
     imageUploadQueueEvents.close(),
     notionSyncQueueEvents.close(),
     notionBulkOperationQueueEvents.close(),
-    subscriptionMonitorQueue.close(),
+    webhookQueueEvents.close(),
+    notificationQueueEvents.close(),
     subscriptionMonitorQueueEvents.close(),
   ]);
 

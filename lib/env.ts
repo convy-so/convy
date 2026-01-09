@@ -12,11 +12,13 @@ const optional = (key: string): string | undefined => {
   return process.env[key];
 };
 
+const betterAuthUrl = required("BETTER_AUTH_URL");
+
 export const env = {
   NODE_ENV: process.env.NODE_ENV ?? "development",
   DATABASE_URL: required("DATABASE_URL"),
   BETTER_AUTH_SECRET: required("BETTER_AUTH_SECRET"),
-  BETTER_AUTH_URL: required("BETTER_AUTH_URL"),
+  BETTER_AUTH_URL: betterAuthUrl,
   GOOGLE_CLIENT_ID: required("GOOGLE_CLIENT_ID"),
   GOOGLE_CLIENT_SECRET: required("GOOGLE_CLIENT_SECRET"),
   RESEND_API_KEY: required("RESEND_API_KEY"),
@@ -71,7 +73,8 @@ export const env = {
   APP_BASE_URL: required("APP_BASE_URL"),
 
   // Better Auth Client URL (for frontend)
-  NEXT_PUBLIC_BETTER_AUTH_URL: optional("NEXT_PUBLIC_BETTER_AUTH_URL") || env.BETTER_AUTH_URL,
+  NEXT_PUBLIC_BETTER_AUTH_URL:
+    optional("NEXT_PUBLIC_BETTER_AUTH_URL") || betterAuthUrl,
 };
 
 export type Env = typeof env;

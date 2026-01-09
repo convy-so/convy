@@ -298,15 +298,28 @@ export async function confirmSurveyAction(
       })
       .where(eq(surveys.id, surveyId));
 
-    // Trigger Slack auto-post for survey creation (async, don't wait)
+    // Trigger Zapier Webhook (async)
     try {
-      const { autoPostSurveyCreated } = await import("@/app/actions/slack");
-      autoPostSurveyCreated(session.user.id, surveyId).catch((error) => {
-        console.error("Failed to auto-post survey to Slack:", error);
-        // Don't fail the survey confirmation if Slack post fails
+      const { triggerSurveyCreatedWebhook } = await import("@/lib/zapier/webhook-delivery");
+      triggerSurveyCreatedWebhook(surveyId, session.user.id).catch(console.error);
+    } catch (e) {
+      console.error("Failed to trigger Zapier webhook:", e);
+    }
+
+    // Enqueue Slack Auto-Post (via Notification Queue)
+    try {
+      const { enqueueNotification } = await import("@/lib/queue");
+      await enqueueNotification({
+        type: "slack",
+        userId: session.user.id,
+        message: "Survey Created",
+        metadata: {
+          event: "survey_created",
+          surveyId,
+        },
       });
-    } catch (error) {
-      console.error("Failed to import Slack auto-post function:", error);
+    } catch (e) {
+      console.error("Failed to enqueue Slack notification:", e);
     }
 
     const publicUrl = `/s/${shareableLink}`;
@@ -799,4 +812,4 @@ export async function reactivateSurveyAction(
     }
     return { success: false, error: "Failed to reactivate survey" };
   }
-}
+} 

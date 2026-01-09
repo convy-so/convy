@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import crypto from "crypto";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { db } from "@/db";
@@ -8,6 +8,26 @@ import { payments, subscriptions, subscriptionPlans } from "@/db/schema";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { validateCoinbasePrice } from "@/lib/billing/validation";
+import { PLAN_PRICES_USD_CENTS } from "@/lib/billing/types";
+
+/**
+ * ✅ FIX: Helper to add months/years to a date, handling month-end overflow correctly
+ */
+function addPeriodToDate(date: Date, interval: "month" | "year"): Date {
+  const result = new Date(date);
+  if (interval === "year") {
+    result.setFullYear(result.getFullYear() + 1);
+  } else {
+    // Handle month overflow (e.g., Jan 31 + 1 month = Feb 28/29, not March 3)
+    const originalDate = result.getDate();
+    result.setMonth(result.getMonth() + 1);
+    // If date overflowed (e.g., Feb 31 -> March 3), set to last day of target month
+    if (result.getDate() !== originalDate) {
+      result.setDate(0); // Set to last day of previous month (which is the target month)
+    }
+  }
+  return result;
+}
 
 // Types for Coinbase Commerce Webhook Events
 interface CoinbaseEvent {
@@ -49,11 +69,25 @@ export async function POST(req: NextRequest) {
   hmac.update(rawBody);
   const computedSignature = hmac.digest("hex");
 
-  // Use timingSafeEqual to prevent timing attacks
-  const sigBuffer = Buffer.from(sig, 'utf8');
-  const computedSigBuffer = Buffer.from(computedSignature, 'utf8');
+  // ✅ FIX: Use timingSafeEqual without length check to prevent timing attacks
+  // Coinbase sends signature as hex string
+  let sigBuffer: Buffer;
+  try {
+    sigBuffer = Buffer.from(sig, 'hex');
+  } catch {
+    // Fallback to utf8 if not hex
+    sigBuffer = Buffer.from(sig, 'utf8');
+  }
+  const computedSigBuffer = Buffer.from(computedSignature, 'hex');
 
-  if (sigBuffer.length !== computedSigBuffer.length || !crypto.timingSafeEqual(sigBuffer, computedSigBuffer)) {
+  // Ensure both buffers are same length (pad if needed) for constant-time comparison
+  const maxLength = Math.max(sigBuffer.length, computedSigBuffer.length);
+  const paddedSig = Buffer.alloc(maxLength);
+  const paddedComputed = Buffer.alloc(maxLength);
+  sigBuffer.copy(paddedSig, 0);
+  computedSigBuffer.copy(paddedComputed, 0);
+
+  if (!crypto.timingSafeEqual(paddedSig, paddedComputed)) {
     console.error("Coinbase Commerce webhook verification failed: signature mismatch");
     return new Response("Invalid signature", { status: 400 });
   }
@@ -85,17 +119,27 @@ export async function POST(req: NextRequest) {
 async function handleChargeConfirmed(event: CoinbaseEvent) {
   const charge = event.data;
   
-  // Idempotency check: if we've already processed this charge as succeeded, skip
-  const existingConfirmedPayment = await db.query.payments.findFirst({
-    where: (payments, { eq, and }) => 
+  // ✅ FIX: Check idempotency BEFORE transaction
+  const existingConfirmedPayment = await db
+    .select()
+    .from(payments)
+    .where(
       and(
         eq(payments.coinbaseChargeId, charge.id),
         eq(payments.status, "succeeded")
-      ),
-  });
+      )
+    )
+    .limit(1);
 
-  if (existingConfirmedPayment) {
+  if (existingConfirmedPayment.length > 0) {
     logger.info(`Coinbase charge already processed`, { chargeId: charge.id });
+    return;
+  }
+
+  // ✅ FIX: Check charge expiration
+  const expiresAt = new Date(charge.expires_at);
+  if (expiresAt < new Date()) {
+    logger.warn("Coinbase charge expired", { chargeId: charge.id, expiresAt });
     return;
   }
 
@@ -131,7 +175,7 @@ async function handleChargeConfirmed(event: CoinbaseEvent) {
   const amountUsd = parseFloat(localPrice.amount);
   const amountUsdCents = Math.round(amountUsd * 100);
 
-  // Amount Validation (now async, uses database prices)
+  // ✅ FIX: Strict amount validation - must be exact match (or max 1 cent tolerance)
   const validation = await validateCoinbasePrice(planId, interval, amountUsdCents);
   
   if (!validation.isValid) {
@@ -141,14 +185,14 @@ async function handleChargeConfirmed(event: CoinbaseEvent) {
        expected: validation.expected,
        error: validation.error
      });
-     
-     // Fail safely if it's a significant mismatch (>1 USD) or explicit error
-     if (validation.error === "Unknown plan" || 
-         validation.error === "Plan not available for purchase" ||
-         Math.abs(amountUsdCents - validation.expected) > 100) {
-        return; 
-     }
+     // ✅ FIX: Reject if amount is below required or significantly above
+     return; // Don't process if amount doesn't match
   }
+
+  // ✅ FIX: Extract crypto amount from payments array
+  const cryptoPayment = charge.payments?.find(p => p.status === "COMPLETED");
+  const cryptoAmount = cryptoPayment?.value?.crypto?.amount;
+  const cryptoCurrency = cryptoPayment?.value?.crypto?.currency;
 
   // Use a transaction to ensure atomicity
   await db.transaction(async (tx) => {
@@ -158,6 +202,7 @@ async function handleChargeConfirmed(event: CoinbaseEvent) {
     });
 
     if (existingPayment) {
+      // ✅ FIX: Store crypto amount when updating existing payment
       await tx
         .update(payments)
         .set({
@@ -165,9 +210,12 @@ async function handleChargeConfirmed(event: CoinbaseEvent) {
           paidAt: new Date(),
           amountUsdCents,
           amountOriginal: amountUsdCents,
+          cryptoCurrency: cryptoCurrency as any,
+          cryptoAmount: cryptoAmount ?? null,
         })
         .where(eq(payments.id, existingPayment.id));
     } else {
+      // ✅ FIX: Store crypto amount and currency
       await tx.insert(payments).values({
         id: nanoid(),
         userId,
@@ -178,6 +226,8 @@ async function handleChargeConfirmed(event: CoinbaseEvent) {
         amountOriginal: amountUsdCents,
         currency: "USD",
         coinbaseChargeId: charge.id,
+        cryptoCurrency: cryptoCurrency as any,
+        cryptoAmount: cryptoAmount ?? null,
         description: `Coinbase Commerce payment for ${plan.name}`,
         paidAt: new Date(),
       });
@@ -202,13 +252,8 @@ async function handleChargeConfirmed(event: CoinbaseEvent) {
       const isSamePlan = existingSubscription.planId === plan.id;
       
       if (isSamePlan) {
-        // Renewal: Extend the current period from the existing end date
-        const newEndDate = new Date(existingSubscription.currentPeriodEnd);
-        if (interval === "year") {
-          newEndDate.setFullYear(newEndDate.getFullYear() + 1);
-        } else {
-          newEndDate.setMonth(newEndDate.getMonth() + 1);
-        }
+        // ✅ FIX: Renewal: Extend the current period using proper date calculation
+        const newEndDate = addPeriodToDate(existingSubscription.currentPeriodEnd, interval);
         
         await tx.update(subscriptions)
           .set({ 
@@ -231,14 +276,43 @@ async function handleChargeConfirmed(event: CoinbaseEvent) {
           newEndDate: newEndDate.toISOString() 
         });
       } else {
-        // Plan change (upgrade/downgrade): Update plan and reset period
-        const startDate = new Date();
-        const endDate = new Date(startDate);
-        if (interval === "year") {
-          endDate.setFullYear(endDate.getFullYear() + 1);
-        } else {
-          endDate.setMonth(endDate.getMonth() + 1);
+        // ✅ FIX: Plan change (upgrade/downgrade): Calculate proration
+        const now = new Date();
+        const remainingMs = existingSubscription.currentPeriodEnd.getTime() - now.getTime();
+        const totalMs = existingSubscription.currentPeriodEnd.getTime() - existingSubscription.currentPeriodStart.getTime();
+        const remainingRatio = remainingMs / totalMs;
+
+        // Get old plan price
+        const oldPlanPrice = PLAN_PRICES_USD_CENTS[existingSubscription.planId as keyof typeof PLAN_PRICES_USD_CENTS];
+        const oldMonthlyPrice = oldPlanPrice?.monthly ?? 0;
+        
+        // Calculate credit for remaining time
+        const creditCents = Math.round(oldMonthlyPrice * remainingRatio);
+        
+        // New plan price
+        const newPlanPrice = PLAN_PRICES_USD_CENTS[plan.id as keyof typeof PLAN_PRICES_USD_CENTS];
+        const newMonthlyPrice = newPlanPrice?.monthly ?? 0;
+        
+        // Expected charge amount (new plan price - credit)
+        const expectedCharge = Math.max(0, newMonthlyPrice - creditCents);
+        
+        // Verify amount matches prorated charge
+        if (Math.abs(amountUsdCents - expectedCharge) > 1) {
+          logger.error("Coinbase plan change: amount doesn't match prorated charge", {
+            chargeId: charge.id,
+            paid: amountUsdCents,
+            expected: expectedCharge,
+            oldPlanPrice: oldMonthlyPrice,
+            newPlanPrice: newMonthlyPrice,
+            credit: creditCents,
+            remainingRatio,
+          });
+          // Continue anyway, but log for review
         }
+
+        // Plan change: Update plan and reset period
+        const startDate = now;
+        const endDate = addPeriodToDate(startDate, interval);
         
         await tx.update(subscriptions)
           .set({ 
@@ -253,6 +327,8 @@ async function handleChargeConfirmed(event: CoinbaseEvent) {
               interval,
               previousPlanId: existingSubscription.planId,
               planChangedAt: new Date().toISOString(),
+              prorationCredit: creditCents,
+              prorationCharge: amountUsdCents,
             }
           })
           .where(eq(subscriptions.id, existingSubscription.id));
@@ -262,18 +338,15 @@ async function handleChargeConfirmed(event: CoinbaseEvent) {
         logger.info("Coinbase subscription plan changed", { 
           subscriptionId: existingSubscription.id, 
           fromPlan: existingSubscription.planId,
-          toPlan: plan.id
+          toPlan: plan.id,
+          prorationCredit: creditCents,
+          prorationCharge: amountUsdCents,
         });
       }
     } else {
-      // New subscription: No active subscription exists
+      // ✅ FIX: New subscription: Use proper date calculation
       const startDate = new Date();
-      const endDate = new Date(startDate);
-      if (interval === "year") {
-        endDate.setFullYear(endDate.getFullYear() + 1);
-      } else {
-        endDate.setMonth(endDate.getMonth() + 1);
-      }
+      const endDate = addPeriodToDate(startDate, interval);
 
       const newSubscriptionId = nanoid();
 
