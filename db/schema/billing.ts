@@ -3,9 +3,11 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
+  unique,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { timestamps } from "./common";
@@ -47,7 +49,9 @@ const subscriptionPlans = pgTable("subscription_plans", {
     maxTextResponses: number | null; // per survey or total
     maxVoiceResponses: number | null; // per survey
     maxConcurrentParticipants: number | null; // for voice surveys
-    maxWorkspaceMembers: number | null;
+    maxWorkspaceMembers: number | null; // per workspace
+    maxWorkspaces: number | null; // total workspaces allowed
+    maxVoiceMinutesPerSession: number | null; // max minutes per voice conversation
     advancedAnalytics: boolean;
     customBranding: boolean;
     customDomain: boolean;
@@ -55,6 +59,9 @@ const subscriptionPlans = pgTable("subscription_plans", {
     uiCustomization: boolean;
     removeConvyBranding: boolean;
     customIntegrations: boolean;
+    zapierIntegration: boolean;
+    notionIntegration: boolean;
+    slackIntegration: boolean;
     sso: boolean;
     dedicatedSupport: boolean;
     sla: boolean;
@@ -118,6 +125,12 @@ const subscriptions = pgTable(
       table.stripeSubscriptionId
     ),
     index("subscriptions_stripe_customer_id_idx").on(table.stripeCustomerId),
+    // Composite index for common query: userId + status + currentPeriodEnd
+    index("subscriptions_user_status_period_idx").on(
+      table.userId,
+      table.status,
+      table.currentPeriodEnd
+    ),
   ]
 );
 
@@ -131,7 +144,7 @@ const payments = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     subscriptionId: text("subscription_id").references(() => subscriptions.id, {
-      onDelete: "set null",
+      onDelete: "restrict", // Prevent orphaned payments - subscription must exist
     }),
     planId: text("plan_id")
       .notNull()
@@ -201,6 +214,7 @@ const usageTracking = pgTable(
     voiceSurveysCount: integer("voice_surveys_count").default(0).notNull(),
     textResponsesCount: integer("text_responses_count").default(0).notNull(),
     voiceResponsesCount: integer("voice_responses_count").default(0).notNull(),
+    voiceMinutesUsed: numeric("voice_minutes_used").default("0").notNull(),
     // Per-survey tracking
     surveyUsage: jsonb("survey_usage").$type<
       Record<
@@ -217,6 +231,12 @@ const usageTracking = pgTable(
     index("usage_tracking_user_id_idx").on(table.userId),
     index("usage_tracking_organization_id_idx").on(table.organizationId),
     index("usage_tracking_period_idx").on(table.periodStart, table.periodEnd),
+    // Unique constraint: one usage record per user/org/period
+    unique("usage_tracking_user_org_period_unique").on(
+      table.userId,
+      table.organizationId,
+      table.periodStart
+    ),
   ]
 );
 

@@ -35,7 +35,7 @@ export async function createWorkspace(data: {
       headers: await getSessionHeaders(),
     });
 
-    if (!result.data) {
+    if (!result) {
       return {
         success: false,
         error: "Failed to create workspace",
@@ -45,9 +45,9 @@ export async function createWorkspace(data: {
     return {
       success: true,
       data: {
-        id: result.data.id,
-        name: result.data.name,
-        slug: result.data.slug,
+        id: result.id,
+        name: result.name,
+        slug: result.slug,
       },
     };
   } catch (error) {
@@ -82,7 +82,7 @@ export async function getUserWorkspaces(): Promise<
       headers: await getSessionHeaders(),
     });
 
-    if (!result.data) {
+    if (!result) {
       return {
         success: true,
         data: [],
@@ -91,7 +91,7 @@ export async function getUserWorkspaces(): Promise<
 
     return {
       success: true,
-      data: result.data.map((org: any) => ({
+      data: result.map((org: any) => ({
         id: org.id,
         name: org.name,
         slug: org.slug,
@@ -107,7 +107,6 @@ export async function getUserWorkspaces(): Promise<
         error instanceof Error
           ? error.message
           : "Failed to get workspaces",
-      data: [],
     };
   }
 }
@@ -125,28 +124,46 @@ export async function getActiveWorkspace(): Promise<
   } | null>
 > {
   try {
-    await getVerifiedSession();
+    const session = await getVerifiedSession();
 
-    // Use Better Auth API to get active organization
-    const result = await auth.api.getActiveOrganization({
-      headers: await getSessionHeaders(),
-    });
+    // Get active organization ID from session
+    // Note: session.session has activeOrganizationId added by the organization plugin
+    const activeOrganizationId = (session.session as any)
+      .activeOrganizationId as string | null | undefined;
 
-    if (!result.data) {
+    if (!activeOrganizationId) {
       return {
         success: true,
         data: null,
       };
     }
 
+    const org = await db.query.organizations.findFirst({
+      where: eq(organizations.id, activeOrganizationId),
+    });
+
+    if (!org) {
+      return {
+        success: true,
+        data: null,
+      };
+    }
+
+    const member = await db.query.members.findFirst({
+      where: and(
+        eq(members.organizationId, activeOrganizationId),
+        eq(members.userId, session.user.id)
+      ),
+    });
+
     return {
       success: true,
       data: {
-        id: result.data.id,
-        name: result.data.name,
-        slug: result.data.slug,
-        role: (result.data as any).role || "member",
-        logo: result.data.logo || null,
+        id: org.id,
+        name: org.name,
+        slug: org.slug,
+        role: member?.role || "member",
+        logo: org.logo || null,
       },
     };
   } catch (error) {
@@ -157,7 +174,6 @@ export async function getActiveWorkspace(): Promise<
         error instanceof Error
           ? error.message
           : "Failed to get active workspace",
-      data: null,
     };
   }
 }
@@ -207,7 +223,7 @@ export async function inviteToWorkspace(data: {
     const session = await getVerifiedSession();
 
     // Use Better Auth API to invite member
-    const result = await auth.api.inviteMember({
+    const result = await auth.api.createInvitation({
       body: {
         email: data.email,
         role: data.role || "member",
@@ -216,7 +232,7 @@ export async function inviteToWorkspace(data: {
       headers: await getSessionHeaders(),
     });
 
-    if (!result.data) {
+    if (!result || !result.id) {
       return {
         success: false,
         error: "Failed to send invitation",
@@ -226,7 +242,7 @@ export async function inviteToWorkspace(data: {
     return {
       success: true,
       data: {
-        invitationId: result.data.id,
+        invitationId: result.id as string,
       },
     };
   } catch (error) {
@@ -307,7 +323,7 @@ export async function getWorkspaceMembers(data?: {
       headers: await getSessionHeaders(),
     });
 
-    if (!result.data) {
+    if (!result) {
       return {
         success: true,
         data: [],
@@ -316,7 +332,7 @@ export async function getWorkspaceMembers(data?: {
 
     return {
       success: true,
-      data: result.data.map((member: any) => ({
+      data: result.members.map((member: any) => ({
         id: member.id,
         userId: member.userId,
         role: member.role,
@@ -336,7 +352,6 @@ export async function getWorkspaceMembers(data?: {
         error instanceof Error
           ? error.message
           : "Failed to get workspace members",
-      data: [],
     };
   }
 }

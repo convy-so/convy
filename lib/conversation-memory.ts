@@ -513,9 +513,11 @@ export function buildCompressedContext(
   const recentMessages = fullMessages.slice(splitPoint);
 
   // Build summary of older messages (will be updated by AI later)
-  // This is a structural placeholder - actual summarization happens via AI
+  // FIXED: Prefer the AI-generated summary from memory if available, otherwise fall back to existing history or quick summary
   const historySummary =
-    existingContext.historySummary || buildQuickSummary(olderMessages);
+    existingContext.memory.conversationSummary ||
+    existingContext.historySummary ||
+    buildQuickSummary(olderMessages);
 
   return {
     ...existingContext,

@@ -766,17 +766,20 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
       console.error("Failed to enqueue Notion sync:", error);
     }
 
-    // Trigger Slack auto-post
+    // Trigger Slack auto-post (via Notification Queue)
     try {
-      const { autoPostAnalyticsUpdate } = await import("@/app/actions/slack");
-      autoPostAnalyticsUpdate(job.data.userId, surveyId).catch((error) => {
-        console.error(
-          `[Survey Analytics Worker] Failed to auto-post analytics to Slack:`,
-          error
-        );
+      const { enqueueNotification } = await import("@/lib/queue");
+      await enqueueNotification({
+        type: "slack",
+        userId: job.data.userId,
+        message: "Analytics Updated",
+        metadata: {
+          event: "analytics_updated",
+          surveyId,
+        },
       });
     } catch (error) {
-      console.error("Failed to import Slack auto-post function:", error);
+      console.error("Failed to enqueue Slack notification:", error);
     }
 
     // Trigger Zapier webhook for analytics updated

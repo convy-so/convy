@@ -30,6 +30,8 @@ import {
   checkAudioChunkAllowed,
   checkTTSAllowed,
 } from "../middleware/rate-limit";
+import { UsageService } from "@/lib/billing/usage";
+import { FeatureFlags } from "@/lib/flags";
 
 // Configuration constants
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes idle timeout
@@ -67,6 +69,7 @@ export class SurveyCreationVoiceHandler {
   private userId: string;
   private sessionId: string;
   private identifier: string; // For rate limiting
+  private organizationId: string | null = null;
   private audioBuffer: AudioBufferManager;
   private state: CreationState;
   private sttService: ReturnType<typeof getGoogleSTTService>;
@@ -130,6 +133,45 @@ export class SurveyCreationVoiceHandler {
    * Initialize the handler
    */
   async initialize(): Promise<void> {
+    // ✅ FIX: Check entitlement for voice survey creation
+    try {
+      const { assertCanCreateVoiceSurvey } = await import("../../lib/billing/entitlements");
+      const { getActiveWorkspace } = await import("../../app/actions/workspace");
+      
+      // Get active workspace if available
+      try {
+        const workspaceResult = await getActiveWorkspace();
+        if (workspaceResult.success && workspaceResult.data) {
+          this.organizationId = workspaceResult.data.id;
+        }
+      } catch (error) {
+        // Continue without workspace
+      }
+      
+      // Feature Flag Check
+      const canUseVoice = await FeatureFlags.isEnabled("voice_surveys", this.userId);
+      if (!canUseVoice) {
+         this.send({ type: "error", error: "Voice surveys are currently disabled or not available on your plan." });
+         this.ws.close();
+         return;
+      }
+
+      await assertCanCreateVoiceSurvey({
+        userId: this.userId,
+        organizationId: this.organizationId,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "PlanLimitError") {
+        this.send({
+          type: "error",
+          error: error.message,
+        });
+        this.ws.close();
+        return;
+      }
+      // Log other errors but continue
+      console.error("[Survey Creation Voice] Entitlement check error:", error);
+    }
     try {
       this.sessionStartTime = Date.now();
 
@@ -502,6 +544,13 @@ export class SurveyCreationVoiceHandler {
         surveyId,
         conversationId,
       });
+
+      // Track usage
+      await UsageService.incrementUsage(
+        this.userId, 
+        this.organizationId, 
+        "voiceSurveysCount"
+      );
     } catch (error) {
       console.error("[Survey Creation Voice] Start error:", error);
       this.send({
@@ -869,6 +918,43 @@ export class SurveyCreationVoiceHandler {
 
       // FIXED: Update conversation with final extracted data
       if (this.state.conversationId) {
+        // First update the survey itself with the extracted data
+        // This was the missing link causing the "empty config" bug
+        if (this.state.surveyId) {
+          const data = this.state.extractedData as any;
+          
+          // Construct updates
+          const surveyUpdates: Record<string, any> = {
+            status: "draft", // Ready for confirmation
+            // Structured data
+            objective: data.objective,
+            targetAudience: data.targetAudience,
+            scope: data.scope,
+            successCriteria: data.successCriteria,
+            constraints: data.constraints,
+            hypotheses: data.hypotheses,
+            // Simple fields
+            tone: data.tone,
+            additionalContext: data.additionalContext,
+            metrics: data.metrics,
+            personalInfo: data.personalInfo,
+            requiredQuestions: data.requiredQuestions || [], 
+          };
+
+          // Only update title if relevant (basic "Untitled Survey" check? Or just overwrite)
+          if (data.title) {
+            surveyUpdates.title = data.title;
+          }
+
+          // Force language consistency
+          surveyUpdates.language = this.state.language;
+
+          await db
+            .update(surveys)
+            .set(surveyUpdates)
+            .where(eq(surveys.id, this.state.surveyId));
+        }
+
         await db
           .update(surveyCreationConversations)
           .set({
@@ -972,12 +1058,21 @@ export class SurveyCreationVoiceHandler {
             ttsCost: this.totalTtsCost.toString(),
           })
           .where(eq(voiceSessions.id, this.state.voiceSessionId));
-
         console.log(
-          `[Survey Creation Voice] Session ${this.state.voiceSessionId} cleaned up: ` +
-            `duration=${sessionDurationMs}ms, audioDuration=${this.totalAudioDurationMs}ms, ` +
+          `[Survey Creation Voice] Session ended: ${this.state.voiceSessionId}, ` +
             `sttCost=$${this.totalSttCost.toFixed(4)}, ttsCost=$${this.totalTtsCost.toFixed(4)}`
         );
+        
+        // Track voice minutes usage
+        const minutes = this.totalAudioDurationMs / 60000;
+        if (minutes > 0) {
+            await UsageService.incrementUsage(
+                this.userId,
+                this.organizationId,
+                "voiceMinutesUsed",
+                minutes
+            );
+        }
       }
 
       // Cleanup Google STT session

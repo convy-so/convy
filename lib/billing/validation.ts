@@ -31,10 +31,14 @@ export async function validateCoinbasePrice(
     return { isValid: false, expected: 0, error: "Plan not available for purchase" };
   }
 
-  // Allow for negligible difference (float precision) but strictly it should be exact for fixed_price
-  // Threshold: 5 cents
-  if (Math.abs(amountUsdCents - expectedAmountCents) > 5) {
-    return { isValid: false, expected: expectedAmountCents, error: "Amount mismatch" };
+  // ✅ FIX: Require exact match (or max 1 cent tolerance for rounding)
+  // Amount must be equal to expected plan price, not below
+  if (amountUsdCents < expectedAmountCents) {
+    return { isValid: false, expected: expectedAmountCents, error: "Amount below required price" };
+  }
+  // Allow 1 cent tolerance for rounding errors only
+  if (amountUsdCents > expectedAmountCents + 1) {
+    return { isValid: false, expected: expectedAmountCents, error: "Amount exceeds expected price" };
   }
   
   return { isValid: true, expected: expectedAmountCents };

@@ -13,6 +13,13 @@ import { userRoleEnum } from "./enums";
 // Re-export what is defined here
 export { users, userEmails, accounts, sessions, verificationTokens, accountsRelations, sessionsRelations };
 
+// Forward reference to organizations (defined in organization.ts)
+// We'll use a function reference to avoid circular dependency
+let organizationsTable: ReturnType<typeof pgTable> | null = null;
+export function setOrganizationsTable(table: ReturnType<typeof pgTable>) {
+  organizationsTable = table;
+}
+
 const users = pgTable(
   "users",
   {
@@ -94,6 +101,7 @@ const sessions = pgTable(
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
     // Workspace/Organization support (added by Better Auth organization plugin)
+    // Note: FK constraint added in organization.ts to avoid circular dependency
     activeOrganizationId: text("active_organization_id"),
     activeTeamId: text("active_team_id"),
   },

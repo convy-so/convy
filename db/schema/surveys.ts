@@ -5,6 +5,7 @@ import {
   jsonb,
   pgTable,
   text,
+  timestamp,
   unique,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
@@ -303,7 +304,9 @@ const surveyAnalytics = pgTable(
     lastUpdated: timestamp("last_updated", {
       withTimezone: true,
       mode: "date",
-    }).defaultNow(),
+    })
+      .defaultNow()
+      .notNull(),
   },
   (table) => [index("survey_analytics_survey_id_idx").on(table.surveyId)]
 );

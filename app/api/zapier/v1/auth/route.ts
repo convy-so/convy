@@ -10,6 +10,7 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { db } from "@/db";
 import { zapierIntegrations } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { nanoid } from "nanoid";
 
 export async function GET(req: NextRequest) {
   try {
@@ -19,29 +20,48 @@ export async function GET(req: NextRequest) {
     const [integration] = await db
       .select()
       .from(zapierIntegrations)
+
       .where(eq(zapierIntegrations.userId, session.user.id));
 
     if (!integration) {
       // Create integration if it doesn't exist
+      const apiKey = `zv_${nanoid(32)}`; // Zapier-specific prefix
       const newIntegration = await db.insert(zapierIntegrations).values({
         id: crypto.randomUUID(),
         userId: session.user.id,
+        apiKey,
         enabled: true,
       }).returning();
 
       return NextResponse.json({
         status: "success",
         data: {
-          access_token: newIntegration[0].id, // Use integration ID as access token
+          access_token: newIntegration[0].apiKey, 
           token_type: "Bearer",
         },
       });
     }
 
+    // If integration exists but no API key (migration), generate one
+    if (!integration.apiKey) {
+         const apiKey = `zv_${nanoid(32)}`;
+         await db.update(zapierIntegrations)
+           .set({ apiKey })
+           .where(eq(zapierIntegrations.id, integration.id));
+           
+         return NextResponse.json({
+            status: "success",
+            data: {
+              access_token: apiKey,
+              token_type: "Bearer",
+            },
+          });
+    }
+
     return NextResponse.json({
       status: "success",
       data: {
-        access_token: integration.id,
+        access_token: integration.apiKey,
         token_type: "Bearer",
       },
     });

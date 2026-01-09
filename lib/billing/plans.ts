@@ -3,9 +3,8 @@ import {
   subscriptionPlans,
   subscriptions,
   usageTracking,
-  type subscriptionPlans as SubscriptionPlanTable,
 } from "@/db/schema";
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte } from "drizzle-orm";
 
 import { PlanId, BillingInterval, PLAN_PRICES_USD_CENTS } from "./types";
 
@@ -18,7 +17,7 @@ export type PlanFeatures =
     name: string;
   };
 
-export const DEFAULT_PLAN_FEATURES: Record<PlanId, SubscriptionPlanTable["features"]> =
+export const DEFAULT_PLAN_FEATURES: Record<PlanId, typeof subscriptionPlans.$inferSelect["features"]> =
   {
     free: {
       maxTextSurveys: 3,
@@ -27,24 +26,31 @@ export const DEFAULT_PLAN_FEATURES: Record<PlanId, SubscriptionPlanTable["featur
       maxVoiceResponses: 0,
       maxConcurrentParticipants: 0,
       maxWorkspaceMembers: 1,
-      advancedAnalytics: false,
+      maxWorkspaces: 0, // No workspaces on free
+      maxVoiceMinutesPerSession: 0,
+      advancedAnalytics: true, // Free gets basic analytics
       customBranding: false,
       customDomain: false,
       embeddableWidget: false,
       uiCustomization: false,
       removeConvyBranding: false,
       customIntegrations: false,
+      zapierIntegration: false,
+      notionIntegration: false,
+      slackIntegration: false,
       sso: false,
       dedicatedSupport: false,
       sla: false,
     },
     pro: {
-      maxTextSurveys: null, // unlimited
-      maxVoiceSurveys: 5,
-      maxTextResponses: null, // unlimited
+      maxTextSurveys: 50,
+      maxVoiceSurveys: 10,
+      maxTextResponses: 100, // per survey
       maxVoiceResponses: 50, // per voice survey
-      maxConcurrentParticipants: 25,
-      maxWorkspaceMembers: 3,
+      maxConcurrentParticipants: 50, // per voice survey
+      maxWorkspaceMembers: 5, // per workspace
+      maxWorkspaces: 5,
+      maxVoiceMinutesPerSession: 10, // minutes per voice conversation
       advancedAnalytics: true,
       customBranding: false,
       customDomain: false,
@@ -52,35 +58,45 @@ export const DEFAULT_PLAN_FEATURES: Record<PlanId, SubscriptionPlanTable["featur
       uiCustomization: false,
       removeConvyBranding: false,
       customIntegrations: false,
+      zapierIntegration: false,
+      notionIntegration: false,
+      slackIntegration: false,
       sso: false,
       dedicatedSupport: false,
       sla: false,
     },
     premium: {
-      maxTextSurveys: null,
-      maxVoiceSurveys: null,
-      maxTextResponses: null,
-      maxVoiceResponses: null,
-      maxConcurrentParticipants: 100,
-      maxWorkspaceMembers: 10,
+      maxTextSurveys: 100,
+      maxVoiceSurveys: 50,
+      maxTextResponses: 200, // per survey
+      maxVoiceResponses: 100, // per voice survey
+      maxConcurrentParticipants: 100, // per voice survey
+      maxWorkspaceMembers: 20, // per workspace
+      maxWorkspaces: 10,
+      maxVoiceMinutesPerSession: 30, // minutes per voice conversation
       advancedAnalytics: true,
-      customBranding: true,
-      customDomain: true,
+      customBranding: true, // Logo on forms
+      customDomain: false,
       embeddableWidget: true,
       uiCustomization: true,
       removeConvyBranding: true,
       customIntegrations: false,
+      zapierIntegration: true,
+      notionIntegration: true,
+      slackIntegration: true,
       sso: false,
       dedicatedSupport: true,
       sla: false,
     },
     enterprise: {
-      maxTextSurveys: null,
-      maxVoiceSurveys: null,
-      maxTextResponses: null,
-      maxVoiceResponses: null,
-      maxConcurrentParticipants: null,
-      maxWorkspaceMembers: null,
+      maxTextSurveys: null, // unlimited
+      maxVoiceSurveys: null, // unlimited
+      maxTextResponses: null, // unlimited
+      maxVoiceResponses: null, // unlimited
+      maxConcurrentParticipants: null, // unlimited
+      maxWorkspaceMembers: null, // unlimited
+      maxWorkspaces: null, // unlimited
+      maxVoiceMinutesPerSession: null, // unlimited
       advancedAnalytics: true,
       customBranding: true,
       customDomain: true,
@@ -88,6 +104,9 @@ export const DEFAULT_PLAN_FEATURES: Record<PlanId, SubscriptionPlanTable["featur
       uiCustomization: true,
       removeConvyBranding: true,
       customIntegrations: true,
+      zapierIntegration: true,
+      notionIntegration: true,
+      slackIntegration: true,
       sso: true,
       dedicatedSupport: true,
       sla: true,
@@ -163,6 +182,7 @@ export async function getActiveSubscriptionForUser(
 ) {
   const now = new Date();
 
+  // ✅ FIX: Check status and cancelAtPeriodEnd
   const rows = await db
     .select()
     .from(subscriptions)
@@ -171,13 +191,17 @@ export async function getActiveSubscriptionForUser(
         eq(subscriptions.userId, userId),
         organizationId
           ? eq(subscriptions.organizationId, organizationId)
-          : eq(subscriptions.organizationId, null),
-        gte(subscriptions.currentPeriodEnd, now)
+          : isNull(subscriptions.organizationId),
+        eq(subscriptions.status, "active"), // ✅ FIX: Must be active
+        gte(subscriptions.currentPeriodEnd, now) // ✅ FIX: Must not be expired
       )
     )
     .orderBy(desc(subscriptions.currentPeriodEnd));
 
-  return rows[0] ?? null;
+  // ✅ FIX: Filter out subscriptions scheduled for cancellation
+  const activeSubscription = rows.find(sub => !sub.cancelAtPeriodEnd) ?? null;
+
+  return activeSubscription;
 }
 
 export async function getUsageForPeriod(
@@ -194,7 +218,7 @@ export async function getUsageForPeriod(
         eq(usageTracking.userId, userId),
         organizationId
           ? eq(usageTracking.organizationId, organizationId)
-          : eq(usageTracking.organizationId, null),
+          : isNull(usageTracking.organizationId),
         gte(usageTracking.periodStart, periodStart),
         lte(usageTracking.periodEnd, periodEnd)
       )

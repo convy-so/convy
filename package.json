@@ -22,6 +22,7 @@
     "@google-cloud/speech": "^6.7.0",
     "@google-cloud/text-to-speech": "^5.5.0",
     "@notionhq/client": "^5.4.0",
+    "@sentry/nextjs": "^10.32.1",
     "@slack/bolt": "^3.22.0",
     "@slack/types": "^2.16.0",
     "@slack/web-api": "^7.13.0",

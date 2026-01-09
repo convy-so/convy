@@ -13,17 +13,11 @@ import {
   surveyAnalytics,
 } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { enqueueWebhook } from "@/lib/queue";
+import { WebhookEventType, WebhookPayload } from "./types";
 
-export type WebhookEventType =
-  | "survey_created"
-  | "new_conversation"
-  | "analytics_updated";
 
-export type WebhookPayload = {
-  event: WebhookEventType;
-  data: Record<string, unknown>;
-  timestamp: string;
-};
+
 
 /**
  * Format survey data for webhook payload
@@ -121,16 +115,18 @@ async function formatAnalyticsData(
     totalConversations: analytics.totalConversations,
     averageConversationLength: analytics.averageConversationLength,
     metrics: analytics.metrics,
-    lastUpdated: analytics.lastUpdated.toISOString(),
+    lastUpdated: (analytics.lastUpdated ?? analytics.updatedAt).toISOString(),
   };
 }
 
 /**
- * Deliver webhook to a single subscription
+ * Process webhook delivery (Worker Logic)
+ * This is called by the BullMQ worker
  */
-async function deliverWebhook(
+export async function processWebhookDelivery(
   subscriptionId: string,
-  payload: WebhookPayload
+  payload: WebhookPayload,
+  deliveryId: string
 ): Promise<{ success: boolean; statusCode?: number; error?: string }> {
   const [subscription] = await db
     .select()
@@ -141,19 +137,33 @@ async function deliverWebhook(
     return { success: false, error: "Subscription not active" };
   }
 
-  // Create delivery record
-  const deliveryId = crypto.randomUUID();
-  await db.insert(zapierWebhookDeliveries).values({
-    id: deliveryId,
-    subscriptionId,
-    eventType: payload.event,
-    surveyId: payload.data.id as string | undefined,
-    conversationId:
-      payload.event === "new_conversation"
-        ? (payload.data.id as string)
-        : undefined,
-    status: "pending",
+  // Check if delivery record already exists (retry scenario)
+  const existingDelivery = await db.query.zapierWebhookDeliveries.findFirst({
+        where: eq(zapierWebhookDeliveries.id, deliveryId)
   });
+
+  if (!existingDelivery) {
+      // Create new delivery record
+      await db.insert(zapierWebhookDeliveries).values({
+        id: deliveryId,
+        subscriptionId,
+        eventType: payload.event,
+        surveyId: payload.data.id as string | undefined,
+        conversationId:
+          payload.event === "new_conversation"
+            ? (payload.data.id as string)
+            : undefined,
+        status: "pending",
+      });
+  } else {
+      // Update retry count or status
+      // We don't increment retry count here explicitly as BullMQ handles it? 
+      // Actually we might want to track it in DB.
+      // But for simplicity, we just status update.
+      await db.update(zapierWebhookDeliveries)
+        .set({ status: "pending", error: null }) // Reset error/status for retry
+        .where(eq(zapierWebhookDeliveries.id, deliveryId));
+  }
 
   try {
     const response = await fetch(subscription.targetUrl, {
@@ -186,12 +196,18 @@ async function deliverWebhook(
       .set({
         lastTriggeredAt: new Date(),
         triggerCount: subscription.triggerCount + 1,
+        // Only count as error if failed eventually? 
+        // We'll increment error count on failure
         errorCount: response.ok
           ? subscription.errorCount
           : subscription.errorCount + 1,
         lastError: response.ok ? null : `HTTP ${response.status}: ${responseBody.substring(0, 500)}`,
       })
       .where(eq(zapierWebhookSubscriptions.id, subscriptionId));
+      
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${responseBody.substring(0, 100)}`);
+    }
 
     return {
       success: response.ok,
@@ -221,10 +237,7 @@ async function deliverWebhook(
       })
       .where(eq(zapierWebhookSubscriptions.id, subscriptionId));
 
-    return {
-      success: false,
-      error: errorMessage,
-    };
+    throw error; // Re-throw for BullMQ
   }
 }
 
@@ -261,9 +274,13 @@ export async function triggerSurveyCreatedWebhook(surveyId: string, userId: stri
       timestamp: new Date().toISOString(),
     };
 
-    // Deliver to all subscriptions (in parallel)
+    // Enqueue to all subscriptions (in parallel)
     await Promise.allSettled(
-      subscriptions.map((sub) => deliverWebhook(sub.id, payload))
+      subscriptions.map((sub) => enqueueWebhook({
+        subscriptionId: sub.id,
+        payload,
+        deliveryId: crypto.randomUUID()
+      }))
     );
 
     console.log(
@@ -317,9 +334,13 @@ export async function triggerNewConversationWebhook(
       timestamp: new Date().toISOString(),
     };
 
-    // Deliver to all subscriptions (in parallel)
+    // Enqueue to all subscriptions (in parallel)
     await Promise.allSettled(
-      subscriptions.map((sub) => deliverWebhook(sub.id, payload))
+      subscriptions.map((sub) => enqueueWebhook({
+        subscriptionId: sub.id,
+        payload,
+        deliveryId: crypto.randomUUID()
+      }))
     );
 
     console.log(
@@ -372,9 +393,13 @@ export async function triggerAnalyticsUpdatedWebhook(
       timestamp: new Date().toISOString(),
     };
 
-    // Deliver to all subscriptions (in parallel)
+    // Enqueue to all subscriptions (in parallel)
     await Promise.allSettled(
-      subscriptions.map((sub) => deliverWebhook(sub.id, payload))
+      subscriptions.map((sub) => enqueueWebhook({
+        subscriptionId: sub.id,
+        payload,
+        deliveryId: crypto.randomUUID()
+      }))
     );
 
     console.log(

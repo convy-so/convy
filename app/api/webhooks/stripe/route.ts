@@ -8,11 +8,12 @@ import {
   subscriptionPlans,
 } from "@/db/schema";
 import { env } from "@/lib/env";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { logger } from "@/lib/logger";
+import { PLAN_PRICES_USD_CENTS } from "@/lib/billing/types";
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
-  apiVersion: "2024-09-30.acacia",
+  apiVersion: "2024-06-20",
 });
 
 export async function POST(req: NextRequest) {
@@ -109,6 +110,20 @@ async function handleCheckoutSessionCompleted(
       ? session.customer
       : session.customer?.id;
 
+  // ✅ FIX: Check idempotency BEFORE creating subscription
+  const [existingSubscription] = await db
+    .select()
+    .from(subscriptions)
+    .where(eq(subscriptions.stripeSubscriptionId, stripeSubId));
+
+  if (existingSubscription) {
+    logger.info("Subscription already exists, skipping duplicate webhook", {
+      stripeSubId,
+      subscriptionId: existingSubscription.id,
+    });
+    return; // Already processed
+  }
+
   const now = new Date();
 
   // Stripe will send a follow-up invoice.payment_succeeded with exact amounts,
@@ -124,8 +139,7 @@ async function handleCheckoutSessionCompleted(
       currentPeriodEnd: now, // will be updated on invoice webhook
       stripeSubscriptionId: stripeSubId,
       stripeCustomerId: stripeCustomerId ?? null,
-    })
-    .onConflictDoNothing();
+    });
 }
 
 async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
@@ -146,54 +160,138 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
 
   if (!periodStart || !periodEnd) return;
 
-  const [sub] = await db
-    .select()
-    .from(subscriptions)
-    .where(eq(subscriptions.stripeSubscriptionId, stripeSubId));
+  // ✅ FIX: Use transaction to ensure atomicity
+  await db.transaction(async (tx) => {
+    // ✅ FIX: Check for existing payment (idempotency)
+    const paymentIntentId = invoice.payment_intent?.toString();
+    if (paymentIntentId) {
+      const [existingPayment] = await tx
+        .select()
+        .from(payments)
+        .where(eq(payments.stripePaymentIntentId, paymentIntentId));
 
-  if (!sub) {
-    logger.warn("Subscription not found for invoice", { stripeSubId });
-    return;
-  }
+      if (existingPayment) {
+        logger.info("Payment already recorded, skipping duplicate webhook", {
+          paymentIntentId,
+          paymentId: existingPayment.id,
+        });
+        return; // Already processed
+      }
+    }
 
-  const [plan] = await db
-    .select()
-    .from(subscriptionPlans)
-    .where(eq(subscriptionPlans.id, sub.planId));
+    // ✅ FIX: Create subscription if it doesn't exist (race condition fix)
+    let [sub] = await tx
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.stripeSubscriptionId, stripeSubId));
 
-  if (!plan) {
-    logger.warn("Plan not found for invoice", { planId: sub.planId });
-    return;
-  }
+    if (!sub) {
+      // Subscription might not exist yet if checkout.session.completed hasn't fired
+      // Extract planId from invoice metadata or line items
+      const planId = invoice.metadata?.planId || invoice.lines.data[0]?.price?.metadata?.planId;
+      const userId = invoice.metadata?.userId;
 
-  const usdCents = amountPaid;
+      if (!planId || !userId) {
+        logger.error("Cannot create subscription: missing planId or userId", {
+          invoiceId: invoice.id,
+          stripeSubId,
+        });
+        throw new Error("Missing planId or userId in invoice metadata");
+      }
 
-  // Record payment
-  await db.insert(payments).values({
-    id: invoice.id,
-    userId: sub.userId,
-    subscriptionId: sub.id,
-    planId: plan.id,
-    provider: "stripe",
-    status: "succeeded",
-    amountUsdCents: usdCents,
-    amountOriginal: usdCents,
-    currency: currency as any,
-    stripePaymentIntentId: invoice.payment_intent?.toString(),
-    stripeInvoiceId: invoice.id,
-    description: `Stripe subscription invoice for ${plan.name}`,
-    paidAt: new Date((invoice.status_transitions?.paid_at ?? Date.now()) * 1000),
+      const [plan] = await tx
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.id, planId));
+
+      if (!plan) {
+        logger.error("Plan not found when creating subscription", { planId });
+        throw new Error(`Plan not found: ${planId}`);
+      }
+
+      // Create subscription
+      const subscriptionId = stripeSubId;
+      await tx.insert(subscriptions).values({
+        id: subscriptionId,
+        userId,
+        planId: plan.id,
+        status: "active",
+        currentPeriodStart: new Date(periodStart * 1000),
+        currentPeriodEnd: new Date(periodEnd * 1000),
+        stripeSubscriptionId: stripeSubId,
+        stripeCustomerId:
+          typeof invoice.customer === "string"
+            ? invoice.customer
+            : invoice.customer?.id ?? null,
+      });
+
+      [sub] = await tx
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.stripeSubscriptionId, stripeSubId));
+
+      if (!sub) {
+        throw new Error("Failed to create subscription");
+      }
+    }
+
+    const [plan] = await tx
+      .select()
+      .from(subscriptionPlans)
+      .where(eq(subscriptionPlans.id, sub.planId));
+
+    if (!plan) {
+      logger.warn("Plan not found for invoice", { planId: sub.planId });
+      throw new Error(`Plan not found: ${sub.planId}`);
+    }
+
+    // ✅ FIX: Validate amount matches plan price
+    const expectedAmount = PLAN_PRICES_USD_CENTS[plan.id as keyof typeof PLAN_PRICES_USD_CENTS];
+    if (expectedAmount) {
+      const expectedMonthly = expectedAmount.monthly;
+      // Allow 1 cent tolerance for rounding
+      if (Math.abs(amountPaid - expectedMonthly) > 1) {
+        logger.error("Amount mismatch: payment amount doesn't match plan price", {
+          planId: plan.id,
+          expectedAmount: expectedMonthly,
+          actualAmount: amountPaid,
+          invoiceId: invoice.id,
+        });
+        // Don't throw - log and continue, but flag for review
+        // In production, you might want to flag this for manual review
+      }
+    }
+
+    const usdCents = amountPaid;
+
+    // Record payment
+    await tx.insert(payments).values({
+      id: invoice.id,
+      userId: sub.userId,
+      subscriptionId: sub.id,
+      planId: plan.id,
+      provider: "stripe",
+      status: "succeeded",
+      amountUsdCents: usdCents,
+      amountOriginal: usdCents,
+      currency: currency as any,
+      stripePaymentIntentId: paymentIntentId ?? null,
+      stripeInvoiceId: invoice.id,
+      description: `Stripe subscription invoice for ${plan.name}`,
+      metadata: invoice.metadata ? JSON.parse(JSON.stringify(invoice.metadata)) : null,
+      paidAt: new Date((invoice.status_transitions?.paid_at ?? Date.now()) * 1000),
+    });
+
+    // Update subscription period
+    await tx
+      .update(subscriptions)
+      .set({
+        status: "active",
+        currentPeriodStart: new Date(periodStart * 1000),
+        currentPeriodEnd: new Date(periodEnd * 1000),
+      })
+      .where(eq(subscriptions.id, sub.id));
   });
-
-  // Update subscription period
-  await db
-    .update(subscriptions)
-    .set({
-      status: "active",
-      currentPeriodStart: new Date(periodStart * 1000),
-      currentPeriodEnd: new Date(periodEnd * 1000),
-    })
-    .where(eq(subscriptions.id, sub.id));
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
@@ -241,8 +339,13 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
     amountDue: invoice.amount_due,
   });
 
-  // We rely on 'customer.subscription.updated' to set the status to 'past_due'
-  // but we log here for visibility.
+  // ✅ FIX: Update subscription status to past_due
+  await db
+    .update(subscriptions)
+    .set({
+      status: "past_due",
+    })
+    .where(eq(subscriptions.stripeSubscriptionId, stripeSubId));
 }
 
 async function handleChargeRefunded(charge: Stripe.Charge) {
@@ -253,25 +356,54 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
 
   if (!paymentIntentId) return;
 
-  const [payment] = await db
-    .select()
-    .from(payments)
-    .where(eq(payments.stripePaymentIntentId, paymentIntentId));
+  // ✅ FIX: Use transaction for atomic updates
+  await db.transaction(async (tx) => {
+    const [payment] = await tx
+      .select()
+      .from(payments)
+      .where(eq(payments.stripePaymentIntentId, paymentIntentId));
 
-  if (!payment) {
-    logger.warn("Payment not found for refund", { paymentIntentId });
-    return;
-  }
+    if (!payment) {
+      logger.warn("Payment not found for refund", { paymentIntentId });
+      return;
+    }
 
-  await db
-    .update(payments)
-    .set({
-      status: "refunded", // Assuming 'refunded' is a valid status in your schema, or use 'failed' if not.
-      // Ideally schema should have 'refunded' or we just verify checking schema.
-    })
-    .where(eq(payments.id, payment.id));
-    
-  logger.info("Payment marked as refunded", { paymentId: payment.id, amountRefunded: charge.amount_refunded });
+    // Check if already refunded (idempotency)
+    if (payment.status === "refunded") {
+      logger.info("Payment already marked as refunded", { paymentId: payment.id });
+      return;
+    }
+
+    // Update payment status
+    await tx
+      .update(payments)
+      .set({
+        status: "refunded",
+      })
+      .where(eq(payments.id, payment.id));
+
+    // ✅ FIX: Cancel subscription if payment was for subscription
+    if (payment.subscriptionId) {
+      await tx
+        .update(subscriptions)
+        .set({
+          status: "canceled",
+          canceledAt: new Date(),
+          cancelAtPeriodEnd: false, // Cancel immediately
+        })
+        .where(eq(subscriptions.id, payment.subscriptionId));
+
+      logger.info("Subscription canceled due to refund", {
+        subscriptionId: payment.subscriptionId,
+        paymentId: payment.id,
+      });
+    }
+
+    logger.info("Payment marked as refunded", {
+      paymentId: payment.id,
+      amountRefunded: charge.amount_refunded,
+    });
+  });
 }
 
 

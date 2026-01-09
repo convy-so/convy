@@ -336,6 +336,7 @@ const zapierIntegrations = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" })
       .unique(),
+    apiKey: text("api_key").unique(), // Secure token for authentication
     embedId: text("embed_id"),
     enabled: boolean("enabled").default(true).notNull(),
     lastUsedAt: timestamp("last_used_at", {
@@ -418,7 +419,7 @@ const zapierWebhookDeliveries = pgTable(
     index("zapier_webhook_deliveries_status_idx").on(table.status),
     index("zapier_webhook_deliveries_event_type_idx").on(table.eventType),
     // created_at index: 'createdAt' comes from timestamps spread, but key is 'created_at' in DB column name
-    index("zapier_webhook_deliveries_created_at_idx").on(timestamps.createdAt),
+    index("zapier_webhook_deliveries_created_at_idx").on(table.createdAt),
   ]
 );
 
