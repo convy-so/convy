@@ -1,17 +1,8 @@
-import {
-  index,
-  pgTable,
-  text,
-  timestamp,
-  jsonb,
-} from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { timestamps } from "./common";
 import { users } from "./auth";
-import { surveys, surveyTeamMembers } from "./surveys";
-
-// Re-export
-export { organizations, members, invitations, projects, organizationsRelations, membersRelations, invitationsRelations, projectsRelations };
+import { surveys } from "./surveys";
 
 // Organization/Workspace tables (managed by Better Auth organization plugin)
 const organizations = pgTable("organization", {
@@ -70,7 +61,6 @@ const projects = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    // Projects can belong to a workspace (null = personal project)
     organizationId: text("organization_id").references(() => organizations.id, {
       onDelete: "cascade",
     }),
@@ -123,3 +113,14 @@ const projectsRelations = relations(projects, ({ one, many }) => ({
   }),
   surveys: many(surveys),
 }));
+
+export {
+  organizations,
+  members,
+  invitations,
+  projects,
+  organizationsRelations,
+  membersRelations,
+  invitationsRelations,
+  projectsRelations,
+};

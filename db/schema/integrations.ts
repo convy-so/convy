@@ -15,34 +15,6 @@ import {
   surveyConversations,
 } from "./surveys";
 
-// Re-export
-export {
-  notionIntegrations,
-  notionExports,
-  notionSyncStatus,
-  notionBulkOperations,
-  notionPagePermissions,
-  notionSyncConflicts,
-  zapierIntegrations,
-  zapierWebhookSubscriptions,
-  zapierWebhookDeliveries,
-  slackIntegrations,
-  slackPosts,
-  notionIntegrationsRelations,
-  notionExportsRelations,
-  notionSyncStatusRelations,
-  notionBulkOperationsRelations,
-  notionPagePermissionsRelations,
-  notionSyncConflictsRelations,
-  zapierIntegrationsRelations,
-  zapierWebhookSubscriptionsRelations,
-  zapierWebhookDeliveriesRelations,
-  slackIntegrationsRelations,
-  slackPostsRelations,
-};
-
-// --- Notion ---
-
 const notionIntegrations = pgTable(
   "notion_integrations",
   {
@@ -50,16 +22,12 @@ const notionIntegrations = pgTable(
     ...timestamps,
     userId: text("user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" })
-      .unique(),
+      .references(() => users.id, { onDelete: "cascade" }),
 
     // OAuth tokens (encrypted)
     accessToken: text("access_token").notNull(),
     accessTokenIv: text("access_token_iv").notNull(),
     accessTokenTag: text("access_token_tag").notNull(),
-
-    // Legacy token support
-    notionToken: text("notion_token"),
 
     // OAuth metadata
     botId: text("bot_id"),
@@ -79,12 +47,12 @@ const notionIntegrations = pgTable(
     surveyDatabaseId: text("survey_database_id"),
 
     // Auto-sync settings
-    autoSync: boolean("auto_sync").default(true).notNull(),
+    autoSync: boolean("auto_sync").default(false).notNull(),
     syncOnNewConversation: boolean("sync_on_new_conversation")
-      .default(true)
+      .default(false)
       .notNull(),
     syncOnAnalyticsUpdate: boolean("sync_on_analytics_update")
-      .default(true)
+      .default(false)
       .notNull(),
     lastSyncedAt: timestamp("last_synced_at", {
       withTimezone: true,
@@ -334,8 +302,7 @@ const zapierIntegrations = pgTable(
     ...timestamps,
     userId: text("user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" })
-      .unique(),
+      .references(() => users.id, { onDelete: "cascade" }),
     apiKey: text("api_key").unique(), // Secure token for authentication
     embedId: text("embed_id"),
     enabled: boolean("enabled").default(true).notNull(),
@@ -480,9 +447,7 @@ const slackIntegrations = pgTable(
     ...timestamps,
     userId: text("user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" })
-      .unique(),
-
+      .references(() => users.id, { onDelete: "cascade" }),
     accessToken: text("access_token").notNull(),
     accessTokenIv: text("access_token_iv").notNull(),
     accessTokenTag: text("access_token_tag").notNull(),
@@ -495,11 +460,11 @@ const slackIntegrations = pgTable(
     defaultChannelId: text("default_channel_id"),
     defaultChannelName: text("default_channel_name"),
     autoPostNewSurveys: boolean("auto_post_new_surveys")
-      .default(true)
+      .default(false)
       .notNull(),
-    autoPostAnalytics: boolean("auto_post_analytics").default(true).notNull(),
+    autoPostAnalytics: boolean("auto_post_analytics").default(false).notNull(),
     autoPostOnConversation: boolean("auto_post_on_conversation")
-      .default(true)
+      .default(false)
       .notNull(),
 
     lastPostedAt: timestamp("last_posted_at", {
@@ -578,3 +543,28 @@ const slackPostsRelations = relations(slackPosts, ({ one }) => ({
     references: [surveyConversations.id],
   }),
 }));
+
+export {
+  notionIntegrations,
+  notionExports,
+  notionSyncStatus,
+  notionBulkOperations,
+  notionPagePermissions,
+  notionSyncConflicts,
+  zapierIntegrations,
+  zapierWebhookSubscriptions,
+  zapierWebhookDeliveries,
+  slackIntegrations,
+  slackPosts,
+  notionIntegrationsRelations,
+  notionExportsRelations,
+  notionSyncStatusRelations,
+  notionBulkOperationsRelations,
+  notionPagePermissionsRelations,
+  notionSyncConflictsRelations,
+  zapierIntegrationsRelations,
+  zapierWebhookSubscriptionsRelations,
+  zapierWebhookDeliveriesRelations,
+  slackIntegrationsRelations,
+  slackPostsRelations,
+};

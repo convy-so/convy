@@ -215,7 +215,7 @@ export default function ZapierSettingsPage() {
                 width="100%"
                 height="600px"
                 style={{ display: "block" }}
-              />
+              /> 
             )}
           </div>
         </div>

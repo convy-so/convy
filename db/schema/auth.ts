@@ -9,16 +9,7 @@ import {
 import { relations } from "drizzle-orm";
 import { timestamps } from "./common";
 import { userRoleEnum } from "./enums";
-// Feature imports removed to prevent circular dependencies
-// Re-export what is defined here
 export { users, userEmails, accounts, sessions, verificationTokens, accountsRelations, sessionsRelations };
-
-// Forward reference to organizations (defined in organization.ts)
-// We'll use a function reference to avoid circular dependency
-let organizationsTable: ReturnType<typeof pgTable> | null = null;
-export function setOrganizationsTable(table: ReturnType<typeof pgTable>) {
-  organizationsTable = table;
-}
 
 const users = pgTable(
   "users",
@@ -44,7 +35,7 @@ const userEmails = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
     emailVerified: boolean("email_verified").default(false).notNull(),
-    verificationToken: text("verification_token"), // For verifying this specific email
+    verificationToken: text("verification_token"), 
   },
   (table) => [
     unique("user_emails_email_unique").on(table.email),
@@ -100,8 +91,6 @@ const sessions = pgTable(
     token: text("token").notNull(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
-    // Workspace/Organization support (added by Better Auth organization plugin)
-    // Note: FK constraint added in organization.ts to avoid circular dependency
     activeOrganizationId: text("active_organization_id"),
     activeTeamId: text("active_team_id"),
   },
