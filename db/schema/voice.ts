@@ -2,7 +2,6 @@ import {
   boolean,
   index,
   integer,
-  jsonb,
   numeric,
   pgTable,
   text,

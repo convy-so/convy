@@ -14,28 +14,15 @@ import { timestamps } from "./common";
 import { users } from "./auth";
 import { organizations } from "./organization";
 import {
-  subscriptionPlanEnum,
   subscriptionStatusEnum,
   paymentProviderEnum,
   paymentStatusEnum,
   paymentCurrencyEnum,
   cryptoCurrencyEnum,
 } from "./enums";
-
-// Re-export
-export {
-  subscriptionPlans,
-  subscriptions,
-  payments,
-  usageTracking,
-  subscriptionsRelations,
-  paymentsRelations,
-  usageTrackingRelations,
-};
-
 // Subscription Plans (static reference data)
 const subscriptionPlans = pgTable("subscription_plans", {
-  id: text("id").primaryKey(), // 'free', 'pro', 'premium', 'enterprise'
+  id: text("id").primaryKey(),
   name: text("name").notNull(),
   priceMonthly: integer("price_monthly").notNull(), // in cents (USD)
   priceYearly: integer("price_yearly"), // in cents (USD), null for free/enterprise
@@ -85,7 +72,7 @@ const subscriptions = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     organizationId: text("organization_id").references(() => organizations.id, {
       onDelete: "cascade",
-    }), // For organization-level subscriptions
+    }), // For organization level subscriptions. 
     planId: text("plan_id")
       .notNull()
       .references(() => subscriptionPlans.id),
@@ -280,3 +267,13 @@ const usageTrackingRelations = relations(usageTracking, ({ one }) => ({
     references: [organizations.id],
   }),
 }));
+
+export {
+  subscriptionPlans,
+  subscriptions,
+  payments,
+  usageTracking,
+  subscriptionsRelations,
+  paymentsRelations,
+  usageTrackingRelations,
+};

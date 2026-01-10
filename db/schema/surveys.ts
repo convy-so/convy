@@ -19,25 +19,6 @@ import {
   creationConversationStatusEnum,
 } from "./enums";
 
-// Export everything defined here
-export {
-  surveys,
-  surveyCreationConversations,
-  sampleConversations,
-  surveyConversations,
-  conversationInsights,
-  surveyAnalytics,
-  surveyTeamMembers,
-  surveysRelations,
-  surveyCreationConversationsRelations,
-  sampleConversationsRelations,
-  surveyConversationsRelations,
-  conversationInsightsRelations,
-  surveyAnalyticsRelations,
-  surveyTeamMembersRelations,
-};
-
-// Types
 export type SurveyObjective = {
   goal: string;
   context: string;
@@ -442,3 +423,20 @@ const surveyTeamMembersRelations = relations(
     }),
   })
 );
+
+export {
+  surveys,
+  surveyCreationConversations,
+  sampleConversations,
+  surveyConversations,
+  conversationInsights,
+  surveyAnalytics,
+  surveyTeamMembers,
+  surveysRelations,
+  surveyCreationConversationsRelations,
+  sampleConversationsRelations,
+  surveyConversationsRelations,
+  conversationInsightsRelations,
+  surveyAnalyticsRelations,
+  surveyTeamMembersRelations,
+};
