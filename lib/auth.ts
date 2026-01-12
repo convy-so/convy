@@ -25,15 +25,10 @@ export const auth = betterAuth({
   plugins: [
     nextCookies(),
     organization({
-      // Allow unlimited members per workspace (for now)
       membershipLimit: Infinity,
-      // Allow unlimited invitations
       invitationLimit: Infinity,
-      // 7 days expiration for invitations
       invitationExpiresIn: 60 * 60 * 24 * 7,
-      // Creator gets owner role
       creatorRole: "owner",
-      // Send invitation emails
       async sendInvitationEmail(data) {
         const inviteLink = `${env.BETTER_AUTH_URL}/workspace/accept-invitation/${data.id}`;
         await sendWorkspaceInvitationEmail({

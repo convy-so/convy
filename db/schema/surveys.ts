@@ -307,7 +307,7 @@ const surveyTeamMembers = pgTable(
       .notNull()
       .references(() => users.id),
     role: text("role").notNull().default("viewer"), // 'owner' | 'editor' | 'viewer'
-    notionAccess: boolean("notion_access").default(true).notNull(),
+    notionAccess: boolean("notion_access").default(false).notNull(),
     canSync: boolean("can_sync").default(false).notNull(),
     canInvite: boolean("can_invite").default(false).notNull(),
     acceptedAt: timestamp("accepted_at", {

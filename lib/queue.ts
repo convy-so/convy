@@ -4,8 +4,6 @@ import { Queue, QueueEvents } from "bullmq";
 import { getRedisClient, createBlockingClient } from "@/lib/redis";
 import type { WebhookPayload } from "@/lib/zapier/types";
 
-
-
 const sharedConnection = getRedisClient();
 
 export interface ConversationInsightsJobData {

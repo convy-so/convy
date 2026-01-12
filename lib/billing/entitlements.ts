@@ -128,7 +128,7 @@ export async function assertCanCreateVoiceSurvey(ctx: EntitlementContext) {
         "Voice surveys are not available on your current plan. Upgrade to Pro or higher."
       );
     }
-    return; // null = unlimited
+    return;
   }
 
   // Count existing voice surveys
@@ -171,7 +171,7 @@ export async function assertCanAddVoiceParticipant(
   const { features } = entitlements;
 
   if (features.maxConcurrentParticipants === null) {
-    return; // Unlimited
+    return; 
   }
 
   if (currentCount >= features.maxConcurrentParticipants) {
@@ -192,7 +192,7 @@ export async function assertVoiceDurationAllowed(
   const { features } = entitlements;
 
   if (features.maxVoiceMinutesPerSession === null) {
-    return; // Unlimited
+    return; 
   }
 
   if (durationMinutes > features.maxVoiceMinutesPerSession) {

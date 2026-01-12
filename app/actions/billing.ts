@@ -10,7 +10,7 @@ import { env } from "@/lib/env";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { isWorkspaceOwner } from "@/lib/workspace-access";
 import { ensurePlansSeeded, getPlanById, PLAN_PRICES_USD_CENTS } from "@/lib/billing/plans";
-import { coinbase } from "@/lib/billing/coinbase";
+import { coinbasePaymentLink } from "@/lib/billing/coinbase-payment-link";
 import { logger } from "@/lib/logger";
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
@@ -97,12 +97,12 @@ export async function createStripeCheckoutAction(input: {
   }
 }
 
-export async function createCoinbaseChargeAction(input: {
+export async function createCoinbasePaymentLinkAction(input: {
   planId: "pro" | "premium";
   interval: "month" | "year";
   cancelUrl: string;
   successUrl: string;
-}): Promise<ActionResult<{ hostedUrl: string; chargeId: string }>> {
+}): Promise<ActionResult<{ paymentUrl: string; paymentLinkId: string }>> {
   try {
     const session = await getVerifiedSession();
     const activeOrgId = session.session.activeOrganizationId;
@@ -140,46 +140,44 @@ export async function createCoinbaseChargeAction(input: {
     });
 
     if (existingPendingPayment && existingPendingPayment.coinbaseChargeId) {
-      // Try to retrieve the existing charge to get its hosted URL
+      // Try to retrieve the existing payment link to get its URL
       try {
-        const existingCharge = await coinbase.charges.retrieve(
+        const existingLink = await coinbasePaymentLink.retrieve(
           existingPendingPayment.coinbaseChargeId
         );
         
-        if (existingCharge && existingCharge.hosted_url) {
-          logger.info("Returning existing pending Coinbase charge", { 
-            chargeId: existingCharge.id,
+        if (existingLink && existingLink.url && existingLink.status === "pending") {
+          logger.info("Returning existing pending Coinbase payment link", { 
+            paymentLinkId: existingLink.id,
             userId: session.user.id 
           });
           return { 
             success: true, 
             data: { 
-              hostedUrl: existingCharge.hosted_url, 
-              chargeId: existingCharge.id 
+              paymentUrl: existingLink.url, 
+              paymentLinkId: existingLink.id 
             } 
           };
         }
       } catch (retrieveError) {
-        // If retrieval fails, the charge may have expired - continue to create new one
-        logger.warn("Failed to retrieve existing Coinbase charge, creating new one", { 
-          chargeId: existingPendingPayment.coinbaseChargeId,
+        // If retrieval fails, the payment link may have expired - continue to create new one
+        logger.warn("Failed to retrieve existing Coinbase payment link, creating new one", { 
+          paymentLinkId: existingPendingPayment.coinbaseChargeId,
           error: retrieveError
         });
       }
     }
 
+    // Convert cents to dollars for the API (which accepts string amounts)
     const amountUsd = (amountUsdCents / 100).toFixed(2);
 
-    const charge = await coinbase.charges.create({
-      name: `${plan.name} (${input.interval})`,
-      description: `${plan.name} subscription via Coinbase Commerce`,
-      pricing_type: "fixed_price",
-      local_price: {
-        amount: amountUsd,
-        currency: "USD",
-      },
-      redirect_url: input.successUrl,
-      cancel_url: input.cancelUrl,
+    // Create payment link via the Payment Link API
+    const paymentLink = await coinbasePaymentLink.create({
+      name: `${plan.name} Plan (${input.interval}ly)`,
+      description: `${plan.name} subscription - ${input.interval}ly billing`,
+      amount: amountUsd,
+      successRedirectUrl: input.successUrl,
+      cancelRedirectUrl: input.cancelUrl,
       metadata: {
         userId: session.user.id,
         planId: input.planId,
@@ -188,10 +186,10 @@ export async function createCoinbaseChargeAction(input: {
       },
     });
 
-    if (!charge || !charge.id || !charge.hosted_url) {
+    if (!paymentLink || !paymentLink.id || !paymentLink.url) {
       return {
         success: false,
-        error: "Failed to create Coinbase Commerce charge",
+        error: "Failed to create Coinbase payment link",
       };
     }
 
@@ -205,28 +203,35 @@ export async function createCoinbaseChargeAction(input: {
       amountUsdCents,
       amountOriginal: amountUsdCents,
       currency: "USD",
-      coinbaseChargeId: charge.id,
-      description: `${plan.name} (${input.interval})`,
+      coinbaseChargeId: paymentLink.id, // Store payment link ID in this field
+      description: `${plan.name} (${input.interval}) - Crypto Payment`,
       metadata: {
         userId: session.user.id,
         planId: input.planId,
         interval: input.interval,
         organizationId: activeOrgId ?? "",
+        paymentMethod: "crypto",
       },
     });
 
-    return { success: true, data: { hostedUrl: charge.hosted_url, chargeId: charge.id } };
+    logger.info("Coinbase payment link created and recorded", {
+      paymentLinkId: paymentLink.id,
+      userId: session.user.id,
+      planId: input.planId,
+      amount: amountUsd,
+    });
+
+    return { success: true, data: { paymentUrl: paymentLink.url, paymentLinkId: paymentLink.id } };
   } catch (error) {
-    logger.error("Error creating Coinbase Commerce charge", { error });
+    logger.error("Error creating Coinbase payment link", { error });
     return {
       success: false,
       error:
         error instanceof Error
           ? error.message
-          : "Failed to create Coinbase Commerce charge",
+          : "Failed to create crypto payment link",
     };
   }
 }
-
 
 

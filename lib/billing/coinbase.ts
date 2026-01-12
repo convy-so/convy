@@ -30,7 +30,7 @@ export interface CoinbaseCharge {
   metadata: Record<string, unknown>;
   pricing: {
     local: CoinbasePrice;
-    [key: string]: CoinbasePrice; // Crypto prices (BTC, ETH, etc.)
+    [key: string]: CoinbasePrice; 
   };
   pricing_type: "fixed_price" | "no_price";
   payments: Array<unknown>;
@@ -99,7 +99,6 @@ async function request<T>(
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      // Create an AbortController for timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
