@@ -1,11 +1,5 @@
 "use client";
 
-/**
- * Better Auth Client
- * 
- * Client-side authentication and workspace management
- */
-
 import { createAuthClient } from "better-auth/client";
 import { organizationClient } from "better-auth/client/plugins";
 

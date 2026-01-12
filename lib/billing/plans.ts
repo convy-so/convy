@@ -182,7 +182,6 @@ export async function getActiveSubscriptionForUser(
 ) {
   const now = new Date();
 
-  // ✅ FIX: Check status and cancelAtPeriodEnd
   const rows = await db
     .select()
     .from(subscriptions)
@@ -192,13 +191,12 @@ export async function getActiveSubscriptionForUser(
         organizationId
           ? eq(subscriptions.organizationId, organizationId)
           : isNull(subscriptions.organizationId),
-        eq(subscriptions.status, "active"), // ✅ FIX: Must be active
-        gte(subscriptions.currentPeriodEnd, now) // ✅ FIX: Must not be expired
+        eq(subscriptions.status, "active"),
+        gte(subscriptions.currentPeriodEnd, now) 
       )
     )
     .orderBy(desc(subscriptions.currentPeriodEnd));
 
-  // ✅ FIX: Filter out subscriptions scheduled for cancellation
   const activeSubscription = rows.find(sub => !sub.cancelAtPeriodEnd) ?? null;
 
   return activeSubscription;
