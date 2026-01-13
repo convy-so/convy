@@ -18,9 +18,9 @@ import { eq } from "drizzle-orm";
  * - First 3 responses generate immediately
  */
 
-const DEBOUNCE_DELAY_MS = 5 * 60 * 1000; // 5 minutes
-const RESPONSE_THRESHOLD = 10; // Generate analytics after 10 responses
-const IMMEDIATE_THRESHOLD = 3; // Generate immediately for first 3 responses
+const DEBOUNCE_DELAY_MS = 5 * 60 * 1000;
+const RESPONSE_THRESHOLD = 10;
+const IMMEDIATE_THRESHOLD = 3;
 
 /**
  * Get the current analytics counter for a survey
