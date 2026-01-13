@@ -5,13 +5,14 @@ export const runtime = "nodejs";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { surveyId: string } }
+  { params }: { params: Promise<{ surveyId: string }> }
 ) {
+  const { surveyId } = await params;
   try {
     const body = await request.json();
     const result = await removeSurveyMediaAction({
       ...body,
-      surveyId: params.surveyId,
+      surveyId,
     });
 
     if (!result.success) {

@@ -28,7 +28,7 @@ export const DEFAULT_PLAN_FEATURES: Record<PlanId, typeof subscriptionPlans.$inf
       maxWorkspaceMembers: 1,
       maxWorkspaces: 0, // No workspaces on free
       maxVoiceMinutesPerSession: 0,
-      advancedAnalytics: true, // Free gets basic analytics
+      advancedAnalytics: false, // Free gets basic analytics only
       customBranding: false,
       customDomain: false,
       embeddableWidget: false,

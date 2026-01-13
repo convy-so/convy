@@ -2,18 +2,16 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 
 /**
- * Coinbase Commerce Payment Link API Client
+ * Coinbase Commerce Payment Link Client
  * 
- * This client uses the new Payment Link API which:
- * - Uses business.coinbase.com/api/v1 as base URL
- * - Requires API key authentication
- * - Only supports USDC payments
- * - Returns shareable payment URLs
- * 
- * For more info: https://docs.cdp.coinbase.com/commerce-onchain/docs/payment-links
+ * This client manages "Payment Links" via the Coinbase Commerce Hosted Charges API.
+ * It provides a modern interface for:
+ * - Creating hosted payment pages (charges)
+ * - Monitoring payment status via webhooks or polling
+ * - Supporting various cryptocurrencies (USDC, BTC, ETH, etc.)
  */
 
-const COINBASE_PAYMENT_LINK_API_URL = "https://api.commerce.coinbase.com";
+const COINBASE_API_URL = "https://api.commerce.coinbase.com";
 
 // Retry configuration for resilience
 const MAX_RETRIES = 3;
@@ -111,7 +109,7 @@ async function request<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${COINBASE_PAYMENT_LINK_API_URL}${endpoint}`;
+  const url = `${COINBASE_API_URL}${endpoint}`;
   
   const headers: Record<string, string> = {
     "Content-Type": "application/json",

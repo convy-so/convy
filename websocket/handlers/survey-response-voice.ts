@@ -39,11 +39,16 @@ import {
   determineConversationState,
   getMemoryUpdatePrompt,
   applyMemoryUpdate,
+  getContextKey,
+  getStartTimeKey,
 } from "@/lib/conversation-memory";
 import { UsageService } from "@/lib/billing/usage";
+import { getRedisClient } from "@/lib/redis";
+import { enqueueConversationInsights } from "@/lib/queue";
 
 // Configuration constants
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes idle timeout
+const IDLE_WARNING_MS = 30 * 1000; // Warn 30 seconds before timeout
 const SPEECH_PROCESSING_DELAY_MS = 800; // Wait 800ms after speech ends for final results
 
 /**
@@ -93,7 +98,9 @@ export class SurveyResponseVoiceHandler {
 
   // Idle timeout management
   private idleTimeout: NodeJS.Timeout | null = null;
+  private idleWarningTimeout: NodeJS.Timeout | null = null;
   private lastActivityTime: number = Date.now();
+  private cleanupStarted: boolean = false; // Issue 16: prevent double cleanup
 
   // Session metrics
   private sessionStartTime: number = Date.now();
@@ -180,6 +187,13 @@ export class SurveyResponseVoiceHandler {
           { userId: targetUserId, organizationId: survey.organizationId ?? null },
           survey.currentParticipants
         );
+
+        // Issue 8 Fix: Assert user can use voice and check session duration limits
+        const { assertVoiceDurationAllowed } = await import("../../lib/billing/entitlements");
+        await assertVoiceDurationAllowed(
+          { userId: targetUserId, organizationId: survey.organizationId ?? null },
+          1 // Start with 1 minute check to ensure they can at least start
+        );
       } catch (error) {
         if (error instanceof Error && error.name === "PlanLimitError") {
           this.send({
@@ -207,10 +221,32 @@ export class SurveyResponseVoiceHandler {
       this.state.language = survey.language;
 
       this.state.surveyConfig = buildCompleteSurveyConfig(survey);
-      this.state.context = createRollingContext(
-        this.state.surveyConfig,
-        new Date()
-      );
+      
+      // Issue 3 Fix: Persistent memory tracking (Load from Redis or create new)
+      const redis = getRedisClient();
+      const contextKey = getContextKey(this.identifier); // Use identifier (session/ip) or conversation if known
+      const startTimeKey = getStartTimeKey(this.identifier);
+      
+      const existingContext = await redis.get(contextKey);
+      const startTimeStr = await redis.get(startTimeKey);
+      const startTime = startTimeStr ? new Date(startTimeStr as string) : new Date();
+      this.sessionStartTime = startTime.getTime();
+
+      if (existingContext) {
+        try {
+          this.state.context = typeof existingContext === "string" 
+            ? JSON.parse(existingContext) 
+            : existingContext as RollingContext;
+        } catch {
+          this.state.context = createRollingContext(this.state.surveyConfig, startTime);
+        }
+      } else {
+        this.state.context = createRollingContext(
+          this.state.surveyConfig,
+          startTime
+        );
+        await redis.set(startTimeKey, startTime.toISOString(), "EX", 7200);
+      }
 
       // Create voice session in database
       await db.insert(voiceSessions).values({
@@ -282,15 +318,41 @@ export class SurveyResponseVoiceHandler {
   private resetIdleTimeout(): void {
     this.lastActivityTime = Date.now();
 
-    // Clear existing timeout
+    // Clear existing timeouts
     if (this.idleTimeout) {
       clearTimeout(this.idleTimeout);
+      this.idleTimeout = null;
+    }
+    if (this.idleWarningTimeout) {
+      clearTimeout(this.idleWarningTimeout);
+      this.idleWarningTimeout = null;
     }
 
-    // Set new timeout
+    // Issue 2 Fix: Set warning timeout first (30s before disconnect)
+    this.idleWarningTimeout = setTimeout(() => {
+      this.handleIdleWarning();
+    }, IDLE_TIMEOUT_MS - IDLE_WARNING_MS);
+
+    // Set main timeout
     this.idleTimeout = setTimeout(() => {
       this.handleIdleTimeout();
     }, IDLE_TIMEOUT_MS);
+  }
+
+  /**
+   * Issue 2 Fix: Send warning 30 seconds before timeout
+   */
+  private handleIdleWarning(): void {
+    console.log(
+      `[Survey Response Voice] Session ${this.state.voiceSessionId} idle warning - 30s until timeout`
+    );
+
+    this.send({
+      type: "idle_warning",
+      message:
+        "Are you still there? The session will close in 30 seconds due to inactivity.",
+      secondsRemaining: 30,
+    });
   }
 
   /**
@@ -761,10 +823,15 @@ export class SurveyResponseVoiceHandler {
         });
       }
 
-      // Trigger async memory update for longer conversations (SEQUENTIAL)
-      this.memoryMutex = this.memoryMutex
-        .then(() => this.updateMemoryAsync())
-        .catch(err => console.error("Memory update error:", err));
+      // Save context to Redis for persistence (Issue 3 Fix)
+      if (this.state.context && this.state.conversationId) {
+        const redis = getRedisClient();
+        await redis.set(
+            getContextKey(this.identifier), 
+            JSON.stringify(this.state.context), 
+            "EX", 7200
+        );
+      }
 
       // Synthesize speech
       await this.synthesizeAndSendAudio(response);
@@ -947,6 +1014,23 @@ export class SurveyResponseVoiceHandler {
           .update(surveyConversations)
           .set({ completed: true })
           .where(eq(surveyConversations.id, this.state.conversationId));
+
+        // Issue 1 Fix: Enqueue insights for voice response
+        try {
+          await enqueueConversationInsights({
+            conversationId: this.state.conversationId,
+            surveyId: this.state.survey?.id || "",
+            userId: this.ownerId || "",
+          });
+          console.log(`[Survey Response Voice] Enqueued insights for ${this.state.conversationId}`);
+        } catch (error) {
+          console.error("[Survey Response Voice] Failed to enqueue insights:", error);
+        }
+        
+        // Cleanup Redis context on successful completion
+        const redis = getRedisClient();
+        await redis.del(getContextKey(this.identifier));
+        await redis.del(getStartTimeKey(this.identifier));
       }
 
       // Calculate final session metrics
@@ -992,8 +1076,16 @@ export class SurveyResponseVoiceHandler {
 
   /**
    * Cleanup resources
+   * Issue 16 Fix: Added idempotency guard to prevent double cleanup
    */
   private async cleanup(): Promise<void> {
+    // Issue 16: Prevent double cleanup which can cause memory corruption
+    if (this.cleanupStarted) {
+      console.log(`[Survey Response Voice] Cleanup already in progress for session ${this.state.voiceSessionId}`);
+      return;
+    }
+    this.cleanupStarted = true;
+    
     try {
       // Clear any pending timeouts
       if (this.speechProcessingTimeout) {
@@ -1005,6 +1097,12 @@ export class SurveyResponseVoiceHandler {
       if (this.idleTimeout) {
         clearTimeout(this.idleTimeout);
         this.idleTimeout = null;
+      }
+      
+      // Clear idle warning timeout (Issue 2 related)
+      if (this.idleWarningTimeout) {
+        clearTimeout(this.idleWarningTimeout);
+        this.idleWarningTimeout = null;
       }
 
       // Process any remaining transcription

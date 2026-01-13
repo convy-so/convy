@@ -178,6 +178,15 @@ export interface RollingContext {
 }
 
 // ============================================================================
+// REDIS KEY HELPERS
+// ============================================================================
+
+export const getContextKey = (conversationId: string) =>
+  `conv:context:${conversationId}`;
+export const getStartTimeKey = (conversationId: string) =>
+  `conv:start:${conversationId}`;
+
+// ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
 

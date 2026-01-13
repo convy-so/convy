@@ -10,10 +10,13 @@ const redis = new Redis({
 });
 
 export const CacheKeys = {
-  subscription: (userId: string) => `subscription:${userId}`,
-  entitlements: (userId: string) => `entitlements:${userId}`,
+  subscription: (userId: string, orgId?: string | null) =>
+    orgId ? `subscription:${userId}:org:${orgId}` : `subscription:${userId}`,
+  entitlements: (userId: string, orgId?: string | null) =>
+    orgId ? `entitlements:${userId}:org:${orgId}` : `entitlements:${userId}`,
   featureFlags: (userId: string) => `flags:${userId}`,
-  usage: (userId: string, period: string) => `usage:${userId}:${period}`,
+  usage: (userId: string, period: string, orgId?: string | null) =>
+    orgId ? `usage:${userId}:${period}:org:${orgId}` : `usage:${userId}:${period}`,
 } as const;
 
 export const TTL = {

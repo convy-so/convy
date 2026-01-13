@@ -5,13 +5,14 @@ import { updateSurveyMediaAction } from "@/app/actions/survey-images";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { surveyId: string } }
+  { params }: { params: Promise<{ surveyId: string }> }
 ) {
+  const { surveyId } = await params;
   try {
     const body = await request.json();
     const result = await updateSurveyMediaAction({
       ...body,
-      surveyId: params.surveyId,
+      surveyId,
     });
 
     if (!result.success) {
