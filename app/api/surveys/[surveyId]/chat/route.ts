@@ -25,16 +25,14 @@ import {
   determineConversationState,
   getMemoryUpdatePrompt,
   applyMemoryUpdate,
+  getContextKey,
+  getStartTimeKey,
 } from "@/lib/conversation-memory";
 import { getRedisClient } from "@/lib/redis";
 
 export const maxDuration = 300;
 
-// Redis keys for conversation context
-const getContextKey = (conversationId: string) =>
-  `conv:context:${conversationId}`;
-const getStartTimeKey = (conversationId: string) =>
-  `conv:start:${conversationId}`;
+
 
 /**
  * Load or create rolling context for a conversation

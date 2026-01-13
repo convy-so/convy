@@ -107,6 +107,8 @@ export async function POST(req: NextRequest) {
       await handleChargeResolved(event);
     } else if (event.type === "charge:failed") {
       await handleChargeFailed(event);
+    } else if (event.type === "charge:refunded") {
+      await handleChargeRefunded(event);
     }
 
     return new Response("OK", { status: 200 });
@@ -394,6 +396,49 @@ async function handleChargeFailed(event: CoinbaseEvent) {
       .update(payments)
       .set({ status: "failed", failedAt: new Date() })
       .where(eq(payments.coinbaseChargeId, charge.id));
+}
+
+async function handleChargeRefunded(event: CoinbaseEvent) {
+  const charge = event.data;
+  
+  logger.info("Handling refunded Coinbase charge", { chargeId: charge.id });
+
+  // Use a transaction to ensure atomicity
+  await db.transaction(async (tx) => {
+    // 1. Find the payment
+    const [payment] = await tx
+      .select()
+      .from(payments)
+      .where(eq(payments.coinbaseChargeId, charge.id))
+      .limit(1);
+
+    if (!payment) {
+      logger.warn("Payment not found for Coinbase refund", { chargeId: charge.id });
+      return;
+    }
+
+    // 2. Mark payment as failed/refunded
+    await tx
+      .update(payments)
+      .set({ status: "failed" }) 
+      .where(eq(payments.id, payment.id));
+
+    // 3. Cancel subscription if applicable
+    if (payment.subscriptionId) {
+      await tx
+        .update(subscriptions)
+        .set({
+          status: "canceled",
+          canceledAt: new Date(),
+        })
+        .where(eq(subscriptions.id, payment.subscriptionId));
+      
+      logger.info("Subscription canceled due to Coinbase refund", { 
+        subscriptionId: payment.subscriptionId,
+        paymentId: payment.id 
+      });
+    }
+  });
 }
 
 

@@ -5,11 +5,12 @@ export const runtime = "nodejs";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { surveyId: string } }
+  { params }: { params: Promise<{ surveyId: string }> }
 ) {
+  const { surveyId } = await params;
   try {
     const formData = await request.formData();
-    formData.set("surveyId", params.surveyId);
+    formData.set("surveyId", surveyId);
     const result = await uploadSurveyMediaAction(formData);
 
     if (!result.success) {

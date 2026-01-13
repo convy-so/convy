@@ -43,19 +43,26 @@ const tests = [
 
 let failures = 0;
 
-tests.forEach(test => {
-    const result = validateCoinbasePrice(test.planId, test.interval, test.amount);
-    if (result.isValid === test.expectedValid) {
-        console.log(`✅ ${test.name}: Passed`);
-    } else {
-        console.error(`❌ ${test.name}: Failed. Expected ${test.expectedValid} but got ${result.isValid} (Msg: ${result.error})`);
-        failures++;
+async function runTests() {
+    for (const test of tests) {
+        const result = await validateCoinbasePrice(test.planId, test.interval, test.amount);
+        if (result.isValid === test.expectedValid) {
+            console.log(`✅ ${test.name}: Passed`);
+        } else {
+            console.error(`❌ ${test.name}: Failed. Expected ${test.expectedValid} but got ${result.isValid} (Msg: ${result.error})`);
+            failures++;
+        }
     }
-});
 
-if (failures > 0) {
-    console.error(`\n${failures} tests failed.`);
-    process.exit(1);
-} else {
-    console.log("\nAll tests passed!");
+    if (failures > 0) {
+        console.error(`\n${failures} tests failed.`);
+        process.exit(1);
+    } else {
+        console.log("\nAll tests passed!");
+    }
 }
+
+runTests().catch(err => {
+    console.error("Test execution failed:", err);
+    process.exit(1);
+});

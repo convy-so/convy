@@ -532,10 +532,13 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
 
     const completedConversations = conversations.filter((c) => c.summary);
 
-    if (completedConversations.length === 0) {
-      throw new Error(
-        "No completed conversations found. Generate insights for conversations first."
-      );
+    // Issue 4 Fix: Don't throw error, just continue with empty/zero metrics
+    // if no conversations are completed yet. This prevents "Locked Dashboard"
+    // and worker retry loops.
+    if (completedConversations.length === 0 && conversations.length === 0) {
+      console.log(`[Survey Analytics Worker] No conversations found for survey ${surveyId}.`);
+      // Update with zero-state metrics
+      // (Optional: handle empty-state specialized response here)
     }
 
     await job.updateProgress(20);

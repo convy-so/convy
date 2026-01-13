@@ -84,15 +84,17 @@ async function syncSurvey(
   job: Job<NotionSyncJobData>,
   notion: Client,
   integration: typeof notionIntegrations.$inferSelect,
-  surveyId: string
+  surveyId: string,
+  preloadedSurvey?: typeof surveys.$inferSelect,
+  preloadedExport?: typeof notionExports.$inferSelect
 ) {
   console.log("Syncing survey to Notion:", { surveyId });
 
-  // Get survey
-  const [survey] = await db
+  // Get survey (use preloaded if available)
+  const survey = preloadedSurvey || (await db
     .select()
     .from(surveys)
-    .where(eq(surveys.id, surveyId));
+    .where(eq(surveys.id, surveyId)))[0];
 
   if (!survey) {
     throw new Error("Survey not found");
@@ -103,7 +105,7 @@ async function syncSurvey(
   }
 
   // Check if already exported
-  const [existingExport] = await db
+  const existingExport = preloadedExport || (await db
     .select()
     .from(notionExports)
     .where(
@@ -112,7 +114,7 @@ async function syncSurvey(
         eq(notionExports.surveyId, surveyId),
         eq(notionExports.exportType, "survey")
       )
-    );
+    ))[0];
 
   if (existingExport && !job.data.forceUpdate) {
     console.log("Updating existing survey page:", existingExport.notionPageId);
@@ -175,24 +177,27 @@ async function syncAnalytics(
   job: Job<NotionSyncJobData>,
   notion: Client,
   integration: typeof notionIntegrations.$inferSelect,
-  surveyId: string
+  surveyId: string,
+  preloadedSurvey?: typeof surveys.$inferSelect,
+  preloadedAnalytics?: typeof surveyAnalytics.$inferSelect,
+  preloadedExport?: typeof notionExports.$inferSelect
 ) {
   console.log("Syncing analytics to Notion:", { surveyId });
 
   // Get survey and analytics
-  const [survey] = await db
+  const survey = preloadedSurvey || (await db
     .select()
     .from(surveys)
-    .where(eq(surveys.id, surveyId));
+    .where(eq(surveys.id, surveyId)))[0];
 
   if (!survey) {
     throw new Error("Survey not found");
   }
 
-  const [analytics] = await db
+  const analytics = preloadedAnalytics || (await db
     .select()
     .from(surveyAnalytics)
-    .where(eq(surveyAnalytics.surveyId, surveyId));
+    .where(eq(surveyAnalytics.surveyId, surveyId)))[0];
 
   if (!analytics) {
     console.log("No analytics found for survey, skipping");
@@ -204,7 +209,7 @@ async function syncAnalytics(
   }
 
   // Check if already exported
-  const [existingExport] = await db
+  const existingExport = preloadedExport || (await db
     .select()
     .from(notionExports)
     .where(
@@ -213,7 +218,7 @@ async function syncAnalytics(
         eq(notionExports.surveyId, surveyId),
         eq(notionExports.exportType, "analytics")
       )
-    );
+    ))[0];
 
   if (existingExport && !job.data.forceUpdate) {
     // Update existing page - replace all blocks
@@ -301,21 +306,24 @@ async function syncConversation(
   job: Job<NotionSyncJobData>,
   notion: Client,
   integration: typeof notionIntegrations.$inferSelect,
-  conversationId: string
+  conversationId: string,
+  preloadedConversation?: typeof surveyConversations.$inferSelect,
+  preloadedSurvey?: typeof surveys.$inferSelect,
+  preloadedExport?: typeof notionExports.$inferSelect
 ) {
   console.log("Syncing conversation to Notion:", { conversationId });
-  const [conversation] = await db
+  const conversation = preloadedConversation || (await db
     .select()
     .from(surveyConversations)
-    .where(eq(surveyConversations.id, conversationId));
+    .where(eq(surveyConversations.id, conversationId)))[0];
 
   if (!conversation) {
     throw new Error("Conversation not found");
   }
-  const [survey] = await db
+  const survey = preloadedSurvey || (await db
     .select()
     .from(surveys)
-    .where(eq(surveys.id, conversation.surveyId));
+    .where(eq(surveys.id, conversation.surveyId)))[0];
 
   if (!survey) {
     throw new Error("Survey not found");
@@ -325,14 +333,14 @@ async function syncConversation(
     throw new Error("Parent page not configured");
   }
 
-  // Get insights if available
+  // Get insights if available (Optional: preloading insights could be added too)
   const [insights] = await db
     .select()
     .from(conversationInsights)
     .where(eq(conversationInsights.conversationId, conversationId));
 
   // Check if already exported
-  const [existingExport] = await db
+  const existingExport = preloadedExport || (await db
     .select()
     .from(notionExports)
     .where(
@@ -341,7 +349,7 @@ async function syncConversation(
         eq(notionExports.exportType, "conversation"),
         eq(notionExports.relatedId, conversationId)
       )
-    );
+    ))[0];
 
   if (existingExport && !job.data.forceUpdate) {
     const conflictCheck = await detectPageConflict(
@@ -551,11 +559,26 @@ async function fullSync(
   for (const { survey, analytics } of surveysWithAnalytics) {
     try {
       // Sync survey
-      await syncSurvey(job, notion, integration, survey.id);
+      await syncSurvey(
+        job, 
+        notion, 
+        integration, 
+        survey.id, 
+        survey, 
+        surveyExports.get(survey.id)
+      );
 
       // Sync analytics if available
       if (analytics) {
-        await syncAnalytics(job, notion, integration, survey.id);
+        await syncAnalytics(
+          job, 
+          notion, 
+          integration, 
+          survey.id, 
+          survey, 
+          analytics, 
+          analyticsExports.get(survey.id)
+        );
       }
 
       // Sync conversations using pre-loaded data
@@ -566,7 +589,15 @@ async function fullSync(
 
       for (const conversation of surveyConvos) {
         try {
-          await syncConversation(job, notion, integration, conversation.id);
+          await syncConversation(
+            job, 
+            notion, 
+            integration, 
+            conversation.id, 
+            conversation, 
+            survey, 
+            conversationExports.get(conversation.id)
+          );
         } catch (convError) {
           console.error(
             `Failed to sync conversation ${conversation.id}:`,

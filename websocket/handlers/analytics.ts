@@ -30,12 +30,14 @@ export interface AnalyticsMessage {
 export class AnalyticsHandler {
   private ws: WebSocket;
   private userId: string;
-  private surveyId: string;
+  private userRole: string; // Added for Issue 5
+  public surveyId: string; // Changed from private for server.ts cleanup access
   private isActive: boolean = true;
 
   constructor(connection: AuthenticatedConnection, surveyId: string) {
     this.ws = connection.ws;
     this.userId = connection.userId;
+    this.userRole = connection.role;
     this.surveyId = surveyId;
 
     // Set up WebSocket event handlers
@@ -63,7 +65,7 @@ export class AnalyticsHandler {
         return;
       }
 
-      if (survey.userId !== this.userId) {
+      if (survey.userId !== this.userId && this.userRole !== "admin") {
         this.send({
           type: "error",
           error: "Unauthorized access to survey",

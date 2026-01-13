@@ -17,6 +17,9 @@ import sampleConversationInsightsWorker from "./sample-conversation-insights.wor
 import emailWorker from "./email.worker";
 import notionSyncWorker from "./notion-sync.worker";
 import notionBulkOperationWorker from "./notion-bulk-operation.worker";
+import subscriptionMonitorWorker from "./subscription-monitor.worker";
+import { webhookWorker } from "./webhook.worker";
+import { notificationWorker } from "./notification.worker";
 
 // Collect all workers for coordinated shutdown
 const workers = [
@@ -29,6 +32,9 @@ const workers = [
   { name: "Email", worker: emailWorker },
   { name: "Notion Sync", worker: notionSyncWorker },
   { name: "Notion Bulk Operation", worker: notionBulkOperationWorker },
+  { name: "Subscription Monitor", worker: subscriptionMonitorWorker },
+  { name: "Webhook", worker: webhookWorker },
+  { name: "Notification", worker: notificationWorker },
 ];
 
 console.log("🚀 Starting all workers...");
