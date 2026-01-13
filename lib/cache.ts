@@ -20,10 +20,10 @@ export const CacheKeys = {
 } as const;
 
 export const TTL = {
-  subscription: 300, // 5 minutes
-  entitlements: 60, // 1 minute
-  featureFlags: 60, // 1 minute
-  usage: 60, // 1 minute (for fast checking, mostly strict consistency needed though)
+  subscription: 300,
+  entitlements: 60,
+  featureFlags: 60,
+  usage: 60,
 } as const;
 
 export class CacheService {

@@ -711,12 +711,12 @@ export interface SurveyAnalyticsAIResponse {
     supportingCount: number;
     contradictingCount: number;
     supportingEvidence: Array<{
-      quote: string;
+    
+    contradictingEvidence: Array<{
+        quote: string;
       conversationId: string;
       type: string;
-    }>;
-    contradictingEvidence: Array<{
-      quote: string;
+    }>;quote: string;
       conversationId: string;
       type: string;
     }>;

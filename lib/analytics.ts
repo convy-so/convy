@@ -404,7 +404,6 @@ export interface ConversationInsightData {
 // ============================================================================
 
 export interface SurveyAnalyticsData {
-  // Metadata
   surveyId: string;
   surveyTitle: string;
   generatedAt: string;
@@ -462,9 +461,9 @@ export interface DashboardWidget {
   type: WidgetType;
   title: string;
   description?: string;
-  priority: number; // Lower = more important, show first
+  priority: number;
   size: "small" | "medium" | "large" | "full";
-  data: unknown; // Type depends on widget type
+  data: unknown;
 }
 
 // Specific widget data types
