@@ -30,8 +30,8 @@ export interface AnalyticsMessage {
 export class AnalyticsHandler {
   private ws: WebSocket;
   private userId: string;
-  private userRole: string;
-  public surveyId: string; 
+  private userRole: string; // Added for Issue 5
+  public surveyId: string; // Changed from private for server.ts cleanup access
   private isActive: boolean = true;
 
   constructor(connection: AuthenticatedConnection, surveyId: string) {

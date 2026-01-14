@@ -1,4 +1,4 @@
- /**
+/**
  * Slack OAuth Integration
  *
  * Utilities for Slack OAuth 2.0 authentication flow
