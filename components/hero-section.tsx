@@ -27,10 +27,10 @@ export default function HeroSection() {
           {/* Create form button */}
           <div className="flex flex-col items-center mt-6">
             <Link
-              href="/create"
+              href="/sign-up"
               className="rounded-full bg-[#292929] px-[16px] py-[10px] text-[18px] font-medium tracking-[-0.28px] text-[#FAFAFA] transition-colors hover:bg-[#3a3a3a] whitespace-nowrap flex items-center gap-2"
             >
-              Create a free form
+              Get started free
               <ArrowUpRight size={18} />
             </Link>
             <p className="text-sm text-[#696969] mt-2">no credit card required</p>
