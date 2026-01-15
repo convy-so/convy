@@ -222,7 +222,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Recent Surveys</h2>
             <Link
-              href="/surveys"
+              href="/dashboard/surveys"
               className="text-sm font-medium text-gray-500 hover:text-gray-900 flex items-center gap-1 transition-colors"
             >
               View all
@@ -246,7 +246,7 @@ export default function DashboardPage() {
                 Get started by creating your first AI-powered survey
               </p>
               <Link
-                href="/surveys/create"
+                href="/dashboard/create"
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors"
               >
                 <Plus className="w-4 h-4" />
