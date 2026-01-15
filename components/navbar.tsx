@@ -28,16 +28,16 @@ export default function Navbar() {
             Pricing
           </Link>
           <Link
-            href="/login"
+            href="/sign-in"
             className="text-sm sm:text-base md:text-[18px] font-medium text-[#292929] tracking-[-0.28px] transition-colors hover:text-[#292929]/80"
           >
-            Login
+            Sign in
           </Link>
           <Link
-            href="/create"
+            href="/sign-up"
             className="rounded-full bg-[#292929] px-3 py-1.5 sm:px-4 sm:py-2 md:px-[16px] md:py-[10px] text-sm sm:text-base md:text-[18px] font-medium tracking-[-0.28px] text-[#FAFAFA] transition-colors hover:bg-[#3a3a3a] whitespace-nowrap"
           >
-            Create form
+            Get started
           </Link>
         </div>
       </div>
