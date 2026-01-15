@@ -29,10 +29,10 @@ export default function WaitlistSection() {
           {/* CTA */}
           <div className="flex justify-center">
             <Link
-              href="/waitlist"
+              href="/sign-up"
               className="rounded-full bg-[#292929] px-[24px] py-[12px] text-[18px] font-medium tracking-[-0.28px] text-[#FAFAFA] transition-colors hover:bg-[#3a3a3a] whitespace-nowrap"
             >
-              Sign up to Waitlist
+              Get started free
             </Link>
           </div>
         </div>
