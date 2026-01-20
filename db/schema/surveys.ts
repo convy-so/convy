@@ -292,39 +292,6 @@ const surveyAnalytics = pgTable(
   (table) => [index("survey_analytics_survey_id_idx").on(table.surveyId)]
 );
 
-const surveyTeamMembers = pgTable(
-  "survey_team_members",
-  {
-    id: text("id").primaryKey(),
-    ...timestamps,
-    surveyId: text("survey_id")
-      .notNull()
-      .references(() => surveys.id, { onDelete: "cascade" }),
-    userId: text("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    invitedBy: text("invited_by")
-      .notNull()
-      .references(() => users.id),
-    role: text("role").notNull().default("viewer"), // 'owner' | 'editor' | 'viewer'
-    notionAccess: boolean("notion_access").default(false).notNull(),
-    canSync: boolean("can_sync").default(false).notNull(),
-    canInvite: boolean("can_invite").default(false).notNull(),
-    acceptedAt: timestamp("accepted_at", {
-      withTimezone: true,
-      mode: "date",
-    }),
-    invitationToken: text("invitation_token"),
-  },
-  (table) => [
-    index("survey_team_members_survey_id_idx").on(table.surveyId),
-    index("survey_team_members_user_id_idx").on(table.userId),
-    unique("survey_team_members_survey_user_unique").on(
-      table.surveyId,
-      table.userId
-    ),
-  ]
-);
 
 const surveysRelations = relations(surveys, ({ one, many }) => ({
   user: one(users, {
@@ -349,7 +316,7 @@ const surveysRelations = relations(surveys, ({ one, many }) => ({
     fields: [surveys.id],
     references: [surveyAnalytics.surveyId],
   }),
-  teamMembers: many(surveyTeamMembers),
+
 }));
 
 const surveyCreationConversationsRelations = relations(
@@ -406,24 +373,6 @@ const surveyAnalyticsRelations = relations(
   })
 );
 
-const surveyTeamMembersRelations = relations(
-  surveyTeamMembers,
-  ({ one }) => ({
-    survey: one(surveys, {
-      fields: [surveyTeamMembers.surveyId],
-      references: [surveys.id],
-    }),
-    user: one(users, {
-      fields: [surveyTeamMembers.userId],
-      references: [users.id],
-    }),
-    inviter: one(users, {
-      fields: [surveyTeamMembers.invitedBy],
-      references: [users.id],
-    }),
-  })
-);
-
 export {
   surveys,
   surveyCreationConversations,
@@ -431,12 +380,10 @@ export {
   surveyConversations,
   conversationInsights,
   surveyAnalytics,
-  surveyTeamMembers,
   surveysRelations,
   surveyCreationConversationsRelations,
   sampleConversationsRelations,
   surveyConversationsRelations,
   conversationInsightsRelations,
   surveyAnalyticsRelations,
-  surveyTeamMembersRelations,
 };

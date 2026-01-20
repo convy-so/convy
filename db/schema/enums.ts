@@ -58,7 +58,7 @@ export const subscriptionStatusEnum = pgEnum("subscription_status", [
 ]);
 export const paymentProviderEnum = pgEnum("payment_provider", [
   "stripe",
-  "coinbase_commerce",
+  "coinbase_business",
 ]);
 export const paymentStatusEnum = pgEnum("payment_status", [
   "pending",

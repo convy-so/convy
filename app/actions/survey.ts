@@ -5,7 +5,7 @@ import { z } from "zod";
 import { and, eq, ne, or, sql, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
-import { surveys, users } from "@/db/schema";
+import { surveys, users, organizations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getSurveyAccessLevel } from "@/lib/workspace-access";
 import { env } from "@/lib/env";
@@ -812,4 +812,93 @@ export async function reactivateSurveyAction(
     }
     return { success: false, error: "Failed to reactivate survey" };
   }
-} 
+}
+
+/**
+ * Delete a survey (Creator ONLY)
+ * Removes survey and all related data (cascade). Notifies workspace members.
+ */
+export async function deleteSurveyAction(
+  surveyId: string
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const session = await getVerifiedSession();
+
+    const [survey] = await db
+      .select({
+        id: surveys.id,
+        title: surveys.title,
+        userId: surveys.userId,
+        organizationId: surveys.organizationId,
+      })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    // Strict Rule: Only the Creator can delete
+    if (survey.userId !== session.user.id) {
+      return {
+        success: false,
+        error: "Unauthorized: Only the survey creator can delete this survey",
+      };
+    }
+
+    // Capture details for notification before deletion
+    const surveyTitle = survey.title;
+    const organizationId = survey.organizationId;
+
+    // Delete survey (Waterfall cascade deletes everything else)
+    await db.delete(surveys).where(eq(surveys.id, surveyId));
+
+    // Send Notifications if in a workspace
+    if (organizationId) {
+      // We run this asynchronously to not block the UI response
+      (async () => {
+        try {
+          const { getWorkspaceMembers } = await import("@/app/actions/workspace");
+          const { sendSurveyDeletedEmail } = await import("@/lib/email");
+
+          const membersResult = await getWorkspaceMembers({ organizationId });
+          
+          const [org] = await db
+            .select({ name: organizations.name })
+            .from(organizations)
+            .where(eq(organizations.id, organizationId));
+             
+          const workspaceName = org?.name || "Workspace";
+
+          if (membersResult.success) {
+            for (const member of membersResult.data) {
+              if (member.user.email) {
+                 await sendSurveyDeletedEmail({
+                   email: member.user.email,
+                   surveyTitle,
+                   deletedBy: session.user.name || session.user.email,
+                   workspaceName,
+                 });
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Failed to send delete notifications:", e);
+        }
+      })();
+    }
+
+    return { success: true, data: { id: surveyId } };
+  } catch (error) {
+     if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Failed to delete survey" };
+  }
+}

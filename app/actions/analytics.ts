@@ -56,12 +56,10 @@ export async function generateSurveyAnalyticsAction(
       return {
         success: false,
         error:
-          "No completed conversations found. Generate insights for conversations first.",
+          "No completed conversations found. Generate insights for conversations first."
       };
     }
 
-    // Manual trigger: Reset counter and generate immediately
-    // This bypasses the automatic scheduling system
     try {
       const { resetAnalyticsCounterAfterGeneration } =
         await import("@/lib/analytics-scheduler");
@@ -71,7 +69,6 @@ export async function generateSurveyAnalyticsAction(
         "Failed to reset analytics counter for manual trigger:",
         error
       );
-      // Continue anyway
     }
 
     const job = await enqueueSurveyAnalytics({
@@ -133,8 +130,6 @@ export async function getSurveyAnalyticsAction(surveyId: string): Promise<
       .from(surveyAnalytics)
       .where(eq(surveyAnalytics.surveyId, surveyId));
 
-    // If analytics don't exist, check if there are completed conversations
-    // If so, automatically trigger analytics generation
     if (!analytics) {
       const conversations = await db
         .select({
@@ -494,7 +489,6 @@ export async function getComprehensiveAnalyticsAction(
         analytics.updatedAt.toISOString(),
     };
 
-    // Generate dashboard widgets
     analyticsData.dashboardWidgets = createDashboardWidgets(analyticsData);
 
     return {

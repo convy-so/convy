@@ -1,6 +1,7 @@
 import "server-only";
 
 import { enqueueEmail } from "@/lib/queue";
+import { env } from "@/lib/env";
 
 type EmailPayload = {
   email: string;
@@ -88,5 +89,26 @@ export async function sendSecondaryEmailVerification(payload: {
     email: payload.email,
     url: payload.url,
     name: payload.name,
+  });
+}
+
+/**
+ * Queue survey deleted email (notify workspace members)
+ */
+export async function sendSurveyDeletedEmail(payload: {
+  email: string;
+  surveyTitle: string;
+  deletedBy: string;
+  workspaceName: string;
+}) {
+  await enqueueEmail({
+    type: "survey-deleted",
+    email: payload.email,
+    url: env.APP_BASE_URL, // Redirect to dashboard
+    name: payload.surveyTitle,
+    metadata: {
+      deletedBy: payload.deletedBy,
+      workspaceName: payload.workspaceName,
+    },
   });
 }

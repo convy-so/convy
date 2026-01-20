@@ -35,7 +35,7 @@ const worker = new Worker<SubscriptionMonitorJobData>(
         
         // Filter for Coinbase Commerce (or non-Stripe)
         // If stripeSubscriptionId is present, Stripe handles churn/emails (usually).
-        if (subscription.stripeSubscriptionId && metadata.provider !== 'coinbase_commerce') {
+        if (subscription.stripeSubscriptionId && metadata.provider !== 'coinbase_business') {
             continue;
         }
         

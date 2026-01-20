@@ -14,7 +14,6 @@ export async function inviteMember(email: string, role: "admin" | "member" | "ow
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) throw new Error("Unauthorized");
 
-  // Permission check
   const membership = await db.query.members.findFirst({
     where: and(
       eq(members.userId, session.user.id),
@@ -89,7 +88,7 @@ export async function inviteMember(email: string, role: "admin" | "member" | "ow
         .set({
           expiresAt,
           status: "pending",
-          role, // update role if changed
+          role, 
         })
         .where(eq(invitations.id, existingInvite.id));
 
@@ -234,9 +233,16 @@ export async function getPendingInvitations(workspaceId: string) {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) return [];
 
-    // Check permission
-    // ...
-    // Assuming if you can see settings, you can see pending invites (or filter based on role)
+    const membership = await db.query.members.findFirst({
+        where: and(
+            eq(members.userId, session.user.id),
+            eq(members.organizationId, workspaceId)
+        )
+    });
+
+    if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
+        throw new Error("You do not have permission to view pending invitations");
+    }
     
     return await db.query.invitations.findMany({
         where: and(
