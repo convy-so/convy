@@ -118,7 +118,6 @@ const extractedDataSchema = z.object({
 export async function startSurveyCreationAction(
   input: z.infer<typeof startSurveyCreationSchema> = { language: "en" }
 ): Promise<ActionResult<{ surveyId: string; conversationId: string }>> {
-  // ✅ FIX: Add entitlement check for text survey creation
   try {
     const { assertCanCreateTextSurvey } = await import("@/lib/billing/entitlements");
     const session = await getVerifiedSession();
