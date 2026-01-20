@@ -68,7 +68,10 @@ export async function getSlackIntegrationStatus() {
         autoPostOnConversation: integration.autoPostOnConversation,
         defaultChannelId: integration.defaultChannelId,
         defaultChannelName: integration.defaultChannelName,
+        syncScheduleMode: integration.syncScheduleMode,
+        syncScheduleHour: integration.syncScheduleHour,
         lastPostedAt: integration.lastPostedAt,
+        lastScheduledSyncAt: integration.lastScheduledSyncAt,
       },
     };
   } catch (error) {
@@ -172,6 +175,51 @@ export async function updateSlackIntegrationSettings(settings: {
     return {
       success: false,
       error: "Failed to update settings",
+    };
+  }
+}
+
+/**
+ * Update Slack sync schedule (digest mode)
+ */
+export async function updateSlackSyncSchedule(params: {
+  mode: "hourly" | "every3h" | "every5h" | "daily_hour" | "disabled";
+  hourOfDay?: number;
+}) {
+  try {
+    const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+
+    if (activeOrgId) {
+      const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
+      if (!isOwner) {
+        return { success: false, error: "Only workspace owner can manage integrations" };
+      }
+    }
+
+    // Update database settings
+    await updateSlackSettings(session.user.id, {
+      syncScheduleMode: params.mode,
+      syncScheduleHour: params.hourOfDay ?? null,
+    });
+
+    // Update scheduled jobs
+    const { scheduleSlackSyncRepeating } = await import("@/lib/queue");
+    await scheduleSlackSyncRepeating({
+      userId: session.user.id,
+      mode: params.mode,
+      hourOfDay: params.hourOfDay,
+    });
+
+    return {
+      success: true,
+      message: "Sync schedule updated",
+    };
+  } catch (error) {
+    console.error("Error updating Slack sync schedule:", error);
+    return {
+      success: false,
+      error: "Failed to update sync schedule",
     };
   }
 }

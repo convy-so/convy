@@ -81,6 +81,8 @@ export async function updateSlackSettings(
     autoPostOnConversation?: boolean;
     defaultChannelId?: string;
     defaultChannelName?: string;
+    syncScheduleMode?: string | null;
+    syncScheduleHour?: number | null;
   }
 ) {
   await db

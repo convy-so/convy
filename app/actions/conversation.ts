@@ -71,20 +71,28 @@ export async function completeConversationAction(
       console.error("Failed to trigger Zapier webhook:", e);
     }
 
+    // Slack notification - check if digest mode is enabled
     try {
-      const { enqueueNotification } = await import("@/lib/queue");
-      await enqueueNotification({
-        type: "slack",
-        userId: survey.userId,
-        message: "New Response",
-        metadata: {
-          event: "new_conversation",
-          surveyId: conversation.surveyId,
-          conversationId,
-        },
-      });
+      const { getSlackIntegration } = await import("@/lib/slack/oauth");
+      const slackIntegration = await getSlackIntegration(survey.userId);
+      
+      // Only send immediate notification if digest mode is disabled/not configured
+      if (slackIntegration && (!slackIntegration.syncScheduleMode || slackIntegration.syncScheduleMode === "disabled")) {
+        const { enqueueNotification } = await import("@/lib/queue");
+        await enqueueNotification({
+          type: "slack",
+          userId: survey.userId,
+          message: "New Response",
+          metadata: {
+            event: "new_conversation",
+            surveyId: conversation.surveyId,
+            conversationId,
+          },
+        });
+      }
+      // If digest mode is enabled, conversation will be included in next scheduled digest
     } catch (e) {
-      console.error("Failed to enqueue Slack notification:", e);
+      console.error("Failed to check Slack notification settings:", e);
     }
 
     return {
