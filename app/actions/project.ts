@@ -2,7 +2,7 @@
 
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { eq, and, isNull, sql, or } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
 import { projects, surveys } from "@/db/schema";

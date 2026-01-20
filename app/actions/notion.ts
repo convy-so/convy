@@ -15,10 +15,9 @@ import {
   exportSurveyToNotion,
   exportAnalyticsToNotion,
   exportConversationToNotion,
-  createSurveyDatabase,
   getNotionPageUrl,
 } from "@/lib/notion-improved";
-import { encrypt, decrypt } from "@/lib/encryption";
+import { decrypt } from "@/lib/encryption";
 
 /**
  * Get user's Notion integration status
@@ -50,102 +49,6 @@ export async function getNotionIntegrationStatus() {
       error: "Failed to get Notion integration status",
       connected: false,
       integration: null,
-    };
-  }
-}
-
-/**
- * Configure Notion integration
- */
-export async function configureNotionIntegration(data: {
-  notionToken: string;
-  parentPageId?: string;
-  workspaceName?: string;
-}) {
-  try {
-    const session = await getVerifiedSession();
-    const { notionToken, parentPageId, workspaceName } = data;
-
-    if (!notionToken) {
-      return {
-        success: false,
-        error: "Notion token is required",
-      };
-    }
-
-    // Test the token
-    const notion = getNotionClient(notionToken);
-
-    try {
-      await notion.users.me({});
-    } catch (error) {
-      return {
-        success: false,
-        error: "Invalid Notion token",
-      };
-    }
-
-    // Get existing integration
-    const [existingIntegration] = await db
-      .select()
-      .from(notionIntegrations)
-      .where(eq(notionIntegrations.userId, session.user.id));
-
-    let surveyDatabaseId = existingIntegration?.surveyDatabaseId || null;
-
-    // Create survey database if parent page is provided
-    if (parentPageId && !surveyDatabaseId) {
-      try {
-        const database = await createSurveyDatabase(
-          notion,
-          parentPageId,
-          "Surveys"
-        );
-        surveyDatabaseId = database.id;
-      } catch (error) {
-        console.error("Failed to create survey database:", error);
-      }
-    }
-
-    // Encrypt the token for secure storage (required by schema)
-    const encryptedToken = encrypt(notionToken);
-
-    if (existingIntegration) {
-      await db
-        .update(notionIntegrations)
-        .set({
-          accessToken: encryptedToken.encrypted,
-          accessTokenIv: encryptedToken.iv,
-          accessTokenTag: encryptedToken.tag,
-          parentPageId: parentPageId || existingIntegration.parentPageId,
-          workspaceName: workspaceName || existingIntegration.workspaceName,
-          surveyDatabaseId:
-            surveyDatabaseId || existingIntegration.surveyDatabaseId,
-        })
-        .where(eq(notionIntegrations.userId, session.user.id));
-    } else {
-      await db.insert(notionIntegrations).values({
-        id: crypto.randomUUID(),
-        userId: session.user.id,
-        accessToken: encryptedToken.encrypted,
-        accessTokenIv: encryptedToken.iv,
-        accessTokenTag: encryptedToken.tag,
-        parentPageId: parentPageId || null,
-        workspaceName: workspaceName || null,
-        surveyDatabaseId: surveyDatabaseId,
-      });
-    }
-
-    return {
-      success: true,
-      message: "Notion integration configured successfully",
-      surveyDatabaseId,
-    };
-  } catch (error) {
-    console.error("Error configuring Notion integration:", error);
-    return {
-      success: false,
-      error: "Failed to configure Notion integration",
     };
   }
 }
