@@ -769,7 +769,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
       console.error("Failed to enqueue Notion sync:", error);
     }
 
-    // Trigger Slack auto-post (via Notification Queue)
+    // Trigger Slack auto-post (analytics updates are always immediate, not affected by digest mode)
     try {
       const { enqueueNotification } = await import("@/lib/queue");
       await enqueueNotification({

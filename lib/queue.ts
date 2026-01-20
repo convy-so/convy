@@ -68,11 +68,25 @@ export interface SubscriptionMonitorJobData {
   checkDate?: string;
 }
 
+export interface SlackSyncJobData {
+  userId: string;
+  surveyId?: string;
+  syncType: "digest" | "analytics" | "survey_created";
+  targetId?: string;
+}
+
 export type NotionSyncScheduleMode =
   | "hourly"
   | "every3h"
   | "every5h"
   | "daily_hour";
+
+export type SlackSyncScheduleMode =
+  | "hourly"
+  | "every3h"
+  | "every5h"
+  | "daily_hour"
+  | "disabled";
 
 export const conversationInsightsQueue = new Queue<ConversationInsightsJobData>(
   "conversation-insights",
@@ -210,6 +224,24 @@ export const notionBulkOperationQueue = new Queue<NotionBulkOperationJobData>(
   }
 );
 
+export const slackSyncQueue = new Queue<SlackSyncJobData>("slack-sync", {
+  connection: sharedConnection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: "exponential",
+      delay: 2000,
+    },
+    removeOnComplete: {
+      age: 24 * 3600,
+      count: 1000,
+    },
+    removeOnFail: {
+      age: 7 * 24 * 3600,
+    },
+  },
+});
+
 /**
  * Queue Events for monitoring
  * Each QueueEvents needs its own dedicated connection for blocking operations
@@ -267,6 +299,10 @@ export const subscriptionMonitorQueueEvents = new QueueEvents(
   "subscription-monitor",
   { connection: createBlockingClient() }
 );
+
+export const slackSyncQueueEvents = new QueueEvents("slack-sync", {
+  connection: createBlockingClient(),
+});
 
 export async function enqueueConversationInsights(
   data: ConversationInsightsJobData
@@ -406,6 +442,64 @@ export async function ensureDefaultScheduledSync(userId: string) {
   });
 }
 
+/**
+ * Remove existing scheduled Slack sync jobs for a user
+ */
+export async function clearScheduledSlackSync(userId: string) {
+  await slackSyncQueue.removeJobScheduler(`slack-schedule-${userId}`);
+}
+
+/**
+ * Schedule a repeating Slack digest for a user
+ */
+export async function scheduleSlackSyncRepeating(params: {
+  userId: string;
+  mode: SlackSyncScheduleMode;
+  hourOfDay?: number;
+}) {
+  // If mode is 'disabled', clear the schedule
+  if (params.mode === "disabled") {
+    await clearScheduledSlackSync(params.userId);
+    return;
+  }
+
+  const repeat = buildRepeatOptions(params.mode as NotionSyncScheduleMode, params.hourOfDay);
+
+  return await slackSyncQueue.upsertJobScheduler(
+    `slack-schedule-${params.userId}`,
+    repeat,
+    {
+      name: "scheduled-digest",
+      data: {
+        userId: params.userId,
+        syncType: "digest" as const,
+      },
+      opts: {
+        priority: 2,
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    }
+  );
+}
+
+/**
+ * Enqueue Slack sync job
+ */
+export async function enqueueSlackSync(data: SlackSyncJobData) {
+  const jobId =
+    data.syncType === "digest"
+      ? `slack-digest-${data.userId}-${Date.now()}`
+      : data.syncType === "analytics" && data.surveyId
+        ? `slack-analytics-${data.surveyId}`
+        : `slack-survey-${data.surveyId || "unknown"}`;
+
+  return await slackSyncQueue.add(`sync-${data.syncType}`, data, {
+    jobId,
+    priority: 2,
+  });
+}
+
 export async function enqueueBulkOperation(data: NotionBulkOperationJobData) {
   return await notionBulkOperationQueue.add(
     `bulk-${data.operationType}`,
@@ -518,6 +612,7 @@ export async function closeQueues() {
     webhookQueue.close(),
     notificationQueue.close(),
     subscriptionMonitorQueue.close(),
+    slackSyncQueue.close(),
     
     conversationInsightsQueueEvents.close(),
     surveyAnalyticsQueueEvents.close(),
@@ -529,6 +624,7 @@ export async function closeQueues() {
     webhookQueueEvents.close(),
     notificationQueueEvents.close(),
     subscriptionMonitorQueueEvents.close(),
+    slackSyncQueueEvents.close(),
   ]);
 
   await closeRedisConnections();
