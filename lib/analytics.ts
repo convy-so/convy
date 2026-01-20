@@ -362,40 +362,26 @@ export interface GoalAssessment {
 
 export interface ConversationInsightData {
   conversationId: string;
-
-  // Summary
   summary: string;
   keyFindings: string[];
-
-  // Quantitative
   messageCount: number;
   participantResponseCount: number;
   averageResponseLength: number;
   durationMinutes: number;
   followUpDepth: number;
-
-  // Quality
   engagementLevel: "high" | "medium" | "low";
-  responseQuality: number; // 1-10
-
-  // Coverage
+  responseQuality: number;
   topicsCovered: string[];
   requiredQuestionsCovered: string[];
   requiredQuestionsMissed: string[];
-
-  // Extracted data
   sentiment: SentimentAnalysis;
   extractedMetrics: Record<string, string | number | boolean>;
   notableQuotes: ExtractedQuote[];
-
-  // Hypothesis evidence (if hypotheses exist)
   hypothesisEvidence: {
     hypothesis: string;
     evidence: "supporting" | "contradicting" | "neutral";
     quote?: string;
   }[];
-
-  // Media interactions (if media exists in survey)
   mediaInteractions: MediaInteraction[];
 }
 
@@ -462,9 +448,9 @@ export interface DashboardWidget {
   type: WidgetType;
   title: string;
   description?: string;
-  priority: number; // Lower = more important, show first
+  priority: number;
   size: "small" | "medium" | "large" | "full";
-  data: unknown; // Type depends on widget type
+  data: unknown; 
 }
 
 // Specific widget data types
@@ -1487,7 +1473,7 @@ export function aggregateConversationInsights(
 
   return {
     totalConversations: total,
-    completedConversations: total, // All in insights are completed
+    completedConversations: total,
     completionRate: 100,
     averageMessagesPerConversation: Math.round(totalMessages / total),
     averageResponseLength: Math.round(totalResponseLength / total),

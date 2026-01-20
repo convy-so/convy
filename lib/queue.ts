@@ -31,7 +31,9 @@ export interface EmailJobData {
     | "workspace-invitation"
     | "subscription-expiration"
     | "workspace-welcome"
-    | "secondary-verification";
+    | "secondary-verification"
+    | "survey-deleted";
+
   email: string;
   url: string;
   name?: string | null;

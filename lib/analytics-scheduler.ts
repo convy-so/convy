@@ -111,10 +111,8 @@ async function scheduleDebouncedAnalytics(
   userId: string
 ): Promise<void> {
   try {
-    // Cancel any existing scheduled job
     await cancelScheduledAnalytics(surveyId);
 
-    // Schedule new job with delay
     const jobId = getScheduledJobId(surveyId);
     await surveyAnalyticsQueue.add(
       "generate-analytics",
@@ -198,8 +196,6 @@ export async function scheduleAnalyticsOnNewResponse(
       // Generate immediately
       await generateAnalyticsImmediately(surveyId, userId);
       
-      // Reset counter after immediate generation
-      await resetAnalyticsCounter(surveyId);
       return;
     }
 
