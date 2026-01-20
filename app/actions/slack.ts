@@ -90,15 +90,18 @@ export async function disconnectSlack() {
   try {
     const session = await getVerifiedSession();
     const activeOrgId = session.session.activeOrganizationId;
+    let targetUserId = session.user.id;
 
     if (activeOrgId) {
       const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
       if (!isOwner) {
         return { success: false, error: "Only workspace owner can manage integrations" };
       }
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) targetUserId = ownerId;
     }
 
-    await disconnectSlackIntegration(session.user.id);
+    await disconnectSlackIntegration(targetUserId);
 
     return {
       success: true,
@@ -156,15 +159,18 @@ export async function updateSlackIntegrationSettings(settings: {
   try {
     const session = await getVerifiedSession();
     const activeOrgId = session.session.activeOrganizationId;
+    let targetUserId = session.user.id;
 
     if (activeOrgId) {
       const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
       if (!isOwner) {
         return { success: false, error: "Only workspace owner can manage integrations" };
       }
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) targetUserId = ownerId;
     }
 
-    await updateSlackSettings(session.user.id, settings);
+    await updateSlackSettings(targetUserId, settings);
 
     return {
       success: true,
@@ -189,16 +195,19 @@ export async function updateSlackSyncSchedule(params: {
   try {
     const session = await getVerifiedSession();
     const activeOrgId = session.session.activeOrganizationId;
+    let targetUserId = session.user.id;
 
     if (activeOrgId) {
       const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
       if (!isOwner) {
         return { success: false, error: "Only workspace owner can manage integrations" };
       }
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) targetUserId = ownerId;
     }
 
     // Update database settings
-    await updateSlackSettings(session.user.id, {
+    await updateSlackSettings(targetUserId, {
       syncScheduleMode: params.mode,
       syncScheduleHour: params.hourOfDay ?? null,
     });
@@ -206,7 +215,7 @@ export async function updateSlackSyncSchedule(params: {
     // Update scheduled jobs
     const { scheduleSlackSyncRepeating } = await import("@/lib/queue");
     await scheduleSlackSyncRepeating({
-      userId: session.user.id,
+      userId: targetUserId,
       mode: params.mode,
       hourOfDay: params.hourOfDay,
     });
@@ -298,7 +307,7 @@ export async function postSurveyToSlack(surveyId: string, channelId: string) {
     await db
       .update(slackIntegrations)
       .set({ lastPostedAt: new Date() })
-      .where(eq(slackIntegrations.userId, session.user.id));
+      .where(eq(slackIntegrations.userId, targetUserId));
 
     return {
       success: true,
@@ -439,7 +448,7 @@ export async function postAnalyticsToSlack(
     await db
       .update(slackIntegrations)
       .set({ lastPostedAt: new Date() })
-      .where(eq(slackIntegrations.userId, session.user.id));
+      .where(eq(slackIntegrations.userId, targetUserId));
 
     return {
       success: true,
