@@ -88,22 +88,8 @@ export async function generateSampleConversationAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    const conversationNumber =
-      body.conversationNumber ?? survey.sampleConversationCount + 1;
-
-    if (conversationNumber > MAX_SAMPLE_CONVERSATIONS) {
-      return {
-        success: false,
-        error: `Maximum number of sample conversations (${MAX_SAMPLE_CONVERSATIONS}) has been reached`,
-      };
-    }
-
-    if (conversationNumber > survey.sampleConversationCount + 1) {
-      return {
-        success: false,
-        error: "Sample conversations must be completed sequentially",
-      };
-    }
+    // Always use conversationNumber 1 - we only have one sample that gets improved
+    const conversationNumber = 1;
 
     const [existingConversation] = await db
       .select()
@@ -162,14 +148,11 @@ export async function generateSampleConversationAction(
       .update(surveys)
       .set({
         status: "sample_review",
-        sampleConversationCount: Math.max(
-          survey.sampleConversationCount,
-          conversationNumber
-        ),
+        sampleConversationCount: 1,
       })
       .where(eq(surveys.id, body.surveyId));
 
-    const remainingSamples = MAX_SAMPLE_CONVERSATIONS - conversationNumber;
+    const remainingSamples = 0; // No more samples needed - we iterate on the same one
 
     const feedbackPrompt = getSampleConversationFeedbackPrompt(
       conversationNumber,
@@ -274,7 +257,8 @@ export async function provideSampleConversationFeedbackAction(
 /**
  * Confirm a sample conversation (mark it as approved)
  */
-export async function confirmSampleConversationAction(
+export async function confirmSampleConversationAction
+(
   input: z.infer<typeof confirmSampleConversationSchema>
 ): Promise<ActionResult<{ id: string; canConfirmSurvey: boolean }>> {
   try {
@@ -321,7 +305,7 @@ export async function confirmSampleConversationAction(
 
     const canConfirmSurvey =
       allConversations.length > 0 &&
-      confirmedConversations.length === allConversations.length &&
+      confirmedConversations.length >= 1 &&
       allConversations.length <= MAX_SAMPLE_CONVERSATIONS;
 
     if (canConfirmSurvey) {
@@ -524,7 +508,7 @@ export async function getSampleConversationStatusAction(
     const confirmedSamples = conversations.filter((c) => c.confirmed).length;
     const remainingSamples = MAX_SAMPLE_CONVERSATIONS - totalSamples;
     const canConfirmSurvey =
-      totalSamples > 0 && confirmedSamples === totalSamples;
+      totalSamples > 0 && confirmedSamples >= 1;
 
     let feedbackPrompt: string | null = null;
     if (remainingSamples > 0 && totalSamples > 0) {
