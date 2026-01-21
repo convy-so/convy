@@ -118,21 +118,6 @@ async function updateMemoryAsync(
       existingContext.memory
     );
 
-    const { object: memoryUpdate } = await generateObject({
-      model: analysisModel,
-      schema: z.object({
-        targetUpdate: z.unknown().describe(" The parsed update object"),
-      }), // Flexible schema since applyMemoryUpdate handles validation, or we can define strict schema matching MemoryUpdate
-      // Better to use strict schema if possible, but let's stick to simple "object" generation for now to match current logic or define strict schema for MemoryUpdate.
-      // Actually, let's use a semi-flexible schema to avoid breaking if AI invents fields, but `generateObject` is strict by default.
-      // Let's rely on the extraction prompt's JSON structure.
-      system: "You are an expert conversation analyst. Update the memory based on the latest messages.",
-      prompt: memoryPrompt,
-      mode: 'json'
-    });
-
-    // Actually, `applyMemoryUpdate` expects specific fields. Let's make the schema loose for now to replicate existing behavior but safer.
-    // Or better:
     const schema = z.object({
         keyFactsLearned: z.array(z.string()).optional(),
         topicsCovered: z.array(z.string()).optional(),
@@ -154,6 +139,7 @@ async function updateMemoryAsync(
     const { object: update } = await generateObject({
       model: analysisModel,
       schema,
+      system: "You are an expert conversation analyst. Update the memory based on the latest messages.",
       prompt: memoryPrompt,
       temperature: 0.3,
     });
