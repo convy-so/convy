@@ -100,7 +100,6 @@ async function performIncrementalExtraction(
       prompt: extractionPrompt,
       system: "You are an expert survey designer. Extract structured data from the conversation.",
       temperature: 0.3,
-      mode: 'json'
     });
 
     // Extract collectedInfo and data
