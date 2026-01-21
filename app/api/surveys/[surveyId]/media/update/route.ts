@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { updateSurveyMediaAction } from "@/app/actions/survey-images";
+import { updateSurveyMediaAction } from "@/app/actions/survey-media";
 
 // export const runtime = "nodejs";
 

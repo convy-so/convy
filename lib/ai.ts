@@ -1,7 +1,7 @@
 import "server-only";
 
 import { google } from "@ai-sdk/google";
-import { generateText, streamText } from "ai";
+import { generateText, streamText} from "ai";
 
 
 export const defaultModel = google("gemini-2.5-flash-lite");

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { removeSurveyMediaAction } from "@/app/actions/survey-images";
+import { removeSurveyMediaAction } from "@/app/actions/survey-media";
 
 export const runtime = "nodejs";
 

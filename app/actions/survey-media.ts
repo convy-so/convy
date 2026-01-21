@@ -1,0 +1,538 @@
+"use server";
+
+import { nanoid } from "nanoid";
+import { z } from "zod";
+import { eq } from "drizzle-orm";
+
+import { db } from "@/db";
+import { surveys, type SurveyMedia } from "@/db/schema";
+import { getVerifiedSession } from "@/lib/auth/session";
+import {
+  uploadSurveyMedia,
+  deleteSurveyMedia,
+} from "@/lib/storage";
+
+type ActionResult<T> =
+  | { success: true; data: T }
+  | { success: false; error: string };
+
+const addSurveyMediaSchema = z.object({
+  surveyId: z.string().min(1),
+  url: z.string().url("Invalid media URL"),
+  description: z.string().min(10, "Description must be at least 10 characters"),
+  contextForUse: z.string().min(10, "Context for use must be at least 10 characters"),
+  contentSummary: z.string().min(10).optional(),
+  infoToGather: z.string().min(5).optional(),
+  durationMs: z.number().max(5 * 60 * 1000, "Duration exceeds 5 minutes").optional(),
+  type: z.enum(["image", "audio", "video"]).default("image"),
+});
+
+const updateSurveyMediaSchema = z.object({
+  surveyId: z.string().min(1),
+  mediaId: z.string().min(1),
+  url: z.string().url("Invalid media URL").optional(),
+  description: z.string().min(10).optional(),
+  contextForUse: z.string().min(10).optional(),
+  contentSummary: z.string().min(10).optional(),
+  infoToGather: z.string().min(5).optional(),
+  durationMs: z.number().max(5 * 60 * 1000, "Duration exceeds 5 minutes").optional(),
+  mimeType: z.string().optional(),
+});
+
+const removeSurveyMediaSchema = z.object({
+  surveyId: z.string().min(1),
+  mediaId: z.string().min(1),
+});
+
+const uploadSurveyMediaSchema = z.object({
+  surveyId: z.string().min(1),
+  description: z.string().min(10, "Description must be at least 10 characters"),
+  contextForUse: z.string().min(10, "Context for use must be at least 10 characters"),
+  contentSummary: z.string().optional(),
+  infoToGather: z.string().optional(),
+  durationMs: z.number().optional(),
+  type: z.enum(["image", "audio", "video"]),
+});
+
+/**
+ * Upload a media file (image/audio/video) to Supabase Storage and add it to the survey
+ * @param formData - FormData containing the file and metadata
+ */
+export async function uploadSurveyMediaAction(
+  formData: FormData
+): Promise<ActionResult<{ mediaId: string; media: SurveyMedia }>> {
+  try {
+    const session = await getVerifiedSession();
+
+    const surveyId = formData.get("surveyId") as string;
+    const description = formData.get("description") as string;
+    const contextForUse = formData.get("contextForUse") as string;
+    const contentSummary = formData.get("contentSummary") as string;
+    const infoToGather = formData.get("infoToGather") as string;
+    const type = (formData.get("type") as "image" | "audio" | "video") || "image"; // Default to image if not specified
+    const durationMs = Number(formData.get("durationMs"));
+    const file = formData.get("file") as File;
+
+    const validation = uploadSurveyMediaSchema.parse({
+      surveyId,
+      description,
+      contextForUse,
+      contentSummary,
+      infoToGather,
+      type,
+      durationMs: isNaN(durationMs) ? undefined : durationMs,
+    });
+
+    if (!file || !(file instanceof File)) {
+      return { success: false, error: "No file provided" };
+    }
+
+    const imageTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
+    const audioTypes = ["audio/mpeg", "audio/wav", "audio/ogg", "audio/webm", "audio/mp4"];
+    const videoTypes = ["video/mp4", "video/webm", "video/quicktime", "video/ogg"];
+    
+    let validTypes = imageTypes;
+    if (type === "audio") validTypes = audioTypes;
+    if (type === "video") validTypes = videoTypes;
+
+    if (!validTypes.includes(file.type)) {
+      return {
+        success: false,
+        error: `Invalid file type for ${type}.`,
+      };
+    }
+
+    const maxSizeMB = type === "image" ? 5 : 100;
+    const maxSizeBytes = maxSizeMB * 1024 * 1024;
+    if (file.size > maxSizeBytes) {
+      return {
+        success: false,
+        error: `File size exceeds ${maxSizeMB}MB limit`,
+      };
+    }
+
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, validation.surveyId));
+
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    if (survey.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    if (
+      survey.status !== "draft" &&
+      survey.status !== "creating" &&
+      survey.status !== "sample_review"
+    ) {
+      return {
+        success: false,
+        error: "Cannot upload media to survey in current status",
+      };
+    }
+
+    const mediaId = nanoid();
+
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Determines bucket internally in storage.ts based on 'type'
+    const { url } = await uploadSurveyMedia(
+      buffer,
+      validation.surveyId,
+      mediaId,
+      file.type,
+      type
+    );
+
+    const newMedia: SurveyMedia = {
+      id: mediaId,
+      url,
+      type: type,
+      description: validation.description,
+      contextForUse: validation.contextForUse,
+      contentSummary: validation.contentSummary || validation.description, // Fallback for images
+      infoToGather: validation.infoToGather || validation.contextForUse, // Fallback for images
+      durationMs: validation.durationMs || null,
+      mimeType: file.type,
+    };
+
+    const updatedMedia = [...(survey.media || []), newMedia];
+
+    await db
+      .update(surveys)
+      .set({ media: updatedMedia })
+      .where(eq(surveys.id, validation.surveyId));
+
+    return {
+      success: true,
+      data: { mediaId, media: newMedia },
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return {
+        success: false,
+        error: error.errors[0]?.message ?? "Validation error",
+      };
+    }
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Failed to upload media" };
+  }
+}
+
+/**
+ * Update media metadata (audio/video/image)
+ */
+export async function updateSurveyMediaAction(
+  input: z.infer<typeof updateSurveyMediaSchema>
+): Promise<ActionResult<{ media: SurveyMedia }>> {
+  try {
+    const session = await getVerifiedSession();
+    const body = updateSurveyMediaSchema.parse(input);
+
+    const [survey] = await db.select().from(surveys).where(eq(surveys.id, body.surveyId));
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+    if (survey.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+    if (
+      survey.status !== "draft" &&
+      survey.status !== "creating" &&
+      survey.status !== "sample_review"
+    ) {
+      return {
+        success: false,
+        error: "Cannot update media in survey with current status",
+      };
+    }
+
+    const currentMedia = survey.media || [];
+    const mediaIndex = currentMedia.findIndex((m) => m.id === body.mediaId);
+    if (mediaIndex === -1) {
+      return { success: false, error: "Media not found" };
+    }
+
+    const durationMsUpdate =
+      body.durationMs !== undefined ? Math.min(body.durationMs, 5 * 60 * 1000) : undefined;
+
+    const updatedMedia: SurveyMedia = {
+      ...currentMedia[mediaIndex],
+      ...(body.url && { url: body.url }),
+      ...(body.description && { description: body.description }),
+      ...(body.contentSummary && { contentSummary: body.contentSummary }),
+      ...(body.contextForUse && { contextForUse: body.contextForUse }),
+      ...(body.infoToGather && { infoToGather: body.infoToGather }),
+      ...(durationMsUpdate !== undefined && { durationMs: durationMsUpdate }),
+      ...(body.mimeType && { mimeType: body.mimeType }),
+    };
+
+    const newMediaArray = [...currentMedia];
+    newMediaArray[mediaIndex] = updatedMedia;
+
+    await db
+      .update(surveys)
+      .set({ media: newMediaArray })
+      .where(eq(surveys.id, body.surveyId));
+
+    return { success: true, data: { media: updatedMedia } };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return {
+        success: false,
+        error: error.errors[0]?.message ?? "Validation error",
+      };
+    }
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Failed to update media" };
+  }
+}
+
+/**
+ * Remove media from a survey
+ */
+export async function removeSurveyMediaAction(
+  input: z.infer<typeof removeSurveyMediaSchema>
+): Promise<ActionResult<{ success: boolean }>> {
+  try {
+    const session = await getVerifiedSession();
+    const body = removeSurveyMediaSchema.parse(input);
+
+    const [survey] = await db.select().from(surveys).where(eq(surveys.id, body.surveyId));
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+    if (survey.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+    if (
+      survey.status !== "draft" &&
+      survey.status !== "creating" &&
+      survey.status !== "sample_review"
+    ) {
+      return {
+        success: false,
+        error: "Cannot remove media from survey with current status",
+      };
+    }
+
+    const currentMedia = survey.media || [];
+    const mediaToRemove = currentMedia.find((m) => m.id === body.mediaId);
+    if (!mediaToRemove) {
+      return { success: false, error: "Media not found" };
+    }
+
+    // Delete from storage
+    try {
+      const pathSegment = mediaToRemove.url.split("/storage/v1/object/public/")[1];
+      if (pathSegment) {
+        // Auto-detect bucket from path or use type if path structure is standard
+        // deleteSurveyAsset handles it if we pass kind.
+        // We can infer kind from mediaToRemove.type
+        // Or if we need to parse bucket from path:
+        let bucketPrefix = "";
+        let kind: "image" | "audio" | "video" = "image";
+        
+        if (mediaToRemove.type === "audio") { bucketPrefix = "survey-audio/"; kind="audio"; }
+        else if (mediaToRemove.type === "video") { bucketPrefix = "survey-video/"; kind="video"; }
+        else { bucketPrefix = "survey-images/"; kind="image"; }
+
+        if (pathSegment.startsWith(bucketPrefix)) {
+          const storagePath = pathSegment.replace(bucketPrefix, "");
+          await deleteSurveyMedia(storagePath, kind);
+        }
+      }
+    } catch (storageError) {
+      console.error("Failed to delete media from storage:", storageError);
+    }
+
+    const updatedMedia = currentMedia.filter((m) => m.id !== body.mediaId);
+
+    await db
+      .update(surveys)
+      .set({ media: updatedMedia })
+      .where(eq(surveys.id, body.surveyId));
+
+    return { success: true, data: { success: true } };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return {
+        success: false,
+        error: error.errors[0]?.message ?? "Validation error",
+      };
+    }
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Failed to remove media" };
+  }
+}
+
+/**
+ * Add a media item URL to a survey (external reference)
+ * @deprecated Use uploadSurveyMediaAction for uploading files
+ */
+export async function addSurveyMediaAction(
+  input: z.infer<typeof addSurveyMediaSchema>
+): Promise<ActionResult<{ mediaId: string; media: SurveyMedia }>> {
+  try {
+    const session = await getVerifiedSession();
+    const body = addSurveyMediaSchema.parse(input);
+
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, body.surveyId));
+
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    if (survey.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    if (survey.status !== "draft" && survey.status !== "creating" && survey.status !== "sample_review") {
+      return {
+        success: false,
+        error: "Cannot add media to survey in current status",
+      };
+    }
+
+    const mediaId = nanoid();
+    const newMedia: SurveyMedia = {
+      id: mediaId,
+      url: body.url,
+      type: body.type,
+      description: body.description,
+      contextForUse: body.contextForUse,
+      contentSummary: body.contentSummary || body.description,
+      infoToGather: body.infoToGather || body.contextForUse,
+      durationMs: body.durationMs || null,
+    };
+
+    const updatedMedia = [...(survey.media || []), newMedia];
+
+    await db
+      .update(surveys)
+      .set({ media: updatedMedia })
+      .where(eq(surveys.id, body.surveyId));
+
+    return {
+      success: true,
+      data: { mediaId, media: newMedia },
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return {
+        success: false,
+        error: error.errors[0]?.message ?? "Validation error",
+      };
+    }
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Failed to add media" };
+  }
+}
+
+/**
+ * Get all media for a survey
+ */
+export async function getSurveyMediaAction(
+  surveyId: string
+): Promise<ActionResult<{ media: SurveyMedia[] }>> {
+  try {
+    const session = await getVerifiedSession();
+
+    // Get survey and verify ownership
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    if (survey.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const media = survey.media || [];
+    return {
+      success: true,
+      data: { media },
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Failed to get media" };
+  }
+}
+
+/**
+ * Reorder media in a survey
+ */
+export async function reorderSurveyMediaAction(
+  surveyId: string,
+  mediaIds: string[]
+): Promise<ActionResult<{ media: SurveyMedia[] }>> {
+  try {
+    const session = await getVerifiedSession();
+
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    if (survey.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    if (survey.status !== "draft" && survey.status !== "creating" && survey.status !== "sample_review") {
+      return {
+        success: false,
+        error: "Cannot reorder media in survey with current status",
+      };
+    }
+
+    // Create a map of current media for easy lookup
+    const currentMedia = survey.media || [];
+    const mediaMap = new Map(currentMedia.map((m) => [m.id, m]));
+
+    // Build new array based on input IDs, preserving verified media
+    const reorderedMedia = mediaIds
+      .map((id) => mediaMap.get(id))
+      .filter((m): m is SurveyMedia => m !== undefined);
+
+    if (reorderedMedia.length !== currentMedia.length) {
+      return { success: false, error: "Invalid media IDs provided" };
+    }
+
+    await db
+      .update(surveys)
+      .set({ media: reorderedMedia })
+      .where(eq(surveys.id, surveyId));
+
+    return {
+      success: true,
+      data: { media: reorderedMedia },
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Failed to reorder media" };
+  }
+}

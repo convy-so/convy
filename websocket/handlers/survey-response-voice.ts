@@ -22,7 +22,9 @@ import {
   getSurveyConversationSystemPrompt,
   type SurveyConfig,
 } from "@/lib/prompts";
-import { generateAIResponse, analysisModel } from "@/lib/ai";
+import { generateAIResponse, analysisModel, defaultModel } from "@/lib/ai";
+import { generateText, tool, stepCountIs } from "ai";
+import { z } from "zod";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import {
   checkMessageAllowed,
@@ -786,19 +788,61 @@ export class SurveyResponseVoiceHandler {
         )
         .join("\n");
 
-      const response = await generateAIResponse(
-        `Continue this conversation naturally. Latest message from participant: "${this.state.messages[this.state.messages.length - 1].content}"\n\nConversation so far:\n${conversationContext}`,
-        systemPrompt,
-        {
-          temperature: 0.7,
-          maxTokens: 500,
-        }
-      );
+      // Define tools for voice agent
+      const tools = {
+        showMedia: tool({
+          description: "Display a media item (image, audio, or video) to the participant's screen during the voice call",
+          inputSchema: z.object({
+            mediaId: z.string().describe("The unique ID of the media item to display"),
+          }),
+          execute: async ({ mediaId }) => {
+            // Find the media in the survey config
+            const media = this.state.surveyConfig?.media?.find((m) => m.id === mediaId);
+            if (!media) {
+              return { error: "Media not found" };
+            }
+            
+            // Side effect: Send WS message to client to display media
+            this.send({
+              type: "display_media",
+              media: {
+                id: media.id,
+                type: media.type,
+                url: media.url,
+                description: media.description,
+                altText: media.altText,
+                durationMs: media.durationMs,
+              }
+            });
+
+            console.log(`[Survey Response Voice] Displaying media ${mediaId}`);
+
+            // Return success to AI so it knows it happened
+            return {
+              success: true,
+              displayed: true,
+              mediaDescription: media.description
+            };
+          },
+        }),
+      };
+
+      const { text: responseText } = await generateText({
+        model: defaultModel,
+        system: systemPrompt,
+        messages: [
+          { role: "user", content: `Continue this conversation naturally. Latest message from participant: "${this.state.messages[this.state.messages.length - 1].content}"\n\nConversation so far:\n${conversationContext}` }
+        ],
+        temperature: 0.7,
+        maxOutputTokens: 500,
+        tools,
+        stopWhen: stepCountIs(5), // Allow tool use loop with AI SDK v6
+      });
 
       // Add assistant message
       this.state.messages.push({
         role: "assistant",
-        content: response,
+        content: responseText,
         timestamp: new Date().toISOString(),
       });
 
@@ -834,7 +878,7 @@ export class SurveyResponseVoiceHandler {
       }
 
       // Synthesize speech
-      await this.synthesizeAndSendAudio(response);
+      await this.synthesizeAndSendAudio(responseText);
     } catch (error) {
       console.error(
         "[Survey Response Voice] Response generation error:",

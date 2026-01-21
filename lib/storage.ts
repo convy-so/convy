@@ -38,7 +38,7 @@ export async function uploadSurveyImage(
   imageId: string,
   contentType: string
 ): Promise<{ url: string; path: string }> {
-  return uploadSurveyAsset(file, surveyId, imageId, contentType, "image");
+  return uploadSurveyMedia(file, surveyId, imageId, contentType, "image");
 }
 
 /**
@@ -49,15 +49,20 @@ export async function uploadSurveyImage(
  * @param contentType - MIME type
  * @param kind - "image" | "audio" | "video"
  */
-export async function uploadSurveyAsset(
+export async function uploadSurveyMedia(
   file: Buffer | Blob,
   surveyId: string,
   assetId: string,
   contentType: string,
   kind: "image" | "audio" | "video"
 ): Promise<{ url: string; path: string }> {
+  // Use distinct extensions if needed, but keeping original logic for now
   const ext = contentType.split("/")[1] || "bin";
-  const filePath = `${surveyId}/${kind}/${assetId}.${ext}`;
+  
+  // Naming convention: surveyId/assetId.ext (simpler structure within buckets)
+  // Original was: surveyId/kind/assetId.ext - but with separate buckets we can just do surveyId/assetId.ext
+  // However, keeping surveyId as a folder is good organization.
+  const filePath = `${surveyId}/${assetId}.${ext}`;
 
   const bucket =
     kind === "audio"
@@ -102,9 +107,10 @@ export async function deleteSurveyImage(path: string): Promise<void> {
 
 /**
  * Delete a media asset from Supabase Storage
- * @param path - The storage path of the asset (e.g., "surveyId/video/{id}.mp4")
+ * @param path - The storage path of the asset
+ * @param kind - "image" | "audio" | "video"
  */
-export async function deleteSurveyAsset(
+export async function deleteSurveyMedia(
   path: string,
   kind: "image" | "audio" | "video"
 ): Promise<void> {
@@ -123,30 +129,45 @@ export async function deleteSurveyAsset(
 }
 
 /**
- * Delete all images for a survey
+ * Delete all media (images, audio, video) for a survey from all buckets
  * @param surveyId - The survey ID
  */
+export async function clearSurveyMedia(surveyId: string): Promise<void> {
+  const buckets = [SURVEY_IMAGES_BUCKET, SURVEY_AUDIO_BUCKET, SURVEY_VIDEO_BUCKET];
+  
+  await Promise.all(
+    buckets.map(async (bucket) => {
+      const { data: files, error: listError } = await supabase.storage
+        .from(bucket)
+        .list(surveyId);
+
+      if (listError) {
+        console.error(`Failed to list files in bucket ${bucket} for survey ${surveyId}:`, listError);
+        return; 
+      }
+
+      if (!files || files.length === 0) {
+        return;
+      }
+
+      const filePaths = files.map((file) => `${surveyId}/${file.name}`);
+      const { error: deleteError } = await supabase.storage
+        .from(bucket)
+        .remove(filePaths);
+
+      if (deleteError) {
+        console.error(`Failed to delete files in bucket ${bucket}:`, deleteError);
+      }
+    })
+  );
+}
+
+// Deprecated: Alias for clearSurveyMedia for backward compatibility if needed, 
+// otherwise can be removed if strictly following "no backward compatibility".
+// Keeping it as a wrapper to avoid breaking if mistakenly called, 
+// but clearSurveyMedia is preferred.
 export async function deleteSurveyImages(surveyId: string): Promise<void> {
-  const { data: files, error: listError } = await supabase.storage
-    .from(SURVEY_IMAGES_BUCKET)
-    .list(surveyId);
-
-  if (listError) {
-    throw new Error(`Failed to list images: ${listError.message}`);
-  }
-
-  if (!files || files.length === 0) {
-    return;
-  }
-
-  const filePaths = files.map((file) => `${surveyId}/${file.name}`);
-  const { error: deleteError } = await supabase.storage
-    .from(SURVEY_IMAGES_BUCKET)
-    .remove(filePaths);
-
-  if (deleteError) {
-    throw new Error(`Failed to delete images: ${deleteError.message}`);
-  }
+  await clearSurveyMedia(surveyId);
 }
 
 /**

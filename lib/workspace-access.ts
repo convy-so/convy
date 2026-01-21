@@ -84,12 +84,16 @@ export async function getSurveyAccessLevel(
     if (!isMember) return "none";
 
     // If survey is in a workspace and user is a member:
-    // 1. Creator = Owner (Can delete)
-    // 2. Workspace Member = Viewer (Can view, create new)
-    // Note: User requested that confirmed surveys cannot be edited.
-    // We return 'owner' for creator to allow deletion.
+    // 1. Creator = Owner
+    // 2. Workspace Owner = Owner (Can manage/close)
+    // 3. Workspace Member = Viewer (Can view, create new)
     
     if (survey.userId === userId) {
+      return "owner";
+    }
+
+    const isOwner = await isWorkspaceOwner(userId, survey.organizationId);
+    if (isOwner) {
       return "owner";
     }
 
