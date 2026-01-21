@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
-import { streamText } from "ai";
+import { streamText, generateObject } from "ai";
+import { z } from "zod";
 
 import { db } from "@/db";
 import { surveys, surveyCreationConversations } from "@/db/schema";
@@ -28,20 +29,79 @@ async function performIncrementalExtraction(
 
     const extractionPrompt = getSurveyDataExtractionPrompt(messages);
 
-    const extractedText = await generateAIResponse(
-      extractionPrompt,
-      undefined,
-      {
-        model: analysisModel,
-        temperature: 0.3,
-        maxTokens: 2000,
-      }
-    );
+    const extractionSchema = z.object({
+      objective: z
+        .object({
+          goal: z.string().nullable(),
+          context: z.string().nullable(),
+          decision: z.string().nullable(),
+        })
+        .nullable(),
+      targetAudience: z
+        .object({
+          description: z.string().nullable(),
+          relationship: z.string().nullable(),
+          knowledgeLevel: z.string().nullable(),
+        })
+        .nullable(),
+      scope: z
+        .object({
+          breadthVsDepth: z.enum(["broad", "deep", "balanced"]).nullable(),
+          mainTopics: z.array(z.string()).nullable(),
+          boundaries: z.string().nullable(),
+        })
+        .nullable(),
+      successCriteria: z
+        .object({
+          insightTypes: z
+            .array(z.enum(["emotional", "behavioral", "rational"]))
+            .nullable(),
+          detailLevel: z.enum(["high", "medium", "low"]).nullable(),
+          description: z.string().nullable(),
+        })
+        .nullable(),
+      constraints: z
+        .object({
+          timeLimit: z.number().nullable(),
+          sensitiveTopics: z.array(z.string()).nullable(),
+          otherConstraints: z.string().nullable(),
+        })
+        .nullable(),
+      hypotheses: z
+        .object({
+          assumptions: z.array(z.string()).nullable(),
+        })
+        .nullable(),
+      tone: z
+        .enum(["formal", "casual", "playful", "empathetic"])
+        .nullable(),
+      additionalContext: z.string().nullable(),
+      requiredQuestions: z.array(z.string()).nullable(),
+      metrics: z.array(z.string()).nullable(),
+      personalInfo: z.array(z.string()).nullable(),
+      collectedInfo: z.object({
+        objective: z.boolean(),
+        targetAudience: z.boolean(),
+        scope: z.boolean(),
+        successCriteria: z.boolean(),
+        constraints: z.boolean(),
+        hypotheses: z.boolean(),
+        tone: z.boolean(),
+        additionalContext: z.boolean(),
+        requiredQuestions: z.boolean(),
+        metrics: z.boolean(),
+        personalInfo: z.boolean(),
+      }),
+    });
 
-    const jsonMatch = extractedText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return;
-
-    const parsed = JSON.parse(jsonMatch[0]);
+    const { object: parsed } = await generateObject({
+      model: analysisModel,
+      schema: extractionSchema,
+      prompt: extractionPrompt,
+      system: "You are an expert survey designer. Extract structured data from the conversation.",
+      temperature: 0.3,
+      mode: 'json'
+    });
 
     // Extract collectedInfo and data
     const { collectedInfo, ...dataWithoutCollectedInfo } = parsed;

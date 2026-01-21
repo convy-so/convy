@@ -34,6 +34,7 @@ export const voiceSessionStatusEnum = pgEnum("voice_session_status", [
 export const voiceSessionTypeEnum = pgEnum("voice_session_type", [
   "survey_creation",
   "survey_response",
+  "sample_conversation",
 ]);
 export const voiceChunkTypeEnum = pgEnum("voice_chunk_type", [
   "audio_in",

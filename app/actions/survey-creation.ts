@@ -119,22 +119,6 @@ export async function startSurveyCreationAction(
   input: z.infer<typeof startSurveyCreationSchema> = { language: "en" }
 ): Promise<ActionResult<{ surveyId: string; conversationId: string }>> {
   try {
-    const { assertCanCreateTextSurvey } = await import("@/lib/billing/entitlements");
-    const session = await getVerifiedSession();
-    const activeOrgId = session.session.activeOrganizationId;
-    
-    await assertCanCreateTextSurvey({
-      userId: session.user.id,
-      organizationId: activeOrgId ?? null,
-    });
-  } catch (error) {
-    if (error instanceof Error && error.name === "PlanLimitError") {
-      return { success: false, error: error.message };
-    }
-    // Log other errors but continue (don't block on entitlement check failures)
-    console.error("Entitlement check error:", error);
-  }
-  try {
     const session = await getVerifiedSession();
     const body = startSurveyCreationSchema.parse(input);
 
@@ -174,7 +158,7 @@ export async function startSurveyCreationAction(
       }
     }
 
-    // ✅ FIX: Enforce plan limits with organizationId context
+    // Enforce plan limits with organizationId context
     try {
       await assertCanCreateTextSurvey({
         userId: session.user.id,
@@ -287,7 +271,10 @@ export async function getSurveyCreationStateAction(surveyId: string): Promise<
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    // Check access: owner or workspace member
+    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
+    const accessLevel = await getSurveyAccessLevel(session.user.id, surveyId);
+    if (accessLevel === "none") {
       return { success: false, error: "Unauthorized" };
     }
 

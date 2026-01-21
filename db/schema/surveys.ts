@@ -72,7 +72,7 @@ export type SurveyMedia = {
   thumbnailUrl?: string;
 };
 
-export type SurveyImage = SurveyMedia;
+// export type SurveyImage = SurveyMedia; // Removed as part of media refactor
 
 const surveys = pgTable(
   "surveys",

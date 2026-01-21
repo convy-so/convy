@@ -18,6 +18,7 @@ import {
 } from "./middleware/rate-limit";
 import { SurveyCreationVoiceHandler } from "./handlers/survey-creation-voice";
 import { SurveyResponseVoiceHandler } from "./handlers/survey-response-voice";
+import { SampleSurveyVoiceHandler } from "./handlers/sample-survey-voice";
 import { AnalyticsHandler } from "./handlers/analytics";
 import { getRedisSubscriber } from "@/lib/redis";
 
@@ -35,6 +36,7 @@ const activeConnections = new Map<
     handler:
       | SurveyCreationVoiceHandler
       | SurveyResponseVoiceHandler
+      | SampleSurveyVoiceHandler
       | AnalyticsHandler;
     userId?: string;
     createdAt: number; // Track when connection was created for cleanup
@@ -166,6 +168,8 @@ wss.on("connection", async (ws: WebSocket, req) => {
       await handleSurveyCreation(ws, req);
     } else if (pathname === "/voice/survey-response") {
       await handleSurveyResponse(ws, req);
+    } else if (pathname === "/voice/sample-conversation") {
+      await handleSampleConversation(ws, req);
     } else if (pathname === "/analytics") {
       await handleAnalytics(ws, req);
     } else {
@@ -323,6 +327,92 @@ async function handleSurveyResponse(
       JSON.stringify({
         type: "error",
         error: "Failed to initialize voice session",
+      })
+    );
+    ws.close();
+  }
+}
+
+/**
+ * Handle sample survey voice connections (authenticated owner)
+ */
+async function handleSampleConversation(
+  ws: WebSocket,
+  req: IncomingMessage
+): Promise<void> {
+  // Authenticate as owner
+  const authResult = await authenticateWebSocket(ws, req);
+
+  if ("code" in authResult) {
+    sendAuthError(ws, authResult);
+    return;
+  }
+
+  const connection = authResult as AuthenticatedConnection;
+
+  // Get surveyId and conversationNumber from query parameters
+  const url = parse(req.url || "", true);
+  const surveyId = url.query?.surveyId as string;
+  const conversationNumber = parseInt(
+    (url.query?.conversationNumber as string) || "1"
+  );
+
+  if (!surveyId) {
+    ws.send(
+      JSON.stringify({
+        type: "error",
+        error: "Survey ID required",
+      })
+    );
+    ws.close();
+    return;
+  }
+
+  const identifier = getClientIdentifier(req, connection.userId);
+  const rateLimitCheck = await checkConnectionAllowed(identifier);
+
+  if (!rateLimitCheck.allowed) {
+    ws.send(
+      JSON.stringify({
+        type: "error",
+        error: rateLimitCheck.reason,
+        retryAfter: rateLimitCheck.retryAfter,
+      })
+    );
+    ws.close();
+    return;
+  }
+
+  try {
+    const handler = new SampleSurveyVoiceHandler(
+      connection,
+      surveyId,
+      conversationNumber
+    );
+    await handler.initialize();
+
+    const connectionId = `sample-${connection.userId}-${surveyId}-${Date.now()}`;
+    activeConnections.set(connectionId, {
+      handler,
+      userId: connection.userId,
+      createdAt: Date.now(),
+    });
+
+    ws.on("close", async () => {
+      activeConnections.delete(connectionId);
+      await releaseConnection(identifier);
+    });
+
+    console.log(
+      `[WebSocket] Sample voice handler initialized for user ${connection.userId}, survey ${surveyId}`
+    );
+  } catch (error) {
+    console.error("[WebSocket] Sample voice handler error:", error);
+    await releaseConnection(identifier);
+    ws.send(
+      JSON.stringify({
+        type: "error",
+        error: "Failed to initialize sample voice session",
       })
     );
     ws.close();
@@ -556,6 +646,7 @@ server.listen(PORT, () => {
 ║   Endpoints:                                                 ║
 ║   • ws://localhost:${PORT}/voice/survey-creation             ║
 ║   • ws://localhost:${PORT}/voice/survey-response             ║
+║   • ws://localhost:${PORT}/voice/sample-conversation?surveyId={id}&conversationNumber={n} ║
 ║   • ws://localhost:${PORT}/analytics?surveyId={id}           ║
 ║                                                              ║
 ║   Health Check: http://localhost:${PORT}/health              ║
