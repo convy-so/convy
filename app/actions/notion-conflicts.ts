@@ -10,11 +10,10 @@
 import { getVerifiedSession } from "@/lib/auth/session";
 import { db } from "@/db";
 import { notionSyncConflicts } from "@/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, ne, lte } from "drizzle-orm";
 import {
   resolveConflict,
   applyConflictResolution,
-  autoResolveConflict,
   type ResolutionStrategy,
 } from "@/lib/notion-conflict";
 import { getNotionOAuthClient } from "@/lib/notion-oauth";
@@ -193,6 +192,17 @@ export async function resolveConflictAction(
 export async function autoResolveAllConflicts() {
   try {
     const session = await getVerifiedSession();
+    
+    // Get Notion client first - needed to apply resolutions
+    const notion = await getNotionOAuthClient(session.user.id);
+    if (!notion) {
+      return {
+        success: false,
+        error: "Notion integration not configured",
+        resolvedCount: 0,
+        failedCount: 0,
+      };
+    }
 
     const conflicts = await db
       .select()
@@ -216,10 +226,25 @@ export async function autoResolveAllConflicts() {
     let failedCount = 0;
 
     for (const conflict of conflicts) {
-      const result = await autoResolveConflict(conflict.id, session.user.id);
-      if (result.success) {
+      // 1. Mark as resolved with "app_priority" (App Wins)
+      const resolutionResult = await resolveConflict(
+        conflict.id,
+        "app_priority", 
+        session.user.id
+      );
+
+      if (!resolutionResult.success) {
+        failedCount++;
+        continue;
+      }
+
+      // 2. Apply the resolution (overwrite Notion)
+      const applyResult = await applyConflictResolution(notion, conflict.id);
+
+      if (applyResult.success) {
         resolvedCount++;
       } else {
+        console.error(`Failed to apply resolution for conflict ${conflict.id}:`, applyResult.error);
         failedCount++;
       }
     }
@@ -338,7 +363,8 @@ export async function cleanupResolvedConflicts(daysOld = 30) {
       .where(
         and(
           eq(notionSyncConflicts.userId, session.user.id),
-          eq(notionSyncConflicts.resolution, "pending")
+          ne(notionSyncConflicts.resolution, "pending"),
+          lte(notionSyncConflicts.resolvedAt, cutoffDate)
         )
       );
 

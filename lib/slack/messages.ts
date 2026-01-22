@@ -264,3 +264,54 @@ export function formatManualPostMessage(data: {
     blocks,
   };
 }
+
+/**
+ * Format conversation digest message (batched conversations)
+ */
+export function formatConversationDigestMessage(data: {
+  totalNewConversations: number;
+  surveyBreakdown: Array<{
+    surveyTitle: string;
+    surveyId: string;
+    count: number;
+  }>;
+  timeframe: string;
+}) {
+  const blocks: (Block | KnownBlock)[] = [
+    {
+      type: "header" as const,
+      text: {
+        type: "plain_text" as const,
+        text: `🎉 ${data.totalNewConversations} New Response${data.totalNewConversations === 1 ? "" : "s"} ${data.timeframe}`,
+        emoji: true,
+      },
+    },
+  ];
+
+  // Add survey breakdown if multiple surveys
+  if (data.surveyBreakdown.length > 1) {
+    blocks.push({
+      type: "section" as const,
+      text: {
+        type: "mrkdwn" as const,
+        text: `*Breakdown by Survey:*\n${data.surveyBreakdown
+          .map((s) => `• *${s.surveyTitle}*: ${s.count} response${s.count === 1 ? "" : "s"}`)
+          .join("\n")}`,
+      },
+    });
+  } else if (data.surveyBreakdown.length === 1) {
+    blocks.push({
+      type: "section" as const,
+      text: {
+        type: "mrkdwn" as const,
+        text: `*Survey:* ${data.surveyBreakdown[0].surveyTitle}`,
+      },
+    });
+  }
+
+  return {
+    text: `${data.totalNewConversations} new survey response${data.totalNewConversations === 1 ? "" : "s"} ${data.timeframe}`,
+    blocks,
+  };
+}
+

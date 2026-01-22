@@ -83,8 +83,8 @@ export function getRedisSubscriber(): Redis {
 }
 
 /**
- * Create a blnew blocking client
- * BullMQ creates these for ocking operations (BRPOP, etc.)
+ * Create a new blocking client
+ * BullMQ creates these for blocking operations (BRPOP, etc.)
  * Each worker needs its own blocking client
  */
 export function createBlockingClient(): Redis {

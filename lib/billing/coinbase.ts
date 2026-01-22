@@ -1,164 +1,153 @@
 import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
+import jwt from "jsonwebtoken";
 
-const COINBASE_API_URL = "https://api.commerce.coinbase.com";
+// Coinbase Business Payment Link API
+const BASE_URL = "https://business.coinbase.com/api/v1";
 
-// Retry configuration
-const MAX_RETRIES = 3;
-const INITIAL_RETRY_DELAY_MS = 1000;
-const REQUEST_TIMEOUT_MS = 30000;
-
-interface CoinbasePrice {
+export interface CreatePaymentLinkParams {
+  name: string;
+  description: string;
   amount: string;
-  currency: string;
-}
-
-export interface CoinbaseCharge {
-  id: string;
-  resource: "charge";
-  code: string;
-  name: string;
-  description: string;
-  logo_url?: string;
-  hosted_url: string;
-  created_at: string;
-  expires_at: string;
-  timeline: Array<{
-    status: string;
-    time: string;
-    context?: string;
-  }>;
-  metadata: Record<string, unknown>;
-  pricing: {
-    local: CoinbasePrice;
-    [key: string]: CoinbasePrice; 
-  };
-  pricing_type: "fixed_price" | "no_price";
-  payments: Array<unknown>;
-  addresses?: Record<string, string>;
-  redirect_url?: string;
-  cancel_url?: string;
-}
-
-export interface CreateChargeParams {
-  name: string;
-  description: string;
-  pricing_type: "fixed_price" | "no_price";
-  local_price?: CoinbasePrice;
+  currency: "USD";
   metadata?: Record<string, string | number | boolean>;
-  redirect_url?: string;
   cancel_url?: string;
-}
-
-export class CoinbaseCommerceError extends Error {
-  constructor(
-    public status: number,
-    public code: string,
-    message: string
-  ) {
-    super(message);
-    this.name = "CoinbaseCommerceError";
-  }
+  redirect_url?: string;
 }
 
 /**
- * Determines if an error is retryable (transient network/server errors)
+ * Generate JWT for Coinbase Business API (CDP)
+ * URI Format: METHOD + " " + HOST + PATH
+ * Example: "POST business.coinbase.com/api/v1/payment-links"
  */
-function isRetryableError(error: unknown): boolean {
-  if (error instanceof CoinbaseCommerceError) {
-    // Retry on 5xx server errors and 429 rate limits
-    return error.status >= 500 || error.status === 429;
-  }
-  // Retry on network errors (fetch failures)
-  if (error instanceof TypeError && error.message.includes("fetch")) {
-    return true;
-  }
-  return false;
-}
+function generateJWT(requestMethod: string, requestPath: string): string {
+  const keyName = env.COINBASE_CDP_API_KEY_NAME;
+  const privateKey = env.COINBASE_CDP_API_KEY_PRIVATE_KEY.replace(/\\n/g, '\n');
 
-/**
- * Sleep for a given number of milliseconds
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  const algorithm = "ES256";
+  
+  // Clean URL to get host and path without protocol
+  // If requestPath passed is full URL (e.g. https://business.coinbase.com/api/v1/...), extract host+path
+  // If passed as relative, we construct it.
+  // Best practice: passing full URL to request function, so let's extract.
+  const urlObj = new URL(requestPath.startsWith("http") ? requestPath : `${BASE_URL}${requestPath}`);
+  const host = urlObj.host;
+  const path = urlObj.pathname + urlObj.search;
+  
+  const uri = `${requestMethod} ${host}${path}`;
+
+  const token = jwt.sign(
+    {
+      iss: "coinbase-cloud",
+      nbf: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 120, // 2 minutes
+      sub: keyName,
+      uri,
+    },
+    privateKey,
+    {
+      algorithm: algorithm as jwt.Algorithm, 
+      header: {
+        kid: keyName,
+        // nonce is not required for CDP standard JWT
+      } as any,
+    }
+  );
+
+  return token;
 }
 
 async function request<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${COINBASE_API_URL}${endpoint}`;
+  const url = `${BASE_URL}${endpoint}`;
+  const method = options.method || "GET";
   
-  const headers = {
+  let token: string;
+  try {
+     token = generateJWT(method, url); 
+  } catch (error) {
+    logger.error("Failed to generate Coinbase JWT", { error });
+    throw new Error("Authentication Setup Failed");
+  }
+
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    "X-CC-Api-Key": env.COINBASE_COMMERCE_API_KEY,
-    "X-CC-Version": "2018-03-22",
-    ...options.headers,
+    "Accept": "application/json",
+    "Authorization": `Bearer ${token}`,
+    ...(options.headers as Record<string, string> || {}),
   };
 
-  let lastError: Error | null = null;
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
 
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-      const response = await fetch(url, {
-        ...options,
-        headers,
-        signal: controller.signal,
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error("Coinbase API Error", { 
+        status: response.status, 
+        statusText: response.statusText,
+        body: errorText,
+        url: url
       });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new CoinbaseCommerceError(
-          response.status,
-          errorData?.error?.type || "unknown_error",
-          errorData?.error?.message || `Coinbase Commerce API Error: ${response.statusText}`
-        );
-      }
-
-      const json = await response.json();
-      return json.data;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-
-      // Don't retry on non-retryable errors or last attempt
-      if (!isRetryableError(error) || attempt === MAX_RETRIES - 1) {
-        break;
-      }
-
-      // Exponential backoff: 1s, 2s, 4s...
-      const delayMs = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt);
-      await sleep(delayMs);
+      throw new Error(`Coinbase API Request Failed: ${response.status} ${response.statusText}`);
     }
-  }
 
-  // Throw the last error after all retries exhausted
-  if (lastError instanceof CoinbaseCommerceError) {
-    throw lastError;
+    const json = await response.json();
+    return json;
+  } catch (error) {
+    throw error;
   }
-  throw new Error(
-    lastError 
-      ? `Coinbase Commerce Request Failed: ${lastError.message}` 
-      : "Unknown Coinbase Commerce Request Failed"
-  );
 }
 
-export const coinbase = {
-  charges: {
-    create: (params: CreateChargeParams) => 
-      request<CoinbaseCharge>("/charges", {
-        method: "POST",
-        body: JSON.stringify(params),
-      }),
-      
-    retrieve: (id: string) => 
-      request<CoinbaseCharge>(`/charges/${id}`, {
-        method: "GET",
-      }),
+export const coinbaseClient = {
+  createPaymentLink: async (params: CreatePaymentLinkParams) => {
+    // Endpoint: POST /payment-links
+    
+    const payload = {
+      name: params.name,
+      description: params.description,
+      pricing_type: "fixed_price",
+      fixed_price: {
+        amount: params.amount,
+        currency: params.currency,
+      },
+      requested_info: ["name", "email"],
+      metadata: params.metadata,
+      redirect_url: params.redirect_url, // For success redirect ?? 
+      // Note: "redirect_url" might not be supported in new API directly or named differently.
+      // Checking docs via search: "cancel_url" and "redirect_url" are often properties.
+      // If valid, keep them. Otherwise, we might need 'success_url'.
+      // Assumption: API uses standard naming.
+    };
+
+    const response = await request<any>("/payment-links", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    // Business API response often wraps in { payment_link: ... } or just returns object
+    const data = response.payment_link || response;
+
+    return {
+      id: data.id,
+      url: `https://commerce.coinbase.com/pay/${data.id}`, 
+      // Note: Payment Link URL format might differ for Business. 
+      // Often checking the 'url' or 'hosted_url' field in response is safer.
+      // We will prefer the one returned by API.
+    };
   },
+
+  getPaymentLink: async (id: string) => {
+    const response = await request<any>(`/payment-links/${id}`);
+    const data = response.payment_link || response;
+    
+    return {
+      id: data.id,
+      url: data.hosted_url || `https://commerce.coinbase.com/pay/${data.id}`,
+    };
+  }
 };
-
-

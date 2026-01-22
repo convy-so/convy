@@ -734,31 +734,40 @@ ${idx + 1}. [${m.type.toUpperCase()}] ID: "${m.id}"${m.priority === "high" ? " â
   .join("\n")}
 
 MEDIA INTEGRATION GUIDELINES:
-1. INTRODUCING MEDIA:
-   - For IMAGES: "Let me show you something - [describe briefly]. Looking at this image..."
-   - For VIDEOS: "I'd like you to watch this short video. [After watching] What stood out to you?"
-   - For AUDIO: "Please listen to this audio clip. [After listening] What are your thoughts on what you heard?"
+1. **CRITICAL - HOW TO SHOW MEDIA**:
+   - When you want to display media, you MUST call the \`showMedia\` tool with the media ID
+   - DO NOT just say "Let me show you..." - actually CALL THE TOOL: showMedia(mediaId: "the-media-id")
+   - Example: If you want to show media with ID "abc123", call showMedia with mediaId "abc123"
+   - The frontend will receive the tool call and display the media automatically
 
-2. TIMING & CONTEXT:
-   - Show media when it aligns with the "When to Show" context for each item
-   - Don't rush - give participants time to process visual/audio content
-   - For longer media (>30s), acknowledge the time: "This is about [X] seconds long"
+2. WHEN TO SHOW MEDIA:
+   - Show media when the conversation reaches the context described in "When to Show"
+   - Only call showMedia once per media item during the conversation
+   - Don't rush - wait for the right moment in the conversation flow
 
-3. GATHERING INSIGHTS FROM MEDIA:
-   - Ask the specific questions listed in "Key Questions to Ask" for each media
-   - Probe their emotional reactions: "How did that make you feel?"
+3. AFTER SHOWING MEDIA:
+   - Once you've called showMedia, the participant will see the image/video/audio
+   - Ask the specific questions listed in "Suggested Questions" or "REQUIRED Questions"
+   - For IMAGES: Ask about what they notice, how it makes them feel, what catches their attention
+   - For VIDEOS: Let them watch, then ask what stood out, their reactions, thoughts
+   - For AUDIO: Let them listen, then gather their impressions and thoughts
+   - If longer media (>30s), acknowledge: "This is about [X] seconds long"
+
+4. GATHERING INSIGHTS FROM MEDIA:
+   - Probe emotional reactions: "How did that make you feel?"
    - Explore specific elements: "What caught your attention first?"
    - Compare to expectations: "Was that what you expected?"
-   - Ask about clarity: "Was anything confusing about that?"
+   - Ask about clarity: "Was anything confusing?"
+   - Ask follow-up questions based on their response
 
-4. TRACKING REACTIONS:
-   - Note if they seem confused, interested, or disengaged
+5. TRACKING REACTIONS:
    - If they don't engage with the media, gently probe: "What did you think of that?"
-   - If they seem confused, clarify: "Was anything unclear about that?"
+   - If they seem confused, clarify: "Was anything unclear?"
+   - Note their level of interest and adjust accordingly
 
-5. FOLLOW-UP AFTER MEDIA:
+6. REFERENCING MEDIA LATER:
    - Connect media to broader survey themes
-   - Reference media in later questions: "Going back to that [image/video/audio]..."
+   - Reference it in later questions: "Going back to that [image/video/audio]..."
    - Build on their media-based responses for deeper insights`;
   }
 

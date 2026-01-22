@@ -15,6 +15,7 @@ export interface AuthenticatedConnection {
   sessionId: string;
   userEmail: string;
   emailVerified: boolean;
+  role: "user" | "admin" | "org_admin" | "org_member"; // Added role for Issue 5
 }
 
 export interface AuthError {
@@ -57,13 +58,16 @@ function extractSessionToken(request: IncomingMessage): string | null {
  */
 async function verifySessionToken(token: string): Promise<{
   userId: string;
+  sessionId: string;
   userEmail: string;
   emailVerified: boolean;
+  role: "user" | "admin" | "org_admin" | "org_member";
 } | null> {
   try {
     // Query session from database
     const [session] = await db
       .select({
+        id: sessions.id,
         userId: sessions.userId,
         expiresAt: sessions.expiresAt,
       })
@@ -85,6 +89,7 @@ async function verifySessionToken(token: string): Promise<{
       .select({
         email: users.email,
         emailVerified: users.emailVerified,
+        role: users.role,
       })
       .from(users)
       .where(eq(users.id, session.userId))
@@ -96,8 +101,10 @@ async function verifySessionToken(token: string): Promise<{
 
     return {
       userId: session.userId,
+      sessionId: session.id, // Fixed Issue 6: using session ID instead of token
       userEmail: user.email,
       emailVerified: user.emailVerified,
+      role: user.role as any,
     };
   } catch (error) {
     console.error("[WS Auth] Session verification error:", error);
@@ -143,9 +150,10 @@ export async function authenticateWebSocket(
   return {
     ws,
     userId: userInfo.userId,
-    sessionId: token,
+    sessionId: userInfo.sessionId,
     userEmail: userInfo.userEmail,
     emailVerified: userInfo.emailVerified,
+    role: userInfo.role,
   };
 }
 

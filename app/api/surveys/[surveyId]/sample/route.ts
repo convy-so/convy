@@ -1,4 +1,5 @@
-import { streamText } from "ai";
+import { streamText, tool, stepCountIs } from "ai";
+import { z } from "zod";
 import { and, eq, lt } from "drizzle-orm";
 
 import { db } from "@/db";
@@ -131,12 +132,43 @@ export async function POST(
       survey.language
     );
 
+    // Define tools for the AI to call (parity with chat route)
+    const tools = {
+      showMedia: tool({
+        description: "Display a media item (image, audio, or video) to the participant in the conversation",
+        inputSchema: z.object({
+          mediaId: z.string().describe("The unique ID of the media item to display"),
+        }),
+        execute: async ({ mediaId }) => {
+          // Find the media in the survey config
+          const media = surveyConfig.media?.find((m) => m.id === mediaId);
+          if (!media) {
+            return { error: "Media not found" };
+          }
+          // Return media details for the frontend to render
+          return {
+            success: true,
+            media: {
+              id: media.id,
+              type: media.type,
+              url: media.url,
+              description: media.description,
+              altText: media.altText,
+              durationMs: media.durationMs,
+            },
+          };
+        },
+      }),
+    };
+
     const result = streamText({
       model: defaultModel,
       messages,
       system: systemPrompt,
       temperature: 0.8,
       maxOutputTokens: 2000,
+      tools,
+      stopWhen: stepCountIs(5),
     });
 
     // Include remaining sample count in response headers

@@ -23,7 +23,7 @@ const strongPasswordSchema = z
   );
 
 const signUpSchema = z.object({
-  name: z.string().min(1, "Name is required"),
+  name: z.string().min(3, "Name is required"),
   email: emailSchema,
   password: strongPasswordSchema,
   rememberMe: z.boolean().optional().default(false),

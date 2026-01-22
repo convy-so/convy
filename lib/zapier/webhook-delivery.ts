@@ -67,7 +67,6 @@ async function formatConversationData(
     return null;
   }
 
-  // Get survey info
   const [survey] = await db
     .select()
     .from(surveys)

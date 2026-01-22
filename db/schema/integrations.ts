@@ -467,6 +467,14 @@ const slackIntegrations = pgTable(
       .default(false)
       .notNull(),
 
+    // Scheduled sync settings (mirroring Notion)
+    syncScheduleMode: text("sync_schedule_mode"), // 'hourly' | 'every3h' | 'every5h' | 'daily_hour' | 'disabled' | null
+    syncScheduleHour: integer("sync_schedule_hour"), // 0-23 for daily_hour mode
+    lastScheduledSyncAt: timestamp("last_scheduled_sync_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+
     lastPostedAt: timestamp("last_posted_at", {
       withTimezone: true,
       mode: "date",

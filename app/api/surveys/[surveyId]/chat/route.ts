@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import { eq } from "drizzle-orm";
-import { streamText } from "ai";
+import { streamText, tool, generateObject, stepCountIs } from "ai";
+import { z } from "zod";
 
 import { db } from "@/db";
 import { surveyConversations, surveys } from "@/db/schema";
@@ -25,16 +26,14 @@ import {
   determineConversationState,
   getMemoryUpdatePrompt,
   applyMemoryUpdate,
+  getContextKey,
+  getStartTimeKey,
 } from "@/lib/conversation-memory";
 import { getRedisClient } from "@/lib/redis";
 
 export const maxDuration = 300;
 
-// Redis keys for conversation context
-const getContextKey = (conversationId: string) =>
-  `conv:context:${conversationId}`;
-const getStartTimeKey = (conversationId: string) =>
-  `conv:start:${conversationId}`;
+
 
 /**
  * Load or create rolling context for a conversation
@@ -119,16 +118,32 @@ async function updateMemoryAsync(
       existingContext.memory
     );
 
-    const memoryUpdateText = await generateAIResponse(memoryPrompt, undefined, {
-      model: analysisModel,
-      temperature: 0.3,
-      maxTokens: 1000,
+    const schema = z.object({
+        keyFactsLearned: z.array(z.string()).optional(),
+        topicsCovered: z.array(z.string()).optional(),
+        currentTopic: z.string().nullable().optional(),
+        unansweredQuestions: z.array(z.string()).optional(),
+        emotionalSignals: z.array(z.string()).optional(),
+        conversationSummary: z.string().optional(),
+        specificExamples: z.array(z.string()).optional(),
+        unexploredHypotheses: z.array(z.string()).optional(),
+        timelineEvents: z.array(z.string()).optional(),
+        peerContext: z.array(z.string()).optional(),
+        participantSuggestedSolutions: z.array(z.string()).optional(),
+        hypothesesEvidence: z.record(z.object({
+             supporting: z.array(z.string()),
+             contradicting: z.array(z.string())
+        })).optional()
     });
 
-    // Parse the memory update
-    const jsonMatch = memoryUpdateText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const update = JSON.parse(jsonMatch[0]);
+    const { object: update } = await generateObject({
+      model: analysisModel,
+      schema,
+      system: "You are an expert conversation analyst. Update the memory based on the latest messages.",
+      prompt: memoryPrompt,
+      temperature: 0.3,
+    });
+
       const updatedMemory = applyMemoryUpdate(
         existingContext.memory,
         update,
@@ -143,7 +158,6 @@ async function updateMemoryAsync(
         memory: updatedMemory,
       };
       await redis.set(contextKey, JSON.stringify(updatedContext), "EX", 7200);
-    }
   } catch (error) {
     console.error("[Chat Route] Memory update error:", error);
     // Non-critical - continue without memory update
@@ -265,12 +279,43 @@ export async function POST(
         ? context.recentMessages
         : sanitizedMessages;
 
+    // Define tools for the AI to call
+    const tools = {
+      showMedia: tool({
+        description: "Display a media item (image, audio, or video) to the participant in the conversation",
+        inputSchema: z.object({
+          mediaId: z.string().describe("The unique ID of the media item to display"),
+        }),
+        execute: async ({ mediaId }) => {
+          // Find the media in the survey config
+          const media = surveyConfig.media?.find((m) => m.id === mediaId);
+          if (!media) {
+            return { error: "Media not found" };
+          }
+          // Return media details for the frontend to render
+          return {
+            success: true,
+            media: {
+              id: media.id,
+              type: media.type,
+              url: media.url,
+              description: media.description,
+      altText: media.altText,
+              durationMs: media.durationMs,
+            },
+          };
+        },
+      }),
+    };
+
     const result = streamText({
       model: defaultModel,
       messages: messagesForAI,
       system: systemPrompt,
       temperature: 0.7,
       maxOutputTokens: 2000,
+      tools,
+      stopWhen: stepCountIs(5), // Enable multi-step agent behavior with AI SDK v6
     });
 
     // Trigger async memory update (non-blocking)
