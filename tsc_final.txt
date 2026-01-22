@@ -1,1 +1,0 @@
-app/settings/zapier/page.tsx(212,15): error TS2339: Property 'zapier-mcp' does not exist on type 'JSX.IntrinsicElements'.

@@ -1,1 +1,0 @@
-websocket/handlers/sample-survey-voice.ts(330,42): error TS2339: Property 'stop' does not exist on type 'GoogleSTTStreamingSession'.
