@@ -18,7 +18,7 @@ import {
 const notionIntegrations = pgTable(
   "notion_integrations",
   {
-    id: text("id").primaryKey(),
+    id: text("id").primaryKey().notNull(),
     ...timestamps,
     userId: text("user_id")
       .notNull()
@@ -65,7 +65,7 @@ const notionIntegrations = pgTable(
 const notionExports = pgTable(
   "notion_exports",
   {
-    id: text("id").primaryKey(),
+    id: text("id").primaryKey().notNull(),
     ...timestamps,
     userId: text("user_id")
       .notNull()
@@ -88,7 +88,7 @@ const notionExports = pgTable(
 const notionSyncStatus = pgTable(
   "notion_sync_status",
   {
-    id: text("id").primaryKey(),
+    id: text("id").primaryKey().notNull(),
     ...timestamps,
     userId: text("user_id")
       .notNull()
@@ -117,7 +117,7 @@ const notionSyncStatus = pgTable(
 const notionBulkOperations = pgTable(
   "notion_bulk_operations",
   {
-    id: text("id").primaryKey(),
+    id: text("id").primaryKey().notNull(),
     ...timestamps,
     userId: text("user_id")
       .notNull()
@@ -156,7 +156,7 @@ const notionBulkOperations = pgTable(
 const notionPagePermissions = pgTable(
   "notion_page_permissions",
   {
-    id: text("id").primaryKey(),
+    id: text("id").primaryKey().notNull(),
     ...timestamps,
     notionPageId: text("notion_page_id").notNull(),
     userId: text("user_id")
@@ -183,7 +183,7 @@ const notionPagePermissions = pgTable(
 const notionSyncConflicts = pgTable(
   "notion_sync_conflicts",
   {
-    id: text("id").primaryKey(),
+    id: text("id").primaryKey().notNull(),
     ...timestamps,
     userId: text("user_id")
       .notNull()
@@ -298,7 +298,7 @@ const notionSyncConflictsRelations = relations(
 const zapierIntegrations = pgTable(
   "zapier_integrations",
   {
-    id: text("id").primaryKey(),
+    id: text("id").primaryKey().notNull(),
     ...timestamps,
     userId: text("user_id")
       .notNull()
@@ -319,7 +319,7 @@ const zapierIntegrations = pgTable(
 const zapierWebhookSubscriptions = pgTable(
   "zapier_webhook_subscriptions",
   {
-    id: text("id").primaryKey(),
+    id: text("id").primaryKey().notNull(),
     ...timestamps,
     userId: text("user_id")
       .notNull()
@@ -356,7 +356,7 @@ const zapierWebhookSubscriptions = pgTable(
 const zapierWebhookDeliveries = pgTable(
   "zapier_webhook_deliveries",
   {
-    id: text("id").primaryKey(),
+    id: text("id").primaryKey().notNull(),
     ...timestamps,
     subscriptionId: text("subscription_id")
       .notNull()
@@ -443,7 +443,7 @@ const zapierWebhookDeliveriesRelations = relations(
 const slackIntegrations = pgTable(
   "slack_integrations",
   {
-    id: text("id").primaryKey(),
+    id: text("id").primaryKey().notNull(),
     ...timestamps,
     userId: text("user_id")
       .notNull()
@@ -489,7 +489,7 @@ const slackIntegrations = pgTable(
 const slackPosts = pgTable(
   "slack_posts",
   {
-    id: text("id").primaryKey(),
+    id: text("id").primaryKey().notNull(),
     ...timestamps,
     userId: text("user_id")
       .notNull()
