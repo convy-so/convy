@@ -1,4 +1,3 @@
-import "server-only";
 
 import { Redis } from "@upstash/redis";
 import { env } from "@/lib/env";

@@ -1,4 +1,3 @@
-import "server-only";
 
 import { Readable, Transform, PassThrough } from "stream";
 import * as prism from "prism-media";

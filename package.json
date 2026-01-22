@@ -7,10 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "workers:dev": "tsx watch workers/index.ts",
+    "workers:dev": "tsx watch --env-file=.env workers/index.ts",
     "workers:build": "tsc -p workers/tsconfig.json",
     "workers:start": "node dist/workers/index.js",
-    "websocket:dev": "tsx watch websocket/server.ts",
+    "websocket:dev": "tsx watch --env-file=.env websocket/server.ts",
     "websocket:build": "tsc -p websocket/tsconfig.json",
     "websocket:start": "node dist/websocket/server.js",
     "dev:all": "concurrently \"pnpm dev\" \"pnpm workers:dev\" \"pnpm websocket:dev\""

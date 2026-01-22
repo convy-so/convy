@@ -1,4 +1,3 @@
-import "server-only";
 
 import * as googleTTS from "@google-cloud/text-to-speech";
 import { env } from "@/lib/env";

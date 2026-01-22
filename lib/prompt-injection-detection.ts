@@ -1,4 +1,3 @@
-import "server-only";
 
 /**
  * Utility functions to detect potential prompt injection attempts
