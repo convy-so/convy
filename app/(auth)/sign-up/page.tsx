@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Mail, Lock, User } from "lucide-react";
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleButton } from "@/components/auth/google-button";
@@ -9,8 +10,11 @@ import { FormDivider } from "@/components/auth/form-divider";
 import { InputField } from "@/components/auth/input-field";
 import { PasswordStrength } from "@/components/auth/password-strength";
 import { SubmitButton } from "@/components/auth/submit-button";
+import { authClient } from "@/lib/auth-client";
+import toast from "react-hot-toast"; // Assuming sonner
 
 export default function SignUpPage() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -40,15 +44,45 @@ export default function SignUpPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // TODO: Implement sign up logic
-    console.log("Sign up:", formData);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsLoading(false);
+
+    try {
+      const result = await authClient.signUp.email({
+        email: formData.email,
+        password: formData.password,
+        name: formData.name,
+        callbackURL: "/dashboard",
+        fetchOptions: {
+          onError: (ctx) => {
+            toast.error(ctx.error.message);
+          }
+        }
+      });
+
+      // Handle the response - token will be null due to email verification requirement
+      if (result.data?.user && result.data?.token === null) {
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('verification_email', formData.email);
+        }
+        toast.success("Account created! Please check your email to verify your account.");
+        router.push("/verify-email");
+      } else if (result.data?.token) {
+        // This shouldn't happen with requireEmailVerification: true, but handle it
+        toast.success("Account created and verified!");
+        router.push("/dashboard");
+      }
+    } catch (error) {
+      console.error("Sign-up error:", error);
+      toast.error("Something went wrong. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleGoogleSignUp = () => {
-    // TODO: Implement Google sign up
-    console.log("Google sign up");
+  const handleGoogleSignUp = async () => {
+    await authClient.signIn.social({
+      provider: "google",
+      callbackURL: "/dashboard"
+    });
   };
 
   const isPasswordValid = Object.values(passwordStrength).every(Boolean);
@@ -59,7 +93,7 @@ export default function SignUpPage() {
       subtitle="Start creating conversational surveys today"
     >
       <GoogleButton onClick={handleGoogleSignUp} />
-      
+
       <div className="my-6">
         <FormDivider />
       </div>
@@ -107,9 +141,9 @@ export default function SignUpPage() {
             }
             required
           />
-          
-          <PasswordStrength 
-            password={formData.password} 
+
+          <PasswordStrength
+            password={formData.password}
             requirements={passwordStrength}
             compact
           />
@@ -136,8 +170,8 @@ export default function SignUpPage() {
           </label>
         </div>
 
-        <SubmitButton 
-          isLoading={isLoading} 
+        <SubmitButton
+          isLoading={isLoading}
           loadingText="Creating account..."
           disabled={!isPasswordValid || !formData.agreeToTerms}
         >

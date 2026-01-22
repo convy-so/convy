@@ -22,24 +22,16 @@ import {
   Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import toast from "react-hot-toast";
+import { authClient } from "@/lib/auth-client";
+
+type CreationStep = "objective" | "audience" | "questions" | "tone" | "review";
 
 type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
-  timestamp: Date;
 };
-
-type CreationStep = "objective" | "audience" | "questions" | "tone" | "review";
-
-// Steps removed from UI but kept for logic
-const steps: { id: CreationStep; label: string; description: string }[] = [
-  { id: "objective", label: "Objective", description: "What do you want to learn?" },
-  { id: "audience", label: "Audience", description: "Who are you surveying?" },
-  { id: "questions", label: "Questions", description: "Key topics to cover" },
-  { id: "tone", label: "Tone", description: "How should AI communicate?" },
-  { id: "review", label: "Review", description: "Finalize your survey" },
-];
 
 const suggestedPrompts = [
   "I want to understand customer satisfaction with our product",
@@ -50,16 +42,9 @@ const suggestedPrompts = [
 
 export default function CreateSurveyPage() {
   const router = useRouter();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      role: "assistant",
-      content: "Hi! I'm here to help you create the perfect survey. Let's start with the basics - what's the main objective of your survey? What do you want to learn from your respondents?",
-      timestamp: new Date(),
-    },
-  ]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [surveyId, setSurveyId] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState<CreationStep>("objective");
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -68,10 +53,269 @@ export default function CreateSurveyPage() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   
+  // Chat state
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "welcome",
+      role: "assistant",
+      content: "Hi! I'm here to help you create the perfect survey. Let's start with the basics - what's the main objective of your survey? What do you want to learn from your respondents?"
+    }
+  ]);
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const [extractedData, setExtractedData] = useState<any>(null);
+  const [collectedInfo, setCollectedInfo] = useState<any>(null);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Check authentication status
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const session = await authClient.getSession();
+        if (!session.data) {
+          setAuthError("Please sign in to create surveys");
+          return;
+        }
+        if (!session.data.user.emailVerified) {
+          setAuthError("Please verify your email before creating surveys");
+          return;
+        }
+        setAuthError(null);
+      } catch (error) {
+        console.error("Auth check failed:", error);
+        setAuthError("Authentication failed");
+      }
+    };
+    checkAuth();
+  }, []);
+
+  // Initialize survey draft on mount
+  useEffect(() => {
+    if (authError) {
+      setIsInitializing(false);
+      return;
+    }
+
+    const createDraft = async () => {
+      try {
+        const response = await fetch("/api/surveys", { 
+          method: "POST",
+          credentials: "include"
+        });
+        
+        if (response.status === 401) {
+          setAuthError("Please sign in to create surveys");
+          return;
+        }
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          if (errorText === "EMAIL_NOT_VERIFIED") {
+            setAuthError("Please verify your email before creating surveys");
+            return;
+          }
+          throw new Error(`Failed to create draft: ${response.status}`);
+        }
+        
+        const survey = await response.json();
+        setSurveyId(survey.id);
+      } catch (error) {
+        toast.error("Failed to initialize survey");
+        console.error(error);
+        setAuthError("Failed to initialize survey");
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+    createDraft();
+  }, [authError]);
+
+  // Replace useChat with manual implementation
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+  };
+
+  const sendMessage = async (content: string) => {
+    if (!surveyId || authError) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`/api/surveys/${surveyId}/create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          messages: [...messages, userMessage].map(m => ({
+            role: m.role,
+            content: m.content
+          }))
+        }),
+      });
+
+      if (response.status === 401) {
+        setAuthError("Please sign in to continue");
+        return;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        if (errorText === "EMAIL_NOT_VERIFIED") {
+          setAuthError("Please verify your email to continue");
+          return;
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Check if response is streaming
+      const contentType = response.headers.get('content-type');
+            console.log("Response content-type:", contentType);
+
+      if (contentType?.includes('text/plain') || contentType?.includes('text/stream')) {
+        // Handle streaming response
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("No response body");
+
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: ""
+        };
+
+        setMessages(prev => [...prev, assistantMessage]);
+
+        const decoder = new TextDecoder();
+        let done = false;
+        let buffer = '';
+
+        while (!done) {
+          const { value, done: readerDone } = await reader.read();
+          done = readerDone;
+
+          if (value) {
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+            // console.log("Received chunk:", chunk); // Debug log
+            
+            // Process complete lines
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Keep incomplete line in buffer
+            
+            for (const line of lines) {
+              if (line.trim()) {
+                // Handle AI SDK streaming format
+                if (line.startsWith('0:')) {
+                  // Format: "0:content"
+                  const content = line.slice(2);
+                  if (content) {
+                    setMessages(prev => 
+                      prev.map(msg => 
+                        msg.id === assistantMessage.id 
+                          ? { ...msg, content: msg.content + content }
+                          : msg
+                      )
+                    );
+                  }
+                } else if (line.startsWith('data: ')) {
+                  // Format: "data: content"
+                  const content = line.slice(6);
+                  if (content && content !== '[DONE]') {
+                    try {
+                      const parsed = JSON.parse(content);
+                      if (parsed.choices?.[0]?.delta?.content) {
+                        setMessages(prev => 
+                          prev.map(msg => 
+                            msg.id === assistantMessage.id 
+                              ? { ...msg, content: msg.content + parsed.choices[0].delta.content }
+                              : msg
+                          )
+                        );
+                      }
+                    } catch (e) {
+                      // If not JSON, treat as plain text
+                      setMessages(prev => 
+                        prev.map(msg => 
+                          msg.id === assistantMessage.id 
+                            ? { ...msg, content: msg.content + content }
+                            : msg
+                        )
+                      );
+                    }
+                  }
+                } else {
+                  // Plain text content - this is likely what we're getting
+                  setMessages(prev => 
+                    prev.map(msg => 
+                      msg.id === assistantMessage.id 
+                        ? { ...msg, content: msg.content + line }
+                        : msg
+                    )
+                  );
+                }
+              }
+            }
+          }
+        }
+        
+        // Process any remaining buffer content
+        if (buffer.trim()) {
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === assistantMessage.id 
+                ? { ...msg, content: msg.content + buffer }
+                : msg
+            )
+          );
+        }
+      } else {
+        // Handle non-streaming response (fallback)
+        const responseText = await response.text();
+        console.log("Non-streaming response:", responseText);
+        
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: responseText
+        };
+
+        setMessages(prev => [...prev, assistantMessage]);
+      }
+    } catch (error) {
+      console.error("Chat error:", error);
+      toast.error("Failed to send message. Please try again.");
+      // Remove the user message if there was an error
+      setMessages(prev => prev.filter(msg => msg.id !== userMessage.id));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input?.trim() || isLoading || authError) return;
+    
+    const message = input.trim();
+    setInput("");
+    sendMessage(message);
+  };
+
+  const append = async (message: { role: "user" | "assistant"; content: string }) => {
+    await sendMessage(message.content);
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -81,61 +325,40 @@ export default function CreateSurveyPage() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSend = async (textOverride?: string) => {
-    const textToSend = textOverride || input;
-    if (!textToSend.trim() || isLoading) return;
+  // Poll for extracted data to update preview
+  useEffect(() => {
+    if (!surveyId || isLoading) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: textToSend,
-      timestamp: new Date(),
+    const fetchExtractedData = async () => {
+      try {
+        const res = await fetch(`/api/surveys/${surveyId}/create`);
+        if (res.ok) {
+          const data = await res.json();
+          setExtractedData(data.extractedData);
+          setCollectedInfo(data.collectedInfo);
+        }
+      } catch (err) {
+        console.error("Failed to fetch extraction data", err);
+      }
     };
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setIsLoading(true);
-
-    // Simulate AI response
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    const stepResponses: Record<CreationStep, string> = {
-      objective: "Great objective! Now let's talk about your target audience. Who will be taking this survey? Consider their demographics, relationship to your product/service, and any specific segments you want to reach.",
-      audience: "Perfect! I understand your audience. Now, what are the key topics or questions you want to cover? What specific information do you need from your respondents?",
-      questions: "Excellent topics! Now let's set the tone. How would you like the AI to communicate with your respondents? Should it be formal, casual, friendly, or professional?",
-      tone: "Great! I have all the information I need. Let me summarize your survey configuration. You can review it and then we'll create your survey!",
-      review: "Your survey has been created! You can now share it with your respondents or test it with sample conversations.",
-    };
-
-    const nextSteps: Record<CreationStep, CreationStep> = {
-      objective: "audience",
-      audience: "questions",
-      questions: "tone",
-      tone: "review",
-      review: "review",
-    };
-
-    const assistantMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: "assistant",
-      content: stepResponses[currentStep],
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, assistantMessage]);
-    setCurrentStep(nextSteps[currentStep]);
-    setIsLoading(false);
-  };
+    const timer = setInterval(fetchExtractedData, 5000);
+    fetchExtractedData(); // Initial fetch
+    return () => clearInterval(timer);
+  }, [surveyId, isLoading]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      if (!input?.trim() || isLoading) return;
+      handleSubmit(e as any);
     }
   };
 
   const handleSuggestedPrompt = (prompt: string) => {
-    setInput(prompt);
+    if (!authError) {
+      setInput(prompt);
+    }
   };
 
   const toggleVoiceMode = () => {
@@ -199,7 +422,8 @@ export default function CreateSurveyPage() {
       setAudioUrl(null);
     } catch (err) {
       console.error("Error accessing microphone:", err);
-      alert("Could not access microphone. Please ensure you have granted permission.");
+      // alert("Could not access microphone. Please ensure you have granted permission.");
+      toast.error("Microphone access denied");
     }
   };
 
@@ -230,13 +454,22 @@ export default function CreateSurveyPage() {
     }
   };
 
-  const handleVoiceSend = () => {
-    if (transcribedText) {
-      setInput(transcribedText);
-      handleSend(transcribedText); // Pass text directly
-      setTranscribedText("");
-      setAudioUrl(null);
-      audioRef.current = null;
+  const handleVoiceSend = async () => {
+    if (transcribedText && !authError) {
+      try {
+        // Directly append user message using useChat's append
+        await append({
+          role: 'user',
+          content: transcribedText
+        });
+        
+        setTranscribedText("");
+        setAudioUrl(null);
+        audioRef.current = null;
+      } catch (error) {
+        console.error("Voice send error:", error);
+        toast.error("Failed to send voice message");
+      }
     }
   };
 
@@ -263,7 +496,60 @@ export default function CreateSurveyPage() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const currentStepIndex = steps.findIndex((s) => s.id === currentStep);
+  if (isInitializing) {
+      return (
+          <div className="h-screen flex items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+          </div>
+      );
+  }
+
+  if (authError) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
+            <User className="w-8 h-8 text-red-600" />
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900">Authentication Required</h2>
+          <p className="text-gray-600 max-w-md">{authError}</p>
+          <div className="flex gap-3 justify-center">
+            {authError.includes("verify") ? (
+              <>
+                <Link
+                  href="/verify-email"
+                  className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+                >
+                  Verify Email
+                </Link>
+                <Link
+                  href="/dashboard"
+                  className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Go Back
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/sign-in"
+                  className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/"
+                  className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Go Home
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-[calc(100vh-7rem)] flex flex-col max-w-6xl mx-auto">
@@ -303,8 +589,6 @@ export default function CreateSurveyPage() {
         </div>
         <p className="text-gray-500 mt-3 ml-14 text-sm">AI-powered survey creation assistant</p>
       </div>
-
-      {/* Steps Removed from UI */}
 
       {/* Chat Container */}
       <div className="flex-1 bg-white rounded-xl border border-gray-100 flex flex-col overflow-hidden relative">
@@ -425,7 +709,9 @@ export default function CreateSurveyPage() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {messages.map((message) => (
+          {messages.map((message) => {
+            // console.log("Rendering message:", message); // Debug log
+            return (
             <div
               key={message.id}
               className={cn(
@@ -459,7 +745,7 @@ export default function CreateSurveyPage() {
                 <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
               </div>
             </div>
-          ))}
+          )})}
 
           {isLoading && (
             <div className="flex gap-3">
@@ -500,10 +786,10 @@ export default function CreateSurveyPage() {
         {/* Input Area */}
         {!isVoiceMode && (
          <div className="border-t border-gray-100 p-4 bg-gray-50/50">
-            <div className="relative bg-white border border-gray-200 rounded-2xl shadow-sm focus-within:ring-2 focus-within:ring-purple-500/10 focus-within:border-purple-500/50 transition-all overflow-hidden">
+            <form onSubmit={handleSubmit} className="relative bg-white border border-gray-200 rounded-2xl shadow-sm focus-within:ring-2 focus-within:ring-purple-500/10 focus-within:border-purple-500/50 transition-all overflow-hidden">
                 <textarea
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={handleInputChange}
                   onKeyDown={handleKeyDown}
                   placeholder="Describe your survey..."
                   rows={1}
@@ -512,8 +798,8 @@ export default function CreateSurveyPage() {
                 
                 <div className="absolute right-2 bottom-2">
                     <button
-                        onClick={() => handleSend()}
-                        disabled={!input.trim() || isLoading}
+                        type="submit"
+                        disabled={!input?.trim() || isLoading || !!authError}
                         className="p-2 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                     >
                         {isLoading ? (
@@ -523,7 +809,7 @@ export default function CreateSurveyPage() {
                         )}
                     </button>
                 </div>
-            </div>
+            </form>
             <p className="text-center text-xs text-gray-400 mt-2">
                 Convy AI can make mistakes. Review generated surveys carefully.
             </p>
@@ -532,48 +818,72 @@ export default function CreateSurveyPage() {
       </div>
 
       {/* Preview Section */}
-      {currentStep === "review" && (
+      {extractedData && (Object.keys(extractedData).length > 0) && (
             <div className="mt-6 bg-white rounded-xl border border-gray-100 p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="flex items-center justify-between mb-6">
                     <div>
-                        <h2 className="text-lg font-bold text-gray-900">Survey Preview</h2>
-                        <p className="text-sm text-gray-500">Based on your requirements</p>
+                        <h2 className="text-lg font-bold text-gray-900">{extractedData.title || "Survey Draft"}</h2>
+                        <p className="text-sm text-gray-500">Real-time AI construction</p>
                     </div>
                     <div className="flex gap-3">
-                        <button className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg transition-colors">
-                            Regenerate
-                        </button>
-                        <button
-                            onClick={() => router.push("/surveys")}
-                            className="flex items-center gap-2 px-6 py-2 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-shadow shadow-lg shadow-gray-200"
+                        <button 
+                          onClick={() => router.push(`/dashboard/surveys/${surveyId}`)}
+                          className="flex items-center gap-2 px-6 py-2 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-shadow shadow-lg shadow-gray-200"
                         >
                             <Sparkles className="w-4 h-4" />
-                            Create & Publish
+                            Finalize Survey
                         </button>
                     </div>
                 </div>
 
-                <div className="bg-gray-50 rounded-xl p-8 max-w-2xl mx-auto border border-gray-200 shadow-sm">
-                    <div className="bg-white rounded-xl p-6 shadow-sm mb-4">
-                        <h3 className="font-semibold text-xl text-gray-900 mb-2">Product Feedback Survey</h3>
-                        <p className="text-gray-500 text-sm">Help us improve our services by answering a few questions.</p>
-                    </div>
-
-                    <div className="space-y-4">
-                        {[1, 2, 3].map((i) => (
-                            <div key={i} className="bg-white rounded-xl p-4 border border-gray-100">
-                                <div className="flex gap-3">
-                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xs font-medium">
-                                        {i}
-                                    </span>
-                                    <div className="space-y-3 flex-1">
-                                        <div className="h-4 bg-gray-100 rounded w-3/4" />
-                                        <div className="h-8 bg-gray-50 rounded w-full border border-gray-200" />
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {extractedData.objective && (
+                      <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Objective</h3>
+                          <p className="text-sm text-gray-700 font-medium">{extractedData.objective.goal}</p>
+                      </div>
+                    )}
+                    {extractedData.targetAudience && (
+                      <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Audience</h3>
+                          <p className="text-sm text-gray-700 font-medium">{extractedData.targetAudience.description}</p>
+                      </div>
+                    )}
+                    {extractedData.tone && (
+                      <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Tone</h3>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              {extractedData.tone}
+                          </span>
+                      </div>
+                    )}
+                    {extractedData.scope?.mainTopics && extractedData.scope.mainTopics.length > 0 && (
+                      <div className="p-4 rounded-xl bg-gray-50 border border-gray-100 md:col-span-2">
+                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Key Topics</h3>
+                          <div className="flex flex-wrap gap-2">
+                             {extractedData.scope.mainTopics.map((topic: string, i: number) => (
+                               <span key={i} className="px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs text-gray-600">
+                                 {topic}
+                               </span>
+                             ))}
+                          </div>
+                      </div>
+                    )}
+                    {extractedData.requiredQuestions && extractedData.requiredQuestions.length > 0 && (
+                      <div className="p-4 rounded-xl bg-gray-50 border border-gray-100 md:col-span-2">
+                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Extracted Questions</h3>
+                          <div className="space-y-3">
+                             {extractedData.requiredQuestions.map((q: string, i: number) => (
+                               <div key={i} className="flex gap-3 p-3 bg-white rounded-lg border border-gray-100 shadow-sm">
+                                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-bold">
+                                    {i + 1}
+                                  </span>
+                                  <p className="text-sm text-gray-800 font-medium">{q}</p>
+                               </div>
+                             ))}
+                          </div>
+                      </div>
+                    )}
                 </div>
             </div>
       )}

@@ -75,7 +75,7 @@ export function SurveyCard({
 
                     <div className="min-w-0 flex-1">
                         <Link
-                            href={`/surveys/${id}`}
+                            href={`/dashboard/surveys/${id}`}
                             className="text-base font-semibold text-gray-900 hover:text-blue-600 transition-colors truncate block"
                         >
                             {title}
@@ -112,7 +112,7 @@ export function SurveyCard({
                                 />
                                 <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl border border-gray-200 shadow-xl z-50 py-1 animate-in fade-in slide-in-from-top-2 duration-150">
                                     <Link
-                                        href={`/surveys/${id}`}
+                                        href={`/dashboard/surveys/${id}`}
                                         className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                         onClick={() => setShowMenu(false)}
                                     >
@@ -120,7 +120,7 @@ export function SurveyCard({
                                         View Details
                                     </Link>
                                     <Link
-                                        href={`/surveys/${id}/edit`}
+                                        href={`/dashboard/surveys/${id}?tab=settings`}
                                         className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                         onClick={() => setShowMenu(false)}
                                     >
@@ -128,7 +128,7 @@ export function SurveyCard({
                                         Edit Survey
                                     </Link>
                                     <Link
-                                        href={`/surveys/${id}/analytics`}
+                                        href={`/dashboard/surveys/${id}?tab=analytics`}
                                         className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                         onClick={() => setShowMenu(false)}
                                     >
