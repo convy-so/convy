@@ -478,8 +478,8 @@ function mergeVersions(
 export async function getUserConflictStrategy(
   userId: string
 ): Promise<ResolutionStrategy> {
-  // TODO: Store user preference in database
-  // For now, default to app priority
+  // ENFORCED: Always return 'app_priority' as the source of truth
+  // This ensures the app's data always overwrites Notion in case of conflict
   return "app_priority";
 }
 

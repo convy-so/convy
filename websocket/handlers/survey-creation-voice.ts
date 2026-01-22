@@ -1062,17 +1062,6 @@ export class SurveyCreationVoiceHandler {
           `[Survey Creation Voice] Session ended: ${this.state.voiceSessionId}, ` +
             `sttCost=$${this.totalSttCost.toFixed(4)}, ttsCost=$${this.totalTtsCost.toFixed(4)}`
         );
-        
-        // Track voice minutes usage
-        const minutes = this.totalAudioDurationMs / 60000;
-        if (minutes > 0) {
-            await UsageService.incrementUsage(
-                this.userId,
-                this.organizationId,
-                "voiceMinutesUsed",
-                minutes
-            );
-        }
       }
 
       // Cleanup Google STT session

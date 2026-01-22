@@ -2,7 +2,6 @@
 
 import { nanoid } from "nanoid";
 import Stripe from "stripe";
-import { eq, and } from "drizzle-orm";
 
 import { db } from "@/db";
 import { payments } from "@/db/schema";
@@ -10,7 +9,7 @@ import { env } from "@/lib/env";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { isWorkspaceOwner } from "@/lib/workspace-access";
 import { ensurePlansSeeded, getPlanById, PLAN_PRICES_USD_CENTS } from "@/lib/billing/plans";
-import { coinbasePaymentLink } from "@/lib/billing/coinbase-payment-link";
+import { coinbaseClient } from "@/lib/billing/coinbase";
 import { logger } from "@/lib/logger";
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
@@ -125,8 +124,6 @@ export async function createCoinbasePaymentLinkAction(input: {
     const amountUsdCents =
       input.interval === "month" ? priceMap.monthly : priceMap.yearly;
 
-    // Deduplication: Check for existing pending payment for this user/plan/interval
-    // that was created in the last 60 minutes (Coinbase charges expire after ~1 hour)
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
     
     const existingPendingPayment = await db.query.payments.findFirst({
@@ -134,7 +131,7 @@ export async function createCoinbasePaymentLinkAction(input: {
         eq(p.userId, session.user.id),
         eq(p.planId, input.planId),
         eq(p.status, "pending"),
-        eq(p.provider, "coinbase_commerce"),
+        eq(p.provider, "coinbase_business"),
         gte(p.createdAt, oneHourAgo)
       ),
     });
@@ -142,11 +139,11 @@ export async function createCoinbasePaymentLinkAction(input: {
     if (existingPendingPayment && existingPendingPayment.coinbaseChargeId) {
       // Try to retrieve the existing payment link to get its URL
       try {
-        const existingLink = await coinbasePaymentLink.retrieve(
+        const existingLink = await coinbaseClient.getPaymentLink(
           existingPendingPayment.coinbaseChargeId
         );
         
-        if (existingLink && existingLink.url && existingLink.status === "pending") {
+        if (existingLink && existingLink.url) {
           logger.info("Returning existing pending Coinbase payment link", { 
             paymentLinkId: existingLink.id,
             userId: session.user.id 
@@ -168,21 +165,26 @@ export async function createCoinbasePaymentLinkAction(input: {
       }
     }
 
+    // Generate ID for the payment record beforehand to pass in metadata
+    const paymentId = nanoid();
+
     // Convert cents to dollars for the API (which accepts string amounts)
     const amountUsd = (amountUsdCents / 100).toFixed(2);
 
     // Create payment link via the Payment Link API
-    const paymentLink = await coinbasePaymentLink.create({
+    const paymentLink = await coinbaseClient.createPaymentLink({
       name: `${plan.name} Plan (${input.interval}ly)`,
       description: `${plan.name} subscription - ${input.interval}ly billing`,
       amount: amountUsd,
-      successRedirectUrl: input.successUrl,
-      cancelRedirectUrl: input.cancelUrl,
+      currency: "USD",
+      redirect_url: input.successUrl,
+      cancel_url: input.cancelUrl,
       metadata: {
         userId: session.user.id,
         planId: input.planId,
         interval: input.interval,
         organizationId: activeOrgId ?? "",
+        paymentId, 
       },
     });
 
@@ -195,15 +197,15 @@ export async function createCoinbasePaymentLinkAction(input: {
 
     // Record pending payment; it will be finalized on webhook confirmation
     await db.insert(payments).values({
-      id: nanoid(),
+      id: paymentId,
       userId: session.user.id,
       planId: plan.id,
-      provider: "coinbase_commerce",
+      provider: "coinbase_business",
       status: "pending",
       amountUsdCents,
       amountOriginal: amountUsdCents,
       currency: "USD",
-      coinbaseChargeId: paymentLink.id, // Store payment link ID in this field
+      coinbaseChargeId: paymentLink.id, // Store payment link ID (Checkout ID)
       description: `${plan.name} (${input.interval}) - Crypto Payment`,
       metadata: {
         userId: session.user.id,
@@ -211,6 +213,7 @@ export async function createCoinbasePaymentLinkAction(input: {
         interval: input.interval,
         organizationId: activeOrgId ?? "",
         paymentMethod: "crypto",
+        paymentId,
       },
     });
 

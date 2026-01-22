@@ -18,6 +18,7 @@ import {
 } from "./middleware/rate-limit";
 import { SurveyCreationVoiceHandler } from "./handlers/survey-creation-voice";
 import { SurveyResponseVoiceHandler } from "./handlers/survey-response-voice";
+import { SampleSurveyVoiceHandler } from "./handlers/sample-survey-voice";
 import { AnalyticsHandler } from "./handlers/analytics";
 import { getRedisSubscriber } from "@/lib/redis";
 
@@ -35,14 +36,15 @@ const activeConnections = new Map<
     handler:
       | SurveyCreationVoiceHandler
       | SurveyResponseVoiceHandler
+      | SampleSurveyVoiceHandler
       | AnalyticsHandler;
     userId?: string;
     createdAt: number; // Track when connection was created for cleanup
   }
 >();
 
-// Track analytics connections: userId -> surveyId -> handler
-const analyticsConnections = new Map<string, Map<string, AnalyticsHandler>>();
+// Issue 14 Fix: Flattened Map (userId + ":" + surveyId) -> handler to prevent nested Map leaks
+const analyticsConnections = new Map<string, AnalyticsHandler>();
 
 // Redis pub/sub subscriber for analytics events
 let redisSubscriber: ReturnType<typeof getRedisSubscriber> | null = null;
@@ -79,17 +81,10 @@ function cleanupStaleConnections(): void {
         cleanedCount++;
 
         // Also clean up from analyticsConnections if applicable
-        if (connection.userId) {
-          const userConnections = analyticsConnections.get(connection.userId);
-          if (userConnections) {
-            for (const [surveyId, handler] of userConnections) {
-              if (handler === connection.handler) {
-                userConnections.delete(surveyId);
-              }
-            }
-            if (userConnections.size === 0) {
-              analyticsConnections.delete(connection.userId);
-            }
+        if (connection.userId && connection.handler instanceof AnalyticsHandler) {
+          const key = `${connection.userId}:${connection.handler.surveyId}`;
+          if (analyticsConnections.get(key) === connection.handler) {
+            analyticsConnections.delete(key);
           }
         }
       }
@@ -130,18 +125,6 @@ const server = createServer((req, res) => {
     return;
   }
 
-  // Stats endpoint
-  if (req.url === "/stats") {
-    const stats = {
-      activeConnections: activeConnections.size,
-      uptime: process.uptime(),
-      memory: process.memoryUsage(),
-      timestamp: new Date().toISOString(),
-    };
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(stats));
-    return;
-  }
 
   res.writeHead(404);
   res.end("Not Found");
@@ -185,6 +168,8 @@ wss.on("connection", async (ws: WebSocket, req) => {
       await handleSurveyCreation(ws, req);
     } else if (pathname === "/voice/survey-response") {
       await handleSurveyResponse(ws, req);
+    } else if (pathname === "/voice/sample-conversation") {
+      await handleSampleConversation(ws, req);
     } else if (pathname === "/analytics") {
       await handleAnalytics(ws, req);
     } else {
@@ -349,6 +334,92 @@ async function handleSurveyResponse(
 }
 
 /**
+ * Handle sample survey voice connections (authenticated owner)
+ */
+async function handleSampleConversation(
+  ws: WebSocket,
+  req: IncomingMessage
+): Promise<void> {
+  // Authenticate as owner
+  const authResult = await authenticateWebSocket(ws, req);
+
+  if ("code" in authResult) {
+    sendAuthError(ws, authResult);
+    return;
+  }
+
+  const connection = authResult as AuthenticatedConnection;
+
+  // Get surveyId and conversationNumber from query parameters
+  const url = parse(req.url || "", true);
+  const surveyId = url.query?.surveyId as string;
+  const conversationNumber = parseInt(
+    (url.query?.conversationNumber as string) || "1"
+  );
+
+  if (!surveyId) {
+    ws.send(
+      JSON.stringify({
+        type: "error",
+        error: "Survey ID required",
+      })
+    );
+    ws.close();
+    return;
+  }
+
+  const identifier = getClientIdentifier(req, connection.userId);
+  const rateLimitCheck = await checkConnectionAllowed(identifier);
+
+  if (!rateLimitCheck.allowed) {
+    ws.send(
+      JSON.stringify({
+        type: "error",
+        error: rateLimitCheck.reason,
+        retryAfter: rateLimitCheck.retryAfter,
+      })
+    );
+    ws.close();
+    return;
+  }
+
+  try {
+    const handler = new SampleSurveyVoiceHandler(
+      connection,
+      surveyId,
+      conversationNumber
+    );
+    await handler.initialize();
+
+    const connectionId = `sample-${connection.userId}-${surveyId}-${Date.now()}`;
+    activeConnections.set(connectionId, {
+      handler,
+      userId: connection.userId,
+      createdAt: Date.now(),
+    });
+
+    ws.on("close", async () => {
+      activeConnections.delete(connectionId);
+      await releaseConnection(identifier);
+    });
+
+    console.log(
+      `[WebSocket] Sample voice handler initialized for user ${connection.userId}, survey ${surveyId}`
+    );
+  } catch (error) {
+    console.error("[WebSocket] Sample voice handler error:", error);
+    await releaseConnection(identifier);
+    ws.send(
+      JSON.stringify({
+        type: "error",
+        error: "Failed to initialize sample voice session",
+      })
+    );
+    ws.close();
+  }
+}
+
+/**
  * Handle analytics connections (authenticated)
  */
 async function handleAnalytics(
@@ -412,21 +483,13 @@ async function handleAnalytics(
     });
 
     // Track analytics connection for Redis pub/sub routing
-    if (!analyticsConnections.has(connection.userId)) {
-      analyticsConnections.set(connection.userId, new Map());
-    }
-    analyticsConnections.get(connection.userId)!.set(surveyId, handler);
+    const analyticsKey = `${connection.userId}:${surveyId}`;
+    analyticsConnections.set(analyticsKey, handler);
 
     // Handle disconnection
     ws.on("close", async () => {
       activeConnections.delete(connectionId);
-      const userConnections = analyticsConnections.get(connection.userId);
-      if (userConnections) {
-        userConnections.delete(surveyId);
-        if (userConnections.size === 0) {
-          analyticsConnections.delete(connection.userId);
-        }
-      }
+      analyticsConnections.delete(analyticsKey);
       await releaseConnection(identifier);
       console.log(
         `[WebSocket] Analytics connection closed for user ${connection.userId}, survey ${surveyId}`
@@ -487,15 +550,13 @@ function initializeRedisSubscriber(): void {
           const data = JSON.parse(message);
 
           // Find and notify connected clients
-          const userConnections = analyticsConnections.get(userId);
-          if (userConnections) {
-            const handler = userConnections.get(surveyId);
-            if (handler) {
-              handler.handleAnalyticsUpdate(data);
-              console.log(
-                `[Redis Pub/Sub] Delivered analytics update to user ${userId}, survey ${surveyId}`
-              );
-            }
+          const analyticsKey = `${userId}:${surveyId}`;
+          const handler = analyticsConnections.get(analyticsKey);
+          if (handler) {
+            handler.handleAnalyticsUpdate(data);
+            console.log(
+              `[Redis Pub/Sub] Delivered analytics update to user ${userId}, survey ${surveyId}`
+            );
           }
         }
       } catch (error) {
@@ -585,6 +646,7 @@ server.listen(PORT, () => {
 ║   Endpoints:                                                 ║
 ║   • ws://localhost:${PORT}/voice/survey-creation             ║
 ║   • ws://localhost:${PORT}/voice/survey-response             ║
+║   • ws://localhost:${PORT}/voice/sample-conversation?surveyId={id}&conversationNumber={n} ║
 ║   • ws://localhost:${PORT}/analytics?surveyId={id}           ║
 ║                                                              ║
 ║   Health Check: http://localhost:${PORT}/health              ║

@@ -2,7 +2,7 @@
 
 import { eq, and } from "drizzle-orm";
 import { db } from "@/db";
-import { members, organizations, surveys, projects, surveyTeamMembers } from "@/db/schema";
+import { members, organizations, surveys, projects } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 
 /**
@@ -77,60 +77,32 @@ export async function getSurveyAccessLevel(
   if (!survey) return "none";
 
   // Case 1: Survey belongs to a workspace
+  // Case 1: Survey belongs to a workspace
   if (survey.organizationId) {
-    // CRITICAL: First check if user is still a member of this workspace
-    // Even if they are the creator (userId matches), they lose access if removed from workspace
+    // Check if user is a member of this workspace
     const isMember = await isWorkspaceMember(userId, survey.organizationId);
     if (!isMember) return "none";
 
-    // If they are a member, check for granular survey role
-    const [teamMember] = await db
-      .select({ role: surveyTeamMembers.role })
-      .from(surveyTeamMembers)
-      .where(
-        and(
-          eq(surveyTeamMembers.surveyId, surveyId),
-          eq(surveyTeamMembers.userId, userId)
-        )
-      );
-
-    if (teamMember) {
-      // Explicit role assignment takes precedence
-      // Map 'owner' | 'editor' | 'viewer' directly
-      return teamMember.role as "owner" | "editor" | "viewer";
+    // If survey is in a workspace and user is a member:
+    // 1. Creator = Owner
+    // 2. Workspace Owner = Owner (Can manage/close)
+    // 3. Workspace Member = Viewer (Can view, create new)
+    
+    if (survey.userId === userId) {
+      return "owner";
     }
 
-    // Fallback: If they created it AND are still in the workspace, they are owner
-    if (survey.userId === userId) return "owner";
-
-    // Fallback 2: Check workspace role (Admins might get access?)
-    // For now, let's keep it strict. If not in survey team and not creator, 
-    // maybe check if they are Workspace Owner?
     const isOwner = await isWorkspaceOwner(userId, survey.organizationId);
-    if (isOwner) return "owner"; // Workspace owner overrides
+    if (isOwner) {
+      return "owner";
+    }
 
-    // Default for other members: currently 'none' or 'viewer'?
-    // The user requested enforcing granular roles, so 'none' is safer unless added.
-    return "none"; 
+    // Default for all other workspace members
+    return "viewer";
   }
 
   // Case 2: Personal Survey (no organization)
   if (survey.userId === userId) return "owner";
-
-  // Check unique shared access (if we support sharing personal surveys via team table)
-  const [teamMember] = await db
-    .select({ role: surveyTeamMembers.role })
-    .from(surveyTeamMembers)
-    .where(
-      and(
-        eq(surveyTeamMembers.surveyId, surveyId),
-        eq(surveyTeamMembers.userId, userId)
-      )
-    );
-
-   if (teamMember) {
-      return teamMember.role as "owner" | "editor" | "viewer";
-   }
 
   return "none";
 }

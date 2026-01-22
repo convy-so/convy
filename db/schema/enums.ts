@@ -34,6 +34,7 @@ export const voiceSessionStatusEnum = pgEnum("voice_session_status", [
 export const voiceSessionTypeEnum = pgEnum("voice_session_type", [
   "survey_creation",
   "survey_response",
+  "sample_conversation",
 ]);
 export const voiceChunkTypeEnum = pgEnum("voice_chunk_type", [
   "audio_in",
@@ -58,7 +59,7 @@ export const subscriptionStatusEnum = pgEnum("subscription_status", [
 ]);
 export const paymentProviderEnum = pgEnum("payment_provider", [
   "stripe",
-  "coinbase_commerce",
+  "coinbase_business",
 ]);
 export const paymentStatusEnum = pgEnum("payment_status", [
   "pending",

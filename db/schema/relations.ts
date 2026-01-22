@@ -4,7 +4,7 @@ import {
   accounts,
   sessions,
 } from "./auth";
-import { surveys, surveyTeamMembers } from "./surveys";
+import { surveys } from "./surveys";
 import {
   notionIntegrations,
   notionExports,
@@ -26,7 +26,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   notionExports: many(notionExports),
   notionSyncStatuses: many(notionSyncStatus),
   notionBulkOperations: many(notionBulkOperations),
-  surveyTeamMemberships: many(surveyTeamMembers),
+
   notionPagePermissions: many(notionPagePermissions),
   notionSyncConflicts: many(notionSyncConflicts),
   slackIntegrations: many(slackIntegrations),

@@ -1,17 +1,18 @@
 import { NextRequest } from "next/server";
-import { updateSurveyMediaAction } from "@/app/actions/survey-images";
+import { updateSurveyMediaAction } from "@/app/actions/survey-media";
 
 // export const runtime = "nodejs";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { surveyId: string } }
+  { params }: { params: Promise<{ surveyId: string }> }
 ) {
+  const { surveyId } = await params;
   try {
     const body = await request.json();
     const result = await updateSurveyMediaAction({
       ...body,
-      surveyId: params.surveyId,
+      surveyId,
     });
 
     if (!result.success) {

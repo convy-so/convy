@@ -2,7 +2,7 @@
 
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { eq, and, isNull, sql, or } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
 import { projects, surveys } from "@/db/schema";
@@ -67,8 +67,6 @@ export async function getProjectsAction(): Promise<
     let projectList;
 
     if (activeOrgId) {
-      // Get all projects in workspace
-      // Access check: User must be member
       const isMember = await isWorkspaceMember(session.user.id, activeOrgId);
       if (!isMember) {
         return { success: false, error: "Unauthorized" };
@@ -80,7 +78,6 @@ export async function getProjectsAction(): Promise<
         .where(eq(projects.organizationId, activeOrgId))
         .orderBy(projects.createdAt);
     } else {
-      // Get personal projects
       projectList = await db
         .select()
         .from(projects)
@@ -121,24 +118,12 @@ export async function updateProjectAction(
 
     if (!project) {
       return { success: false, error: "Project not found" };
-    }
-
-    // Authorization:
-    // If personal, must be owner.
-    // If workspace, must be member? Or owner?
-    // Let's allow any member to update project details for now (collaborative)
-    // Or maybe just owner/creator?
-    // "members... must be able to see...".
-    // Let's restrict update to creator or workspace admin if we had admins.
-    // Since roles are basic (owner/member), maybe workspace owner or project creator.
-    
+    }    
     let isAuthorized = false;
 
     if (project.organizationId) {
       const isMember = await isWorkspaceMember(session.user.id, project.organizationId);
       if (isMember) {
-         // Allow any member to edit project metadata? 
-         // For now, let's allow it to facilitate collaboration.
          isAuthorized = true;
       }
     } else {
@@ -178,28 +163,20 @@ export async function deleteProjectAction(id: string): Promise<ActionResult<void
       return { success: false, error: "Project not found" };
     }
 
-    // Determine authorization for deletion
     let isAuthorized = false;
 
     if (project.organizationId) {
-        // Only workspace owner or project creator can delete
-        // We need to check if session user is workspace owner
-        // Importing isWorkspaceOwner creates circular dep? No.
-        // But verifying logic: 
         if (project.userId === session.user.id) {
-            // CRITICAL: Even if creator, must still be a member of the workspace
             const { isWorkspaceMember } = await import("@/lib/workspace-access");
             const isMember = await isWorkspaceMember(session.user.id, project.organizationId);
             if (isMember) {
                 isAuthorized = true;
             }
         } else {
-             // Check if workspace owner
              const { isWorkspaceOwner } = await import("@/lib/workspace-access");
              isAuthorized = await isWorkspaceOwner(session.user.id, project.organizationId);
         }
     } else {
-      // Personal project - just check ownership
       if (project.userId === session.user.id) {
         isAuthorized = true;
       }
@@ -208,12 +185,7 @@ export async function deleteProjectAction(id: string): Promise<ActionResult<void
     if (!isAuthorized) {
       return { success: false, error: "Unauthorized" };
     }
-    
-    // Check if project has surveys?
-    // If cascade delete, surveys get deleted. 
-    // We should probably prevent deletion if surveys exist, or move them to root (set projectId null).
-    // Let's move surveys to root instead of deleting them.
-    
+   
     await db.update(surveys)
       .set({ projectId: null })
       .where(eq(surveys.projectId, id));

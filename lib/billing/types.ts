@@ -7,5 +7,5 @@ export const PLAN_PRICES_USD_CENTS: Record<
   { monthly: number; yearly: number }
 > = {
   pro: { monthly: 2900, yearly: 2500 * 12 }, 
-  premium: { monthly: 9900, yearly: 8500 * 12 }, 
+  premium: { monthly: 6900, yearly: 8500 * 12 }, 
 };
