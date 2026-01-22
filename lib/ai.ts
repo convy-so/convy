@@ -1,4 +1,3 @@
-import "server-only";
 
 import { google } from "@ai-sdk/google";
 import { generateText, streamText} from "ai";

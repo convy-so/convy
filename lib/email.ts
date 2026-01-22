@@ -1,4 +1,3 @@
-import "server-only";
 
 import { enqueueEmail } from "@/lib/queue";
 import { env } from "@/lib/env";

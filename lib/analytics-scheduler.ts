@@ -1,4 +1,3 @@
-import "server-only";
 
 import { getRedisClient } from "@/lib/redis";
 import { enqueueSurveyAnalytics } from "@/lib/queue";

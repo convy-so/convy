@@ -1,4 +1,3 @@
-import "server-only";
 
 import * as speech from "@google-cloud/speech";
 import { env } from "@/lib/env";

@@ -11,7 +11,6 @@ import { useEffect, useState, useRef } from "react";
 import {
   getZapierIntegrationStatus,
   getZapierSubscriptions,
-  updateZapierIntegrationSettings,
   disconnectZapierIntegration,
 } from "@/app/actions/zapier";
 
