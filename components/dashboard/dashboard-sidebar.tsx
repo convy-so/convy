@@ -1,5 +1,7 @@
 "use client";
 
+import { User } from "better-auth/types";
+
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -33,7 +35,11 @@ const bottomNavigation = [
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
-export function DashboardSidebar() {
+interface DashboardSidebarProps {
+  user: User | null;
+}
+
+export function DashboardSidebar({ user }: DashboardSidebarProps) {
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -147,11 +153,17 @@ export function DashboardSidebar() {
         <div className="p-4 border-t border-gray-100 bg-gray-50/50">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center">
-              <span className="text-white text-sm font-bold">U</span>
+              <span className="text-white text-sm font-bold">
+                {user?.name?.charAt(0).toUpperCase() ?? "U"}
+              </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate">User Name</p>
-              <p className="text-xs text-gray-500 truncate">user@example.com</p>
+              <p className="text-sm font-semibold text-gray-900 truncate">
+                {user?.name ?? "Guest User"}
+              </p>
+              <p className="text-xs text-gray-500 truncate">
+                {user?.email ?? "Sign in to continue"}
+              </p>
             </div>
           </div>
         </div>
