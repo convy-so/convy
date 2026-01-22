@@ -1,4 +1,3 @@
-import "server-only";
 
 import { db } from "@/db";
 import { usageTracking, subscriptionPlans } from "@/db/schema/billing";

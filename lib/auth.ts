@@ -1,4 +1,3 @@
-import "server-only";
 
 import { betterAuth, InferSession, InferUser } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";

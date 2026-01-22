@@ -1,4 +1,3 @@
-import "server-only";
 
 import { Queue, QueueEvents } from "bullmq";
 import { getRedisClient, createBlockingClient } from "@/lib/redis";

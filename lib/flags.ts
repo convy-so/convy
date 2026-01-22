@@ -1,4 +1,3 @@
-import "server-only";
 
 import { CacheService, CacheKeys, TTL } from "./cache";
 

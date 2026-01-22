@@ -1,4 +1,3 @@
-import "server-only";
 
 import { REQUIRED_INFORMATION } from "../surveys";
 import type { CollectedInfo } from "../prompts";
