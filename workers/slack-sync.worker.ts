@@ -67,14 +67,15 @@ export const slackSyncWorker = new Worker<SlackSyncJobData>(
 /**
  * Handle digest post - collect and batch new conversations
  */
-async function handle
-
-DigestPost(
+async function handleDigestPost(
   job: Job<SlackSyncJobData>,
   userId: string,
   integration: Awaited<ReturnType<typeof getSlackIntegration>>
 ) {
-  if (!integration) return { skipped: true };
+  if (!integration || !integration.defaultChannelId) {
+    console.warn(`[Slack Sync Worker] No default channel for user ${userId}`);
+    return { skipped: true, reason: "No default channel" };
+  }
 
   await job.updateProgress(30);
 
@@ -143,9 +144,9 @@ DigestPost(
   await db.insert(slackPosts).values({
     id: postId,
     userId,
-    slackIntegrationId: integration.id,
+    slackIntegrationId: integration.id!,
     postType: "digest",
-    channelId: integration.defaultChannelId,
+    channelId: integration.defaultChannelId!,
     channelName: integration.defaultChannelName || null,
     messageContent: message.text,
     status: "pending",
@@ -214,7 +215,10 @@ async function handleAnalyticsPost(
   surveyId: string,
   integration: Awaited<ReturnType<typeof getSlackIntegration>>
 ) {
-  if (!integration) return { skipped: true };
+  if (!integration || !integration.defaultChannelId) {
+    console.warn(`[Slack Sync Worker] No default channel for user ${userId}`);
+    return { skipped: true, reason: "No default channel" };
+  }
 
   await job.updateProgress(40);
 
@@ -249,10 +253,10 @@ async function handleAnalyticsPost(
   await db.insert(slackPosts).values({
     id: postId,
     userId,
-    slackIntegrationId: integration.id,
+    slackIntegrationId: integration.id!,
     postType: "analytics_update",
     surveyId,
-    channelId: integration.defaultChannelId,
+    channelId: integration.defaultChannelId!,
     channelName: integration.defaultChannelName || null,
     messageContent: message.text,
     status: "pending",
@@ -308,7 +312,10 @@ async function handleSurveyCreatedPost(
   surveyId: string,
   integration: Awaited<ReturnType<typeof getSlackIntegration>>
 ) {
-  if (!integration) return { skipped: true };
+  if (!integration || !integration.defaultChannelId) {
+    console.warn(`[Slack Sync Worker] No default channel for user ${userId}`);
+    return { skipped: true, reason: "No default channel" };
+  }
 
   await job.updateProgress(40);
 
@@ -330,10 +337,10 @@ async function handleSurveyCreatedPost(
   await db.insert(slackPosts).values({
     id: postId,
     userId,
-    slackIntegrationId: integration.id,
+    slackIntegrationId: integration.id!,
     postType: "survey_created",
     surveyId,
-    channelId: integration.defaultChannelId,
+    channelId: integration.defaultChannelId!,
     channelName: integration.defaultChannelName || null,
     messageContent: message.text,
     status: "pending",
