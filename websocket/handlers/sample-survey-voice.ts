@@ -210,8 +210,8 @@ export class SampleSurveyVoiceHandler {
 
   private initializeSTTSession(): void {
     this.sttSession = this.sttService.createStreamingSession({
-      languageCode: this.state.language === "fr" ? "fr-FR" : this.state.language === "de" ? "de-DE" : "en-US",
-      interimResults: true,
+      language: this.state.language,
+      enableInterimResults: true,
     });
 
     this.sttSession.on("transcript", (result) => {
@@ -327,7 +327,7 @@ export class SampleSurveyVoiceHandler {
   private cleanup(): void {
     if (!this.isActive) return;
     this.isActive = false;
-    if (this.sttSession) this.sttSession.stop();
+    if (this.sttSession) this.sttSession.end();
     if (this.idleTimeout) clearTimeout(this.idleTimeout);
     
     db.update(voiceSessions)
