@@ -1,26 +1,29 @@
 import type { Metadata } from "next";
-import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar"
-import { DashboardHeader } from "@/components/dashboard/dashboard-header"
+import { auth } from "@/lib/auth"; // Import backend auth
+import { headers } from "next/headers";
 
-export const metadata: Metadata = {
-  title: "Dashboard — Convy",
-  description: "Manage your conversational surveys",
-};
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export async function DashboardHeader() {
+  const session = await auth.api.getSession({
+    headers: await headers()
+  });
+
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
-      <DashboardSidebar />
-      <div className="lg:pl-72">
-        <DashboardHeader />
-        <main className="p-6">
-          {children}
-        </main>
+    <header className="h-16 border-b border-[#EAEAEA] bg-white px-6 flex items-center justify-between sticky top-0 z-10">
+      <div className="flex items-center gap-4 lg:hidden">
+        <span className="font-semibold text-[#292929]">Convy</span>
+      
       </div>
-    </div>
+
+      <div className="flex-1" />
+
+      <div className="flex items-center gap-4">
+        {session?.user && (
+             <div className="flex items-center gap-2">
+                 <span className="text-sm font-medium">{session.user.name}</span>
+             </div>
+        )}
+      </div>
+    </header>
   );
 }

@@ -7,6 +7,8 @@ import { AuthCard } from "@/components/auth/auth-card";
 import { StatusCard } from "@/components/auth/status-card";
 import { InputField } from "@/components/auth/input-field";
 import { SubmitButton } from "@/components/auth/submit-button";
+import { authClient } from "@/lib/auth-client";
+import toast from "react-hot-toast";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -16,15 +18,25 @@ export default function ForgotPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
-    // TODO: Implement password reset logic
-    console.log("Password reset for:", email);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setIsLoading(false);
-    setIsSubmitted(true);
+
+    try {
+      await authClient.forgetPassword({
+        email,
+        redirectTo: "/reset-password",
+        fetchOptions: {
+          onSuccess: () => {
+            setIsSubmitted(true);
+          },
+          onError: (ctx) => {
+            toast.error(ctx.error.message);
+          }
+        }
+      });
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (isSubmitted) {

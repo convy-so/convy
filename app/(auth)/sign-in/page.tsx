@@ -2,14 +2,18 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleButton } from "@/components/auth/google-button";
 import { FormDivider } from "@/components/auth/form-divider";
 import { InputField } from "@/components/auth/input-field";
 import { SubmitButton } from "@/components/auth/submit-button";
+import { authClient } from "@/lib/auth-client";
+import toast from "react-hot-toast"; // Assuming sonner is used, if not, I'll check available toast libraries
 
 export default function SignInPage() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -21,15 +25,34 @@ export default function SignInPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // TODO: Implement sign in logic
-    console.log("Sign in:", formData);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsLoading(false);
+
+    try {
+      await authClient.signIn.email({
+        email: formData.email,
+        password: formData.password,
+        rememberMe: formData.rememberMe,
+        fetchOptions: {
+          onSuccess: () => {
+            router.push("/dashboard");
+            window.location.reload(); // Ensure session state is refreshed
+          },
+          onError: (ctx) => {
+            toast.error(ctx.error.message);
+          }
+        }
+      });
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleGoogleSignIn = () => {
-    // TODO: Implement Google sign in
-    console.log("Google sign in");
+  const handleGoogleSignIn = async () => {
+    await authClient.signIn.social({
+      provider: "google",
+      callbackURL: "/dashboard"
+    });
   };
 
   return (
@@ -38,7 +61,7 @@ export default function SignInPage() {
       subtitle="Sign in to your account to continue"
     >
       <GoogleButton onClick={handleGoogleSignIn} />
-      
+
       <div className="my-6">
         <FormDivider />
       </div>
