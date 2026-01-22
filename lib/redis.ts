@@ -1,4 +1,3 @@
-import "server-only";
 
 import IORedis, { Redis, RedisOptions } from "ioredis";
 import { env } from "@/lib/env";
