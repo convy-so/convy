@@ -2,14 +2,16 @@ import Link from "next/link";
 import { LucideIcon } from "lucide-react";
 
 interface StatusCardProps {
-  icon: LucideIcon;
-  iconColor: "green" | "red" | "blue";
+  icon?: LucideIcon;
+  iconColor?: "green" | "red" | "blue";
+  imageSrc?: string;
   title: string;
-  description: string;
+  description: string | React.ReactNode;
   actionButton?: {
     text: string;
     href?: string;
     onClick?: () => void;
+    disabled?: boolean;
   };
   secondaryAction?: {
     text: string;
@@ -21,7 +23,8 @@ interface StatusCardProps {
 
 export function StatusCard({ 
   icon: Icon, 
-  iconColor, 
+  iconColor = "blue", 
+  imageSrc,
   title, 
   description, 
   actionButton,
@@ -35,7 +38,7 @@ export function StatusCard({
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 max-w-md w-full mx-auto">
       <div className="text-center">
         {showLogo && (
           <Link href="/" className="inline-block mb-6">
@@ -43,9 +46,15 @@ export function StatusCard({
           </Link>
         )}
         
-        <div className={`w-16 h-16 ${iconColorClasses[iconColor]} rounded-full flex items-center justify-center mx-auto mb-6`}>
-          <Icon className="w-8 h-8" />
-        </div>
+        {imageSrc ? (
+          <div className="flex justify-center mb-6">
+            <img src={imageSrc} alt={title} className="w-32 h-32 object-contain" />
+          </div>
+        ) : Icon && (
+          <div className={`w-16 h-16 ${iconColorClasses[iconColor]} rounded-full flex items-center justify-center mx-auto mb-6`}>
+            <Icon className="w-8 h-8" />
+          </div>
+        )}
         
         <h2 className="text-2xl font-semibold text-[#080808] mb-2">
           {title}
@@ -68,7 +77,8 @@ export function StatusCard({
               ) : (
                 <button
                   onClick={actionButton.onClick}
-                  className="w-full bg-[#292929] text-white py-3 px-4 rounded-xl font-medium hover:bg-[#3a3a3a] transition-colors"
+                  disabled={actionButton.disabled}
+                  className="w-full bg-[#292929] text-white py-3 px-4 rounded-xl font-medium hover:bg-[#3a3a3a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {actionButton.text}
                 </button>
