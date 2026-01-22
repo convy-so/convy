@@ -13,7 +13,7 @@ import { users, accounts, sessions, verificationTokens } from "./auth";
 import { organizations, members, invitations } from "./organization";
 
 export const authSchema = {
-  user: users,
+  users: users,
   account: accounts,
   session: sessions,
   verification: verificationTokens,

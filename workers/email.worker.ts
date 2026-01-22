@@ -132,7 +132,7 @@ const emailWorker = new Worker<EmailJobData>(
     await job.updateProgress(50);
 
     const result = await resend.emails.send({
-      from: process.env.EMAIL_FROM!,
+      from: process.env.RESEND_FROM_EMAIL!,
       to: email,
       subject,
       text,

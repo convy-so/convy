@@ -1,87 +1,86 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
-import { Check, AlertCircle, RefreshCw } from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { authClient } from "@/lib/auth-client";
+import toast from "react-hot-toast";
 import { StatusCard } from "@/components/auth/status-card";
 
 export default function VerifyEmailPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
-  const email = searchParams.get("email");
   
-  const [verificationStatus, setVerificationStatus] = useState<'loading' | 'success' | 'error' | 'expired'>('loading');
+  const [email, setEmail] = useState<string | null>(null);
   const [isResending, setIsResending] = useState(false);
 
   useEffect(() => {
-    if (token) {
-      // TODO: Implement email verification logic
-      console.log("Verifying email with token:", token);
-      
-      // Simulate API call
-      setTimeout(() => {
-        // Randomly simulate success or error for demo
-        const success = Math.random() > 0.3;
-        setVerificationStatus(success ? 'success' : 'expired');
-      }, 2000);
+    // Try to get email from URL if present (legacy support) or sessionStorage
+    const emailParam = searchParams.get("email");
+    if (emailParam) {
+      setEmail(emailParam);
+    } else if (typeof window !== 'undefined') {
+      const storedEmail = sessionStorage.getItem('verification_email');
+      if (storedEmail) setEmail(storedEmail);
     }
-  }, [token]);
+
+    if (token) {
+      const verify = async () => {
+        try {
+          await authClient.verifyEmail({
+            query: {
+              token: token
+            },
+            fetchOptions: {
+              onSuccess: () => {
+                toast.success("Email verified successfully!");
+                router.push("/dashboard");
+              },
+              onError: (ctx) => {
+                toast.error(ctx.error.message || "Verification failed");
+              }
+            }
+          });
+        } catch (error) {
+          toast.error("An error occurred during verification");
+        }
+      };
+      
+      verify();
+    }
+  }, [token, router]);
 
   const handleResendVerification = async () => {
+    if (!email) return;
     setIsResending(true);
     
-    // TODO: Implement resend verification logic
-    console.log("Resending verification to:", email);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setIsResending(false);
+    try {
+        await authClient.sendVerificationEmail({
+            email,
+            callbackURL: "/dashboard"
+        });
+        toast.success("Verification email sent!");
+    } catch(err) {
+        toast.error("Failed to send verification email");
+    } finally {
+        setIsResending(false);   
+    }
   };
 
-  // Loading state
-  if (verificationStatus === 'loading') {
-    return (
-      <StatusCard
-        icon={RefreshCw}
-        iconColor="blue"
-        title="Verifying your email"
-        description="Please wait while we verify your email address..."
-        showLogo
-      />
-    );
-  }
-
-  // Success state
-  if (verificationStatus === 'success') {
-    return (
-      <StatusCard
-        icon={Check}
-        iconColor="green"
-        title="Email verified successfully!"
-        description="Your email has been verified. You can now access all features of your Convy account."
-        actionButton={{
-          text: "Go to Dashboard",
-          href: "/dashboard"
-        }}
-      />
-    );
-  }
-
-  // Error/Expired state
   return (
     <StatusCard
-      icon={AlertCircle}
-      iconColor="red"
-      title="Verification link expired"
+      imageSrc="/check-email.png"
+      title="Check your email"
       description={
-        email 
-          ? `This email verification link has expired or is invalid. We can send a new verification link to ${email}`
-          : "This email verification link has expired or is invalid."
+        <>
+          We've sent a verification link to <span className="font-semibold text-[#292929]">{email || "your email"}</span>. Please check your inbox and follow the instructions to verify your account.
+        </>
       }
+      showLogo
       actionButton={email ? {
-        text: isResending ? "Sending new link..." : "Send new verification link",
-        onClick: handleResendVerification
+        text: isResending ? "Sending..." : "Resend verification email",
+        onClick: handleResendVerification,
+        disabled: isResending
       } : undefined}
       secondaryAction={{
         text: "Back to sign in",
