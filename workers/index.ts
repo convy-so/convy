@@ -7,6 +7,8 @@
  * - Production: node dist/workers/index.js
  */
 
+import { env } from "@/lib/env";
+
 import { testRedisConnection } from "@/lib/redis";
 
 // Import all workers - this actually starts them since each worker file
