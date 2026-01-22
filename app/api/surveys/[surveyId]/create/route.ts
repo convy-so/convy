@@ -359,3 +359,69 @@ export async function PUT(
     return new Response("Internal server error", { status: 500 });
   }
 }
+
+/**
+ * Get the current state of a survey creation conversation
+ */
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ surveyId: string }> }
+) {
+  try {
+    const session = await getVerifiedSession();
+    const { surveyId } = await params;
+
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+
+    if (!survey) {
+      return new Response("Survey not found", { status: 404 });
+    }
+
+    if (survey.userId !== session.user.id) {
+      return new Response("Unauthorized", { status: 403 });
+    }
+
+    const [creationConversation] = await db
+      .select()
+      .from(surveyCreationConversations)
+      .where(eq(surveyCreationConversations.surveyId, surveyId));
+
+    if (!creationConversation) {
+      return new Response(
+        JSON.stringify({ 
+          collectedInfo: {
+            objective: false, targetAudience: false, scope: false, successCriteria: false,
+            constraints: false, hypotheses: false, tone: false, additionalContext: false,
+            requiredQuestions: false, metrics: false, personalInfo: false,
+          },
+          extractedData: {}
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        collectedInfo: creationConversation.collectedInfo,
+        extractedData: creationConversation.extractedData,
+        status: creationConversation.status,
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return new Response(error.message, { status: 401 });
+      }
+    }
+    console.error("Error fetching creation conversation:", error);
+    return new Response("Internal server error", { status: 500 });
+  }
+}
+

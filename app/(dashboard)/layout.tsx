@@ -1,29 +1,30 @@
 import type { Metadata } from "next";
-import { auth } from "@/lib/auth"; // Import backend auth
+import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
+import { AuthProvider } from "@/components/providers/auth-provider";
+import { DashboardHeader } from "@/components/dashboard/header";
+import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
 
-
-export async function DashboardHeader() {
+export default async function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const session = await auth.api.getSession({
     headers: await headers()
   });
 
   return (
-    <header className="h-16 border-b border-[#EAEAEA] bg-white px-6 flex items-center justify-between sticky top-0 z-10">
-      <div className="flex items-center gap-4 lg:hidden">
-        <span className="font-semibold text-[#292929]">Convy</span>
-      
+    <AuthProvider initialSession={session}>
+      <div className="min-h-screen bg-[#FAFAFA]">
+        <DashboardSidebar user={session?.user ?? null} />
+        <div className="lg:pl-72 transition-all duration-300 flex flex-col min-h-screen">
+          <DashboardHeader user={session?.user ?? null} />
+          <main className="flex-1 p-6">
+            {children}
+          </main>
+        </div>
       </div>
-
-      <div className="flex-1" />
-
-      <div className="flex items-center gap-4">
-        {session?.user && (
-             <div className="flex items-center gap-2">
-                 <span className="text-sm font-medium">{session.user.name}</span>
-             </div>
-        )}
-      </div>
-    </header>
+    </AuthProvider>
   );
 }
