@@ -1,3 +1,9 @@
+import { loadEnvConfig } from "@next/env";
+
+// Load .env file for non-Next.js contexts (workers, websocket server)
+// This must happen before any env variables are read
+loadEnvConfig(process.cwd());
+
 const required = (key: string): string => {
   const value = process.env[key];
 
@@ -12,7 +18,7 @@ const optional = (key: string): string | undefined => {
   return process.env[key];
 };
 
-const betterAuthUrl = required("BETTER_AUTH_URL");
+const betterAuthUrl = optional("BETTER_AUTH_URL")|| "http://localhost:3000";
 
 export const env = {
   NODE_ENV: process.env.NODE_ENV ?? "development",
@@ -49,7 +55,7 @@ export const env = {
   WEBSOCKET_PORT: optional("WEBSOCKET_PORT") || "3001",
   GOOGLE_CLOUD_PROJECT_ID: optional("GOOGLE_CLOUD_PROJECT_ID"),
   GOOGLE_APPLICATION_CREDENTIALS: optional("GOOGLE_APPLICATION_CREDENTIALS"),
-  
+
   // Voice Feature Toggles
   ENABLE_VOICE_FEATURES: optional("ENABLE_VOICE_FEATURES") === "true",
   VAD_SENSITIVITY: optional("VAD_SENSITIVITY") || "0.5",
@@ -59,18 +65,19 @@ export const env = {
   ZAPIER_EMBED_ID: optional("ZAPIER_EMBED_ID"),
 
   // Billing / Payments - Stripe
-  STRIPE_SECRET_KEY: required("STRIPE_SECRET_KEY"),
-  STRIPE_WEBHOOK_SECRET: required("STRIPE_WEBHOOK_SECRET"),
+  STRIPE_SECRET_KEY: optional("STRIPE_SECRET_KEY"),
+  STRIPE_WEBHOOK_SECRET: optional("STRIPE_WEBHOOK_SECRET"),
 
   // Billing / Payments - Coinbase Commerce (CDP Keys)
-  COINBASE_CDP_API_KEY_NAME: required("COINBASE_CDP_API_KEY_NAME"),
-  COINBASE_CDP_API_KEY_PRIVATE_KEY: required("COINBASE_CDP_API_KEY_PRIVATE_KEY"),
-  COINBASE_COMMERCE_WEBHOOK_SECRET: required(
+  COINBASE_CDP_API_KEY_NAME: optional("COINBASE_CDP_API_KEY_NAME"),
+  COINBASE_CDP_API_KEY_PRIVATE_KEY: optional("COINBASE_CDP_API_KEY_PRIVATE_KEY"),
+  COINBASE_COMMERCE_WEBHOOK_SECRET: optional(
     "COINBASE_COMMERCE_WEBHOOK_SECRET"
   ),
 
   // Application base URL (for public links & embeds), e.g. https://app.convy.com
-  APP_BASE_URL: required("APP_BASE_URL"),
+  APP_BASE_URL: optional("APP_BASE_URL") || "http://localhost:3000",
+  betterAuthUrl: optional("BETTER_AUTH_URL") || "http://localhost:3000",
 
   // Better Auth Client URL (for frontend)
   NEXT_PUBLIC_BETTER_AUTH_URL:

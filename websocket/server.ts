@@ -3,6 +3,11 @@
 import { createServer, IncomingMessage } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { parse } from "url";
+import { loadEnvConfig } from "@next/env";
+
+const projectDir = process.cwd();
+loadEnvConfig(projectDir);
+
 import { env } from "@/lib/env";
 import {
   authenticateWebSocket,
