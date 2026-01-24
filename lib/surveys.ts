@@ -31,6 +31,7 @@ export function buildCompleteSurveyConfig(
   additionalContext?: string;
   media?: SurveyMedia[];
   personalInfo?: string[];
+  domainId?: number;
 } {
   const informationParts: string[] = [];
   if (survey.objective?.context)
@@ -59,6 +60,7 @@ export function buildCompleteSurveyConfig(
     additionalContext: survey.additionalContext ?? undefined,
     media: survey.media ?? undefined,
     personalInfo: survey.personalInfo ?? undefined,
+    domainId: survey.domainId ?? undefined,
   };
 }
 

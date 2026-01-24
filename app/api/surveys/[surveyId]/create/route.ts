@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { streamText, generateObject } from "ai";
+import { streamText, generateText } from "ai";
 import { z } from "zod";
 
 import { db } from "@/db";
@@ -51,7 +51,7 @@ async function performIncrementalExtraction(
       scope: z
         .object({
           breadthVsDepth: z.enum(["broad", "deep", "balanced"]).nullable(),
-          mainTopics: z.array(z.string().min(2)).min(1, "At least one topic required").nullable(),
+          mainTopics: z.array(z.string().min(2)).nullable(),
           boundaries: z.string().min(5).nullable(),
         })
         .nullable(),
@@ -59,7 +59,6 @@ async function performIncrementalExtraction(
         .object({
           insightTypes: z
             .array(z.enum(["emotional", "behavioral", "rational"]))
-            .min(1)
             .nullable(),
           detailLevel: z.enum(["high", "medium", "low"]).nullable(),
           description: z.string().min(5).nullable(),
@@ -113,9 +112,11 @@ async function performIncrementalExtraction(
       }),
     });
 
-    const { object: parsed } = await generateObject({
+    const { object: parsed } = await generateText({
       model: analysisModel,
-      schema: extractionSchema,
+      output: {
+        schema: extractionSchema,
+      },
       prompt: extractionPrompt,
       system: "You are an expert survey designer. Extract structured data from the conversation.",
       temperature: 0.3,

@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import { eq } from "drizzle-orm";
-import { streamText, tool, generateObject, stepCountIs } from "ai";
+import { streamText, tool, generateText, stepCountIs } from "ai";
 import { z } from "zod";
 
 import { db } from "@/db";
@@ -136,9 +136,11 @@ async function updateMemoryAsync(
         })).optional()
     });
 
-    const { object: update } = await generateObject({
+    const { object: update } = await generateText({
       model: analysisModel,
-      schema,
+      output: {
+        schema,
+      },
       system: "You are an expert conversation analyst. Update the memory based on the latest messages.",
       prompt: memoryPrompt,
       temperature: 0.3,

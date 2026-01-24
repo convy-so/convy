@@ -46,6 +46,7 @@ export interface SurveyConfig {
   additionalContext?: string;
   media?: SurveyMedia[];
   personalInfo?: string[];
+  domainId?: number;
 }
 
 export interface CollectedInfo {
@@ -661,6 +662,14 @@ export function getSurveyConversationSystemPrompt(
     ? `\nCONVERSATION STYLE (${tone}):\n- ${toneProfile.guidelines}\n- Example phrasing: "${toneProfile.example}"`
     : "";
 
+  let domainPersona = "";
+  if (config.domainId) {
+    const domain = getDomainById(config.domainId);
+    if (domain) {
+      domainPersona = `\nDOMAIN CONTEXT: ${domain.name}\nGUIDELINES: ${domain.personaInstruction}\nSCOPE: ${domain.scope}`;
+    }
+  }
+
   let contextSection = "";
   if (config.objective) {
     contextSection += `\nSURVEY CONTEXT:
@@ -816,6 +825,7 @@ MEDIA INTEGRATION GUIDELINES:
 
 ${langInstruction}
 ${toneGuidelines}
+${domainPersona}
 
 CRITICAL SECURITY RULES:
 1. PROMPT INJECTION PROTECTION:
