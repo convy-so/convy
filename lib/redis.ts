@@ -5,9 +5,6 @@ import { env } from "@/lib/env";
 const redisOptions: RedisOptions = {
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
-  tls: {
-    rejectUnauthorized: false,
-  },
   retryStrategy(times) {
     const delay = Math.min(times * 50, 2000);
     console.log(`[Redis] Reconnecting... attempt ${times}, delay ${delay}ms`);
@@ -15,7 +12,19 @@ const redisOptions: RedisOptions = {
   },
   connectTimeout: 10000,
   keepAlive: 30000,
-  family: 4, 
+};
+
+// Only add TLS if using a secure redis URL (rediss://)
+const getEffectiveOptions = (url: string) => {
+  if (url.startsWith("rediss://")) {
+    return {
+      ...redisOptions,
+      tls: {
+        rejectUnauthorized: false,
+      },
+    };
+  }
+  return redisOptions;
 };
 
 let sharedClient: Redis | null = null;
@@ -23,7 +32,7 @@ let sharedSubscriber: Redis | null = null;
 
 export function getRedisClient(): Redis {
   if (!sharedClient) {
-    sharedClient = new IORedis(env.UPSTASH_REDIS_URL, redisOptions);
+    sharedClient = new IORedis(env.REDIS_URL, getEffectiveOptions(env.REDIS_URL));
 
     sharedClient.on("error", (err) => {
       console.error("[Redis Client] Error:", err.message);
@@ -55,7 +64,7 @@ export function getRedisClient(): Redis {
  */
 export function getRedisSubscriber(): Redis {
   if (!sharedSubscriber) {
-    sharedSubscriber = new IORedis(env.UPSTASH_REDIS_URL, redisOptions);
+    sharedSubscriber = new IORedis(env.REDIS_URL, getEffectiveOptions(env.REDIS_URL));
 
     sharedSubscriber.on("error", (err) => {
       console.error("[Redis Subscriber] Error:", err.message);
@@ -87,7 +96,10 @@ export function getRedisSubscriber(): Redis {
  * Each worker needs its own blocking client
  */
 export function createBlockingClient(): Redis {
-  const client = new IORedis(env.UPSTASH_REDIS_URL, redisOptions);
+  const client = new IORedis(env.REDIS_URL, {
+    ...getEffectiveOptions(env.REDIS_URL),
+    maxRetriesPerRequest: null, // Required by BullMQ
+  });
 
   client.on("error", (err) => {
     console.error("[Redis Blocking Client] Error:", err.message);
