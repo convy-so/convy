@@ -1,7 +1,7 @@
 "use server";
 
 import { nanoid } from "nanoid";
-import Stripe from "stripe";
+// import Stripe from "stripe"; // Removed
 
 import { db } from "@/db";
 import { payments } from "@/db/schema";
@@ -12,15 +12,16 @@ import { ensurePlansSeeded, getPlanById, PLAN_PRICES_USD_CENTS } from "@/lib/bil
 import { coinbaseClient } from "@/lib/billing/coinbase";
 import { logger } from "@/lib/logger";
 
-const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
-  apiVersion: "2024-06-20",
-});
+import { createLemonSqueezyCheckout } from "@/lib/billing/lemonsqueezy";
+
+// Stripe removed
+
 
 type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
-export async function createStripeCheckoutAction(input: {
+export async function createLemonSqueezyCheckoutAction(input: {
   planId: "pro" | "premium";
   interval: "month" | "year";
   cancelUrl: string;
@@ -44,54 +45,47 @@ export async function createStripeCheckoutAction(input: {
       return { success: false, error: "Invalid plan" };
     }
 
-    const priceMap = PLAN_PRICES_USD_CENTS[input.planId];
-    const amountUsdCents =
-      input.interval === "month" ? priceMap.monthly : priceMap.yearly;
+    const variantId = input.interval === "month" 
+        ? plan.lemonSqueezyVariantIdMonthly 
+        : plan.lemonSqueezyVariantIdYearly;
 
-    const checkoutSession = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: `${plan.name} (${input.interval})`,
-              description: `${plan.name} subscription`,
-            },
-            unit_amount: amountUsdCents,
-            recurring: {
-              interval: input.interval,
-            },
-          },
-          quantity: 1,
-        },
-      ],
-      metadata: {
-        userId: session.user.id,
-        planId: input.planId,
-        interval: input.interval,
-        organizationId: activeOrgId ?? "",
-      },
-      client_reference_id: session.user.id,
-      success_url: input.successUrl,
-      cancel_url: input.cancelUrl,
-      customer_email: session.user.email,
-    });
-
-    if (!checkoutSession.url) {
-       return { success: false, error: "Failed to create Stripe Checkout URL" };
+    if (!variantId) {
+        return { success: false, error: "Plan configuration missing (Variant ID not set)" };
     }
 
-    return { success: true, data: { url: checkoutSession.url } };
+    if (!env.LEMONSQUEEZY_STORE_ID) {
+        return { success: false, error: "Server configuration error (Store ID missing)" };
+    }
+
+    const checkoutUrl = await createLemonSqueezyCheckout({
+        storeId: env.LEMONSQUEEZY_STORE_ID,
+        variantId: variantId,
+        checkoutData: {
+            email: session.user.email,
+            name: session.user.name,
+            custom: {
+                userId: session.user.id,
+                planId: input.planId,
+                interval: input.interval,
+                organizationId: activeOrgId ?? "",
+            }
+        },
+        redirectUrl: input.successUrl,
+    });
+
+    if (!checkoutUrl?.data?.attributes?.url) {
+       return { success: false, error: "Failed to create Lemon Squeezy Checkout URL" };
+    }
+
+    return { success: true, data: { url: checkoutUrl.data.attributes.url } };
   } catch (error) {
-    logger.error("Error creating Stripe Checkout session", { error });
+    logger.error("Error creating Lemon Squeezy Checkout session", { error });
     return {
       success: false,
       error:
         error instanceof Error
           ? error.message
-          : "Failed to create Stripe payment session",
+          : "Failed to create payment session",
     };
   }
 }
@@ -102,6 +96,10 @@ export async function createCoinbasePaymentLinkAction(input: {
   cancelUrl: string;
   successUrl: string;
 }): Promise<ActionResult<{ paymentUrl: string; paymentLinkId: string }>> {
+  if (true) {
+    return { success: false, error: "Crypto payments are currently disabled." };
+  }
+  
   try {
     const session = await getVerifiedSession();
     const activeOrgId = session.session.activeOrganizationId;
