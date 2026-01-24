@@ -58,7 +58,7 @@ export const subscriptionStatusEnum = pgEnum("subscription_status", [
   "incomplete_expired",
 ]);
 export const paymentProviderEnum = pgEnum("payment_provider", [
-  "stripe",
+  "lemonsqueezy",
   "coinbase_business",
 ]);
 export const paymentStatusEnum = pgEnum("payment_status", [

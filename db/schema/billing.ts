@@ -28,8 +28,8 @@ const subscriptionPlans = pgTable("subscription_plans", {
   priceYearly: integer("price_yearly"), // in cents (USD), null for free/enterprise
   currency: text("currency").default("USD").notNull(),
   interval: text("interval").notNull(), // 'month' | 'year'
-  stripePriceIdMonthly: text("stripe_price_id_monthly"),
-  stripePriceIdYearly: text("stripe_price_id_yearly"),
+  lemonSqueezyVariantIdMonthly: text("lemon_squeezy_variant_id_monthly"),
+  lemonSqueezyVariantIdYearly: text("lemon_squeezy_variant_id_yearly"),
   features: jsonb("features").$type<{
     maxTextSurveys: number | null; // null = unlimited
     maxVoiceSurveys: number | null;
@@ -99,8 +99,8 @@ const subscriptions = pgTable(
       mode: "date",
     }),
     // Payment provider references
-    stripeSubscriptionId: text("stripe_subscription_id").unique(),
-    stripeCustomerId: text("stripe_customer_id"),
+    lemonSqueezySubscriptionId: text("lemon_squeezy_subscription_id").unique(),
+    lemonSqueezyCustomerId: text("lemon_squeezy_customer_id"),
     // Metadata
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
   },
@@ -108,10 +108,10 @@ const subscriptions = pgTable(
     index("subscriptions_user_id_idx").on(table.userId),
     index("subscriptions_organization_id_idx").on(table.organizationId),
     index("subscriptions_status_idx").on(table.status),
-    index("subscriptions_stripe_subscription_id_idx").on(
-      table.stripeSubscriptionId
+    index("subscriptions_lemon_squeezy_subscription_id_idx").on(
+      table.lemonSqueezySubscriptionId
     ),
-    index("subscriptions_stripe_customer_id_idx").on(table.stripeCustomerId),
+    index("subscriptions_lemon_squeezy_customer_id_idx").on(table.lemonSqueezyCustomerId),
     // Composite index for common query: userId + status + currentPeriodEnd
     index("subscriptions_user_status_period_idx").on(
       table.userId,
@@ -147,8 +147,8 @@ const payments = pgTable(
     cryptoAmount: text("crypto_amount"), // Store as text to avoid precision issues
     exchangeRate: text("exchange_rate"), // Rate used for conversion
     // Provider-specific IDs
-    stripePaymentIntentId: text("stripe_payment_intent_id").unique(),
-    stripeInvoiceId: text("stripe_invoice_id"),
+    lemonSqueezyOrderId: text("lemon_squeezy_order_id").unique(),
+    lemonSqueezyInvoiceId: text("lemon_squeezy_invoice_id"),
     coinbaseChargeId: text("coinbase_charge_id").unique(),
     // Payment metadata
     description: text("description"),
@@ -168,8 +168,8 @@ const payments = pgTable(
     index("payments_subscription_id_idx").on(table.subscriptionId),
     index("payments_status_idx").on(table.status),
     index("payments_provider_idx").on(table.provider),
-    index("payments_stripe_payment_intent_id_idx").on(
-      table.stripePaymentIntentId
+    index("payments_lemon_squeezy_order_id_idx").on(
+      table.lemonSqueezyOrderId
     ),
     index("payments_coinbase_charge_id_idx").on(table.coinbaseChargeId),
   ]

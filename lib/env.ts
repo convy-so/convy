@@ -66,8 +66,10 @@ export const env = {
   ZAPIER_EMBED_ID: optional("ZAPIER_EMBED_ID"),
 
   // Billing / Payments - Stripe
-  STRIPE_SECRET_KEY: optional("STRIPE_SECRET_KEY"),
-  STRIPE_WEBHOOK_SECRET: optional("STRIPE_WEBHOOK_SECRET"),
+  // Billing / Payments - Lemon Squeezy
+  LEMONSQUEEZY_API_KEY: optional("LEMONSQUEEZY_API_KEY"),
+  LEMONSQUEEZY_STORE_ID: optional("LEMONSQUEEZY_STORE_ID"),
+  LEMONSQUEEZY_WEBHOOK_SECRET: optional("LEMONSQUEEZY_WEBHOOK_SECRET"),
 
   // Billing / Payments - Coinbase Commerce (CDP Keys)
   COINBASE_CDP_API_KEY_NAME: optional("COINBASE_CDP_API_KEY_NAME"),
