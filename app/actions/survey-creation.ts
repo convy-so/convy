@@ -43,6 +43,8 @@ const extractedDataSchema = z.object({
       goal: z.string(),
       context: z.string(),
       decision: z.string(),
+      subjectDomain: z.string().optional().nullable(),
+      subjectDescription: z.string().optional().nullable(),
     })
     .optional()
     .nullable(),
@@ -96,6 +98,7 @@ const extractedDataSchema = z.object({
   metrics: z.array(z.string()).optional().nullable(),
   personalInfo: z.array(z.string()).optional().nullable(),
   title: z.string().optional(),
+  domainId: z.number().optional().nullable(),
   collectedInfo: z.object({
     objective: z.boolean(),
     targetAudience: z.boolean(),
@@ -108,6 +111,8 @@ const extractedDataSchema = z.object({
     requiredQuestions: z.boolean(),
     metrics: z.boolean(),
     personalInfo: z.boolean(),
+    subjectDefined: z.boolean(),
+    domainIdentified: z.boolean(),
   }),
 });
 
@@ -207,6 +212,8 @@ export async function startSurveyCreationAction(
         requiredQuestions: false,
         metrics: false,
         personalInfo: false,
+        subjectDefined: false,
+        domainIdentified: false,
       },
       extractedData: {},
     });
@@ -309,6 +316,8 @@ export async function getSurveyCreationStateAction(surveyId: string): Promise<
                 requiredQuestions: false,
                 metrics: false,
                 personalInfo: false,
+                subjectDefined: false,
+                domainIdentified: false,
               },
               extractedData: conversation.extractedData ?? {},
             }
@@ -515,6 +524,7 @@ export async function finalizeSurveyCreationAction(
       metrics?: string[];
       personalInfo?: string[];
       title?: string;
+      domainId?: number;
     };
 
     const shareableLink = `survey-${nanoid(12)}`;
@@ -536,6 +546,7 @@ export async function finalizeSurveyCreationAction(
         personalInfo: data.personalInfo || [],
         status: "draft",
         shareableLink,
+        domainId: data.domainId,
       })
       .where(eq(surveys.id, surveyId));
 
@@ -699,6 +710,8 @@ export async function resumeSurveyCreationAction(surveyId: string): Promise<
           requiredQuestions: false,
           metrics: false,
           personalInfo: false,
+          subjectDefined: false,
+          domainIdentified: false,
         },
       },
     };

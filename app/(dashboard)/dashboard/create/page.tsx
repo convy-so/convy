@@ -170,41 +170,50 @@ export default function CreateSurveyPage() {
     }
     
     setAuthError(null);
-    
-    // Initialize survey draft
-    const createDraft = async () => {
-      try {
-        const response = await fetch("/api/surveys", { 
-          method: "POST",
-          credentials: "include"
-        });
-        
-        if (response.status === 401) {
-          setAuthError("Please sign in to create surveys");
-          return;
-        }
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          if (errorText === "EMAIL_NOT_VERIFIED") {
-            setAuthError("Please verify your email before creating surveys");
-            return;
-          }
-          throw new Error(`Failed to create draft: ${response.status}`);
-        }
-        
-        const survey = await response.json();
-        setSurveyId(survey.id);
-      } catch (error) {
-        toast.error("Failed to initialize survey");
-        console.error(error);
-        setAuthError("Failed to initialize survey");
-      } finally {
-        setIsInitializing(false);
-      }
-    };
-    createDraft();
+    setIsInitializing(false); // Just finish init without creating draft
   }, [user, authLoading]);
+
+  // Lazy creation state
+  const [isCreatingDraft, setIsCreatingDraft] = useState(false);
+
+  // Helper to ensure draft exists before sending message
+  const ensureDraftExists = async (): Promise<string | null> => {
+    if (surveyId) return surveyId;
+    if (isCreatingDraft) return null; // Avoid dual creation
+    
+    setIsCreatingDraft(true);
+    try {
+      const response = await fetch("/api/surveys", { 
+        method: "POST",
+        credentials: "include"
+      });
+      
+      if (response.status === 401) {
+        setAuthError("Please sign in to create surveys");
+        return null;
+      }
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        if (errorText === "EMAIL_NOT_VERIFIED") {
+          setAuthError("Please verify your email before creating surveys");
+          return null;
+        }
+        throw new Error(`Failed to create draft: ${response.status}`);
+      }
+      
+      const survey = await response.json();
+      setSurveyId(survey.id);
+      return survey.id;
+    } catch (error) {
+      toast.error("Failed to initialize survey");
+      console.error(error);
+      setAuthError("Failed to initialize survey");
+      return null;
+    } finally {
+      setIsCreatingDraft(false);
+    }
+  };
 
   // Replace useChat with manual implementation
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -212,7 +221,7 @@ export default function CreateSurveyPage() {
   };
 
   const sendMessage = async (content: string) => {
-    if (!surveyId || authError) return;
+    if (authError) return;
 
     // Clear any existing typing animation
     if (typingIntervalRef.current) {
@@ -232,7 +241,17 @@ export default function CreateSurveyPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`/api/surveys/${surveyId}/create`, {
+      // Ensure we have a survey ID (create lazily if needed)
+      let currentSurveyId = surveyId;
+      if (!currentSurveyId) {
+         currentSurveyId = await ensureDraftExists();
+         if (!currentSurveyId) {
+            setIsLoading(false);
+            return; // Failed to create
+         }
+      }
+
+      const response = await fetch(`/api/surveys/${currentSurveyId}/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -949,6 +968,32 @@ export default function CreateSurveyPage() {
                   </div>
 
                   <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                    {/* Domain & Subject Section */}
+                    {(extractedData.objective?.subjectDescription || extractedData.domainId) && (
+                      <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
+                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                           <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                           Context & Domain
+                        </h3>
+                        
+                        {extractedData.domainId && (
+                           <div className="mb-3">
+                              <span className="px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100">
+                                Domain {extractedData.domainId}
+                              </span>
+                           </div>
+                        )}
+
+                        {extractedData.objective?.subjectDescription && (
+                           <div>
+                              <p className="text-xs text-gray-500 font-medium uppercase mb-1">Subject</p>
+                              <p className="text-sm text-gray-900 font-bold leading-relaxed">{extractedData.objective.subjectDescription}</p>
+                           </div>
+                        )}
+                      </div>
+                    )}
+
                     {extractedData.objective && (
                       <div className="bg-white p-5 rounded-xl transition-all ">
                           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">

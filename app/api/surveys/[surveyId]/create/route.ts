@@ -34,59 +34,63 @@ async function performIncrementalExtraction(
     const extractionSchema = z.object({
       objective: z
         .object({
-          goal: z.string().nullable(),
-          context: z.string().nullable(),
-          decision: z.string().nullable(),
+          goal: z.string().min(5, "Goal must be descriptive").nullable(),
+          context: z.string().min(5, "Context must be descriptive").nullable(),
+          decision: z.string().min(5, "Decision must be descriptive").nullable(),
+          subjectDomain: z.string().min(2).nullable(),
+          subjectDescription: z.string().min(5).nullable(),
         })
         .nullable(),
       targetAudience: z
         .object({
-          description: z.string().nullable(),
-          relationship: z.string().nullable(),
+          description: z.string().min(5).nullable(),
+          relationship: z.string().min(2).nullable(),
           knowledgeLevel: z.string().nullable(),
         })
         .nullable(),
       scope: z
         .object({
           breadthVsDepth: z.enum(["broad", "deep", "balanced"]).nullable(),
-          mainTopics: z.array(z.string()).nullable(),
-          boundaries: z.string().nullable(),
+          mainTopics: z.array(z.string().min(2)).min(1, "At least one topic required").nullable(),
+          boundaries: z.string().min(5).nullable(),
         })
         .nullable(),
       successCriteria: z
         .object({
           insightTypes: z
             .array(z.enum(["emotional", "behavioral", "rational"]))
+            .min(1)
             .nullable(),
           detailLevel: z.enum(["high", "medium", "low"]).nullable(),
-          description: z.string().nullable(),
+          description: z.string().min(5).nullable(),
         })
         .nullable(),
       constraints: z
         .object({
-          timeLimit: z.number().nullable(),
+          timeLimit: z.number().positive().max(60).nullable(),
           sensitiveTopics: z.array(z.string()).nullable(),
           otherConstraints: z.string().nullable(),
         })
         .nullable(),
       hypotheses: z
         .object({
-          assumptions: z.array(z.string()).nullable(),
+          assumptions: z.array(z.string().min(5)).nullable(),
         })
         .nullable(),
       tone: z
         .enum(["formal", "casual", "playful", "empathetic"])
         .nullable(),
       additionalContext: z.string().nullable(),
-      requiredQuestions: z.array(z.string()).nullable(),
-      metrics: z.array(z.string()).nullable(),
+      requiredQuestions: z.array(z.string().min(5)).nullable(),
+      metrics: z.array(z.string().min(2)).nullable(),
       personalInfo: z.array(z.string()).nullable(),
+      domainId: z.number().int().min(1).max(10).nullable(),
       media: z
         .array(
           z.object({
             type: z.enum(["image", "audio", "video"]),
-            description: z.string(),
-            contextForUse: z.string(),
+            description: z.string().min(5),
+            contextForUse: z.string().min(5),
             priority: z.enum(["high", "medium", "low"]).nullable(),
           })
         )
@@ -103,6 +107,8 @@ async function performIncrementalExtraction(
         requiredQuestions: z.boolean(),
         metrics: z.boolean(),
         personalInfo: z.boolean(),
+        subjectDefined: z.boolean(),
+        domainIdentified: z.boolean(),
         media: z.boolean(),
       }),
     });
@@ -289,28 +295,30 @@ export async function POST(
               timestamp: string;
             }>;
             
+            const updatedMessages = [
+              ...currentMessages,
+              {
+                role: "assistant" as const,
+                content: text,
+                timestamp: new Date().toISOString(),
+              },
+            ];
+            
             await db
               .update(surveyCreationConversations)
               .set({
-                messages: [
-                  ...currentMessages,
-                  {
-                    role: "assistant",
-                    content: text,
-                    timestamp: new Date().toISOString(),
-                  },
-                ],
+                messages: updatedMessages,
               })
               .where(eq(surveyCreationConversations.surveyId, surveyId));
+
+            // Trigger incremental extraction (await to ensure it runs before lambda dies)
+            await performIncrementalExtraction(surveyId, updatedMessages);
           }
-        } catch (dbError) {
-          console.error("Failed to save assistant response:", dbError);
+        } catch (error) {
+          console.error("Error saving conversation or performing extraction:", error);
         }
       },
     });
-
-    // Trigger incremental extraction in the background (non-blocking)
-    performIncrementalExtraction(surveyId, messages).catch(console.error);
 
     return result.toTextStreamResponse();
   } catch (error) {
