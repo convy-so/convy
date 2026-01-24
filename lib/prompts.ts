@@ -4,6 +4,7 @@ import {
   TONE_PROFILES,
   type ToneProfile,
 } from "./surveys";
+import { SURVEY_DOMAINS, getDomainById, type SurveyDomainId } from "./domains";
 import type {
   SurveyObjective,
   SurveyTargetAudience,
@@ -59,6 +60,8 @@ export interface CollectedInfo {
   requiredQuestions: boolean;
   metrics: boolean;
   personalInfo: boolean;
+  subjectDefined: boolean;
+  domainIdentified: boolean;
 }
 
 /**
@@ -100,18 +103,33 @@ export function getSurveyCreationSystemPrompt(
   const allRequiredCollected = uncollectedRequired.length === 0;
   const needsMetrics = !collectedInfo.metrics;
   const needsAdditionalContext = !collectedInfo.additionalContext;
-
+  
+  // DOMAIN & SUBJECT ORCHESTRATION LAYER
+  // This is the highest priority: We must know WHAT (Subject) and WHICH (Domain) we are surveying.
+  
   let currentPhase: string;
   let nextTarget: string;
-
-  if (!allRequiredCollected) {
+  let domainContextStr = "";
+  
+  // 1. Subject Identification Gate (The "Vague Template" Fix)
+  if (!collectedInfo.subjectDefined) {
+    currentPhase = "SUBJECT_IDENTIFICATION";
+    nextTarget = "CRITICAL: You do NOT know what product/service/experience is being surveyed. You MUST ask the user to describe the specific subject (e.g. 'The mobile app checkout', 'Patient recovery process'). Do not proceed to other questions until this is clear.";
+  } 
+  // 2. Domain Identification
+  else if (!collectedInfo.domainIdentified) {
+    currentPhase = "DOMAIN_CLASSIFICATION";
+    nextTarget = "Based on the subject, classify the survey into one of the 10 domains (e.g. Health, CX, HR). Ask clarifying questions if the domain is ambiguous.";
+  }
+  // 3. Main Collection Loop
+  else if (!allRequiredCollected) {
     const [nextKey, nextInfo] = uncollectedRequired[0];
     currentPhase = "GATHERING_REQUIRED_INFO";
     nextTarget = `Next: Collect "${nextKey}" - ${nextInfo.description}. Quality checks: ${nextInfo.qualityChecks.join(", ")}`;
   } else if (needsAdditionalContext) {
     currentPhase = "ASKING_ADDITIONAL_INFO";
     nextTarget =
-      "Ask if there's any additional context or information they'd like to add about their survey.";
+      "Ask if there's any additional context or information they'd like to add.";
   } else if (needsMetrics) {
     currentPhase = "ASKING_METRICS";
     nextTarget =
@@ -126,15 +144,41 @@ export function getSurveyCreationSystemPrompt(
       "All information collected! Summarize what you've learned and explain they can now try sample surveys.";
   }
 
+  // Inject Domain Persona if available
+  // Note: ideally we pass domainId in args, but for now prompt logic implies AI should "know" or we inject it via context.
+  // In a stateless prompting loop, extraction updates the DB, which updates collectedInfo. 
+  // We need to pass the actual domainId here if we want to inject specific text.
+  // Assuming the caller might pass it or we rely on the prompt to "act" like the domain once identified.
+  
+  const domainList = Object.values(SURVEY_DOMAINS).map(d => `${d.id}. ${d.name}: ${d.scope}`).join("\n");
+
+  const FIELD_EXAMPLES = {
+    objective: "e.g., 'Measure satisfaction with the new checkout flow', 'Understand why employees are leaving'",
+    targetAudience: "e.g., 'Recent purchasers in the US', 'Nurses with 5+ years experience'",
+    scope: "e.g., 'Focus only on the mobile app experience, not the website'",
+    successCriteria: "e.g., 'We need emotional verbatims', 'We need a quantitative NPS score'",
+    constraints: "e.g., 'Must be under 5 minutes', 'Do not mention the upcoming merger'",
+    hypotheses: "e.g., 'We assume price is the main barrier', 'We think users are confused by the navigation'",
+    tone: "e.g., 'Professional but warm', 'Strictly factual and neutral'",
+    additionalContext: "e.g., 'This is for a quarterly board meeting'",
+    metrics: "e.g., 'NPS (Net Promoter Score)', 'CSAT (Customer Satisfaction)', 'CES (Customer Effort Score)', 'Retention Rate'",
+    personalInfo: "e.g., 'Email for follow-up', 'Job Title', 'Company Name'",
+  };
+
   return `You are an expert survey designer helping a user create an AI-powered conversational survey.
 ${languageInstructions[language]}
 
 YOUR ROLE:
 You guide users through creating effective surveys by having a natural conversation to understand their needs.
 You ask thoughtful questions to extract the information needed for a well-designed survey.
+WHEN ASKING QUESTIONS, ALWAYS PROVIDE CONCRETE EXAMPLES to help the user understand what you need.
 
 CURRENT PHASE: ${currentPhase}
 ${nextTarget}
+
+DOMAIN FRAMEWORK:
+We classify surveys into 10 domains to ensure tailored questions.
+${domainList}
 
 INFORMATION STRUCTURE:
 Required information (in order of priority):
@@ -143,8 +187,10 @@ ${requiredFields
     const status = collectedInfo[key as keyof CollectedInfo]
       ? "✓ COLLECTED"
       : "○ NEEDED";
+    const example = FIELD_EXAMPLES[key as keyof typeof FIELD_EXAMPLES] || "";
     return `${info.priority}. ${key} [${status}]: ${info.description}
-   Quality checks: ${info.qualityChecks.join("; ")}`;
+   Quality checks: ${info.qualityChecks.join("; ")}
+   Example to cite: "${example}"`;
   })
   .join("\n")}
 
@@ -154,76 +200,37 @@ ${optionalFields
     const status = collectedInfo[key as keyof CollectedInfo]
       ? "✓ COLLECTED"
       : "○ OPTIONAL";
-    return `${info.priority}. ${key} [${status}]: ${info.description}`;
+    const example = FIELD_EXAMPLES[key as keyof typeof FIELD_EXAMPLES] || "";
+    return `${info.priority}. ${key} [${status}]: ${info.description}
+   Example to cite: "${example}"`;
   })
   .join("\n")}
 
 Additional items:
-- additionalContext [${collectedInfo.additionalContext ? "✓" : "○"}]: Any extra information about the survey
-- metrics [${collectedInfo.metrics ? "✓" : "○"}]: Specific metrics to track
-- personalInfo [${collectedInfo.personalInfo ? "✓" : "○"}]: Personal information to collect (e.g., email, name, phone number)
+- Subject Description [${collectedInfo.subjectDefined ? "✓" : "CRITICAL MISSING"}]: The specific thing being surveyed
+- Domain ID [${collectedInfo.domainIdentified ? "✓" : "MISSING"}]: The category of the survey
+- additionalContext [${collectedInfo.additionalContext ? "✓" : "○"}]: Any extra information (Example: "${FIELD_EXAMPLES.additionalContext}")
+- metrics [${collectedInfo.metrics ? "✓" : "○"}]: Specific metrics to track (Example: "${FIELD_EXAMPLES.metrics}")
+- personalInfo [${collectedInfo.personalInfo ? "✓" : "○"}]: Personal info to collect (Example: "${FIELD_EXAMPLES.personalInfo}")
 
 TONE OPTIONS (explain when asking about tone):
 ${toneExamples}
 
 CONVERSATION GUIDELINES:
-1. Be warm, helpful, and conversational - not robotic or checklist-like
-2. Ask ONE focused question at a time
-3. Acknowledge and build on their responses - reference what they said earlier
-4. Ask clarifying follow-ups if responses are vague or surface-level
-5. Probe for the "why" - don't just accept what they say, understand why it matters to them
-6. Validate that responses meet quality checks before moving on
-7. Naturally transition between topics
-8. If they provide information out of order, capture it and adjust your flow
-9. Don't repeat questions for information already collected
+1. **SUBJECT FIRST**: If 'Subject Description' is missing, you MUST ask for it. Do not accept "a survey". Ask "A survey about what? What specific product, service, or topic?".
+2. **DOMAIN ADAPTATION**: Once you know the subject, identify the Domain (1-10). Adapt your follow-up questions to match that domain's perspective.
+3. **USE EXAMPLES**: When asking about a field (e.g. Metrics), YOU MUST provide the examples listed above to help the user. Say "For example, are you tracking NPS or CSAT?" instead of just "What metrics?".
+4. Be warm, helpful, and conversational.
+5. Probe for the "why" - don't just accept surface answers.
 
 CRITICAL - FOLLOW-UP QUESTIONS:
-The goal is to truly understand their survey needs, not just collect data points. You MUST:
-- Ask follow-up questions when answers are incomplete or lack depth
-- Probe for specifics and examples: "Can you give me an example of that?"
-- Understand motivations: "What's driving this need right now?"
-- Connect the dots: "How does this relate to what you mentioned earlier about X?"
-- Don't accept generic answers - push gently for the real story
-
-CONTEXT RETENTION:
-- Remember everything they've said throughout the conversation
-- Build on previous responses to show you're listening and understanding
-- Use their own words and terminology when asking follow-ups
-- If something contradicts earlier statements, gently clarify
-
-QUALITY VALIDATION:
-Before marking information as collected, ensure it meets the quality checks.
-If a response is unclear or incomplete, gently probe for more detail.
+- If they say "It's for a hospital", ask "Are we surveying patients, doctors, or staff?" (Domain disambiguation).
+- If they say "It's an app", ask "What is the core feature we are testing?" (Subject Deep-Dive).
 
 WHEN ALL REQUIRED INFO IS COLLECTED:
-1. First ask if there's anything else they'd like to add about their survey (additional context)
-2. Then ask if there are any specific questions they want to include in the survey conversations
-3. Then ask about specific metrics they want to track from responses
-4. Ask about optional preferences (tone, hypotheses) if not already covered
-5. **IMPORTANT** - Ask if they want to collect any personal information from survey takers (e.g., email, name, phone number):
-   - Explain that this information will be collected at the END of the conversation with survey takers
-   - Ask what specific information they want to collect (email, name, phone number, company, job title, etc.)
-   - List all the types they mention so they can confirm
-   - If they say no or don't want to collect any, mark personalInfo as collected with an empty list
-6. **CRITICAL** - Ask if they want to add any media (images, audio up to 5 min, or video up to 5 min) to enrich the survey:
-   - Explain that media can help respondents better understand the context
-   - If they say yes, inform them they can upload media through the interface
-   - For each media type they mention, explain they'll need to provide:
-     * Description: What the media shows/contains
-     * Content summary: Brief overview of the content
-     * Context for use: When to show it in the conversation
-     * Info to gather: What questions the AI should ask about it
-     * Duration (for audio/video, must be under 5 minutes)
-   - Note that they can add multiple media items (multiple images, videos, audio files)
-6. Summarize what you've understood about their survey
-7. Explain they can now do up to 3 sample surveys to test the conversation flow
-8. Let them know they can provide feedback after each sample to refine the AI's approach
-
-RESPONSE FORMAT:
-- Keep responses concise but warm
-- Use natural language, not bullet points (unless summarizing)
-- Show understanding of their goals
-- Connect questions to what they've already shared`;
+1. Confirm the specific Subject and Domain.
+2. Ask about Metrics, Tone, and Personal Info (using the examples).
+3. Summarize and offer sample surveys.`;
 }
 
 /**
@@ -248,9 +255,11 @@ Extract the following (use null if not discussed or unclear):
 
 {
   "objective": {
-    "goal": "What they want to learn (be specific)",
-    "context": "Why this matters to them",
-    "decision": "What decision this will inform"
+    "goal": "What they want to learn",
+    "context": "Why this matters",
+    "decision": "What decision this will inform",
+    "subjectDomain": "Healthcare, HR, etc.",
+    "subjectDescription": "The specific thing being surveyed (e.g. mobile app checkout)"
   },
   "targetAudience": {
     "description": "Who will be surveyed",
@@ -281,6 +290,7 @@ Extract the following (use null if not discussed or unclear):
   "metrics": ["metric to track 1", "metric to track 2"],
   "personalInfo": ["email", "name", "phone number"],
   "title": "Concise descriptive title for the survey",
+  "domainId": 1,
   "collectedInfo": {
     "objective": true/false,
     "targetAudience": true/false,
@@ -292,12 +302,16 @@ Extract the following (use null if not discussed or unclear):
     "additionalContext": true/false,
     "requiredQuestions": true/false,
     "metrics": true/false,
-    "personalInfo": true/false
+    "personalInfo": true/false,
+    "subjectDefined": true/false,
+    "domainIdentified": true/false
   }
 }
 
 QUALITY CRITERIA for marking as collected (true):
-- objective: Has clear goal + context + what decision it informs
+- objective: Has clear goal + context + decision.
+- subjectDefined: True ONLY if the user has described the specific product, service, or experience (not just "an app").
+- domainIdentified: True if the survey fits clearly into one of the 10 domains.
 - targetAudience: Knows who + their relationship + knowledge level
 - scope: Clear on breadth vs depth + main topics + boundaries
 - successCriteria: Knows what type of insights + detail level needed
@@ -393,6 +407,8 @@ export const surveyDataExtractionSchema = {
         goal: { type: "string" },
         context: { type: "string" },
         decision: { type: "string" },
+        subjectDomain: { type: "string" },
+        subjectDescription: { type: "string" },
       },
       required: ["goal", "context", "decision"],
     },
@@ -452,6 +468,7 @@ export const surveyDataExtractionSchema = {
     metrics: { type: ["array", "null"], items: { type: "string" } },
     personalInfo: { type: ["array", "null"], items: { type: "string" } },
     title: { type: "string" },
+    domainId: { type: "number" },
     collectedInfo: {
       type: "object",
       properties: {
@@ -465,6 +482,8 @@ export const surveyDataExtractionSchema = {
         additionalContext: { type: "boolean" },
         metrics: { type: "boolean" },
         personalInfo: { type: "boolean" },
+        subjectDefined: { type: "boolean" },
+        domainIdentified: { type: "boolean" },
       },
       required: [
         "objective",
@@ -477,6 +496,8 @@ export const surveyDataExtractionSchema = {
         "additionalContext",
         "metrics",
         "personalInfo",
+        "subjectDefined",
+        "domainIdentified",
       ],
     },
   },

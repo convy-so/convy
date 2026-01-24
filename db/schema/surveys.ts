@@ -23,6 +23,8 @@ export type SurveyObjective = {
   goal: string;
   context: string;
   decision: string;
+  subjectDomain?: string; // e.g. "Healthcare", "HR"
+  subjectDescription?: string; // The specific thing being surveyed
 };
 
 export type SurveyTargetAudience = {
@@ -111,6 +113,7 @@ const surveys = pgTable(
       .notNull(),
     confirmed: boolean("confirmed").default(false).notNull(),
     language: languageEnum("language").default("en").notNull(),
+    domainId: integer("domain_id"), // 1-10 based on the framework
   },
   (table) => [
     index("surveys_user_id_idx").on(table.userId),
@@ -156,6 +159,8 @@ const surveyCreationConversations = pgTable(
         requiredQuestions: boolean;
         metrics: boolean;
         personalInfo: boolean;
+        subjectDefined: boolean;
+        domainIdentified: boolean;
       }>()
       .default({
         objective: false,
@@ -169,6 +174,8 @@ const surveyCreationConversations = pgTable(
         requiredQuestions: false,
         metrics: false,
         personalInfo: false,
+        subjectDefined: false,
+        domainIdentified: false,
       }),
     extractedData: jsonb("extracted_data")
       .$type<{
