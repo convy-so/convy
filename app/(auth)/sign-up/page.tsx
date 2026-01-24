@@ -10,6 +10,7 @@ import { FormDivider } from "@/components/auth/form-divider";
 import { InputField } from "@/components/auth/input-field";
 import { PasswordStrength } from "@/components/auth/password-strength";
 import { SubmitButton } from "@/components/auth/submit-button";
+import { LoadingOverlay } from "@/components/auth/loading-overlay";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast"; // Assuming sonner
 
@@ -17,6 +18,7 @@ export default function SignUpPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -64,10 +66,12 @@ export default function SignUpPage() {
           sessionStorage.setItem('verification_email', formData.email);
         }
         toast.success("Account created! Please check your email to verify your account.");
+        setIsRedirecting(true);
         router.push("/verify-email");
       } else if (result.data?.token) {
         // This shouldn't happen with requireEmailVerification: true, but handle it
         toast.success("Account created and verified!");
+        setIsRedirecting(true);
         router.push("/dashboard");
       }
     } catch (error) {
@@ -88,10 +92,17 @@ export default function SignUpPage() {
   const isPasswordValid = Object.values(passwordStrength).every(Boolean);
 
   return (
-    <AuthCard
-      title="Create your account"
-      subtitle="Start creating conversational surveys today"
-    >
+    <>
+      {isRedirecting && (
+        <LoadingOverlay 
+          message="Creating your account..." 
+          subtitle="Redirecting you shortly"
+        />
+      )}
+      <AuthCard
+        title="Create your account"
+        subtitle="Start creating conversational surveys today"
+      >
       <GoogleButton onClick={handleGoogleSignUp} />
 
       <div className="my-6">
@@ -191,5 +202,6 @@ export default function SignUpPage() {
         </p>
       </div>
     </AuthCard>
+    </>
   );
 }

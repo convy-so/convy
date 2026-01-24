@@ -16,111 +16,75 @@ import {
   Copy,
   ExternalLink,
   TrendingUp,
-  TrendingDown,
   Calendar,
   Mic,
   CheckCircle,
-  XCircle,
-  ChevronRight,
   Download,
   Filter,
   Search,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import toast from "react-hot-toast";
 
-// Mock survey data
-const getSurveyData = (id: string) => ({
-  id,
-  title: "Customer Satisfaction Survey",
-  description: "Measuring customer happiness and identifying improvement areas with conversational AI-powered surveys.",
-  status: "active" as "active" | "draft" | "completed" | "paused",
-  isVoice: false,
-  createdAt: "2024-01-10",
-  updatedAt: "2024-01-15",
-  responses: 45,
-  maxResponses: 100,
-  completionRate: 87,
-  avgDuration: "3:24",
-  shareableLink: "https://convy.app/s/abc123",
-  objective: "Understand customer satisfaction levels and identify key pain points",
-  targetAudience: "Existing customers who have used our product in the last 30 days",
-  tone: "Friendly and conversational",
-  projectName: "Q1 Research",
-});
+// Types
+interface Survey {
+  id: string;
+  title: string;
+  status: "active" | "draft" | "completed" | "paused" | "creating";
+  createdAt: string;
+  updatedAt: string;
+  objective?: { description?: string };
+  targetAudience?: { description?: string };
+  tone?: string;
+  additionalContext?: string;
+  shareableLink?: string;
+  shareableUrl?: string;
+  participantLimit: number;
+  currentParticipants: number;
+  scope?: { mainTopics?: string[] };
+  requiredQuestions?: string[];
+  metrics?: string[];
+}
 
-const mockResponses = [
-  {
-    id: "r1",
-    participantId: "p1",
-    completedAt: "2024-01-15 14:32",
-    duration: "3:45",
-    status: "completed",
-    sentiment: "positive",
-    keyInsights: ["Happy with product quality", "Wants faster shipping"],
-  },
-  {
-    id: "r2",
-    participantId: "p2",
-    completedAt: "2024-01-15 13:18",
-    duration: "4:12",
-    status: "completed",
-    sentiment: "neutral",
-    keyInsights: ["Average experience", "Price concerns"],
-  },
-  {
-    id: "r3",
-    participantId: "p3",
-    completedAt: "2024-01-15 11:05",
-    duration: "2:58",
-    status: "completed",
-    sentiment: "positive",
-    keyInsights: ["Excellent support", "Would recommend"],
-  },
-  {
-    id: "r4",
-    participantId: "p4",
-    completedAt: "2024-01-14 16:42",
-    duration: "5:20",
-    status: "completed",
-    sentiment: "negative",
-    keyInsights: ["Shipping delays", "Poor packaging"],
-  },
-  {
-    id: "r5",
-    participantId: "p5",
-    completedAt: "2024-01-14 10:15",
-    duration: "3:02",
-    status: "abandoned",
-    sentiment: null,
-    keyInsights: [],
-  },
-];
+interface SurveyStats {
+  totalResponses: number;
+  completedResponses: number;
+  completionRate: number;
+  avgDuration: string;
+}
 
+interface Response {
+  id: string;
+  participantId: string;
+  status: "completed" | "abandoned";
+  completedAt: string | null;
+  createdAt: string | null;
+  duration: string;
+  sentiment: "positive" | "neutral" | "negative" | null;
+  keyInsights: string[];
+  messageCount: number;
+}
+
+// Mock analytics data (TODO: Integrate with real analytics API)
 const analyticsData = {
-  responsesByDay: [
-    { day: "Mon", count: 8 },
-    { day: "Tue", count: 12 },
-    { day: "Wed", count: 6 },
-    { day: "Thu", count: 15 },
-    { day: "Fri", count: 4 },
-  ],
   sentimentBreakdown: {
     positive: 65,
     neutral: 25,
     negative: 10,
   },
-  topThemes: [
-    { theme: "Product Quality", mentions: 32, sentiment: "positive" },
-    { theme: "Shipping Speed", mentions: 28, sentiment: "negative" },
-    { theme: "Customer Support", mentions: 24, sentiment: "positive" },
-    { theme: "Pricing", mentions: 18, sentiment: "neutral" },
-  ],
   completionFunnel: [
     { stage: "Started", count: 52, percentage: 100 },
     { stage: "25% Complete", count: 48, percentage: 92 },
     { stage: "50% Complete", count: 46, percentage: 88 },
     { stage: "75% Complete", count: 45, percentage: 87 },
     { stage: "Completed", count: 45, percentage: 87 },
+  ],
+  topThemes: [
+    { theme: "Product Quality", mentions: 32, sentiment: "positive" as const },
+    { theme: "Shipping Speed", mentions: 28, sentiment: "negative" as const },
+    { theme: "Customer Support", mentions: 24, sentiment: "positive" as const },
+    { theme: "Pricing", mentions: 18, sentiment: "neutral" as const },
   ],
 };
 
@@ -130,10 +94,67 @@ export default function SurveyDetailPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const surveyId = params.surveyId as string;
-  const survey = getSurveyData(surveyId);
-  
+
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [copied, setCopied] = useState(false);
+
+  // Real data state
+  const [survey, setSurvey] = useState<Survey | null>(null);
+  const [stats, setStats] = useState<SurveyStats | null>(null);
+  const [responses, setResponses] = useState<Response[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingResponses, setIsLoadingResponses] = useState(false);
+
+  // Fetch survey details
+  useEffect(() => {
+    const fetchSurvey = async () => {
+      try {
+        const response = await fetch(`/api/surveys/${surveyId}/details`, {
+          credentials: "include",
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setSurvey(data.survey);
+          setStats(data.stats);
+        } else {
+          toast.error("Failed to load survey");
+        }
+      } catch (error) {
+        console.error("Error fetching survey:", error);
+        toast.error("Failed to load survey");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchSurvey();
+  }, [surveyId]);
+
+  // Fetch responses when tab changes to responses
+  useEffect(() => {
+    if (activeTab === "responses" && responses.length === 0) {
+      const fetchResponses = async () => {
+        setIsLoadingResponses(true);
+        try {
+          const response = await fetch(`/api/surveys/${surveyId}/responses`, {
+            credentials: "include",
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            setResponses(data.responses || []);
+          }
+        } catch (error) {
+          console.error("Error fetching responses:", error);
+        } finally {
+          setIsLoadingResponses(false);
+        }
+      };
+
+      fetchResponses();
+    }
+  }, [activeTab, surveyId, responses.length]);
 
   // Handle tab from URL
   useEffect(() => {
@@ -144,9 +165,12 @@ export default function SurveyDetailPage() {
   }, [searchParams]);
 
   const copyLink = () => {
-    navigator.clipboard.writeText(survey.shareableLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (survey?.shareableUrl) {
+      navigator.clipboard.writeText(survey.shareableUrl);
+      setCopied(true);
+      toast.success("Link copied!");
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
@@ -156,17 +180,34 @@ export default function SurveyDetailPage() {
     { id: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
   ];
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  // Survey not found
+  if (!survey) {
+    return (
+      <div className="text-center py-24">
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Survey not found</h2>
+        <Link href="/dashboard/surveys" className="text-gray-500 hover:text-gray-700">
+          ← Back to Surveys
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      {/* Header - SalesX Inspired Design */}
+      {/* Header */}
       <div className="bg-white rounded-2xl border border-gray-100 p-6">
         <div className="flex items-center justify-between">
-          {/* Left: Back + Title + Status */}
           <div className="flex items-center gap-4">
-            <Link
-              href="/dashboard/surveys"
-              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-            >
+            <Link href="/dashboard/surveys" className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </Link>
             <div className="flex items-center gap-3">
@@ -180,25 +221,15 @@ export default function SurveyDetailPage() {
               )}>
                 {survey.status}
               </span>
-              {survey.isVoice && (
-                <span className="flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-700 rounded-full text-xs font-medium">
-                  <Mic className="w-3 h-3" />
-                  Voice
-                </span>
-              )}
             </div>
           </div>
 
-          {/* Right: Actions */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={copyLink}
-              className="flex flex-col items-center gap-0.5 px-4 py-2 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors min-w-[70px]"
-            >
+            <button onClick={copyLink} className="flex flex-col items-center gap-0.5 px-4 py-2 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors min-w-[70px]">
               {copied ? <CheckCircle className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
               <span className="text-xs font-medium">{copied ? "Copied!" : "Copy Link"}</span>
             </button>
-            
+
             {survey.status === "active" ? (
               <button className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-medium hover:bg-orange-600 transition-colors">
                 <Pause className="w-4 h-4" />
@@ -210,21 +241,14 @@ export default function SurveyDetailPage() {
                 Resume
               </button>
             )}
-            
-            <a
-              href={survey.shareableLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors"
-            >
+
+            <a href={survey.shareableUrl || '#'} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors">
               <ExternalLink className="w-4 h-4" />
               Preview
             </a>
           </div>
         </div>
-        
-        {/* Description below */}
-        <p className="text-gray-500 mt-3 ml-14 text-sm">{survey.description}</p>
+        <p className="text-gray-500 mt-3 ml-14 text-sm">{survey.additionalContext || survey.objective?.description || 'No description'}</p>
       </div>
 
       {/* Tabs */}
@@ -248,33 +272,32 @@ export default function SurveyDetailPage() {
         </nav>
       </div>
 
-      {/* Tab Content */}
+      {/* Overview Tab */}
       {activeTab === "overview" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Stats */}
           <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-white rounded-xl border border-gray-100 p-4">
               <div className="flex items-center gap-2 text-gray-500 mb-2">
                 <Users className="w-4 h-4" />
                 <span className="text-sm">Responses</span>
               </div>
-              <p className="text-2xl font-bold text-gray-900">{survey.responses}</p>
-              <p className="text-xs text-gray-400 mt-1">of {survey.maxResponses} target</p>
+              <p className="text-2xl font-bold text-gray-900">{stats?.totalResponses || 0}</p>
+              <p className="text-xs text-gray-400 mt-1">of {survey.participantLimit} target</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-100 p-4">
               <div className="flex items-center gap-2 text-gray-500 mb-2">
                 <TrendingUp className="w-4 h-4" />
                 <span className="text-sm">Completion</span>
               </div>
-              <p className="text-2xl font-bold text-gray-900">{survey.completionRate}%</p>
-              <p className="text-xs text-emerald-500 mt-1">+5% vs last week</p>
+              <p className="text-2xl font-bold text-gray-900">{stats?.completionRate || 0}%</p>
+              <p className="text-xs text-gray-400 mt-1">{stats?.completedResponses || 0} completed</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-100 p-4">
               <div className="flex items-center gap-2 text-gray-500 mb-2">
                 <Clock className="w-4 h-4" />
                 <span className="text-sm">Avg. Duration</span>
               </div>
-              <p className="text-2xl font-bold text-gray-900">{survey.avgDuration}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats?.avgDuration || '~3 min'}</p>
               <p className="text-xs text-gray-400 mt-1">minutes</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-100 p-4">
@@ -287,90 +310,66 @@ export default function SurveyDetailPage() {
             </div>
           </div>
 
-          {/* Share Link */}
           <div className="bg-white rounded-xl border border-gray-100 p-5">
             <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
               <Share2 className="w-4 h-4" />
               Share Link
             </h3>
             <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={survey.shareableLink}
-                readOnly
-                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600 truncate"
-              />
-              <button
-                onClick={copyLink}
-                className="p-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
-              >
+              <input type="text" value={survey.shareableUrl || 'Not published yet'} readOnly className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600 truncate" />
+              <button onClick={copyLink} className="p-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors">
                 <Copy className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          {/* Survey Details */}
           <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 p-5">
             <h3 className="font-semibold text-gray-900 mb-4">Survey Configuration</h3>
             <div className="space-y-4">
               <div>
                 <p className="text-sm text-gray-500 mb-1">Objective</p>
-                <p className="text-gray-900">{survey.objective}</p>
+                <p className="text-gray-900">{survey.objective?.description || 'Not specified'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500 mb-1">Target Audience</p>
-                <p className="text-gray-900">{survey.targetAudience}</p>
+                <p className="text-gray-900">{survey.targetAudience?.description || 'Not specified'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500 mb-1">Conversation Tone</p>
-                <p className="text-gray-900">{survey.tone}</p>
+                <p className="text-gray-900 capitalize">{survey.tone || 'casual'}</p>
               </div>
             </div>
           </div>
 
-          {/* Recent Responses Preview */}
           <div className="bg-white rounded-xl border border-gray-100 p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-gray-900">Recent Responses</h3>
-              <button 
-                onClick={() => setActiveTab("responses")}
-                className="text-sm text-gray-500 hover:text-gray-900"
-              >
-                View all
-              </button>
+              <button onClick={() => setActiveTab("responses")} className="text-sm text-gray-500 hover:text-gray-900">View all</button>
             </div>
             <div className="space-y-3">
-              {mockResponses.slice(0, 3).map((response) => (
+              {responses.length > 0 ? responses.slice(0, 3).map((response) => (
                 <div key={response.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "w-2 h-2 rounded-full",
-                      response.sentiment === "positive" && "bg-emerald-500",
-                      response.sentiment === "neutral" && "bg-amber-500",
-                      response.sentiment === "negative" && "bg-red-500",
-                      !response.sentiment && "bg-gray-300"
-                    )} />
-                    <span className="text-sm text-gray-700">{response.completedAt}</span>
+                    <div className={cn("w-2 h-2 rounded-full", response.sentiment === "positive" && "bg-emerald-500", response.sentiment === "neutral" && "bg-amber-500", response.sentiment === "negative" && "bg-red-500", !response.sentiment && "bg-gray-300")} />
+                    <span className="text-sm text-gray-700">{response.completedAt ? new Date(response.completedAt).toLocaleString() : 'In progress'}</span>
                   </div>
                   <span className="text-xs text-gray-500">{response.duration}</span>
                 </div>
-              ))}
+              )) : (
+                <p className="text-sm text-gray-500 text-center py-4">No responses yet</p>
+              )}
             </div>
           </div>
         </div>
       )}
 
+      {/* Responses Tab */}
       {activeTab === "responses" && (
         <div className="space-y-4">
-          {/* Filters */}
           <div className="flex items-center gap-4">
             <div className="flex-1 max-w-md relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search responses..."
-                className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none text-sm"
-              />
+              <input type="text" placeholder="Search responses..." className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none text-sm" />
             </div>
             <button className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50">
               <Filter className="w-4 h-4" />
@@ -382,76 +381,72 @@ export default function SurveyDetailPage() {
             </button>
           </div>
 
-          {/* Responses Table */}
           <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-100">
-                <tr>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Participant</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Completed</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Duration</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Sentiment</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Key Insights</th>
-                  <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {mockResponses.map((response) => (
-                  <tr key={response.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-6 py-4">
-                      <span className="text-sm font-medium text-gray-900">{response.participantId}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-sm text-gray-600">{response.completedAt}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-sm text-gray-600">{response.duration}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      {response.sentiment ? (
-                        <span className={cn(
-                          "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium capitalize",
-                          response.sentiment === "positive" && "bg-emerald-50 text-emerald-700",
-                          response.sentiment === "neutral" && "bg-amber-50 text-amber-700",
-                          response.sentiment === "negative" && "bg-red-50 text-red-700"
-                        )}>
-                          {response.sentiment}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-gray-400">N/A</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1">
-                        {response.keyInsights.slice(0, 2).map((insight, idx) => (
-                          <span key={idx} className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
-                            {insight}
-                          </span>
-                        ))}
-                        {response.keyInsights.length === 0 && (
-                          <span className="text-xs text-gray-400">—</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <Link
-                        href={`/dashboard/surveys/${surveyId}/responses/${response.id}`}
-                        className="text-sm text-gray-500 hover:text-gray-900"
-                      >
-                        View →
-                      </Link>
-                    </td>
+            {isLoadingResponses ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+              </div>
+            ) : responses.length === 0 ? (
+              <div className="text-center py-12">
+                <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500">No responses yet</p>
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Participant</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Completed</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Duration</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Sentiment</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Key Insights</th>
+                    <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {responses.map((response) => (
+                    <tr key={response.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-6 py-4">
+                        <span className="text-sm font-medium text-gray-900">{response.participantId}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm text-gray-600">{response.completedAt ? new Date(response.completedAt).toLocaleString() : 'In progress'}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm text-gray-600">{response.duration}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        {response.sentiment ? (
+                          <span className={cn("inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium capitalize", response.sentiment === "positive" && "bg-emerald-50 text-emerald-700", response.sentiment === "neutral" && "bg-amber-50 text-amber-700", response.sentiment === "negative" && "bg-red-50 text-red-700")}>
+                            {response.sentiment}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">N/A</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {response.keyInsights.slice(0, 2).map((insight, idx) => (
+                            <span key={idx} className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">{insight}</span>
+                          ))}
+                          {response.keyInsights.length === 0 && <span className="text-xs text-gray-400">—</span>}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <Link href={`/dashboard/surveys/${surveyId}/responses/${response.id}`} className="text-sm text-gray-500 hover:text-gray-900">View →</Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       )}
 
+      {/* Analytics Tab */}
       {activeTab === "analytics" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Sentiment Breakdown */}
           <div className="bg-white rounded-xl border border-gray-100 p-5">
             <h3 className="font-semibold text-gray-900 mb-4">Sentiment Breakdown</h3>
             <div className="space-y-3">
@@ -485,18 +480,14 @@ export default function SurveyDetailPage() {
             </div>
           </div>
 
-          {/* Completion Funnel */}
           <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 p-5">
             <h3 className="font-semibold text-gray-900 mb-4">Completion Funnel</h3>
             <div className="space-y-3">
-              {analyticsData.completionFunnel.map((stage, index) => (
+              {analyticsData.completionFunnel.map((stage) => (
                 <div key={stage.stage} className="flex items-center gap-4">
                   <div className="w-28 text-sm text-gray-600">{stage.stage}</div>
                   <div className="flex-1 h-8 bg-gray-100 rounded-lg overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-lg flex items-center justify-end pr-3"
-                      style={{ width: `${stage.percentage}%` }}
-                    >
+                    <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-lg flex items-center justify-end pr-3" style={{ width: `${stage.percentage}%` }}>
                       <span className="text-xs font-medium text-white">{stage.count}</span>
                     </div>
                   </div>
@@ -506,28 +497,14 @@ export default function SurveyDetailPage() {
             </div>
           </div>
 
-          {/* Top Themes */}
           <div className="lg:col-span-3 bg-white rounded-xl border border-gray-100 p-5">
             <h3 className="font-semibold text-gray-900 mb-4">Top Themes</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {analyticsData.topThemes.map((theme) => (
-                <div 
-                  key={theme.theme}
-                  className={cn(
-                    "p-4 rounded-xl border",
-                    theme.sentiment === "positive" && "bg-emerald-50/50 border-emerald-100",
-                    theme.sentiment === "neutral" && "bg-amber-50/50 border-amber-100",
-                    theme.sentiment === "negative" && "bg-red-50/50 border-red-100"
-                  )}
-                >
+                <div key={theme.theme} className={cn("p-4 rounded-xl border", theme.sentiment === "positive" && "bg-emerald-50/50 border-emerald-100", theme.sentiment === "neutral" && "bg-amber-50/50 border-amber-100", theme.sentiment === "negative" && "bg-red-50/50 border-red-100")}>
                   <h4 className="font-medium text-gray-900 mb-1">{theme.theme}</h4>
                   <p className="text-sm text-gray-500">{theme.mentions} mentions</p>
-                  <span className={cn(
-                    "inline-block mt-2 px-2 py-0.5 rounded-full text-xs font-medium capitalize",
-                    theme.sentiment === "positive" && "bg-emerald-100 text-emerald-700",
-                    theme.sentiment === "neutral" && "bg-amber-100 text-amber-700",
-                    theme.sentiment === "negative" && "bg-red-100 text-red-700"
-                  )}>
+                  <span className={cn("inline-block mt-2 px-2 py-0.5 rounded-full text-xs font-medium capitalize", theme.sentiment === "positive" && "bg-emerald-100 text-emerald-700", theme.sentiment === "neutral" && "bg-amber-100 text-amber-700", theme.sentiment === "negative" && "bg-red-100 text-red-700")}>
                     {theme.sentiment}
                   </span>
                 </div>
@@ -537,6 +514,7 @@ export default function SurveyDetailPage() {
         </div>
       )}
 
+      {/* Settings Tab */}
       {activeTab === "settings" && (
         <div className="max-w-2xl space-y-6">
           <div className="bg-white rounded-xl border border-gray-100 p-5">
@@ -544,27 +522,15 @@ export default function SurveyDetailPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Survey Title</label>
-                <input
-                  type="text"
-                  defaultValue={survey.title}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none"
-                />
+                <input type="text" defaultValue={survey.title} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <textarea
-                  defaultValue={survey.description}
-                  rows={3}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none resize-none"
-                />
+                <textarea defaultValue={survey.additionalContext || ''} rows={3} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none resize-none" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Response Limit</label>
-                <input
-                  type="number"
-                  defaultValue={survey.maxResponses}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none"
-                />
+                <input type="number" defaultValue={survey.participantLimit} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none" />
               </div>
             </div>
             <div className="mt-6 flex justify-end">
@@ -574,7 +540,6 @@ export default function SurveyDetailPage() {
             </div>
           </div>
 
-          {/* Danger Zone */}
           <div className="bg-red-50 rounded-xl border border-red-200 p-5">
             <h3 className="font-semibold text-red-900 mb-2">Danger Zone</h3>
             <p className="text-sm text-red-700 mb-4">Once you delete a survey, there is no going back. Please be certain.</p>

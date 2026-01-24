@@ -24,8 +24,10 @@ async function performIncrementalExtraction(
   messages: Array<{ role: "user" | "assistant"; content: string }>
 ): Promise<void> {
   try {
-    // Only extract every 2 exchanges to save costs
-    if (messages.length < 4 || messages.length % 2 !== 0) return;
+    // Extract after at least 2 messages (1 user message + AI welcome)
+    if (messages.length < 2) return;
+    
+    console.log(`[Create Route] Starting extraction for survey ${surveyId} with ${messages.length} messages`);
 
     const extractionPrompt = getSurveyDataExtractionPrompt(messages);
 
@@ -79,6 +81,16 @@ async function performIncrementalExtraction(
       requiredQuestions: z.array(z.string()).nullable(),
       metrics: z.array(z.string()).nullable(),
       personalInfo: z.array(z.string()).nullable(),
+      media: z
+        .array(
+          z.object({
+            type: z.enum(["image", "audio", "video"]),
+            description: z.string(),
+            contextForUse: z.string(),
+            priority: z.enum(["high", "medium", "low"]).nullable(),
+          })
+        )
+        .nullable(),
       collectedInfo: z.object({
         objective: z.boolean(),
         targetAudience: z.boolean(),
@@ -91,6 +103,7 @@ async function performIncrementalExtraction(
         requiredQuestions: z.boolean(),
         metrics: z.boolean(),
         personalInfo: z.boolean(),
+        media: z.boolean(),
       }),
     });
 
@@ -224,6 +237,31 @@ export async function POST(
         personalInfo: false,
       };
 
+    // SAVE CONVERSATION STATE (Important for extraction to work)
+    const messagesWithTimestamp = messages.map((msg) => ({
+      role: msg.role,
+      content: msg.content,
+      timestamp: new Date().toISOString(),
+    }));
+
+    if (creationConversation) {
+      await db
+        .update(surveyCreationConversations)
+        .set({
+          messages: messagesWithTimestamp,
+        })
+        .where(eq(surveyCreationConversations.surveyId, surveyId));
+    } else {
+      await db.insert(surveyCreationConversations).values({
+        id: crypto.randomUUID(),
+        surveyId,
+        messages: messagesWithTimestamp,
+        status: "in_progress",
+        collectedInfo: collectedInfo,
+        extractedData: {},
+      });
+    }
+
     const systemPrompt = getSurveyCreationSystemPrompt(
       collectedInfo,
       survey.language
@@ -235,6 +273,40 @@ export async function POST(
       system: systemPrompt,
       temperature: 0.7,
       maxOutputTokens: 1500,
+      onFinish: async ({ text }) => {
+        // Save the assistant's response when done
+        try {
+          // Re-fetch to get latest state in case extraction updated it
+          const [latestConv] = await db
+            .select()
+            .from(surveyCreationConversations)
+            .where(eq(surveyCreationConversations.surveyId, surveyId));
+            
+          if (latestConv) {
+            const currentMessages = latestConv.messages as Array<{
+              role: "user" | "assistant";
+              content: string;
+              timestamp: string;
+            }>;
+            
+            await db
+              .update(surveyCreationConversations)
+              .set({
+                messages: [
+                  ...currentMessages,
+                  {
+                    role: "assistant",
+                    content: text,
+                    timestamp: new Date().toISOString(),
+                  },
+                ],
+              })
+              .where(eq(surveyCreationConversations.surveyId, surveyId));
+          }
+        } catch (dbError) {
+          console.error("Failed to save assistant response:", dbError);
+        }
+      },
     });
 
     // Trigger incremental extraction in the background (non-blocking)
