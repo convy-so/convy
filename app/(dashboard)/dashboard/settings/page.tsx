@@ -391,17 +391,17 @@ export default function SettingsPage() {
                                 <div className="flex items-start justify-between mb-4">
                                     <div>
                                         <p className="text-sm text-gray-300 mb-1">Current Plan</p>
-                                        <h2 className="text-2xl font-bold">Free Plan</h2>
+                                        <h2 className="text-2xl font-bold">Enterprise (Test Mode)</h2>
                                     </div>
                                     <span className="px-3 py-1 bg-white/10 rounded-full text-sm font-medium">
                                         Active
                                     </span>
                                 </div>
                                 <p className="text-gray-300 mb-6">
-                                    You're using the free plan. Upgrade to Pro for unlimited features.
+                                    Billing is currently frozen for testing. You have full access to all features.
                                 </p>
-                                <button className="w-full py-3 bg-white text-gray-900 rounded-xl font-semibold hover:bg-gray-100 transition-colors">
-                                    Upgrade to Pro
+                                <button disabled className="w-full py-3 bg-gray-600 text-gray-300 rounded-xl font-semibold cursor-not-allowed">
+                                    Billing Disabled
                                 </button>
                             </div>
 
@@ -412,19 +412,19 @@ export default function SettingsPage() {
                                     <div>
                                         <div className="flex items-center justify-between mb-2">
                                             <span className="text-sm text-gray-600">Surveys</span>
-                                            <span className="text-sm font-medium text-gray-900">3 / 5</span>
+                                            <span className="text-sm font-medium text-gray-900">Unlimited</span>
                                         </div>
                                         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                            <div className="h-full w-3/5 bg-blue-500 rounded-full" />
+                                            <div className="h-full w-full bg-blue-500 rounded-full" />
                                         </div>
                                     </div>
                                     <div>
                                         <div className="flex items-center justify-between mb-2">
                                             <span className="text-sm text-gray-600">Responses</span>
-                                            <span className="text-sm font-medium text-gray-900">247 / 500</span>
+                                            <span className="text-sm font-medium text-gray-900">Unlimited</span>
                                         </div>
                                         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                            <div className="h-full w-1/2 bg-purple-500 rounded-full" />
+                                            <div className="h-full w-full bg-purple-500 rounded-full" />
                                         </div>
                                     </div>
                                 </div>
