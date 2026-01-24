@@ -1,14 +1,8 @@
 "use server";
-
-import { nanoid } from "nanoid";
-
-import { db } from "@/db";
-import { payments } from "@/db/schema";
 import { env } from "@/lib/env";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { isWorkspaceOwner } from "@/lib/workspace-access";
-import { ensurePlansSeeded, getPlanById, PLAN_PRICES_USD_CENTS } from "@/lib/billing/plans";
-import { coinbaseClient } from "@/lib/billing/coinbase";
+import { ensurePlansSeeded, getPlanById } from "@/lib/billing/plans";
 import { logger } from "@/lib/logger";
 
 import { createLemonSqueezyCheckout } from "@/lib/billing/lemonsqueezy";
