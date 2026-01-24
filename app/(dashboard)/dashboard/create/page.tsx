@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -20,10 +20,12 @@ import {
   Pause,
   RotateCcw,
   Check,
+  Share2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
-import { authClient } from "@/lib/auth-client";
+import { useAuth } from "@/components/providers/auth-provider";
+import { PublishSurveyModal } from "@/components/surveys/publish-survey-modal";
 
 type CreationStep = "objective" | "audience" | "questions" | "tone" | "review";
 
@@ -31,6 +33,8 @@ type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  displayedContent?: string; // For typing animation
+  isTyping?: boolean;
 };
 
 const suggestedPrompts = [
@@ -40,8 +44,12 @@ const suggestedPrompts = [
   "I want to gather market research for a new product launch",
 ];
 
+// Typing animation delay in milliseconds per character
+const TYPING_DELAY_MS = 15;
+
 export default function CreateSurveyPage() {
   const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth();
   const [surveyId, setSurveyId] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -52,13 +60,17 @@ export default function CreateSurveyPage() {
   const [transcribedText, setTranscribedText] = useState("");
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   
   // Chat state
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
       role: "assistant",
-      content: "Hi! I'm here to help you create the perfect survey. Let's start with the basics - what's the main objective of your survey? What do you want to learn from your respondents?"
+      content: "Hi! I'm here to help you create the perfect survey. Let's start with the basics - what's the main objective of your survey? What do you want to learn from your respondents?",
+      displayedContent: "Hi! I'm here to help you create the perfect survey. Let's start with the basics - what's the main objective of your survey? What do you want to learn from your respondents?",
+      isTyping: false,
     }
   ]);
   const [input, setInput] = useState("");
@@ -66,41 +78,100 @@ export default function CreateSurveyPage() {
   
   const [extractedData, setExtractedData] = useState<any>(null);
   const [collectedInfo, setCollectedInfo] = useState<any>(null);
+
+  // Detect if the user is ready to publish based on conversation content
+  const isReadyToPublish = useMemo(() => {
+    if (!surveyId || messages.length < 4) return false;
+    
+    // Check if the last few messages indicate completion
+    const recentMessages = messages.slice(-4);
+    const completionKeywords = [
+      'publish', 'done', 'finished', 'complete', 'ready', 'perfect', 
+      'looks good', 'satisfied', "that's all", 'thats all', 'go live',
+      'share', 'launch', 'good to go', 'approved', 'confirmed'
+    ];
+    
+    // Check if user mentioned completion keywords
+    const userMentionedCompletion = recentMessages.some(msg => {
+      if (msg.role !== 'user') return false;
+      const content = msg.content.toLowerCase();
+      return completionKeywords.some(keyword => content.includes(keyword));
+    });
+    
+    // Check if AI confirmed survey is ready
+    const aiConfirmedReady = recentMessages.some(msg => {
+      if (msg.role !== 'assistant') return false;
+      const content = msg.content.toLowerCase();
+      return content.includes('ready to publish') || 
+             content.includes('survey is now published') ||
+             content.includes('looks great') ||
+             content.includes('ready to collect') ||
+             content.includes('all set');
+    });
+    
+    // Check if enough data has been collected (at least objective and audience)
+    const hasEnoughData = collectedInfo && 
+      (collectedInfo.objective && collectedInfo.targetAudience);
+    
+    return (userMentionedCompletion && aiConfirmedReady) || 
+           (hasEnoughData && messages.length >= 6);
+  }, [messages, surveyId, collectedInfo]);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const typingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Check authentication status
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const session = await authClient.getSession();
-        if (!session.data) {
-          setAuthError("Please sign in to create surveys");
-          return;
-        }
-        if (!session.data.user.emailVerified) {
-          setAuthError("Please verify your email before creating surveys");
-          return;
-        }
-        setAuthError(null);
-      } catch (error) {
-        console.error("Auth check failed:", error);
-        setAuthError("Authentication failed");
+  // Typing animation function
+  const animateTyping = useCallback((messageId: string, fullContent: string) => {
+    let charIndex = 0;
+    
+    const typeNextChar = () => {
+      if (charIndex < fullContent.length) {
+        charIndex++;
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === messageId 
+              ? { ...msg, displayedContent: fullContent.slice(0, charIndex) }
+              : msg
+          )
+        );
+        typingIntervalRef.current = setTimeout(typeNextChar, TYPING_DELAY_MS);
+      } else {
+        // Finished typing
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === messageId 
+              ? { ...msg, isTyping: false, displayedContent: fullContent }
+              : msg
+          )
+        );
       }
     };
-    checkAuth();
+    
+    typeNextChar();
   }, []);
 
-  // Initialize survey draft on mount
+  // Check authentication status using AuthContext
   useEffect(() => {
-    if (authError) {
+    if (authLoading) return;
+    
+    if (!user) {
+      setAuthError("Please sign in to create surveys");
       setIsInitializing(false);
       return;
     }
-
+    
+    if (!user.emailVerified) {
+      setAuthError("Please verify your email before creating surveys");
+      setIsInitializing(false);
+      return;
+    }
+    
+    setAuthError(null);
+    
+    // Initialize survey draft
     const createDraft = async () => {
       try {
         const response = await fetch("/api/surveys", { 
@@ -133,7 +204,7 @@ export default function CreateSurveyPage() {
       }
     };
     createDraft();
-  }, [authError]);
+  }, [user, authLoading]);
 
   // Replace useChat with manual implementation
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -143,10 +214,18 @@ export default function CreateSurveyPage() {
   const sendMessage = async (content: string) => {
     if (!surveyId || authError) return;
 
+    // Clear any existing typing animation
+    if (typingIntervalRef.current) {
+      clearTimeout(typingIntervalRef.current);
+      typingIntervalRef.current = null;
+    }
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content
+      content,
+      displayedContent: content,
+      isTyping: false,
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -181,21 +260,26 @@ export default function CreateSurveyPage() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
+      // Collect full response content first, then animate
+      let fullContent = "";
+      const assistantMessageId = (Date.now() + 1).toString();
+      
       // Check if response is streaming
       const contentType = response.headers.get('content-type');
-            console.log("Response content-type:", contentType);
 
       if (contentType?.includes('text/plain') || contentType?.includes('text/stream')) {
-        // Handle streaming response
+        // Handle streaming response - collect all content
         const reader = response.body?.getReader();
         if (!reader) throw new Error("No response body");
 
+        // Add placeholder message with typing indicator
         const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
+          id: assistantMessageId,
           role: "assistant",
-          content: ""
+          content: "",
+          displayedContent: "",
+          isTyping: true,
         };
-
         setMessages(prev => [...prev, assistantMessage]);
 
         const decoder = new TextDecoder();
@@ -209,62 +293,33 @@ export default function CreateSurveyPage() {
           if (value) {
             const chunk = decoder.decode(value, { stream: true });
             buffer += chunk;
-            // console.log("Received chunk:", chunk); // Debug log
             
             // Process complete lines
             const lines = buffer.split('\n');
-            buffer = lines.pop() || ''; // Keep incomplete line in buffer
+            buffer = lines.pop() || '';
             
             for (const line of lines) {
               if (line.trim()) {
                 // Handle AI SDK streaming format
                 if (line.startsWith('0:')) {
-                  // Format: "0:content"
-                  const content = line.slice(2);
-                  if (content) {
-                    setMessages(prev => 
-                      prev.map(msg => 
-                        msg.id === assistantMessage.id 
-                          ? { ...msg, content: msg.content + content }
-                          : msg
-                      )
-                    );
+                  const lineContent = line.slice(2);
+                  if (lineContent) {
+                    fullContent += lineContent;
                   }
                 } else if (line.startsWith('data: ')) {
-                  // Format: "data: content"
-                  const content = line.slice(6);
-                  if (content && content !== '[DONE]') {
+                  const lineContent = line.slice(6);
+                  if (lineContent && lineContent !== '[DONE]') {
                     try {
-                      const parsed = JSON.parse(content);
+                      const parsed = JSON.parse(lineContent);
                       if (parsed.choices?.[0]?.delta?.content) {
-                        setMessages(prev => 
-                          prev.map(msg => 
-                            msg.id === assistantMessage.id 
-                              ? { ...msg, content: msg.content + parsed.choices[0].delta.content }
-                              : msg
-                          )
-                        );
+                        fullContent += parsed.choices[0].delta.content;
                       }
                     } catch (e) {
-                      // If not JSON, treat as plain text
-                      setMessages(prev => 
-                        prev.map(msg => 
-                          msg.id === assistantMessage.id 
-                            ? { ...msg, content: msg.content + content }
-                            : msg
-                        )
-                      );
+                      fullContent += lineContent;
                     }
                   }
                 } else {
-                  // Plain text content - this is likely what we're getting
-                  setMessages(prev => 
-                    prev.map(msg => 
-                      msg.id === assistantMessage.id 
-                        ? { ...msg, content: msg.content + line }
-                        : msg
-                    )
-                  );
+                  fullContent += line;
                 }
               }
             }
@@ -273,26 +328,41 @@ export default function CreateSurveyPage() {
         
         // Process any remaining buffer content
         if (buffer.trim()) {
-          setMessages(prev => 
-            prev.map(msg => 
-              msg.id === assistantMessage.id 
-                ? { ...msg, content: msg.content + buffer }
-                : msg
-            )
-          );
+          fullContent += buffer;
         }
+
+        // Update the message with full content and start typing animation
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === assistantMessageId 
+              ? { ...msg, content: fullContent, displayedContent: "", isTyping: true }
+              : msg
+          )
+        );
+
+        // Start typing animation after a short delay
+        setTimeout(() => {
+          animateTyping(assistantMessageId, fullContent);
+        }, 100);
+
       } else {
         // Handle non-streaming response (fallback)
         const responseText = await response.text();
-        console.log("Non-streaming response:", responseText);
         
         const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
+          id: assistantMessageId,
           role: "assistant",
-          content: responseText
+          content: responseText,
+          displayedContent: "",
+          isTyping: true,
         };
 
         setMessages(prev => [...prev, assistantMessage]);
+        
+        // Start typing animation
+        setTimeout(() => {
+          animateTyping(assistantMessageId, responseText);
+        }, 100);
       }
     } catch (error) {
       console.error("Chat error:", error);
@@ -327,25 +397,33 @@ export default function CreateSurveyPage() {
 
   // Poll for extracted data to update preview
   useEffect(() => {
-    if (!surveyId || isLoading) return;
+    if (!surveyId) return;
 
     const fetchExtractedData = async () => {
       try {
         const res = await fetch(`/api/surveys/${surveyId}/create`);
         if (res.ok) {
           const data = await res.json();
-          setExtractedData(data.extractedData);
-          setCollectedInfo(data.collectedInfo);
+          // Only update if we get valid data, don't overwrite with empty if we already have data
+          // unless it's a genuine update (this prevents some flickering if API returns temp empty state)
+          if (data.extractedData && Object.keys(data.extractedData).length > 0) {
+             setExtractedData(data.extractedData);
+          }
+          if (data.collectedInfo) {
+             setCollectedInfo(data.collectedInfo);
+          }
         }
       } catch (err) {
         console.error("Failed to fetch extraction data", err);
       }
     };
 
-    const timer = setInterval(fetchExtractedData, 5000);
+    // Poll more frequently to catch real-time updates
+    const timer = setInterval(fetchExtractedData, 3000);
     fetchExtractedData(); // Initial fetch
+    
     return () => clearInterval(timer);
-  }, [surveyId, isLoading]);
+  }, [surveyId]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -552,9 +630,11 @@ export default function CreateSurveyPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-7rem)] flex flex-col max-w-6xl mx-auto">
-      {/* Header - SalesX Inspired Design */}
-      <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-6">
+    <div className="h-[calc(100vh-7rem)] flex flex-col md:flex-row gap-6 max-w-[1600px] mx-auto p-4 overflow-hidden">
+      {/* Left Side: Header + Chat */}
+      <div className="flex-1 flex flex-col min-w-0 h-full">
+        {/* Header - SalesX Inspired Design */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-4 flex-shrink-0">
         <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
                 <Link
@@ -571,8 +651,21 @@ export default function CreateSurveyPage() {
                 </div>
             </div>
 
-            {/* Voice/Text Toggle */}
+            {/* Voice/Text Toggle & Preview Toggle */}
             <div className="flex items-center gap-2">
+                  <button
+                      onClick={() => setShowPreview(!showPreview)}
+                      className={cn(
+                          "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors border",
+                          showPreview
+                              ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                              : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                      )}
+                  >
+                      {showPreview ? <Sparkles className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+                      {showPreview ? "Hide Preview" : "Show Preview"}
+                  </button>
+
                 <button
                     onClick={toggleVoiceMode}
                     className={cn(
@@ -742,7 +835,12 @@ export default function CreateSurveyPage() {
                     : "bg-gray-900 text-white"
                 )}
               >
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                  {message.displayedContent || message.content}
+                  {message.isTyping && message.role === "assistant" && (
+                    <span className="inline-block w-0.5 h-4 bg-gray-900 ml-0.5 animate-pulse" />
+                  )}
+                </p>
               </div>
             </div>
           )})}
@@ -817,76 +915,185 @@ export default function CreateSurveyPage() {
         )}
       </div>
 
-      {/* Preview Section */}
-      {extractedData && (Object.keys(extractedData).length > 0) && (
-            <div className="mt-6 bg-white rounded-xl border border-gray-100 p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="flex items-center justify-between mb-6">
-                    <div>
-                        <h2 className="text-lg font-bold text-gray-900">{extractedData.title || "Survey Draft"}</h2>
-                        <p className="text-sm text-gray-500">Real-time AI construction</p>
+    </div>
+      {/* Right Side: Preview Panel */}
+      {showPreview && (
+        <div className="w-[400px] flex-shrink-0 animate-in fade-in slide-in-from-right-4 duration-500">
+           <div className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent pr-2 pb-4">
+              <div className="bg-gray-50/50 rounded-2xl border border-gray-100 h-full overflow-hidden flex flex-col sticky top-0">
+                {!extractedData || Object.keys(extractedData).length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center mb-4">
+                      <Sparkles className="w-8 h-8 text-gray-300" />
                     </div>
-                    <div className="flex gap-3">
-                        <button 
-                          onClick={() => router.push(`/dashboard/surveys/${surveyId}`)}
-                          className="flex items-center gap-2 px-6 py-2 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-shadow shadow-lg shadow-gray-200"
-                        >
-                            <Sparkles className="w-4 h-4" />
-                            Finalize Survey
-                        </button>
+                    <h3 className="text-gray-900 font-bold text-lg mb-2">No Data Yet</h3>
+                    <p className="text-sm text-gray-500 max-w-[240px] leading-relaxed">
+                      Start chatting with the AI to generate your survey draft. Live updates will appear here.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                  <div className="p-6 border-b border-gray-100 bg-white">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-xl font-bold text-gray-900 leading-tight">{extractedData.title || "Survey Draft"}</h2>
+                            <div className="flex items-center gap-2 mt-2">
+                              <span className="flex h-2 w-2 relative">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                              </span>
+                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Live Preview</p>
+                            </div>
+                        </div>
                     </div>
-                </div>
+                  </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="flex-1 overflow-y-auto p-6 space-y-4">
                     {extractedData.objective && (
-                      <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
-                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Objective</h3>
-                          <p className="text-sm text-gray-700 font-medium">{extractedData.objective.goal}</p>
+                      <div className="bg-white p-5 rounded-xl transition-all ">
+                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                            Objective
+                          </h3>
+                          <p className="text-sm text-gray-900 font-medium leading-relaxed">{extractedData.objective.goal}</p>
                       </div>
                     )}
+
                     {extractedData.targetAudience && (
-                      <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
-                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Audience</h3>
-                          <p className="text-sm text-gray-700 font-medium">{extractedData.targetAudience.description}</p>
+                      <div className="bg-white p-5 rounded-xl  transition-all ">
+                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                             <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                             Target Audience
+                          </h3>
+                          <p className="text-sm text-gray-900 font-medium leading-relaxed">{extractedData.targetAudience.description}</p>
                       </div>
                     )}
-                    {extractedData.tone && (
-                      <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
-                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Tone</h3>
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              {extractedData.tone}
-                          </span>
-                      </div>
-                    )}
+
                     {extractedData.scope?.mainTopics && extractedData.scope.mainTopics.length > 0 && (
-                      <div className="p-4 rounded-xl bg-gray-50 border border-gray-100 md:col-span-2">
-                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Key Topics</h3>
+                      <div className="bg-white p-5 rounded-xl  transition-all">
+                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                             <span className="w-1.5 h-1.5 rounded-full bg-teal-500" />
+                             Key Topics
+                          </h3>
                           <div className="flex flex-wrap gap-2">
-                             {extractedData.scope.mainTopics.map((topic: string, i: number) => (
-                               <span key={i} className="px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs text-gray-600">
-                                 {topic}
-                               </span>
-                             ))}
+                            {extractedData.scope.mainTopics.map((topic: string, i: number) => (
+                              <span key={i} className="px-3 py-1.5 bg-teal-50 text-teal-700 rounded-lg text-xs font-semibold border border-teal-100">
+                                {topic}
+                              </span>
+                            ))}
                           </div>
                       </div>
                     )}
+
+                    {extractedData.tone && (
+                      <div className="bg-white p-5 rounded-xl  transition-all ">
+                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                             <span className="w-1.5 h-1.5 rounded-full bg-pink-500" />
+                             Tone
+                          </h3>
+                          <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-pink-50 text-pink-700 border border-pink-100 capitalize">
+                            {extractedData.tone}
+                          </span>
+                      </div>
+                    )}
+
+                    {extractedData.metrics && extractedData.metrics.length > 0 && (
+                      <div className="bg-white p-5 rounded-xl  transition-all ">
+                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                             <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                             Key Metrics
+                          </h3>
+                          <div className="flex flex-wrap gap-2">
+                            {extractedData.metrics.map((metric: string, i: number) => (
+                              <span key={i} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-semibold border border-blue-100">
+                                {metric}
+                              </span>
+                            ))}
+                          </div>
+                      </div>
+                    )}
+                    
                     {extractedData.requiredQuestions && extractedData.requiredQuestions.length > 0 && (
-                      <div className="p-4 rounded-xl bg-gray-50 border border-gray-100 md:col-span-2">
-                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Extracted Questions</h3>
+                      <div className="bg-white p-5 rounded-xl  transition-all ">
+                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center justify-between">
+                             <div className="flex items-center gap-2">
+                               <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                               Questions
+                             </div>
+                             <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[10px]">{extractedData.requiredQuestions.length}</span>
+                          </h3>
                           <div className="space-y-3">
                              {extractedData.requiredQuestions.map((q: string, i: number) => (
-                               <div key={i} className="flex gap-3 p-3 bg-white rounded-lg border border-gray-100 shadow-sm">
-                                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-bold">
+                               <div key={i} className="flex gap-3 items-start group">
+                                  <span className="flex-shrink-0 w-5 h-5 rounded bg-gray-50 text-gray-500 flex items-center justify-center text-[10px] font-bold mt-0.5 group-hover:bg-gray-900 group-hover:text-white transition-colors">
                                     {i + 1}
                                   </span>
-                                  <p className="text-sm text-gray-800 font-medium">{q}</p>
+                                  <p className="text-sm text-gray-700 font-medium leading-relaxed">{q}</p>
                                </div>
                              ))}
                           </div>
                       </div>
                     )}
-                </div>
-            </div>
+
+                    {extractedData.media && extractedData.media.length > 0 && (
+                      <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm transition-all hover:shadow-md">
+                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center justify-between">
+                             <div className="flex items-center gap-2">
+                               <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
+                               Media
+                             </div>
+                             <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[10px]">{extractedData.media.length}</span>
+                          </h3>
+                          <div className="space-y-3">
+                             {extractedData.media.map((item: any, i: number) => (
+                               <div key={i} className="flex gap-3 items-start group p-3 rounded-lg bg-gray-50 border border-gray-100">
+                                  <span className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-white ${
+                                    item.type === 'image' ? 'bg-green-500' : 
+                                    item.type === 'video' ? 'bg-red-500' : 'bg-amber-500'
+                                  }`}>
+                                    {item.type === 'image' ? '🖼️' : item.type === 'video' ? '🎬' : '🎵'}
+                                  </span>
+                                  <div>
+                                    <p className="text-sm font-semibold text-gray-900 capitalize">{item.type}</p>
+                                    <p className="text-xs text-gray-500 mt-0.5">{item.description}</p>
+                                    {item.contextForUse && (
+                                      <p className="text-xs text-gray-400 mt-1 italic">Context: {item.contextForUse}</p>
+                                    )}
+                                  </div>
+                               </div>
+                             ))}
+                          </div>
+                      </div>
+                    )}
+                  </div>
+                
+                 {/* Footer Action */}
+                 <div className="p-4 bg-white border-t border-gray-100">
+                  <button 
+                    onClick={() => setShowPublishModal(true)}
+                    className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm"
+                  >
+                      <Share2 className="w-4 h-4" />
+                      Publish Survey
+                  </button>
+                 </div>
+                 </>
+                )}
+              </div>
+           </div>
+        </div>
       )}
+
+      {/* Publish Survey Modal */}
+      <PublishSurveyModal
+        isOpen={showPublishModal}
+        onClose={() => setShowPublishModal(false)}
+        surveyId={surveyId || ""}
+        initialTitle={extractedData?.title || "Untitled Survey"}
+        onPublished={(shareUrl) => {
+          console.log("Survey published:", shareUrl);
+        }}
+      />
     </div>
   );
 }

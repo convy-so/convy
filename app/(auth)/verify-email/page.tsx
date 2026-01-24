@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
 import { StatusCard } from "@/components/auth/status-card";
+import { LoadingOverlay } from "@/components/auth/loading-overlay";
 
 export default function VerifyEmailPage() {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function VerifyEmailPage() {
   
   const [email, setEmail] = useState<string | null>(null);
   const [isResending, setIsResending] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
     // Try to get email from URL if present (legacy support) or sessionStorage
@@ -25,6 +27,7 @@ export default function VerifyEmailPage() {
     }
 
     if (token) {
+      setIsVerifying(true);
       const verify = async () => {
         try {
           await authClient.verifyEmail({
@@ -37,11 +40,13 @@ export default function VerifyEmailPage() {
                 router.push("/dashboard");
               },
               onError: (ctx) => {
+                setIsVerifying(false);
                 toast.error(ctx.error.message || "Verification failed");
               }
             }
           });
         } catch (error) {
+          setIsVerifying(false);
           toast.error("An error occurred during verification");
         }
       };
@@ -66,6 +71,16 @@ export default function VerifyEmailPage() {
         setIsResending(false);   
     }
   };
+
+  // Show loading overlay when verifying token
+  if (isVerifying) {
+    return (
+      <LoadingOverlay 
+        message="Verifying your email..." 
+        subtitle="Please wait a moment"
+      />
+    );
+  }
 
   return (
     <StatusCard
