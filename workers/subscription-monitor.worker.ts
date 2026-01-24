@@ -33,9 +33,9 @@ const worker = new Worker<SubscriptionMonitorJobData>(
       for (const { subscription, user } of activeSubs) {
         const metadata = (subscription.metadata as Record<string, any>) || {};
         
-        // Filter for Coinbase Commerce (or non-Stripe)
-        // If stripeSubscriptionId is present, Stripe handles churn/emails (usually).
-        if (subscription.stripeSubscriptionId && metadata.provider !== 'coinbase_business') {
+        // Filter for Coinbase Commerce (or non-Lemon Squeezy)
+        // If lemonSqueezySubscriptionId is present, LS handles dunning/emails (usually).
+        if (subscription.lemonSqueezySubscriptionId && metadata.provider !== 'coinbase_business') {
             continue;
         }
         

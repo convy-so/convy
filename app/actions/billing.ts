@@ -1,240 +1,231 @@
-"use server";
+// "use server";
+// import { env } from "@/lib/env";
+// import { getVerifiedSession } from "@/lib/auth/session";
+// import { isWorkspaceOwner } from "@/lib/workspace-access";
+// import { ensurePlansSeeded, getPlanById } from "@/lib/billing/plans";
+// import { logger } from "@/lib/logger";
 
-import { nanoid } from "nanoid";
-import Stripe from "stripe";
+// import { createLemonSqueezyCheckout } from "@/lib/billing/lemonsqueezy";
 
-import { db } from "@/db";
-import { payments } from "@/db/schema";
-import { env } from "@/lib/env";
-import { getVerifiedSession } from "@/lib/auth/session";
-import { isWorkspaceOwner } from "@/lib/workspace-access";
-import { ensurePlansSeeded, getPlanById, PLAN_PRICES_USD_CENTS } from "@/lib/billing/plans";
-import { coinbaseClient } from "@/lib/billing/coinbase";
-import { logger } from "@/lib/logger";
+// type ActionResult<T> =
+//   | { success: true; data: T }
+//   | { success: false; error: string };
 
-const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
-  apiVersion: "2024-06-20",
-});
+// export async function createLemonSqueezyCheckoutAction(input: {
+//   planId: "pro" | "premium";
+//   interval: "month" | "year";
+//   cancelUrl: string;
+//   successUrl: string;
+// }): Promise<ActionResult<{ url: string }>> {
+//   // FREEZE: Payments are temporarily disabled
+//   return { success: false, error: "Payments are currently disabled for testing." };
 
-type ActionResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string };
+//   try {
+//     const session = await getVerifiedSession();
+//     const activeOrgId = session.session.activeOrganizationId;
 
-export async function createStripeCheckoutAction(input: {
-  planId: "pro" | "premium";
-  interval: "month" | "year";
-  cancelUrl: string;
-  successUrl: string;
-}): Promise<ActionResult<{ url: string }>> {
-  try {
-    const session = await getVerifiedSession();
-    const activeOrgId = session.session.activeOrganizationId;
+//     if (activeOrgId) {
+//       const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
+//       if (!isOwner) {
+//         return { success: false, error: "Only workspace owner can manage billing" };
+//       }
+//     }
+//     await ensurePlansSeeded();
 
-    if (activeOrgId) {
-      const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
-      if (!isOwner) {
-        return { success: false, error: "Only workspace owner can manage billing" };
-      }
-    }
-    await ensurePlansSeeded();
+//     const plan = await getPlanById(input.planId);
 
-    const plan = await getPlanById(input.planId);
+//     if (!plan) {
+//       return { success: false, error: "Invalid plan" };
+//     }
 
-    if (!plan) {
-      return { success: false, error: "Invalid plan" };
-    }
+//     const variantId = input.interval === "month" 
+//         ? plan.lemonSqueezyVariantIdMonthly 
+//         : plan.lemonSqueezyVariantIdYearly;
 
-    const priceMap = PLAN_PRICES_USD_CENTS[input.planId];
-    const amountUsdCents =
-      input.interval === "month" ? priceMap.monthly : priceMap.yearly;
+//     if (!variantId) {
+//         return { success: false, error: "Plan configuration missing (Variant ID not set)" };
+//     }
 
-    const checkoutSession = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: `${plan.name} (${input.interval})`,
-              description: `${plan.name} subscription`,
-            },
-            unit_amount: amountUsdCents,
-            recurring: {
-              interval: input.interval,
-            },
-          },
-          quantity: 1,
-        },
-      ],
-      metadata: {
-        userId: session.user.id,
-        planId: input.planId,
-        interval: input.interval,
-        organizationId: activeOrgId ?? "",
-      },
-      client_reference_id: session.user.id,
-      success_url: input.successUrl,
-      cancel_url: input.cancelUrl,
-      customer_email: session.user.email,
-    });
+//     if (!env.LEMONSQUEEZY_STORE_ID) {
+//         return { success: false, error: "Server configuration error (Store ID missing)" };
+//     }
 
-    if (!checkoutSession.url) {
-       return { success: false, error: "Failed to create Stripe Checkout URL" };
-    }
+//     const checkoutUrl = await createLemonSqueezyCheckout({
+//         storeId: env.LEMONSQUEEZY_STORE_ID,
+//         variantId: variantId,
+//         checkoutData: {
+//             email: session.user.email,
+//             name: session.user.name,
+//             custom: {
+//                 userId: session.user.id,
+//                 planId: input.planId,
+//                 interval: input.interval,
+//                 organizationId: activeOrgId ?? "",
+//             }
+//         },
+//         redirectUrl: input.successUrl,
+//     });
 
-    return { success: true, data: { url: checkoutSession.url } };
-  } catch (error) {
-    logger.error("Error creating Stripe Checkout session", { error });
-    return {
-      success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Failed to create Stripe payment session",
-    };
-  }
-}
+//     if (!checkoutUrl?.data?.attributes?.url) {
+//        return { success: false, error: "Failed to create Lemon Squeezy Checkout URL" };
+//     }
 
-export async function createCoinbasePaymentLinkAction(input: {
-  planId: "pro" | "premium";
-  interval: "month" | "year";
-  cancelUrl: string;
-  successUrl: string;
-}): Promise<ActionResult<{ paymentUrl: string; paymentLinkId: string }>> {
-  try {
-    const session = await getVerifiedSession();
-    const activeOrgId = session.session.activeOrganizationId;
+//     return { success: true, data: { url: checkoutUrl.data.attributes.url } };
+//   } catch (error) {
+//     logger.error("Error creating Lemon Squeezy Checkout session", { error });
+//     return {
+//       success: false,
+//       error:
+//         error instanceof Error
+//           ? error.message
+//           : "Failed to create payment session",
+//     };
+//   }
+// }
 
-    if (activeOrgId) {
-      const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
-      if (!isOwner) {
-        return { success: false, error: "Only workspace owner can manage billing" };
-      }
-    }
-    await ensurePlansSeeded();
+// // export async function createCoinbasePaymentLinkAction(input: {
+// //   planId: "pro" | "premium";
+// //   interval: "month" | "year";
+// //   cancelUrl: string;
+// //   successUrl: string;
+// // }): Promise<ActionResult<{ paymentUrl: string; paymentLinkId: string }>> {
+// //   if (true) {
+// //     return { success: false, error: "Crypto payments are currently disabled." };
+// //   }
+  
+// //   try {
+// //     const session = await getVerifiedSession();
+// //     const activeOrgId = session.session.activeOrganizationId;
 
-    const plan = await getPlanById(input.planId);
+// //     if (activeOrgId) {
+// //       const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
+// //       if (!isOwner) {
+// //         return { success: false, error: "Only workspace owner can manage billing" };
+// //       }
+// //     }
+// //     await ensurePlansSeeded();
 
-    if (!plan) {
-      return { success: false, error: "Invalid plan" };
-    }
+// //     const plan = await getPlanById(input.planId);
 
-    const priceMap = PLAN_PRICES_USD_CENTS[input.planId];
-    const amountUsdCents =
-      input.interval === "month" ? priceMap.monthly : priceMap.yearly;
+// //     if (!plan) {
+// //       return { success: false, error: "Invalid plan" };
+// //     }
 
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+// //     const priceMap = PLAN_PRICES_USD_CENTS[input.planId];
+// //     const amountUsdCents =
+// //       input.interval === "month" ? priceMap.monthly : priceMap.yearly;
+
+// //     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
     
-    const existingPendingPayment = await db.query.payments.findFirst({
-      where: (p, { eq, and, gte }) => and(
-        eq(p.userId, session.user.id),
-        eq(p.planId, input.planId),
-        eq(p.status, "pending"),
-        eq(p.provider, "coinbase_business"),
-        gte(p.createdAt, oneHourAgo)
-      ),
-    });
+// //     const existingPendingPayment = await db.query.payments.findFirst({
+// //       where: (p, { eq, and, gte }) => and(
+// //         eq(p.userId, session.user.id),
+// //         eq(p.planId, input.planId),
+// //         eq(p.status, "pending"),
+// //         eq(p.provider, "coinbase_business"),
+// //         gte(p.createdAt, oneHourAgo)
+// //       ),
+// //     });
 
-    if (existingPendingPayment && existingPendingPayment.coinbaseChargeId) {
-      // Try to retrieve the existing payment link to get its URL
-      try {
-        const existingLink = await coinbaseClient.getPaymentLink(
-          existingPendingPayment.coinbaseChargeId
-        );
+// //     if (existingPendingPayment && existingPendingPayment.coinbaseChargeId) {
+// //       // Try to retrieve the existing payment link to get its URL
+// //       try {
+// //         const existingLink = await coinbaseClient.getPaymentLink(
+// //           existingPendingPayment.coinbaseChargeId
+// //         );
         
-        if (existingLink && existingLink.url) {
-          logger.info("Returning existing pending Coinbase payment link", { 
-            paymentLinkId: existingLink.id,
-            userId: session.user.id 
-          });
-          return { 
-            success: true, 
-            data: { 
-              paymentUrl: existingLink.url, 
-              paymentLinkId: existingLink.id 
-            } 
-          };
-        }
-      } catch (retrieveError) {
-        // If retrieval fails, the payment link may have expired - continue to create new one
-        logger.warn("Failed to retrieve existing Coinbase payment link, creating new one", { 
-          paymentLinkId: existingPendingPayment.coinbaseChargeId,
-          error: retrieveError
-        });
-      }
-    }
+// //         if (existingLink && existingLink.url) {
+// //           logger.info("Returning existing pending Coinbase payment link", { 
+// //             paymentLinkId: existingLink.id,
+// //             userId: session.user.id 
+// //           });
+// //           return { 
+// //             success: true, 
+// //             data: { 
+// //               paymentUrl: existingLink.url, 
+// //               paymentLinkId: existingLink.id 
+// //             } 
+// //           };
+// //         }
+// //       } catch (retrieveError) {
+// //         // If retrieval fails, the payment link may have expired - continue to create new one
+// //         logger.warn("Failed to retrieve existing Coinbase payment link, creating new one", { 
+// //           paymentLinkId: existingPendingPayment.coinbaseChargeId,
+// //           error: retrieveError
+// //         });
+// //       }
+// //     }
 
-    // Generate ID for the payment record beforehand to pass in metadata
-    const paymentId = nanoid();
+// //     // Generate ID for the payment record beforehand to pass in metadata
+// //     const paymentId = nanoid();
 
-    // Convert cents to dollars for the API (which accepts string amounts)
-    const amountUsd = (amountUsdCents / 100).toFixed(2);
+// //     // Convert cents to dollars for the API (which accepts string amounts)
+// //     const amountUsd = (amountUsdCents / 100).toFixed(2);
 
-    // Create payment link via the Payment Link API
-    const paymentLink = await coinbaseClient.createPaymentLink({
-      name: `${plan.name} Plan (${input.interval}ly)`,
-      description: `${plan.name} subscription - ${input.interval}ly billing`,
-      amount: amountUsd,
-      currency: "USD",
-      redirect_url: input.successUrl,
-      cancel_url: input.cancelUrl,
-      metadata: {
-        userId: session.user.id,
-        planId: input.planId,
-        interval: input.interval,
-        organizationId: activeOrgId ?? "",
-        paymentId, 
-      },
-    });
+// //     // Create payment link via the Payment Link API
+// //     const paymentLink = await coinbaseClient.createPaymentLink({
+// //       name: `${plan.name} Plan (${input.interval}ly)`,
+// //       description: `${plan.name} subscription - ${input.interval}ly billing`,
+// //       amount: amountUsd,
+// //       currency: "USD",
+// //       redirect_url: input.successUrl,
+// //       cancel_url: input.cancelUrl,
+// //       metadata: {
+// //         userId: session.user.id,
+// //         planId: input.planId,
+// //         interval: input.interval,
+// //         organizationId: activeOrgId ?? "",
+// //         paymentId, 
+// //       },
+// //     });
 
-    if (!paymentLink || !paymentLink.id || !paymentLink.url) {
-      return {
-        success: false,
-        error: "Failed to create Coinbase payment link",
-      };
-    }
+// //     if (!paymentLink || !paymentLink.id || !paymentLink.url) {
+// //       return {
+// //         success: false,
+// //         error: "Failed to create Coinbase payment link",
+// //       };
+// //     }
 
-    // Record pending payment; it will be finalized on webhook confirmation
-    await db.insert(payments).values({
-      id: paymentId,
-      userId: session.user.id,
-      planId: plan.id,
-      provider: "coinbase_business",
-      status: "pending",
-      amountUsdCents,
-      amountOriginal: amountUsdCents,
-      currency: "USD",
-      coinbaseChargeId: paymentLink.id, // Store payment link ID (Checkout ID)
-      description: `${plan.name} (${input.interval}) - Crypto Payment`,
-      metadata: {
-        userId: session.user.id,
-        planId: input.planId,
-        interval: input.interval,
-        organizationId: activeOrgId ?? "",
-        paymentMethod: "crypto",
-        paymentId,
-      },
-    });
+// //     // Record pending payment; it will be finalized on webhook confirmation
+// //     await db.insert(payments).values({
+// //       id: paymentId,
+// //       userId: session.user.id,
+// //       planId: plan.id,
+// //       provider: "coinbase_business",
+// //       status: "pending",
+// //       amountUsdCents,
+// //       amountOriginal: amountUsdCents,
+// //       currency: "USD",
+// //       coinbaseChargeId: paymentLink.id, // Store payment link ID (Checkout ID)
+// //       description: `${plan.name} (${input.interval}) - Crypto Payment`,
+// //       metadata: {
+// //         userId: session.user.id,
+// //         planId: input.planId,
+// //         interval: input.interval,
+// //         organizationId: activeOrgId ?? "",
+// //         paymentMethod: "crypto",
+// //         paymentId,
+// //       },
+// //     });
 
-    logger.info("Coinbase payment link created and recorded", {
-      paymentLinkId: paymentLink.id,
-      userId: session.user.id,
-      planId: input.planId,
-      amount: amountUsd,
-    });
+// //     logger.info("Coinbase payment link created and recorded", {
+// //       paymentLinkId: paymentLink.id,
+// //       userId: session.user.id,
+// //       planId: input.planId,
+// //       amount: amountUsd,
+// //     });
 
-    return { success: true, data: { paymentUrl: paymentLink.url, paymentLinkId: paymentLink.id } };
-  } catch (error) {
-    logger.error("Error creating Coinbase payment link", { error });
-    return {
-      success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Failed to create crypto payment link",
-    };
-  }
-}
+// //     return { success: true, data: { paymentUrl: paymentLink.url, paymentLinkId: paymentLink.id } };
+// //   } catch (error) {
+// //     logger.error("Error creating Coinbase payment link", { error });
+// //     return {
+// //       success: false,
+// //       error:
+// //         error instanceof Error
+// //           ? error.message
+// //           : "Failed to create crypto payment link",
+// //     };
+// //   }
+// // }
 
 
