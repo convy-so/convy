@@ -121,16 +121,16 @@ export async function POST(
         const tone = survey.tone || "friendly";
         const requiredQuestions = survey.requiredQuestions || [];
         const scope = (survey.scope as any)?.mainTopics || [];
-        
+
         // Count user responses
         const userMessages = messages.filter(m => m.role === "user");
         const userMessageCount = userMessages.length;
-        
+
         // Build question tracking instructions
-        const questionList = requiredQuestions.length > 0 
+        const questionList = requiredQuestions.length > 0
             ? requiredQuestions.map((q: string, i: number) => `Q${i + 1}: "${q}"`).join('\n')
             : '';
-        
+
         const totalQuestions = requiredQuestions.length;
         const minQuestionsNeeded = Math.max(totalQuestions, 3); // At least 3 questions or all required
 
@@ -159,11 +159,11 @@ Total required questions: ${totalQuestions || 'At least 3-5 questions about the 
 
 === QUESTION TRACKING ===
 User has responded ${userMessageCount} times so far.
-${userMessageCount < totalQuestions 
-    ? `You still need to ask ${totalQuestions - userMessageCount} more required questions. DO NOT end the survey yet.`
-    : userMessageCount >= totalQuestions 
-        ? 'All questions have likely been asked. You may wrap up the survey now.'
-        : ''}
+${userMessageCount < totalQuestions
+                ? `You still need to ask ${totalQuestions - userMessageCount} more required questions. DO NOT end the survey yet.`
+                : userMessageCount >= totalQuestions
+                    ? 'All questions have likely been asked. You may wrap up the survey now.'
+                    : ''}
 
 === ENDING THE SURVEY ===
 ONLY when ALL required questions have been asked and answered (minimum ${minQuestionsNeeded} exchanges), end with:
@@ -186,7 +186,7 @@ DO NOT end the survey prematurely. If you haven't asked all questions, continue 
                 content: m.content,
             })),
             temperature: 0.7,
-            maxTokens: 400,
+            maxOutputTokens: 400,
             onFinish: async ({ text }) => {
                 // Save conversation to database
                 const updatedMessages = [
@@ -198,7 +198,7 @@ DO NOT end the survey prematurely. If you haven't asked all questions, continue 
                 const isCompletionPhrase = text.toLowerCase().includes("thank you for completing") ||
                     text.toLowerCase().includes("survey is now complete") ||
                     text.toLowerCase().includes("your feedback is incredibly valuable");
-                
+
                 // Only mark complete if user has answered enough questions
                 const isCompleted = isCompletionPhrase && userMessageCount >= minQuestionsNeeded;
 
