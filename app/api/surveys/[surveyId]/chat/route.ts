@@ -1,11 +1,11 @@
 import { nanoid } from "nanoid";
 import { eq } from "drizzle-orm";
-import { streamText, tool, generateText, stepCountIs } from "ai";
+import { streamText, tool, generateText, Output, stepCountIs } from "ai";
 import { z } from "zod";
 
 import { db } from "@/db";
 import { surveyConversations, surveys } from "@/db/schema";
-import { defaultModel, analysisModel, generateAIResponse } from "@/lib/ai";
+import { defaultModel, analysisModel} from "@/lib/ai";
 import {
   getSurveyConversationSystemPrompt,
   type SurveyConfig,
@@ -119,47 +119,45 @@ async function updateMemoryAsync(
     );
 
     const schema = z.object({
-        keyFactsLearned: z.array(z.string()).optional(),
-        topicsCovered: z.array(z.string()).optional(),
-        currentTopic: z.string().nullable().optional(),
-        unansweredQuestions: z.array(z.string()).optional(),
-        emotionalSignals: z.array(z.string()).optional(),
-        conversationSummary: z.string().optional(),
-        specificExamples: z.array(z.string()).optional(),
-        unexploredHypotheses: z.array(z.string()).optional(),
-        timelineEvents: z.array(z.string()).optional(),
-        peerContext: z.array(z.string()).optional(),
-        participantSuggestedSolutions: z.array(z.string()).optional(),
-        hypothesesEvidence: z.record(z.object({
-             supporting: z.array(z.string()),
-             contradicting: z.array(z.string())
-        })).optional()
+      keyFactsLearned: z.array(z.string()).optional(),
+      topicsCovered: z.array(z.string()).optional(),
+      currentTopic: z.string().nullable().optional(),
+      unansweredQuestions: z.array(z.string()).optional(),
+      emotionalSignals: z.array(z.string()).optional(),
+      conversationSummary: z.string().optional(),
+      specificExamples: z.array(z.string()).optional(),
+      unexploredHypotheses: z.array(z.string()).optional(),
+      timelineEvents: z.array(z.string()).optional(),
+      peerContext: z.array(z.string()).optional(),
+      participantSuggestedSolutions: z.array(z.string()).optional(),
+      hypothesesEvidence: z.record(z.object({
+        supporting: z.array(z.string()),
+        contradicting: z.array(z.string())
+      })).optional()
     });
 
-    const { object: update } = await generateText({
+    const { output: update } = await generateText({
       model: analysisModel,
-      output: {
-        schema,
-      },
+      output: Output.object({ schema }),
       system: "You are an expert conversation analyst. Update the memory based on the latest messages.",
       prompt: memoryPrompt,
       temperature: 0.3,
     });
 
-      const updatedMemory = applyMemoryUpdate(
-        existingContext.memory,
-        update,
-        config
-      );
+    const updatedMemory = applyMemoryUpdate(
+      existingContext.memory,
+      update,
+      config
+    );
 
-      // Save updated context to Redis
-      const redis = getRedisClient();
-      const contextKey = getContextKey(conversationId);
-      const updatedContext: RollingContext = {
-        ...existingContext,
-        memory: updatedMemory,
-      };
-      await redis.set(contextKey, JSON.stringify(updatedContext), "EX", 7200);
+    // Save updated context to Redis
+    const redis = getRedisClient();
+    const contextKey = getContextKey(conversationId);
+    const updatedContext: RollingContext = {
+      ...existingContext,
+      memory: updatedMemory,
+    };
+    await redis.set(contextKey, JSON.stringify(updatedContext), "EX", 7200);
   } catch (error) {
     console.error("[Chat Route] Memory update error:", error);
     // Non-critical - continue without memory update
@@ -302,7 +300,7 @@ export async function POST(
               type: media.type,
               url: media.url,
               description: media.description,
-      altText: media.altText,
+              altText: media.altText,
               durationMs: media.durationMs,
             },
           };

@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { streamText, generateText } from "ai";
+import { streamText, generateText, Output } from "ai";
 import { z } from "zod";
 
 import { db } from "@/db";
@@ -26,7 +26,7 @@ async function performIncrementalExtraction(
   try {
     // Extract after at least 2 messages (1 user message + AI welcome)
     if (messages.length < 2) return;
-    
+
     console.log(`[Create Route] Starting extraction for survey ${surveyId} with ${messages.length} messages`);
 
     const extractionPrompt = getSurveyDataExtractionPrompt(messages);
@@ -112,11 +112,9 @@ async function performIncrementalExtraction(
       }),
     });
 
-    const { object: parsed } = await generateText({
+    const { output: parsed } = await generateText({
       model: analysisModel,
-      output: {
-        schema: extractionSchema,
-      },
+      output: Output.object({ schema: extractionSchema }),
       prompt: extractionPrompt,
       system: "You are an expert survey designer. Extract structured data from the conversation.",
       temperature: 0.3,
@@ -242,6 +240,8 @@ export async function POST(
         requiredQuestions: false,
         metrics: false,
         personalInfo: false,
+        subjectDefined: false,
+        domainIdentified: false,
       };
 
     // SAVE CONVERSATION STATE (Important for extraction to work)
@@ -288,14 +288,14 @@ export async function POST(
             .select()
             .from(surveyCreationConversations)
             .where(eq(surveyCreationConversations.surveyId, surveyId));
-            
+
           if (latestConv) {
             const currentMessages = latestConv.messages as Array<{
               role: "user" | "assistant";
               content: string;
               timestamp: string;
             }>;
-            
+
             const updatedMessages = [
               ...currentMessages,
               {
@@ -304,7 +304,7 @@ export async function POST(
                 timestamp: new Date().toISOString(),
               },
             ];
-            
+
             await db
               .update(surveyCreationConversations)
               .set({
@@ -418,6 +418,8 @@ export async function PUT(
           requiredQuestions: false,
           metrics: false,
           personalInfo: false,
+          subjectDefined: false,
+          domainIdentified: false,
         },
         extractedData: extractedData || {},
       });
@@ -472,11 +474,12 @@ export async function GET(
 
     if (!creationConversation) {
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           collectedInfo: {
             objective: false, targetAudience: false, scope: false, successCriteria: false,
             constraints: false, hypotheses: false, tone: false, additionalContext: false,
             requiredQuestions: false, metrics: false, personalInfo: false,
+            subjectDefined: false, domainIdentified: false,
           },
           extractedData: {}
         }),
