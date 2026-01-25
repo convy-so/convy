@@ -26,6 +26,8 @@ import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useAuth } from "@/components/providers/auth-provider";
 import { PublishSurveyModal } from "@/components/surveys/publish-survey-modal";
+import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
+import { env } from "@/lib/env";
 
 type CreationStep = "objective" | "audience" | "questions" | "tone" | "review";
 
@@ -62,6 +64,49 @@ export default function CreateSurveyPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+
+  // WebSocket Voice Hook
+  const voiceWs = useVoiceWebSocket({
+    url: `ws://localhost:3001/voice/survey-creation?token=${user?.id}`, // Note: In production use secure WebSocket and dynamic port/token
+    onReady: () => {
+      if (surveyId) {
+        voiceWs.sendJson({ type: "set_survey_id", surveyId });
+      }
+    },
+    onMessage: (data) => {
+      if (data.type === "update_extracted_data") {
+        setExtractedData(data.extractedData);
+        setCollectedInfo(data.collectedInfo);
+      } else if (data.type === "audio_sent" || data.type === "text_response") {
+          // Add AI message to chat
+          const assistantMessage: Message = {
+            id: Date.now().toString(),
+            role: "assistant",
+            content: data.text,
+            displayedContent: data.text,
+            isTyping: false,
+          };
+          setMessages(prev => [...prev, assistantMessage]);
+      } else if (data.type === "transcription" && data.isFinal) {
+          // Add user message to chat for visual consistency
+          const userMessage: Message = {
+            id: Date.now().toString(),
+            role: "user",
+            content: data.text,
+            displayedContent: data.text,
+            isTyping: false,
+          };
+          setMessages(prev => [...prev, userMessage]);
+      }
+    }
+  });
+
+  // Effect to sync surveyId with WebSocket
+  useEffect(() => {
+     if (surveyId && voiceWs.status === "connected") {
+        voiceWs.sendJson({ type: "set_survey_id", surveyId });
+     }
+  }, [surveyId, voiceWs.status]);
   
   // Chat state
   const [messages, setMessages] = useState<Message[]>([
@@ -459,14 +504,20 @@ export default function CreateSurveyPage() {
   };
 
   const toggleVoiceMode = () => {
-    setIsVoiceMode(!isVoiceMode);
+    const newMode = !isVoiceMode;
+    setIsVoiceMode(newMode);
+    if (newMode) {
+      voiceWs.connect();
+    } else {
+      voiceWs.disconnect();
+    }
   };
 
   const toggleRecording = async () => {
-    if (isRecording) {
-      stopRecording();
+    if (voiceWs.isRecording) {
+      voiceWs.stopRecording();
     } else {
-      startRecording();
+      voiceWs.startRecording();
     }
   };
 
@@ -688,14 +739,14 @@ export default function CreateSurveyPage() {
                 <button
                     onClick={toggleVoiceMode}
                     className={cn(
-                        "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                        "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm",
                         isVoiceMode
-                            ? "bg-gray-900 text-white"
-                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            ? "bg-red-50 text-red-600 border border-red-100 animate-pulse"
+                            : "bg-indigo-600 text-white hover:bg-indigo-700 border border-transparent shadow-md hover:shadow-lg hover:-translate-y-0.5"
                     )}
                 >
-                    {isVoiceMode ? <Volume2 className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
-                    {isVoiceMode ? "Voice Mode" : "Text Mode"}
+                    {isVoiceMode ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                    {isVoiceMode ? "Stop Voice Mode" : "Design with Voice"}
                 </button>
             </div>
         </div>
@@ -718,12 +769,12 @@ export default function CreateSurveyPage() {
                     onClick={toggleRecording}
                     className={cn(
                         "relative w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl",
-                        isRecording
+                        voiceWs.isRecording
                             ? "bg-red-600 scale-110"
                             : "bg-gray-900 hover:scale-105"
                     )}
                 >
-                    {isRecording ? (
+                    {voiceWs.isRecording ? (
                         <MicOff className="w-10 h-10 text-white" />
                     ) : (
                         <Mic className="w-10 h-10 text-white" />
@@ -733,7 +784,7 @@ export default function CreateSurveyPage() {
 
             {/* Status Text & Visualizer */}
             <div className="mt-8 text-center space-y-6 w-full max-w-md px-4">
-                {isRecording ? (
+                {voiceWs.isRecording ? (
                     <>
                         <div className="space-y-2">
                              <h3 className="text-3xl font-bold text-gray-900 font-mono tracking-wider">
@@ -758,55 +809,26 @@ export default function CreateSurveyPage() {
                             ))}
                         </div>
                         
-                        {transcribedText && (
+                        {(voiceWs.transcription || voiceWs.interimTranscription) && (
                             <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 text-left max-h-32 overflow-y-auto">
-                                <p className="text-gray-900 text-sm leading-relaxed">{transcribedText}</p>
+                                <p className="text-gray-900 text-sm leading-relaxed">
+                                    {voiceWs.transcription}
+                                    <span className="text-gray-400">{voiceWs.interimTranscription}</span>
+                                </p>
                             </div>
                         )}
                     </>
-                ) : audioUrl ? (
-                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                        <div className="space-y-2">
-                            <h3 className="text-xl font-semibold text-gray-900">Recording Finished</h3>
-                            <p className="text-sm text-gray-500">Review your message before sending</p>
-                        </div>
-
-                        {/* Audio Player */}
-                        <div className="flex items-center justify-center gap-4">
-                            <button 
-                                onClick={handleVoiceSend}
-                                className="flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5"
-                            >
-                                <Check className="w-4 h-4" />
-                                Send Message
-                            </button>
-                            <button 
-                                onClick={tooglePlayback}
-                                className="p-3 bg-white border border-gray-200 text-gray-900 rounded-xl hover:bg-gray-50 transition-colors"
-                                title={isPlaying ? "Pause" : "Play Recording"}
-                            >
-                                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-                            </button>
-                            <button 
-                                onClick={resetRecording}
-                                className="p-3 bg-white border border-gray-200 text-gray-500 rounded-xl hover:bg-gray-50 hover:text-red-600 transition-colors"
-                                title="Discard & Retake"
-                            >
-                                <RotateCcw className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        {transcribedText && (
-                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 text-left">
-                                <p className="text-xs text-gray-400 font-medium mb-1 uppercase tracking-wider">Transcript</p>
-                                <p className="text-gray-900 text-sm leading-relaxed">{transcribedText}</p>
-                            </div>
-                        )}
-                    </div>
                 ) : (
-                    <p className="text-gray-500 max-w-xs mx-auto">
-                        Describe your survey objectives, audience, and questions naturally.
-                    </p>
+                    <div className="space-y-4">
+                        <h3 className="text-xl font-semibold text-gray-900">
+                            {voiceWs.status === "connected" ? "Voice Assistant Ready" : "Connecting..."}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                            {voiceWs.status === "connected" 
+                                ? "Click the microphone to start talking" 
+                                : "Please wait while we establish a secure connection"}
+                        </p>
+                    </div>
                 )}
             </div>
 
@@ -984,6 +1006,36 @@ export default function CreateSurveyPage() {
                               </span>
                            </div>
                         )}
+
+                        {/* Survey Mode (Voice vs Text) */}
+                        <div className="mb-4">
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">Participant Mode</p>
+                            <button 
+                                onClick={() => setExtractedData((prev: any) => ({ ...prev, isVoice: !prev?.isVoice }))}
+                                className={cn(
+                                    "w-full flex items-center justify-between p-3 rounded-xl border transition-all",
+                                    extractedData.isVoice 
+                                        ? "bg-emerald-50 border-emerald-100 text-emerald-700 shadow-sm" 
+                                        : "bg-gray-50 border-gray-100 text-gray-600"
+                                )}
+                            >
+                                <div className="flex items-center gap-2">
+                                    {extractedData.isVoice ? <Mic className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
+                                    <span className="text-xs font-bold uppercase tracking-tight">
+                                        {extractedData.isVoice ? "Voice-First Survey" : "Text-First Survey"}
+                                    </span>
+                                </div>
+                                <div className={cn(
+                                    "w-8 h-4 rounded-full relative transition-colors duration-200",
+                                    extractedData.isVoice ? "bg-emerald-500" : "bg-gray-300"
+                                )}>
+                                    <div className={cn(
+                                        "absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform duration-200",
+                                        extractedData.isVoice ? "right-0.5" : "left-0.5"
+                                    )} />
+                                </div>
+                            </button>
+                        </div>
 
                         {extractedData.objective?.subjectDescription && (
                            <div>

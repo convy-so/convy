@@ -32,6 +32,7 @@ export async function GET(
                 participantLimit: surveys.participantLimit,
                 requiredQuestions: surveys.requiredQuestions,
                 scope: surveys.scope,
+                isVoice: surveys.isVoice,
             })
             .from(surveys)
             .where(eq(surveys.shareableLink, shareableLink));
@@ -70,6 +71,7 @@ export async function GET(
                 targetAudience: survey.targetAudience,
                 tone: survey.tone,
                 requiredQuestions: survey.requiredQuestions || [],
+                isVoice: survey.isVoice,
             },
             conversationId,
             participantId,

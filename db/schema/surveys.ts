@@ -114,6 +114,7 @@ const surveys = pgTable(
     confirmed: boolean("confirmed").default(false).notNull(),
     language: languageEnum("language").default("en").notNull(),
     domainId: integer("domain_id"), // 1-10 based on the framework
+    isVoice: boolean("is_voice").default(false).notNull(),
   },
   (table) => [
     index("surveys_user_id_idx").on(table.userId),
