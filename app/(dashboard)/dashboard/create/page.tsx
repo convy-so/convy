@@ -67,7 +67,7 @@ export default function CreateSurveyPage() {
 
   // WebSocket Voice Hook
   const voiceWs = useVoiceWebSocket({
-    url: `ws://localhost:3001/voice/survey-creation?token=${user?.id}`, // Note: In production use secure WebSocket and dynamic port/token
+    url: `ws://localhost:3000/voice/survey-creation`, // Proxy through Next.js (port 3000) for auth
     onReady: () => {
       if (surveyId) {
         voiceWs.sendJson({ type: "set_survey_id", surveyId });
@@ -100,6 +100,7 @@ export default function CreateSurveyPage() {
       }
     }
   });
+
 
   // Effect to sync surveyId with WebSocket
   useEffect(() => {
@@ -630,13 +631,15 @@ export default function CreateSurveyPage() {
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (isRecording) {
+    if (voiceWs.isRecording) {
       interval = setInterval(() => {
         setDuration(prev => prev + 1);
       }, 1000);
+    } else {
+      setDuration(0);
     }
     return () => clearInterval(interval);
-  }, [isRecording]);
+  }, [voiceWs.isRecording]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);

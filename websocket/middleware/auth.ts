@@ -35,12 +35,19 @@ function extractSessionToken(request: IncomingMessage): string | null {
   // Try to get token from cookies
   const cookies = request.headers.cookie;
   if (cookies) {
+    const cookieName = "better-auth.session_token=";
     const sessionCookie = cookies
       .split(";")
-      .find((c) => c.trim().startsWith("better-auth.session_token="));
+      .map((c) => c.trim())
+      .find((c) => c.startsWith(cookieName));
 
     if (sessionCookie) {
-      return sessionCookie.split("=")[1];
+      const rawToken = sessionCookie.substring(cookieName.length);
+      try {
+        return decodeURIComponent(rawToken);
+      } catch {
+        return rawToken;
+      }
     }
   }
 

@@ -56,7 +56,7 @@ export default function SampleReviewPage() {
 
     // WebSocket Hook for Sample Conversation
     const voiceWs = useVoiceWebSocket({
-        url: `ws://localhost:3001/voice/sample-conversation?surveyId=${surveyId}&token=${user?.id}`,
+        url: `ws://localhost:3000/voice/sample-conversation?surveyId=${surveyId}`,
         onReady: () => {
             console.log("Sample conversation WebSocket ready");
         },
