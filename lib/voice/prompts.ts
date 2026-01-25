@@ -16,7 +16,7 @@ export function getSurveyCreationPrompt(
   collectedInfo?: CollectedInfo
 ): string {
   // Default collected info if not provided
-  const collected = collectedInfo || {
+  const collected: CollectedInfo = collectedInfo || {
     objective: false,
     targetAudience: false,
     scope: false,
@@ -28,6 +28,8 @@ export function getSurveyCreationPrompt(
     requiredQuestions: false,
     metrics: false,
     personalInfo: false,
+    subjectDefined: false,
+    domainIdentified: false,
   };
 
   // Build phase and target info (same logic as text version)
