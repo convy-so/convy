@@ -99,6 +99,9 @@ export async function POST(
         if (extractedData.media) {
             updateData.media = extractedData.media;
         }
+        if (extractedData.isVoice !== undefined) {
+            updateData.isVoice = extractedData.isVoice;
+        }
 
         // Update survey with all data
         const [updatedSurvey] = await db

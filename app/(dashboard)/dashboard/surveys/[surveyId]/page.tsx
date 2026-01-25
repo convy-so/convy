@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   BarChart3,
   MessageSquare,
+  Sparkles,
   Users,
   Clock,
   Share2,
@@ -31,7 +32,7 @@ import toast from "react-hot-toast";
 interface Survey {
   id: string;
   title: string;
-  status: "active" | "draft" | "completed" | "paused" | "creating";
+  status: "active" | "draft" | "completed" | "paused" | "creating" | "sample_review";
   createdAt: string;
   updatedAt: string;
   objective?: { description?: string };
@@ -92,6 +93,7 @@ type TabType = "overview" | "responses" | "analytics" | "settings";
 
 export default function SurveyDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const surveyId = params.surveyId as string;
 
@@ -164,6 +166,44 @@ export default function SurveyDetailPage() {
     }
   }, [searchParams]);
 
+  const handleStatusUpdate = async (newStatus: "active" | "paused") => {
+    try {
+      const response = await fetch(`/api/surveys/${surveyId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (response.ok) {
+        setSurvey((prev) => (prev ? { ...prev, status: newStatus } : null));
+        toast.success(`Survey ${newStatus === "active" ? "resumed" : "paused"}`);
+      } else {
+        toast.error("Failed to update status");
+      }
+    } catch (error) {
+      toast.error("An error occurred");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm("Are you sure you want to delete this survey?")) return;
+
+    try {
+      const response = await fetch(`/api/surveys/${surveyId}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        toast.success("Survey deleted");
+        router.push("/dashboard/surveys");
+      } else {
+        toast.error("Failed to delete survey");
+      }
+    } catch (error) {
+      toast.error("An error occurred");
+    }
+  };
+
   const copyLink = () => {
     if (survey?.shareableUrl) {
       navigator.clipboard.writeText(survey.shareableUrl);
@@ -217,9 +257,10 @@ export default function SurveyDetailPage() {
                 survey.status === "active" && "bg-emerald-50 text-emerald-700 border border-emerald-200",
                 survey.status === "draft" && "bg-amber-50 text-amber-700 border border-amber-200",
                 survey.status === "completed" && "bg-gray-50 text-gray-700 border border-gray-200",
-                survey.status === "paused" && "bg-orange-50 text-orange-700 border border-orange-200"
+                survey.status === "paused" && "bg-orange-50 text-orange-700 border border-orange-200",
+                survey.status === "sample_review" && "bg-blue-50 text-blue-700 border border-blue-200"
               )}>
-                {survey.status}
+                {survey.status.replace('_', ' ')}
               </span>
             </div>
           </div>
@@ -231,16 +272,34 @@ export default function SurveyDetailPage() {
             </button>
 
             {survey.status === "active" ? (
-              <button className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-medium hover:bg-orange-600 transition-colors">
+              <button 
+                onClick={() => handleStatusUpdate("paused")}
+                className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-medium hover:bg-orange-600 transition-colors"
+                title="Pause Survey"
+              >
                 <Pause className="w-4 h-4" />
                 Pause
               </button>
-            ) : (
-              <button className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500 text-white rounded-xl text-sm font-medium hover:bg-emerald-600 transition-colors">
+            ) : survey.status === "paused" ? (
+              <button 
+                onClick={() => handleStatusUpdate("active")}
+                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500 text-white rounded-xl text-sm font-medium hover:bg-emerald-600 transition-colors"
+                title="Resume Survey"
+              >
                 <Play className="w-4 h-4" />
                 Resume
               </button>
-            )}
+            ) : null}
+
+            <button 
+              onClick={handleDelete}
+              className="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+              title="Delete Survey"
+            >
+              <div className="w-5 h-5 flex items-center justify-center">
+                <span className="text-xl">×</span>
+              </div>
+            </button>
 
             <a href={survey.shareableUrl || '#'} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors">
               <ExternalLink className="w-4 h-4" />
@@ -250,6 +309,32 @@ export default function SurveyDetailPage() {
         </div>
         <p className="text-gray-500 mt-3 ml-14 text-sm">{survey.additionalContext || survey.objective?.description || 'No description'}</p>
       </div>
+
+      {/* Sample Review Banner */}
+      {survey.status === "sample_review" && (
+         <div className="mb-6 p-6 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl text-white shadow-lg overflow-hidden relative group">
+            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-500">
+                <Mic className="w-32 h-32" />
+            </div>
+            <div className="relative z-10">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="px-2 py-0.5 bg-white/20 backdrop-blur-sm rounded text-[10px] font-bold uppercase tracking-wider">Required Step</span>
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <h2 className="text-2xl font-bold mb-2">Ready for Sample Conversations</h2>
+              <p className="text-blue-100 mb-6 max-w-xl">
+                Your survey logic has been generated! Conduct a sample voice conversation with the AI to verify the experience before going live.
+              </p>
+              <Link 
+                href={`/dashboard/surveys/${surveyId}/sample-review`}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-white text-blue-700 rounded-xl font-bold hover:bg-blue-50 transition-all shadow-md hover:shadow-xl hover:-translate-y-0.5"
+              >
+                <Play className="w-4 h-4 fill-current" />
+                Start Sample Conversation
+              </Link>
+            </div>
+         </div>
+      )}
 
       {/* Tabs */}
       <div className="border-b border-gray-200">

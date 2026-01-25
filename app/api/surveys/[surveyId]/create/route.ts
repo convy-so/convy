@@ -110,6 +110,7 @@ async function performIncrementalExtraction(
         domainIdentified: z.boolean(),
         media: z.boolean(),
       }),
+      isVoice: z.boolean().nullable(),
     });
 
     const { output: parsed } = await generateText({

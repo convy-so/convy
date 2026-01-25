@@ -292,6 +292,7 @@ Extract the following (use null if not discussed or unclear):
   "personalInfo": ["email", "name", "phone number"],
   "title": "Concise descriptive title for the survey",
   "domainId": 1,
+  "isVoice": true/false,
   "collectedInfo": {
     "objective": true/false,
     "targetAudience": true/false,
@@ -470,6 +471,7 @@ export const surveyDataExtractionSchema = {
     personalInfo: { type: ["array", "null"], items: { type: "string" } },
     title: { type: "string" },
     domainId: { type: "number" },
+    isVoice: { type: "boolean" },
     collectedInfo: {
       type: "object",
       properties: {
