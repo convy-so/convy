@@ -1,5 +1,3 @@
-import { WebSocket } from "ws";
-import { nanoid } from "nanoid";
 import { db } from "@/db";
 import {
   surveys,
@@ -8,61 +6,32 @@ import {
   voiceChunks,
 } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
-import { AudioBufferManager, AUDIO_CONFIG } from "@/lib/voice/audio-processing";
+import { nanoid } from "nanoid";
+import { AUDIO_CONFIG } from "@/lib/voice/audio-processing";
 import {
-  getGoogleSTTService,
-  GoogleSTTStreamingSession,
-  type TranscriptionResult,
-  type VoiceActivityEvent,
   STT_COST_PER_MINUTE,
 } from "@/lib/voice/google-stt";
-import { getTTSService } from "@/lib/voice/google-tts";
 import { CostTracker } from "@/lib/voice/cost-tracking";
 import {
-  getSurveyConversationSystemPrompt,
   type SurveyConfig,
 } from "@/lib/prompts";
-import { generateAIResponse, analysisModel, defaultModel } from "@/lib/ai";
-import { generateText, tool, stepCountIs } from "ai";
-import { z } from "zod";
+import { generateText, stepCountIs } from "ai";
+import { defaultModel } from "@/lib/ai";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import {
-  checkMessageAllowed,
-  checkAudioChunkAllowed,
   checkTTSAllowed,
 } from "../middleware/rate-limit";
 import {
   type RollingContext,
-  createRollingContext,
-  buildCompressedContext,
-  calculateQualitySignals,
-  detectParticipantStyle,
-  calculateProgress,
-  determineConversationState,
-  getMemoryUpdatePrompt,
-  applyMemoryUpdate,
   getContextKey,
   getStartTimeKey,
 } from "@/lib/conversation-memory";
+import { enqueueConversationInsights } from "@/lib/queue";
 import { UsageService } from "@/lib/billing/usage";
 import { getRedisClient } from "@/lib/redis";
-import { enqueueConversationInsights } from "@/lib/queue";
-
-// Configuration constants
-const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes idle timeout
-const IDLE_WARNING_MS = 30 * 1000; // Warn 30 seconds before timeout
-const SPEECH_PROCESSING_DELAY_MS = 800; // Wait 800ms after speech ends for final results
-
-/**
- * WebSocket Handler for Voice-Enabled Survey Responses
- * Handles real-time voice conversation for survey takers
- */
-
-interface VoiceMessage {
-  type: string;
-  language?: "en" | "fr" | "de";
-  [key: string]: unknown;
-}
+import { WebSocket } from "ws";
+import { BaseVoiceHandler } from "./base-voice-handler";
+import { ConversationManager } from "@/lib/conversation-manager";
 
 interface ResponseState {
   surveyId: string;
@@ -73,115 +42,77 @@ interface ResponseState {
     content: string;
     timestamp: string;
   }>;
-  isProcessing: boolean;
   survey: typeof surveys.$inferSelect | null;
   language: "en" | "fr" | "de";
-  // NEW: Conversation context for tracking progress
   context: RollingContext | null;
   surveyConfig: SurveyConfig | null;
 }
 
-export class SurveyResponseVoiceHandler {
-  private ws: WebSocket;
-  private surveyId: string;
-  private identifier: string; // For rate limiting
-  private audioBuffer: AudioBufferManager;
+export class SurveyResponseVoiceHandler extends BaseVoiceHandler {
   private state: ResponseState;
-  private sttService: ReturnType<typeof getGoogleSTTService>;
-  private sttSession: GoogleSTTStreamingSession | null = null;
-  private tts: ReturnType<typeof getTTSService>;
-  private isActive: boolean = true;
+  
+  // Specific to response handler
   private participantId: string;
-  private pendingTranscription: string = "";
-  private speechProcessingTimeout: NodeJS.Timeout | null = null;
-
-  // VAD state tracking - tracks if Google STT detects speech
-  private isSpeechActive: boolean = false;
-
-  // Idle timeout management
-  private idleTimeout: NodeJS.Timeout | null = null;
-  private idleWarningTimeout: NodeJS.Timeout | null = null;
-  private lastActivityTime: number = Date.now();
-  private cleanupStarted: boolean = false; // Issue 16: prevent double cleanup
-
-  // Session metrics
   private sessionStartTime: number = Date.now();
-  private totalAudioDurationMs: number = 0;
   private totalSttCost: number = 0;
   private totalTtsCost: number = 0;
+  private totalAudioDurationMs: number = 0;
+  private cleanupStarted: boolean = false;
   
   // Billing & State context
-  private ownerId: string | null = null; // The survey owner (who pays)
+  private ownerId: string | null = null;
   private organizationId: string | null = null;
-  private memoryMutex: Promise<void> = Promise.resolve();
 
   constructor(ws: WebSocket, surveyId: string, identifier: string) {
-    this.ws = ws;
-    this.surveyId = surveyId;
-    this.identifier = identifier; // For rate limiting
-    this.participantId = nanoid(); // Generate anonymous participant ID
-    this.audioBuffer = new AudioBufferManager();
-    this.sttService = getGoogleSTTService();
-    this.tts = getTTSService();
+    // Pass to base
+    super(ws, identifier);
+    
+    this.participantId = nanoid();
+    this.enableAudioBuffering = true;
 
     this.state = {
       surveyId,
       conversationId: null,
       voiceSessionId: nanoid(),
       messages: [],
-      isProcessing: false,
       survey: null,
       language: "en",
       context: null,
       surveyConfig: null,
     };
-
-    this.setupMessageHandlers();
-    this.setupConnectionHandlers();
   }
 
-  /**
-   * Initialize the handler
-   */
   async initialize(): Promise<void> {
     try {
       // Load survey
       const [survey] = await db
         .select()
         .from(surveys)
-        .where(eq(surveys.shareableLink, this.surveyId));
+        .where(eq(surveys.shareableLink, this.state.surveyId));
 
       if (!survey) {
-        this.send({
-          type: "error",
-          error: "Survey not found",
-        });
+        this.sendError("Survey not found");
         this.ws.close();
         return;
       }
 
       if (survey.status !== "active") {
-        this.send({
-          type: "error",
-          error: "Survey is not active",
-        });
+        this.sendError("Survey is not active");
         this.ws.close();
         return;
       }
 
-      // ✅ FIX: Check plan-based concurrent participant limit
+      // Check plan-based concurrent participant limit
       try {
         const { assertCanAddVoiceParticipant } = await import("../../lib/billing/entitlements");
         const { getWorkspaceOwnerId } = await import("../../lib/workspace-access");
         
-        // Get workspace owner for entitlement check
         let targetUserId = survey.userId;
         if (survey.organizationId) {
           const ownerId = await getWorkspaceOwnerId(survey.organizationId);
           if (ownerId) targetUserId = ownerId;
         }
         
-        // Store for usage tracking
         this.ownerId = targetUserId;
         this.organizationId = survey.organizationId ?? null;
 
@@ -190,65 +121,42 @@ export class SurveyResponseVoiceHandler {
           survey.currentParticipants
         );
 
-        // Issue 8 Fix: Assert user can use voice and check session duration limits
         const { assertVoiceDurationAllowed } = await import("../../lib/billing/entitlements");
         await assertVoiceDurationAllowed(
           { userId: targetUserId, organizationId: survey.organizationId ?? null },
-          1 // Start with 1 minute check to ensure they can at least start
+          1 // Start with 1 minute check
         );
       } catch (error) {
         if (error instanceof Error && error.name === "PlanLimitError") {
-          this.send({
-            type: "error",
-            error: error.message,
-          });
+          this.sendError(error.message);
           this.ws.close();
           return;
         }
-        // Log but continue with survey's own limit check
         console.error("[Survey Response Voice] Entitlement check error:", error);
       }
 
-      // Also check survey's own participant limit
       if (survey.currentParticipants >= survey.participantLimit) {
-        this.send({
-          type: "error",
-          error: "Survey has reached participant limit",
-        });
+        this.sendError("Survey has reached participant limit");
         this.ws.close();
         return;
       }
 
       this.state.survey = survey;
       this.state.language = survey.language;
-
       this.state.surveyConfig = buildCompleteSurveyConfig(survey);
       
-      // Issue 3 Fix: Persistent memory tracking (Load from Redis or create new)
-      const redis = getRedisClient();
-      const contextKey = getContextKey(this.identifier); // Use identifier (session/ip) or conversation if known
-      const startTimeKey = getStartTimeKey(this.identifier);
-      
-      const existingContext = await redis.get(contextKey);
-      const startTimeStr = await redis.get(startTimeKey);
-      const startTime = startTimeStr ? new Date(startTimeStr as string) : new Date();
-      this.sessionStartTime = startTime.getTime();
+      // Load or create context using Manager
+      this.state.context = await ConversationManager.loadOrCreateContext(
+        this.identifier,
+        [], // No messages yet
+        this.state.surveyConfig
+      );
 
-      if (existingContext) {
-        try {
-          this.state.context = typeof existingContext === "string" 
-            ? JSON.parse(existingContext) 
-            : existingContext as RollingContext;
-        } catch {
-          this.state.context = createRollingContext(this.state.surveyConfig, startTime);
-        }
-      } else {
-        this.state.context = createRollingContext(
-          this.state.surveyConfig,
-          startTime
-        );
-        await redis.set(startTimeKey, startTime.toISOString(), "EX", 7200);
-      }
+      // Restore start time from redis or use current
+      const redis = getRedisClient();
+      const startTimeKey = getStartTimeKey(this.identifier);
+      const startTimeStr = await redis.get(startTimeKey);
+      this.sessionStartTime = startTimeStr ? new Date(startTimeStr).getTime() : Date.now();
 
       // Create voice session in database
       await db.insert(voiceSessions).values({
@@ -270,7 +178,6 @@ export class SurveyResponseVoiceHandler {
 
       this.state.conversationId = conversationId;
 
-      // ✅ FIX: Use atomic SQL increment to prevent race condition
       await db
         .update(surveys)
         .set({
@@ -278,8 +185,7 @@ export class SurveyResponseVoiceHandler {
         })
         .where(eq(surveys.id, survey.id));
         
-      // Track usage (Response Count)
-      // We charge the owner of the survey
+      // Track usage
       if (this.ownerId) {
           await UsageService.incrementUsage(
               this.ownerId,
@@ -288,10 +194,10 @@ export class SurveyResponseVoiceHandler {
           );
       }
 
-      // Initialize Google STT streaming session with built-in VAD
+      // Initialize Google STT streaming session (via base class)
       this.initializeSTTSession();
-
-      // Start idle timeout monitoring
+      
+      // Start idle timeout (via base class)
       this.resetIdleTimeout();
 
       // Send ready message
@@ -306,178 +212,34 @@ export class SurveyResponseVoiceHandler {
       await this.sendWelcomeMessage();
     } catch (error) {
       console.error("[Survey Response Voice] Initialization error:", error);
-      this.send({
-        type: "error",
-        error: "Failed to initialize voice session",
-      });
+      this.sendError("Failed to initialize voice session");
       this.ws.close();
     }
   }
 
-  /**
-   * Reset idle timeout - call on any activity
-   */
-  private resetIdleTimeout(): void {
-    this.lastActivityTime = Date.now();
-
-    // Clear existing timeouts
-    if (this.idleTimeout) {
-      clearTimeout(this.idleTimeout);
-      this.idleTimeout = null;
-    }
-    if (this.idleWarningTimeout) {
-      clearTimeout(this.idleWarningTimeout);
-      this.idleWarningTimeout = null;
-    }
-
-    // Issue 2 Fix: Set warning timeout first (30s before disconnect)
-    this.idleWarningTimeout = setTimeout(() => {
-      this.handleIdleWarning();
-    }, IDLE_TIMEOUT_MS - IDLE_WARNING_MS);
-
-    // Set main timeout
-    this.idleTimeout = setTimeout(() => {
-      this.handleIdleTimeout();
-    }, IDLE_TIMEOUT_MS);
+  protected getLanguage(): "en" | "fr" | "de" {
+    return this.state.language;
   }
 
-  /**
-   * Issue 2 Fix: Send warning 30 seconds before timeout
-   */
-  private handleIdleWarning(): void {
-    console.log(
-      `[Survey Response Voice] Session ${this.state.voiceSessionId} idle warning - 30s until timeout`
-    );
+  protected async handleControlMessage(message: any): Promise<void> {
+    await super.handleControlMessage(message);
 
-    this.send({
-      type: "idle_warning",
-      message:
-        "Are you still there? The session will close in 30 seconds due to inactivity.",
-      secondsRemaining: 30,
-    });
-  }
+    switch (message.type) {
+      case "stop_speaking":
+        this.isProcessing = false;
+        break;
 
-  /**
-   * Handle idle timeout - close session gracefully
-   */
-  private async handleIdleTimeout(): Promise<void> {
-    console.log(
-      `[Survey Response Voice] Session ${this.state.voiceSessionId} idle timeout after ${IDLE_TIMEOUT_MS / 1000}s`
-    );
-
-    this.send({
-      type: "idle_timeout",
-      message:
-        "Session closed due to inactivity. Please reconnect to continue.",
-    });
-
-    // Clean up and close
-    this.isActive = false;
-    await this.cleanup();
-    this.ws.close(1000, "Idle timeout");
-  }
-
-  /**
-   * Initialize Google STT streaming session with VAD events
-   */
-  private initializeSTTSession(): void {
-    // Create new streaming session with VAD configuration
-    this.sttSession = this.sttService.createStreamingSession({
-      language: this.state.language,
-      enableInterimResults: true,
-      enableAutoPunctuation: true,
-      // VAD timeouts - wait 1.5s of silence before considering speech ended
-      speechEndTimeout: 1.5,
-      singleUtterance: false, // Keep stream open for continuous conversation
-    });
-
-    // Handle transcription results
-    this.sttSession.on("transcription", (result: TranscriptionResult) => {
-      this.handleTranscriptionResult(result);
-    });
-
-    // Handle voice activity events (built-in VAD)
-    this.sttSession.on("voiceActivity", (event: VoiceActivityEvent) => {
-      this.handleVoiceActivity(event);
-    });
-
-    // Handle errors
-    this.sttSession.on("error", (error: Error) => {
-      console.error("[Survey Response Voice] STT session error:", error);
-      // Restart session on error
-      this.restartSTTSession();
-    });
-
-    // Handle session end
-    this.sttSession.on("end", () => {
-      console.log("[Survey Response Voice] STT session ended");
-      // Restart session if still active
-      if (this.isActive && !this.state.isProcessing) {
-        this.restartSTTSession();
-      }
-    });
-
-    // Handle max restarts reached
-    this.sttSession.on("maxRestartsReached", (attempts: number) => {
-      console.error(
-        `[Survey Response Voice] STT max restarts reached after ${attempts} attempts`
-      );
-      this.send({
-        type: "warning",
-        message:
-          "Voice recognition is experiencing issues. You can continue with text input.",
-        code: "STT_UNSTABLE",
-      });
-    });
-
-    // Start the session
-    this.sttSession.start();
-    console.log("[Survey Response Voice] Google STT session started with VAD");
-  }
-
-  /**
-   * Restart STT session with retry mechanism
-   */
-  private async restartSTTSession(): Promise<void> {
-    if (!this.isActive) return;
-
-    // Use the session's built-in retry mechanism
-    if (this.sttSession) {
-      const success = await this.sttSession.attemptRestart();
-
-      if (!success) {
-        // Max retries reached - notify client
-        console.error(
-          "[Survey Response Voice] STT session restart failed after max attempts"
-        );
-        this.send({
-          type: "error",
-          error:
-            "Voice recognition service unavailable. Please try again later.",
-          code: "STT_RESTART_FAILED",
-        });
-        return;
-      }
-    } else {
-      // No existing session - create a new one
-      this.initializeSTTSession();
+      case "complete":
+        await this.handleComplete();
+        break;
     }
   }
 
-  /**
-   * Handle transcription results from Google STT
-   */
-  private handleTranscriptionResult(result: TranscriptionResult): void {
-    // Reset idle timeout on transcription activity
-    this.resetIdleTimeout();
-
-    if (result.isFinal) {
-      // Accumulate final transcription
-      this.pendingTranscription +=
-        (this.pendingTranscription ? " " : "") + result.text;
-
-      // Track costs in Redis for rate limiting and analytics
-      if (result.cost > 0) {
+  // Override to handle cost tracking
+  protected handleTranscriptionResult(result: import("@/lib/voice/google-stt").TranscriptionResult): void {
+      super.handleTranscriptionResult(result);
+      
+      if (result.isFinal && result.cost > 0) {
         CostTracker.trackSTT(
           this.participantId,
           result.cost,
@@ -485,193 +247,22 @@ export class SurveyResponseVoiceHandler {
           this.state.voiceSessionId
         ).catch(console.error);
       }
-
-      // Send final transcription to client
-      this.send({
-        type: "transcription",
-        text: result.text,
-        isFinal: true,
-        confidence: result.confidence,
-      });
-    } else {
-      // Send interim results for real-time feedback
-      this.send({
-        type: "transcription_interim",
-        text: result.text,
-        stability: result.stability,
-      });
-    }
   }
 
-  /**
-   * Handle voice activity events from Google STT's built-in VAD
-   */
-  private handleVoiceActivity(event: VoiceActivityEvent): void {
-    // Reset idle timeout on any voice activity
-    this.resetIdleTimeout();
-
-    switch (event.type) {
-      case "SPEECH_START":
-        // Update VAD state - speech is now active
-        this.isSpeechActive = true;
-
-        // Clear any pending processing timeout
-        if (this.speechProcessingTimeout) {
-          clearTimeout(this.speechProcessingTimeout);
-          this.speechProcessingTimeout = null;
-        }
-        this.send({ type: "speech_start" });
-        break;
-
-      case "SPEECH_END":
-      case "END_OF_UTTERANCE":
-        // Update VAD state - speech has ended
-        this.isSpeechActive = false;
-
-        this.send({ type: "speech_end" });
-
-        // Wait a brief moment for final transcription, then process
-        if (this.speechProcessingTimeout) {
-          clearTimeout(this.speechProcessingTimeout);
-        }
-        this.speechProcessingTimeout = setTimeout(() => {
-          this.processAccumulatedTranscription();
-        }, SPEECH_PROCESSING_DELAY_MS);
-        break;
-    }
-  }
-
-  /**
-   * Setup message handlers
-   */
-  private setupMessageHandlers(): void {
-    this.ws.on("message", async (data: Buffer) => {
-      // Check message rate limit
-      const messageCheck = await checkMessageAllowed(this.identifier);
-      if (!messageCheck.allowed) {
-        this.send({
-          type: "rate_limit",
-          error: messageCheck.reason,
-          retryAfter: messageCheck.retryAfter,
-        });
-        return;
-      }
-
-      try {
-        // Try to parse as JSON (control messages)
-        const message = JSON.parse(data.toString()) as VoiceMessage;
-        await this.handleControlMessage(message);
-      } catch {
-        // Not JSON, treat as audio data
-        await this.handleAudioData(data);
-      }
-    });
-  }
-
-  /**
-   * Setup connection handlers
-   */
-  private setupConnectionHandlers(): void {
-    this.ws.on("close", async () => {
-      this.isActive = false;
-      await this.cleanup();
-    });
-
-    this.ws.on("error", (error) => {
-      console.error("[Survey Response Voice] WebSocket error:", error);
-      this.isActive = false;
-    });
-  }
-
-  /**
-   * Handle control messages
-   */
-  private async handleControlMessage(message: VoiceMessage): Promise<void> {
-    switch (message.type) {
-      case "stop_speaking":
-        // User interrupted - stop current audio
-        this.state.isProcessing = false;
-        break;
-
-      case "complete":
-        await this.handleComplete();
-        break;
-
-      default:
-        console.warn(
-          "[Survey Response Voice] Unknown message type:",
-          message.type
-        );
-    }
-  }
-
-  /**
-   * Handle incoming audio data
-   */
-  private async handleAudioData(audioData: Buffer): Promise<void> {
-    if (!this.isActive || this.state.isProcessing) return;
-
-    // Reset idle timeout on audio activity
-    this.resetIdleTimeout();
-
-    // Check audio chunk rate limit
-    const audioCheck = await checkAudioChunkAllowed(this.identifier);
-    if (!audioCheck.allowed) {
-      this.send({
-        type: "rate_limit",
-        error: audioCheck.reason,
-      });
-      return;
-    }
-
-    try {
-      // Stream audio directly to Google STT (VAD is handled by Google)
-      if (this.sttSession) {
-        const success = this.sttSession.write(audioData);
-        if (!success) {
-          // Session might have ended, restart it
-          await this.restartSTTSession();
-          // Try writing again after restart
-          if (this.sttSession) {
-            this.sttSession.write(audioData);
-          }
-        }
-      }
-
-      // Track audio duration using AUDIO_CONFIG constants
-      const bytesPerSample = AUDIO_CONFIG.BIT_DEPTH / 8;
-      const chunkDurationMs =
-        (audioData.length /
-          (AUDIO_CONFIG.SAMPLE_RATE * AUDIO_CONFIG.CHANNELS * bytesPerSample)) *
-        1000;
-      this.totalAudioDurationMs += chunkDurationMs;
-
-      // Buffer for database storage - only buffer when speech is active (from Google STT VAD)
-      this.audioBuffer.addChunk(audioData, this.isSpeechActive);
-    } catch (error) {
-      console.error("[Survey Response Voice] Audio processing error:", error);
-    }
-  }
-
-  /**
-   * Process accumulated transcription after speech ends
-   */
-  private async processAccumulatedTranscription(): Promise<void> {
-    if (this.state.isProcessing) return;
-
+  // Override to handle audio buffering logic specifics
+  protected async processAccumulatedTranscription(): Promise<void> {
     const transcriptionText = this.pendingTranscription.trim();
-    if (!transcriptionText) return;
+    if (!transcriptionText || this.isProcessing) return;
 
-    // Clear pending transcription
+    // Clear pending transcription immediately
     this.pendingTranscription = "";
-
-    this.state.isProcessing = true;
+    this.isProcessing = true;
 
     try {
       // Flush audio buffer for storage
       const audioBuffer = this.audioBuffer.flush();
 
-      // Calculate duration using AUDIO_CONFIG constants
+      // Calculate duration/cost
       const bytesPerSample = AUDIO_CONFIG.BIT_DEPTH / 8;
       const audioDurationMs = audioBuffer
         ? (audioBuffer.length /
@@ -681,7 +272,6 @@ export class SurveyResponseVoiceHandler {
           1000
         : 0;
 
-      // Calculate cost using the constant
       const chunkCost = (audioDurationMs / 60000) * STT_COST_PER_MINUTE;
       this.totalSttCost += chunkCost;
 
@@ -695,32 +285,30 @@ export class SurveyResponseVoiceHandler {
           sizeBytes: audioBuffer.length,
           transcription: transcriptionText,
           cost: chunkCost.toString(),
-          hadSpeech: true, // Only speech chunks are saved
-          processingTimeMs: 0, // Streaming - no separate processing time
+          hadSpeech: true, 
+          processingTimeMs: 0,
         });
       }
 
-      // Add user message
+      await this.processUserMessage(transcriptionText);
+    } catch (error) {
+       console.error("[Survey Response Voice] processing error:", error);
+       this.sendError("Failed to process conversation");
+    } finally {
+       this.isProcessing = false;
+    }
+  }
+
+  async processUserMessage(text: string): Promise<void> {
+     // Add user message
       this.state.messages.push({
         role: "user",
-        content: transcriptionText,
+        content: text,
         timestamp: new Date().toISOString(),
       });
 
       // Generate AI response
       await this.generateResponse();
-    } catch (error) {
-      console.error(
-        "[Survey Response Voice] Transcription processing error:",
-        error
-      );
-      this.send({
-        type: "error",
-        error: "Failed to process transcription",
-      });
-    } finally {
-      this.state.isProcessing = false;
-    }
   }
 
   /**
@@ -732,45 +320,21 @@ export class SurveyResponseVoiceHandler {
         throw new Error("Survey data unavailable");
       }
 
-      // Update context with current messages
+      // Update context with current messages using Manager
+      // This handles compression, quality signals, and progress tracking
       if (this.state.context) {
-        const messagesForContext = this.state.messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        }));
-
-        this.state.context = buildCompressedContext(
-          messagesForContext,
-          this.state.context
+        this.state.context = await ConversationManager.loadOrCreateContext(
+          this.identifier,
+          this.state.messages.map((m) => ({ role: m.role, content: m.content })),
+          this.state.surveyConfig
         );
-        this.state.context.qualitySignals =
-          calculateQualitySignals(messagesForContext);
-        this.state.context.memory.participantStyle =
-          detectParticipantStyle(messagesForContext);
-        this.state.context.progress = calculateProgress(
-          messagesForContext,
-          this.state.surveyConfig,
-          new Date(
-            Date.now() - this.state.context.progress.elapsedMinutes * 60000
-          ),
-          this.state.context.memory.topicsCovered
-        );
-        this.state.context.stateContext = {
-          ...this.state.context.stateContext,
-          previousState: this.state.context.stateContext.currentState,
-          currentState: determineConversationState(
-            this.state.context.progress,
-            messagesForContext.length,
-            this.state.surveyConfig
-          ),
-        };
       }
 
-      // Generate system prompt with context injection
-      const systemPrompt = getSurveyConversationSystemPrompt(
+      // Generate system prompt with context injection using Manager
+      const systemPrompt = ConversationManager.getSystemPrompt(
         this.state.surveyConfig,
-        this.state.language,
-        this.state.context || undefined
+        this.state.context!, // Only null if not initialized, which shouldn't happen here
+        { language: this.state.language }
       );
 
       // Use compressed recent messages for generation
@@ -788,20 +352,10 @@ export class SurveyResponseVoiceHandler {
         )
         .join("\n");
 
-      // Define tools for voice agent
-      const tools = {
-        showMedia: tool({
-          description: "Display a media item (image, audio, or video) to the participant's screen during the voice call",
-          inputSchema: z.object({
-            mediaId: z.string().describe("The unique ID of the media item to display"),
-          }),
-          execute: async ({ mediaId }) => {
-            // Find the media in the survey config
-            const media = this.state.surveyConfig?.media?.find((m) => m.id === mediaId);
-            if (!media) {
-              return { error: "Media not found" };
-            }
-            
+      // Define tools for voice agent using Manager
+      const tools = ConversationManager.getTools(
+        this.state.surveyConfig,
+        (media) => {
             // Side effect: Send WS message to client to display media
             this.send({
               type: "display_media",
@@ -814,18 +368,9 @@ export class SurveyResponseVoiceHandler {
                 durationMs: media.durationMs,
               }
             });
-
-            console.log(`[Survey Response Voice] Displaying media ${mediaId}`);
-
-            // Return success to AI so it knows it happened
-            return {
-              success: true,
-              displayed: true,
-              mediaDescription: media.description
-            };
-          },
-        }),
-      };
+            console.log(`[Survey Response Voice] Displaying media ${media.id}`);
+        }
+      );
 
       const { text: responseText } = await generateText({
         model: defaultModel,
@@ -867,14 +412,9 @@ export class SurveyResponseVoiceHandler {
         });
       }
 
-      // Save context to Redis for persistence (Issue 3 Fix)
+      // Save context to Redis for persistence using Manager
       if (this.state.context && this.state.conversationId) {
-        const redis = getRedisClient();
-        await redis.set(
-            getContextKey(this.identifier), 
-            JSON.stringify(this.state.context), 
-            "EX", 7200
-        );
+        await ConversationManager.saveContext(this.identifier, this.state.context);
       }
 
       // Synthesize speech
@@ -896,43 +436,14 @@ export class SurveyResponseVoiceHandler {
    */
   private async updateMemoryAsync(): Promise<void> {
     if (!this.state.context || !this.state.surveyConfig) return;
-    if (this.state.messages.length < 4 || this.state.messages.length % 2 !== 0)
-      return;
-
-    try {
-      const messagesForMemory = this.state.messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-
-      const memoryPrompt = getMemoryUpdatePrompt(
-        messagesForMemory,
-        this.state.surveyConfig,
-        this.state.context.memory
-      );
-
-      const memoryUpdateText = await generateAIResponse(
-        memoryPrompt,
-        undefined,
-        {
-          model: analysisModel,
-          temperature: 0.3,
-          maxTokens: 1000,
-        }
-      );
-
-      const jsonMatch = memoryUpdateText.match(/\{[\s\S]*\}/);
-      if (jsonMatch && this.state.context) {
-        const update = JSON.parse(jsonMatch[0]);
-        this.state.context.memory = applyMemoryUpdate(
-          this.state.context.memory,
-          update,
-          this.state.surveyConfig
-        );
-      }
-    } catch (error) {
-      console.error("[Survey Response Voice] Memory update error:", error);
-    }
+    
+    // Delegate to Manager
+    await ConversationManager.updateMemoryAsync(
+        this.identifier, 
+        this.state.messages, 
+        this.state.surveyConfig, 
+        this.state.context
+    );
   }
 
   /**
@@ -1112,17 +623,13 @@ export class SurveyResponseVoiceHandler {
   /**
    * Send message to client
    */
-  private send(message: Record<string, unknown>): void {
-    if (this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
-    }
-  }
+
 
   /**
    * Cleanup resources
    * Issue 16 Fix: Added idempotency guard to prevent double cleanup
    */
-  private async cleanup(): Promise<void> {
+  protected async cleanup(): Promise<void> {
     // Issue 16: Prevent double cleanup which can cause memory corruption
     if (this.cleanupStarted) {
       console.log(`[Survey Response Voice] Cleanup already in progress for session ${this.state.voiceSessionId}`);

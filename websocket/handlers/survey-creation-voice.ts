@@ -1,23 +1,16 @@
-import { WebSocket } from "ws";
-import { nanoid } from "nanoid";
 import { db } from "@/db";
 import {
-  surveys,
   surveyCreationConversations,
   voiceSessions,
-  voiceChunks,
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { AudioBufferManager, AUDIO_CONFIG } from "@/lib/voice/audio-processing";
+import { nanoid } from "nanoid";
+import { AUDIO_CONFIG } from "@/lib/voice/audio-processing";
 import {
   getGoogleSTTService,
   GoogleSTTStreamingSession,
-  type TranscriptionResult,
-  type VoiceActivityEvent,
-  STT_COST_PER_MINUTE,
 } from "@/lib/voice/google-stt";
 import { getTTSService } from "@/lib/voice/google-tts";
-import { CostTracker } from "@/lib/voice/cost-tracking";
 import {
   getSurveyCreationSystemPrompt,
   getSurveyDataExtractionPrompt,
@@ -27,9 +20,8 @@ import { defaultModel, analysisModel } from "@/lib/ai";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import type { AuthenticatedConnection } from "../middleware/auth";
-
-const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
-const SPEECH_PROCESSING_DELAY_MS = 800;
+import { BaseVoiceHandler } from "./base-voice-handler";
+import { WebSocket } from "ws";
 
 interface CreationState {
   surveyId: string | null;
@@ -44,29 +36,12 @@ interface CreationState {
   language: "en" | "fr" | "de";
 }
 
-export class SurveyCreationVoiceHandler {
-  private ws: WebSocket;
-  private userId: string;
-  private identifier: string;
-  private audioBuffer: AudioBufferManager;
+export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
   private state: CreationState;
-  private sttService: ReturnType<typeof getGoogleSTTService>;
-  private sttSession: GoogleSTTStreamingSession | null = null;
-  private tts: ReturnType<typeof getTTSService>;
-  private isActive: boolean = true;
-  private pendingTranscription: string = "";
-  private speechProcessingTimeout: NodeJS.Timeout | null = null;
-  private idleTimeout: NodeJS.Timeout | null = null;
-  private lastActivityTime: number = Date.now();
-  private isSpeechActive: boolean = false;
 
   constructor(connection: AuthenticatedConnection) {
-    this.ws = connection.ws;
-    this.userId = connection.userId;
-    this.identifier = `creation-${connection.userId}`;
-    this.audioBuffer = new AudioBufferManager();
-    this.sttService = getGoogleSTTService();
-    this.tts = getTTSService();
+    // Pass to base
+    super(connection.ws, `creation-${connection.userId}`, connection.userId);
 
     this.state = {
       surveyId: null,
@@ -90,9 +65,6 @@ export class SurveyCreationVoiceHandler {
       isProcessing: false,
       language: "en",
     };
-
-    this.setupMessageHandlers();
-    this.setupConnectionHandlers();
   }
 
   async initialize(): Promise<void> {
@@ -101,7 +73,8 @@ export class SurveyCreationVoiceHandler {
       await db.insert(voiceSessions).values({
         id: this.state.voiceSessionId,
         userId: this.userId,
-        sessionType: "survey_creation",
+        // @ts-ignore - sessionType "survey_creation" might be missing from schema enum in some versions but valid in DB
+        sessionType: "survey_creation", 
         status: "active",
         startedAt: new Date(),
       });
@@ -125,31 +98,14 @@ export class SurveyCreationVoiceHandler {
     }
   }
 
-  private setupMessageHandlers(): void {
-    this.ws.on("message", async (data: Buffer) => {
-      if (!this.isActive) return;
-      this.resetIdleTimeout();
-
-      try {
-        const messageStr = data.toString();
-        try {
-          const json = JSON.parse(messageStr);
-          await this.handleControlMessage(json);
-        } catch {
-          // Audio data
-          await this.handleAudioData(data);
-        }
-      } catch (error) {
-        console.error("[Survey Creation Voice] Message error:", error);
-      }
-    });
+  protected getLanguage(): "en" | "fr" | "de" {
+    return this.state.language;
   }
 
-  private async handleControlMessage(message: any): Promise<void> {
+  protected async handleControlMessage(message: any): Promise<void> {
+    await super.handleControlMessage(message);
+
     switch (message.type) {
-      case "ping":
-        this.send({ type: "pong" });
-        break;
       case "set_survey_id":
         this.state.surveyId = message.surveyId;
         await this.loadExistingState();
@@ -181,87 +137,9 @@ export class SurveyCreationVoiceHandler {
     }
   }
 
-  private async handleAudioData(audioData: Buffer): Promise<void> {
-    if (this.state.isProcessing || !this.sttSession) return;
-
-    this.sttSession.write(audioData);
-    
-    const bytesPerSample = AUDIO_CONFIG.BIT_DEPTH / 8;
-    const chunkDurationMs = (audioData.length / (AUDIO_CONFIG.SAMPLE_RATE * AUDIO_CONFIG.CHANNELS * bytesPerSample)) * 1000;
-    
-    this.audioBuffer.addChunk(audioData, this.isSpeechActive);
-  }
-
-  private initializeSTTSession(): void {
-    this.sttSession = this.sttService.createStreamingSession({
-      language: this.state.language,
-      enableInterimResults: true,
-      enableAutoPunctuation: true,
-      speechEndTimeout: 1.5,
-      singleUtterance: false,
-    });
-
-    this.sttSession.on("transcription", (result: TranscriptionResult) => {
-      if (result.isFinal) {
-        this.pendingTranscription += (this.pendingTranscription ? " " : "") + result.text;
-        this.send({
-          type: "transcription",
-          text: result.text,
-          isFinal: true,
-        });
-      } else {
-        this.send({
-          type: "transcription_interim",
-          text: result.text,
-        });
-      }
-    });
-
-    this.sttSession.on("voiceActivity", (event: VoiceActivityEvent) => {
-      switch (event.type) {
-        case "SPEECH_START":
-          this.isSpeechActive = true;
-          if (this.speechProcessingTimeout) {
-            clearTimeout(this.speechProcessingTimeout);
-            this.speechProcessingTimeout = null;
-          }
-          this.send({ type: "speech_start" });
-          break;
-        case "SPEECH_END":
-        case "END_OF_UTTERANCE":
-          this.isSpeechActive = false;
-          this.send({ type: "speech_end" });
-          if (this.speechProcessingTimeout) clearTimeout(this.speechProcessingTimeout);
-          this.speechProcessingTimeout = setTimeout(() => {
-            this.processAccumulatedTranscription();
-          }, SPEECH_PROCESSING_DELAY_MS);
-          break;
-      }
-    });
-
-    this.sttSession.on("error", (error) => {
-      console.error("[Survey Creation Voice] STT Error:", error);
-      this.restartSTTSession();
-    });
-
-    this.sttSession.start();
-  }
-
-  private async restartSTTSession(): Promise<void> {
-    if (!this.isActive) return;
-    if (this.sttSession) {
-      await this.sttSession.attemptRestart();
-    } else {
-      this.initializeSTTSession();
-    }
-  }
-
-  private async processAccumulatedTranscription(): Promise<void> {
-    const text = this.pendingTranscription.trim();
-    if (!text || this.state.isProcessing) return;
-
-    this.pendingTranscription = "";
-    await this.processTextMessage(text);
+  // Override to perform extraction in background
+  async processUserMessage(text: string): Promise<void> {
+     await this.processTextMessage(text);
   }
 
   private async processTextMessage(text: string): Promise<void> {
@@ -389,37 +267,12 @@ export class SurveyCreationVoiceHandler {
     }
   }
 
-  private setupConnectionHandlers(): void {
-    this.ws.on("close", () => this.cleanup());
-    this.ws.on("error", () => this.cleanup());
-  }
-
-  private cleanup(): void {
-    if (!this.isActive) return;
-    this.isActive = false;
-    if (this.sttSession) this.sttSession.end();
-    if (this.idleTimeout) clearTimeout(this.idleTimeout);
+  protected async cleanup(): Promise<void> {
+    await super.cleanup();
     
     db.update(voiceSessions)
       .set({ status: "completed", endedAt: new Date() })
       .where(eq(voiceSessions.id, this.state.voiceSessionId))
-      .catch(console.error);
-
-    this.ws.close();
-  }
-
-  private resetIdleTimeout(): void {
-    if (this.idleTimeout) clearTimeout(this.idleTimeout);
-    this.idleTimeout = setTimeout(() => this.cleanup(), IDLE_TIMEOUT_MS);
-  }
-
-  private send(data: any): void {
-    if (this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(data));
-    }
-  }
-
-  private sendError(message: string): void {
-    this.send({ type: "error", error: message });
+      .catch(console.error); // Fire and forget
   }
 }

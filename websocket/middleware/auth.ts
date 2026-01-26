@@ -71,53 +71,85 @@ async function verifySessionToken(token: string): Promise<{
   role: "user" | "admin" | "org_admin" | "org_member";
 } | null> {
   try {
-    // Query session from database
+    console.log(`[WS Auth] Verifying token: ${token.substring(0, 5)}...${token.substring(token.length - 5)}`);
+    
+    // Query session from database - check both token and id
     const [session] = await db
       .select({
         id: sessions.id,
         userId: sessions.userId,
         expiresAt: sessions.expiresAt,
+        token: sessions.token,
       })
       .from(sessions)
       .where(eq(sessions.token, token))
       .limit(1);
 
     if (!session) {
+      console.log(`[WS Auth] No session found for token.`);
+      // Try fallback to ID just in case the cookie contains the ID
+      const [sessionById] = await db
+        .select({
+          id: sessions.id,
+          userId: sessions.userId,
+          expiresAt: sessions.expiresAt,
+          token: sessions.token,
+        })
+        .from(sessions)
+        .where(eq(sessions.id, token))
+        .limit(1);
+        
+      if (sessionById) {
+        console.log(`[WS Auth] Found session by ID fallback.`);
+        // Continue with sessionById
+        return processSession(sessionById);
+      }
+      
       return null;
     }
 
-    // Check if session is expired
-    if (session.expiresAt && session.expiresAt < new Date()) {
-      return null;
+    return processSession(session);
+
+    async function processSession(session: any) {
+      // Check if session is expired
+      const now = new Date();
+      if (session.expiresAt && session.expiresAt < now) {
+        console.log(`[WS Auth] Session expired. Expires at: ${session.expiresAt}, Now: ${now}`);
+        return null;
+      }
+
+      // Get user details
+      const [user] = await db
+        .select({
+          email: users.email,
+          emailVerified: users.emailVerified,
+          role: users.role,
+        })
+        .from(users)
+        .where(eq(users.id, session.userId))
+        .limit(1);
+
+      if (!user) {
+        console.log(`[WS Auth] User not found for session: ${session.userId}`);
+        return null;
+      }
+
+      console.log(`[WS Auth] Session verified for user: ${user.email}`);
+
+      return {
+        userId: session.userId,
+        sessionId: session.id,
+        userEmail: user.email,
+        emailVerified: user.emailVerified,
+        role: user.role as any,
+      };
     }
-
-    // Get user details
-    const [user] = await db
-      .select({
-        email: users.email,
-        emailVerified: users.emailVerified,
-        role: users.role,
-      })
-      .from(users)
-      .where(eq(users.id, session.userId))
-      .limit(1);
-
-    if (!user) {
-      return null;
-    }
-
-    return {
-      userId: session.userId,
-      sessionId: session.id, // Fixed Issue 6: using session ID instead of token
-      userEmail: user.email,
-      emailVerified: user.emailVerified,
-      role: user.role as any,
-    };
   } catch (error) {
     console.error("[WS Auth] Session verification error:", error);
     return null;
   }
 }
+
 
 /**
  * Authenticate WebSocket connection
@@ -190,15 +222,15 @@ export async function verifyPublicAccess(
  * Send authentication error to WebSocket client
  */
 export function sendAuthError(ws: WebSocket, error: AuthError): void {
-  ws.send(
-    JSON.stringify({
-      type: "error",
-      error: {
-        code: error.code,
-        message: error.message,
-      },
-    })
-  );
+  const payload = {
+    type: "error",
+    error: {
+      code: error.code,
+      message: error.message,
+    },
+  };
+  console.log("[WS Auth] Sending auth error:", JSON.stringify(payload));
+  ws.send(JSON.stringify(payload));
   ws.close(1008, error.message);
 }
 

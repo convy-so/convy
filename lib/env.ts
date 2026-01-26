@@ -1,8 +1,7 @@
-import { loadEnvConfig } from "@next/env";
-
 // Load .env file for non-Next.js contexts (workers, websocket server)
 // This must happen before any env variables are read
-loadEnvConfig(process.cwd());
+// NOTE: loadEnvConfig(process.cwd()) MUST be called in the entry point of the server process (e.g. server.ts, worker.ts)
+// It cannot be here because this file is shared with Client Components and 'fs' is not available.
 
 const required = (key: string): string => {
   const value = process.env[key];
@@ -85,6 +84,8 @@ export const env = {
   // Better Auth Client URL (for frontend)
   NEXT_PUBLIC_BETTER_AUTH_URL:
     optional("NEXT_PUBLIC_BETTER_AUTH_URL") || betterAuthUrl,
+    
+  NEXT_PUBLIC_WEBSOCKET_URL: optional("NEXT_PUBLIC_WEBSOCKET_URL") || "ws://localhost:3001",
 };
 
 export type Env = typeof env;

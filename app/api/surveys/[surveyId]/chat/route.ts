@@ -1,168 +1,19 @@
 import { nanoid } from "nanoid";
 import { eq } from "drizzle-orm";
-import { streamText, tool, generateText, Output, stepCountIs } from "ai";
-import { z } from "zod";
+import { streamText, stepCountIs } from "ai";
 
 import { db } from "@/db";
 import { surveyConversations, surveys } from "@/db/schema";
-import { defaultModel, analysisModel} from "@/lib/ai";
-import {
-  getSurveyConversationSystemPrompt,
-  type SurveyConfig,
-} from "@/lib/prompts";
+import { defaultModel } from "@/lib/ai";
 import { chatRateLimiter, getClientIP } from "@/lib/ratelimit";
 import {
   logPromptInjectionAttempt,
   sanitizeUserInput,
 } from "@/lib/prompt-injection-detection";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
-import {
-  type RollingContext,
-  createRollingContext,
-  buildCompressedContext,
-  calculateQualitySignals,
-  detectParticipantStyle,
-  calculateProgress,
-  determineConversationState,
-  getMemoryUpdatePrompt,
-  applyMemoryUpdate,
-  getContextKey,
-  getStartTimeKey,
-} from "@/lib/conversation-memory";
-import { getRedisClient } from "@/lib/redis";
+import { ConversationManager } from "@/lib/conversation-manager";
 
 export const maxDuration = 300;
-
-
-
-/**
- * Load or create rolling context for a conversation
- */
-async function loadOrCreateContext(
-  conversationId: string,
-  messages: Array<{ role: "user" | "assistant"; content: string }>,
-  config: SurveyConfig
-): Promise<RollingContext> {
-  const redis = getRedisClient();
-  const contextKey = getContextKey(conversationId);
-  const startTimeKey = getStartTimeKey(conversationId);
-
-  // Try to load existing context
-  const existingContext = await redis.get(contextKey);
-  const startTimeStr = await redis.get(startTimeKey);
-  const startTime = startTimeStr ? new Date(startTimeStr) : new Date();
-
-  let context: RollingContext;
-
-  if (existingContext) {
-    try {
-      context = JSON.parse(existingContext) as RollingContext;
-    } catch {
-      context = createRollingContext(config, startTime);
-    }
-  } else {
-    context = createRollingContext(config, startTime);
-    // Store start time for new conversations
-    await redis.set(startTimeKey, startTime.toISOString(), "EX", 7200); // 2 hour expiry
-  }
-
-  // Update context with current messages
-  context = buildCompressedContext(messages, context);
-
-  // Calculate quality signals
-  context.qualitySignals = calculateQualitySignals(messages);
-
-  // Detect participant style
-  context.memory.participantStyle = detectParticipantStyle(messages);
-
-  // Calculate progress
-  context.progress = calculateProgress(
-    messages,
-    config,
-    startTime,
-    context.memory.topicsCovered
-  );
-
-  // Update conversation state
-  context.stateContext = {
-    ...context.stateContext,
-    previousState: context.stateContext.currentState,
-    currentState: determineConversationState(
-      context.progress,
-      messages.length,
-      config
-    ),
-    stateEnteredAt: messages.length,
-    transitionReason: null,
-  };
-
-  return context;
-}
-
-/**
- * Update conversation memory using AI analysis (async, non-blocking)
- */
-async function updateMemoryAsync(
-  conversationId: string,
-  messages: Array<{ role: "user" | "assistant"; content: string }>,
-  config: SurveyConfig,
-  existingContext: RollingContext
-): Promise<void> {
-  try {
-    // Only update every 2-3 exchanges to save costs
-    if (messages.length < 4 || messages.length % 2 !== 0) return;
-
-    const memoryPrompt = getMemoryUpdatePrompt(
-      messages,
-      config,
-      existingContext.memory
-    );
-
-    const schema = z.object({
-      keyFactsLearned: z.array(z.string()).optional(),
-      topicsCovered: z.array(z.string()).optional(),
-      currentTopic: z.string().nullable().optional(),
-      unansweredQuestions: z.array(z.string()).optional(),
-      emotionalSignals: z.array(z.string()).optional(),
-      conversationSummary: z.string().optional(),
-      specificExamples: z.array(z.string()).optional(),
-      unexploredHypotheses: z.array(z.string()).optional(),
-      timelineEvents: z.array(z.string()).optional(),
-      peerContext: z.array(z.string()).optional(),
-      participantSuggestedSolutions: z.array(z.string()).optional(),
-      hypothesesEvidence: z.record(z.object({
-        supporting: z.array(z.string()),
-        contradicting: z.array(z.string())
-      })).optional()
-    });
-
-    const { output: update } = await generateText({
-      model: analysisModel,
-      output: Output.object({ schema }),
-      system: "You are an expert conversation analyst. Update the memory based on the latest messages.",
-      prompt: memoryPrompt,
-      temperature: 0.3,
-    });
-
-    const updatedMemory = applyMemoryUpdate(
-      existingContext.memory,
-      update,
-      config
-    );
-
-    // Save updated context to Redis
-    const redis = getRedisClient();
-    const contextKey = getContextKey(conversationId);
-    const updatedContext: RollingContext = {
-      ...existingContext,
-      memory: updatedMemory,
-    };
-    await redis.set(contextKey, JSON.stringify(updatedContext), "EX", 7200);
-  } catch (error) {
-    console.error("[Chat Route] Memory update error:", error);
-    // Non-critical - continue without memory update
-  }
-}
 
 export async function POST(
   request: Request,
@@ -259,18 +110,18 @@ export async function POST(
         .where(eq(surveys.id, survey.id));
     }
 
-    // Load or create rolling context for this conversation
-    const context = await loadOrCreateContext(
+    // Load or create rolling context for this conversation using Manager
+    const context = await ConversationManager.loadOrCreateContext(
       convId,
       sanitizedMessages,
       surveyConfig
     );
 
-    // Generate system prompt with context injection
-    const systemPrompt = getSurveyConversationSystemPrompt(
+    // Generate system prompt with context injection using Manager
+    const systemPrompt = ConversationManager.getSystemPrompt(
       surveyConfig,
-      survey.language,
-      context
+      context,
+      { language: survey.language }
     );
 
     // Use the compressed messages for the AI call
@@ -279,34 +130,8 @@ export async function POST(
         ? context.recentMessages
         : sanitizedMessages;
 
-    // Define tools for the AI to call
-    const tools = {
-      showMedia: tool({
-        description: "Display a media item (image, audio, or video) to the participant in the conversation",
-        inputSchema: z.object({
-          mediaId: z.string().describe("The unique ID of the media item to display"),
-        }),
-        execute: async ({ mediaId }) => {
-          // Find the media in the survey config
-          const media = surveyConfig.media?.find((m) => m.id === mediaId);
-          if (!media) {
-            return { error: "Media not found" };
-          }
-          // Return media details for the frontend to render
-          return {
-            success: true,
-            media: {
-              id: media.id,
-              type: media.type,
-              url: media.url,
-              description: media.description,
-              altText: media.altText,
-              durationMs: media.durationMs,
-            },
-          };
-        },
-      }),
-    };
+    // Define tools for the AI to call using Manager
+    const tools = ConversationManager.getTools(surveyConfig);
 
     const result = streamText({
       model: defaultModel,
@@ -318,14 +143,13 @@ export async function POST(
       stopWhen: stepCountIs(5), // Enable multi-step agent behavior with AI SDK v6
     });
 
-    // Trigger async memory update (non-blocking)
-    updateMemoryAsync(convId, sanitizedMessages, surveyConfig, context).catch(
+    // Trigger async memory update (non-blocking) using Manager
+    ConversationManager.updateMemoryAsync(convId, sanitizedMessages, surveyConfig, context).catch(
       console.error
     );
 
-    // Save updated context to Redis
-    const redis = getRedisClient();
-    await redis.set(getContextKey(convId), JSON.stringify(context), "EX", 7200);
+    // Save updated context to Redis using Manager
+    await ConversationManager.saveContext(convId, context);
 
     const response = result.toTextStreamResponse();
     response.headers.set("X-Conversation-Id", convId);

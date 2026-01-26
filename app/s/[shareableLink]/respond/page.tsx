@@ -1,5 +1,7 @@
 "use client";
 
+import { clientEnv } from "@/lib/env.client";
+
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Send, Loader2, AlertCircle, MessageSquare, CheckCircle, Mic, MicOff, Volume2 } from "lucide-react";
@@ -42,7 +44,7 @@ export default function SurveyRespondPage() {
 
     // Voice WebSocket Integration
     const voiceWs = useVoiceWebSocket({
-        url: `ws://localhost:3001/voice/survey-response?surveyId=${shareableLink}`,
+        url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-response?surveyId=${shareableLink}`,
         onMessage: (data) => {
             if (data.type === "audio_sent" || data.type === "text_response") {
                 const assistantMessage: Message = {
@@ -308,144 +310,217 @@ export default function SurveyRespondPage() {
         );
     }
 
+
+    // ... imports ...
+
+    // Premium UI Components
+    const VisualizerRing = ({ isRecording }: { isRecording: boolean }) => (
+        <div className="relative flex items-center justify-center">
+            {isRecording && (
+                <>
+                    <div className="absolute inset-0 rounded-full border-4 border-indigo-500/20 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite]" />
+                    <div className="absolute inset-0 rounded-full border-4 border-indigo-500/10 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]" />
+                </>
+            )}
+            <div className={cn(
+                "relative z-10 w-20 h-20 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl backdrop-blur-sm border border-white/10",
+                isRecording 
+                    ? "bg-gradient-to-br from-indigo-600 to-violet-600 scale-110 shadow-indigo-500/50" 
+                    : "bg-gray-900 shadow-xl hover:scale-105"
+            )}>
+                {isRecording ? <MicOff className="w-8 h-8 text-white" /> : <Mic className="w-8 h-8 text-white" />}
+            </div>
+        </div>
+    );
+
+    if (isInitializing) {
+        return (
+            <div className="min-h-screen bg-white flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="relative">
+                         <div className="w-12 h-12 rounded-full border-4 border-gray-100" />
+                         <div className="absolute inset-0 rounded-full border-4 border-gray-900 border-t-transparent animate-spin" />
+                    </div>
+                    <p className="text-gray-500 font-medium animate-pulse">Initializing experience...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl shadow-xl p-10 max-w-md w-full text-center border border-gray-100">
+                    <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <AlertCircle className="w-10 h-10 text-red-500" />
+                    </div>
+                    <h1 className="text-2xl font-bold text-gray-900 mb-3">{error}</h1>
+                    <p className="text-gray-500 text-lg">Please check the link and try again.</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (isCompleted) {
+        return (
+            <div className="min-h-screen bg-white flex items-center justify-center p-4 relative overflow-hidden">
+                {/* Background Decoration */}
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-gray-50 via-white to-white" />
+                
+                <div className="relative bg-white/80 backdrop-blur-xl rounded-[2rem] shadow-2xl p-12 max-w-lg w-full text-center border border-white/20 ring-1 ring-gray-900/5">
+                    <div className="w-24 h-24 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg shadow-emerald-500/20">
+                        <CheckCircle className="w-12 h-12 text-white" />
+                    </div>
+                    <h1 className="text-4xl font-bold text-gray-900 mb-4 tracking-tight">Thank You!</h1>
+                    <p className="text-xl text-gray-500 mb-10 leading-relaxed font-light">
+                        Your insights are incredibly valuable. We appreciate you taking the time to share your thoughts with us.
+                    </p>
+                    <button
+                        onClick={() => window.close()}
+                        className="px-8 py-4 bg-gray-900 text-white rounded-2xl font-semibold hover:bg-gray-800 transition-all hover:shadow-xl hover:-translate-y-1 active:scale-95 w-full"
+                    >
+                        Close Survey
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex flex-col">
-            {/* Header */}
-            <div className="bg-white border-b border-gray-100 px-4 py-3">
-                <div className="max-w-3xl mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center">
-                            <MessageSquare className="w-5 h-5 text-white" />
+        <div className="min-h-screen bg-[#FDFDFD] flex flex-col font-sans selection:bg-gray-900 selection:text-white">
+            {/* Minimal Header */}
+            <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100 px-6 py-4 transition-all">
+                <div className="max-w-4xl mx-auto flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center border border-gray-200">
+                             <span className="text-lg">💬</span>
                         </div>
                         <div>
-                            <h1 className="font-semibold text-gray-900">{survey?.title}</h1>
-                            <p className="text-xs text-gray-500">Conversational Survey</p>
+                            <h1 className="font-bold text-gray-900 tracking-tight">{survey?.title}</h1>
+                            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Conversational Survey</p>
                         </div>
                     </div>
                     
                     <button 
                         onClick={toggleVoiceMode}
                         className={cn(
-                            "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all",
+                            "flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300",
                             isVoiceMode 
-                                ? "bg-red-50 text-red-600 border border-red-100" 
-                                : "bg-gray-50 text-gray-600 border border-gray-100 hover:bg-gray-100"
+                                ? "bg-gray-900 text-white shadow-lg scale-105" 
+                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                         )}
                     >
-                        {isVoiceMode ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                        {isVoiceMode ? "Exit Voice Mode" : "Switch to Voice"}
+                        {isVoiceMode ? (
+                            <>
+                                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                                Voice Mode
+                            </>
+                        ) : (
+                            <>
+                                <Mic className="w-4 h-4" />
+                                Try Voice
+                            </>
+                        )}
                     </button>
                 </div>
-            </div>
+            </header>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-4 py-6">
-                <div className="max-w-3xl mx-auto space-y-4">
+            {/* Chat Area */}
+            <main className="flex-1 overflow-y-auto scroll-smooth">
+                <div className="max-w-3xl mx-auto px-4 py-8 space-y-8 pb-32">
                     {messages.map((message) => (
                         <div
                             key={message.id}
                             className={cn(
-                                "flex",
+                                "flex w-full animate-in fade-in slide-in-from-bottom-2 duration-500",
                                 message.role === "user" ? "justify-end" : "justify-start"
                             )}
                         >
                             <div
                                 className={cn(
-                                    "max-w-[80%] rounded-2xl px-4 py-3",
+                                    "max-w-[85%] rounded-[2rem] px-8 py-5 text-[1.05rem] leading-relaxed shadow-sm transition-all hover:shadow-md",
                                     message.role === "user"
-                                        ? "bg-gray-900 text-white"
-                                        : "bg-white border border-gray-100 shadow-sm text-gray-900"
+                                        ? "bg-gray-900 text-white rounded-br-none"
+                                        : "bg-white border border-gray-100 text-gray-800 rounded-bl-none shadow-sm"
                                 )}
                             >
-                                <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                                <p className="whitespace-pre-wrap">
                                     {message.displayedContent ?? message.content}
                                     {message.isTyping && (
-                                        <span className="inline-block w-1.5 h-4 bg-gray-400 ml-0.5 animate-pulse" />
+                                        <span className="inline-block w-1.5 h-5 bg-current ml-1 animate-pulse align-middle opacity-50" />
                                     )}
                                 </p>
                             </div>
                         </div>
                     ))}
+                    <div ref={messagesEndRef} className="h-4" />
+                </div>
+            </main>
 
-                    {isLoading && messages[messages.length - 1]?.role === "user" && (
-                        <div className="flex justify-start">
-                            <div className="bg-white border border-gray-100 shadow-sm rounded-2xl px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" />
-                                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }} />
-                                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
+            {/* Input Area */}
+            <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white/95 to-transparent pb-8 pt-12 px-4 z-20">
+                <div className="max-w-3xl mx-auto">
+                    {isVoiceMode ? (
+                        <div className="flex flex-col items-center gap-6 animate-in slide-in-from-bottom-4 duration-500">
+                           <button
+                                onClick={() => {
+                                    if (voiceWs.isRecording) voiceWs.stopRecording();
+                                    else voiceWs.startRecording();
+                                }}
+                                className="group focus:outline-none"
+                            >
+                                <VisualizerRing isRecording={voiceWs.isRecording} />
+                            </button>
+                            
+                            <div className="text-center space-y-1">
+                                <p className="text-gray-900 font-semibold text-lg tracking-tight">
+                                    {voiceWs.isRecording ? "Listening..." : "Tap to speak"}
+                                </p>
+                                {/* Live Transcription Preview */}
+                                <div className="h-6 flex items-center justify-center">
+                                     {(voiceWs.transcription || voiceWs.interimTranscription) ? (
+                                        <p className="text-sm text-gray-500 max-w-md truncate px-4">
+                                            {voiceWs.transcription}
+                                            <span className="text-gray-400 italic">{voiceWs.interimTranscription}</span>
+                                        </p>
+                                     ) : (
+                                        <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">
+                                            {voiceWs.status === "connected" ? "AI Ready" : "Connecting..."}
+                                        </p>
+                                     )}
                                 </div>
                             </div>
                         </div>
-                    )}
-
-                    <div ref={messagesEndRef} />
-                </div>
-            </div>
-
-            {/* Input */}
-            <div className="bg-white border-t border-gray-100 px-4 py-4">
-                {isVoiceMode ? (
-                    <div className="max-w-3xl mx-auto flex flex-col items-center py-4 space-y-4">
-                        <button
-                            onClick={() => {
-                                if (voiceWs.isRecording) voiceWs.stopRecording();
-                                else voiceWs.startRecording();
-                            }}
-                            className={cn(
-                                "w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg",
-                                voiceWs.isRecording ? "bg-red-600 text-white scale-110" : "bg-gray-900 text-white hover:scale-105"
-                            )}
-                        >
-                            {voiceWs.isRecording ? <MicOff className="w-8 h-8" /> : <Mic className="w-8 h-8" />}
-                        </button>
-                        <div className="text-center">
-                             <p className="text-sm font-bold text-gray-900">
-                                {voiceWs.isRecording ? "Listening to you..." : "Ready to listen"}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                                {voiceWs.isRecording ? "Speak naturally" : "Click the mic to speak"}
-                            </p>
-                        </div>
-                        {(voiceWs.transcription || voiceWs.interimTranscription) && (
-                            <div className="w-full bg-gray-50 p-3 rounded-xl border border-gray-100 text-sm">
-                                <p>
-                                    {voiceWs.transcription}
-                                    <span className="text-gray-400">{voiceWs.interimTranscription}</span>
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                ) : (
-                    <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
-                        <div className="flex items-end gap-3">
-                            <div className="flex-1 relative">
+                    ) : (
+                        <form onSubmit={handleSubmit} className="relative group">
+                            <div className="absolute inset-0 bg-gray-200 rounded-[2rem] blur opacity-20 group-hover:opacity-30 transition-opacity" />
+                            <div className="relative flex items-end gap-2 bg-white rounded-[2rem] border border-gray-200 p-2 shadow-2xl shadow-gray-200/50">
                                 <textarea
                                     ref={inputRef}
                                     value={input}
                                     onChange={(e) => setInput(e.target.value)}
                                     onKeyDown={handleKeyDown}
-                                    placeholder="Type your response..."
+                                    placeholder="Type your answer..."
                                     rows={1}
                                     disabled={isLoading}
-                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 disabled:opacity-50 text-sm"
-                                    style={{ minHeight: "48px", maxHeight: "120px" }}
+                                    className="w-full pl-6 pr-4 py-4 bg-transparent border-none resize-none focus:ring-0 text-gray-900 placeholder:text-gray-400 text-lg max-h-32 min-h-[3.5rem]"
+                                    style={{ height: '3.5rem' }} 
                                 />
+                                <button
+                                    type="submit"
+                                    disabled={!input.trim() || isLoading}
+                                    className="mb-1 mr-1 p-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95 flex-shrink-0"
+                                >
+                                    {isLoading ? (
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                    ) : (
+                                        <Send className="w-5 h-5" />
+                                    )}
+                                </button>
                             </div>
-                            <button
-                                type="submit"
-                                disabled={!input.trim() || isLoading}
-                                className="p-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {isLoading ? (
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                ) : (
-                                    <Send className="w-5 h-5" />
-                                )}
-                            </button>
-                        </div>
-                    </form>
-                )}
+                        </form>
+                    )}
+                </div>
             </div>
         </div>
     );

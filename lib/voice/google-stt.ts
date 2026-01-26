@@ -360,7 +360,7 @@ export class GoogleSTTService extends EventEmitter {
   /**
    * Handle API errors
    */
-  private handleError(error: unknown): TranscriptionError {
+  public handleError(error: unknown): TranscriptionError {
     const err = error as { code?: number | string; message?: string };
 
     // Quota exceeded
@@ -395,6 +395,18 @@ export class GoogleSTTService extends EventEmitter {
       return {
         error: "Authentication failed",
         code: "UNAUTHENTICATED",
+        retryable: false,
+      };
+    }
+
+    // Permission denied (API disabled or missing credentials)
+    if (err?.code === 7 || err?.code === "PERMISSION_DENIED") {
+      const isServiceDisabled = err?.message?.includes("disabled") || err?.message?.includes("not been used");
+      return {
+        error: isServiceDisabled 
+          ? "Google Speech-to-Text API is disabled. Please enable it in Google Cloud Console." 
+          : "Permission denied for Speech-to-Text API.",
+        code: isServiceDisabled ? "SERVICE_DISABLED" : "PERMISSION_DENIED",
         retryable: false,
       };
     }
@@ -548,12 +560,14 @@ export class GoogleSTTStreamingSession extends EventEmitter {
       );
 
       this.recognizeStream.on("error", (error: Error) => {
+        if (!this.isActive) return;
         console.error("[Google STT Stream] Error:", error);
         this.emit("error", error);
         this.cleanup();
       });
 
       this.recognizeStream.on("end", () => {
+        if (!this.isActive) return;
         this.cleanup();
         this.emit("end");
       });
@@ -562,9 +576,10 @@ export class GoogleSTTStreamingSession extends EventEmitter {
       console.log("[Google STT Stream] Session started successfully");
     } catch (error) {
       console.error("[Google STT Stream] Failed to start:", error);
-      this.emit("error", error);
       this.isActive = false;
+      this.emit("error", error);
     }
+
   }
 
   /**
@@ -838,9 +853,15 @@ export class GoogleSTTStreamingSession extends EventEmitter {
    * Cleanup resources
    */
   private cleanup(): void {
+    if (!this.isActive) return;
     this.isActive = false;
-    this.recognizeStream = null;
+    
+    if (this.recognizeStream) {
+      this.recognizeStream.removeAllListeners();
+      this.recognizeStream = null;
+    }
   }
+
 
   /**
    * Destroy the session

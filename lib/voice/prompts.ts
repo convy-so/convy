@@ -16,7 +16,7 @@ export function getSurveyCreationPrompt(
   collectedInfo?: CollectedInfo
 ): string {
   // Default collected info if not provided
-  const collected: CollectedInfo = collectedInfo || {
+  const collected = collectedInfo || {
     objective: false,
     targetAudience: false,
     scope: false,
