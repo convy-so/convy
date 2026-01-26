@@ -1,0 +1,19 @@
+.next/dev/types/validator.ts(432,31): error TS2344: Type 'typeof import("C:/Users/pc/convy/app/api/surveys/[surveyId]/sample/feedback/route")' does not satisfy the constraint 'RouteHandlerConfig<"/api/surveys/[surveyId]/sample/feedback">'.
+  Types of property 'POST' are incompatible.
+    Type '(req: NextRequest, { params }: { params: { surveyId: string; }; }) => Promise<NextResponse<unknown>>' is not assignable to type '(request: NextRequest, context: { params: Promise<{ surveyId: string; }>; }) => void | Response | Promise<void | Response>'.
+      Types of parameters '__1' and 'context' are incompatible.
+        Type '{ params: Promise<{ surveyId: string; }>; }' is not assignable to type '{ params: { surveyId: string; }; }'.
+          Types of property 'params' are incompatible.
+            Property 'surveyId' is missing in type 'Promise<{ surveyId: string; }>' but required in type '{ surveyId: string; }'.
+.next/types/validator.ts(432,31): error TS2344: Type 'typeof import("C:/Users/pc/convy/app/api/surveys/[surveyId]/sample/feedback/route")' does not satisfy the constraint 'RouteHandlerConfig<"/api/surveys/[surveyId]/sample/feedback">'.
+  Types of property 'POST' are incompatible.
+    Type '(req: NextRequest, { params }: { params: { surveyId: string; }; }) => Promise<NextResponse<unknown>>' is not assignable to type '(request: NextRequest, context: { params: Promise<{ surveyId: string; }>; }) => void | Response | Promise<void | Response>'.
+      Types of parameters '__1' and 'context' are incompatible.
+        Type '{ params: Promise<{ surveyId: string; }>; }' is not assignable to type '{ params: { surveyId: string; }; }'.
+          Types of property 'params' are incompatible.
+            Property 'surveyId' is missing in type 'Promise<{ surveyId: string; }>' but required in type '{ surveyId: string; }'.
+app/api/webhooks/coinbase/route.ts(71,44): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'BinaryLike | KeyObject'.
+  Type 'undefined' is not assignable to type 'BinaryLike | KeyObject'.
+app/api/webhooks/lemonsqueezy/route.ts(143,13): error TS1117: An object literal cannot have multiple properties with the same name.
+app/settings/zapier/page.tsx(211,15): error TS2339: Property 'zapier-mcp' does not exist on type 'JSX.IntrinsicElements'.
+lib/billing/coinbase.ts(25,22): error TS18048: 'env.COINBASE_CDP_API_KEY_PRIVATE_KEY' is possibly 'undefined'.

@@ -1,5 +1,7 @@
 "use client";
 
+import { clientEnv } from "@/lib/env.client";
+
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -43,6 +45,8 @@ export default function SampleReviewPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isConfirming, setIsConfirming] = useState(false);
     const [feedback, setFeedback] = useState("");
+    const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+    const [isRetrying, setIsRetrying] = useState(false);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -56,7 +60,7 @@ export default function SampleReviewPage() {
 
     // WebSocket Hook for Sample Conversation
     const voiceWs = useVoiceWebSocket({
-        url: `ws://localhost:3000/voice/sample-conversation?surveyId=${surveyId}`,
+        url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/sample-conversation?surveyId=${surveyId}&conversationNumber=${survey?.sampleConversationCount ? survey.sampleConversationCount + 1 : 1}`,
         onReady: () => {
             console.log("Sample conversation WebSocket ready");
         },
@@ -99,6 +103,39 @@ export default function SampleReviewPage() {
 
         if (surveyId) fetchSurvey();
     }, [surveyId]);
+
+    const handleRetry = async () => {
+        setIsRetrying(true);
+        try {
+            // Save feedback and increment count
+            const response = await fetch(`/api/surveys/${surveyId}/sample/feedback`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ feedback }),
+            });
+
+            if (response.ok) {
+                toast.success("Feedback applied! Starting new conversation...");
+                setShowFeedbackModal(false);
+                setFeedback("");
+                setMessages([]);
+                
+                // Refresh survey data to get new conversation count
+                const data = await response.json();
+                setSurvey(data.survey); // This updates the count, which updates the WS URL
+                
+                // Reconnect WS with new number
+                voiceWs.disconnect();
+                setTimeout(() => voiceWs.connect(), 500);
+            } else {
+                toast.error("Failed to apply feedback");
+            }
+        } catch (error) {
+            toast.error("Error applying feedback");
+        } finally {
+            setIsRetrying(false);
+        }
+    };
 
     const handleConfirm = async () => {
         if (!confirm("Are you satisfied with the conversation flow? This will mark the survey as reviewed and ready for publishing.")) return;
@@ -160,6 +197,16 @@ export default function SampleReviewPage() {
                         <RefreshCcw className="w-4 h-4" />
                         Restart
                     </button>
+                    
+                    {/* Feedback / Retry Button */}
+                     <button 
+                        onClick={() => setShowFeedbackModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors shadow-sm"
+                    >
+                        <MessageSquare className="w-4 h-4" />
+                        Give Feedback & Retry
+                    </button>
+
                     <button 
                         onClick={handleConfirm}
                         disabled={isConfirming || messages.length < 2}
@@ -170,6 +217,45 @@ export default function SampleReviewPage() {
                     </button>
                 </div>
             </div>
+
+            {/* Feedback Modal */}
+            {showFeedbackModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-6">
+                        <div className="space-y-2">
+                            <h3 className="text-xl font-bold text-gray-900">Improve the AI's Behavior</h3>
+                            <p className="text-sm text-gray-500">
+                                Tell the AI how to improve (e.g., "Don't ask about price," "Be more formal," "Speak slower"). 
+                                This feedback will be applied to the <strong>next sample</strong> and the <strong>real survey</strong>.
+                            </p>
+                        </div>
+                        
+                        <textarea
+                            value={feedback}
+                            onChange={(e) => setFeedback(e.target.value)}
+                            placeholder="e.g., Please ask about the specific product features earlier..."
+                            className="w-full h-32 p-4 rounded-xl border border-gray-200 focus:ring-2 focus:ring-gray-900 focus:border-transparent resize-none bg-gray-50"
+                        />
+                        
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowFeedbackModal(false)}
+                                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleRetry}
+                                disabled={!feedback.trim() || isRetrying}
+                                className="px-6 py-2 bg-gray-900 text-white rounded-lg font-bold hover:bg-gray-800 disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {isRetrying ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4" />}
+                                Apply & Retry
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="flex flex-1 gap-6 overflow-hidden min-h-0">
                 {/* Chat Panel */}

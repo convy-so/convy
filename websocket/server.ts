@@ -191,7 +191,7 @@ wss.on("connection", async (ws: WebSocket, req) => {
     ws.send(
       JSON.stringify({
         type: "error",
-        error: "Internal server error",
+        error: `Internal server error: ${error instanceof Error ? error.message : String(error)}`,
       })
     );
     ws.close();
@@ -263,7 +263,7 @@ async function handleSurveyCreation(
     ws.send(
       JSON.stringify({
         type: "error",
-        error: "Failed to initialize voice session",
+        error: `Failed to initialize voice session: ${error instanceof Error ? error.message : String(error)}`,
       })
     );
     ws.close();
@@ -331,7 +331,7 @@ async function handleSurveyResponse(
     ws.send(
       JSON.stringify({
         type: "error",
-        error: "Failed to initialize voice session",
+        error: `Failed to initialize voice session: ${error instanceof Error ? error.message : String(error)}`,
       })
     );
     ws.close();
@@ -417,7 +417,7 @@ async function handleSampleConversation(
     ws.send(
       JSON.stringify({
         type: "error",
-        error: "Failed to initialize sample voice session",
+        error: `Failed to initialize sample voice session: ${error instanceof Error ? error.message : String(error)}`,
       })
     );
     ws.close();
@@ -510,7 +510,7 @@ async function handleAnalytics(
     ws.send(
       JSON.stringify({
         type: "error",
-        error: "Failed to initialize analytics connection",
+        error: `Failed to initialize analytics connection: ${error instanceof Error ? error.message : String(error)}`,
       })
     );
     ws.close();

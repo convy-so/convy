@@ -27,7 +27,7 @@ import toast from "react-hot-toast";
 import { useAuth } from "@/components/providers/auth-provider";
 import { PublishSurveyModal } from "@/components/surveys/publish-survey-modal";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
-import { env } from "@/lib/env";
+import { clientEnv } from "@/lib/env.client";
 
 type CreationStep = "objective" | "audience" | "questions" | "tone" | "review";
 
@@ -67,7 +67,7 @@ export default function CreateSurveyPage() {
 
   // WebSocket Voice Hook
   const voiceWs = useVoiceWebSocket({
-    url: `ws://localhost:3000/voice/survey-creation`, // Proxy through Next.js (port 3000) for auth
+    url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-creation`,
     onReady: () => {
       if (surveyId) {
         voiceWs.sendJson({ type: "set_survey_id", surveyId });

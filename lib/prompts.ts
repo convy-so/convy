@@ -47,6 +47,7 @@ export interface SurveyConfig {
   media?: SurveyMedia[];
   personalInfo?: string[];
   domainId?: number;
+  improvementFeedback?: string;
 }
 
 export interface CollectedInfo {
@@ -514,9 +515,10 @@ export function getSampleConversationSystemPrompt(
   config: SurveyConfig,
   feedback?: string,
   conversationNumber?: number,
-  language?: "en" | "fr" | "de"
+  language?: "en" | "fr" | "de",
+  context?: RollingContext
 ): string {
-  const basePrompt = getSurveyConversationSystemPrompt(config, language);
+  const basePrompt = getSurveyConversationSystemPrompt(config, language, context);
   const iterationNote =
     conversationNumber && conversationNumber > 1
       ? `\n- This is rehearsal conversation #${conversationNumber}. Adjust your tone and pacing based on previous feedback.`
@@ -735,6 +737,10 @@ When exploring hypotheses:
 
   if (config.additionalContext) {
     contextSection += `\n\nADDITIONAL CONTEXT:\n${config.additionalContext}`;
+  }
+
+  if (config.improvementFeedback) {
+    contextSection += `\n\nCRITICAL INSTRUCTIONS FROM SURVEY CREATOR:\n${config.improvementFeedback}\n(You MUST strictly adhere to these instructions regarding your behavior/questions)`;
   }
 
   let mediaInstructions = "";

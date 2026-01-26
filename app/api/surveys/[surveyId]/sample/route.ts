@@ -1,16 +1,13 @@
-import { streamText, tool, stepCountIs } from "ai";
-import { z } from "zod";
+import { streamText, stepCountIs } from "ai";
 import { and, eq, lt } from "drizzle-orm";
 
 import { db } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
 import { defaultModel } from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/session";
-import {
-  getSampleConversationSystemPrompt,
-} from "@/lib/prompts";
 import { MAX_SAMPLE_CONVERSATIONS, buildCompleteSurveyConfig } from "@/lib/surveys";
 import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
+import { ConversationManager } from "@/lib/conversation-manager";
 
 export const maxDuration = 300;
 
@@ -125,41 +122,32 @@ export async function POST(
       .filter((value): value is string => !!value && value.trim().length > 0)
       .join("\n\n");
 
-    const systemPrompt = getSampleConversationSystemPrompt(
+    // Deterministic ID for context persistence during this sample session
+    const conversationId = `sample:${surveyId}:${conversationNumber}:${session.user.id}`;
+
+    // Load or create rolling context using Manager
+    // If it's the first message, force new context to reset previous runs of this sample number
+    const isStart = messages.length <= 1;
+    const context = await ConversationManager.loadOrCreateContext(
+      conversationId,
+      messages,
       surveyConfig,
-      combinedFeedback || undefined,
-      conversationNumber,
-      survey.language
+      isStart // forceNew
     );
 
-    // Define tools for the AI to call (parity with chat route)
-    const tools = {
-      showMedia: tool({
-        description: "Display a media item (image, audio, or video) to the participant in the conversation",
-        inputSchema: z.object({
-          mediaId: z.string().describe("The unique ID of the media item to display"),
-        }),
-        execute: async ({ mediaId }) => {
-          // Find the media in the survey config
-          const media = surveyConfig.media?.find((m) => m.id === mediaId);
-          if (!media) {
-            return { error: "Media not found" };
-          }
-          // Return media details for the frontend to render
-          return {
-            success: true,
-            media: {
-              id: media.id,
-              type: media.type,
-              url: media.url,
-              description: media.description,
-              altText: media.altText,
-              durationMs: media.durationMs,
-            },
-          };
-        },
-      }),
-    };
+    const systemPrompt = ConversationManager.getSystemPrompt(
+      surveyConfig,
+      context,
+      {
+         isSample: true,
+         sampleFeedback: combinedFeedback,
+         conversationNumber,
+         language: survey.language
+      }
+    );
+
+    // Define tools for the AI to call using Manager
+    const tools = ConversationManager.getTools(surveyConfig);
 
     const result = streamText({
       model: defaultModel,
@@ -170,6 +158,16 @@ export async function POST(
       tools,
       stopWhen: stepCountIs(5),
     });
+
+    // Trigger async memory update (non-blocking) using Manager
+    ConversationManager.updateMemoryAsync(conversationId, messages, surveyConfig, context).catch(
+      console.error
+    );
+
+    // Save updated context to Redis using Manager
+    await ConversationManager.saveContext(conversationId, context);
+
+
 
     // Include remaining sample count in response headers
     const remainingSamples = MAX_SAMPLE_CONVERSATIONS - conversationNumber;

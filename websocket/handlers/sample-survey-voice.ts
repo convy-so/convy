@@ -1,5 +1,3 @@
-import { WebSocket } from "ws";
-import { nanoid } from "nanoid";
 import { db } from "@/db";
 import {
   surveys,
@@ -7,30 +5,21 @@ import {
   voiceSessions,
 } from "@/db/schema";
 import { eq, and, lt } from "drizzle-orm";
-import { AudioBufferManager } from "@/lib/voice/audio-processing";
+import { nanoid } from "nanoid";
 import {
-  getGoogleSTTService,
-  GoogleSTTStreamingSession,
-} from "@/lib/voice/google-stt";
-import { getTTSService } from "@/lib/voice/google-tts";
-import {
-  getSampleConversationSystemPrompt,
   type SurveyConfig,
 } from "@/lib/prompts";
-import { defaultModel, } from "@/lib/ai";
-import { generateText, tool, stepCountIs } from "ai";
-import { z } from "zod";
-import { buildCompleteSurveyConfig} from "@/lib/surveys";
+import { defaultModel } from "@/lib/ai";
+import { generateText, stepCountIs } from "ai";
+import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import {
   type RollingContext,
-  createRollingContext,
 } from "@/lib/conversation-memory";
 import type { AuthenticatedConnection } from "../middleware/auth";
+import { BaseVoiceHandler } from "./base-voice-handler";
+import { ConversationManager } from "@/lib/conversation-manager";
 
-const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
-const SPEECH_PROCESSING_DELAY_MS = 800;
-
-interface ResponseState {
+interface SampleState {
   surveyId: string;
   conversationId: string | null;
   conversationNumber: number;
@@ -40,52 +29,30 @@ interface ResponseState {
     content: string;
     timestamp: string;
   }>;
-  isProcessing: boolean;
   survey: typeof surveys.$inferSelect | null;
   language: "en" | "fr" | "de";
   context: RollingContext | null;
   surveyConfig: SurveyConfig | null;
 }
 
-export class SampleSurveyVoiceHandler {
-  private ws: WebSocket;
-  private surveyId: string;
-  private userId: string;
-  private identifier: string;
-  private audioBuffer: AudioBufferManager;
-  private state: ResponseState;
-  private sttService: ReturnType<typeof getGoogleSTTService>;
-  private sttSession: GoogleSTTStreamingSession | null = null;
-  private tts: ReturnType<typeof getTTSService>;
-  private isActive: boolean = true;
-  private speechProcessingTimeout: NodeJS.Timeout | null = null;
-  private idleTimeout: NodeJS.Timeout | null = null;
-  private lastActivityTime: number = Date.now();
+export class SampleSurveyVoiceHandler extends BaseVoiceHandler {
+  private state: SampleState;
 
   constructor(connection: AuthenticatedConnection, surveyId: string, conversationNumber: number = 1) {
-    this.ws = connection.ws;
-    this.surveyId = surveyId;
-    this.userId = connection.userId;
-    this.identifier = `sample-${connection.userId}`;
-    this.audioBuffer = new AudioBufferManager();
-    this.sttService = getGoogleSTTService();
-    this.tts = getTTSService();
-
+    // Pass connection details to base class
+    super(connection.ws, `sample-${connection.userId}`, connection.userId);
+    
     this.state = {
       surveyId,
       conversationId: null,
       conversationNumber,
       voiceSessionId: nanoid(),
       messages: [],
-      isProcessing: false,
       survey: null,
       language: "en",
       context: null,
       surveyConfig: null,
     };
-
-    this.setupMessageHandlers();
-    this.setupConnectionHandlers();
   }
 
   async initialize(): Promise<void> {
@@ -93,19 +60,20 @@ export class SampleSurveyVoiceHandler {
       const [survey] = await db
         .select()
         .from(surveys)
-        .where(eq(surveys.id, this.surveyId));
+        .where(eq(surveys.id, this.state.surveyId));
 
       if (!survey) {
         this.sendError("Survey not found");
+        this.ws.close();
         return;
       }
 
       if (survey.userId !== this.userId) {
         this.sendError("Unauthorized");
+        this.ws.close();
         return;
       }
 
-      // Allow mostly any status for sampling, but check sequential logic
       if (this.state.conversationNumber > survey.sampleConversationCount + 1) {
         this.sendError("Sample conversations must be sequential");
         return;
@@ -115,9 +83,15 @@ export class SampleSurveyVoiceHandler {
       this.state.language = survey.language;
       this.state.surveyConfig = buildCompleteSurveyConfig(survey);
 
-      // Setup conversation memory
-      const startTime = new Date();
-      this.state.context = createRollingContext(this.state.surveyConfig, startTime);
+      // Deterministic ID for context persistence during this sample session (handles reconnects)
+      const contextId = `sample:${this.state.surveyId}:${this.state.conversationNumber}:${this.userId}`;
+
+      // Load or create rolling context using Manager
+      this.state.context = await ConversationManager.loadOrCreateContext(
+        contextId,
+        [], // Start with empty messages (will be filled as we go)
+        this.state.surveyConfig
+      );
 
       // Create voice session in database
       await db.insert(voiceSessions).values({
@@ -129,7 +103,7 @@ export class SampleSurveyVoiceHandler {
         startedAt: new Date(),
       });
 
-      // Create sample conversation record
+      // Create sample conversation record (DB only)
       const conversationId = nanoid();
       await db.insert(sampleConversations).values({
         id: conversationId,
@@ -141,6 +115,7 @@ export class SampleSurveyVoiceHandler {
 
       this.state.conversationId = conversationId;
 
+      // Initialize STT via base class
       this.initializeSTTSession();
       this.resetIdleTimeout();
 
@@ -150,116 +125,87 @@ export class SampleSurveyVoiceHandler {
         conversationId: this.state.conversationId,
         conversationNumber: this.state.conversationNumber,
       });
+
     } catch (error) {
       console.error("[Sample Survey Voice] Initialization error:", error);
       this.sendError("Failed to initialize session");
     }
   }
 
-  private setupMessageHandlers(): void {
-    this.ws.on("message", async (data: Buffer) => {
-      if (!this.isActive) return;
-      this.lastActivityTime = Date.now();
-      this.resetIdleTimeout();
-
-      try {
-        if (data.length > 100 && data.length < 10000) {
-          if (this.sttSession) {
-            this.sttSession.write(data);
-          }
-        } else {
-          try {
-            const message = JSON.parse(data.toString());
-            this.handleJsonMessage(message);
-          } catch {
-            // Probably binary audio
-          }
-        }
-      } catch (error) {
-        console.error("[Sample Survey Voice] Message error:", error);
-      }
-    });
+  protected getLanguage(): "en" | "fr" | "de" {
+    return this.state.language;
   }
 
-  private handleJsonMessage(message: any): void {
-    switch (message.type) {
-      case "ping":
-        this.send({ type: "pong" });
-        break;
-      case "end_session":
-        this.cleanup();
-        break;
+  protected async handleControlMessage(message: any): Promise<void> {
+    // Handle base messages (ping)
+    await super.handleControlMessage(message);
+
+    if (message.type === "end_session") {
+       await this.cleanup();
     }
   }
 
-  private initializeSTTSession(): void {
-    this.sttSession = this.sttService.createStreamingSession({
-      language: this.state.language,
-      enableInterimResults: true,
+  async processUserMessage(text: string): Promise<void> {
+    // Accumulate user message
+    this.state.messages.push({
+      role: "user",
+      content: text,
+      timestamp: new Date().toISOString(),
     });
 
-    this.sttSession.on("transcript", (result) => {
-      if (result.isFinal) {
-        this.handleTranscription(result.transcript);
-      }
-    });
-
-    this.sttSession.on("error", (error) => {
-      console.error("[Sample Survey Voice] STT Error:", error);
-    });
-  }
-
-  private async handleTranscription(text: string): Promise<void> {
-    if (this.state.isProcessing) return;
-    this.state.isProcessing = true;
-
-    try {
-      this.state.messages.push({
-        role: "user",
-        content: text,
-        timestamp: new Date().toISOString(),
-      });
-
-      await this.generateResponse();
-    } finally {
-      this.state.isProcessing = false;
-    }
+    await this.generateResponse();
   }
 
   private async generateResponse(): Promise<void> {
     try {
       if (!this.state.surveyConfig) return;
 
+      // Deterministic ID for context
+      const contextId = `sample:${this.state.surveyId}:${this.state.conversationNumber}:${this.userId}`;
+
+      // Update context using Manager (Handles compression, signals, etc.)
+      // We pass the full history so the Manager can rebuild/compress correctly
+      this.state.context = await ConversationManager.loadOrCreateContext(
+        contextId,
+        this.state.messages.map(m => ({ role: m.role, content: m.content })),
+        this.state.surveyConfig
+      );
+
       // Get previous feedback for rehearsal
       const previousFeedbackRows = await db
         .select({ feedback: sampleConversations.feedback, finalComments: sampleConversations.finalComments })
         .from(sampleConversations)
-        .where(and(eq(sampleConversations.surveyId, this.surveyId), lt(sampleConversations.conversationNumber, this.state.conversationNumber)));
+        .where(
+            and(
+                eq(sampleConversations.surveyId, this.state.surveyId), 
+                lt(sampleConversations.conversationNumber, this.state.conversationNumber)
+            )
+        );
       
       const combinedFeedback = previousFeedbackRows
         .flatMap(r => [r.feedback, r.finalComments])
         .filter(Boolean)
         .join("\n\n");
 
-      const systemPrompt = getSampleConversationSystemPrompt(
+      // Get prompt from Manager
+      const systemPrompt = ConversationManager.getSystemPrompt(
         this.state.surveyConfig,
-        combinedFeedback || undefined,
-        this.state.conversationNumber,
-        this.state.language
+        this.state.context!,
+        {
+            isSample: true,
+            sampleFeedback: combinedFeedback || undefined,
+            conversationNumber: this.state.conversationNumber,
+            language: this.state.language
+        }
       );
 
-      const tools = {
-        showMedia: tool({
-          description: "Display a media item during the sample voice call",
-          inputSchema: z.object({ mediaId: z.string() }),
-          execute: async ({ mediaId }) => {
-            const media = this.state.surveyConfig?.media?.find(m => m.id === mediaId);
-            if (!media) return { error: "Media not found" };
-            this.send({ type: "display_media", media });
-            return { success: true, displayed: true };
+      // Get tools from Manager
+      const tools = ConversationManager.getTools(
+          this.state.surveyConfig, 
+          (media) => {
+             this.send({ type: "display_media", media });
           }
-        })
-      };
+      );
 
       const { text: responseText } = await generateText({
         model: defaultModel,
@@ -281,9 +227,18 @@ export class SampleSurveyVoiceHandler {
           .where(eq(sampleConversations.id, this.state.conversationId));
       }
 
+      // Trigger async memory update (non-blocking) using Manager
+      ConversationManager.updateMemoryAsync(contextId, this.state.messages, this.state.surveyConfig, this.state.context!).catch(
+        console.error
+      );
+
+      // Save updated context to Redis using Manager
+      await ConversationManager.saveContext(contextId, this.state.context!);
+
       await this.synthesizeAndSendAudio(responseText);
     } catch (error) {
       console.error("[Sample Survey Voice] Response error:", error);
+      this.sendError("Failed to generate response");
     }
   }
 
@@ -303,38 +258,16 @@ export class SampleSurveyVoiceHandler {
     }
   }
 
-  private setupConnectionHandlers(): void {
-    this.ws.on("close", () => this.cleanup());
-    this.ws.on("error", () => this.cleanup());
-  }
-
-  private cleanup(): void {
-    if (!this.isActive) return;
-    this.isActive = false;
-    if (this.sttSession) this.sttSession.end();
-    if (this.idleTimeout) clearTimeout(this.idleTimeout);
+  protected async cleanup(): Promise<void> {
+    await super.cleanup();
     
-    db.update(voiceSessions)
-      .set({ status: "completed", endedAt: new Date() })
-      .where(eq(voiceSessions.id, this.state.voiceSessionId))
-      .catch(console.error);
-
-    this.ws.close();
-  }
-
-  private resetIdleTimeout(): void {
-    if (this.idleTimeout) clearTimeout(this.idleTimeout);
-    this.idleTimeout = setTimeout(() => this.cleanup(), IDLE_TIMEOUT_MS);
-  }
-
-  private send(data: any): void {
-    if (this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(data));
+    // Update DB status
+    if (this.state.voiceSessionId) {
+        db.update(voiceSessions)
+        .set({ status: "completed", endedAt: new Date() })
+        .where(eq(voiceSessions.id, this.state.voiceSessionId))
+        .catch(console.error);
     }
   }
-
-  private sendError(message: string): void {
-    this.send({ type: "error", error: message });
-    this.ws.close();
-  }
 }
+

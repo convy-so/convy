@@ -23,11 +23,32 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
     const isPlayingRef = useRef(false);
 
     // Initialize WebSocket
-    const connect = useCallback(() => {
+    const connect = useCallback(async () => {
         if (wsRef.current) return;
 
         setStatus("connecting");
-        const ws = new WebSocket(url);
+
+        let connectionUrl = url;
+
+        // Auto-inject token if we can find one for authenticated endpoints
+        // We do this check to avoid fetching for public endpoints
+        if (url.includes("/voice/survey-creation") || url.includes("/voice/sample-conversation") || url.includes("/analytics")) {
+             try {
+                const res = await fetch("/api/auth/token");
+                if (res.ok) {
+                    const { token } = await res.json();
+                    if (token) {
+                        const urlObj = new URL(url);
+                        urlObj.searchParams.set("token", token);
+                        connectionUrl = urlObj.toString();
+                    }
+                }
+             } catch (e) {
+                 console.warn("Failed to fetch auth token for voice WebSocket", e);
+             }
+        }
+
+        const ws = new WebSocket(connectionUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -84,7 +105,8 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
                 // AI started speaking
                 break;
             case "error":
-                console.error("Server error:", data.error);
+                console.error("Server error (full data):", data);
+                console.error("Server error (error prop):", data.error);
                 break;
         }
         onMessage?.(data);
