@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import { Fasthand } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
+import Providers from "./providers";
 
 const aspekta = localFont({
   src: [
@@ -36,34 +37,36 @@ export default function RootLayout({
       <body
         className={`${aspekta.variable} ${fasthand.variable} font-sans antialiased bg-[#FAFAFA]`}
       >
-        {children}
-        <Toaster
-          position="bottom-right"
-          toastOptions={{
-            style: {
-              background: '#fff',
-              color: '#333',
-              border: '1px solid #E5E7EB',
-              borderRadius: '8px',
-              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-              padding: '12px 16px',
-              fontSize: '14px',
-              maxWidth: '356px',
-            },
-            success: {
-              iconTheme: {
-                primary: '#059669',
-                secondary: 'white',
-              },
-            },
-            error: {
-              iconTheme: {
-                primary: '#DC2626',
-                secondary: 'white',
-              },
-            },
-          }}
-        />
+        <Providers>
+          {children}
+          <Toaster
+             position="bottom-right"
+             toastOptions={{
+               style: {
+                 background: '#fff',
+                 color: '#333',
+                 border: '1px solid #E5E7EB',
+                 borderRadius: '8px',
+                 boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                 padding: '12px 16px',
+                 fontSize: '14px',
+                 maxWidth: '356px',
+               },
+               success: {
+                 iconTheme: {
+                   primary: '#059669',
+                   secondary: 'white',
+                 },
+               },
+               error: {
+                 iconTheme: {
+                   primary: '#DC2626',
+                   secondary: 'white',
+                 },
+               },
+             }}
+           />
+        </Providers>
       </body>
     </html>
   );
