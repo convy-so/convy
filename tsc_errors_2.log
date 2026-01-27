@@ -1,5 +1,0 @@
-app/api/webhooks/coinbase/route.ts(71,44): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'BinaryLike | KeyObject'.
-  Type 'undefined' is not assignable to type 'BinaryLike | KeyObject'.
-app/api/webhooks/lemonsqueezy/route.ts(143,13): error TS1117: An object literal cannot have multiple properties with the same name.
-app/settings/zapier/page.tsx(211,15): error TS2339: Property 'zapier-mcp' does not exist on type 'JSX.IntrinsicElements'.
-lib/billing/coinbase.ts(25,22): error TS18048: 'env.COINBASE_CDP_API_KEY_PRIVATE_KEY' is possibly 'undefined'.

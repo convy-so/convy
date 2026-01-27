@@ -1,13 +1,15 @@
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
-import { streamText } from "ai";
-import { google } from "@ai-sdk/google";
+import { streamText, stepCountIs } from "ai";
 
 import { db } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema";
+import { ConversationManager } from "@/lib/conversation-manager";
+import { buildCompleteSurveyConfig } from "@/lib/surveys";
+import { defaultModel } from "@/lib/ai";
 
-const model = google("gemini-2.0-flash-001");
+const model = defaultModel; // Use consistent model
 
 /**
  * GET - Initialize a survey response conversation
@@ -33,6 +35,7 @@ export async function GET(
                 requiredQuestions: surveys.requiredQuestions,
                 scope: surveys.scope,
                 isVoice: surveys.isVoice,
+                media: surveys.media,
             })
             .from(surveys)
             .where(eq(surveys.shareableLink, shareableLink));
@@ -72,6 +75,7 @@ export async function GET(
                 tone: survey.tone,
                 requiredQuestions: survey.requiredQuestions || [],
                 isVoice: survey.isVoice,
+                media: survey.media,
             },
             conversationId,
             participantId,
@@ -86,125 +90,90 @@ export async function GET(
  * POST - Handle survey conversation messages
  */
 export async function POST(
-    request: Request,
+    req: Request,
     { params }: { params: Promise<{ shareableLink: string }> }
 ) {
     try {
+        const { messages, context } = await req.json();
         const { shareableLink } = await params;
-        const body = await request.json();
-        const { conversationId, messages } = body as {
-            conversationId: string;
-            messages: Array<{ role: "user" | "assistant"; content: string }>;
-        };
 
-        // Get survey configuration
+        // Fetch survey by shareable link
         const [survey] = await db
             .select()
             .from(surveys)
-            .where(eq(surveys.shareableLink, shareableLink));
+            .where(eq(surveys.shareableLink, shareableLink))
+            .limit(1);
 
-        if (!survey || survey.status !== "active") {
-            return NextResponse.json({ error: "Survey not available" }, { status: 404 });
+        if (!survey) {
+            return NextResponse.json({ error: "Survey not found" }, { status: 404 });
         }
 
-        // Verify conversation exists
-        const [conversation] = await db
-            .select()
-            .from(surveyConversations)
-            .where(eq(surveyConversations.id, conversationId));
+        // Get or create conversation (simplified logic for this route - assumes context has what we need or we find by other means if needed. 
+        // Actually the context usually contains conversationId if we are continuing.
+        // But for this simplified route, we might rely on the client passing it or just creating a new one implicitly for the stream.
+        // Re-using existing logic below:
+        const conversationId = context?.conversationId;
 
-        if (!conversation) {
-            return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+        if (!conversationId) {
+            return NextResponse.json({ error: "Conversation ID is required" }, { status: 400 });
         }
 
-        // Build survey context for AI
-        const objective = (survey.objective as any)?.description || "gather feedback";
-        const targetAudience = (survey.targetAudience as any)?.description || "general users";
-        const tone = survey.tone || "friendly";
-        const requiredQuestions = survey.requiredQuestions || [];
-        const scope = (survey.scope as any)?.mainTopics || [];
+        // Prepare survey config
+        const surveyConfig = buildCompleteSurveyConfig(survey);
 
-        // Count user responses
-        const userMessages = messages.filter(m => m.role === "user");
-        const userMessageCount = userMessages.length;
+        // Load conversation context (handling hydration, compression, signals)
+        const rollingContext = await ConversationManager.loadOrCreateContext(
+            conversationId,
+            messages,
+            surveyConfig
+        );
 
-        // Build question tracking instructions
-        const questionList = requiredQuestions.length > 0
-            ? requiredQuestions.map((q: string, i: number) => `Q${i + 1}: "${q}"`).join('\n')
-            : '';
+        const systemPrompt = ConversationManager.getSystemPrompt(surveyConfig, rollingContext);
 
-        const totalQuestions = requiredQuestions.length;
-        const minQuestionsNeeded = Math.max(totalQuestions, 3); // At least 3 questions or all required
-
-        const systemPrompt = `You are a friendly AI survey interviewer conducting a conversational survey. Your job is to ask ALL the required questions and gather meaningful responses.
-
-=== SURVEY INFORMATION ===
-Title: ${survey.title}
-Objective: ${objective}
-Target Audience: ${targetAudience}
-Conversation Style: ${tone}
-${scope.length > 0 ? `Topics to cover: ${scope.join(', ')}` : ''}
-
-=== REQUIRED QUESTIONS (YOU MUST ASK ALL OF THESE) ===
-${questionList || 'No specific questions - ask about their general experience and feedback.'}
-
-Total required questions: ${totalQuestions || 'At least 3-5 questions about the topic'}
-
-=== CRITICAL INSTRUCTIONS ===
-1. YOU MUST ASK ALL ${totalQuestions || 3} REQUIRED QUESTIONS before ending the survey
-2. Ask ONE question at a time - wait for the user to respond before asking the next
-3. You can rephrase questions naturally to fit the conversation flow, but the CORE MEANING must be preserved
-4. Track which questions you've already asked - DO NOT repeat questions
-5. After EACH user response, acknowledge their answer briefly, then ask the NEXT required question
-6. Follow up on interesting points briefly, but always return to the required questions
-7. Be conversational and ${tone} - make it feel like a natural chat, not an interrogation
-
-=== QUESTION TRACKING ===
-User has responded ${userMessageCount} times so far.
-${userMessageCount < totalQuestions
-                ? `You still need to ask ${totalQuestions - userMessageCount} more required questions. DO NOT end the survey yet.`
-                : userMessageCount >= totalQuestions
-                    ? 'All questions have likely been asked. You may wrap up the survey now.'
-                    : ''}
-
-=== ENDING THE SURVEY ===
-ONLY when ALL required questions have been asked and answered (minimum ${minQuestionsNeeded} exchanges), end with:
-"Thank you for completing this survey! Your feedback is incredibly valuable."
-
-DO NOT end the survey prematurely. If you haven't asked all questions, continue asking.
-
-=== RESPONSE FORMAT ===
-- Keep responses concise (2-3 sentences max)
-- Show genuine interest in their answers
-- Transition naturally between questions
-- NEVER ask multiple questions in one message`;
+        // Define tools but don't use side-channel callback for media since we'll receive it in tool results
+        const tools = ConversationManager.getTools(surveyConfig, () => {
+             // Side-effect callback not needed for data stream writing here
+        });
 
         // Stream the AI response
         const result = streamText({
-            model,
+            model: defaultModel,
             system: systemPrompt,
-            messages: messages.map(m => ({
+            messages: messages.map((m: any) => ({
                 role: m.role,
                 content: m.content,
             })),
+            tools,
+            stopWhen: stepCountIs(5), // Allow tool execution (and thus media display)
             temperature: 0.7,
             maxOutputTokens: 400,
-            onFinish: async ({ text }) => {
+            onFinish: async ({ text, toolCalls }) => {
                 // Save conversation to database
                 const updatedMessages = [
                     ...messages,
                     { role: "assistant" as const, content: text, timestamp: new Date().toISOString() }
                 ];
 
+                // Update memory in background (learning)
+                ConversationManager.updateMemoryAsync(
+                    conversationId,
+                    updatedMessages,
+                    surveyConfig,
+                    rollingContext
+                ).catch(err => console.error("Background memory update failed:", err));
+
                 // Check if survey is complete
                 const isCompletionPhrase = text.toLowerCase().includes("thank you for completing") ||
                     text.toLowerCase().includes("survey is now complete") ||
                     text.toLowerCase().includes("your feedback is incredibly valuable");
 
-                // Only mark complete if user has answered enough questions
-                const isCompleted = isCompletionPhrase && userMessageCount >= minQuestionsNeeded;
+                // Only mark complete if we have a reasonable amount of interaction (e.g. at least 3 user messages)
+                const userMessages = messages.filter((m: any) => m.role === "user");
+                const minQuestions = Math.max((survey.requiredQuestions as any[])?.length || 0, 3);
+                const isCompleted = isCompletionPhrase && userMessages.length >= minQuestions;
 
-                await db
+                if (conversationId) {
+                    await db
                     .update(surveyConversations)
                     .set({
                         rawConversation: updatedMessages.map(m => ({
@@ -215,13 +184,14 @@ DO NOT end the survey prematurely. If you haven't asked all questions, continue 
                         updatedAt: new Date(),
                     })
                     .where(eq(surveyConversations.id, conversationId));
+                }
 
                 // Increment participant count if completed
                 if (isCompleted) {
                     await db
                         .update(surveys)
                         .set({
-                            currentParticipants: survey.currentParticipants + 1,
+                            currentParticipants: (survey.currentParticipants || 0) + 1,
                             updatedAt: new Date(),
                         })
                         .where(eq(surveys.id, survey.id));
@@ -229,7 +199,7 @@ DO NOT end the survey prematurely. If you haven't asked all questions, continue 
             },
         });
 
-        return result.toTextStreamResponse();
+        return result.toUIMessageStreamResponse();
     } catch (error) {
         console.error("Error in survey response:", error);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });

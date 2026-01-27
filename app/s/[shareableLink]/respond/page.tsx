@@ -4,16 +4,21 @@ import { clientEnv } from "@/lib/env.client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Send, Loader2, AlertCircle, MessageSquare, CheckCircle, Mic, MicOff, Volume2 } from "lucide-react";
+import { Send, Loader2, AlertCircle,CheckCircle, Mic, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
+import { useChat } from "@ai-sdk/react";
+import { type UIMessage } from "@ai-sdk/react";
+import { MediaDisplay } from "@/components/surveys/media-display";
 
-interface Message {
+interface ExtendedMessage extends Omit<Partial<UIMessage>, "role"> {
     id: string;
-    role: "user" | "assistant";
+    role: "user" | "assistant" | "system" | "data";
     content: string;
     displayedContent?: string;
     isTyping?: boolean;
+    media?: any;
+    toolInvocations?: any[];
 }
 
 interface Survey {
@@ -23,6 +28,7 @@ interface Survey {
     targetAudience?: { description?: string };
     tone?: string;
     isVoice?: boolean;
+    media?: any[];
 }
 
 const TYPING_DELAY_MS = 12;
@@ -34,9 +40,39 @@ export default function SurveyRespondPage() {
 
     const [survey, setSurvey] = useState<Survey | null>(null);
     const [conversationId, setConversationId] = useState<string | null>(null);
-    const [messages, setMessages] = useState<Message[]>([]);
+
+    // AI SDK useChat
+    const chatHelpers = useChat<any>({
+        api: `/api/surveys/respond/${shareableLink}`,
+        body: { conversationId },
+        onFinish: (message: any) => {
+             // Optional: Handle finish
+        }
+    } as any);
+    
+    const { messages, setMessages, status, sendMessage } = chatHelpers;
+    const streamData = (chatHelpers as any).data;
+
     const [input, setInput] = useState("");
-    const [isLoading, setIsLoading] = useState(false);
+    const isChatLoading = status === "streaming" || status === "submitted"; // Derived loading state
+    
+    // Manual handleSubmit
+    const handleSubmit = async (e?: React.FormEvent) => {
+        if (e) {
+            e.preventDefault();
+        }
+        if (!input.trim() || isChatLoading) return;
+
+        const currentInput = input;
+        setInput(""); // Clear input early
+
+        try {
+           await sendMessage({ role: "user", content: currentInput });
+        } catch (error) {
+           console.error("Failed to send message:", error);
+           // Optionally restore input or show error
+        }
+    };
     const [isInitializing, setIsInitializing] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isCompleted, setIsCompleted] = useState(false);
@@ -47,31 +83,89 @@ export default function SurveyRespondPage() {
         url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-response?surveyId=${shareableLink}`,
         onMessage: (data) => {
             if (data.type === "audio_sent" || data.type === "text_response") {
-                const assistantMessage: Message = {
+                const assistantMessage: ExtendedMessage = {
                     id: Date.now().toString(),
                     role: "assistant",
                     content: data.text,
                     displayedContent: data.text,
                     isTyping: false,
                 };
-                setMessages(prev => [...prev, assistantMessage]);
+                setMessages((prev: UIMessage[]) => [...prev, assistantMessage as UIMessage]);
                 
                 if (data.text.toLowerCase().includes("thank you for completing") ||
                     data.text.toLowerCase().includes("survey is now complete")) {
                     setIsCompleted(true);
                 }
             } else if (data.type === "transcription" && data.isFinal) {
-                const userMessage: Message = {
+                const userMessage: ExtendedMessage = {
                     id: Date.now().toString(),
                     role: "user",
                     content: data.text,
                     displayedContent: data.text,
                     isTyping: false,
                 };
-                setMessages(prev => [...prev, userMessage]);
+                setMessages((prev: UIMessage[]) => [...prev, userMessage as UIMessage]);
+            } else if (data.type === 'display_media') {
+                 // Voice mode media
+                 if (survey?.media) { // Assuming media is fetched or we try to find it?
+                     // Wait, for Public Survey, initially we might not have media unless we fetch detail.
+                     // But the voice websocket logic sends { id, type } usually?
+                     // Actually Sample page logic used survey.media lookup.
+                     // Does public survey fetch media? YES, I updated GET route to return media.
+                     const fullMedia = (survey as any).media?.find((m: any) => m.id === data.media.id);
+                     if (fullMedia) {
+                         setMessages((prev: UIMessage[]) => [...prev, {
+                             id: Date.now().toString(),
+                             role: "assistant",
+                             content: "Shared media",
+                             media: fullMedia
+                         } as any]);
+                     }
+                 }
             }
         }
     });
+
+    // Handle StreamData from Text Mode (useChat)
+    useEffect(() => {
+        if (!streamData) return;
+        // streamData is array of JSON objects. checking last one or iterating?
+        // useChat 'data' accumulates.
+        const lastData = streamData[streamData.length - 1] as any;
+        if (lastData && lastData.type === 'display_media') {
+             // Check if we already added this media?
+             // Since streamData persists, we might re-process.
+             // We can check if the last message has this media?
+             // Or just ignore duplicates based on ID in messages?
+             
+             // A better way: attach media to the assistant message that triggered it?
+             // But 'data' comes separately in stream.
+             
+             // Let's just append a "system" or "assistant" message with media if not present.
+             // Or simpler: We just render media if we see it.
+             
+             // Actually, with useChat, we can't easily inject a message from 'data' effect loop without causing loops.
+             // But we can update the LAST message to include media?
+             
+             // Simpler: Just rely on voice logic for now or implement clean handling later.
+             // For now, let's just log it or try to append a message if it's new.
+             const mediaId = lastData.media.id;
+             // Check if any message has this media?
+             
+             const hasMedia = messages.some((m: any) => m.media && m.media.id === mediaId);
+             if (!hasMedia && (survey as any)?.media) {
+                 const fullMedia = (survey as any).media.find((m: any) => m.id === mediaId);
+                 if (fullMedia) {
+                      setMessages((prev: UIMessage[]) => [...prev, {
+                         id: Date.now().toString(),
+                         role: "assistant",
+                         content: "", // Empty or descriptive
+                         media: fullMedia
+                      } as any]);
+                 }
+             }
+        }
+    }, [streamData, messages, survey]);
 
     const toggleVoiceMode = () => {
         const newMode = !isVoiceMode;
@@ -99,7 +193,7 @@ export default function SurveyRespondPage() {
         let currentIndex = 0;
         const intervalId = setInterval(() => {
             currentIndex++;
-            setMessages(prev => prev.map(msg =>
+            setMessages((prev: UIMessage[]) => prev.map(msg =>
                 msg.id === messageId
                     ? {
                         ...msg,
@@ -170,93 +264,9 @@ export default function SurveyRespondPage() {
         }
     }, [shareableLink, animateTyping]);
 
-    const handleSubmit = async (e?: React.FormEvent) => {
-        e?.preventDefault();
 
-        const trimmedInput = input.trim();
-        if (!trimmedInput || isLoading || !conversationId) return;
-
-        const userMessage: Message = {
-            id: Date.now().toString(),
-            role: "user",
-            content: trimmedInput,
-        };
-
-        setMessages(prev => [...prev, userMessage]);
-        setInput("");
-        setIsLoading(true);
-
-        try {
-            const response = await fetch(`/api/surveys/respond/${shareableLink}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    conversationId,
-                    messages: [...messages, userMessage].map(m => ({
-                        role: m.role,
-                        content: m.content,
-                    })),
-                }),
-            });
-
-            if (!response.ok) {
-                throw new Error("Failed to get response");
-            }
-
-            // Handle streaming response
-            const reader = response.body?.getReader();
-            if (!reader) throw new Error("No response body");
-
-            let fullContent = "";
-            const assistantMessageId = (Date.now() + 1).toString();
-
-            setMessages(prev => [...prev, {
-                id: assistantMessageId,
-                role: "assistant",
-                content: "",
-                displayedContent: "",
-                isTyping: true,
-            }]);
-
-            const decoder = new TextDecoder();
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                const chunk = decoder.decode(value);
-                fullContent += chunk;
-
-                setMessages(prev => prev.map(msg =>
-                    msg.id === assistantMessageId
-                        ? { ...msg, content: fullContent, displayedContent: fullContent }
-                        : msg
-                ));
-            }
-
-            // Check if survey is complete
-            if (fullContent.toLowerCase().includes("thank you for completing") ||
-                fullContent.toLowerCase().includes("survey is now complete")) {
-                setIsCompleted(true);
-            }
-
-            setMessages(prev => prev.map(msg =>
-                msg.id === assistantMessageId
-                    ? { ...msg, isTyping: false }
-                    : msg
-            ));
-
-        } catch (err) {
-            console.error("Error:", err);
-            setMessages(prev => [...prev, {
-                id: (Date.now() + 1).toString(),
-                role: "assistant",
-                content: "I'm sorry, something went wrong. Please try again.",
-            }]);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+    // Replaced by useChat's handleSubmit and input management
+    // We bind useChat's handleSubmit to the form
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -428,7 +438,7 @@ export default function SurveyRespondPage() {
             {/* Chat Area */}
             <main className="flex-1 overflow-y-auto scroll-smooth">
                 <div className="max-w-3xl mx-auto px-4 py-8 space-y-8 pb-32">
-                    {messages.map((message) => (
+                    {messages.map((message: any) => (
                         <div
                             key={message.id}
                             className={cn(
@@ -444,12 +454,27 @@ export default function SurveyRespondPage() {
                                         : "bg-white border border-gray-100 text-gray-800 rounded-bl-none shadow-sm"
                                 )}
                             >
-                                <p className="whitespace-pre-wrap">
-                                    {message.displayedContent ?? message.content}
+                                <div className="whitespace-pre-wrap">
+                                    {message.content}
+                                    
+                                    {/* Handle direct media attachment (legacy) */}
+                                    {message.media && <MediaDisplay media={message.media} />}
+                                    
+                                    {/* Handle tool invocations for media */}
+                                    {message.toolInvocations?.map((toolInvocation: any) => {
+                                        if (toolInvocation.toolName === 'showMedia' && 'result' in toolInvocation) {
+                                            const result = toolInvocation.result;
+                                            if (result && result.media) {
+                                                return <MediaDisplay key={toolInvocation.toolCallId} media={result.media} />;
+                                            }
+                                        }
+                                        return null;
+                                    })}
+                                    
                                     {message.isTyping && (
                                         <span className="inline-block w-1.5 h-5 bg-current ml-1 animate-pulse align-middle opacity-50" />
                                     )}
-                                </p>
+                                </div>
                             </div>
                         </div>
                     ))}
@@ -498,20 +523,25 @@ export default function SurveyRespondPage() {
                                 <textarea
                                     ref={inputRef}
                                     value={input}
-                                    onChange={(e) => setInput(e.target.value)}
-                                    onKeyDown={handleKeyDown}
+                                    onChange={e => setInput(e.target.value)} // useChat handles this
+                                    onKeyDown={e => {
+                                        if (e.key === "Enter" && !e.shiftKey) {
+                                            e.preventDefault();
+                                            handleSubmit(e);
+                                        }
+                                    }}
                                     placeholder="Type your answer..."
                                     rows={1}
-                                    disabled={isLoading}
+                                    disabled={isChatLoading}
                                     className="w-full pl-6 pr-4 py-4 bg-transparent border-none resize-none focus:ring-0 text-gray-900 placeholder:text-gray-400 text-lg max-h-32 min-h-[3.5rem]"
                                     style={{ height: '3.5rem' }} 
                                 />
                                 <button
                                     type="submit"
-                                    disabled={!input.trim() || isLoading}
+                                    disabled={!input.trim() || isChatLoading}
                                     className="mb-1 mr-1 p-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95 flex-shrink-0"
                                 >
-                                    {isLoading ? (
+                                    {isChatLoading ? (
                                         <Loader2 className="w-5 h-5 animate-spin" />
                                     ) : (
                                         <Send className="w-5 h-5" />

@@ -1,0 +1,11 @@
+app/s/[shareableLink]/respond/page.tsx(45,23): error TS2339: Property 'input' does not exist on type 'UseChatHelpers<UIMessage<unknown, UIDataTypes, UITools>>'.
+app/s/[shareableLink]/respond/page.tsx(45,30): error TS2339: Property 'setInput' does not exist on type 'UseChatHelpers<UIMessage<unknown, UIDataTypes, UITools>>'.
+app/s/[shareableLink]/respond/page.tsx(45,40): error TS2339: Property 'append' does not exist on type 'UseChatHelpers<UIMessage<unknown, UIDataTypes, UITools>>'.
+app/s/[shareableLink]/respond/page.tsx(45,48): error TS2339: Property 'handleSubmit' does not exist on type 'UseChatHelpers<UIMessage<unknown, UIDataTypes, UITools>>'.
+app/s/[shareableLink]/respond/page.tsx(45,75): error TS2339: Property 'isLoading' does not exist on type 'UseChatHelpers<UIMessage<unknown, UIDataTypes, UITools>>'.
+app/s/[shareableLink]/respond/page.tsx(45,101): error TS2339: Property 'data' does not exist on type 'UseChatHelpers<UIMessage<unknown, UIDataTypes, UITools>>'.
+app/s/[shareableLink]/respond/page.tsx(46,9): error TS2353: Object literal may only specify known properties, and 'api' does not exist in type 'UseChatOptions<UIMessage<unknown, UIDataTypes, UITools>>'.
+app/s/[shareableLink]/respond/page.tsx(228,21): error TS2353: Object literal may only specify known properties, and 'content' does not exist in type 'UIMessage<unknown, UIDataTypes, UITools>'.
+app/s/[shareableLink]/respond/page.tsx(437,46): error TS2339: Property 'content' does not exist on type 'UIMessage<unknown, UIDataTypes, UITools>'.
+app/s/[shareableLink]/respond/page.tsx(443,46): error TS2339: Property 'toolInvocations' does not exist on type 'UIMessage<unknown, UIDataTypes, UITools>'.
+app/s/[shareableLink]/respond/page.tsx(443,68): error TS7006: Parameter 'toolInvocation' implicitly has an 'any' type.

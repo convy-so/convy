@@ -154,6 +154,9 @@ export interface ConversationProgress {
 // ============================================================================
 
 export interface RollingContext {
+  // Associated survey ID (Security)
+  surveyId: string;
+
   // Summarized older messages
   historySummary: string;
 
@@ -454,10 +457,12 @@ export function createEmptyMemory(config: SurveyConfig): ConversationMemory {
  * Initialize rolling context
  */
 export function createRollingContext(
+  surveyId: string,
   config: SurveyConfig,
   startTime: Date
 ): RollingContext {
   return {
+    surveyId,
     historySummary: "",
     recentMessages: [],
     persistentFacts: [],
