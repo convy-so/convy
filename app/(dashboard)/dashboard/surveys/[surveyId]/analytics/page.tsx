@@ -1,4 +1,4 @@
-import { AnalyticsDashboard } from "@/app/(dashboard)/dashboard/analytics/components/AnalyticsDashboard";
+import { AnalyticsDashboard } from "@/components/analytics/AnalyticsDashboard";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 // Using props type for Next.js page params
