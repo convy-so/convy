@@ -1,16 +1,14 @@
 import { getVerifiedSession } from "@/lib/auth/session";
 import { db } from "@/db";
-import { surveys, surveyConversations, surveyAnalytics } from "@/db/schema";
+import { surveys, surveyConversations} from "@/db/schema";
 import { eq, desc, count } from "drizzle-orm";
 import Link from "next/link";
 import {
   BarChart3,
   TrendingUp,
-  ExternalLink,
   Calendar,
   ArrowRight,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 export const metadata = {
   title: "Analytics | Convy",

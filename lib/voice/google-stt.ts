@@ -144,16 +144,22 @@ export class GoogleSTTService extends EventEmitter {
     // Add voice activity timeout configuration if specified
     if (config.speechStartTimeout || config.speechEndTimeout) {
       streamingConfig.voiceActivityTimeout = {};
+      
       if (config.speechStartTimeout) {
+        const seconds = Math.floor(config.speechStartTimeout);
+        const nanos = Math.floor((config.speechStartTimeout - seconds) * 1e9);
         streamingConfig.voiceActivityTimeout.speechStartTimeout = {
-          seconds: config.speechStartTimeout,
-          nanos: 0,
+          seconds,
+          nanos,
         };
       }
+      
       if (config.speechEndTimeout) {
+        const seconds = Math.floor(config.speechEndTimeout);
+        const nanos = Math.floor((config.speechEndTimeout - seconds) * 1e9);
         streamingConfig.voiceActivityTimeout.speechEndTimeout = {
-          seconds: config.speechEndTimeout,
-          nanos: 0,
+          seconds,
+          nanos,
         };
       }
     }
@@ -545,6 +551,7 @@ export class GoogleSTTStreamingSession extends EventEmitter {
       this.recognizeStream = this.client.streamingRecognize();
 
       // Send initial config
+      console.log("[Google STT Stream] Sending streaming configuration");
       this.recognizeStream.write({
         streamingConfig: this.config,
       });
@@ -589,6 +596,12 @@ export class GoogleSTTStreamingSession extends EventEmitter {
    */
   write(audioBuffer: Buffer): boolean {
     if (!this.isActive || !this.recognizeStream) {
+      return false;
+    }
+
+    // STRICT VALIDATION: Prevent empty/malformed buffers that cause MALORDERED_DATA errors
+    if (!Buffer.isBuffer(audioBuffer) || audioBuffer.length === 0) {
+      console.warn("[Google STT Stream] Skipping non-buffer or empty audio chunk");
       return false;
     }
 
