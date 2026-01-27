@@ -1,4 +1,8 @@
 import type {
+  SurveyConfig,
+  ToneProfile,
+} from "./prompts";
+import type {
   surveys,
   SurveyObjective,
   SurveyTargetAudience,
@@ -16,24 +20,7 @@ export const MAX_SAMPLE_CONVERSATIONS = 3;
  */
 export function buildCompleteSurveyConfig(
   survey: typeof surveys.$inferSelect
-): {
-  information: string;
-  requiredQuestions: string[];
-  metrics: string[];
-  language: "en" | "fr" | "de";
-  objective?: SurveyObjective;
-  targetAudience?: SurveyTargetAudience;
-  scope?: SurveyScope;
-  successCriteria?: SurveySuccessCriteria;
-  constraints?: SurveyConstraints;
-  hypotheses?: SurveyHypotheses;
-  tone?: ToneProfile;
-  additionalContext?: string;
-  media?: SurveyMedia[];
-  personalInfo?: string[];
-  domainId?: number;
-  improvementFeedback?: string;
-} {
+): SurveyConfig {
   const informationParts: string[] = [];
   if (survey.objective?.context)
     informationParts.push(survey.objective.context);
@@ -47,6 +34,7 @@ export function buildCompleteSurveyConfig(
       : "Collect participant feedback";
 
   return {
+    id: survey.id,
     information,
     requiredQuestions: survey.requiredQuestions || [],
     metrics: survey.metrics || [],
@@ -140,6 +128,16 @@ export const REQUIRED_INFORMATION = {
     qualityChecks: [
       "Questions are clearly stated",
       "Questions align with the survey objective",
+    ],
+  },
+
+  media: {
+    required: false,
+    priority: 9,
+    description: "Media (images/videos/audio) to show during conversation",
+    qualityChecks: [
+      "Media purpose is clear",
+      "Context for when to show is defined",
     ],
   },
 } as const;

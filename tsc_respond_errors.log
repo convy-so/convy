@@ -1,0 +1,14 @@
+app/s/[shareableLink]/respond/page.tsx(41,23): error TS2339: Property 'input' does not exist on type 'UseChatHelpers<UIMessage<unknown, UIDataTypes, UITools>>'.
+app/s/[shareableLink]/respond/page.tsx(41,30): error TS2339: Property 'setInput' does not exist on type 'UseChatHelpers<UIMessage<unknown, UIDataTypes, UITools>>'.
+app/s/[shareableLink]/respond/page.tsx(41,40): error TS2339: Property 'append' does not exist on type 'UseChatHelpers<UIMessage<unknown, UIDataTypes, UITools>>'.
+app/s/[shareableLink]/respond/page.tsx(41,48): error TS2339: Property 'handleSubmit' does not exist on type 'UseChatHelpers<UIMessage<unknown, UIDataTypes, UITools>>'.
+app/s/[shareableLink]/respond/page.tsx(41,75): error TS2339: Property 'isLoading' does not exist on type 'UseChatHelpers<UIMessage<unknown, UIDataTypes, UITools>>'.
+app/s/[shareableLink]/respond/page.tsx(41,101): error TS2339: Property 'data' does not exist on type 'UseChatHelpers<UIMessage<unknown, UIDataTypes, UITools>>'.
+app/s/[shareableLink]/respond/page.tsx(42,9): error TS2353: Object literal may only specify known properties, and 'api' does not exist in type 'UseChatOptions<UIMessage<unknown, UIDataTypes, UITools>>'.
+app/s/[shareableLink]/respond/page.tsx(68,29): error TS2345: Argument of type '(prev: UIMessage<unknown, UIDataTypes, UITools>[]) => (Message | UIMessage<unknown, UIDataTypes, UITools>)[]' is not assignable to parameter of type 'UIMessage<unknown, UIDataTypes, UITools>[] | ((messages: UIMessage<unknown, UIDataTypes, UITools>[]) => UIMessage<unknown, UIDataTypes, UITools>[])'.
+app/s/[shareableLink]/respond/page.tsx(82,29): error TS2345: Argument of type '(prev: UIMessage<unknown, UIDataTypes, UITools>[]) => (Message | UIMessage<unknown, UIDataTypes, UITools>)[]' is not assignable to parameter of type 'UIMessage<unknown, UIDataTypes, UITools>[] | ((messages: UIMessage<unknown, UIDataTypes, UITools>[]) => UIMessage<unknown, UIDataTypes, UITools>[])'.
+app/s/[shareableLink]/respond/page.tsx(85,30): error TS2339: Property 'media' does not exist on type 'Survey'.
+app/s/[shareableLink]/respond/page.tsx(224,21): error TS2353: Object literal may only specify known properties, and 'content' does not exist in type 'UIMessage<unknown, UIDataTypes, UITools>'.
+app/s/[shareableLink]/respond/page.tsx(433,46): error TS2339: Property 'content' does not exist on type 'UIMessage<unknown, UIDataTypes, UITools>'.
+app/s/[shareableLink]/respond/page.tsx(439,46): error TS2339: Property 'toolInvocations' does not exist on type 'UIMessage<unknown, UIDataTypes, UITools>'.
+app/s/[shareableLink]/respond/page.tsx(439,68): error TS7006: Parameter 'toolInvocation' implicitly has an 'any' type.

@@ -1,0 +1,7 @@
+app/s/[shareableLink]/respond/page.tsx(48,20): error TS7006: Parameter 'message' implicitly has an 'any' type.
+app/s/[shareableLink]/respond/page.tsx(72,29): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+app/s/[shareableLink]/respond/page.tsx(86,29): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+app/s/[shareableLink]/respond/page.tsx(96,38): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+app/s/[shareableLink]/respond/page.tsx(138,35): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+app/s/[shareableLink]/respond/page.tsx(175,25): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+app/s/[shareableLink]/respond/page.tsx(175,42): error TS7006: Parameter 'msg' implicitly has an 'any' type.

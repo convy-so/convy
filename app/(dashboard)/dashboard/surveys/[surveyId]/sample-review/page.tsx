@@ -23,12 +23,14 @@ import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
+import { MediaDisplay } from "@/components/surveys/media-display";
 
 type Message = {
     id: string;
     role: "user" | "assistant";
     content: string;
     timestamp: string;
+    media?: any;
 };
 
 export default function SampleReviewPage() {
@@ -76,6 +78,19 @@ export default function SampleReviewPage() {
                     content: data.text,
                     timestamp: new Date().toISOString()
                  }]);
+            } else if (data.type === 'display_media') {
+                 if (survey?.media) {
+                     const fullMedia = survey.media.find((m: any) => m.id === data.media.id);
+                     if (fullMedia) {
+                         setMessages(prev => [...prev, {
+                             id: Date.now().toString(),
+                             role: "assistant",
+                             content: "Shared media",
+                             timestamp: new Date().toISOString(),
+                             media: fullMedia
+                         }]);
+                     }
+                 }
             }
         }
     });
@@ -282,6 +297,7 @@ export default function SampleReviewPage() {
                                     msg.role === "assistant" ? "bg-gray-50 text-gray-800" : "bg-gray-900 text-white"
                                 )}>
                                     {msg.content}
+                                    {msg.media && <MediaDisplay media={msg.media} />}
                                 </div>
                             </div>
                         ))}

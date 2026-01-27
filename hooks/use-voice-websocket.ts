@@ -21,6 +21,12 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
     const audioContextRef = useRef<AudioContext | null>(null);
     const audioQueueRef = useRef<Blob[]>([]);
     const isPlayingRef = useRef(false);
+    
+    // Keep latest callback in ref to avoid stale closures in ws.onmessage
+    const onMessageRef = useRef(onMessage);
+    useEffect(() => {
+        onMessageRef.current = onMessage;
+    }, [onMessage]);
 
     // Initialize WebSocket
     const connect = useCallback(async () => {
@@ -109,7 +115,7 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
                 console.error("Server error (error prop):", data.error);
                 break;
         }
-        onMessage?.(data);
+        onMessageRef.current?.(data);
     };
 
     const handleIncomingAudio = async (blob: Blob) => {

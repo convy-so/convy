@@ -63,7 +63,17 @@ export class ConversationManager {
     
         if (existingContext) {
             try {
-                context = JSON.parse(existingContext) as RollingContext;
+                const parsedContext = JSON.parse(existingContext) as RollingContext;
+                
+                // Security check: ensure the conversation belongs to this survey
+                if (parsedContext.surveyId !== config.id) {
+                    console.warn(`[ConversationManager] Security alert: Conversation ${conversationId} attempted to access survey ${config.id} but belongs to ${parsedContext.surveyId}`);
+                    // Re-initialize for this survey or throw error. 
+                    // To be safe, we'll treat it as a new conversation for the correct survey.
+                    context = null;
+                } else {
+                    context = parsedContext;
+                }
             } catch {
                 // Formatting error, ignore and recreate
             }
@@ -72,7 +82,7 @@ export class ConversationManager {
 
     // Initialize if needed
     if (!context) {
-      context = createRollingContext(config, startTime);
+      context = createRollingContext(config.id, config, startTime);
       // Store start time for new conversations
       await redis.set(startTimeKey, startTime.toISOString(), "EX", 7200); // 2 hour expiry
     }
@@ -248,6 +258,7 @@ export class ConversationManager {
                           id: media.id,
                           type: media.type,
                           description: media.description,
+                          url: media.url,
                       }
                   };
               },

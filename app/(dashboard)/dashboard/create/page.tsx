@@ -10,14 +10,15 @@ import {
   Mic,
   MicOff,
   Loader2,
-  MessageSquare,
   User,
   Share2,
+  Paperclip,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useAuth } from "@/components/providers/auth-provider";
 import { PublishSurveyModal } from "@/components/surveys/publish-survey-modal";
+import { AddMediaModal } from "@/components/surveys/add-media-modal";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
 import { clientEnv } from "@/lib/env.client";
 
@@ -69,7 +70,6 @@ export default function CreateSurveyPage() {
         setExtractedData(data.extractedData);
         setCollectedInfo(data.collectedInfo);
       } else if (data.type === "audio_sent" || data.type === "text_response") {
-          // Add AI message to chat
           const assistantMessage: Message = {
             id: Date.now().toString(),
             role: "assistant",
@@ -79,7 +79,6 @@ export default function CreateSurveyPage() {
           };
           setMessages(prev => [...prev, assistantMessage]);
       } else if (data.type === "transcription" && data.isFinal) {
-          // Add user message to chat for visual consistency
           const userMessage: Message = {
             id: Date.now().toString(),
             role: "user",
@@ -212,6 +211,7 @@ export default function CreateSurveyPage() {
 
   // Lazy creation state
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
+  const [showMediaModal, setShowMediaModal] = useState(false);
 
   // Helper to ensure draft exists before sending message
   const ensureDraftExists = async (): Promise<string | null> => {
@@ -620,6 +620,23 @@ export default function CreateSurveyPage() {
     audioRef.current = null;
   };
 
+  const handleMediaUploaded = (media: any) => {
+    const msg = `I have uploaded a ${media.type}: "${media.description}". Context for use: ${media.contextForUse}`;
+    append({
+        role: 'user',
+        content: msg
+    });
+  };
+
+  const handleOpenMediaModal = async () => {
+      let currentSurveyId = surveyId;
+      if (!currentSurveyId) {
+          currentSurveyId = await ensureDraftExists();
+          if (!currentSurveyId) return;
+      }
+      setShowMediaModal(true);
+  };
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (voiceWs.isRecording) {
@@ -921,13 +938,22 @@ export default function CreateSurveyPage() {
         {!isVoiceMode && (
          <div className="border-t border-gray-100 p-4 bg-gray-50/50">
             <form onSubmit={handleSubmit} className="relative bg-white border border-gray-200 rounded-2xl shadow-sm focus-within:ring-2 focus-within:ring-purple-500/10 focus-within:border-purple-500/50 transition-all overflow-hidden">
+                <button
+                    type="button"
+                    onClick={handleOpenMediaModal}
+                    disabled={isLoading || isCreatingDraft}
+                    className="absolute left-2 bottom-2 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Add Media"
+                >
+                    <Paperclip className="w-4 h-4" />
+                </button>
                 <textarea
                   value={input}
                   onChange={handleInputChange}
                   onKeyDown={handleKeyDown}
                   placeholder="Describe your survey..."
                   rows={1}
-                  className="w-full pl-4 pr-12 py-3.5 bg-transparent outline-none resize-none text-sm min-h-[52px] max-h-32"
+                  className="w-full pl-12 pr-12 py-3.5 bg-transparent outline-none resize-none text-sm min-h-[52px] max-h-32"
                 />
                 
                 <div className="absolute right-2 bottom-2">
@@ -961,6 +987,13 @@ export default function CreateSurveyPage() {
         onPublished={(shareUrl) => {
           console.log("Survey published:", shareUrl);
         }}
+      />
+
+      <AddMediaModal
+        isOpen={showMediaModal}
+        onClose={() => setShowMediaModal(false)}
+        surveyId={surveyId || ""}
+        onUploaded={handleMediaUploaded}
       />
     </div>
   );

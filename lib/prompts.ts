@@ -32,6 +32,7 @@ import type {
  */
 
 export interface SurveyConfig {
+  id: string;
   information: string;
   requiredQuestions: string[];
   metrics: string[];
