@@ -9,7 +9,13 @@ import {
   AlertCircle
 } from "lucide-react";
 import { TeamMemberList } from "@/components/dashboard/team-member-list";
-import { getWorkspaceMembers, getActiveWorkspace } from "@/app/actions/workspace";
+import { 
+  getWorkspaceMembers, 
+  getActiveWorkspace, 
+  getWorkspaceInvitations,
+  deleteWorkspace,
+  leaveWorkspace
+} from "@/app/actions/workspace";
 import { cn } from "@/lib/utils";
 
 type TeamMember = {
@@ -31,47 +37,47 @@ export default function TeamPage() {
     role: string;
   } | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Mock pending invites for now since we don't have a backend action for it yet
-  const pendingInvites = [
-    {
-      id: "1",
-      email: "sarah@example.com",
-      role: "member",
-      status: "pending" as const,
-      createdAt: "2 days ago",
-    },
-  ];
+  async function loadTeamData() {
+    try {
+      const workspaceResult = await getActiveWorkspace();
+      
+      if (workspaceResult.success && workspaceResult.data) {
+        setActiveWorkspace(workspaceResult.data);
+        
+        const [membersResult, invitationsResult] = await Promise.all([
+          getWorkspaceMembers({ organizationId: workspaceResult.data.id }),
+          getWorkspaceInvitations(workspaceResult.data.id)
+        ]);
+        
+        if (membersResult.success) {
+          const transformedMembers = membersResult.data.map((m: any) => ({
+            ...m,
+            role: m.role as "owner" | "member"
+          }));
+          setMembers(transformedMembers);
+        }
+
+        if (invitationsResult.success) {
+            setPendingInvites(invitationsResult.data.map((i: any) => ({
+                id: i.id,
+                email: i.email,
+                role: i.role,
+                status: i.status === "pending" ? "pending" : "expired",
+                createdAt: new Date(i.createdAt).toLocaleDateString()
+            })));
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load team data:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function loadTeamData() {
-      try {
-        const workspaceResult = await getActiveWorkspace();
-        
-        if (workspaceResult.success && workspaceResult.data) {
-          setActiveWorkspace(workspaceResult.data);
-          
-          const membersResult = await getWorkspaceMembers({
-            organizationId: workspaceResult.data.id
-          });
-          
-          if (membersResult.success) {
-            // Transform the data to match Key<TeamMember>
-            const transformedMembers = membersResult.data.map(m => ({
-              ...m,
-              role: m.role as "owner" | "member"
-            }));
-            setMembers(transformedMembers);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to load team data:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
     loadTeamData();
   }, []);
 
@@ -166,8 +172,7 @@ export default function TeamPage() {
             workspaceId={activeWorkspace.id}
             onMemberRemoved={handleMemberRemoved}
             onInviteSent={() => {
-              // Refresh logic would go here
-              console.log("Invite sent");
+              loadTeamData();
             }}
           />
         </div>
@@ -220,6 +225,52 @@ export default function TeamPage() {
             <button className="w-full py-2 bg-white text-gray-900 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
               Upgrade Plan
             </button>
+          </div>
+
+          {/* Danger Zone */}
+          <div className="bg-red-50 rounded-xl border border-red-100 p-5">
+            <h3 className="font-semibold text-red-900 mb-4 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" />
+              Danger Zone
+            </h3>
+            
+            {activeWorkspace.role === "owner" ? (
+                <div>
+                   <p className="text-xs text-red-700 mb-3">
+                     Deleting a workspace is permanent and cannot be undone. All surveys and data will be lost.
+                   </p>
+                   <button 
+                     onClick={async () => {
+                        if (confirm("Are you sure you want to delete this workspace? This action cannot be undone.")) {
+                            setIsLoading(true);
+                            await deleteWorkspace(activeWorkspace.id);
+                            window.location.href = "/dashboard";
+                        }
+                     }}
+                     className="w-full py-2 bg-white border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 hover:border-red-300 transition-colors"
+                   >
+                     Delete Workspace
+                   </button>
+                </div>
+            ) : (
+                <div>
+                   <p className="text-xs text-red-700 mb-3">
+                     Leaving this workspace will revoke your access to all surveys and data.
+                   </p>
+                   <button 
+                     onClick={async () => {
+                        if (confirm("Are you sure you want to leave this workspace?")) {
+                            setIsLoading(true);
+                            await leaveWorkspace(activeWorkspace.id);
+                            window.location.href = "/dashboard";
+                        }
+                     }}
+                     className="w-full py-2 bg-white border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 hover:border-red-300 transition-colors"
+                   >
+                     Leave Workspace
+                   </button>
+                </div>
+            )}
           </div>
         </div>
       </div>

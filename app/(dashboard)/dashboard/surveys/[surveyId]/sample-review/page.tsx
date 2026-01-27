@@ -8,17 +8,14 @@ import Link from "next/link";
 import {
   Mic,
   MicOff,
-  Volume2,
   Loader2,
   ArrowLeft,
   CheckCircle,
   MessageSquare,
   Sparkles,
   RefreshCcw,
-  Send,
   User,
   Bot,
-  ChevronRight,
   TrendingUp,
   AlertCircle
 } from "lucide-react";

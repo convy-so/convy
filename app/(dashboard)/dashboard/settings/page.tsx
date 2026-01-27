@@ -13,7 +13,6 @@ import {
     Loader2,
     Camera,
     AlertCircle,
-    Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 

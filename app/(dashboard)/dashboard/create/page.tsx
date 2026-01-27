@@ -9,17 +9,9 @@ import {
   ArrowLeft,
   Mic,
   MicOff,
-  Volume2,
   Loader2,
   MessageSquare,
-  Bot,
   User,
-  CheckCircle,
-  ChevronRight,
-  Play,
-  Pause,
-  RotateCcw,
-  Check,
   Share2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -63,7 +55,6 @@ export default function CreateSurveyPage() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
 
   // WebSocket Voice Hook
   const voiceWs = useVoiceWebSocket({
@@ -724,19 +715,20 @@ export default function CreateSurveyPage() {
                 </div>
             </div>
 
-            {/* Voice/Text Toggle & Preview Toggle */}
+            {/* Publish Button (Header) - Replaces Preview Toggle */}
             <div className="flex items-center gap-2">
-                  <button
-                      onClick={() => setShowPreview(!showPreview)}
+                 <button
+                      onClick={() => setShowPublishModal(true)}
+                     disabled={!isReadyToPublish}
                       className={cn(
-                          "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors border",
-                          showPreview
-                              ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                              : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                          "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm border",
+                          isReadyToPublish
+                              ? "bg-gray-900 text-white border-transparent hover:bg-gray-800 shadow-md transform hover:-translate-y-0.5"
+                              : "bg-gray-50 text-gray-400 border-gray-100 cursor-not-allowed"
                       )}
                   >
-                      {showPreview ? <Sparkles className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
-                      {showPreview ? "Hide Preview" : "Show Preview"}
+                      <Share2 className="w-4 h-4" />
+                      Publish Survey
                   </button>
 
                 <button
@@ -958,231 +950,7 @@ export default function CreateSurveyPage() {
          </div>
         )}
       </div>
-
     </div>
-      {/* Right Side: Preview Panel */}
-      {showPreview && (
-        <div className="w-[400px] flex-shrink-0 animate-in fade-in slide-in-from-right-4 duration-500">
-           <div className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent pr-2 pb-4">
-              <div className="bg-gray-50/50 rounded-2xl border border-gray-100 h-full overflow-hidden flex flex-col sticky top-0">
-                {!extractedData || Object.keys(extractedData).length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center mb-4">
-                      <Sparkles className="w-8 h-8 text-gray-300" />
-                    </div>
-                    <h3 className="text-gray-900 font-bold text-lg mb-2">No Data Yet</h3>
-                    <p className="text-sm text-gray-500 max-w-[240px] leading-relaxed">
-                      Start chatting with the AI to generate your survey draft. Live updates will appear here.
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                  <div className="p-6 border-b border-gray-100 bg-white">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h2 className="text-xl font-bold text-gray-900 leading-tight">{extractedData.title || "Survey Draft"}</h2>
-                            <div className="flex items-center gap-2 mt-2">
-                              <span className="flex h-2 w-2 relative">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                              </span>
-                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Live Preview</p>
-                            </div>
-                        </div>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                    {/* Domain & Subject Section */}
-                    {(extractedData.objective?.subjectDescription || extractedData.domainId) && (
-                      <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-                        <div className="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
-                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                           <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                           Context & Domain
-                        </h3>
-                        
-                        {extractedData.domainId && (
-                           <div className="mb-3">
-                              <span className="px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100">
-                                Domain {extractedData.domainId}
-                              </span>
-                           </div>
-                        )}
-
-                        {/* Survey Mode (Voice vs Text) */}
-                        <div className="mb-4">
-                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">Participant Mode</p>
-                            <button 
-                                onClick={() => setExtractedData((prev: any) => ({ ...prev, isVoice: !prev?.isVoice }))}
-                                className={cn(
-                                    "w-full flex items-center justify-between p-3 rounded-xl border transition-all",
-                                    extractedData.isVoice 
-                                        ? "bg-emerald-50 border-emerald-100 text-emerald-700 shadow-sm" 
-                                        : "bg-gray-50 border-gray-100 text-gray-600"
-                                )}
-                            >
-                                <div className="flex items-center gap-2">
-                                    {extractedData.isVoice ? <Mic className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
-                                    <span className="text-xs font-bold uppercase tracking-tight">
-                                        {extractedData.isVoice ? "Voice-First Survey" : "Text-First Survey"}
-                                    </span>
-                                </div>
-                                <div className={cn(
-                                    "w-8 h-4 rounded-full relative transition-colors duration-200",
-                                    extractedData.isVoice ? "bg-emerald-500" : "bg-gray-300"
-                                )}>
-                                    <div className={cn(
-                                        "absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform duration-200",
-                                        extractedData.isVoice ? "right-0.5" : "left-0.5"
-                                    )} />
-                                </div>
-                            </button>
-                        </div>
-
-                        {extractedData.objective?.subjectDescription && (
-                           <div>
-                              <p className="text-xs text-gray-500 font-medium uppercase mb-1">Subject</p>
-                              <p className="text-sm text-gray-900 font-bold leading-relaxed">{extractedData.objective.subjectDescription}</p>
-                           </div>
-                        )}
-                      </div>
-                    )}
-
-                    {extractedData.objective && (
-                      <div className="bg-white p-5 rounded-xl transition-all ">
-                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                            Objective
-                          </h3>
-                          <p className="text-sm text-gray-900 font-medium leading-relaxed">{extractedData.objective.goal}</p>
-                      </div>
-                    )}
-
-                    {extractedData.targetAudience && (
-                      <div className="bg-white p-5 rounded-xl  transition-all ">
-                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                             <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-                             Target Audience
-                          </h3>
-                          <p className="text-sm text-gray-900 font-medium leading-relaxed">{extractedData.targetAudience.description}</p>
-                      </div>
-                    )}
-
-                    {extractedData.scope?.mainTopics && extractedData.scope.mainTopics.length > 0 && (
-                      <div className="bg-white p-5 rounded-xl  transition-all">
-                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                             <span className="w-1.5 h-1.5 rounded-full bg-teal-500" />
-                             Key Topics
-                          </h3>
-                          <div className="flex flex-wrap gap-2">
-                            {extractedData.scope.mainTopics.map((topic: string, i: number) => (
-                              <span key={i} className="px-3 py-1.5 bg-teal-50 text-teal-700 rounded-lg text-xs font-semibold border border-teal-100">
-                                {topic}
-                              </span>
-                            ))}
-                          </div>
-                      </div>
-                    )}
-
-                    {extractedData.tone && (
-                      <div className="bg-white p-5 rounded-xl  transition-all ">
-                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                             <span className="w-1.5 h-1.5 rounded-full bg-pink-500" />
-                             Tone
-                          </h3>
-                          <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-pink-50 text-pink-700 border border-pink-100 capitalize">
-                            {extractedData.tone}
-                          </span>
-                      </div>
-                    )}
-
-                    {extractedData.metrics && extractedData.metrics.length > 0 && (
-                      <div className="bg-white p-5 rounded-xl  transition-all ">
-                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                             <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                             Key Metrics
-                          </h3>
-                          <div className="flex flex-wrap gap-2">
-                            {extractedData.metrics.map((metric: string, i: number) => (
-                              <span key={i} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-semibold border border-blue-100">
-                                {metric}
-                              </span>
-                            ))}
-                          </div>
-                      </div>
-                    )}
-                    
-                    {extractedData.requiredQuestions && extractedData.requiredQuestions.length > 0 && (
-                      <div className="bg-white p-5 rounded-xl  transition-all ">
-                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center justify-between">
-                             <div className="flex items-center gap-2">
-                               <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                               Questions
-                             </div>
-                             <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[10px]">{extractedData.requiredQuestions.length}</span>
-                          </h3>
-                          <div className="space-y-3">
-                             {extractedData.requiredQuestions.map((q: string, i: number) => (
-                               <div key={i} className="flex gap-3 items-start group">
-                                  <span className="flex-shrink-0 w-5 h-5 rounded bg-gray-50 text-gray-500 flex items-center justify-center text-[10px] font-bold mt-0.5 group-hover:bg-gray-900 group-hover:text-white transition-colors">
-                                    {i + 1}
-                                  </span>
-                                  <p className="text-sm text-gray-700 font-medium leading-relaxed">{q}</p>
-                               </div>
-                             ))}
-                          </div>
-                      </div>
-                    )}
-
-                    {extractedData.media && extractedData.media.length > 0 && (
-                      <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm transition-all hover:shadow-md">
-                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center justify-between">
-                             <div className="flex items-center gap-2">
-                               <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
-                               Media
-                             </div>
-                             <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[10px]">{extractedData.media.length}</span>
-                          </h3>
-                          <div className="space-y-3">
-                             {extractedData.media.map((item: any, i: number) => (
-                               <div key={i} className="flex gap-3 items-start group p-3 rounded-lg bg-gray-50 border border-gray-100">
-                                  <span className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-white ${
-                                    item.type === 'image' ? 'bg-green-500' : 
-                                    item.type === 'video' ? 'bg-red-500' : 'bg-amber-500'
-                                  }`}>
-                                    {item.type === 'image' ? '🖼️' : item.type === 'video' ? '🎬' : '🎵'}
-                                  </span>
-                                  <div>
-                                    <p className="text-sm font-semibold text-gray-900 capitalize">{item.type}</p>
-                                    <p className="text-xs text-gray-500 mt-0.5">{item.description}</p>
-                                    {item.contextForUse && (
-                                      <p className="text-xs text-gray-400 mt-1 italic">Context: {item.contextForUse}</p>
-                                    )}
-                                  </div>
-                               </div>
-                             ))}
-                          </div>
-                      </div>
-                    )}
-                  </div>
-                
-                 {/* Footer Action */}
-                 <div className="p-4 bg-white border-t border-gray-100">
-                  <button 
-                    onClick={() => setShowPublishModal(true)}
-                    className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm"
-                  >
-                      <Share2 className="w-4 h-4" />
-                      Publish Survey
-                  </button>
-                 </div>
-                 </>
-                )}
-              </div>
-           </div>
-        </div>
-      )}
 
       {/* Publish Survey Modal */}
       <PublishSurveyModal

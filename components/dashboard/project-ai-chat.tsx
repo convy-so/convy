@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Sparkles, Send, X, MessageSquare, ChevronDown } from "lucide-react";
+import { Sparkles, Send, X,ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ProjectAIChatProps = {
@@ -36,10 +36,14 @@ export function ProjectAIChat({ project }: ProjectAIChatProps) {
         setAiQuery("");
 
         // Mock AI response
+        const totalSurveys = project.surveys?.length || project.stats?.totalSurveys || 0;
+        // Mocking completion rate since we don't have it in schema
+        // const avgCompletion = project.stats?.avgCompletion || 0;
+        
         setTimeout(() => {
             setAiMessages(prev => [...prev, {
                 role: 'assistant',
-                content: `Based on your ${project.stats.totalSurveys} surveys, I can see that your best performing survey has a ${project.stats.avgCompletion}% completion rate. Would you like specific recommendations to improve engagement?`
+                content: `Based on your ${totalSurveys} surveys, I can see that you are making progress. Would you like specific recommendations to improve engagement?`
             }]);
         }, 1000);
     };

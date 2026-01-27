@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Loader2, Plus, Building2 } from "lucide-react";
-// import { createWorkspace } from "@/app/actions/workspace";
+import { createWorkspace, setActiveWorkspace } from "@/app/actions/workspace";
 import { useRouter } from "next/navigation";
 
 type CreateWorkspaceModalProps = {
@@ -15,6 +15,7 @@ type CreateWorkspaceModalProps = {
 export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorkspaceModalProps) {
     const router = useRouter();
     const [name, setName] = useState("");
+    const [slug, setSlug] = useState("");
     const [description, setDescription] = useState("");
     const [isCreating, setIsCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -30,15 +31,35 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
         setIsCreating(true);
         setError(null);
 
-        // Mock creation simulation
-        setTimeout(() => {
-            setIsCreating(false);
-            setName("");
-            setDescription("");
-            onSuccess?.();
-            onClose();
-            router.refresh();
-        }, 1500);
+        try {
+            // Auto-generate slug if not provided or just rely on name
+            const finalSlug = slug || name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+            const result = await createWorkspace({
+                name,
+                slug: finalSlug,
+            });
+
+            if (result.success) {
+                // Set as active instantly
+                await setActiveWorkspace(result.data.id);
+                
+                setName("");
+                setSlug("");
+                setDescription("");
+                onSuccess?.();
+                onClose();
+                router.refresh();
+                // Force reload to ensure session state is updated in all components
+                window.location.href = "/dashboard";
+            } else {
+                setError(result.error);
+            }
+        } catch (err) {
+             setError("An unexpected error occurred");
+        } finally {
+             setIsCreating(false);
+        }
     };
 
     if (!isOpen || !mounted) return null;

@@ -4,10 +4,8 @@ import { useState } from "react";
 import {
     Plug,
     Zap,
-    Slack,
     FileText,
     Check,
-    ArrowRight,
     ExternalLink,
     Copy,
     RefreshCw,
@@ -15,6 +13,7 @@ import {
     ChevronRight,
     AlertCircle,
 } from "lucide-react";
+import { SiSlack } from "react-icons/si";
 import { cn } from "@/lib/utils";
 
 type IntegrationStatus = "connected" | "disconnected" | "coming_soon";
@@ -63,7 +62,7 @@ const integrations: Integration[] = [
         id: "slack",
         name: "Slack",
         description: "Get instant notifications and share insights with your team in Slack.",
-        icon: <Slack className="w-6 h-6" />,
+        icon: <SiSlack className="w-6 h-6" />,
         iconBg: "bg-gradient-to-br from-purple-600 to-purple-700",
         status: "disconnected",
         features: [
