@@ -4,17 +4,22 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Loader2, UserPlus, Mail, ChevronDown, Check, Eye, Edit3, Shield, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { inviteToWorkspace } from "@/app/actions/workspace";
+import { useRouter } from "next/navigation";
 
 type InviteMemberModalProps = {
     isOpen: boolean;
     onClose: () => void;
     onSuccess?: () => void;
+    organizationId?: string; // Add organizationId prop
 };
 
-export function InviteMemberModal({ isOpen, onClose, onSuccess }: InviteMemberModalProps) {
+export function InviteMemberModal({ isOpen, onClose, onSuccess, organizationId }: InviteMemberModalProps) {
+    const router = useRouter();
     const [email, setEmail] = useState("");
-    const [role, setRole] = useState("viewer");
+    const [role, setRole] = useState("member");
     const [isInviting, setIsInviting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [mounted, setMounted] = useState(false);
     const [isRoleOpen, setIsRoleOpen] = useState(false);
 
@@ -23,9 +28,8 @@ export function InviteMemberModal({ isOpen, onClose, onSuccess }: InviteMemberMo
     }, []);
 
     const roles = [
-        { id: 'viewer', label: 'Viewer', description: 'Can view responses and analytics', icon: Eye },
-        { id: 'editor', label: 'Editor', description: 'Can edit surveys and view results', icon: Edit3 },
-        { id: 'admin', label: 'Admin', description: 'Full access to project settings', icon: Shield },
+        { id: 'member', label: 'Member', description: 'Can create and manage surveys', icon: User },
+        { id: 'owner', label: 'Owner', description: 'Full access to workspace settings', icon: Shield },
     ];
 
     const selectedRole = roles.find(r => r.id === role) || roles[0];
@@ -34,16 +38,30 @@ export function InviteMemberModal({ isOpen, onClose, onSuccess }: InviteMemberMo
         if (!email.trim()) return;
 
         setIsInviting(true);
+        setError(null);
 
-        // Mock invite simulation
-        setTimeout(() => {
+        try {
+            const result = await inviteToWorkspace({
+                email,
+                role: role as "member" | "owner",
+                organizationId
+            });
+
+            if (result.success) {
+                setEmail("");
+                setRole("member");
+                setIsRoleOpen(false);
+                onSuccess?.();
+                onClose();
+                router.refresh();
+            } else {
+                setError(result.error);
+            }
+        } catch (err) {
+            setError("An unexpected error occurred");
+        } finally {
             setIsInviting(false);
-            setEmail("");
-            setRole("viewer");
-            setIsRoleOpen(false);
-            onSuccess?.();
-            onClose();
-        }, 1500);
+        }
     };
 
     if (!isOpen || !mounted) return null;
@@ -72,6 +90,11 @@ export function InviteMemberModal({ isOpen, onClose, onSuccess }: InviteMemberMo
                 </div>
 
                 <div className="px-6 py-5 space-y-4">
+                    {error && (
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+                            {error}
+                        </div>
+                    )}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                             Email Address

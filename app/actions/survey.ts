@@ -118,6 +118,7 @@ export async function getSurveysAction(): Promise<
       projectId: string | null;
       creatorName: string | null;
       isOwner: boolean;
+      isVoice: boolean;
     }>
   >
 > {
@@ -139,6 +140,7 @@ export async function getSurveysAction(): Promise<
           projectId: surveys.projectId,
           creatorName: users.name,
           isOwner: sql<boolean>`${surveys.userId} = ${session.user.id}`,
+          isVoice: surveys.isVoice,
         })
         .from(surveys)
         .leftJoin(users, eq(surveys.userId, users.id))
@@ -160,6 +162,7 @@ export async function getSurveysAction(): Promise<
           projectId: surveys.projectId,
           creatorName: users.name,
           isOwner: sql<boolean>`${surveys.userId} = ${session.user.id}`,
+          isVoice: surveys.isVoice,
         })
         .from(surveys)
         .leftJoin(users, eq(surveys.userId, users.id))

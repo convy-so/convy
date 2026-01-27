@@ -6,16 +6,11 @@ import { useParams } from "next/navigation";
 import {
     ArrowLeft,
     User,
-    Clock,
-    Calendar,
-    MessageSquare,
     ThumbsUp,
     ThumbsDown,
     Minus,
     Bot,
-    Download,
-    ChevronDown,
-    ChevronUp,
+    Download
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 

@@ -9,8 +9,8 @@
 import { auth } from "@/lib/auth";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { db } from "@/db";
-import { organizations, members } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { organizations, members, invitations } from "@/db/schema";
+import { eq, and, desc } from "drizzle-orm";
 
 type ActionResult<T> =
   | { success: true; data: T }
@@ -477,3 +477,59 @@ async function getSessionHeaders(): Promise<Headers> {
   return headers;
 }
 
+
+/**
+ * Get workspace invitations
+ */
+export async function getWorkspaceInvitations(
+  organizationId: string
+): Promise<
+  ActionResult<
+    Array<{
+      id: string;
+      email: string;
+      role: string;
+      status: string;
+      createdAt: Date;
+      inviterName: string;
+    }>
+  >
+> {
+  try {
+    await getVerifiedSession();
+
+    const invites = await db.query.invitations.findMany({
+      where: eq(invitations.organizationId, organizationId),
+      orderBy: [desc(invitations.createdAt)],
+      with: {
+        inviter: {
+            columns: {
+                name: true,
+                email: true,
+            }
+        }
+      }
+    });
+
+    return {
+      success: true,
+      data: invites.map((invite) => ({
+        id: invite.id,
+        email: invite.email,
+        role: invite.role,
+        status: invite.status,
+        createdAt: invite.createdAt,
+        inviterName: invite.inviter.name || invite.inviter.email,
+      })),
+    };
+  } catch (error) {
+    console.error("Error getting workspace invitations:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to get workspace invitations",
+    };
+  }
+}

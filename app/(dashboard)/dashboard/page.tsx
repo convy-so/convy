@@ -8,8 +8,6 @@ import {
   TrendingUp,
   Plus,
   ArrowUpRight,
-  Mic,
-  Clock,
   Sparkles,
   FolderOpen,
   Plug,

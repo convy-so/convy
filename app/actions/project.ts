@@ -2,7 +2,7 @@
 
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, count, sum, getTableColumns } from "drizzle-orm";
 
 import { db } from "@/db";
 import { projects, surveys } from "@/db/schema";
@@ -58,13 +58,18 @@ export async function createProjectAction(
 }
 
 export async function getProjectsAction(): Promise<
-  ActionResult<Array<typeof projects.$inferSelect>>
+  ActionResult<
+    Array<
+      typeof projects.$inferSelect & {
+        surveyCount: number;
+        totalResponses: number;
+      }
+    >
+  >
 > {
   try {
     const session = await getVerifiedSession();
     const activeOrgId = session.session.activeOrganizationId;
-
-    let projectList;
 
     if (activeOrgId) {
       const isMember = await isWorkspaceMember(session.user.id, activeOrgId);
@@ -72,28 +77,260 @@ export async function getProjectsAction(): Promise<
         return { success: false, error: "Unauthorized" };
       }
 
-      projectList = await db
-        .select()
+      const projectList = await db
+        .select({
+            ...getTableColumns(projects),
+            surveyCount: count(surveys.id),
+            totalResponses: sum(surveys.currentParticipants),
+        })
         .from(projects)
+        .leftJoin(surveys, eq(projects.id, surveys.projectId))
         .where(eq(projects.organizationId, activeOrgId))
+        .groupBy(projects.id)
         .orderBy(projects.createdAt);
+        
+      const results = projectList.map(p => ({
+            ...p,
+            surveyCount: Number(p.surveyCount),
+            totalResponses: Number(p.totalResponses || 0)
+      }));
+
+      return { success: true, data: results };
     } else {
-      projectList = await db
-        .select()
+      const projectList = await db
+        .select({
+            ...getTableColumns(projects),
+            surveyCount: count(surveys.id),
+            totalResponses: sum(surveys.currentParticipants),
+        })
         .from(projects)
+        .leftJoin(surveys, eq(projects.id, surveys.projectId))
         .where(
           and(
             eq(projects.userId, session.user.id),
             isNull(projects.organizationId)
           )
         )
+        .groupBy(projects.id)
         .orderBy(projects.createdAt);
-    }
 
-    return { success: true, data: projectList };
+       const results = projectList.map(p => ({
+            ...p,
+            surveyCount: Number(p.surveyCount),
+            totalResponses: Number(p.totalResponses || 0)
+      }));
+
+      return { success: true, data: results };
+    }
   } catch (error) {
+    console.error("Error fetching projects:", error);
     return { success: false, error: "Failed to fetch projects" };
   }
+}
+
+export async function getProjectAction(id: string): Promise<
+  ActionResult<
+    typeof projects.$inferSelect & {
+      surveys: Array<
+        typeof surveys.$inferSelect & {
+          summary: string | null;
+        }
+      >;
+    }
+  >
+> {
+  try {
+    const session = await getVerifiedSession();
+
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, id));
+
+    if (!project) {
+      return { success: false, error: "Project not found" };
+    }
+
+    let isAuthorized = false;
+
+    if (project.organizationId) {
+      const isMember = await isWorkspaceMember(
+        session.user.id,
+        project.organizationId
+      );
+      if (isMember) {
+        isAuthorized = true;
+      }
+    } else {
+      if (project.userId === session.user.id) {
+        isAuthorized = true;
+      }
+    }
+
+    if (!isAuthorized) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const projectSurveys = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.projectId, id));
+    
+    // We add a summary field to match the frontend expectations if needed, 
+    // or just return the surveys as is. The frontend type expectations 
+    // might need to be adjusted or mapped.
+    // For now, returning surveys directly.
+    
+    return {
+      success: true,
+      data: {
+        ...project,
+        surveys: projectSurveys.map(s => ({
+            ...s,
+            summary: null // Placeholder if needed, or derived from analytics
+        })),
+      },
+    };
+  } catch (error) {
+     console.error("Error fetching project:", error);
+    return { success: false, error: "Failed to fetch project" };
+  }
+}
+
+export async function addSurveyToProjectAction(
+  projectId: string,
+  surveyId: string
+): Promise<ActionResult<void>> {
+  try {
+    const session = await getVerifiedSession();
+
+    // 1. Verify project access
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, projectId));
+
+    if (!project) {
+      return { success: false, error: "Project not found" };
+    }
+
+     let isAuthorized = false;
+
+    if (project.organizationId) {
+      const isMember = await isWorkspaceMember(
+        session.user.id,
+        project.organizationId
+      );
+      if (isMember) {
+        isAuthorized = true;
+      }
+    } else {
+      if (project.userId === session.user.id) {
+        isAuthorized = true;
+      }
+    }
+
+    if (!isAuthorized) {
+      return { success: false, error: "Unauthorized access to project" };
+    }
+
+    // 2. Verify survey access
+     const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+    
+     if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+    
+    // Check if survey belongs to same org/user context
+    if (project.organizationId) {
+        if (survey.organizationId !== project.organizationId) {
+             return { success: false, error: "Survey belongs to a different workspace" };
+        }
+    } else {
+        if (survey.userId !== session.user.id || survey.organizationId) {
+             return { success: false, error: "Unauthorized access to survey" };
+        }
+    }
+
+    // 3. Update survey
+    await db
+      .update(surveys)
+      .set({ projectId: projectId })
+      .where(eq(surveys.id, surveyId));
+
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error("Error adding survey to project:", error);
+    return { success: false, error: "Failed to add survey to project" };
+  }
+}
+
+export async function removeSurveyFromProjectAction(
+  projectId: string,
+  surveyId: string
+): Promise<ActionResult<void>> {
+   try {
+    const session = await getVerifiedSession();
+
+    // 1. Verify project access (mostly to ensure user has right to modify this project content)
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, projectId));
+
+    if (!project) {
+        // Even if project doesn't exist, if we are just removing the link from survey, 
+        // we mainly need to check survey access. But for consistency, let's enforce project existence verification
+        // or just verify survey access is enough? 
+        // Let's stick to verifying project access to be safe.
+      return { success: false, error: "Project not found" };
+    }
+    
+    let isAuthorized = false;
+    if (project.organizationId) {
+      const isMember = await isWorkspaceMember(
+        session.user.id,
+        project.organizationId
+      );
+      if (isMember) {
+        isAuthorized = true;
+      }
+    } else {
+      if (project.userId === session.user.id) {
+        isAuthorized = true;
+      }
+    }
+    
+    if (!isAuthorized) {
+      return { success: false, error: "Unauthorized access to project" };
+    }
+
+     // 2. Verify survey is indeed in this project
+     const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(and(eq(surveys.id, surveyId), eq(surveys.projectId, projectId)));
+
+    if (!survey) {
+        // Survey not in this project or doesn't exist
+         return { success: false, error: "Survey not found in this project" };
+    }
+
+    // 3. Update survey
+    await db
+      .update(surveys)
+      .set({ projectId: null })
+      .where(eq(surveys.id, surveyId));
+    
+     return { success: true, data: undefined };
+
+   } catch (error) {
+     console.error("Error removing survey from project:", error);
+     return { success: false, error: "Failed to remove survey from project" };
+   }
 }
 
 const updateProjectSchema = z.object({

@@ -313,8 +313,38 @@ export async function POST(
               })
               .where(eq(surveyCreationConversations.surveyId, surveyId));
 
-            // Trigger incremental extraction (await to ensure it runs before lambda dies)
-            await performIncrementalExtraction(surveyId, updatedMessages);
+            // Trigger incremental extraction every 2 assistant messages or if specific completion phrases are used
+            const completionPhrases = [
+              "ready to publish",
+              "all set",
+              "created your survey",
+              "survey is ready",
+              "looks good",
+              "finalized",
+              "try sample",
+            ];
+            const isCompletionVariable = completionPhrases.some((phrase) =>
+              text.toLowerCase().includes(phrase)
+            );
+
+            // Throttle: Extract if it's the very first message, a completion message, or every 4th message
+            const shouldExtract =
+              updatedMessages.length <= 2 ||
+              isCompletionVariable ||
+              updatedMessages.length % 4 === 0;
+
+            if (shouldExtract) {
+              console.log(
+                `[Create Route] Triggering extraction for survey ${surveyId} (Reason: ${
+                  isCompletionVariable ? "Completion Phrase" : "Regular Interval"
+                })`
+              );
+              await performIncrementalExtraction(surveyId, updatedMessages);
+            } else {
+              console.log(
+                `[Create Route] Skipping extraction for survey ${surveyId} (throttled)`
+              );
+            }
           }
         } catch (error) {
           console.error("Error saving conversation or performing extraction:", error);
