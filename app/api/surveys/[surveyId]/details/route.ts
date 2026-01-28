@@ -73,6 +73,44 @@ export async function GET(
             ? Math.round((completedResponses / totalResponses) * 100) 
             : 0;
 
+        // Calculate average duration
+        // We need raw conversation data for this, so we fetch it for completed surveys
+        const completedWithRaw = await db
+            .select({
+                rawConversation: surveyConversations.rawConversation,
+            })
+            .from(surveyConversations)
+            .where(
+                and(
+                    eq(surveyConversations.surveyId, surveyId),
+                    eq(surveyConversations.completed, true)
+                )
+            );
+
+        let totalDurationMs = 0;
+        let durationCount = 0;
+
+        completedWithRaw.forEach((c) => {
+           if (c.rawConversation && Array.isArray(c.rawConversation) && c.rawConversation.length > 1) {
+             const firstMsg = c.rawConversation[0];
+             const lastMsg = c.rawConversation[c.rawConversation.length - 1];
+             
+             if (firstMsg.timestamp && lastMsg.timestamp) {
+               const start = new Date(firstMsg.timestamp).getTime();
+               const end = new Date(lastMsg.timestamp).getTime();
+               const duration = end - start;
+               
+               if (duration > 0 && duration < 24 * 60 * 60 * 1000) { // Exclude outliers > 24h
+                 totalDurationMs += duration;
+                 durationCount++;
+               }
+             }
+           }
+        });
+
+        const avgDurationMs = durationCount > 0 ? totalDurationMs / durationCount : 0;
+        const avgDurationMinutes = Math.round(avgDurationMs / 1000 / 60);
+
         // Build shareable URL
         const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:3000";
         const shareableUrl = survey.shareableLink 
@@ -102,7 +140,7 @@ export async function GET(
                 totalResponses,
                 completedResponses,
                 completionRate,
-                avgDuration: "~3 min", // TODO: Calculate from actual data
+                avgDuration: durationCount > 0 ? `${avgDurationMinutes} min` : "0 min",
             },
             recentResponses: recentResponses.map(r => ({
                 id: r.id,

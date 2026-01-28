@@ -94,7 +94,8 @@ export async function POST(
     { params }: { params: Promise<{ shareableLink: string }> }
 ) {
     try {
-        const { messages, context } = await req.json();
+        const body = await req.json();
+        const { messages, context } = body;
         const { shareableLink } = await params;
 
         // Fetch survey by shareable link
@@ -112,7 +113,7 @@ export async function POST(
         // Actually the context usually contains conversationId if we are continuing.
         // But for this simplified route, we might rely on the client passing it or just creating a new one implicitly for the stream.
         // Re-using existing logic below:
-        const conversationId = context?.conversationId;
+        const conversationId = context?.conversationId || body.conversationId;
 
         if (!conversationId) {
             return NextResponse.json({ error: "Conversation ID is required" }, { status: 400 });

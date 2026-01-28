@@ -67,7 +67,7 @@ export async function GET(
       .where(eq(surveyAnalytics.surveyId, surveyId));
 
     if (!analytics) {
-      // Check if there are any conversations
+      // If no full analysis exists, return "zero-state" analytics so the dashboard still renders
       const conversations = await db
         .select({
           id: surveyConversations.id,
@@ -76,22 +76,81 @@ export async function GET(
         .from(surveyConversations)
         .where(eq(surveyConversations.surveyId, surveyId));
 
+      const totalCount = conversations.length;
       const completedCount = conversations.filter((c) => c.completed).length;
+      
+      const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-      return NextResponse.json(
-        {
-          status: "not_generated",
-          message:
-            completedCount > 0
-              ? "Analytics are being generated. Please check back shortly."
-              : "No completed conversations yet. Analytics will be generated after conversations are completed.",
-          conversationStats: {
-            total: conversations.length,
-            completed: completedCount,
+      // Construct a "live" partial analytics object
+      const partialAnalytics: SurveyAnalyticsData = {
+          surveyId,
+          surveyTitle: survey.title,
+          generatedAt: new Date().toISOString(),
+          dataVersion: ANALYTICS_DATA_VERSION,
+          executiveSummary: {
+              headline: totalCount > 0 ? "Data collection in progress" : "Ready to collect responses",
+              keyInsights: [],
+              overallSentiment: { overall: "neutral", score: 0, confidence: 0 },
+              recommendedActions: []
           },
-        },
-        { status: 200 }
-      );
+          coreMetrics: {
+              totalConversations: totalCount,
+              completedConversations: completedCount,
+              completionRate: completionRate,
+              averageMessagesPerConversation: 0,
+              averageResponseLength: 0,
+              averageFollowUpDepth: 0,
+              medianDurationMinutes: 0,
+              insightQualityScore: 0,
+              responseEngagementDistribution: { high: 0, medium: 0, low: 0 },
+              topicCoverageRate: 0,
+              requiredQuestionsCompletion: []
+          },
+          creatorMetrics: [],
+          hypothesisValidations: [],
+          discoveredInsights: {
+              trends: [],
+              outliers: [],
+              recommendations: [],
+              emergentTopics: [],
+              surprisingFindings: [],
+              dataGaps: []
+          },
+          goalAssessment: {
+              surveyObjective: "",
+              achievementScore: 0,
+              achievementLevel: "not_met",
+              insightTypesCollected: {
+                  emotional: { collected: false, count: 0, quality: "low", examples: [] },
+                  behavioral: { collected: false, count: 0, quality: "low", examples: [] },
+                  rational: { collected: false, count: 0, quality: "low", examples: [] }
+              },
+              successfulAspects: [],
+              gapsIdentified: [],
+              recommendedNextSteps: [],
+              suggestedFollowUpQuestions: []
+          },
+          conversationCount: totalCount,
+          lastUpdated: new Date().toISOString(),
+          dashboardWidgets: [] // Will be generated below
+      };
+
+      // Generate widgets for this partial data
+      partialAnalytics.dashboardWidgets = createDashboardWidgets(partialAnalytics);
+
+      if (format === "widgets") {
+          return NextResponse.json({
+            status: "ready",
+            surveyId,
+            lastUpdated: partialAnalytics.lastUpdated,
+            widgets: partialAnalytics.dashboardWidgets,
+          });
+      }
+
+      return NextResponse.json({
+          status: "ready",
+          ...partialAnalytics
+      });
     }
 
     // Parse stored metrics (which contains the full analytics data)
