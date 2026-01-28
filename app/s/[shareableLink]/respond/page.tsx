@@ -42,16 +42,30 @@ export default function SurveyRespondPage() {
     const [conversationId, setConversationId] = useState<string | null>(null);
 
     // AI SDK useChat
-    const chatHelpers = useChat<any>({
-        api: `/api/surveys/respond/${shareableLink}`,
+    // Ensure we never default to /api/chat by always providing a non-empty string
+    const apiEndpoint = shareableLink ? `/api/surveys/respond/${shareableLink}` : "/api/surveys/respond/missing-link";
+    
+    const { messages, setMessages: originalSetMessages, status, append, data: streamData } = useChat({
+        api: apiEndpoint,
         body: { conversationId },
         onFinish: (message: any) => {
              // Optional: Handle finish
+        },
+        onError: (error:any) => {
+            console.error("Chat error:", error);
+            // If we get an error, verify the API endpoint
+            if (apiEndpoint.includes("missing-link")) {
+                setError("Survey link is missing");
+            }
         }
-    } as any);
-    
-    const { messages, setMessages, status, sendMessage } = chatHelpers;
-    const streamData = (chatHelpers as any).data;
+    });
+
+    // Cast setMessages to allow ExtendedMessage (custom properties like displayedContent)
+    const setMessages = originalSetMessages as any;
+
+    useEffect(() => {
+        console.log("Survey Respond Page - API Endpoint:", apiEndpoint);
+    }, [apiEndpoint]);
 
     const [input, setInput] = useState("");
     const isChatLoading = status === "streaming" || status === "submitted"; // Derived loading state
@@ -67,7 +81,7 @@ export default function SurveyRespondPage() {
         setInput(""); // Clear input early
 
         try {
-           await sendMessage({ role: "user", content: currentInput });
+           await append({ role: "user", content: currentInput });
         } catch (error) {
            console.error("Failed to send message:", error);
            // Optionally restore input or show error
@@ -112,7 +126,7 @@ export default function SurveyRespondPage() {
                      // But the voice websocket logic sends { id, type } usually?
                      // Actually Sample page logic used survey.media lookup.
                      // Does public survey fetch media? YES, I updated GET route to return media.
-                     const fullMedia = (survey as any).media?.find((m: any) => m.id === data.media.id);
+                     const fullMedia = survey?.media?.find((m: any) => m.id === data.media.id);
                      if (fullMedia) {
                          setMessages((prev: UIMessage[]) => [...prev, {
                              id: Date.now().toString(),
@@ -153,8 +167,8 @@ export default function SurveyRespondPage() {
              // Check if any message has this media?
              
              const hasMedia = messages.some((m: any) => m.media && m.media.id === mediaId);
-             if (!hasMedia && (survey as any)?.media) {
-                 const fullMedia = (survey as any).media.find((m: any) => m.id === mediaId);
+             if (!hasMedia && survey?.media) {
+                 const fullMedia = survey.media.find((m: any) => m.id === mediaId);
                  if (fullMedia) {
                       setMessages((prev: UIMessage[]) => [...prev, {
                          id: Date.now().toString(),
@@ -402,8 +416,14 @@ export default function SurveyRespondPage() {
             <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100 px-6 py-4 transition-all">
                 <div className="max-w-4xl mx-auto flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center border border-gray-200">
-                             <span className="text-lg">💬</span>
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gray-900 to-gray-700 flex items-center justify-center shadow-lg shadow-gray-900/10">
+                             <img
+                                src="/logo.svg"
+                                alt="Convy Logo"
+                                width={20}
+                                height={20}
+                                className="w-5 h-5 object-contain invert"
+                             />
                         </div>
                         <div>
                             <h1 className="font-bold text-gray-900 tracking-tight">{survey?.title}</h1>
@@ -533,7 +553,7 @@ export default function SurveyRespondPage() {
                                     placeholder="Type your answer..."
                                     rows={1}
                                     disabled={isChatLoading}
-                                    className="w-full pl-6 pr-4 py-4 bg-transparent border-none resize-none focus:ring-0 text-gray-900 placeholder:text-gray-400 text-lg max-h-32 min-h-[3.5rem]"
+                                    className="w-full pl-6 pr-4 py-4 bg-transparent border-none resize-none focus:outline-none focus:ring-0 text-gray-900 placeholder:text-gray-400 text-lg max-h-32 min-h-[3.5rem]"
                                     style={{ height: '3.5rem' }} 
                                 />
                                 <button
