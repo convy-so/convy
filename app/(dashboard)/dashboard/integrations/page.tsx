@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
     Plug,
     Zap,
@@ -9,14 +10,30 @@ import {
     ExternalLink,
     Copy,
     RefreshCw,
-    Settings,
+    Settings as SettingsIcon,
     ChevronRight,
     AlertCircle,
+    Loader2,
+    X,
 } from "lucide-react";
 import { SiSlack } from "react-icons/si";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import {
+    getSlackIntegrationStatus,
+    disconnectSlack,
+} from "@/app/actions/slack";
+import {
+    getNotionIntegrationStatus,
+    disconnectNotionIntegration,
+} from "@/app/actions/notion";
+import {
+    getZapierIntegrationStatus,
+    disconnectZapierIntegration,
+} from "@/app/actions/zapier";
+import { SlackSettingsModal } from "@/components/integrations/slack-settings-modal";
 
-type IntegrationStatus = "connected" | "disconnected" | "coming_soon";
+type IntegrationStatus = "connected" | "disconnected" | "loading";
 
 interface Integration {
     id: string;
@@ -26,71 +43,135 @@ interface Integration {
     iconBg: string;
     status: IntegrationStatus;
     features: string[];
-    setupUrl?: string;
+    metadata?: any;
 }
 
-const integrations: Integration[] = [
-    {
-        id: "zapier",
-        name: "Zapier",
-        description: "Connect Convy to 5,000+ apps. Automate workflows and sync data in real-time.",
-        icon: <Zap className="w-6 h-6" />,
-        iconBg: "bg-gradient-to-br from-orange-500 to-orange-600",
-        status: "disconnected",
-        features: [
-            "Trigger Zaps on new responses",
-            "Send survey data to any app",
-            "Create surveys from other tools",
-            "Real-time webhook delivery",
-        ],
-    },
-    {
-        id: "notion",
-        name: "Notion",
-        description: "Automatically sync survey responses and insights to your Notion workspace.",
-        icon: <FileText className="w-6 h-6" />,
-        iconBg: "bg-gradient-to-br from-gray-800 to-gray-900",
-        status: "disconnected",
-        features: [
-            "Auto-sync responses to databases",
-            "Export analytics as pages",
-            "Organize insights in workspaces",
-            "Real-time synchronization",
-        ],
-    },
-    {
-        id: "slack",
-        name: "Slack",
-        description: "Get instant notifications and share insights with your team in Slack.",
-        icon: <SiSlack className="w-6 h-6" />,
-        iconBg: "bg-gradient-to-br from-purple-600 to-purple-700",
-        status: "disconnected",
-        features: [
-            "New response notifications",
-            "Weekly analytics summaries",
-            "Share surveys to channels",
-            "Team collaboration alerts",
-        ],
-    },
-];
-
 export default function IntegrationsPage() {
+    const queryClient = useQueryClient();
     const [selectedIntegration, setSelectedIntegration] = useState<string | null>(null);
     const [apiKey, setApiKey] = useState<string | null>(null);
 
+    // Query integration statuses
+    const { data: slackStatus, isLoading: isLoadingSlack } = useQuery({
+        queryKey: ["slack-integration"],
+        queryFn: async () => {
+            const result = await getSlackIntegrationStatus();
+            if (!result.success) throw new Error(result.error);
+            return result.data;
+        },
+    });
+
+    const { data: notionStatus, isLoading: isLoadingNotion } = useQuery({
+        queryKey: ["notion-integration"],
+        queryFn: async () => {
+            const result = await getNotionIntegrationStatus();
+            return result;
+        },
+    });
+
+    const { data: zapierStatus, isLoading: isLoadingZapier } = useQuery({
+        queryKey: ["zapier-integration"],
+        queryFn: async () => {
+            const result = await getZapierIntegrationStatus();
+            if (!result.success) throw new Error(result.error);
+            return result.data;
+        },
+    });
+
+    // Check for OAuth callback results
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        
+        if (params.get("slack_success")) {
+            toast.success("Slack connected successfully!");
+            queryClient.invalidateQueries({ queryKey: ["slack-integration"] });
+            window.history.replaceState({}, "", "/dashboard/integrations");
+        } else if (params.get("slack_error")) {
+            toast.error(`Slack connection failed: ${params.get("slack_error")}`);
+            window.history.replaceState({}, "", "/dashboard/integrations");
+        }
+
+        if (params.get("notion_success")) {
+            toast.success("Notion connected successfully!");
+            queryClient.invalidateQueries({ queryKey: ["notion-integration"] });
+            window.history.replaceState({}, "", "/dashboard/integrations");
+        } else if (params.get("notion_error")) {
+            toast.error(`Notion connection failed: ${params.get("notion_error")}`);
+            window.history.replaceState({}, "", "/dashboard/integrations");
+        }
+    }, [queryClient]);
+
+    const integrations: Integration[] = [
+        {
+            id: "zapier",
+            name: "Zapier",
+            description: "Connect Convy to 5,000+ apps. Automate workflows and sync data in real-time.",
+            icon: <Zap className="w-6 h-6" />,
+            iconBg: "bg-gradient-to-br from-orange-500 to-orange-600",
+            status: isLoadingZapier ? "loading" : zapierStatus?.connected ? "connected" : "disconnected",
+            features: [
+                "Trigger Zaps on new responses",
+                "Send survey data to any app",
+                "Create surveys from other tools",
+                "Real-time webhook delivery",
+            ],
+            metadata: zapierStatus,
+        },
+        {
+            id: "notion",
+            name: "Notion",
+            description: "Automatically sync survey responses and insights to your Notion workspace.",
+            icon: <FileText className="w-6 h-6" />,
+            iconBg: "bg-gradient-to-br from-gray-800 to-gray-900",
+            status: isLoadingNotion ? "loading" : notionStatus?.connected ? "connected" : "disconnected",
+            features: [
+                "Auto-sync responses to databases",
+                "Export analytics as pages",
+                "Organize insights in workspaces",
+                "Real-time synchronization",
+            ],
+            metadata: notionStatus,
+        },
+        {
+            id: "slack",
+            name: "Slack",
+            description: "Get instant notifications and share insights with your team in Slack.",
+            icon: <SiSlack className="w-6 h-6" />,
+            iconBg: "bg-gradient-to-br from-purple-600 to-purple-700",
+            status: isLoadingSlack ? "loading" : slackStatus?.connected ? "connected" : "disconnected",
+            features: [
+                "New response notifications",
+                "Weekly analytics summaries",
+                "Share surveys to channels",
+                "Team collaboration alerts",
+            ],
+            metadata: slackStatus,
+        },
+    ];
+
     const handleConnect = (integrationId: string) => {
+        if (integrationId === "slack") {
+            window.location.href = "/api/slack/auth";
+        } else if (integrationId === "notion") {
+            window.location.href = "/api/notion/auth";
+        } else if (integrationId === "zapier") {
+            setSelectedIntegration(integrationId);
+        }
+    };
+
+    const handleManage = (integrationId: string) => {
         setSelectedIntegration(integrationId);
-        // In real implementation, this would open OAuth flow or show setup modal
     };
 
     const handleGenerateApiKey = () => {
-        // Mock API key generation
         setApiKey("ck_live_" + Math.random().toString(36).substring(2, 15));
+        toast.success("API key generated");
     };
 
     const copyApiKey = () => {
         if (apiKey) {
             navigator.clipboard.writeText(apiKey);
+            toast.success("API key copied to clipboard");
         }
     };
 
@@ -104,22 +185,6 @@ export default function IntegrationsPage() {
                 <p className="text-gray-500 mt-1">
                     Connect Convy with your favorite tools to automate workflows
                 </p>
-            </div>
-
-            {/* Pro Badge Notice */}
-            <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl border border-purple-100 p-5 flex items-start gap-4">
-                <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
-                    <Plug className="w-5 h-5 text-purple-600" />
-                </div>
-                <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900 mb-1">Integrations are a Pro feature</h3>
-                    <p className="text-sm text-gray-600">
-                        Upgrade to Pro to connect your surveys with Zapier, Notion, Slack, and more.
-                    </p>
-                </div>
-                <button className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors">
-                    Upgrade to Pro
-                </button>
             </div>
 
             {/* Integrations Grid */}
@@ -140,22 +205,23 @@ export default function IntegrationsPage() {
                                 >
                                     {integration.icon}
                                 </div>
-                                <span
-                                    className={cn(
-                                        "px-2.5 py-1 rounded-full text-xs font-medium",
-                                        integration.status === "connected"
-                                            ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
-                                            : integration.status === "coming_soon"
-                                                ? "bg-gray-50 text-gray-500 border border-gray-200"
+                                {integration.status === "loading" ? (
+                                    <div className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200 flex items-center gap-1.5">
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                        Loading
+                                    </div>
+                                ) : (
+                                    <span
+                                        className={cn(
+                                            "px-2.5 py-1 rounded-full text-xs font-medium",
+                                            integration.status === "connected"
+                                                ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
                                                 : "bg-gray-50 text-gray-500 border border-gray-200"
-                                    )}
-                                >
-                                    {integration.status === "connected"
-                                        ? "Connected"
-                                        : integration.status === "coming_soon"
-                                            ? "Coming Soon"
-                                            : "Not Connected"}
-                                </span>
+                                        )}
+                                    >
+                                        {integration.status === "connected" ? "Connected" : "Not Connected"}
+                                    </span>
+                                )}
                             </div>
 
                             <h3 className="text-lg font-semibold text-gray-900 mb-2">
@@ -164,6 +230,21 @@ export default function IntegrationsPage() {
                             <p className="text-sm text-gray-500 leading-relaxed">
                                 {integration.description}
                             </p>
+
+                            {/* Show metadata for connected integrations */}
+                            {integration.status === "connected" && (
+                                <div className="mt-3 text-xs text-gray-500">
+                                    {integration.id === "slack" && integration.metadata?.teamName && (
+                                        <p>Workspace: {integration.metadata.teamName}</p>
+                                    )}
+                                    {integration.id === "notion" && integration.metadata?.integration?.workspaceName && (
+                                        <p>Workspace: {integration.metadata.integration.workspaceName}</p>
+                                    )}
+                                    {integration.id === "zapier" && integration.metadata?.activeSubscriptions !== undefined && (
+                                        <p>{integration.metadata.activeSubscriptions} active Zaps</p>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         {/* Features */}
@@ -181,24 +262,27 @@ export default function IntegrationsPage() {
                         {/* Action */}
                         <div className="px-6 pb-6">
                             <button
-                                onClick={() => handleConnect(integration.id)}
-                                disabled={integration.status === "coming_soon"}
+                                onClick={() => integration.status === "connected" ? handleManage(integration.id) : handleConnect(integration.id)}
+                                disabled={integration.status === "loading"}
                                 className={cn(
                                     "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors",
                                     integration.status === "connected"
                                         ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                                        : integration.status === "coming_soon"
+                                        : integration.status === "loading"
                                             ? "bg-gray-50 text-gray-400 cursor-not-allowed"
                                             : "bg-gray-900 text-white hover:bg-gray-800"
                                 )}
                             >
-                                {integration.status === "connected" ? (
+                                {integration.status === "loading" ? (
                                     <>
-                                        <Settings className="w-4 h-4" />
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Loading...
+                                    </>
+                                ) : integration.status === "connected" ? (
+                                    <>
+                                        <SettingsIcon className="w-4 h-4" />
                                         Manage
                                     </>
-                                ) : integration.status === "coming_soon" ? (
-                                    "Coming Soon"
                                 ) : (
                                     <>
                                         Connect
@@ -272,69 +356,118 @@ export default function IntegrationsPage() {
                 </div>
             </div>
 
-            {/* Setup Modal */}
-            {selectedIntegration && selectedInt && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center">
-                    <div
-                        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-                        onClick={() => setSelectedIntegration(null)}
+            {/* Settings Modal */}
+            {selectedIntegration && selectedInt && selectedInt.status === "connected" && (
+                selectedIntegration === "slack" ? (
+                    <SlackSettingsModal
+                        onClose={() => setSelectedIntegration(null)}
+                        onDisconnect={() => {
+                            queryClient.invalidateQueries({ queryKey: ["slack-integration"] });
+                            setSelectedIntegration(null);
+                        }}
+                        metadata={selectedInt.metadata}
                     />
+                ) : (
+                    <IntegrationSettingsModal
+                        integration={selectedInt}
+                        onClose={() => setSelectedIntegration(null)}
+                        onDisconnect={() => {
+                            queryClient.invalidateQueries({ queryKey: [`${selectedIntegration}-integration`] });
+                            setSelectedIntegration(null);
+                        }}
+                    />
+                )
+            )}
+        </div>
+    );
+}
 
-                    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 animate-in fade-in zoom-in-95 duration-200">
-                        <div className="p-6 border-b border-gray-100">
-                            <div className="flex items-center gap-4">
-                                <div
-                                    className={cn(
-                                        "w-12 h-12 rounded-xl flex items-center justify-center text-white",
-                                        selectedInt.iconBg
-                                    )}
-                                >
-                                    {selectedInt.icon}
-                                </div>
-                                <div>
-                                    <h3 className="text-lg font-semibold text-gray-900">
-                                        Connect {selectedInt.name}
-                                    </h3>
-                                    <p className="text-sm text-gray-500">
-                                        Set up your integration in a few steps
-                                    </p>
-                                </div>
-                            </div>
+// Settings Modal Component
+function IntegrationSettingsModal({
+    integration,
+    onClose,
+    onDisconnect,
+}: {
+    integration: Integration;
+    onClose: () => void;
+    onDisconnect: () => void;
+}) {
+    const disconnectMutation = useMutation({
+        mutationFn: async () => {
+            if (integration.id === "slack") {
+                return await disconnectSlack();
+            } else if (integration.id === "notion") {
+                return await disconnectNotionIntegration();
+            } else if (integration.id === "zapier") {
+                return await disconnectZapierIntegration();
+            }
+        },
+        onSuccess: (result) => {
+            if (result?.success) {
+                toast.success(`${integration.name} disconnected successfully`);
+                onDisconnect();
+            } else {
+                toast.error(result?.error || "Failed to disconnect");
+            }
+        },
+        onError: () => {
+            toast.error("Failed to disconnect integration");
+        },
+    });
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 animate-in fade-in zoom-in-95 duration-200">
+                <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center text-white", integration.iconBg)}>
+                            {integration.icon}
                         </div>
-
-                        <div className="p-6">
-                            <div className="space-y-4">
-                                {selectedInt.features.map((feature, idx) => (
-                                    <div key={idx} className="flex items-center gap-3">
-                                        <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center">
-                                            <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                        </div>
-                                        <span className="text-sm text-gray-700">{feature}</span>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div className="mt-6 p-4 bg-amber-50 rounded-xl border border-amber-100">
-                                <p className="text-sm text-amber-700">
-                                    <strong>Pro feature:</strong> Upgrade to Pro to enable this integration.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="p-6 border-t border-gray-100 flex items-center justify-end gap-3">
-                            <button
-                                onClick={() => setSelectedIntegration(null)}
-                                className="px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button className="px-4 py-2.5 bg-purple-600 text-white rounded-lg font-medium text-sm hover:bg-purple-700 transition-colors">
-                                Upgrade to Pro
-                            </button>
+                        <div>
+                            <h3 className="text-lg font-semibold text-gray-900">{integration.name} Settings</h3>
+                            <p className="text-sm text-gray-500">Manage your integration</p>
                         </div>
                     </div>
+                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                        <X className="w-5 h-5 text-gray-500" />
+                    </button>
                 </div>
-            )}
+
+                <div className="p-6">
+                    <div className="space-y-4">
+                        {integration.features.map((feature, idx) => (
+                            <div key={idx} className="flex items-center gap-3">
+                                <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center">
+                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                </div>
+                                <span className="text-sm text-gray-700">{feature}</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="mt-6 p-4 bg-red-50 rounded-xl border border-red-100">
+                        <p className="text-sm text-red-700 mb-3">
+                            Disconnecting will remove access to {integration.name} and stop all automated workflows.
+                        </p>
+                        <button
+                            onClick={() => disconnectMutation.mutate()}
+                            disabled={disconnectMutation.isPending}
+                            className="w-full px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            {disconnectMutation.isPending ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Disconnecting...
+                                </>
+                            ) : (
+                                `Disconnect ${integration.name}`
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
