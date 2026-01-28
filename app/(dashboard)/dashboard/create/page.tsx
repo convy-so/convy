@@ -13,6 +13,9 @@ import {
   User,
   Share2,
   Paperclip,
+  Play,
+  ChevronRight,
+  CheckCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -114,6 +117,18 @@ export default function CreateSurveyPage() {
   
   const [extractedData, setExtractedData] = useState<any>(null);
   const [collectedInfo, setCollectedInfo] = useState<any>(null);
+
+  // Detect if all required info has been collected for sample conversations
+  const isReadyForSample = useMemo(() => {
+    if (!surveyId || !collectedInfo) return false;
+    return (
+      collectedInfo.objective &&
+      collectedInfo.targetAudience &&
+      collectedInfo.scope &&
+      collectedInfo.successCriteria &&
+      collectedInfo.constraints
+    );
+  }, [surveyId, collectedInfo]);
 
   // Detect if the user is ready to publish based on conversation content
   const isReadyToPublish = useMemo(() => {
@@ -930,6 +945,39 @@ export default function CreateSurveyPage() {
                   {prompt}
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Go to Sample Conversations CTA */}
+        {isReadyForSample && surveyId && !isVoiceMode && (
+          <div className="mx-4 mb-4">
+            <div className="relative overflow-hidden bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 rounded-2xl p-[1px] shadow-lg shadow-emerald-500/20">
+              <div className="relative bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 rounded-2xl p-5">
+                {/* Decorative elements */}
+                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+                
+                <div className="relative flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                      <CheckCircle2 className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-bold text-lg">Ready to Test Your Survey!</h3>
+                      <p className="text-white/80 text-sm">All required information collected. Try a sample conversation.</p>
+                    </div>
+                  </div>
+                  <Link
+                    href={`/dashboard/surveys/${surveyId}/sample-review`}
+                    className="flex items-center gap-2 px-6 py-3 bg-white text-emerald-600 rounded-xl font-bold text-sm hover:bg-emerald-50 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 group"
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                    Go to Sample Conversations
+                    <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
         )}
