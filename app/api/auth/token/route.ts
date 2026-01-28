@@ -11,7 +11,6 @@ export async function GET() {
     return NextResponse.json({ error: "No session token" }, { status: 401 });
   }
 
-  // session.session.token is the actual token string stored in the DB
   return NextResponse.json({ token: session.session.token });
 }
 

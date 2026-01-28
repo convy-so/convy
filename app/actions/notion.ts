@@ -18,13 +18,25 @@ import {
   getNotionPageUrl,
 } from "@/lib/notion-improved";
 import { decrypt } from "@/lib/encryption";
+import {
+  getWorkspaceOwnerId,
+  isWorkspaceOwner,
+} from "@/lib/workspace-access";
 
 /**
  * Get user's Notion integration status
+ * Considers active workspace context
  */
 export async function getNotionIntegrationStatus() {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+    let targetUserId = session.user.id;
+
+    if (activeOrgId) {
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) targetUserId = ownerId;
+    }
 
     const [integration] = await db
       .select({
@@ -35,7 +47,7 @@ export async function getNotionIntegrationStatus() {
         createdAt: notionIntegrations.createdAt,
       })
       .from(notionIntegrations)
-      .where(eq(notionIntegrations.userId, session.user.id));
+      .where(eq(notionIntegrations.userId, targetUserId));
 
     return {
       success: true,
@@ -55,14 +67,26 @@ export async function getNotionIntegrationStatus() {
 
 /**
  * Disconnect Notion integration
+ * Restricted to workspace owner if in workspace context
  */
 export async function disconnectNotionIntegration() {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+    let targetUserId = session.user.id;
+
+    if (activeOrgId) {
+      const isOwner = await isWorkspaceOwner(session.user.id, activeOrgId);
+      if (!isOwner) {
+        return { success: false, error: "Only workspace owner can manage integrations" };
+      }
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) targetUserId = ownerId;
+    }
 
     await db
       .delete(notionIntegrations)
-      .where(eq(notionIntegrations.userId, session.user.id));
+      .where(eq(notionIntegrations.userId, targetUserId));
 
     return {
       success: true,
@@ -86,12 +110,19 @@ export async function exportSurveyToNotionAction(
 ) {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+    let targetUserId = session.user.id;
 
-    // Get integration
+    if (activeOrgId) {
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) targetUserId = ownerId;
+    }
+
+    // Get integration (from target user / owner)
     const [integration] = await db
       .select()
       .from(notionIntegrations)
-      .where(eq(notionIntegrations.userId, session.user.id));
+      .where(eq(notionIntegrations.userId, targetUserId));
 
     if (!integration) {
       return {
@@ -113,10 +144,20 @@ export async function exportSurveyToNotionAction(
       };
     }
 
-    if (survey.userId !== session.user.id) {
+    // For accessing the survey itself, standard permissions apply
+    // (Checked implicitly? No, we should check access level ideally, keeping existing logic for now which checked userId)
+    // Original logic: if (survey.userId !== session.user.id) return Unauthorized
+    // We should probably rely on proper access control here if available, but let's stick to the authorized user check 
+    // BUT valid for workspace context too.
+    
+    // Check if user has access to this survey
+    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
+    const accessLevel = await getSurveyAccessLevel(session.user.id, surveyId);
+    
+    if (accessLevel === "none") {
       return {
         success: false,
-        error: "Unauthorized",
+        error: "Unauthorized access to survey",
       };
     }
 
@@ -142,7 +183,7 @@ export async function exportSurveyToNotionAction(
       survey
     );
 
-    // Save export record
+    // Save export record (Associated with the ACTOR, i.e., current user)
     const notionUrl = getNotionPageUrl(notionPage);
     await db.insert(notionExports).values({
       id: crypto.randomUUID(),
@@ -177,12 +218,19 @@ export async function exportAnalyticsToNotionAction(
 ) {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+    let targetUserId = session.user.id;
+
+    if (activeOrgId) {
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) targetUserId = ownerId;
+    }
 
     // Get integration
     const [integration] = await db
       .select()
       .from(notionIntegrations)
-      .where(eq(notionIntegrations.userId, session.user.id));
+      .where(eq(notionIntegrations.userId, targetUserId));
 
     if (!integration) {
       return {
@@ -204,10 +252,13 @@ export async function exportAnalyticsToNotionAction(
       };
     }
 
-    if (survey.userId !== session.user.id) {
+    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
+    const accessLevel = await getSurveyAccessLevel(session.user.id, surveyId);
+    
+    if (accessLevel === "none") {
       return {
         success: false,
-        error: "Unauthorized",
+        error: "Unauthorized access to survey",
       };
     }
 
@@ -286,12 +337,19 @@ export async function exportConversationToNotionAction(
 ) {
   try {
     const session = await getVerifiedSession();
+    const activeOrgId = session.session.activeOrganizationId;
+    let targetUserId = session.user.id;
+
+    if (activeOrgId) {
+      const ownerId = await getWorkspaceOwnerId(activeOrgId);
+      if (ownerId) targetUserId = ownerId;
+    }
 
     // Get integration
     const [integration] = await db
       .select()
       .from(notionIntegrations)
-      .where(eq(notionIntegrations.userId, session.user.id));
+      .where(eq(notionIntegrations.userId, targetUserId));
 
     if (!integration) {
       return {
@@ -326,10 +384,13 @@ export async function exportConversationToNotionAction(
       };
     }
 
-    if (survey.userId !== session.user.id) {
+    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
+    const accessLevel = await getSurveyAccessLevel(session.user.id, survey.id);
+    
+    if (accessLevel === "none") {
       return {
         success: false,
-        error: "Unauthorized",
+        error: "Unauthorized access to survey",
       };
     }
 
@@ -445,7 +506,10 @@ export async function getSurveyNotionExports(surveyId: string) {
       };
     }
 
-    if (survey.userId !== session.user.id) {
+    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
+    const accessLevel = await getSurveyAccessLevel(session.user.id, surveyId);
+    
+    if (accessLevel === "none") {
       return {
         success: false,
         error: "Unauthorized",
