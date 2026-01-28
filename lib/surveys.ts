@@ -1,16 +1,8 @@
 import type {
   SurveyConfig,
-  ToneProfile,
 } from "./prompts";
 import type {
   surveys,
-  SurveyObjective,
-  SurveyTargetAudience,
-  SurveyScope,
-  SurveySuccessCriteria,
-  SurveyConstraints,
-  SurveyHypotheses,
-  SurveyMedia,
 } from "@/db/schema";
 
 export const MAX_SAMPLE_CONVERSATIONS = 3;
