@@ -143,8 +143,12 @@ export function getSurveyCreationSystemPrompt(
     nextTarget = `Optional: Ask about "${nextKey}" - ${nextInfo.description}`;
   } else {
     currentPhase = "READY_FOR_SAMPLE";
-    nextTarget =
-      "All information collected! Summarize what you've learned and explain they can now try sample surveys.";
+    nextTarget = `All required information has been collected! Your job now:
+1. Provide a BRIEF summary of the survey configuration (Objective, Audience, Scope, Success Criteria, Constraints, Tone).
+2. Ask: "Does everything look good, or is there anything you'd like to add or change?"
+3. If they want changes, collect them and update your understanding.
+4. If they say it looks good (or similar), tell them: "Great! Click the 'Go to Sample Conversations' button that should now appear below to test how the AI will conduct the real survey."
+IMPORTANT: Do NOT proceed to sample conversations yourself. The user must click the button in the UI.`;
   }
 
   // Inject Domain Persona if available
