@@ -143,12 +143,17 @@ export function getSurveyCreationSystemPrompt(
     nextTarget = `Optional: Ask about "${nextKey}" - ${nextInfo.description}`;
   } else {
     currentPhase = "READY_FOR_SAMPLE";
-    nextTarget = `All required information has been collected! Your job now:
-1. Provide a BRIEF summary of the survey configuration (Objective, Audience, Scope, Success Criteria, Constraints, Tone).
-2. Ask: "Does everything look good, or is there anything you'd like to add or change?"
-3. If they want changes, collect them and update your understanding.
-4. If they say it looks good (or similar), tell them: "Great! Click the 'Go to Sample Conversations' button that should now appear below to test how the AI will conduct the real survey."
-IMPORTANT: Do NOT proceed to sample conversations yourself. The user must click the button in the UI.`;
+    nextTarget = `All required information has been collected!
+STOP asking questions.
+STOP proposing to draft questions.
+STOP proposing to show examples.
+
+Your ONLY job is to:
+1. Tell the user you have everything you need.
+2. Ask them to click the "Go to Sample Conversations" button below to test the survey as a respondent.
+3. If they ask about questions, tell them they can experience the questions by clicking the button.
+
+Say something like: "I have all the information I need! Please click the 'Go to Sample Conversations' button below to simulate the survey experience."`;
   }
 
   // Inject Domain Persona if available
@@ -538,7 +543,8 @@ export function getSampleConversationSystemPrompt(
 Additional guidance for this rehearsal with the survey creator:
 - Treat the survey creator exactly like a participant so they can experience the real flow
 - After covering every required topic, wrap up politely just as you would with a participant
-- This is sample conversation #${conversationNumber || 1} of 3 maximum${iterationNote}${feedbackSection}`;
+- This is sample conversation #${conversationNumber || 1} of 3 maximum${iterationNote}${feedbackSection}
+- CRITICAL: When the survey is finished and you have said goodbye, output this exact token at the very end: [[SURVEY_COMPLETED]]`;
 }
 
 /**

@@ -5,8 +5,23 @@ import { createPortal } from "react-dom";
 import { Sparkles, Send, X,ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+import { InferSelectModel } from "drizzle-orm";
+import { projects, surveys } from "@/db/schema";
+
+type Project = InferSelectModel<typeof projects>;
+type Survey = InferSelectModel<typeof surveys>;
+
+type ProjectWithSurveys = Project & {
+    surveys: Survey[];
+    stats?: {
+        totalSurveys: number;
+        totalResponses: number;
+        avgCompletion: number;
+    }
+};
+
 type ProjectAIChatProps = {
-    project: any;
+    project: ProjectWithSurveys;
 };
 
 export function ProjectAIChat({ project }: ProjectAIChatProps) {
@@ -37,8 +52,6 @@ export function ProjectAIChat({ project }: ProjectAIChatProps) {
 
         // Mock AI response
         const totalSurveys = project.surveys?.length || project.stats?.totalSurveys || 0;
-        // Mocking completion rate since we don't have it in schema
-        // const avgCompletion = project.stats?.avgCompletion || 0;
         
         setTimeout(() => {
             setAiMessages(prev => [...prev, {
