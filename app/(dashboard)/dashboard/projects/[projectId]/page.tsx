@@ -475,10 +475,6 @@ export default function ProjectDetailPage() {
         }} 
       />
       
-      {/* 
-          ProjectAI Chat would need to be updated to accept real project data type 
-          or generic type. Assuming it works or will need checking.
-      */}
       <ProjectAIChat project={project} />
     </div>
   );
