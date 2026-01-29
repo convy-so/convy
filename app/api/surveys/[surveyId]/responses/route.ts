@@ -1,4 +1,4 @@
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, count, and } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { db } from "@/db";
@@ -15,6 +15,12 @@ export async function GET(
     try {
         const session = await getVerifiedSession();
         const { surveyId } = await params;
+        const { searchParams } = new URL(request.url);
+        
+        const page = parseInt(searchParams.get("page") || "1");
+        const limit = parseInt(searchParams.get("limit") || "10");
+        const status = searchParams.get("status") || "all";
+        const offset = (page - 1) * limit;
 
         // Verify ownership
         const [survey] = await db
@@ -30,12 +36,30 @@ export async function GET(
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 
-        // Get all responses
+        // Build where clause
+        const whereConditions = [eq(surveyConversations.surveyId, surveyId)];
+        if (status === "completed") {
+            whereConditions.push(eq(surveyConversations.completed, true));
+        } else if (status === "in_progress") {
+            whereConditions.push(eq(surveyConversations.completed, false));
+        }
+
+        // Get total count
+        const [totalResult] = await db
+            .select({ count: count() })
+            .from(surveyConversations)
+            .where(and(...whereConditions));
+        
+        const total = totalResult?.count || 0;
+
+        // Get paginated responses
         const responses = await db
             .select()
             .from(surveyConversations)
-            .where(eq(surveyConversations.surveyId, surveyId))
-            .orderBy(desc(surveyConversations.createdAt));
+            .where(and(...whereConditions))
+            .orderBy(desc(surveyConversations.createdAt))
+            .limit(limit)
+            .offset(offset);
 
         // Format responses for frontend
         const formattedResponses = responses.map(r => {
@@ -94,7 +118,15 @@ export async function GET(
             };
         });
 
-        return NextResponse.json({ responses: formattedResponses });
+        return NextResponse.json({ 
+            responses: formattedResponses,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit)
+            }
+        });
     } catch (error) {
         if (error instanceof Error) {
             if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
