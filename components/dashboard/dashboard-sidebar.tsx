@@ -59,7 +59,7 @@ export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
       fetchOptions: {
         onSuccess: () => {
           toast.success("Signed out successfully");
-          router.push("/sign-in");
+          router.replace("/sign-in");
         },
       },
     });

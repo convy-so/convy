@@ -50,7 +50,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
       fetchOptions: {
         onSuccess: () => {
           toast.success("Signed out successfully");
-          router.push("/sign-in");
+          router.replace("/sign-in");
         },
       },
     });
