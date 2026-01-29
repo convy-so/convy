@@ -71,6 +71,28 @@ export default function SampleReviewPage() {
         scrollToBottom();
     }, [messages]);
 
+    // Check for completion token
+    useEffect(() => {
+        const lastMsg = messages[messages.length - 1];
+        if (lastMsg?.role === "assistant" && lastMsg.content.includes("[[SURVEY_COMPLETED]]")) {
+            const cleanedContent = lastMsg.content.replace("[[SURVEY_COMPLETED]]", "").trim();
+            // Update message to remove token and open modal
+            setMessages(prev => {
+                const newMessages = [...prev];
+                newMessages[newMessages.length - 1] = {
+                    ...lastMsg,
+                    content: cleanedContent
+                };
+                return newMessages;
+            });
+            
+            // Only open if we haven't already (to prevent double open if multiple updates happen quickly)
+            if (!showFeedbackModal) {
+                 setShowFeedbackModal(true);
+            }
+        }
+    }, [messages, showFeedbackModal]);
+
     // WebSocket Hook for Voice Conversation
     const voiceWs = useVoiceWebSocket({
         url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/sample-conversation?surveyId=${surveyId}&conversationNumber=${currentSampleNumber}`,
@@ -246,10 +268,10 @@ export default function SampleReviewPage() {
         
         setIsConfirming(true);
         try {
-            const response = await fetch(`/api/surveys/${surveyId}/status`, {
-                method: "PATCH",
+            const response = await fetch(`/api/surveys/${surveyId}/publish`, {
+                method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status: "active" }),
+                body: JSON.stringify({}),
             });
 
             if (response.ok) {

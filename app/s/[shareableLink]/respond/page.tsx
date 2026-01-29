@@ -2,24 +2,16 @@
 
 import { clientEnv } from "@/lib/env.client";
 
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useState, useRef, useEffect } from "react";
+import { useParams } from "next/navigation";
 import { Send, Loader2, AlertCircle, CheckCircle, Mic, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
 import { useChat } from "@ai-sdk/react";
 import { type UIMessage } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
 import { MediaDisplay } from "@/components/surveys/media-display";
-
-interface ExtendedMessage extends Omit<Partial<UIMessage>, "role"> {
-    id: string;
-    role: "user" | "assistant" | "system" | "data";
-    content: string;
-    displayedContent?: string;
-    isTyping?: boolean;
-    media?: any;
-    toolInvocations?: any[];
-}
+import { useQuery } from "@tanstack/react-query";
 
 interface Survey {
     id: string;
@@ -31,92 +23,84 @@ interface Survey {
     media?: any[];
 }
 
-const TYPING_DELAY_MS = 12;
+interface InitialGreeting {
+    role: "assistant";
+    content: string;
+    timestamp: string;
+}
+
+interface SurveyInitResponse {
+    survey: Survey;
+    conversationId: string;
+    participantId: string;
+    initialGreeting: InitialGreeting;
+}
+
+// API function for React Query
+async function initializeSurvey(shareableLink: string): Promise<SurveyInitResponse> {
+    const response = await fetch(`/api/surveys/respond/${shareableLink}`);
+    
+    if (!response.ok) {
+        if (response.status === 404) {
+            throw new Error("Survey not found");
+        } else if (response.status === 403) {
+            const data = await response.json();
+            throw new Error(data.error || "This survey is no longer accepting responses");
+        } else {
+            throw new Error("Failed to load survey");
+        }
+    }
+    
+    return response.json();
+}
 
 export default function SurveyRespondPage() {
     const params = useParams();
-    const router = useRouter();
     const shareableLink = params.shareableLink as string;
 
-    const [survey, setSurvey] = useState<Survey | null>(null);
-    const [conversationId, setConversationId] = useState<string | null>(null);
-    const [initialGreeting, setInitialGreeting] = useState<ExtendedMessage | null>(null);
+    // React Query for survey initialization
+    const { 
+        data: initData, 
+        isLoading: isInitializing, 
+        error: initError 
+    } = useQuery({
+        queryKey: ['survey-respond', shareableLink],
+        queryFn: () => initializeSurvey(shareableLink),
+        enabled: !!shareableLink,
+        staleTime: Infinity, // Don't refetch - this creates a new conversation each time
+        retry: false, // Don't retry on error
+    });
 
-    // AI SDK useChat
-    // Ensure we never default to /api/chat by always providing a non-empty string
-    const apiEndpoint = shareableLink ? `/api/surveys/respond/${shareableLink}` : "/api/surveys/respond/missing-link";
+    // Derived values from query
+    const survey = initData?.survey ?? null;
+    const conversationId = initData?.conversationId ?? null;
+    const initialGreeting = initData?.initialGreeting ?? null;
 
-    // Fetch survey and conversation ID
-    useEffect(() => {
-        if (!shareableLink) return;
+    // API endpoint for useChat
+    const apiEndpoint = `/api/surveys/respond/${shareableLink}`;
 
-        const fetchSurvey = async () => {
-            try {
-                const res = await fetch(`/api/surveys/respond/${shareableLink}`);
-                if (!res.ok) {
-                    if (res.status === 404) throw new Error("Survey not found");
-                    throw new Error("Failed to load survey");
-                }
-                const data = await res.json();
-                setSurvey(data.survey);
-                setConversationId(data.conversationId);
-            } catch (err: any) {
-                console.error("Error fetching survey:", err);
-                setError(err.message || "Failed to load survey");
-            }
-        };
-
-        fetchSurvey();
-    }, [shareableLink]);
-
-
-
+    // useChat hook - only meaningful after initialization (AI SDK v6)
     const { messages, setMessages: originalSetMessages, status, sendMessage } = useChat({
-        id: conversationId ?? undefined,
-        api: apiEndpoint,
-        body: { conversationId },
-        initialMessages: initialGreeting ? [initialGreeting as UIMessage] : [],
-        onFinish: (message: any) => {
-            // Optional: Handle finish
-        },
+        id: conversationId ?? "pending",
+        transport: new DefaultChatTransport({
+            api: apiEndpoint,
+            body: { conversationId },
+        }),
+        messages: initialGreeting ? [{
+            id: "greeting-" + Date.now(),
+            role: "assistant" as const,
+            content: initialGreeting.content,
+            parts: [{ type: 'text', text: initialGreeting.content }],
+        }] : [],
         onError: (error: any) => {
             console.error("Chat error:", error);
-            // If we get an error, verify the API endpoint
-            if (apiEndpoint.includes("missing-link")) {
-                setError("Survey link is missing");
-            }
         }
     });
 
-    // Cast setMessages to allow ExtendedMessage (custom properties like displayedContent)
     const setMessages = originalSetMessages as any;
 
-    useEffect(() => {
-        console.log("Survey Respond Page - API Endpoint:", apiEndpoint);
-    }, [apiEndpoint]);
-
     const [input, setInput] = useState("");
-    const isChatLoading = status === "streaming" || status === "submitted"; // Derived loading state
-
-    // Manual handleSubmit
-    const handleSubmit = async (e?: React.FormEvent) => {
-        if (e) {
-            e.preventDefault();
-        }
-        if (!input.trim() || isChatLoading) return;
-
-        const currentInput = input;
-        setInput(""); // Clear input early
-
-        try {
-            await sendMessage({ role: "user", content: currentInput } as any, { body: { conversationId } });
-        } catch (error) {
-            console.error("Failed to send message:", error);
-            // Optionally restore input or show error
-        }
-    };
-    const [isInitializing, setIsInitializing] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const isChatLoading = status === "streaming" || status === "submitted";
     const [isCompleted, setIsCompleted] = useState(false);
     const [isVoiceMode, setIsVoiceMode] = useState(false);
 
@@ -125,12 +109,11 @@ export default function SurveyRespondPage() {
         url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-response?surveyId=${shareableLink}`,
         onMessage: (data) => {
             if (data.type === "audio_sent" || data.type === "text_response") {
-                const assistantMessage: ExtendedMessage = {
+                const assistantMessage = {
                     id: Date.now().toString(),
-                    role: "assistant",
+                    role: "assistant" as const,
                     content: data.text,
-                    displayedContent: data.text,
-                    isTyping: false,
+                    parts: [{ type: 'text', text: data.text }],
                 };
                 setMessages((prev: UIMessage[]) => [...prev, assistantMessage as UIMessage]);
 
@@ -139,79 +122,34 @@ export default function SurveyRespondPage() {
                     setIsCompleted(true);
                 }
             } else if (data.type === "transcription" && data.isFinal) {
-                const userMessage: ExtendedMessage = {
+                const userMessage = {
                     id: Date.now().toString(),
-                    role: "user",
+                    role: "user" as const,
                     content: data.text,
-                    displayedContent: data.text,
-                    isTyping: false,
+                    parts: [{ type: 'text', text: data.text }],
                 };
                 setMessages((prev: UIMessage[]) => [...prev, userMessage as UIMessage]);
-            } else if (data.type === 'display_media') {
-                // Voice mode media
-                if (survey?.media) { // Assuming media is fetched or we try to find it?
-                    // Wait, for Public Survey, initially we might not have media unless we fetch detail.
-                    // But the voice websocket logic sends { id, type } usually?
-                    // Actually Sample page logic used survey.media lookup.
-                    // Does public survey fetch media? YES, I updated GET route to return media.
-                    const fullMedia = survey?.media?.find((m: any) => m.id === data.media.id);
-                    if (fullMedia) {
-                        setMessages((prev: UIMessage[]) => [...prev, {
-                            id: Date.now().toString(),
-                            role: "assistant",
-                            content: "Shared media",
-                            media: fullMedia
-                        } as any]);
-                    }
+            } else if (data.type === 'display_media' && survey?.media) {
+                const fullMedia = survey.media.find((m: any) => m.id === data.media.id);
+                if (fullMedia) {
+                    setMessages((prev: UIMessage[]) => [...prev, {
+                        id: Date.now().toString(),
+                        role: "assistant",
+                        content: "Shared media",
+                        media: fullMedia
+                    } as any]);
                 }
             }
         }
     });
 
-    // Handle StreamData from Text Mode (useChat)
-    // TODO: 'data' is no longer returned by useChat in this version.
-    // Logic for handling display_media needs to be adapted to inspect 'messages' for data parts.
-    /*
+    // Auto-enable voice mode if survey is voice-based
     useEffect(() => {
-        if (!streamData) return;
-        // streamData is array of JSON objects. checking last one or iterating?
-        // useChat 'data' accumulates.
-        const lastData = streamData[streamData.length - 1] as any;
-        if (lastData && lastData.type === 'display_media') {
-             // Check if we already added this media?
-             // Since streamData persists, we might re-process.
-             // We can check if the last message has this media?
-             // Or just ignore duplicates based on ID in messages?
-             
-             // A better way: attach media to the assistant message that triggered it?
-             // But 'data' comes separately in stream.
-             
-             // Let's just append a "system" or "assistant" message with media if not present.
-             // Or simpler: We just render media if we see it.
-             
-             // Actually, with useChat, we can't easily inject a message from 'data' effect loop without causing loops.
-             // But we can update the LAST message to include media?
-             
-             // Simpler: Just rely on voice logic for now or implement clean handling later.
-             // For now, let's just log it or try to append a message if it's new.
-             const mediaId = lastData.media.id;
-             // Check if any message has this media?
-             
-             const hasMedia = messages.some((m: any) => m.media && m.media.id === mediaId);
-             if (!hasMedia && survey?.media) {
-                 const fullMedia = survey.media.find((m: any) => m.id === mediaId);
-                 if (fullMedia) {
-                      setMessages((prev: UIMessage[]) => [...prev, {
-                         id: Date.now().toString(),
-                         role: "assistant",
-                         content: "", // Empty or descriptive
-                         media: fullMedia
-                      } as any]);
-                 }
-             }
+        if (survey?.isVoice && !isVoiceMode) {
+            setIsVoiceMode(true);
+            voiceWs.connect();
         }
-    }, [streamData, messages, survey]);
-    */
+    }, [survey?.isVoice]);
 
     const toggleVoiceMode = () => {
         const newMode = !isVoiceMode;
@@ -234,141 +172,79 @@ export default function SurveyRespondPage() {
         scrollToBottom();
     }, [messages]);
 
-    // Typing animation
-    const animateTyping = useCallback((messageId: string, fullContent: string) => {
-        let currentIndex = 0;
-        const intervalId = setInterval(() => {
-            currentIndex++;
-            setMessages((prev: UIMessage[]) => prev.map(msg =>
-                msg.id === messageId
-                    ? {
-                        ...msg,
-                        displayedContent: fullContent.slice(0, currentIndex),
-                        isTyping: currentIndex < fullContent.length
-                    }
-                    : msg
-            ));
-
-            if (currentIndex >= fullContent.length) {
-                clearInterval(intervalId);
-            }
-        }, TYPING_DELAY_MS);
-
-        return intervalId;
-    }, []);
-
-    // Initialize conversation
-    useEffect(() => {
-        const initConversation = async () => {
-            try {
-                const response = await fetch(`/api/surveys/respond/${shareableLink}`, {
-                    method: "GET",
-                });
-
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        setError("Survey not found");
-                    } else if (response.status === 403) {
-                        setError("This survey is no longer accepting responses");
-                    } else {
-                        setError("Failed to load survey");
-                    }
-                    return;
-                }
-
-                const data = await response.json();
-                setSurvey(data.survey);
-                setConversationId(data.conversationId);
-
-                if (data.survey.isVoice) {
-                    setIsVoiceMode(true);
-                    voiceWs.connect();
-                }
-
-                // Add initial AI greeting
-                const greetingId = Date.now().toString();
-                const greeting = `Hi! 👋 Welcome to this survey about "${data.survey.title}". I'm here to have a conversation with you to gather your thoughts and feedback. Your responses are anonymous and will help improve our services.\n\nLet's get started! ${data.survey.objective?.description ? `The goal of this survey is: ${data.survey.objective.description}` : ""}\n\nFirst, could you tell me a bit about yourself and your experience with us?`;
-
-                setInitialGreeting({
-                    id: greetingId,
-                    role: "assistant",
-                    content: greeting,
-                    displayedContent: "",
-                    isTyping: true,
-                });
-
-                // Trigger animation after a delay (this will work because useChat will initialize with this message)
-                setTimeout(() => animateTyping(greetingId, greeting), 500);
-            } catch (err) {
-                setError("Failed to load survey");
-            } finally {
-                setIsInitializing(false);
-            }
-        };
-
-        if (shareableLink) {
-            initConversation();
-        }
-    }, [shareableLink, animateTyping]);
-
-
-    // Replaced by useChat's handleSubmit and input management
-    // We bind useChat's handleSubmit to the form
-
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === "Enter" && !e.shiftKey) {
+    // Manual handleSubmit
+    const handleSubmit = async (e?: React.FormEvent) => {
+        if (e) {
             e.preventDefault();
-            handleSubmit();
+        }
+        if (!input.trim() || isChatLoading || !conversationId) return;
+
+        const currentInput = input;
+        setInput("");
+
+        try {
+            // AI SDK v6: sendMessage expects { text: string } format
+            await sendMessage({ text: currentInput }, { body: { conversationId } });
+        } catch (error) {
+            console.error("Failed to send message:", error);
         }
     };
 
+    // Loading state
     if (isInitializing) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
-                <div className="text-center">
-                    <Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500">Loading survey...</p>
-                </div>
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
-                <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <AlertCircle className="w-8 h-8 text-red-500" />
+            <div className="min-h-screen bg-white flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="relative">
+                        <div className="w-12 h-12 rounded-full border-4 border-gray-100" />
+                        <div className="absolute inset-0 rounded-full border-4 border-gray-900 border-t-transparent animate-spin" />
                     </div>
-                    <h1 className="text-xl font-bold text-gray-900 mb-2">{error}</h1>
-                    <p className="text-gray-500">Please check the link and try again.</p>
+                    <p className="text-gray-500 font-medium animate-pulse">Preparing your survey...</p>
                 </div>
             </div>
         );
     }
 
+    // Error state
+    if (initError) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl shadow-xl p-10 max-w-md w-full text-center border border-gray-100">
+                    <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <AlertCircle className="w-10 h-10 text-red-500" />
+                    </div>
+                    <h1 className="text-2xl font-bold text-gray-900 mb-3">
+                        {initError instanceof Error ? initError.message : "Failed to load survey"}
+                    </h1>
+                    <p className="text-gray-500 text-lg">Please check the link and try again.</p>
+                </div>
+            </div>
+        );
+    }
+
+    // Completed state
     if (isCompleted) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
-                <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-                    <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <CheckCircle className="w-8 h-8 text-emerald-500" />
+            <div className="min-h-screen bg-white flex items-center justify-center p-4 relative overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-gray-50 via-white to-white" />
+                <div className="relative bg-white/80 backdrop-blur-xl rounded-[2rem] shadow-2xl p-12 max-w-lg w-full text-center border border-white/20 ring-1 ring-gray-900/5">
+                    <div className="w-24 h-24 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg shadow-emerald-500/20">
+                        <CheckCircle className="w-12 h-12 text-white" />
                     </div>
-                    <h1 className="text-xl font-bold text-gray-900 mb-2">Thank You!</h1>
-                    <p className="text-gray-500 mb-6">Your responses have been recorded. We appreciate your time and feedback!</p>
+                    <h1 className="text-4xl font-bold text-gray-900 mb-4 tracking-tight">Thank You!</h1>
+                    <p className="text-xl text-gray-500 mb-10 leading-relaxed font-light">
+                        Your insights are incredibly valuable. We appreciate you taking the time to share your thoughts with us.
+                    </p>
                     <button
                         onClick={() => window.close()}
-                        className="px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors"
+                        className="px-8 py-4 bg-gray-900 text-white rounded-2xl font-semibold hover:bg-gray-800 transition-all hover:shadow-xl hover:-translate-y-1 active:scale-95 w-full"
                     >
-                        Close
+                        Close Survey
                     </button>
                 </div>
             </div>
         );
     }
-
-
-    // ... imports ...
 
     // Premium UI Components
     const VisualizerRing = ({ isRecording }: { isRecording: boolean }) => (
@@ -389,59 +265,6 @@ export default function SurveyRespondPage() {
             </div>
         </div>
     );
-
-    if (isInitializing) {
-        return (
-            <div className="min-h-screen bg-white flex items-center justify-center">
-                <div className="flex flex-col items-center gap-4">
-                    <div className="relative">
-                        <div className="w-12 h-12 rounded-full border-4 border-gray-100" />
-                        <div className="absolute inset-0 rounded-full border-4 border-gray-900 border-t-transparent animate-spin" />
-                    </div>
-                    <p className="text-gray-500 font-medium animate-pulse">Initializing experience...</p>
-                </div>
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-3xl shadow-xl p-10 max-w-md w-full text-center border border-gray-100">
-                    <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <AlertCircle className="w-10 h-10 text-red-500" />
-                    </div>
-                    <h1 className="text-2xl font-bold text-gray-900 mb-3">{error}</h1>
-                    <p className="text-gray-500 text-lg">Please check the link and try again.</p>
-                </div>
-            </div>
-        );
-    }
-
-    if (isCompleted) {
-        return (
-            <div className="min-h-screen bg-white flex items-center justify-center p-4 relative overflow-hidden">
-                {/* Background Decoration */}
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-gray-50 via-white to-white" />
-
-                <div className="relative bg-white/80 backdrop-blur-xl rounded-[2rem] shadow-2xl p-12 max-w-lg w-full text-center border border-white/20 ring-1 ring-gray-900/5">
-                    <div className="w-24 h-24 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg shadow-emerald-500/20">
-                        <CheckCircle className="w-12 h-12 text-white" />
-                    </div>
-                    <h1 className="text-4xl font-bold text-gray-900 mb-4 tracking-tight">Thank You!</h1>
-                    <p className="text-xl text-gray-500 mb-10 leading-relaxed font-light">
-                        Your insights are incredibly valuable. We appreciate you taking the time to share your thoughts with us.
-                    </p>
-                    <button
-                        onClick={() => window.close()}
-                        className="px-8 py-4 bg-gray-900 text-white rounded-2xl font-semibold hover:bg-gray-800 transition-all hover:shadow-xl hover:-translate-y-1 active:scale-95 w-full"
-                    >
-                        Close Survey
-                    </button>
-                </div>
-            </div>
-        );
-    }
 
     return (
         <div className="min-h-screen bg-[#FDFDFD] flex flex-col font-sans selection:bg-gray-900 selection:text-white">
@@ -508,10 +331,15 @@ export default function SurveyRespondPage() {
                                 )}
                             >
                                 <div className="whitespace-pre-wrap">
-                                    {/* Use displayedContent if available (for typing effect), otherwise fall back to content */}
-                                    {message.displayedContent || message.content}
+                                    {/* AI SDK v6 recommended: use parts for rendering */}
+                                    {message.parts?.map((part: any, index: number) => 
+                                        part.type === 'text' ? <span key={index}>{part.text}</span> : null
+                                    )}
+                                    
+                                    {/* Fallback for backwards compatibility */}
+                                    {!message.parts && message.content}
 
-                                    {/* Handle direct media attachment (legacy) */}
+                                    {/* Handle direct media attachment */}
                                     {message.media && <MediaDisplay media={message.media} />}
 
                                     {/* Handle tool invocations for media */}
@@ -524,10 +352,6 @@ export default function SurveyRespondPage() {
                                         }
                                         return null;
                                     })}
-
-                                    {message.isTyping && (
-                                        <span className="inline-block w-1.5 h-5 bg-current ml-1 animate-pulse align-middle opacity-50" />
-                                    )}
                                 </div>
                             </div>
                         </div>
@@ -555,7 +379,6 @@ export default function SurveyRespondPage() {
                                 <p className="text-gray-900 font-semibold text-lg tracking-tight">
                                     {voiceWs.isRecording ? "Listening..." : "Tap to speak"}
                                 </p>
-                                {/* Live Transcription Preview */}
                                 <div className="h-6 flex items-center justify-center">
                                     {(voiceWs.transcription || voiceWs.interimTranscription) ? (
                                         <p className="text-sm text-gray-500 max-w-md truncate px-4">
@@ -577,7 +400,7 @@ export default function SurveyRespondPage() {
                                 <textarea
                                     ref={inputRef}
                                     value={input}
-                                    onChange={e => setInput(e.target.value)} // useChat handles this
+                                    onChange={e => setInput(e.target.value)}
                                     onKeyDown={e => {
                                         if (e.key === "Enter" && !e.shiftKey) {
                                             e.preventDefault();
