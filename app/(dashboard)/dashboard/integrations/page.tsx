@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { SiSlack } from "react-icons/si";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import toast from "react-hot-toast";
 import {
     getSlackIntegrationStatus,
     disconnectSlack,

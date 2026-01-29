@@ -17,6 +17,7 @@ import {
   Check,
   Mic,
   ExternalLink,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { 
@@ -45,6 +46,7 @@ export default function ProjectsPage() {
   const [showMenuFor, setShowMenuFor] = useState<string | null>(null);
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
   const [editingProject, setEditingProject] = useState<{ id: string; name: string; description?: string | null } | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null);
 
   const filteredProjects = projects?.filter(p =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -74,10 +76,18 @@ export default function ProjectsPage() {
     });
   };
 
-  const handleDeleteProject = (id: string) => {
-    if (confirm("Are you sure you want to delete this project?")) {
-        deleteProjectMutation.mutate(id);
-        setShowMenuFor(null);
+  const handleDeleteProject = (project: { id: string; name: string }) => {
+    setProjectToDelete(project);
+    setShowMenuFor(null);
+  };
+  
+  const confirmDeleteProject = () => {
+    if (projectToDelete) {
+        deleteProjectMutation.mutate(projectToDelete.id, {
+            onSuccess: () => {
+                setProjectToDelete(null);
+            }
+        });
     }
   };
   
@@ -220,7 +230,7 @@ export default function ProjectsPage() {
                           </button>
                           <div className="border-t border-gray-100 my-1" />
                           <button
-                            onClick={() => handleDeleteProject(project.id)}
+                            onClick={() => handleDeleteProject({ id: project.id, name: project.name })}
                             className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -405,6 +415,54 @@ export default function ProjectsPage() {
               >
                 {updateProjectMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Delete Project Modal */}
+      {projectToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setProjectToDelete(null)}
+          />
+
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Project</h3>
+              <p className="text-gray-500">
+                Are you sure you want to delete <span className="font-semibold text-gray-900">"{projectToDelete.name}"</span>? 
+                This action cannot be undone and will remove all survey associations.
+              </p>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 flex items-center gap-3">
+              <button
+                onClick={() => setProjectToDelete(null)}
+                className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteProject}
+                disabled={deleteProjectMutation.isPending}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium text-sm hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {deleteProjectMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Delete Project
+                  </>
+                )}
               </button>
             </div>
           </div>

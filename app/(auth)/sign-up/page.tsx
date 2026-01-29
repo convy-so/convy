@@ -95,7 +95,7 @@ export default function SignUpPage() {
     <>
       {isRedirecting && (
         <LoadingOverlay 
-          message="Creating your account..." 
+          message="Loading ..." 
           subtitle="Redirecting you shortly"
         />
       )}

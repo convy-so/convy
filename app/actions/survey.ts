@@ -905,3 +905,69 @@ export async function deleteSurveyAction(
     return { success: false, error: "Failed to delete survey" };
   }
 }
+
+/**
+ * Duplicate a survey
+ */
+export async function duplicateSurveyAction(
+  surveyId: string
+): Promise<ActionResult<{ id: string; survey: any }>> {
+  try {
+    const session = await getVerifiedSession();
+
+    const [existingSurvey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+
+    if (!existingSurvey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    const access = await getSurveyAccessLevel(session.user.id, existingSurvey.id);
+    if (access !== "owner") {
+      return { success: false, error: "Unauthorized: Only the creator can duplicate this survey" };
+    }
+
+    const newSurveyId = nanoid();
+    const now = new Date();
+
+    // Copy survey data
+    const [newSurvey] = await db
+      .insert(surveys)
+      .values({
+        ...existingSurvey,
+        id: newSurveyId,
+        userId: session.user.id,
+        title: `${existingSurvey.title || "Untitled Survey"} (Copy)`,
+        status: "draft",
+        confirmed: false,
+        currentParticipants: 0,
+        shareableLink: null,
+        customSlug: null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    // Map to frontend format (similar to what GET /api/surveys returns)
+    const formattedSurvey = {
+      id: newSurvey.id,
+      title: newSurvey.title || "Untitled Survey",
+      description: (newSurvey.additionalContext) || (newSurvey.objective as any)?.description || "",
+      status: newSurvey.status,
+      shareableLink: newSurvey.shareableLink,
+      responses: newSurvey.currentParticipants,
+      completionRate: 0,
+      createdAt: newSurvey.createdAt?.toISOString().split('T')[0] || "",
+      lastResponse: "Never",
+      isOwner: true,
+      isVoice: newSurvey.isVoice || false,
+    };
+
+    return { success: true, data: { id: newSurveyId, survey: formattedSurvey } };
+  } catch (error) {
+    console.error("Error duplicating survey:", error);
+    return { success: false, error: "Failed to duplicate survey" };
+  }
+}

@@ -18,6 +18,8 @@ import {
   X,
   Plug,
   Sparkles,
+  LogOut,
+  User as UserIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WorkspaceSwitcher } from "./workspace-switcher";
@@ -32,16 +34,36 @@ const navigation = [
 ];
 
 const bottomNavigation = [
+  { name: "Profile", href: "/dashboard/profile", icon: UserIcon },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
+import { useAuth } from "@/components/providers/auth-provider";
+
+import { authClient } from "@/lib/auth-client";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
+
 interface DashboardSidebarProps {
-  user: User | null;
+  user?: User | null;
 }
 
-export function DashboardSidebar({ user }: DashboardSidebarProps) {
+export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
+  const { user } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const handleSignOut = async () => {
+    await authClient.signOut({
+      fetchOptions: {
+        onSuccess: () => {
+          toast.success("Signed out successfully");
+          router.push("/sign-in");
+        },
+      },
+    });
+  };
 
   return (
     <>
@@ -99,7 +121,7 @@ export function DashboardSidebar({ user }: DashboardSidebarProps) {
             const isActive =
               pathname === item.href;
             const isCreateSurvey = item.href === "/dashboard/create";
-            
+
             return (
               <Link
                 key={item.name}
@@ -109,8 +131,8 @@ export function DashboardSidebar({ user }: DashboardSidebarProps) {
                   isActive
                     ? "bg-gray-900 text-white"
                     : isCreateSurvey
-                    ? "text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                      ? "text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                 )}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
@@ -151,21 +173,22 @@ export function DashboardSidebar({ user }: DashboardSidebarProps) {
 
         {/* User section */}
         <div className="p-4 border-t border-gray-100 bg-gray-50/50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center">
-              <span className="text-white text-sm font-bold">
-                {user?.name?.charAt(0).toUpperCase() ?? "U"}
-              </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate">
-                {user?.name ?? "Guest User"}
-              </p>
-              <p className="text-xs text-gray-500 truncate">
-                {user?.email ?? "Sign in to continue"}
-              </p>
-            </div>
-          </div>
+          {user ? (
+            <button
+              onClick={handleSignOut}
+              className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 transition-all duration-200 border border-transparent hover:border-red-100 group shadow-sm bg-white"
+            >
+              <LogOut className="w-5 h-5 group-hover:scale-110 transition-transform" />
+              Sign Out
+            </button>
+          ) : (
+            <Link
+              href="/sign-in"
+              className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-all duration-200"
+            >
+              Sign In
+            </Link>
+          )}
         </div>
       </div>
     </>

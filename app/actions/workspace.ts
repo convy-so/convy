@@ -9,10 +9,10 @@
 import { auth } from "@/lib/auth";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { db } from "@/db";
-import { organizations, members, invitations } from "@/db/schema";
+import { organizations, members, invitations, subscriptions } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 
-type ActionResult<T> =
+export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
@@ -121,6 +121,7 @@ export async function getActiveWorkspace(): Promise<
     slug: string;
     role: string;
     logo?: string | null;
+    plan?:string | null;
   } | null>
 > {
   try {
@@ -156,6 +157,13 @@ export async function getActiveWorkspace(): Promise<
       ),
     });
 
+    const subscription = await db.query.subscriptions.findFirst({
+      where: (subs, { eq }) => eq(subs.organizationId, activeOrganizationId),
+      with: {
+        plan: true
+      }
+    });
+
     return {
       success: true,
       data: {
@@ -164,6 +172,7 @@ export async function getActiveWorkspace(): Promise<
         slug: org.slug,
         role: member?.role || "member",
         logo: org.logo || null,
+        plan: subscription?.plan?.name || "Free",
       },
     };
   } catch (error) {
@@ -530,6 +539,32 @@ export async function getWorkspaceInvitations(
         error instanceof Error
           ? error.message
           : "Failed to get workspace invitations",
+    };
+  }
+}
+/**
+ * Accept a workspace invitation
+ */
+export async function acceptInvitationAction(invitationId: string): Promise<ActionResult<void>> {
+  try {
+    const session = await getVerifiedSession();
+
+    await auth.api.acceptInvitation({
+      body: {
+        invitationId,
+      },
+      headers: await getSessionHeaders(),
+    });
+
+    return {
+      success: true,
+      data: undefined,
+    };
+  } catch (error) {
+    console.error("Error accepting invitation:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to accept invitation",
     };
   }
 }

@@ -15,26 +15,46 @@ import {
     AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/components/providers/auth-provider";
+import { authClient } from "@/lib/auth-client";
+import { getActiveWorkspace, updateWorkspace } from "@/app/actions/workspace";
+import toast from "react-hot-toast";
+import { useEffect } from "react";
 
 const tabs = [
     { id: "profile", name: "Profile", icon: User },
+    { id: "workspace", name: "Workspace", icon: Key }, // Repurposed icon or could use Settings
     { id: "notifications", name: "Notifications", icon: Bell },
     { id: "security", name: "Security", icon: Shield },
     { id: "billing", name: "Billing", icon: CreditCard },
 ];
 
 export default function SettingsPage() {
+    const { user, session } = useAuth();
     const [activeTab, setActiveTab] = useState("profile");
     const [isSaving, setIsSaving] = useState(false);
     const [profileImage, setProfileImage] = useState<string | null>(null);
 
-    // Mock user data
+    // Profile state
     const [profile, setProfile] = useState({
-        name: "User Name",
-        email: "user@example.com",
-        company: "Acme Inc.",
-        timezone: "UTC-5 (Eastern Time)",
+        name: user?.name || "",
+        email: user?.email || "",
+        image: user?.image || "",
     });
+
+    // Workspace state
+    const [activeWorkspace, setActiveWorkspace] = useState<{
+        id: string;
+        name: string;
+        slug: string;
+        role: string;
+        logo?: string | null;
+        plan?: string | null;
+    } | null>(null);
+
+    const [wsName, setWsName] = useState("");
+    const [wsSlug, setWsSlug] = useState("");
+    const [wsLogo, setWsLogo] = useState<string | null>(null);
 
     const [notifications, setNotifications] = useState({
         emailNewResponse: true,
@@ -44,10 +64,129 @@ export default function SettingsPage() {
         pushSurveyComplete: true,
     });
 
-    const handleSave = async () => {
+    const [passwordData, setPasswordData] = useState({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+    });
+
+    useEffect(() => {
+        if (user) {
+            setProfile({
+                name: user.name || "",
+                email: user.email || "",
+                image: user.image || "",
+            });
+        }
+    }, [user]);
+
+    useEffect(() => {
+        async function loadWorkspace() {
+            const result = await getActiveWorkspace();
+            if (result.success && result.data) {
+                setActiveWorkspace(result.data);
+                setWsName(result.data.name);
+                setWsSlug(result.data.slug);
+                setWsLogo(result.data.logo || null);
+            }
+        }
+        loadWorkspace();
+    }, []);
+
+    const handleProfileSave = async () => {
         setIsSaving(true);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        setIsSaving(false);
+        try {
+            await authClient.updateUser({
+                name: profile.name,
+                image: profileImage || profile.image || undefined,
+                fetchOptions: {
+                    onSuccess: () => {
+                        toast.success("Profile updated successfully");
+                    },
+                    onError: (ctx) => {
+                        toast.error(ctx.error.message || "Failed to update profile");
+                    }
+                }
+            });
+        } catch (error) {
+            toast.error("An error occurred while updating profile");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handlePasswordUpdate = async () => {
+        if (passwordData.newPassword !== passwordData.confirmPassword) {
+            toast.error("New passwords do not match");
+            return;
+        }
+        setIsSaving(true);
+        try {
+            await authClient.changePassword({
+                newPassword: passwordData.newPassword,
+                currentPassword: passwordData.currentPassword,
+                fetchOptions: {
+                    onSuccess: () => {
+                        toast.success("Password updated successfully");
+                        setPasswordData({
+                            currentPassword: "",
+                            newPassword: "",
+                            confirmPassword: "",
+                        });
+                    },
+                    onError: (ctx) => {
+                        toast.error(ctx.error.message || "Failed to update password");
+                    }
+                }
+            });
+        } catch (error) {
+            toast.error("An error occurred while updating password");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleWorkspaceSave = async () => {
+        if (!activeWorkspace) return;
+        setIsSaving(true);
+        try {
+            const result = await updateWorkspace({
+                organizationId: activeWorkspace.id,
+                name: wsName,
+                slug: wsSlug,
+                logo: wsLogo || undefined,
+            });
+            if (result.success) {
+                toast.success("Workspace updated successfully");
+                setActiveWorkspace({ ...activeWorkspace, name: wsName, slug: wsSlug, logo: wsLogo });
+            } else {
+                toast.error(result.error || "Failed to update workspace");
+            }
+        } catch (error) {
+            toast.error("An error occurred while updating workspace");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleSave = async () => {
+        if (activeTab === "profile") {
+            await handleProfileSave();
+        } else if (activeTab === "workspace") {
+            await handleWorkspaceSave();
+        } else if (activeTab === "security") {
+            await handlePasswordUpdate();
+        } else if (activeTab === "notifications") {
+            setIsSaving(true);
+            await new Promise((resolve) => setTimeout(resolve, 800));
+            toast.success("Notification preferences saved");
+            setIsSaving(false);
+        } else {
+            setIsSaving(true);
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            setIsSaving(false);
+            toast.success("Settings saved");
+        }
     };
 
     return (
@@ -96,9 +235,9 @@ export default function SettingsPage() {
                                 {/* Avatar */}
                                 <div className="flex items-center gap-5">
                                     <div className="relative">
-                                        {profileImage ? (
+                                        {profileImage || profile.image ? (
                                             <img 
-                                                src={profileImage} 
+                                                src={profileImage || profile.image} 
                                                 alt="Profile" 
                                                 className="w-20 h-20 rounded-2xl object-cover"
                                             />
@@ -159,29 +298,137 @@ export default function SettingsPage() {
                                         <input
                                             type="email"
                                             value={profile.email}
-                                            onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                            disabled
+                                            className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-500 cursor-not-allowed outline-none transition-all"
                                         />
+                                        <p className="mt-1 text-xs text-gray-400 font-normal italic">Email cannot be changed directly.</p>
                                     </div>
+                                </div>
+                            </div>
+
+                            <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
+                                <button
+                                    onClick={handleSave}
+                                    disabled={isSaving}
+                                    className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50"
+                                >
+                                    {isSaving ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Check className="w-4 h-4" />
+                                            Save Changes
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                {/* Workspace Tab */}
+                {activeTab === "workspace" && (
+                    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-100">
+                            <h2 className="text-lg font-semibold text-gray-900">Workspace Settings</h2>
+                            <p className="text-sm text-gray-500">Manage your workspace identity</p>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            {!activeWorkspace ? (
+                                <div className="flex items-center justify-center py-12">
+                                    <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    {/* Workspace Logo */}
+                                    <div className="flex items-center gap-5">
+                                        <div className="relative">
+                                            {wsLogo ? (
+                                                <img 
+                                                    src={wsLogo} 
+                                                    alt="Workspace Logo" 
+                                                    className="w-16 h-16 rounded-xl object-cover border border-gray-100"
+                                                />
+                                            ) : (
+                                                <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400">
+                                                    <Camera className="w-6 h-6" />
+                                                </div>
+                                            )}
+                                            <label className="absolute -bottom-1 -right-1 w-6 h-6 bg-gray-900 rounded-lg flex items-center justify-center text-white hover:bg-gray-800 transition-colors cursor-pointer shadow-sm">
+                                                <Camera className="w-3 h-3" />
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file) {
+                                                            const reader = new FileReader();
+                                                            reader.onload = (e) => {
+                                                                setWsLogo(e.target?.result as string);
+                                                            };
+                                                            reader.readAsDataURL(file);
+                                                        }
+                                                    }}
+                                                />
+                                            </label>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-900">Workspace Logo</p>
+                                            <p className="text-xs text-gray-500">Recommended: 256x256px</p>
+                                            {wsLogo && (
+                                                <button 
+                                                    onClick={() => setWsLogo(null)}
+                                                    className="text-xs text-red-500 hover:text-red-600 mt-1"
+                                                >
+                                                    Remove
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 gap-5">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Company
+                                            Workspace Name
                                         </label>
                                         <input
                                             type="text"
-                                            value={profile.company}
-                                            onChange={(e) => setProfile({ ...profile, company: e.target.value })}
+                                            value={wsName}
+                                            onChange={(e) => setWsName(e.target.value)}
                                             className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
                                         />
                                     </div>
-                                                                   </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Workspace Slug
+                                        </label>
+                                        <div className="flex gap-2">
+                                            <span className="flex items-center px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-500 text-sm">
+                                                convy.app/
+                                            </span>
+                                            <input
+                                                type="text"
+                                                value={wsSlug}
+                                                onChange={(e) => setWsSlug(e.target.value)}
+                                                className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                            />
+                                    </div>
+                                </div>
                             </div>
+                        </div>
+                    )}
+                </div>
 
+                        {activeWorkspace && (
                             <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
                                 <button
                                     onClick={handleSave}
                                     disabled={isSaving}
-                                    className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50"
+                                    className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-xl font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50 shadow-sm"
                                 >
                                     {isSaving ? (
                                         <>
@@ -191,249 +438,267 @@ export default function SettingsPage() {
                                     ) : (
                                         <>
                                             <Check className="w-4 h-4" />
-                                            Save Changes
+                                            Update Workspace
                                         </>
                                     )}
                                 </button>
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
+                )}
 
-                    {/* Notifications Tab */}
-                    {activeTab === "notifications" && (
+                {/* Notifications Tab */}
+                {activeTab === "notifications" && (
+                    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-100">
+                            <h2 className="text-lg font-semibold text-gray-900">Notification Preferences</h2>
+                            <p className="text-sm text-gray-500">Choose how you want to be notified</p>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            {/* Email Notifications */}
+                            <div>
+                                <div className="flex items-center gap-2 mb-4">
+                                    <Mail className="w-5 h-5 text-gray-500" />
+                                    <h3 className="font-medium text-gray-900">Email Notifications</h3>
+                                </div>
+                                <div className="space-y-3">
+                                    {[
+                                        { key: "emailNewResponse", label: "New survey responses", desc: "Get notified when someone completes your survey" },
+                                        { key: "emailWeeklySummary", label: "Weekly summary", desc: "Receive a weekly digest of your survey analytics" },
+                                        { key: "emailTeamUpdates", label: "Team updates", desc: "Get notified about team member actions" },
+                                    ].map((item) => (
+                                        <label
+                                            key={item.key}
+                                            className="flex items-start gap-4 p-4 rounded-xl bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={notifications[item.key as keyof typeof notifications]}
+                                                onChange={(e) =>
+                                                    setNotifications({ ...notifications, [item.key]: e.target.checked })
+                                                }
+                                                className="mt-1 w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                                            />
+                                            <div>
+                                                <p className="font-medium text-gray-900">{item.label}</p>
+                                                <p className="text-sm text-gray-500">{item.desc}</p>
+                                            </div>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Push Notifications */}
+                            <div>
+                                <div className="flex items-center gap-2 mb-4">
+                                    <Smartphone className="w-5 h-5 text-gray-500" />
+                                    <h3 className="font-medium text-gray-900">Push Notifications</h3>
+                                </div>
+                                <div className="space-y-3">
+                                    {[
+                                        { key: "pushNewResponse", label: "New responses", desc: "Real-time alerts for new responses" },
+                                        { key: "pushSurveyComplete", label: "Survey milestones", desc: "When surveys reach response goals" },
+                                    ].map((item) => (
+                                        <label
+                                            key={item.key}
+                                            className="flex items-start gap-4 p-4 rounded-xl bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={notifications[item.key as keyof typeof notifications]}
+                                                onChange={(e) =>
+                                                    setNotifications({ ...notifications, [item.key]: e.target.checked })
+                                                }
+                                                className="mt-1 w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                                            />
+                                            <div>
+                                                <p className="font-medium text-gray-900">{item.label}</p>
+                                                <p className="text-sm text-gray-500">{item.desc}</p>
+                                            </div>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
+                            <button
+                                onClick={handleSave}
+                                disabled={isSaving}
+                                className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50"
+                            >
+                                {isSaving ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Saving...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Check className="w-4 h-4" />
+                                        Save Changes
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Security Tab */}
+                {activeTab === "security" && (
+                    <div className="space-y-6">
+                        {/* Password */}
                         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-100">
-                                <h2 className="text-lg font-semibold text-gray-900">Notification Preferences</h2>
-                                <p className="text-sm text-gray-500">Choose how you want to be notified</p>
+                                <h2 className="text-lg font-semibold text-gray-900">Change Password</h2>
+                                <p className="text-sm text-gray-500">Update your account password</p>
                             </div>
-
-                            <div className="p-6 space-y-6">
-                                {/* Email Notifications */}
+                            <div className="p-6 space-y-4">
                                 <div>
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <Mail className="w-5 h-5 text-gray-500" />
-                                        <h3 className="font-medium text-gray-900">Email Notifications</h3>
-                                    </div>
-                                    <div className="space-y-3">
-                                        {[
-                                            { key: "emailNewResponse", label: "New survey responses", desc: "Get notified when someone completes your survey" },
-                                            { key: "emailWeeklySummary", label: "Weekly summary", desc: "Receive a weekly digest of your survey analytics" },
-                                            { key: "emailTeamUpdates", label: "Team updates", desc: "Get notified about team member actions" },
-                                        ].map((item) => (
-                                            <label
-                                                key={item.key}
-                                                className="flex items-start gap-4 p-4 rounded-xl bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={notifications[item.key as keyof typeof notifications]}
-                                                    onChange={(e) =>
-                                                        setNotifications({ ...notifications, [item.key]: e.target.checked })
-                                                    }
-                                                    className="mt-1 w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
-                                                />
-                                                <div>
-                                                    <p className="font-medium text-gray-900">{item.label}</p>
-                                                    <p className="text-sm text-gray-500">{item.desc}</p>
-                                                </div>
-                                            </label>
-                                        ))}
-                                    </div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Current Password
+                                    </label>
+                                    <input
+                                        type="password"
+                                        value={passwordData.currentPassword}
+                                        onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                                        placeholder="••••••••"
+                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                    />
                                 </div>
-
-                                {/* Push Notifications */}
                                 <div>
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <Smartphone className="w-5 h-5 text-gray-500" />
-                                        <h3 className="font-medium text-gray-900">Push Notifications</h3>
-                                    </div>
-                                    <div className="space-y-3">
-                                        {[
-                                            { key: "pushNewResponse", label: "New responses", desc: "Real-time alerts for new responses" },
-                                            { key: "pushSurveyComplete", label: "Survey milestones", desc: "When surveys reach response goals" },
-                                        ].map((item) => (
-                                            <label
-                                                key={item.key}
-                                                className="flex items-start gap-4 p-4 rounded-xl bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={notifications[item.key as keyof typeof notifications]}
-                                                    onChange={(e) =>
-                                                        setNotifications({ ...notifications, [item.key]: e.target.checked })
-                                                    }
-                                                    className="mt-1 w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
-                                                />
-                                                <div>
-                                                    <p className="font-medium text-gray-900">{item.label}</p>
-                                                    <p className="text-sm text-gray-500">{item.desc}</p>
-                                                </div>
-                                            </label>
-                                        ))}
-                                    </div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        New Password
+                                    </label>
+                                    <input
+                                        type="password"
+                                        value={passwordData.newPassword}
+                                        onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                                        placeholder="••••••••"
+                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Confirm New Password
+                                    </label>
+                                    <input
+                                        type="password"
+                                        value={passwordData.confirmPassword}
+                                        onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                                        placeholder="••••••••"
+                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                    />
                                 </div>
                             </div>
-
                             <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
-                                <button
-                                    onClick={handleSave}
+                                <button 
+                                    onClick={handlePasswordUpdate}
                                     disabled={isSaving}
-                                    className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50"
+                                    className="px-5 py-2.5 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center gap-2"
                                 >
                                     {isSaving ? (
                                         <>
                                             <Loader2 className="w-4 h-4 animate-spin" />
-                                            Saving...
+                                            Updating...
                                         </>
                                     ) : (
-                                        <>
-                                            <Check className="w-4 h-4" />
-                                            Save Changes
-                                        </>
+                                        "Update Password"
                                     )}
                                 </button>
                             </div>
                         </div>
-                    )}
 
-                    {/* Security Tab */}
-                    {activeTab === "security" && (
-                        <div className="space-y-6">
-                            {/* Password */}
-                            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-                                <div className="px-6 py-4 border-b border-gray-100">
-                                    <h2 className="text-lg font-semibold text-gray-900">Change Password</h2>
-                                    <p className="text-sm text-gray-500">Update your account password</p>
-                                </div>
-                                <div className="p-6 space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Current Password
-                                        </label>
-                                        <input
-                                            type="password"
-                                            placeholder="••••••••"
-                                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            New Password
-                                        </label>
-                                        <input
-                                            type="password"
-                                            placeholder="••••••••"
-                                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Confirm New Password
-                                        </label>
-                                        <input
-                                            type="password"
-                                            placeholder="••••••••"
-                                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
-                                    <button className="px-5 py-2.5 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors">
-                                        Update Password
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Two Factor */}
-                            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                                <div className="flex items-start justify-between">
-                                    <div className="flex items-start gap-4">
-                                        <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center">
-                                            <Key className="w-5 h-5 text-orange-600" />
-                                        </div>
-                                        <div>
-                                            <h3 className="font-semibold text-gray-900">Two-Factor Authentication</h3>
-                                            <p className="text-sm text-gray-500 mt-1">
-                                                Add an extra layer of security to your account
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                                        Enable
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Danger Zone */}
-                            <div className="bg-red-50 rounded-2xl border border-red-200 p-6">
+                        {/* Two Factor */}
+                        <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                            <div className="flex items-start justify-between">
                                 <div className="flex items-start gap-4">
-                                    <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+                                    <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center">
+                                        <Key className="w-5 h-5 text-orange-600" />
+                                    </div>
                                     <div>
-                                        <h3 className="font-semibold text-red-900">Delete Account</h3>
-                                        <p className="text-sm text-red-700 mt-1 mb-4">
-                                            Once you delete your account, there is no going back. Please be certain.
+                                        <h3 className="font-semibold text-gray-900">Two-Factor Authentication</h3>
+                                        <p className="text-sm text-gray-500 mt-1">
+                                            Add an extra layer of security to your account
                                         </p>
-                                        <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
-                                            Delete Account
-                                        </button>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Billing Tab */}
-                    {activeTab === "billing" && (
-                        <div className="space-y-6">
-                            {/* Current Plan */}
-                            <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 text-white">
-                                <div className="flex items-start justify-between mb-4">
-                                    <div>
-                                        <p className="text-sm text-gray-300 mb-1">Current Plan</p>
-                                        <h2 className="text-2xl font-bold">Enterprise (Test Mode)</h2>
-                                    </div>
-                                    <span className="px-3 py-1 bg-white/10 rounded-full text-sm font-medium">
-                                        Active
-                                    </span>
-                                </div>
-                                <p className="text-gray-300 mb-6">
-                                    Billing is currently frozen for testing. You have full access to all features.
-                                </p>
-                                <button disabled className="w-full py-3 bg-gray-600 text-gray-300 rounded-xl font-semibold cursor-not-allowed">
-                                    Billing Disabled
+                                <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                                    Enable
                                 </button>
                             </div>
+                        </div>
 
-                            {/* Usage */}
-                            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                                <h3 className="font-semibold text-gray-900 mb-4">Usage This Month</h3>
-                                <div className="space-y-4">
-                                    <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="text-sm text-gray-600">Surveys</span>
-                                            <span className="text-sm font-medium text-gray-900">Unlimited</span>
-                                        </div>
-                                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                            <div className="h-full w-full bg-blue-500 rounded-full" />
-                                        </div>
+                        {/* Danger Zone */}
+                        <div className="bg-red-50 rounded-2xl border border-red-200 p-6">
+                            <div className="flex items-start gap-4">
+                                <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+                                <div>
+                                    <h3 className="font-semibold text-red-900">Delete Account</h3>
+                                    <p className="text-sm text-red-700 mt-1 mb-4">
+                                        Once you delete your account, there is no going back. Please be certain.
+                                    </p>
+                                    <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
+                                        Delete Account
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Billing Tab */}
+                {activeTab === "billing" && (
+                    <div className="space-y-6">
+                        {/* Current Plan */}
+                        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 text-white">
+                            <div className="flex items-start justify-between mb-4">
+                                <div>
+                                    <p className="text-sm text-gray-300 mb-1">Current Plan</p>
+                                    <h2 className="text-2xl font-bold">Enterprise (Test Mode)</h2>
+                                </div>
+                                <span className="px-3 py-1 bg-white/10 rounded-full text-sm font-medium">
+                                    Active
+                                </span>
+                            </div>
+                            <p className="text-gray-300 mb-6">
+                                Billing is currently frozen for testing. You have full access to all features.
+                            </p>
+                            <button disabled className="w-full py-3 bg-gray-600 text-gray-300 rounded-xl font-semibold cursor-not-allowed">
+                                Billing Disabled
+                            </button>
+                        </div>
+
+                        {/* Usage */}
+                        <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                            <h3 className="font-semibold text-gray-900 mb-4">Usage This Month</h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-sm text-gray-600">Surveys</span>
+                                        <span className="text-sm font-medium text-gray-900">Unlimited</span>
                                     </div>
-                                    <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="text-sm text-gray-600">Responses</span>
-                                            <span className="text-sm font-medium text-gray-900">Unlimited</span>
-                                        </div>
-                                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                            <div className="h-full w-full bg-purple-500 rounded-full" />
-                                        </div>
+                                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                        <div className="h-full w-full bg-blue-500 rounded-full" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-sm text-gray-600">Responses</span>
+                                        <span className="text-sm font-medium text-gray-900">Unlimited</span>
+                                    </div>
+                                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                        <div className="h-full w-full bg-purple-500 rounded-full" />
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    )}
+                    </div>
+                )}
 
 
-                </div>
             </div>
         </div>
-    );
+    </div>
+);
 }
