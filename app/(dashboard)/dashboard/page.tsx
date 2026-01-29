@@ -18,6 +18,10 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { db } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema/surveys";
 import { eq, desc, count, and, sql } from "drizzle-orm";
+import { IntegrationsWidget } from "@/components/dashboard/integrations-widget";
+import { getSlackIntegrationStatus } from "@/app/actions/slack";
+import { getNotionIntegrationStatus } from "@/app/actions/notion";
+import { getZapierIntegrationStatus } from "@/app/actions/zapier";
 
 const quickActions = [
   {
@@ -42,11 +46,11 @@ const quickActions = [
     color: "from-amber-500 to-orange-500",
   },
   {
-    title: "Integrations",
-    description: "Connect your tools",
-    icon: Plug,
-    href: "/dashboard/integrations",
-    color: "from-emerald-500 to-teal-500",
+    title: "Manage Projects",
+    description: "Organize your surveys",
+    icon: FolderOpen,
+    href: "/dashboard/projects",
+    color: "from-amber-500 to-orange-500",
   },
 ];
 
@@ -71,7 +75,7 @@ export default async function DashboardPage() {
     .from(surveyConversations)
     .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
     .where(eq(surveys.userId, userId));
-  
+
   const totalResponses = responsesStats?.total || 0;
   const completedResponses = Number(responsesStats?.completed || 0);
   const completionRate = totalResponses > 0 ? Math.round((completedResponses / totalResponses) * 100) : 0;
@@ -116,6 +120,13 @@ export default async function DashboardPage() {
     description: activity.surveyTitle,
     time: new Date(activity.createdAt!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }),
   }));
+
+  // 4. Fetch Integration Status
+  const [slackStatus, notionStatus, zapierStatus] = await Promise.all([
+    getSlackIntegrationStatus(),
+    getNotionIntegrationStatus(),
+    getZapierIntegrationStatus(),
+  ]);
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -235,8 +246,13 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* Activity Feed - Takes 1 column */}
-        <div className="lg:col-span-1">
+        {/* Sidebar Column - Activity Feed & Integrations */}
+        <div className="lg:col-span-1 space-y-6">
+          <IntegrationsWidget
+            slackConnected={slackStatus.success && slackStatus.data.connected}
+            notionConnected={notionStatus.success && notionStatus.connected}
+            zapierConnected={zapierStatus.success && zapierStatus.data.connected}
+          />
           <ActivityFeed activities={activities} />
         </div>
       </div>
