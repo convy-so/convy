@@ -9,13 +9,15 @@ import { GoogleButton } from "@/components/auth/google-button";
 import { FormDivider } from "@/components/auth/form-divider";
 import { InputField } from "@/components/auth/input-field";
 import { SubmitButton } from "@/components/auth/submit-button";
+import { LoadingOverlay } from "@/components/auth/loading-overlay";
 import { authClient } from "@/lib/auth-client";
-import toast from "react-hot-toast"; // Assuming sonner is used, if not, I'll check available toast libraries
+import toast from "react-hot-toast";
 
 export default function SignInPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -34,6 +36,7 @@ export default function SignInPage() {
         fetchOptions: {
           onSuccess: (ctx) => {
             toast.success("Signed in successfully");
+            setIsRedirecting(true);
             router.push("/dashboard");
           },
           onError: (ctx) => {
@@ -56,6 +59,13 @@ export default function SignInPage() {
   };
 
   return (
+    <>
+      {isRedirecting && (
+        <LoadingOverlay 
+          message="Signing you in..." 
+          subtitle="Redirecting you to dashboard"
+        />
+      )}
     <AuthCard
       title="Welcome back"
       subtitle="Sign in to your account to continue"
@@ -133,5 +143,6 @@ export default function SignInPage() {
         </p>
       </div>
     </AuthCard>
+    </>
   );
 }
