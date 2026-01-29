@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import * as XLSX from "xlsx";
 import {
   ArrowLeft,
   BarChart3,
@@ -24,6 +25,13 @@ import {
   Filter,
   Search,
   Loader2,
+  
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -108,6 +116,11 @@ export default function SurveyDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingResponses, setIsLoadingResponses] = useState(false);
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const ITEMS_PER_PAGE = 10;
   const [settingsForm, setSettingsForm] = useState({
     title: "",
     additionalContext: "",
@@ -146,19 +159,20 @@ export default function SurveyDetailPage() {
     fetchSurvey();
   }, [surveyId]);
 
-  // Fetch responses when tab changes to responses
+  // Fetch responses when tab changes to responses or page changes
   useEffect(() => {
-    if (activeTab === "responses" && responses.length === 0) {
+    if (activeTab === "responses") {
       const fetchResponses = async () => {
         setIsLoadingResponses(true);
         try {
-          const response = await fetch(`/api/surveys/${surveyId}/responses`, {
+          const response = await fetch(`/api/surveys/${surveyId}/responses?page=${currentPage}&limit=${ITEMS_PER_PAGE}&status=${statusFilter}`, {
             credentials: "include",
           });
 
           if (response.ok) {
             const data = await response.json();
             setResponses(data.responses || []);
+            setTotalPages(data.pagination?.totalPages || 1);
           }
         } catch (error) {
           console.error("Error fetching responses:", error);
@@ -169,7 +183,55 @@ export default function SurveyDetailPage() {
 
       fetchResponses();
     }
-  }, [activeTab, surveyId, responses.length]);
+  }, [activeTab, surveyId, currentPage, statusFilter]);
+
+  const handleExport = async () => {
+      const loadingToast = toast.loading("Preparing export...");
+      try {
+          // Fetch all data for export (high limit)
+          const response = await fetch(`/api/surveys/${surveyId}/responses?limit=10000&status=${statusFilter}`, {
+              credentials: "include",
+          });
+          
+          if (!response.ok) throw new Error("Failed to fetch data");
+          
+          const data = await response.json();
+          const responsesToExport = data.responses || [];
+          
+          if (responsesToExport.length === 0) {
+              toast.dismiss(loadingToast);
+              toast.error("No data to export");
+              return;
+          }
+
+          // Format for Excel
+          const exportData = responsesToExport.map((r: any) => ({
+              "Participant ID": r.participantId,
+              "Status": r.status,
+              "Date": new Date(r.createdAt).toLocaleDateString(),
+              "Time": new Date(r.createdAt).toLocaleTimeString(),
+              "Duration": r.duration,
+              "Message Count": r.messageCount,
+              "Sentiment": r.sentiment || "N/A",
+              "Key Insights": r.keyInsights.join("; ")
+          }));
+
+          // Create workbook
+          const wb = XLSX.utils.book_new();
+          const ws = XLSX.utils.json_to_sheet(exportData);
+          XLSX.utils.book_append_sheet(wb, ws, "Responses");
+          
+          // Download
+          XLSX.writeFile(wb, `Survey_Responses_${surveyId}_${new Date().toISOString().split('T')[0]}.xlsx`);
+          
+          toast.dismiss(loadingToast);
+          toast.success("Export started");
+      } catch (error) {
+          console.error("Export failed:", error);
+          toast.dismiss(loadingToast);
+          toast.error("Export failed");
+      }
+  };
 
   // Fetch analytics when tab changes
   useEffect(() => {
@@ -561,16 +623,65 @@ export default function SurveyDetailPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input type="text" placeholder="Search responses..." className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none text-sm" />
             </div>
-            <button className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50">
-              <Filter className="w-4 h-4" />
-              Filter
-            </button>
-            <button className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50">
+            
+            <div className="relative">
+              <button
+                onClick={() => setIsFilterOpen(!isFilterOpen)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none min-w-[160px] justify-between transition-all"
+              >
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-gray-500" />
+                  <span>
+                    {statusFilter === "all" && "All Status"}
+                    {statusFilter === "completed" && "Completed"}
+                    {statusFilter === "in_progress" && "In Progress"}
+                  </span>
+                </div>
+                <ChevronDown className={cn("w-4 h-4 text-gray-400 transition-transform", isFilterOpen && "rotate-180")} />
+              </button>
+
+              {isFilterOpen && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-10" 
+                    onClick={() => setIsFilterOpen(false)}
+                  />
+                  <div className="absolute top-full mt-2 right-0 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-20 animate-in fade-in zoom-in-95 duration-200">
+                    {[
+                      { value: "all", label: "All Status" },
+                      { value: "completed", label: "Completed" },
+                      { value: "in_progress", label: "In Progress" }
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => {
+                          setStatusFilter(option.value);
+                          setCurrentPage(1);
+                          setIsFilterOpen(false);
+                        }}
+                        className={cn(
+                          "w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors hover:bg-gray-50",
+                          statusFilter === option.value ? "text-gray-900 font-medium bg-gray-50/50" : "text-gray-600"
+                        )}
+                      >
+                        {option.label}
+                        {statusFilter === option.value && <Check className="w-4 h-4 text-gray-900" />}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <button 
+                onClick={handleExport}
+                className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
               <Download className="w-4 h-4" />
               Export
             </button>
           </div>
-
+ 
           <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
             {isLoadingResponses ? (
               <div className="flex items-center justify-center py-12">
@@ -651,6 +762,49 @@ export default function SurveyDetailPage() {
               </table>
             )}
           </div>
+
+          {/* Pagination Controls */}
+          {responses.length > 0 && (
+            <div className="flex items-center justify-between border-t border-gray-200 pt-4">
+              <div className="text-sm text-gray-500">
+                Page <span className="font-medium text-gray-900">{currentPage}</span> of <span className="font-medium text-gray-900">{totalPages}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1 || isLoadingResponses}
+                  className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="First Page"
+                >
+                  <ChevronsLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1 || isLoadingResponses}
+                  className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Previous Page"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages || isLoadingResponses}
+                  className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Next Page"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages || isLoadingResponses}
+                  className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Last Page"
+                >
+                  <ChevronsRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

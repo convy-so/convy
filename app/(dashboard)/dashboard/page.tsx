@@ -1,4 +1,3 @@
-"use client";
 
 import Link from "next/link";
 import {
@@ -15,115 +14,10 @@ import {
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { SurveyCard } from "@/components/dashboard/survey-card";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
-
-// This would come from API/database
-const stats = [
-  {
-    name: "Total Surveys",
-    value: "12",
-    change: "+2 this week",
-    changeType: "positive" as const,
-    icon: MessageSquare,
-    iconColor: "bg-blue-50 text-blue-600",
-  },
-  {
-    name: "Total Responses",
-    value: "1,247",
-    change: "+18% from last month",
-    changeType: "positive" as const,
-    icon: Users,
-    iconColor: "bg-purple-50 text-purple-600",
-  },
-  {
-    name: "Completion Rate",
-    value: "87%",
-    change: "+5% improvement",
-    changeType: "positive" as const,
-    icon: BarChart3,
-    iconColor: "bg-emerald-50 text-emerald-600",
-  },
-  {
-    name: "Avg. Duration",
-    value: "3.2 min",
-    change: "12% faster",
-    changeType: "positive" as const,
-    icon: TrendingUp,
-    iconColor: "bg-amber-50 text-amber-600",
-  },
-];
-
-const recentSurveys = [
-  {
-    id: "1",
-    title: "Customer Satisfaction Survey",
-    status: "active" as const,
-    responses: 45,
-    maxResponses: 50,
-    lastActivity: "2 hours ago",
-    createdAt: "2 days ago",
-    isVoice: false,
-    projectName: "Q1 Research",
-  },
-  {
-    id: "2",
-    title: "Product Feedback Collection",
-    status: "draft" as const,
-    responses: 0,
-    maxResponses: 100,
-    lastActivity: "Never",
-    createdAt: "1 week ago",
-    isVoice: true,
-  },
-  {
-    id: "3",
-    title: "Employee Engagement Survey",
-    status: "completed" as const,
-    responses: 128,
-    maxResponses: 128,
-    lastActivity: "1 week ago",
-    createdAt: "2 weeks ago",
-    isVoice: false,
-    projectName: "HR Insights",
-  },
-];
-
-const activities = [
-  {
-    id: "1",
-    type: "new_response" as const,
-    title: "New response received",
-    description: "Customer Satisfaction Survey",
-    time: "2m ago",
-  },
-  {
-    id: "2",
-    type: "survey_created" as const,
-    title: "Survey created",
-    description: "Product Feedback Collection",
-    time: "1h ago",
-  },
-  {
-    id: "3",
-    type: "analytics_ready" as const,
-    title: "Analytics report ready",
-    description: "Weekly summary generated",
-    time: "3h ago",
-  },
-  {
-    id: "4",
-    type: "team_joined" as const,
-    title: "Team member joined",
-    description: "John Doe accepted invitation",
-    time: "5h ago",
-  },
-  {
-    id: "5",
-    type: "voice_session" as const,
-    title: "Voice session completed",
-    description: "Employee Engagement Survey",
-    time: "1d ago",
-  },
-];
+import { getVerifiedSession } from "@/lib/auth/session";
+import { db } from "@/db";
+import { surveys, surveyConversations } from "@/db/schema/surveys";
+import { eq, desc, count, and, sql } from "drizzle-orm";
 
 const quickActions = [
   {
@@ -156,7 +50,73 @@ const quickActions = [
   },
 ];
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const session = await getVerifiedSession();
+  const userId = session.user.id;
+
+  // 1. Fetch Stats
+  // Total Surveys
+  const [surveysCountRes] = await db
+    .select({ count: count() })
+    .from(surveys)
+    .where(eq(surveys.userId, userId));
+  const totalSurveys = surveysCountRes?.count || 0;
+
+  // Total Responses & Completed Responses
+  const [responsesStats] = await db
+    .select({
+      total: count(),
+      completed: sql<number>`sum(case when ${surveyConversations.completed} = true then 1 else 0 end)`,
+    })
+    .from(surveyConversations)
+    .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
+    .where(eq(surveys.userId, userId));
+  
+  const totalResponses = responsesStats?.total || 0;
+  const completedResponses = Number(responsesStats?.completed || 0);
+  const completionRate = totalResponses > 0 ? Math.round((completedResponses / totalResponses) * 100) : 0;
+
+  // 2. Fetch Recent Surveys
+  const recentSurveysData = await db.query.surveys.findMany({
+    where: eq(surveys.userId, userId),
+    orderBy: [desc(surveys.updatedAt)],
+    limit: 3,
+  });
+
+  const recentSurveys = recentSurveysData.map(survey => ({
+    id: survey.id,
+    title: survey.title,
+    status: survey.status as any, // Cast to match component type
+    responses: survey.currentParticipants,
+    maxResponses: survey.participantLimit,
+    lastActivity: new Date(survey.updatedAt).toLocaleDateString(), // simplified
+    createdAt: new Date(survey.createdAt).toLocaleDateString(),
+    isVoice: survey.isVoice,
+    projectName: "Default Project", // Placeholder if project relation not fetched
+  }));
+
+  // 3. Fetch Recent Activity (Responses)
+  const recentActivitiesRaw = await db
+    .select({
+      id: surveyConversations.id,
+      title: sql<string>`'New response'`,
+      surveyTitle: surveys.title,
+      createdAt: surveyConversations.createdAt,
+    })
+    .from(surveyConversations)
+    .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
+    .where(eq(surveys.userId, userId))
+    .orderBy(desc(surveyConversations.createdAt))
+    .limit(5);
+
+  const activities = recentActivitiesRaw.map(activity => ({
+    id: activity.id,
+    type: "new_response" as const,
+    title: "New response received",
+    description: activity.surveyTitle,
+    time: new Date(activity.createdAt!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }),
+  }));
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       {/* Welcome Header */}
@@ -181,17 +141,38 @@ export default function DashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        {stats.map((stat) => (
-          <StatsCard
-            key={stat.name}
-            title={stat.name}
-            value={stat.value}
-            change={stat.change}
-            changeType={stat.changeType}
-            icon={stat.icon}
-            iconColor={stat.iconColor}
-          />
-        ))}
+        <StatsCard
+          title="Total Surveys"
+          value={totalSurveys.toString()}
+          change="All time"
+          changeType="neutral"
+          icon={<MessageSquare className="w-6 h-6" />}
+          iconColor="bg-blue-50 text-blue-600"
+        />
+        <StatsCard
+          title="Total Responses"
+          value={totalResponses.toLocaleString()}
+          change="All time"
+          changeType="neutral"
+          icon={<Users className="w-6 h-6" />}
+          iconColor="bg-purple-50 text-purple-600"
+        />
+        <StatsCard
+          title="Completion Rate"
+          value={`${completionRate}%`}
+          change={`${completedResponses} completed`}
+          changeType="neutral"
+          icon={<BarChart3 className="w-6 h-6" />}
+          iconColor="bg-emerald-50 text-emerald-600"
+        />
+        <StatsCard
+          title="Avg. Duration"
+          value="N/A"
+          change="Coming soon"
+          changeType="neutral"
+          icon={<TrendingUp className="w-6 h-6" />}
+          iconColor="bg-amber-50 text-amber-600"
+        />
       </div>
 
       {/* Quick Actions */}
