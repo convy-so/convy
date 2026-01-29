@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
-import { streamText, stepCountIs } from "ai";
+import { streamText, stepCountIs, generateText, convertToModelMessages, type UIMessage } from "ai";
 
 import { db } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema";
@@ -12,7 +12,7 @@ import { defaultModel } from "@/lib/ai";
 const model = defaultModel; // Use consistent model
 
 /**
- * GET - Initialize a survey response conversation
+ * GET - Initialize a survey response conversation and generate AI greeting
  */
 export async function GET(
     request: Request,
@@ -21,22 +21,9 @@ export async function GET(
     try {
         const { shareableLink } = await params;
 
-        // Get survey by shareable link
+        // Get survey by shareable link (fetch full record for config building)
         const [survey] = await db
-            .select({
-                id: surveys.id,
-                title: surveys.title,
-                objective: surveys.objective,
-                targetAudience: surveys.targetAudience,
-                tone: surveys.tone,
-                status: surveys.status,
-                currentParticipants: surveys.currentParticipants,
-                participantLimit: surveys.participantLimit,
-                requiredQuestions: surveys.requiredQuestions,
-                scope: surveys.scope,
-                isVoice: surveys.isVoice,
-                media: surveys.media,
-            })
+            .select()
             .from(surveys)
             .where(eq(surveys.shareableLink, shareableLink));
 
@@ -56,15 +43,48 @@ export async function GET(
         const conversationId = nanoid();
         const participantId = nanoid(8);
 
+        // Build survey config for prompt generation
+        const surveyConfig = buildCompleteSurveyConfig(survey);
+
+        // Create initial context for the greeting
+        const initialContext = await ConversationManager.loadOrCreateContext(
+            conversationId,
+            [], // No messages yet
+            surveyConfig,
+            true // Force new context
+        );
+
+        // Generate the AI's opening greeting
+        const systemPrompt = ConversationManager.getSystemPrompt(surveyConfig, initialContext);
+
+        const greetingResult = await generateText({
+            model: defaultModel,
+            system: systemPrompt,
+            prompt: "Start the conversation by greeting the participant warmly. Introduce yourself as the interviewer, briefly explain what this survey is about based on your instructions, and ask your first opening question to get the conversation started. Keep it concise and welcoming.",
+            temperature: 0.8,
+            maxTokens: 300,
+        });
+
+        const greetingText = greetingResult.text;
+        const greetingMessage = {
+            role: "assistant" as const,
+            content: greetingText,
+            timestamp: new Date().toISOString(),
+        };
+
+        // Save conversation with the initial greeting
         await db.insert(surveyConversations).values({
             id: conversationId,
             surveyId: survey.id,
             participantId,
-            rawConversation: [],
+            rawConversation: [greetingMessage],
             completed: false,
             createdAt: new Date(),
             updatedAt: new Date(),
         });
+
+        // Save context to Redis for continuity
+        await ConversationManager.saveContext(conversationId, initialContext);
 
         return NextResponse.json({
             survey: {
@@ -79,6 +99,7 @@ export async function GET(
             },
             conversationId,
             participantId,
+            initialGreeting: greetingMessage,
         });
     } catch (error) {
         console.error("Error initializing survey response:", error);
@@ -122,10 +143,13 @@ export async function POST(
         // Prepare survey config
         const surveyConfig = buildCompleteSurveyConfig(survey);
 
+        // AI SDK v6: Convert UIMessages to ModelMessages for proper handling
+        const modelMessages = await convertToModelMessages(messages as UIMessage[]);
+
         // Load conversation context (handling hydration, compression, signals)
         const rollingContext = await ConversationManager.loadOrCreateContext(
             conversationId,
-            messages,
+            modelMessages,
             surveyConfig
         );
 
@@ -140,10 +164,7 @@ export async function POST(
         const result = streamText({
             model: defaultModel,
             system: systemPrompt,
-            messages: messages.map((m: any) => ({
-                role: m.role,
-                content: m.content,
-            })),
+            messages: modelMessages,
             tools,
             stopWhen: stepCountIs(5), // Allow tool execution (and thus media display)
             temperature: 0.7,
@@ -151,8 +172,8 @@ export async function POST(
             onFinish: async ({ text, toolCalls }) => {
                 // Save conversation to database
                 const updatedMessages = [
-                    ...messages,
-                    { role: "assistant" as const, content: text, timestamp: new Date().toISOString() }
+                    ...modelMessages,
+                    { role: "assistant" as const, content: text }
                 ];
 
                 // Update memory in background (learning)
@@ -169,7 +190,7 @@ export async function POST(
                     text.toLowerCase().includes("your feedback is incredibly valuable");
 
                 // Only mark complete if we have a reasonable amount of interaction (e.g. at least 3 user messages)
-                const userMessages = messages.filter((m: any) => m.role === "user");
+                const userMessages = modelMessages.filter((m: any) => m.role === "user");
                 const minQuestions = Math.max((survey.requiredQuestions as any[])?.length || 0, 3);
                 const isCompleted = isCompletionPhrase && userMessages.length >= minQuestions;
 
@@ -178,8 +199,9 @@ export async function POST(
                     .update(surveyConversations)
                     .set({
                         rawConversation: updatedMessages.map(m => ({
-                            ...m,
-                            timestamp: (m as any).timestamp || new Date().toISOString()
+                            role: m.role,
+                            content: m.content,
+                            timestamp: new Date().toISOString()
                         })),
                         completed: isCompleted,
                         updatedAt: new Date(),

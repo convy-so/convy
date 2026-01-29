@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { AuthProvider } from "@/components/providers/auth-provider";
