@@ -21,7 +21,7 @@ import {
   cryptoCurrencyEnum,
 } from "./enums";
 // Subscription Plans (static reference data)
-const subscriptionPlans = pgTable("subscription_plans", {
+export const subscriptionPlans = pgTable("subscription_plans", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   priceMonthly: integer("price_monthly").notNull(), // in cents (USD)
@@ -62,7 +62,7 @@ const subscriptionPlans = pgTable("subscription_plans", {
 });
 
 // User Subscriptions
-const subscriptions = pgTable(
+export const subscriptions = pgTable(
   "subscriptions",
   {
     id: text("id").primaryKey(),
@@ -122,7 +122,7 @@ const subscriptions = pgTable(
 );
 
 // Payments
-const payments = pgTable(
+export const payments = pgTable(
   "payments",
   {
     id: text("id").primaryKey(),
@@ -176,7 +176,7 @@ const payments = pgTable(
 );
 
 // Usage Tracking
-const usageTracking = pgTable(
+export const usageTracking = pgTable(
   "usage_tracking",
   {
     id: text("id").primaryKey(),
@@ -227,7 +227,7 @@ const usageTracking = pgTable(
   ]
 );
 
-const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
+export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
   user: one(users, {
     fields: [subscriptions.userId],
     references: [users.id],
@@ -242,7 +242,7 @@ const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
   }),
 }));
 
-const paymentsRelations = relations(payments, ({ one }) => ({
+export const paymentsRelations = relations(payments, ({ one }) => ({
   user: one(users, {
     fields: [payments.userId],
     references: [users.id],
@@ -257,7 +257,7 @@ const paymentsRelations = relations(payments, ({ one }) => ({
   }),
 }));
 
-const usageTrackingRelations = relations(usageTracking, ({ one }) => ({
+export const usageTrackingRelations = relations(usageTracking, ({ one }) => ({
   user: one(users, {
     fields: [usageTracking.userId],
     references: [users.id],
@@ -269,11 +269,5 @@ const usageTrackingRelations = relations(usageTracking, ({ one }) => ({
 }));
 
 export {
-  subscriptionPlans,
-  subscriptions,
-  payments,
-  usageTracking,
-  subscriptionsRelations,
-  paymentsRelations,
-  usageTrackingRelations,
+  // All tables and relations are now exported directly using 'export const'
 };

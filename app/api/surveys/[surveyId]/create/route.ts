@@ -335,8 +335,7 @@ export async function POST(
 
             if (shouldExtract) {
               console.log(
-                `[Create Route] Triggering extraction for survey ${surveyId} (Reason: ${
-                  isCompletionVariable ? "Completion Phrase" : "Regular Interval"
+                `[Create Route] Triggering extraction for survey ${surveyId} (Reason: ${isCompletionVariable ? "Completion Phrase" : "Regular Interval"
                 })`
               );
               await performIncrementalExtraction(surveyId, updatedMessages);
@@ -520,6 +519,7 @@ export async function GET(
 
     return new Response(
       JSON.stringify({
+        messages: creationConversation.messages || [],
         collectedInfo: creationConversation.collectedInfo,
         extractedData: creationConversation.extractedData,
         status: creationConversation.status,
