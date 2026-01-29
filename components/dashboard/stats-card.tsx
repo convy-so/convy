@@ -8,7 +8,7 @@ interface StatsCardProps {
     value: string | number;
     change?: string;
     changeType?: "positive" | "negative" | "neutral";
-    icon: LucideIcon;
+    icon: React.ReactNode;
     iconColor?: string;
     description?: string;
 }
@@ -18,7 +18,7 @@ export function StatsCard({
     value,
     change,
     changeType = "neutral",
-    icon: Icon,
+    icon,
     iconColor = "bg-gray-100 text-gray-600",
     description,
 }: StatsCardProps) {
@@ -57,7 +57,7 @@ export function StatsCard({
                     "w-12 h-12 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110",
                     iconColor
                 )}>
-                    <Icon className="w-6 h-6" />
+                    {icon}
                 </div>
             </div>
         </div>
