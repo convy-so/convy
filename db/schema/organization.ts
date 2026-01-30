@@ -5,7 +5,7 @@ import { users } from "./auth";
 import { surveys } from "./surveys";
 
 // Organization/Workspace tables (managed by Better Auth organization plugin)
-const organizations = pgTable("organization", {
+export const organizations = pgTable("organization", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
@@ -16,7 +16,7 @@ const organizations = pgTable("organization", {
     .notNull(),
 });
 
-const members = pgTable("member", {
+export const members = pgTable("member", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -30,7 +30,7 @@ const members = pgTable("member", {
     .notNull(),
 });
 
-const invitations = pgTable("invitation", {
+export const invitations = pgTable("invitation", {
   id: text("id").primaryKey(),
   email: text("email").notNull(),
   inviterId: text("inviter_id")
@@ -51,7 +51,7 @@ const invitations = pgTable("invitation", {
 });
 
 // Projects table
-const projects = pgTable(
+export const projects = pgTable(
   "projects",
   {
     id: text("id").primaryKey(),
@@ -75,12 +75,12 @@ const projects = pgTable(
   ]
 );
 
-const organizationsRelations = relations(organizations, ({ many }) => ({
+export const organizationsRelations = relations(organizations, ({ many }) => ({
   members: many(members),
   invitations: many(invitations),
 }));
 
-const membersRelations = relations(members, ({ one }) => ({
+export const membersRelations = relations(members, ({ one }) => ({
   user: one(users, {
     fields: [members.userId],
     references: [users.id],
@@ -91,7 +91,7 @@ const membersRelations = relations(members, ({ one }) => ({
   }),
 }));
 
-const invitationsRelations = relations(invitations, ({ one }) => ({
+export const invitationsRelations = relations(invitations, ({ one }) => ({
   inviter: one(users, {
     fields: [invitations.inviterId],
     references: [users.id],
@@ -102,7 +102,7 @@ const invitationsRelations = relations(invitations, ({ one }) => ({
   }),
 }));
 
-const projectsRelations = relations(projects, ({ one, many }) => ({
+export const projectsRelations = relations(projects, ({ one, many }) => ({
   user: one(users, {
     fields: [projects.userId],
     references: [users.id],
@@ -115,12 +115,5 @@ const projectsRelations = relations(projects, ({ one, many }) => ({
 }));
 
 export {
-  organizations,
-  members,
-  invitations,
-  projects,
-  organizationsRelations,
-  membersRelations,
-  invitationsRelations,
-  projectsRelations,
+  // All tables and relations are now exported directly using 'export const'
 };

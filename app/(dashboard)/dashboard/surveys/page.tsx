@@ -24,9 +24,11 @@ import {
   Calendar,
   ArrowUpRight,
   Play,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { deleteSurveyAction, duplicateSurveyAction } from "@/app/actions/survey";
 
 interface Survey {
   id: string;
@@ -60,32 +62,34 @@ export default function SurveysPage() {
   const [showMenuFor, setShowMenuFor] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
-  
+  const [surveyToDelete, setSurveyToDelete] = useState<{ id: string; title: string } | null>(null);
+
   // Real data state
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
-  // Delete survey handler
-  const handleDelete = async (surveyId: string) => {
-    if (!confirm("Are you sure you want to delete this survey? This action cannot be undone.")) {
-      return;
-    }
-    
-    setIsDeleting(surveyId);
+  // Delete survey click handler
+  const handleDelete = (survey: { id: string; title: string }) => {
+    setSurveyToDelete(survey);
     setShowMenuFor(null);
-    
+  };
+
+  // Confirm delete handler
+  const confirmDeleteSurvey = async () => {
+    if (!surveyToDelete) return;
+
+    setIsDeleting(surveyToDelete.id);
+
     try {
-      const response = await fetch(`/api/surveys/${surveyId}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      
-      if (response.ok) {
-        setSurveys(prev => prev.filter(s => s.id !== surveyId));
+      const result = await deleteSurveyAction(surveyToDelete.id);
+
+      if (result.success) {
+        setSurveys(prev => prev.filter(s => s.id !== surveyToDelete.id));
         toast.success("Survey deleted successfully");
+        setSurveyToDelete(null);
       } else {
-        toast.error("Failed to delete survey");
+        toast.error(result.error || "Failed to delete survey");
       }
     } catch (error) {
       toast.error("Failed to delete survey");
@@ -103,31 +107,19 @@ export default function SurveysPage() {
   // Duplicate survey (creates a copy)
   const handleDuplicate = async (survey: Survey) => {
     setShowMenuFor(null);
-    toast.loading("Duplicating survey...");
-    
+    const loadingToast = toast.loading("Duplicating survey...");
+
     try {
-      const response = await fetch("/api/surveys", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: `${survey.title} (Copy)`,
-          description: survey.description,
-        }),
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        toast.dismiss();
-        toast.success("Survey duplicated!");
-        setSurveys(prev => [data.survey, ...prev]);
+      const result = await duplicateSurveyAction(survey.id);
+
+      if (result.success) {
+        toast.success("Survey duplicated!", { id: loadingToast });
+        setSurveys(prev => [result.data.survey, ...prev]);
       } else {
-        toast.dismiss();
-        toast.error("Failed to duplicate survey");
+        toast.error(result.error || "Failed to duplicate survey", { id: loadingToast });
       }
     } catch (error) {
-      toast.dismiss();
-      toast.error("Failed to duplicate survey");
+      toast.error("Failed to duplicate survey", { id: loadingToast });
     }
   };
 
@@ -153,7 +145,7 @@ export default function SurveysPage() {
   const handleCopyLink = async (shareableLink: string) => {
     const baseUrl = window.location.origin;
     const url = `${baseUrl}/s/${shareableLink}`;
-    
+
     try {
       await navigator.clipboard.writeText(url);
       setCopiedLink(shareableLink);
@@ -174,22 +166,22 @@ export default function SurveysPage() {
   // Filtered surveys
   const filteredSurveys = useMemo(() => {
     let result = surveys;
-    
+
     // Filter by tab
     if (filterTab === "published") {
       result = result.filter(s => s.status === "active");
     } else if (filterTab === "unpublished") {
       result = result.filter(s => s.status !== "active");
     }
-    
+
     // Filter by search
     if (searchQuery) {
-      result = result.filter(s => 
+      result = result.filter(s =>
         s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.description?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-    
+
     return result;
   }, [surveys, filterTab, searchQuery]);
 
@@ -273,7 +265,7 @@ export default function SurveysPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredSurveys.map((survey) => {
               const config = statusConfig[survey.status] || statusConfig.draft;
-              
+
               return (
                 <div
                   key={survey.id}
@@ -344,7 +336,7 @@ export default function SurveysPage() {
                                 <Edit className="w-4 h-4" />
                                 Edit
                               </Link>
-                              <button 
+                              <button
                                 onClick={() => handleDuplicate(survey)}
                                 className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                               >
@@ -352,10 +344,9 @@ export default function SurveysPage() {
                                 Duplicate
                               </button>
                               <div className="border-t border-gray-100 my-1" />
-                              <button 
-                                onClick={() => handleDelete(survey.id)}
-                                disabled={isDeleting === survey.id}
-                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                              <button
+                                onClick={() => handleDelete({ id: survey.id, title: survey.title })}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
                               >
                                 {isDeleting === survey.id ? (
                                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -475,6 +466,55 @@ export default function SurveysPage() {
             </div>
           )}
         </>
+      )}
+      {/* Delete Confirmation Modal */}
+      {surveyToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setSurveyToDelete(null)}
+          />
+
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Survey</h3>
+              <p className="text-gray-500">
+                Are you sure you want to delete <span className="font-semibold text-gray-900">"{surveyToDelete.title}"</span>?
+                This action cannot be undone and will permanently remove all responses.
+              </p>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 flex items-center gap-3">
+              <button
+                onClick={() => setSurveyToDelete(null)}
+                className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                disabled={isDeleting !== null}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteSurvey}
+                disabled={isDeleting !== null}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium text-sm hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Delete Survey
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

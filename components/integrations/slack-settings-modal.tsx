@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Loader2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import toast from "react-hot-toast";
 import {
     getSlackChannelList,
     updateSlackIntegrationSettings,

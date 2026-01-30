@@ -5,6 +5,7 @@ import {
   sessions,
 } from "./auth";
 import { surveys } from "./surveys";
+import { notifications } from "./notifications";
 import {
   notionIntegrations,
   notionExports,
@@ -35,4 +36,9 @@ export const usersRelations = relations(users, ({ many }) => ({
   subscriptions: many(subscriptions),
   payments: many(payments),
   usageTracking: many(usageTracking),
+  notifications: many(notifications),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+	user: one(users, { fields: [notifications.userId], references: [users.id] }),
 }));

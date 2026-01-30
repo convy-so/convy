@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import toast from "react-hot-toast";
 import {
   getProjectsAction,
   getProjectAction,
@@ -51,15 +51,15 @@ export function useProject(id: string) {
 
 // Helper query to get surveys available for assignment (no project)
 export function useAvailableSurveys() {
-    return useQuery({
-        queryKey: surveyKeys.lists(),
-        queryFn: async () => {
-            const result = await getSurveysAction();
-            if (!result.success) throw new Error(result.error);
-            // Filter client-side for simplicity, or backend action could optionally filter
-            return result.data.filter(s => !s.projectId);
-        }
-    });
+  return useQuery({
+    queryKey: surveyKeys.lists(),
+    queryFn: async () => {
+      const result = await getSurveysAction();
+      if (!result.success) throw new Error(result.error);
+      // Filter client-side for simplicity, or backend action could optionally filter
+      return result.data.filter(s => !s.projectId);
+    }
+  });
 }
 
 
@@ -156,9 +156,9 @@ export function useRemoveSurveyFromProject() {
     },
     onSuccess: (_, variables) => {
       toast.success("Survey removed from project");
-       queryClient.invalidateQueries({ queryKey: projectKeys.detail(variables.projectId) });
-       queryClient.invalidateQueries({ queryKey: projectKeys.lists() }); // Update counts
-       queryClient.invalidateQueries({ queryKey: surveyKeys.lists() }); // Update available surveys
+      queryClient.invalidateQueries({ queryKey: projectKeys.detail(variables.projectId) });
+      queryClient.invalidateQueries({ queryKey: projectKeys.lists() }); // Update counts
+      queryClient.invalidateQueries({ queryKey: surveyKeys.lists() }); // Update available surveys
     },
     onError: (error) => {
       toast.error(error.message);
