@@ -79,11 +79,14 @@ export default function ProjectDetailPage() {
   }
 
   // Calculate stats
+  // Calculate stats
+  const totalStarted = project.surveys.reduce((acc, s) => acc + (s.currentParticipants || 0), 0);
+  const totalCompleted = project.surveys.reduce((acc, s) => acc + (s.completedCount || 0), 0);
+
   const stats = {
     totalSurveys: project.surveys.length,
-    totalResponses: project.surveys.reduce((acc, s) => acc + (s.currentParticipants || 0), 0),
-    // Mock avg completion for now as we don't have it in schema yet
-    avgCompletion: 0,
+    totalResponses: totalStarted,
+    avgCompletion: totalStarted > 0 ? Math.round((totalCompleted / totalStarted) * 100) : 0,
     activeSurveys: project.surveys.filter(s => s.status === 'active').length,
   };
 

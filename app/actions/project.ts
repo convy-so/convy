@@ -2,10 +2,10 @@
 
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { eq, and, isNull, count, sum, getTableColumns } from "drizzle-orm";
+import { eq, and, isNull, count, sum, getTableColumns, sql } from "drizzle-orm";
 
 import { db } from "@/db";
-import { projects, surveys } from "@/db/schema";
+import { projects, surveys, surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { isWorkspaceMember } from "@/lib/workspace-access";
 
@@ -134,6 +134,7 @@ export async function getProjectAction(id: string): Promise<
       surveys: Array<
         typeof surveys.$inferSelect & {
           summary: string | null;
+          completedCount: number;
         }
       >;
     }
@@ -172,9 +173,20 @@ export async function getProjectAction(id: string): Promise<
     }
 
     const projectSurveys = await db
-      .select()
+      .select({
+        ...getTableColumns(surveys),
+        completedCount: count(surveyConversations.id),
+      })
       .from(surveys)
-      .where(eq(surveys.projectId, id));
+      .leftJoin(
+        surveyConversations, 
+        and(
+          eq(surveyConversations.surveyId, surveys.id),
+          eq(surveyConversations.completed, true)
+        )
+      )
+      .where(eq(surveys.projectId, id))
+      .groupBy(surveys.id);
     
     // We add a summary field to match the frontend expectations if needed, 
     // or just return the surveys as is. The frontend type expectations 
@@ -187,7 +199,8 @@ export async function getProjectAction(id: string): Promise<
         ...project,
         surveys: projectSurveys.map(s => ({
             ...s,
-            summary: null // Placeholder if needed, or derived from analytics
+            summary: null, // Placeholder if needed, or derived from analytics
+            completedCount: Number(s.completedCount)
         })),
       },
     };
