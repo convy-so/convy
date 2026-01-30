@@ -14,7 +14,6 @@ import {
   Share2,
   Paperclip,
   Play,
-  ChevronRight,
   CheckCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -23,7 +22,6 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { PublishSurveyModal } from "@/components/surveys/publish-survey-modal";
 import { AddMediaModal } from "@/components/surveys/add-media-modal";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
-import { VoiceTranscript } from "@/components/voice/voice-transcript";
 import { clientEnv } from "@/lib/env.client";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 
@@ -894,440 +892,335 @@ function CreateSurveyContent() {
   }
 
   return (
+    <>
     <div className="h-[calc(100vh-7rem)] flex flex-col md:flex-row gap-6 max-w-[1600px] mx-auto p-4 overflow-hidden">
-      {/* Left Side: Header + Chat */}
-      <div className="flex-1 flex flex-col min-w-0 h-full">
-        {/* Header - SalesX Inspired Design */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-4 flex-shrink-0">
-        <div className="flex items-center justify-between">
+      <div className="flex-1 bg-white rounded-3xl border border-gray-200 flex flex-col overflow-hidden relative">
+        
+        {/* Integrated Header */}
+        <div className="border-b border-gray-100 p-4 flex items-center justify-between bg-white z-10">
             <div className="flex items-center gap-4">
                 <Link
                     href="/dashboard"
-                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                    className="p-2 rounded-xl hover:bg-gray-50 transition-colors text-gray-500 hover:text-gray-900"
                 >
-                    <ArrowLeft className="w-5 h-5 text-gray-600" />
+                    <ArrowLeft className="w-5 h-5" />
                 </Link>
                 <div className="flex items-center gap-3">
-                    <h1 className="text-xl font-bold text-gray-900">
+                    <h1 className="text-lg font-bold text-gray-900">
                       {isReadOnly ? "View Creation Conversation" : "Create New Survey"}
                     </h1>
                     <span className={cn(
-                      "px-2.5 py-1 rounded-full text-xs font-medium border",
-                      isReadOnly 
-                        ? "bg-gray-100 text-gray-600 border-gray-200" 
-                        : "bg-gray-100 text-gray-900 border-gray-200"
+                      "px-2 py-0.5 rounded-md text-xs font-medium border border-gray-200 bg-white text-gray-500",
+                      isReadOnly ? "opacity-80" : "" 
                     )}>
-                        {isReadOnly ? "Read Only" : "AI Draft"}
+                        {isReadOnly ? "Read Only" : "AI DRAFT"}
                     </span>
+                    {surveyStatus && isReadOnly && (
+                        <span className="text-xs text-gray-400 font-medium px-2 py-0.5 bg-gray-50 rounded-md capitalize">
+                             {surveyStatus.replace(/_/g, " ")}
+                        </span>
+                    )}
                 </div>
             </div>
 
-            {/* Publish & Voice Buttons - Hide when read-only */}
+            {/* Actions: Play/Publish & Voice */}
             {!isReadOnly && (
             <div className="flex items-center gap-2">
                  <button
                     onClick={() => setShowPublishModal(true)}
                     disabled={!isReadyForSample || !surveyId}
-                    className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+                    className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors text-sm font-medium disabled:opacity-50"
+                    title="Publish Survey"
                 >
                     <Share2 className="w-4 h-4" />
-                    Publish Survey
+                    <span className="hidden sm:inline">Publish</span>
                 </button>
+
+                <div className="h-6 w-px bg-gray-200 mx-1" />
 
                 <button
                     onClick={toggleVoiceMode}
                     className={cn(
-                        "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm",
+                        "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border",
                         isVoiceMode
-                            ? "bg-red-50 text-red-600 border border-red-100 animate-pulse"
-                            : "bg-indigo-600 text-white hover:bg-indigo-700 border border-transparent shadow-md hover:shadow-lg hover:-translate-y-0.5"
+                            ? "bg-red-50 text-red-600 border-red-100"
+                            : "bg-gray-900 text-white border-transparent hover:bg-gray-800"
                     )}
                 >
                     {isVoiceMode ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                    {isVoiceMode ? "Stop Voice Mode" : "Design with Voice"}
+                    {isVoiceMode ? "Stop Voice" : "Voice Mode"}
                 </button>
             </div>
             )}
         </div>
-        <p className="text-gray-500 mt-3 ml-14 text-sm">
-          {isReadOnly 
-            ? "This is a record of the AI conversation used to create this survey" 
-            : "AI-powered survey creation assistant"}
-        </p>
-      </div>
 
-      {/* Read-Only Status Banner */}
-      {isReadOnly && surveyStatus && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-            <CheckCircle2 className="w-5 h-5 text-blue-600" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-blue-900">
-              Viewing creation conversation (read-only)
-            </p>
-            <p className="text-xs text-blue-700">
-              Survey status: <span className="font-medium capitalize">{surveyStatus.replace(/_/g, " ")}</span>
-            </p>
-          </div>
-          <Link
-            href={`/dashboard/surveys/${surveyId}`}
-            className="ml-auto px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            View Survey →
-          </Link>
-        </div>
-      )}
-
-      {/* Resume Banner - Show when actively creating */}
-      {!isReadOnly && surveyId && messages.length > 0 && surveyStatus === "creating" && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
-            <Loader2 className="w-5 h-5 text-amber-600 animate-spin" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-amber-900">
-              Resuming survey creation
-            </p>
-            <p className="text-xs text-amber-700">
-              Continue where you left off
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Chat Container */}
-      <div className="flex-1 bg-white rounded-xl border border-gray-100 flex flex-col overflow-hidden relative">
-        {/* Voice Mode Overlay */}
-        {isVoiceMode && !isReadyForSample && (
-          <div className="absolute inset-0 z-20 bg-white flex transition-all animate-in fade-in duration-300">
-            {/* Split View Container */}
-            <div className="flex-1 flex">
-              {/* Left: Transcript */}
-              <div className="flex-1 border-r border-gray-100 p-6 flex flex-col">
-                <VoiceTranscript
-                  messages={messages}
-                  currentTranscript={voiceWs.interimTranscription}
-                  isRecording={voiceWs.isRecording}
-                />
-              </div>
-
-              {/* Right: Voice Controls */}
-              <div className="w-[400px] flex flex-col items-center justify-center p-8 bg-gradient-to-br from-gray-50 to-white relative">
-                <div className="relative">
-                  {/* Visualizer Ring */}
-                  {voiceWs.isRecording && (
-                    <div className="absolute inset-0 rounded-full border-4 border-gray-900/20 animate-ping" />
-                  )}
-                  
-                  {/* Main Mic Button */}
-                  <button
-                    onClick={toggleRecording}
-                    className={cn(
-                      "relative w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl",
-                      voiceWs.isRecording
-                        ? "bg-red-600 scale-110"
-                        : "bg-gray-900 hover:scale-105"
-                    )}
-                  >
-                    {voiceWs.isRecording ? (
-                      <MicOff className="w-10 h-10 text-white" />
-                    ) : (
-                      <Mic className="w-10 h-10 text-white" />
-                    )}
-                  </button>
-                </div>
-
-                {/* Status Text & Visualizer */}
-                <div className="mt-8 text-center space-y-6 w-full">
-                  {voiceWs.isRecording ? (
-                    <>
-                      <div className="space-y-2">
-                        <h3 className="text-3xl font-bold text-gray-900 font-mono tracking-wider">
-                          {formatTime(duration)}
-                        </h3>
-                        <p className="text-gray-500 font-medium animate-pulse">
-                          Listening...
-                        </p>
-                      </div>
-                      
-                      <div className="flex items-center gap-1.5 h-12 justify-center">
-                        {[...Array(8)].map((_, i) => (
-                          <div
-                            key={i}
-                            className="w-1.5 bg-gray-900 rounded-full animate-bounce"
-                            style={{
-                              height: `${20 + Math.random() * 40}px`,
-                              animationDelay: `${i * 0.1}s`,
-                              animationDuration: '0.8s'
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </>
-                  ) : voiceWs.isPlaying ? (
-                    <div className="space-y-4">
-                      <div className="w-16 h-16 mx-auto bg-gray-900/10 rounded-full flex items-center justify-center">
-                        <Sparkles className="w-8 h-8 text-gray-900 animate-pulse" />
-                      </div>
-                      <div className="space-y-2">
-                        <h3 className="text-xl font-semibold text-gray-900">
-                          AI Speaking...
-                        </h3>
-                        <p className="text-sm text-gray-500">
-                          Listening to response
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <h3 className="text-xl font-semibold text-gray-900">
-                        {voiceWs.status === "connected" ? "Voice Assistant Ready" : "Connecting..."}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {voiceWs.status === "connected" 
-                          ? "Click the microphone to start talking" 
-                          : "Please wait while we establish a secure connection"}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  onClick={toggleVoiceMode}
-                  className="absolute bottom-8 text-sm text-gray-500 hover:text-gray-900 font-medium px-4 py-2 hover:bg-white/80 rounded-lg transition-colors"
-                >
-                  Switch to Text Mode
-                </button>
-              </div>
-            </div>
-          </div>
+        {/* Read-Only Banner (Integrated) */}
+        {isReadOnly && (
+           <div className="bg-blue-50/50 border-b border-blue-100 px-4 py-2 flex items-center justify-center gap-2 text-sm text-blue-800">
+              <Sparkles className="w-4 h-4 text-blue-600" />
+              <span>You are viewing a completed conversation.</span>
+              <Link href={`/dashboard/surveys/${surveyId}`} className="font-medium hover:underline">
+                  Go to Survey Details &rarr;
+              </Link>
+           </div>
+        )}
+        
+        {/* Resume Banner (Integrated) */}
+        {!isReadOnly && surveyId && messages.length > 0 && surveyStatus === "creating" && (
+           <div className="bg-amber-50/50 border-b border-amber-100 px-4 py-2 flex items-center justify-center gap-2 text-sm text-amber-800">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>Resuming your previous session.</span>
+           </div>
         )}
 
-        {/* Voice Completion Message - Show when ready for sample */}
-        {isVoiceMode && isReadyForSample && (
-          <div className="absolute inset-0 z-20 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center p-8">
-            <div className="max-w-md text-center space-y-6">
-              <div className="w-20 h-20 mx-auto bg-white rounded-full flex items-center justify-center shadow-lg">
-                <CheckCircle2 className="w-12 h-12 text-emerald-600" />
-              </div>
-              
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                  Survey Configuration Complete!
-                </h2>
-                <p className="text-gray-600 mb-6">
-                  All required information has been collected through voice. Switch to text mode or click the 'Go to Sample Conversations' button above to proceed.
-                </p>
-                
-                <div className="flex flex-col gap-3">
-                  <button
-                    onClick={toggleVoiceMode}
-                    className="flex items-center justify-center gap-2 px-6 py-3 bg-white text-gray-900 border-2 border-gray-200 rounded-xl font-semibold hover:bg-gray-50 transition-all shadow-md"
-                  >
-                    Switch to Text Mode
-                  </button>
-                  
-                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-xl border border-emerald-200">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                    <span className="text-xs font-medium text-gray-700">Voice input disabled - Ready for testing</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {messages.map((message) => {
-            // console.log("Rendering message:", message); // Debug log
-            return (
-            <div
-              key={message.id}
-              className={cn(
-                "flex gap-3",
-                message.role === "user" ? "flex-row-reverse" : ""
-              )}
-            >
-              <div
-                className={cn(
-                  "w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
-                  message.role === "assistant"
-                    ? "bg-gray-900"
-                    : "bg-gray-200"
-                )}
-              >
-                {message.role === "assistant" ? (
-                  <Sparkles className="w-4 h-4 text-white" />
-                ) : (
-                  <User className="w-4 h-4 text-gray-700" />
-                )}
-              </div>
-
-              <div
-                className={cn(
-                  "max-w-[80%] rounded-2xl px-5 py-3.5 shadow-sm",
-                  message.role === "assistant"
-                    ? "bg-white border border-gray-100 text-gray-800"
-                    : "bg-gray-900 text-white"
-                )}
-              >
-                {message.role === "assistant" ? (
-                  <div className="text-sm">
-                    <MarkdownMessage 
-                      content={message.displayedContent || message.content}
-                      className="text-gray-800"
-                    />
-                    {message.isTyping && (
-                      <span className="inline-block w-0.5 h-4 bg-gray-900 ml-0.5 animate-pulse" />
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                    {message.displayedContent || message.content}
-                  </p>
-                )}
-              </div>
-            </div>
-          )})}
-
-          {isLoading && (
-            <div className="flex gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gray-900 flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-white" />
-              </div>
-              <div className="bg-white border border-gray-100 rounded-2xl px-4 py-3 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Suggested Prompts */}
-        {!isVoiceMode && messages.length === 1 && (
-          <div className="px-6 pb-4">
-            <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wider">Suggested prompts</p>
-            <div className="flex flex-wrap gap-2">
-              {suggestedPrompts.map((prompt, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleSuggestedPrompt(prompt)}
-                  className="px-3 py-2 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-600 transition-all hover:border-gray-300 hover:shadow-sm text-left"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Go to Sample Conversations CTA */}
-        {isReadyForSample && surveyId && !isVoiceMode && (
-          <div className="mx-4 mb-4">
-            <div className="relative overflow-hidden bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 rounded-2xl p-[1px] shadow-lg shadow-emerald-500/20">
-              <div className="relative bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 rounded-2xl p-5">
-                {/* Decorative elements */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-                <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
-                
-                <div className="relative flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                      <CheckCircle2 className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-white font-bold text-lg">Ready to Test Your Survey!</h3>
-                      <p className="text-white/80 text-sm">All required information collected. Try a sample conversation.</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleGoToSampleConversations}
-                    disabled={isFinalizing}
-                    className="flex items-center gap-2 px-6 py-3 bg-white text-emerald-600 rounded-xl font-bold text-sm hover:bg-emerald-50 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 group disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isFinalizing ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Play className="w-4 h-4 fill-current" />
-                    )}
-                    {isFinalizing ? "Finalizing..." : "Go to Sample Conversations"}
-                    {!isFinalizing && <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Input Area - Show only when NOT ready for sample and NOT read-only */}
-        {!isVoiceMode && !isReadyForSample && !isReadOnly && (
-         <div className="border-t border-gray-100 p-4 bg-gray-50/50">
-            <form onSubmit={handleSubmit} className="relative bg-white border border-gray-200 rounded-2xl shadow-sm focus-within:ring-2 focus-within:ring-purple-500/10 focus-within:border-purple-500/50 transition-all overflow-hidden">
-                <button
-                    type="button"
-                    onClick={handleOpenMediaModal}
-                    disabled={isLoading || isCreatingDraft}
-                    className="absolute left-2 bottom-2 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Add Media"
-                >
-                    <Paperclip className="w-4 h-4" />
-                </button>
-                <textarea
-                  value={input}
-                  onChange={handleInputChange}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Describe your survey..."
-                  rows={1}
-                  className="w-full pl-12 pr-12 py-3.5 bg-transparent outline-none resize-none text-sm min-h-[52px] max-h-32"
-                />
-                
-                <div className="absolute right-2 bottom-2">
-                    <button
-                        type="submit"
-                        disabled={!input?.trim() || isLoading || !!authError}
-                        className="p-2 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                    >
-                        {isLoading ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                            <Send className="w-4 h-4" />
+        {/* Chat Area */}
+        <div className="flex-1 overflow-hidden relative flex flex-col bg-slate-50/30">
+            {isVoiceMode && !isReadyForSample && (
+              <div className="absolute inset-0 z-30 bg-white/90 backdrop-blur-md flex flex-col items-center justify-center p-6 animate-in fade-in duration-500">
+                <div className="flex-1 flex flex-col items-center justify-center w-full max-w-2xl relative">
+                   <div className="relative mb-12">
+                      {voiceWs.isRecording && (
+                        <>
+                            <div className="absolute inset-0 rounded-full bg-red-500/10 animate-ping duration-1000" />
+                        </>
+                      )}
+                      <button
+                        onClick={toggleRecording}
+                        className={cn(
+                          "relative w-32 h-32 rounded-full flex items-center justify-center transition-all duration-300 border-4 z-10",
+                          voiceWs.isRecording
+                            ? "bg-red-600 border-red-100"
+                            : "bg-gray-900 border-gray-100 hover:scale-105"
                         )}
+                      >
+                        {voiceWs.isRecording ? (
+                          <MicOff className="w-12 h-12 text-white" />
+                        ) : (
+                          <Mic className="w-12 h-12 text-white" />
+                        )}
+                      </button>
+                   </div>
+
+                   <div className="text-center space-y-4 mb-8">
+                      <h2 className="text-3xl font-bold text-gray-900 tracking-tight">
+                        {voiceWs.isRecording ? "Listening..." : voiceWs.isPlaying ? "Speaking..." : "Voice Assistant Ready"}
+                      </h2>
+                      <p className="text-gray-500 font-medium">
+                        {voiceWs.isRecording 
+                            ? "Speak naturally about your survey goals" 
+                            : "Tap the microphone to start"}
+                      </p>
+                   </div>
+
+                   {/* Live Transcript Bubble */}
+                   {(transcribedText || voiceWs.interimTranscription) && (
+                      <div className="bg-white border border-gray-200 rounded-2xl p-6 max-w-lg w-full transform transition-all animate-in slide-in-from-bottom-5">
+                          <p className="text-lg text-gray-700 leading-relaxed text-center">
+                             &ldquo;{voiceWs.interimTranscription || transcribedText}&rdquo;
+                          </p>
+                      </div>
+                   )}
+                </div>
+
+                {/* Footer Controls */}
+                <div className="mt-auto pt-8 flex gap-4">
+                    <button
+                      onClick={toggleVoiceMode}
+                      className="px-6 py-2.5 rounded-xl bg-gray-50 border border-gray-200 hover:bg-gray-100 text-gray-600 font-medium transition-colors"
+                    >
+                      Switch to Text
                     </button>
                 </div>
-            </form>
-            <p className="text-center text-xs text-gray-400 mt-2">
-                Convy AI can make mistakes. Review generated surveys carefully.
-            </p>
-         </div>
-        )}
-
-        {/* Completion Message - Show when ready for sample */}
-        {!isVoiceMode && isReadyForSample && (
-          <div className="border-t border-gray-100 p-4 bg-gray-50/50">
-            <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 border-2 border-emerald-200 rounded-2xl p-6 text-center space-y-3">
-              <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
-              <div>
-                <h3 className="font-bold text-gray-900 text-lg mb-1">
-                  Survey Configuration Complete!
-                </h3>
-                <p className="text-gray-600 text-sm mb-3">
-                  All required information has been collected. Click the button above to test your survey with sample conversations.
-                </p>
-                <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-xl border border-emerald-200">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                  <span className="text-xs font-medium text-gray-700">Input disabled - Ready for testing</span>
-                </div>
               </div>
+            )}
+
+            {/* Voice Completion Overlay */}
+            {isVoiceMode && isReadyForSample && (
+              <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center p-8 animate-in fade-in">
+                  <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mb-6 animate-in zoom-in duration-300">
+                      <CheckCircle2 className="w-12 h-12 text-emerald-600" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Excellent! We're Ready.</h2>
+                  <p className="text-gray-500 max-w-md text-center mb-8">
+                     I have all the information I need. Let's switch back to view the summary and start testing.
+                  </p>
+                  <button
+                    onClick={toggleVoiceMode}
+                    className="px-8 py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 transition-all hover:-translate-y-0.5"
+                  >
+                    View Summary & Test
+                  </button>
+              </div>
+            )}
+
+             {/* Messages Scroll Area */}
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
+                {messages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={cn(
+                        "flex gap-4 max-w-3xl mx-auto w-full animate-in fade-in slide-in-from-bottom-2",
+                        message.role === "user" ? "flex-row-reverse" : ""
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 border",
+                          message.role === "assistant"
+                            ? "bg-white border-gray-200"
+                            : "bg-black border-transparent"
+                        )}
+                      >
+                        {message.role === "assistant" ? (
+                          <Sparkles className="w-5 h-5 text-indigo-500" />
+                        ) : (
+                          <User className="w-5 h-5 text-white" />
+                        )}
+                      </div>
+        
+                      <div
+                        className={cn(
+                          "max-w-[85%] rounded-2xl px-6 py-4 border",
+                          message.role === "assistant"
+                            ? "bg-white text-gray-800 border-gray-200"
+                            : "bg-zinc-900 text-gray-100 border-transparent"
+                        )}
+                      >
+                         {message.role === "assistant" ? (
+                          <div className="text-[15px] leading-7">
+                            <MarkdownMessage 
+                              content={message.displayedContent || message.content}
+                              className="text-gray-800 prose-sm"
+                            />
+                            {message.isTyping && (
+                              <span className="inline-block w-1 h-4 bg-indigo-500 ml-1 rounded-full animate-pulse" />
+                            )}
+                          </div>
+                         ) : (
+                          <p className="text-[15px] leading-7 whitespace-pre-wrap">
+                            {message.displayedContent || message.content}
+                          </p>
+                         )}
+                      </div>
+                    </div>
+                ))}
+                
+                {isLoading && (
+                    <div className="flex gap-4 max-w-3xl mx-auto w-full">
+                       <div className="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center flex-shrink-0">
+                          <Sparkles className="w-5 h-5 text-indigo-500" />
+                       </div>
+                       <div className="bg-white border border-gray-200 rounded-2xl px-6 py-4 flex items-center gap-1.5">
+                          <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                          <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                          <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                       </div>
+                    </div>
+                )}
+                
+                <div ref={messagesEndRef} className="h-4" />
             </div>
-          </div>
-        )}
+            
+            {/* Suggested Prompts Overlay (Bottom Center) */}
+            {!isVoiceMode && messages.length === 1 && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-10">
+                   <div className="flex flex-wrap gap-2 justify-center">
+                      {suggestedPrompts.map((prompt, index) => (
+                        <button
+                          key={index}
+                          onClick={() => handleSuggestedPrompt(prompt)}
+                          className="px-4 py-2 bg-white/90 backdrop-blur-sm hover:bg-white border border-gray-200 rounded-full text-sm text-gray-600 transition-all hover:border-gray-300"
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                   </div>
+                </div>
+            )}
+        </div>
+
+        <div className="bg-slate-50/30 p-4 pb-6 relative z-20">
+             
+             {isReadyForSample && surveyId && !isVoiceMode && (
+                <div className="max-w-3xl mx-auto mb-4 animate-in slide-in-from-bottom-4 fade-in">
+                    <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
+                                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-gray-900">Ready to Test!</h3>
+                                <p className="text-sm text-gray-500">I have everything I need to draft your survey.</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={handleGoToSampleConversations}
+                            disabled={isFinalizing}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold transition-all hover:-translate-y-0.5"
+                        >
+                            {isFinalizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
+                            {isFinalizing ? "Finalizing..." : "Start Testing"}
+                        </button>
+                    </div>
+                </div>
+             )}
+
+             {/* Main Input */}
+             {(!isReadyForSample && !isReadOnly && !isVoiceMode) && (
+              <div className="max-w-3xl mx-auto">
+                <form onSubmit={handleSubmit} className="relative group">
+                    {/* Removed gradient background */}
+                    <div className="relative bg-white border border-gray-200 rounded-2xl group-focus-within:border-gray-400 transition-all flex items-end overflow-hidden">
+                        <button
+                            type="button"
+                            onClick={handleOpenMediaModal}
+                            disabled={isLoading || isCreatingDraft}
+                            className="p-3 mb-1 ml-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
+                            title="Add Context/Media"
+                        >
+                            <Paperclip className="w-5 h-5" />
+                        </button>
+                        
+                        <textarea
+                          value={input}
+                          onChange={handleInputChange}
+                          onKeyDown={handleKeyDown}
+                          placeholder="Describe your survey goals..."
+                          rows={1}
+                          className="flex-1 py-4 px-2 bg-transparent outline-none resize-none text-base text-gray-800 placeholder:text-gray-400 min-h-[56px] max-h-40"
+                          style={{ minHeight: "56px" }}
+                        />
+                        
+                        <div className="p-2 mb-1 mr-1">
+                            <button
+                                type="submit"
+                                disabled={!input?.trim() || isLoading || !!authError}
+                                className={cn(
+                                    "p-2.5 rounded-xl transition-all",
+                                    input?.trim() && !isLoading 
+                                        ? "bg-black text-white hover:bg-gray-800 hover:-translate-y-0.5" 
+                                        : "bg-gray-100 text-gray-300 cursor-not-allowed"
+                                )}
+                            >
+                                {isLoading ? (
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                ) : (
+                                    <Send className="w-5 h-5" />
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </form>
+              </div>
+             )}
+             
+             {isReadOnly && (
+                <div className="max-w-3xl mx-auto text-center py-4">
+                    <p className="text-sm text-gray-400 italic">This conversation is read-only.</p>
+                </div>
+             )}
+             
+        </div>
       </div>
     </div>
 
@@ -1348,7 +1241,7 @@ function CreateSurveyContent() {
         surveyId={surveyId || ""}
         onUploaded={handleMediaUploaded}
       />
-    </div>
+    </>
   );
 }
 
