@@ -23,7 +23,10 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { PublishSurveyModal } from "@/components/surveys/publish-survey-modal";
 import { AddMediaModal } from "@/components/surveys/add-media-modal";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
+import { VoiceTranscript } from "@/components/voice/voice-transcript";
 import { clientEnv } from "@/lib/env.client";
+import { MarkdownMessage } from "@/components/ui/markdown-message";
+
 
 type CreationStep = "objective" | "audience" | "questions" | "tone" | "review";
 
@@ -61,6 +64,9 @@ function CreateSurveyContent() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
+  const [isReadOnly, setIsReadOnly] = useState(false);
+  const [surveyStatus, setSurveyStatus] = useState<string | null>(null);
 
   // WebSocket Voice Hook
   const voiceWs = useVoiceWebSocket({
@@ -123,14 +129,76 @@ function CreateSurveyContent() {
   // Detect if all required info has been collected for sample conversations
   const isReadyForSample = useMemo(() => {
     if (!surveyId || !collectedInfo) return false;
-    return (
+    
+    // Check ALL required fields are truly collected based on collectedInfo flags
+    const allRequiredFlagsCollected = (
       collectedInfo.objective &&
       collectedInfo.targetAudience &&
       collectedInfo.scope &&
       collectedInfo.successCriteria &&
-      collectedInfo.constraints
+      collectedInfo.constraints &&
+      collectedInfo.subjectDefined &&
+      collectedInfo.domainIdentified
     );
-  }, [surveyId, collectedInfo]);
+    
+    // Check that optional fields have been ASKED ABOUT (even if user declined)
+    // The AI must have at least offered to collect this information
+    const optionalFieldsAsked = (
+      collectedInfo.hypotheses !== undefined && // Has been asked (true = provided, false would mean not asked yet)
+      collectedInfo.tone !== undefined &&
+      collectedInfo.additionalContext !== undefined &&
+      collectedInfo.metrics !== undefined &&
+      collectedInfo.personalInfo !== undefined
+    );
+    
+    // For optional fields, we accept them as "handled" if:
+    // 1. They are true (user provided info), OR
+    // 2. They are explicitly false but the collectedInfo object has the key (meaning it was asked)
+    // Since collectedInfo always has these keys initialized, we need to check if the AI has actually asked
+    // We'll require at least tone, metrics, and personalInfo to be marked as true (asked AND handled)
+    const optionalFieldsHandled = (
+      collectedInfo.tone === true &&  // Tone must be explicitly set
+      collectedInfo.metrics === true &&  // Metrics must be asked about
+      collectedInfo.personalInfo === true  // Personal info must be asked about
+    );
+    
+    // IMPORTANT: Also validate that extractedData actually contains substantive values
+    // The AI extraction can be too eager in marking flags as true
+    if (!allRequiredFlagsCollected || !optionalFieldsHandled || !extractedData) return false;
+    
+    // Validate objective has actual goal content (not just marked as collected)
+    const hasObjective = extractedData.objective?.goal && 
+      typeof extractedData.objective.goal === 'string' && 
+      extractedData.objective.goal.length > 10;
+    
+    // Validate targetAudience has substantive description
+    const hasAudience = extractedData.targetAudience?.description && 
+      typeof extractedData.targetAudience.description === 'string' && 
+      extractedData.targetAudience.description.length > 5;
+    
+    // Validate scope has main topics
+    const hasScope = extractedData.scope?.mainTopics && 
+      Array.isArray(extractedData.scope.mainTopics) && 
+      extractedData.scope.mainTopics.length > 0;
+    
+    // Validate successCriteria has insights defined
+    const hasSuccessCriteria = extractedData.successCriteria?.insightTypes && 
+      Array.isArray(extractedData.successCriteria.insightTypes) && 
+      extractedData.successCriteria.insightTypes.length > 0;
+    
+    // Validate domain is identified
+    const hasDomain = typeof extractedData.domainId === 'number' && 
+      extractedData.domainId >= 1 && 
+      extractedData.domainId <= 10;
+    
+    // Validate tone has been set (even if just default)
+    const hasTone = extractedData.tone && 
+      typeof extractedData.tone === 'string' && 
+      ['formal', 'casual', 'playful', 'empathetic'].includes(extractedData.tone);
+    
+    // All validations must pass
+    return hasObjective && hasAudience && hasScope && hasSuccessCriteria && hasDomain && hasTone;
+  }, [surveyId, collectedInfo, extractedData]);
 
   // Detect if the user is ready to publish based on conversation content
   const isReadyToPublish = useMemo(() => {
@@ -229,13 +297,24 @@ function CreateSurveyContent() {
   // Load existing conversation if ID is provided
   useEffect(() => {
     if (idFromUrl && !authLoading && user) {
+      // Only load if we don't already have this survey loaded
+      // This prevents reload when user object reference changes
+      if (surveyId === idFromUrl && messages.length > 0) {
+        return; // Already loaded, skip
+      }
+      
       setSurveyId(idFromUrl);
       const loadConversation = async () => {
         setIsInitializing(true);
         try {
-          const response = await fetch(`/api/surveys/${idFromUrl}/create`);
-          if (response.ok) {
-            const data = await response.json();
+          // Fetch both conversation data and survey details
+          const [conversationRes, surveyRes] = await Promise.all([
+            fetch(`/api/surveys/${idFromUrl}/create`),
+            fetch(`/api/surveys/${idFromUrl}/details`)
+          ]);
+          
+          if (conversationRes.ok) {
+            const data = await conversationRes.json();
             
             if (data.messages && data.messages.length > 0) {
               setMessages(data.messages.map((m: any, idx: number) => ({
@@ -250,6 +329,20 @@ function CreateSurveyContent() {
             if (data.collectedInfo) setCollectedInfo(data.collectedInfo);
             if (data.extractedData) setExtractedData(data.extractedData);
           }
+          
+          // Get survey status to determine read-only mode
+          if (surveyRes.ok) {
+            const surveyData = await surveyRes.json();
+            const status = surveyData.survey?.status || null;
+            setSurveyStatus(status);
+            
+            // Read-only if survey is NOT in "creating" status
+            if (status && status !== "creating") {
+              setIsReadOnly(true);
+            } else {
+              setIsReadOnly(false);
+            }
+          }
         } catch (error) {
           console.error("Failed to load survey data:", error);
           toast.error("Failed to load survey conversation");
@@ -260,7 +353,7 @@ function CreateSurveyContent() {
       
       loadConversation();
     }
-  }, [idFromUrl, authLoading, user]);
+  }, [idFromUrl, authLoading, user, surveyId, messages.length]);
 
   // Lazy creation state
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
@@ -294,6 +387,10 @@ function CreateSurveyContent() {
       
       const survey = await response.json();
       setSurveyId(survey.id);
+      
+      // Update URL to include the survey ID to prevent reload issues
+      router.replace(`/dashboard/create?id=${survey.id}`, { scroll: false });
+      
       return survey.id;
     } catch (error) {
       toast.error("Failed to initialize survey");
@@ -690,6 +787,39 @@ function CreateSurveyContent() {
       setShowMediaModal(true);
   };
 
+  const handleGoToSampleConversations = async () => {
+    if (!surveyId) return;
+    
+    setIsFinalizing(true);
+    try {
+      // Call finalize endpoint to transfer extracted data to survey
+      const response = await fetch(`/api/surveys/${surveyId}/finalize-creation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include"
+      });
+      
+      if (!response.ok) {
+        const error = await response.text();
+        console.error("Failed to finalize survey:", error);
+        toast.error("Failed to finalize survey. Please try again.");
+        setIsFinalizing(false);
+        return;
+      }
+      
+      const data = await response.json();
+      console.log("Survey finalized:", data);
+      toast.success("Survey finalized! Loading sample conversations...");
+      
+      // Navigate to sample review page
+      router.push(`/dashboard/surveys/${surveyId}/sample-review`);
+    } catch (error) {
+      console.error("Error finalizing survey:", error);
+      toast.error("An error occurred. Please try again.");
+      setIsFinalizing(false);
+    }
+  };
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (voiceWs.isRecording) {
@@ -778,28 +908,31 @@ function CreateSurveyContent() {
                     <ArrowLeft className="w-5 h-5 text-gray-600" />
                 </Link>
                 <div className="flex items-center gap-3">
-                    <h1 className="text-xl font-bold text-gray-900">Create New Survey</h1>
-                    <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-900 border border-gray-200">
-                        AI Draft
+                    <h1 className="text-xl font-bold text-gray-900">
+                      {isReadOnly ? "View Creation Conversation" : "Create New Survey"}
+                    </h1>
+                    <span className={cn(
+                      "px-2.5 py-1 rounded-full text-xs font-medium border",
+                      isReadOnly 
+                        ? "bg-gray-100 text-gray-600 border-gray-200" 
+                        : "bg-gray-100 text-gray-900 border-gray-200"
+                    )}>
+                        {isReadOnly ? "Read Only" : "AI Draft"}
                     </span>
                 </div>
             </div>
 
-            {/* Publish Button (Header) - Replaces Preview Toggle */}
+            {/* Publish & Voice Buttons - Hide when read-only */}
+            {!isReadOnly && (
             <div className="flex items-center gap-2">
                  <button
-                      onClick={() => setShowPublishModal(true)}
-                     disabled={!isReadyToPublish}
-                      className={cn(
-                          "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm border",
-                          isReadyToPublish
-                              ? "bg-gray-900 text-white border-transparent hover:bg-gray-800 shadow-md transform hover:-translate-y-0.5"
-                              : "bg-gray-50 text-gray-400 border-gray-100 cursor-not-allowed"
-                      )}
-                  >
-                      <Share2 className="w-4 h-4" />
-                      Publish Survey
-                  </button>
+                    onClick={() => setShowPublishModal(true)}
+                    disabled={!isReadyForSample || !surveyId}
+                    className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+                >
+                    <Share2 className="w-4 h-4" />
+                    Publish Survey
+                </button>
 
                 <button
                     onClick={toggleVoiceMode}
@@ -814,95 +947,194 @@ function CreateSurveyContent() {
                     {isVoiceMode ? "Stop Voice Mode" : "Design with Voice"}
                 </button>
             </div>
+            )}
         </div>
-        <p className="text-gray-500 mt-3 ml-14 text-sm">AI-powered survey creation assistant</p>
+        <p className="text-gray-500 mt-3 ml-14 text-sm">
+          {isReadOnly 
+            ? "This is a record of the AI conversation used to create this survey" 
+            : "AI-powered survey creation assistant"}
+        </p>
       </div>
+
+      {/* Read-Only Status Banner */}
+      {isReadOnly && surveyStatus && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+            <CheckCircle2 className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-blue-900">
+              Viewing creation conversation (read-only)
+            </p>
+            <p className="text-xs text-blue-700">
+              Survey status: <span className="font-medium capitalize">{surveyStatus.replace(/_/g, " ")}</span>
+            </p>
+          </div>
+          <Link
+            href={`/dashboard/surveys/${surveyId}`}
+            className="ml-auto px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            View Survey →
+          </Link>
+        </div>
+      )}
+
+      {/* Resume Banner - Show when actively creating */}
+      {!isReadOnly && surveyId && messages.length > 0 && surveyStatus === "creating" && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+            <Loader2 className="w-5 h-5 text-amber-600 animate-spin" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-amber-900">
+              Resuming survey creation
+            </p>
+            <p className="text-xs text-amber-700">
+              Continue where you left off
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Chat Container */}
       <div className="flex-1 bg-white rounded-xl border border-gray-100 flex flex-col overflow-hidden relative">
         {/* Voice Mode Overlay */}
-        {isVoiceMode && (
-          <div className="absolute inset-0 z-20 bg-white/95 flex flex-col items-center justify-center backdrop-blur-sm transition-all animate-in fade-in duration-300">
-             <div className="relative">
-                {/* Visualizer Ring */}
-                {isRecording && (
+        {isVoiceMode && !isReadyForSample && (
+          <div className="absolute inset-0 z-20 bg-white flex transition-all animate-in fade-in duration-300">
+            {/* Split View Container */}
+            <div className="flex-1 flex">
+              {/* Left: Transcript */}
+              <div className="flex-1 border-r border-gray-100 p-6 flex flex-col">
+                <VoiceTranscript
+                  messages={messages}
+                  currentTranscript={voiceWs.interimTranscription}
+                  isRecording={voiceWs.isRecording}
+                />
+              </div>
+
+              {/* Right: Voice Controls */}
+              <div className="w-[400px] flex flex-col items-center justify-center p-8 bg-gradient-to-br from-gray-50 to-white relative">
+                <div className="relative">
+                  {/* Visualizer Ring */}
+                  {voiceWs.isRecording && (
                     <div className="absolute inset-0 rounded-full border-4 border-gray-900/20 animate-ping" />
-                )}
-                
-                {/* Main Mic Button */}
-                <button
+                  )}
+                  
+                  {/* Main Mic Button */}
+                  <button
                     onClick={toggleRecording}
                     className={cn(
-                        "relative w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl",
-                        voiceWs.isRecording
-                            ? "bg-red-600 scale-110"
-                            : "bg-gray-900 hover:scale-105"
+                      "relative w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl",
+                      voiceWs.isRecording
+                        ? "bg-red-600 scale-110"
+                        : "bg-gray-900 hover:scale-105"
                     )}
-                >
+                  >
                     {voiceWs.isRecording ? (
-                        <MicOff className="w-10 h-10 text-white" />
+                      <MicOff className="w-10 h-10 text-white" />
                     ) : (
-                        <Mic className="w-10 h-10 text-white" />
+                      <Mic className="w-10 h-10 text-white" />
                     )}
-                </button>
-            </div>
+                  </button>
+                </div>
 
-            {/* Status Text & Visualizer */}
-            <div className="mt-8 text-center space-y-6 w-full max-w-md px-4">
-                {voiceWs.isRecording ? (
+                {/* Status Text & Visualizer */}
+                <div className="mt-8 text-center space-y-6 w-full">
+                  {voiceWs.isRecording ? (
                     <>
-                        <div className="space-y-2">
-                             <h3 className="text-3xl font-bold text-gray-900 font-mono tracking-wider">
-                                {formatTime(duration)}
-                            </h3>
-                            <p className="text-gray-500 font-medium animate-pulse">
-                                Listening...
-                            </p>
-                        </div>
-                        
-                        <div className="flex items-center gap-1.5 h-12 justify-center">
-                            {[...Array(8)].map((_, i) => (
-                                <div
-                                    key={i}
-                                    className="w-1.5 bg-gray-900 rounded-full animate-bounce"
-                                    style={{
-                                        height: `${20 + Math.random() * 40}px`,
-                                        animationDelay: `${i * 0.1}s`,
-                                        animationDuration: '0.8s'
-                                    }}
-                                />
-                            ))}
-                        </div>
-                        
-                        {(voiceWs.transcription || voiceWs.interimTranscription) && (
-                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 text-left max-h-32 overflow-y-auto">
-                                <p className="text-gray-900 text-sm leading-relaxed">
-                                    {voiceWs.transcription}
-                                    <span className="text-gray-400">{voiceWs.interimTranscription}</span>
-                                </p>
-                            </div>
-                        )}
+                      <div className="space-y-2">
+                        <h3 className="text-3xl font-bold text-gray-900 font-mono tracking-wider">
+                          {formatTime(duration)}
+                        </h3>
+                        <p className="text-gray-500 font-medium animate-pulse">
+                          Listening...
+                        </p>
+                      </div>
+                      
+                      <div className="flex items-center gap-1.5 h-12 justify-center">
+                        {[...Array(8)].map((_, i) => (
+                          <div
+                            key={i}
+                            className="w-1.5 bg-gray-900 rounded-full animate-bounce"
+                            style={{
+                              height: `${20 + Math.random() * 40}px`,
+                              animationDelay: `${i * 0.1}s`,
+                              animationDuration: '0.8s'
+                            }}
+                          />
+                        ))}
+                      </div>
                     </>
-                ) : (
+                  ) : voiceWs.isPlaying ? (
                     <div className="space-y-4">
+                      <div className="w-16 h-16 mx-auto bg-gray-900/10 rounded-full flex items-center justify-center">
+                        <Sparkles className="w-8 h-8 text-gray-900 animate-pulse" />
+                      </div>
+                      <div className="space-y-2">
                         <h3 className="text-xl font-semibold text-gray-900">
-                            {voiceWs.status === "connected" ? "Voice Assistant Ready" : "Connecting..."}
+                          AI Speaking...
                         </h3>
                         <p className="text-sm text-gray-500">
-                            {voiceWs.status === "connected" 
-                                ? "Click the microphone to start talking" 
-                                : "Please wait while we establish a secure connection"}
+                          Listening to response
                         </p>
+                      </div>
                     </div>
-                )}
-            </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <h3 className="text-xl font-semibold text-gray-900">
+                        {voiceWs.status === "connected" ? "Voice Assistant Ready" : "Connecting..."}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {voiceWs.status === "connected" 
+                          ? "Click the microphone to start talking" 
+                          : "Please wait while we establish a secure connection"}
+                      </p>
+                    </div>
+                  )}
+                </div>
 
-            <button
-                onClick={toggleVoiceMode}
-                className="absolute bottom-8 text-sm text-gray-500 hover:text-gray-900 font-medium px-4 py-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-                Switch to Text Mode
-            </button>
+                <button
+                  onClick={toggleVoiceMode}
+                  className="absolute bottom-8 text-sm text-gray-500 hover:text-gray-900 font-medium px-4 py-2 hover:bg-white/80 rounded-lg transition-colors"
+                >
+                  Switch to Text Mode
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Voice Completion Message - Show when ready for sample */}
+        {isVoiceMode && isReadyForSample && (
+          <div className="absolute inset-0 z-20 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center p-8">
+            <div className="max-w-md text-center space-y-6">
+              <div className="w-20 h-20 mx-auto bg-white rounded-full flex items-center justify-center shadow-lg">
+                <CheckCircle2 className="w-12 h-12 text-emerald-600" />
+              </div>
+              
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  Survey Configuration Complete!
+                </h2>
+                <p className="text-gray-600 mb-6">
+                  All required information has been collected through voice. Switch to text mode or click the 'Go to Sample Conversations' button above to proceed.
+                </p>
+                
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={toggleVoiceMode}
+                    className="flex items-center justify-center gap-2 px-6 py-3 bg-white text-gray-900 border-2 border-gray-200 rounded-xl font-semibold hover:bg-gray-50 transition-all shadow-md"
+                  >
+                    Switch to Text Mode
+                  </button>
+                  
+                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-xl border border-emerald-200">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <span className="text-xs font-medium text-gray-700">Voice input disabled - Ready for testing</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -941,12 +1173,21 @@ function CreateSurveyContent() {
                     : "bg-gray-900 text-white"
                 )}
               >
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                  {message.displayedContent || message.content}
-                  {message.isTyping && message.role === "assistant" && (
-                    <span className="inline-block w-0.5 h-4 bg-gray-900 ml-0.5 animate-pulse" />
-                  )}
-                </p>
+                {message.role === "assistant" ? (
+                  <div className="text-sm">
+                    <MarkdownMessage 
+                      content={message.displayedContent || message.content}
+                      className="text-gray-800"
+                    />
+                    {message.isTyping && (
+                      <span className="inline-block w-0.5 h-4 bg-gray-900 ml-0.5 animate-pulse" />
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                    {message.displayedContent || message.content}
+                  </p>
+                )}
               </div>
             </div>
           )})}
@@ -1006,22 +1247,27 @@ function CreateSurveyContent() {
                       <p className="text-white/80 text-sm">All required information collected. Try a sample conversation.</p>
                     </div>
                   </div>
-                  <Link
-                    href={`/dashboard/surveys/${surveyId}/sample-review`}
-                    className="flex items-center gap-2 px-6 py-3 bg-white text-emerald-600 rounded-xl font-bold text-sm hover:bg-emerald-50 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 group"
+                  <button
+                    onClick={handleGoToSampleConversations}
+                    disabled={isFinalizing}
+                    className="flex items-center gap-2 px-6 py-3 bg-white text-emerald-600 rounded-xl font-bold text-sm hover:bg-emerald-50 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 group disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Play className="w-4 h-4 fill-current" />
-                    Go to Sample Conversations
-                    <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                  </Link>
+                    {isFinalizing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Play className="w-4 h-4 fill-current" />
+                    )}
+                    {isFinalizing ? "Finalizing..." : "Go to Sample Conversations"}
+                    {!isFinalizing && <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
+                  </button>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Input Area */}
-        {!isVoiceMode && (
+        {/* Input Area - Show only when NOT ready for sample and NOT read-only */}
+        {!isVoiceMode && !isReadyForSample && !isReadOnly && (
          <div className="border-t border-gray-100 p-4 bg-gray-50/50">
             <form onSubmit={handleSubmit} className="relative bg-white border border-gray-200 rounded-2xl shadow-sm focus-within:ring-2 focus-within:ring-purple-500/10 focus-within:border-purple-500/50 transition-all overflow-hidden">
                 <button
@@ -1060,6 +1306,27 @@ function CreateSurveyContent() {
                 Convy AI can make mistakes. Review generated surveys carefully.
             </p>
          </div>
+        )}
+
+        {/* Completion Message - Show when ready for sample */}
+        {!isVoiceMode && isReadyForSample && (
+          <div className="border-t border-gray-100 p-4 bg-gray-50/50">
+            <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 border-2 border-emerald-200 rounded-2xl p-6 text-center space-y-3">
+              <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
+              <div>
+                <h3 className="font-bold text-gray-900 text-lg mb-1">
+                  Survey Configuration Complete!
+                </h3>
+                <p className="text-gray-600 text-sm mb-3">
+                  All required information has been collected. Click the button above to test your survey with sample conversations.
+                </p>
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-xl border border-emerald-200">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                  <span className="text-xs font-medium text-gray-700">Input disabled - Ready for testing</span>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

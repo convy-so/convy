@@ -63,9 +63,19 @@ export function getSurveyCreationPrompt(
     voiceGuidance = "Ask what specific things they want to measure or track.";
   } else {
     currentPhase = "READY_FOR_SAMPLE";
-    nextTarget = "Summarize and explain they can now try sample conversations.";
-    voiceGuidance =
-      "Give a brief summary of what you've learned and explain next steps.";
+    nextTarget = `🚨 CRITICAL - CONVERSATION MUST END NOW 🚨
+    
+ALL REQUIRED INFORMATION HAS BEEN COLLECTED.
+
+YOU MUST DO EXACTLY THIS:
+1. Say: "I have all the information I need to create your survey! Please click the 'Go to Sample Conversations' button to test how the survey will work."
+2. Do NOT ask ANY more questions
+3. Do NOT offer to help with anything else  
+4. Do NOT generate sample questions
+5. Keep it BRIEF (this is voice - 1-2 sentences max)
+
+If they continue talking, respond ONLY with: "Please click the button to continue. I can't modify the survey through voice chat."`;
+    voiceGuidance = "Confirm you have everything and direct them to click the button. Be brief.";
   }
 
   const prompts = {

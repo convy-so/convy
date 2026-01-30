@@ -532,15 +532,30 @@ export default function SampleReviewPage() {
                                      voiceWs.isRecording ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
                                 </button>
                                 
-                                <div className="text-center space-y-1">
+                                <div className="text-center space-y-1 w-full max-w-md">
                                     <p className="text-sm font-bold text-gray-900">
                                         {voiceWs.status !== "connected" ? "Connecting to AI..." : 
-                                         voiceWs.isRecording ? "Listening to you..." : "AI ready to listen"}
+                                         voiceWs.isRecording ? "Listening to you..." :
+                                         voiceWs.isPlaying ? "AI Speaking..." : "AI ready to listen"}
                                     </p>
                                     <p className="text-xs text-gray-500 font-medium">
-                                        {voiceWs.isRecording ? "Speak naturally to experience the flow" : "Click the mic to speak"}
+                                        {voiceWs.isRecording ? "Speak naturally to experience the flow" : 
+                                         voiceWs.isPlaying ? "Listening to AI response" : "Click the mic to speak"}
                                     </p>
                                 </div>
+
+                                {/* Live Transcription Display */}
+                                {voiceWs.isRecording && (voiceWs.transcription || voiceWs.interimTranscription) && (
+                                    <div className="w-full max-w-md bg-gray-50 border border-gray-200 rounded-xl p-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                                            Live Transcription
+                                        </p>
+                                        <p className="text-sm text-gray-900 leading-relaxed">
+                                            {voiceWs.transcription}
+                                            <span className="text-gray-400 italic">{voiceWs.interimTranscription}</span>
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <form onSubmit={handleTextSubmit} className="relative">
