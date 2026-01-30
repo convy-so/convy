@@ -62,7 +62,7 @@ export default function SignInPage() {
     <>
       {isRedirecting && (
         <LoadingOverlay 
-          message="Signing you in..." 
+          message="Loading..." 
           subtitle="Redirecting you to dashboard"
         />
       )}

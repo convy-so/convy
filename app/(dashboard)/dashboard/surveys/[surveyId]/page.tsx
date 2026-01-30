@@ -32,6 +32,8 @@ import {
   ChevronsRight,
   ChevronDown,
   Check,
+  AlertTriangle,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -127,6 +129,8 @@ export default function SurveyDetailPage() {
     participantLimit: 50,
   });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeletingSurvey, setIsDeletingSurvey] = useState(false);
 
   // Fetch survey details
   useEffect(() => {
@@ -279,6 +283,7 @@ export default function SurveyDetailPage() {
 
   const handleSaveSettings = async () => {
     setIsSavingSettings(true);
+    const loadingToast = toast.loading("Saving changes...");
     try {
         const response = await fetch(`/api/surveys/${surveyId}`, {
             method: "PATCH",
@@ -287,14 +292,14 @@ export default function SurveyDetailPage() {
         });
 
         if (response.ok) {
-            toast.success("Settings saved successfully");
+            toast.success("Settings saved successfully", { id: loadingToast });
             // Update local survey state
             setSurvey(prev => prev ? ({ ...prev, ...settingsForm }) : null);
         } else {
-            toast.error("Failed to save settings");
+            toast.error("Failed to save settings", { id: loadingToast });
         }
     } catch (error) {
-        toast.error("An error occurred");
+        toast.error("An error occurred", { id: loadingToast });
     } finally {
         setIsSavingSettings(false);
     }
@@ -328,8 +333,7 @@ export default function SurveyDetailPage() {
   };
 
   const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete this survey?")) return;
-
+    setIsDeletingSurvey(true);
     try {
       const response = await fetch(`/api/surveys/${surveyId}`, {
         method: "DELETE",
@@ -343,6 +347,9 @@ export default function SurveyDetailPage() {
       }
     } catch (error) {
       toast.error("An error occurred");
+    } finally {
+        setIsDeletingSurvey(false);
+        setShowDeleteModal(false);
     }
   };
 
@@ -432,14 +439,23 @@ export default function SurveyDetailPage() {
                 <span className="hidden sm:inline">Resume</span>
               </button>
             ) : null}
+            
+            {(survey.status === "draft" || survey.status === "creating" || survey.status === "sample_review") && (
+              <Link
+                href={`/dashboard/create?id=${survey.id}`}
+                className="flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl text-sm font-medium hover:bg-indigo-100 transition-colors shadow-sm"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Continue Creating</span>
+              </Link>
+            )}
 
             <button 
-              onClick={handleDelete}
+              onClick={() => setShowDeleteModal(true)}
               className="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all border border-transparent hover:border-red-100"
               title="Delete Survey"
             >
-              <Users className="w-5 h-5 hidden" /> {/* Hidden placeholder to keep import valid if needed, replacing X with Trash icon logic below */}
-               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+               <Trash2 className="w-5 h-5" />
             </button>
 
             <a href={survey.shareableUrl || '#'} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors shadow-sm hover:shadow">
@@ -916,12 +932,55 @@ export default function SurveyDetailPage() {
             </div>
           </div>
 
-          <div className="bg-red-50 rounded-xl border border-red-200 p-5">
-            <h3 className="font-semibold text-red-900 mb-2">Danger Zone</h3>
-            <p className="text-sm text-red-700 mb-4">Once you delete a survey, there is no going back. Please be certain.</p>
-            <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
-              Delete Survey
-            </button>
+         
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowDeleteModal(false)}
+          />
+
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Survey</h3>
+              <p className="text-gray-500">
+                Are you sure you want to delete <span className="font-semibold text-gray-900">"{survey.title}"</span>? 
+                This action cannot be undone and will permanently remove all responses.
+              </p>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 flex items-center gap-3">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                disabled={isDeletingSurvey}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={isDeletingSurvey}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium text-sm hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isDeletingSurvey ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Delete Survey
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

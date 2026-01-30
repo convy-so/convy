@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { inviteToWorkspace, removeWorkspaceMember } from "@/app/actions/workspace";
+import toast from "react-hot-toast";
 
 interface TeamMember {
     id: string;
@@ -83,12 +84,15 @@ export function TeamMemberList({
                 setShowInviteModal(false);
                 setInviteEmail("");
                 setInviteRole("member");
+                toast.success("Invitation sent successfully");
                 onInviteSent?.();
             } else {
                 setInviteError(result.error);
+                toast.error(result.error || "Failed to send invitation");
             }
         } catch (error) {
             setInviteError("Failed to send invitation");
+            toast.error("An unexpected error occurred");
         } finally {
             setIsInviting(false);
         }
@@ -103,10 +107,14 @@ export function TeamMemberList({
             });
 
             if (result.success) {
+                toast.success("Member removed successfully");
                 onMemberRemoved?.(memberIdOrEmail);
+            } else {
+                toast.error(result.error || "Failed to remove member");
             }
         } catch (error) {
             console.error("Failed to remove member:", error);
+            toast.error("An unexpected error occurred");
         } finally {
             setRemovingMemberId(null);
             setShowMenuFor(null);

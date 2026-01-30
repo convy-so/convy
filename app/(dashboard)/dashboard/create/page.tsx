@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useRef, useEffect, useCallback, useMemo, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Sparkles,
@@ -45,9 +45,11 @@ const suggestedPrompts = [
 // Typing animation delay in milliseconds per character
 const TYPING_DELAY_MS = 15;
 
-export default function CreateSurveyPage() {
+function CreateSurveyContent() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
+  const searchParams = useSearchParams();
+  const idFromUrl = searchParams.get("id");
   const [surveyId, setSurveyId] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -223,6 +225,42 @@ export default function CreateSurveyPage() {
     setAuthError(null);
     setIsInitializing(false); // Just finish init without creating draft
   }, [user, authLoading]);
+
+  // Load existing conversation if ID is provided
+  useEffect(() => {
+    if (idFromUrl && !authLoading && user) {
+      setSurveyId(idFromUrl);
+      const loadConversation = async () => {
+        setIsInitializing(true);
+        try {
+          const response = await fetch(`/api/surveys/${idFromUrl}/create`);
+          if (response.ok) {
+            const data = await response.json();
+            
+            if (data.messages && data.messages.length > 0) {
+              setMessages(data.messages.map((m: any, idx: number) => ({
+                id: m.id || `msg-${idx}-${Date.now()}`,
+                role: m.role,
+                content: m.content,
+                displayedContent: m.content,
+                isTyping: false
+              })));
+            }
+            
+            if (data.collectedInfo) setCollectedInfo(data.collectedInfo);
+            if (data.extractedData) setExtractedData(data.extractedData);
+          }
+        } catch (error) {
+          console.error("Failed to load survey data:", error);
+          toast.error("Failed to load survey conversation");
+        } finally {
+          setIsInitializing(false);
+        }
+      };
+      
+      loadConversation();
+    }
+  }, [idFromUrl, authLoading, user]);
 
   // Lazy creation state
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
@@ -1044,5 +1082,17 @@ export default function CreateSurveyPage() {
         onUploaded={handleMediaUploaded}
       />
     </div>
+  );
+}
+
+export default function CreateSurveyPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+      </div>
+    }>
+      <CreateSurveyContent />
+    </Suspense>
   );
 }
