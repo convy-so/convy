@@ -1,5 +1,4 @@
-import { nanoid } from "nanoid";
-import { tool, Output } from "ai";
+import { tool, Output, type ModelMessage } from "ai";
 import { z } from "zod";
 import {
   type RollingContext,
@@ -36,15 +35,74 @@ import { getRedisClient } from "@/lib/redis";
 export class ConversationManager {
   
   /**
+   * Normalize messages from various formats (AI SDK ModelMessage/CoreMessage or simple object)
+   * to the internal { role, content } format used for analysis and DB storage.
+   * Now media-aware: injects markers for tool calls (e.g. showMedia).
+   */
+  static normalizeMessages(
+    messages: Array<any>,
+    config?: SurveyConfig
+  ): Array<{ role: "user" | "assistant"; content: string }> {
+    const normalized: Array<{ role: "user" | "assistant"; content: string }> = [];
+
+    messages.forEach((m) => {
+      // Skip system or tool messages for the base list, but we'll extract events from them if needed
+      if (m.role !== "user" && m.role !== "assistant") return;
+
+      let content = "";
+      if (typeof m.content === "string") {
+        content = m.content;
+      } else if (Array.isArray(m.content)) {
+        // AI SDK Part-based content
+        content = m.content
+          .filter((p: any) => p.type === "text")
+          .map((p: any) => p.text)
+          .join("\n");
+      }
+
+      // Handle tool calls/invocations (e.g. media display events)
+      const invocations = m.toolCalls || m.toolInvocations;
+      if (m.role === "assistant" && invocations && Array.isArray(invocations)) {
+        const markers = invocations
+          .map((inv: any) => {
+            const toolName = inv.toolName;
+            if (toolName === "showMedia") {
+              const mediaId = inv.args?.mediaId;
+              const media = config?.media?.find((item) => item.id === mediaId);
+              const label = media ? `${media.type} "${media.description}"` : `media ${mediaId}`;
+              return `[ACTION: Displayed ${label}]`;
+            }
+            return `[ACTION: Called tool ${toolName}]`;
+          })
+          .join(" ");
+
+        if (markers) {
+          content = (markers + (content ? "\n" + content : "")).trim();
+        }
+      }
+
+      normalized.push({
+        role: m.role as "user" | "assistant",
+        content: content || (m.role === "assistant" ? "[AI Response]" : "[Empty Message]"),
+      });
+    });
+
+    return normalized;
+  }
+
+  /**
    * Load or create the rolling context for a conversation.
    * Handles hydration from Redis, calculating signals, and updating progress.
    */
   static async loadOrCreateContext(
     conversationId: string,
-    messages: Array<{ role: "user" | "assistant"; content: string }>,
+    messages: Array<{ role: "user" | "assistant"; content: string }> | ModelMessage[] | any[],
     config: SurveyConfig,
     forceNew: boolean = false
   ): Promise<RollingContext> {
+    // Normalize messages for analysis
+    const normalizedMessages = this.normalizeMessages(messages, config);
+    
     const redis = getRedisClient();
     const contextKey = getContextKey(conversationId);
     const startTimeKey = getStartTimeKey(conversationId);
@@ -74,8 +132,8 @@ export class ConversationManager {
                 } else {
                     context = parsedContext;
                 }
-            } catch {
-                // Formatting error, ignore and recreate
+            } catch (error) {
+                console.warn(`[ConversationManager] Failed to parse existing context for ${conversationId}, recreating fresh session.`, error);
             }
         }
     }
@@ -88,17 +146,17 @@ export class ConversationManager {
     }
 
     // Update context with current messages (Compression)
-    context = buildCompressedContext(messages, context);
+    context = buildCompressedContext(normalizedMessages, context);
 
     // Calculate quality signals
-    context.qualitySignals = calculateQualitySignals(messages);
+    context.qualitySignals = calculateQualitySignals(normalizedMessages);
 
     // Detect participant style
-    context.memory.participantStyle = detectParticipantStyle(messages);
+    context.memory.participantStyle = detectParticipantStyle(normalizedMessages);
 
     // Calculate progress
     context.progress = calculateProgress(
-      messages,
+      normalizedMessages,
       config,
       startTime,
       context.memory.topicsCovered
@@ -110,10 +168,10 @@ export class ConversationManager {
       previousState: context.stateContext.currentState,
       currentState: determineConversationState(
         context.progress,
-        messages.length,
+        normalizedMessages.length,
         config
       ),
-      stateEnteredAt: messages.length,
+      stateEnteredAt: normalizedMessages.length,
       transitionReason: null,
     };
 
@@ -126,16 +184,19 @@ export class ConversationManager {
    */
   static async updateMemoryAsync(
     conversationId: string,
-    messages: Array<{ role: "user" | "assistant"; content: string }>,
+    messages: Array<{ role: "user" | "assistant"; content: string }> | ModelMessage[] | any[],
     config: SurveyConfig,
     existingContext: RollingContext
   ): Promise<void> {
     try {
+      // Normalize messages for analysis
+      const normalizedMessages = this.normalizeMessages(messages, config);
+
       // Only update every 2-3 exchanges to save costs and avoid thrashing
-      if (messages.length < 4 || messages.length % 2 !== 0) return;
+      if (normalizedMessages.length < 4 || normalizedMessages.length % 2 !== 0) return;
 
       const memoryPrompt = getMemoryUpdatePrompt(
-        messages,
+        normalizedMessages,
         config,
         existingContext.memory
       );

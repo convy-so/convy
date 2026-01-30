@@ -12,6 +12,11 @@ import {
   checkMessageAllowed,
   checkAudioChunkAllowed,
 } from "../middleware/rate-limit";
+import {
+  createVoiceError,
+  sendVoiceError,
+  type VoiceError,
+} from "@/lib/voice/errors";
 
 // Configuration constants
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes idle timeout
@@ -82,7 +87,13 @@ export abstract class BaseVoiceHandler {
   }
 
   protected sendError(message: string, code?: string): void {
-    this.send({ type: "error", error: message, code });
+    // Try to map to known error code
+    if (code) {
+      const voiceError = createVoiceError(code as keyof typeof import("@/lib/voice/errors").VOICE_ERRORS, message);
+      sendVoiceError(this.send.bind(this), voiceError);
+    } else {
+      this.send({ type: "error", error: message, code: code || "UNKNOWN_ERROR" });
+    }
   }
 
   /**
@@ -125,26 +136,23 @@ export abstract class BaseVoiceHandler {
     this.ws.on("message", async (data: Buffer) => {
       if (!this.isActive) return;
 
-      // Rate limit checks
-      if (data.length > 10000) { // Large payload check
-         // Assume audio or large JSON
-      } else {
-         const messageCheck = await checkMessageAllowed(this.identifier);
-         if (!messageCheck.allowed) {
-             this.send({
-                 type: "rate_limit",
-                 error: messageCheck.reason,
-                 retryAfter: messageCheck.retryAfter
-             });
-             return;
-         }
-      }
-
       this.resetIdleTimeout();
 
       try {
         // Try to parse as JSON (control messages)
         const message = JSON.parse(data.toString());
+        
+        // Rate limit checks for JSON messages
+        const messageCheck = await checkMessageAllowed(this.identifier);
+        if (!messageCheck.allowed) {
+            this.send({
+                type: "rate_limit",
+                error: messageCheck.reason,
+                retryAfter: messageCheck.retryAfter
+            });
+            return;
+        }
+
         await this.handleControlMessage(message);
       } catch {
         // Not JSON, treat as audio data
@@ -155,6 +163,7 @@ export abstract class BaseVoiceHandler {
 
   /**
    * Handle incoming audio chunks
+   * BUG FIX #4: Transcode WebM/Opus to LINEAR16 PCM before sending to Google STT
    */
   protected async handleAudioData(audioData: Buffer): Promise<void> {
     if (this.isProcessing) return;
@@ -167,18 +176,33 @@ export abstract class BaseVoiceHandler {
     }
 
     try {
-      if (this.sttSession) {
-        this.sttSession.write(audioData);
+      // BUG FIX #4: Transcode WebM/Opus audio to LINEAR16 PCM
+      // The client sends WebM/Opus but Google STT expects LINEAR16 PCM
+      const { transcodeAudioChunk } = await import("@/lib/voice/audio-transcoding");
+      const pcmBuffer = await transcodeAudioChunk(audioData);
+
+      if (!pcmBuffer) {
+        console.error(`[VoiceHandler] Failed to transcode audio chunk (${this.identifier})`);
+        const error = createVoiceError("AUDIO_TRANSCODING_FAILED");
+        sendVoiceError(this.send.bind(this), error);
+        return;
       }
 
+      // Send transcoded PCM audio to Google STT
+      if (this.sttSession) {
+        this.sttSession.write(pcmBuffer);
+      }
 
       // Buffer audio only if enabled and VAD detects speech
+      // Note: We buffer the PCM audio, not the original WebM
       if (this.enableAudioBuffering) {
-          this.audioBuffer.addChunk(audioData, this.isSpeechActive);
+          this.audioBuffer.addChunk(pcmBuffer, this.isSpeechActive);
       }
       
     } catch (error) {
       console.error(`[VoiceHandler] Audio processing error (${this.identifier}):`, error);
+      const voiceError = createVoiceError("AUDIO_FORMAT_INVALID", error instanceof Error ? error.message : String(error));
+      sendVoiceError(this.send.bind(this), voiceError);
     }
   }
 

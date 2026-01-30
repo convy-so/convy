@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
-import { streamText, stepCountIs, generateText, convertToModelMessages, type UIMessage } from "ai";
+import { streamText, generateText, convertToModelMessages, type UIMessage, stepCountIs } from "ai";
 
 import { db } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema";
@@ -9,7 +9,7 @@ import { ConversationManager } from "@/lib/conversation-manager";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import { defaultModel } from "@/lib/ai";
 
-const model = defaultModel; // Use consistent model
+const model = defaultModel;
 
 /**
  * GET - Initialize a survey response conversation and generate AI greeting
@@ -49,9 +49,9 @@ export async function GET(
         // Create initial context for the greeting
         const initialContext = await ConversationManager.loadOrCreateContext(
             conversationId,
-            [], // No messages yet
+            [],
             surveyConfig,
-            true // Force new context
+            true 
         );
 
         // Generate the AI's opening greeting
@@ -62,7 +62,7 @@ export async function GET(
             system: systemPrompt,
             prompt: "Start the conversation by greeting the participant warmly. Introduce yourself as the interviewer, briefly explain what this survey is about based on your instructions, and ask your first opening question to get the conversation started. Keep it concise and welcoming.",
             temperature: 0.8,
-            maxTokens: 300,
+            maxOutputTokens: 300,
         });
 
         const greetingText = greetingResult.text;
@@ -130,10 +130,6 @@ export async function POST(
             return NextResponse.json({ error: "Survey not found" }, { status: 404 });
         }
 
-        // Get or create conversation (simplified logic for this route - assumes context has what we need or we find by other means if needed. 
-        // Actually the context usually contains conversationId if we are continuing.
-        // But for this simplified route, we might rely on the client passing it or just creating a new one implicitly for the stream.
-        // Re-using existing logic below:
         const conversationId = context?.conversationId || body.conversationId;
 
         if (!conversationId) {
@@ -173,7 +169,7 @@ export async function POST(
                 // Save conversation to database
                 const updatedMessages = [
                     ...modelMessages,
-                    { role: "assistant" as const, content: text }
+                    { role: "assistant" as const, content: text, toolCalls }
                 ];
 
                 // Update memory in background (learning)
@@ -195,14 +191,16 @@ export async function POST(
                 const isCompleted = isCompletionPhrase && userMessages.length >= minQuestions;
 
                 if (conversationId) {
+                    // Normalize messages for DB storage (simple role/content strings + timestamps)
+                    const dbMessages = ConversationManager.normalizeMessages(updatedMessages, surveyConfig).map(m => ({
+                        ...m,
+                        timestamp: new Date().toISOString()
+                    }));
+
                     await db
                     .update(surveyConversations)
                     .set({
-                        rawConversation: updatedMessages.map(m => ({
-                            role: m.role,
-                            content: m.content,
-                            timestamp: new Date().toISOString()
-                        })),
+                        rawConversation: dbMessages,
                         completed: isCompleted,
                         updatedAt: new Date(),
                     })
