@@ -7,7 +7,6 @@ import { env } from "@/lib/env";
  * Cost: $4 per 1M characters for Standard voices (cost-effective)
  */
 
-// Cost constant for reuse
 export const TTS_COST_PER_MILLION_CHARS = 4;
 
 /**
@@ -188,8 +187,10 @@ export class GoogleTTSService {
             ssmlGender: options.gender || "NEUTRAL",
           },
           audioConfig: {
-            audioEncoding: "LINEAR16",
-            sampleRateHertz: 16000,
+            // BUG FIX #8: Use MP3 encoding for browser compatibility
+            // Browsers can play MP3 directly via Audio API
+            audioEncoding: "MP3",
+            sampleRateHertz: 24000, // Higher quality for MP3
             speakingRate: options.speakingRate || 1.0,
             pitch: options.pitch || 0.0,
             volumeGainDb: options.volumeGainDb || 0.0,

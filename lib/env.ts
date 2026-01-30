@@ -86,6 +86,9 @@ export const env = {
     optional("NEXT_PUBLIC_BETTER_AUTH_URL") || betterAuthUrl,
     
   NEXT_PUBLIC_WEBSOCKET_URL: optional("NEXT_PUBLIC_WEBSOCKET_URL") || "ws://localhost:3001",
+  
+  // External Tools
+  FFMPEG_PATH: optional("FFMPEG_PATH"),
 };
 
 export type Env = typeof env;

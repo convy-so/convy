@@ -139,6 +139,8 @@ export class GoogleSTTService extends EventEmitter {
         },
         interimResults: config.enableInterimResults ?? true,
         singleUtterance: config.singleUtterance ?? false,
+        // BUG FIX #7: Enable voice activity events for proper VAD
+        enableVoiceActivityEvents: true,
       };
 
     // Add voice activity timeout configuration if specified
@@ -488,6 +490,21 @@ export interface StreamingSessionConfig {
 }
 
 /**
+ * Stream state enum for proper state management
+ */
+enum StreamState {
+  IDLE = "IDLE",
+  INITIALIZING = "INITIALIZING",
+  READY = "READY",
+  STREAMING = "STREAMING",
+  ERROR = "ERROR",
+  CLOSED = "CLOSED",
+}
+
+// Maximum chunk size per Google Cloud STT API spec
+const MAX_CHUNK_SIZE_BYTES = 25 * 1024; // 25 KB
+
+/**
  * Streaming Session for real-time transcription with VAD
  */
 export class GoogleSTTStreamingSession extends EventEmitter {
@@ -498,6 +515,7 @@ export class GoogleSTTStreamingSession extends EventEmitter {
     typeof speech.SpeechClient.prototype.streamingRecognize
   > | null = null;
   private isActive: boolean = false;
+  private streamState: StreamState = StreamState.IDLE;
   private totalAudioDuration: number = 0;
   private startTime: number = 0;
   private speechStartTime: number | null = null;
@@ -539,6 +557,8 @@ export class GoogleSTTStreamingSession extends EventEmitter {
   start(): void {
     if (this.isActive) return;
 
+    // BUG FIX #1 & #4: Proper state management
+    this.streamState = StreamState.INITIALIZING;
     this.isActive = true;
     this.startTime = Date.now();
     this.totalAudioDuration = 0;
@@ -550,10 +570,19 @@ export class GoogleSTTStreamingSession extends EventEmitter {
     try {
       this.recognizeStream = this.client.streamingRecognize();
 
-      // Send initial config
+      // Send initial config - MUST be sent before any audio
       console.log("[Google STT Stream] Sending streaming configuration");
       this.recognizeStream.write({
         streamingConfig: this.config,
+      });
+
+      // Transition to READY state after config is sent
+      // Wait a tick to ensure config is processed
+      setImmediate(() => {
+        if (this.streamState === StreamState.INITIALIZING) {
+          this.streamState = StreamState.READY;
+          console.log("[Google STT Stream] Stream ready to receive audio");
+        }
       });
 
       // Handle responses
@@ -562,12 +591,17 @@ export class GoogleSTTStreamingSession extends EventEmitter {
         (
           response: speech.protos.google.cloud.speech.v1.IStreamingRecognizeResponse
         ) => {
+          // Transition to streaming on first response
+          if (this.streamState === StreamState.READY) {
+            this.streamState = StreamState.STREAMING;
+          }
           this.handleResponse(response);
         }
       );
 
       this.recognizeStream.on("error", (error: Error) => {
         if (!this.isActive) return;
+        this.streamState = StreamState.ERROR;
         console.error("[Google STT Stream] Error:", error);
         this.emit("error", error);
         this.cleanup();
@@ -599,10 +633,28 @@ export class GoogleSTTStreamingSession extends EventEmitter {
       return false;
     }
 
-    // STRICT VALIDATION: Prevent empty/malformed buffers that cause MALORDERED_DATA errors
+    // BUG FIX #1: Only allow audio writes when stream is READY or STREAMING
+    if (this.streamState !== StreamState.READY && this.streamState !== StreamState.STREAMING) {
+      console.warn(
+        `[Google STT Stream] Cannot write audio in state ${this.streamState}, waiting for READY`
+      );
+      return false;
+    }
+
+    // STRICT VALIDATION: Prevent empty/malformed buffers
     if (!Buffer.isBuffer(audioBuffer) || audioBuffer.length === 0) {
       console.warn("[Google STT Stream] Skipping non-buffer or empty audio chunk");
       return false;
+    }
+
+    // BUG FIX #3: Validate 25KB chunk size limit
+    if (audioBuffer.length > MAX_CHUNK_SIZE_BYTES) {
+      console.error(
+        `[Google STT Stream] Chunk size ${audioBuffer.length} bytes exceeds ` +
+          `maximum ${MAX_CHUNK_SIZE_BYTES} bytes. Splitting chunk.`
+      );
+      // Split large chunk into smaller pieces
+      return this.writeLargeChunk(audioBuffer);
     }
 
     // Validate audio buffer if enabled
@@ -626,6 +678,11 @@ export class GoogleSTTStreamingSession extends EventEmitter {
         1000;
       this.totalAudioDuration += durationMs;
 
+      // Transition to STREAMING state on first audio write
+      if (this.streamState === StreamState.READY) {
+        this.streamState = StreamState.STREAMING;
+      }
+
       this.recognizeStream.write({
         audioContent: audioBuffer,
       });
@@ -633,8 +690,39 @@ export class GoogleSTTStreamingSession extends EventEmitter {
       return true;
     } catch (error) {
       console.error("[Google STT Stream] Write error:", error);
+      this.streamState = StreamState.ERROR;
       return false;
     }
+  }
+
+  /**
+   * Write large audio chunk by splitting it into smaller pieces
+   * BUG FIX #3: Handle chunks larger than 25KB
+   */
+  private writeLargeChunk(audioBuffer: Buffer): boolean {
+    let offset = 0;
+    let successCount = 0;
+
+    while (offset < audioBuffer.length) {
+      const chunkSize = Math.min(
+        MAX_CHUNK_SIZE_BYTES,
+        audioBuffer.length - offset
+      );
+      const chunk = audioBuffer.subarray(offset, offset + chunkSize);
+
+      if (this.write(chunk)) {
+        successCount++;
+      } else {
+        console.error(
+          `[Google STT Stream] Failed to write chunk at offset ${offset}`
+        );
+        return false;
+      }
+
+      offset += chunkSize;
+    }
+
+    return successCount > 0;
   }
 
   /**
@@ -868,6 +956,7 @@ export class GoogleSTTStreamingSession extends EventEmitter {
   private cleanup(): void {
     if (!this.isActive) return;
     this.isActive = false;
+    this.streamState = StreamState.CLOSED;
     
     if (this.recognizeStream) {
       this.recognizeStream.removeAllListeners();
