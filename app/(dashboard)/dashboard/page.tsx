@@ -45,14 +45,8 @@ const quickActions = [
     href: "/dashboard/projects",
     color: "from-amber-500 to-orange-500",
   },
-  {
-    title: "Manage Projects",
-    description: "Organize your surveys",
-    icon: FolderOpen,
-    href: "/dashboard/projects",
-    color: "from-amber-500 to-orange-500",
-  },
 ];
+
 
 export default async function DashboardPage() {
   const session = await getVerifiedSession();
@@ -249,9 +243,9 @@ export default async function DashboardPage() {
         {/* Sidebar Column - Activity Feed & Integrations */}
         <div className="lg:col-span-1 space-y-6">
           <IntegrationsWidget
-            slackConnected={slackStatus.success && slackStatus.data.connected}
+            slackConnected={!!(slackStatus.success && slackStatus.data?.connected)}
             notionConnected={notionStatus.success && notionStatus.connected}
-            zapierConnected={zapierStatus.success && zapierStatus.data.connected}
+            zapierConnected={!!(zapierStatus.success && zapierStatus.data?.connected)}
           />
           <ActivityFeed activities={activities} />
         </div>

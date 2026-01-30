@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { db } from "@/db";
 import { surveys, surveyCreationConversations } from "@/db/schema";
-import { defaultModel, analysisModel, generateAIResponse } from "@/lib/ai";
+import { defaultModel, analysisModel } from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
   getSurveyCreationSystemPrompt,
@@ -313,7 +313,7 @@ export async function POST(
               })
               .where(eq(surveyCreationConversations.surveyId, surveyId));
 
-            // Trigger incremental extraction every 2 assistant messages or if specific completion phrases are used
+            // Trigger incremental extraction more frequently to ensure button appears
             const completionPhrases = [
               "ready to publish",
               "all set",
@@ -322,16 +322,21 @@ export async function POST(
               "looks good",
               "finalized",
               "try sample",
+              "i have all the information",
+              "go to sample conversations",
+              "click the button",
+              "everything you need",
+              "everything we need",
             ];
             const isCompletionVariable = completionPhrases.some((phrase) =>
               text.toLowerCase().includes(phrase)
             );
 
-            // Throttle: Extract if it's the very first message, a completion message, or every 4th message
+            // Extract more frequently: first 2 messages, completion phrase, or every 2nd message
             const shouldExtract =
               updatedMessages.length <= 2 ||
               isCompletionVariable ||
-              updatedMessages.length % 4 === 0;
+              updatedMessages.length % 2 === 0;
 
             if (shouldExtract) {
               console.log(
@@ -339,6 +344,35 @@ export async function POST(
                 })`
               );
               await performIncrementalExtraction(surveyId, updatedMessages);
+              
+              // Check if we're now in completion state
+              const [updatedConv] = await db
+                .select()
+                .from(surveyCreationConversations)
+                .where(eq(surveyCreationConversations.surveyId, surveyId));
+
+              if (updatedConv?.collectedInfo) {
+                const info = updatedConv.collectedInfo as any;
+                const allCollected = info.objective && info.targetAudience && 
+                                   info.scope && info.successCriteria && 
+                                   info.constraints && info.subjectDefined && 
+                                   info.domainIdentified;
+                
+                if (allCollected) {
+                  console.log(`[Create Route] ✅ All required info collected for ${surveyId} - conversation should end`);
+                  console.log(`[Create Route] collectedInfo:`, JSON.stringify(info, null, 2));
+                } else {
+                  const missing = [];
+                  if (!info.objective) missing.push("objective");
+                  if (!info.targetAudience) missing.push("targetAudience");
+                  if (!info.scope) missing.push("scope");
+                  if (!info.successCriteria) missing.push("successCriteria");
+                  if (!info.constraints) missing.push("constraints");
+                  if (!info.subjectDefined) missing.push("subjectDefined");
+                  if (!info.domainIdentified) missing.push("domainIdentified");
+                  console.log(`[Create Route] ⏳ Still missing: ${missing.join(", ")}`);
+                }
+              }
             } else {
               console.log(
                 `[Create Route] Skipping extraction for survey ${surveyId} (throttled)`

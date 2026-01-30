@@ -106,6 +106,8 @@ export function getSurveyCreationSystemPrompt(
   const allRequiredCollected = uncollectedRequired.length === 0;
   const needsMetrics = !collectedInfo.metrics;
   const needsAdditionalContext = !collectedInfo.additionalContext;
+  const needsTone = !collectedInfo.tone;
+  const needsPersonalInfo = !collectedInfo.personalInfo;
   
   // DOMAIN & SUBJECT ORCHESTRATION LAYER
   // This is the highest priority: We must know WHAT (Subject) and WHICH (Domain) we are surveying.
@@ -129,31 +131,51 @@ export function getSurveyCreationSystemPrompt(
     const [nextKey, nextInfo] = uncollectedRequired[0];
     currentPhase = "GATHERING_REQUIRED_INFO";
     nextTarget = `Next: Collect "${nextKey}" - ${nextInfo.description}. Quality checks: ${nextInfo.qualityChecks.join(", ")}`;
-  } else if (needsAdditionalContext) {
-    currentPhase = "ASKING_ADDITIONAL_INFO";
-    nextTarget =
-      "Ask if there's any additional context or information they'd like to add.";
-  } else if (needsMetrics) {
+  } 
+  // 4. Ask about TONE (critical optional field)
+  else if (needsTone) {
+    currentPhase = "ASKING_TONE";
+    nextTarget = "Ask about the preferred conversation tone/style. Present the options: formal, casual, playful, or empathetic. Even if they say 'no preference', mark this as collected with default 'casual'.";
+  }
+  // 5. Ask about METRICS
+  else if (needsMetrics) {
     currentPhase = "ASKING_METRICS";
-    nextTarget =
-      "Ask about specific metrics they want to track from the survey responses.";
-  } else if (uncollectedOptional.length > 0) {
+    nextTarget = "Ask about specific metrics they want to track from the survey responses (e.g., NPS, CSAT, CES). If they don't need specific metrics, acknowledge and mark as collected.";
+  }
+  // 6. Ask about PERSONAL INFO to collect
+  else if (needsPersonalInfo) {
+    currentPhase = "ASKING_PERSONAL_INFO";
+    nextTarget = "Ask if they want to collect any personal information from respondents (e.g., email, name, company). If they don't need any, acknowledge and mark as collected.";
+  }
+  // 7. Ask for ADDITIONAL CONTEXT
+  else if (needsAdditionalContext) {
+    currentPhase = "ASKING_ADDITIONAL_INFO";
+    nextTarget = "Ask if there's any additional context or information they'd like to add. If none, acknowledge and mark as collected.";
+  } 
+  // 8. Other optional fields
+  else if (uncollectedOptional.length > 0) {
     const [nextKey, nextInfo] = uncollectedOptional[0];
     currentPhase = "OPTIONAL_INFO";
     nextTarget = `Optional: Ask about "${nextKey}" - ${nextInfo.description}`;
   } else {
     currentPhase = "READY_FOR_SAMPLE";
-    nextTarget = `All required information has been collected!
-STOP asking questions.
-STOP proposing to draft questions.
-STOP proposing to show examples.
+    nextTarget = `🚨 CRITICAL - CONVERSATION MUST END NOW 🚨
 
-Your ONLY job is to:
-1. Tell the user you have everything you need.
-2. Ask them to click the "Go to Sample Conversations" button below to test the survey as a respondent.
-3. If they ask about questions, tell them they can experience the questions by clicking the button.
+ALL REQUIRED AND OPTIONAL INFORMATION HAS BEEN COLLECTED OR ASKED ABOUT.
 
-Say something like: "I have all the information I need! Please click the 'Go to Sample Conversations' button below to simulate the survey experience."`;
+YOU MUST DO EXACTLY THIS:
+1. Briefly summarize what you've collected: the survey objective, target audience, scope, tone preference, and any metrics/personal info they want to track.
+2. Say: "I have all the information I need to create your survey! Please click the 'Go to Sample Conversations' button below to test how the survey will work with real respondents."
+3. Do NOT ask ANY more questions
+4. Do NOT offer to help with anything else
+5. Do NOT generate sample questions or show example conversations
+6. Do NOT propose to draft questions
+7. WAIT for the user to click the button
+
+IMPORTANT: If the user sends another message after this, respond ONLY with:
+"Please click the 'Go to Sample Conversations' button below to continue. I cannot modify the survey configuration further through this chat."
+
+DO NOT ENGAGE in further conversation. DO NOT answer questions about the survey. DO NOT be helpful. ONLY direct them to the button.`;
   }
 
   // Inject Domain Persona if available
@@ -322,16 +344,29 @@ Extract the following (use null if not discussed or unclear):
 }
 
 QUALITY CRITERIA for marking as collected (true):
-- objective: Has clear goal + context + decision.
-- subjectDefined: True ONLY if the user has described the specific product, service, or experience (not just "an app").
-- domainIdentified: True if the survey fits clearly into one of the 10 domains.
-- targetAudience: Knows who + their relationship + knowledge level
-- scope: Clear on breadth vs depth + main topics + boundaries
-- successCriteria: Knows what type of insights + detail level needed
-- constraints: Has time expectations + any sensitive areas
-- personalInfo: Has been asked about and either a list of types provided or explicitly declined
+BE EXTREMELY CONSERVATIVE - Mark as false unless ALL criteria are met with SPECIFIC, DETAILED information.
 
-Be CONSERVATIVE - only mark true if information is specific, not vague.`;
+=== REQUIRED FIELDS (must have substantive data) ===
+- objective: Mark true ONLY if ALL three are present: (1) goal is specific and >10 characters, (2) context explains why, (3) decision is stated. "I want feedback on my app" is NOT enough.
+- subjectDefined: Mark true ONLY if user described the SPECIFIC product/service/experience with enough detail to understand what is being surveyed. "An app" or "my product" is NOT enough. Need specific name or detailed description.
+- domainIdentified: Mark true ONLY if the survey CLEARLY fits into exactly one of the 10 domains (1-10).
+- targetAudience: Mark true ONLY if ALL three are clear: (1) who they are (>5 chars), (2) their relationship to creator, (3) knowledge level.
+- scope: Mark true ONLY if ALL three are defined: (1) breadth vs depth preference stated, (2) at least 1 main topic in the array, (3) boundaries described.
+- successCriteria: Mark true ONLY if: (1) insight types array has at least 1 item, (2) detail level is stated.
+- constraints: Mark true ONLY if time expectations are discussed (even if "no limit" is the answer).
+
+=== OPTIONAL FIELDS (must be ASKED about, even if user declines) ===
+These fields should be marked TRUE when the AI has ASKED the user about them, regardless of whether the user provided info or declined:
+- tone: Mark true if the AI asked about conversation style/tone AND user either chose one (formal/casual/playful/empathetic) OR said they don't have a preference (default to casual).
+- metrics: Mark true if the AI asked about specific metrics to track (NPS, CSAT, etc.) AND user either provided metrics OR said none needed.
+- personalInfo: Mark true if the AI asked about personal info to collect (email, name, etc.) AND user either provided types OR declined.
+- hypotheses: Mark true if the AI asked about assumptions/beliefs to test AND user either provided some OR said they don't have any.
+- additionalContext: Mark true if the AI asked if there's anything else to add AND user either provided context OR said no.
+- requiredQuestions: Mark true if specific questions were discussed (can remain false if not mentioned).
+- media: Mark true if media/images were discussed (can remain false if not mentioned).
+
+WHEN IN DOUBT, MARK FALSE. It is better to ask more questions than to proceed with incomplete information.
+The survey is NOT ready until ALL required fields have substantive data AND all optional fields (tone, metrics, personalInfo) have been asked about.`;
 }
 
 /**
@@ -544,7 +579,36 @@ Additional guidance for this rehearsal with the survey creator:
 - Treat the survey creator exactly like a participant so they can experience the real flow
 - After covering every required topic, wrap up politely just as you would with a participant
 - This is sample conversation #${conversationNumber || 1} of 3 maximum${iterationNote}${feedbackSection}
-- CRITICAL: When the survey is finished and you have said goodbye, output this exact token at the very end: [[SURVEY_COMPLETED]]`;
+- CRITICAL: When the survey is finished and you have said goodbye, output this exact token at the very end: [[SURVEY_COMPLETED]]
+
+🚨 CRITICAL - CONVERSATIONAL FLOW RULES 🚨
+
+YOU MUST HAVE A REAL CONVERSATION:
+1. Ask ONE question at a time - NEVER list multiple questions
+2. Wait for the participant's response before asking the next question
+3. Do NOT generate example conversations or show all questions at once
+4. Do NOT generate sample answers - this is a REAL conversation with a REAL person
+5. Follow up naturally based on their actual responses
+6. Adapt your questions based on what they say
+
+WRONG EXAMPLE (NEVER DO THIS):
+❌ "Here are the questions I'll ask:
+1. How satisfied are you?
+2. What do you like?
+3. Any improvements?"
+
+❌ "Let me show you a sample conversation:
+AI: How satisfied are you?
+User: Very satisfied
+AI: What features do you like?"
+
+RIGHT EXAMPLE (DO THIS):
+✅ "Thanks for joining! Let's start - on a scale of 1-10, how satisfied are you with our product?"
+[Wait for actual response]
+✅ "That's helpful! What aspects do you find most valuable?"
+[Wait for actual response]
+
+REMEMBER: This is NOT a demo, NOT a preview, NOT a simulation. This is a REAL conversation happening RIGHT NOW with a REAL person typing responses.`;
 }
 
 /**

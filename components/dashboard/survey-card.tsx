@@ -12,7 +12,8 @@ import {
     Edit,
     Trash2,
     Copy,
-    Share2
+    Share2,
+    Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -119,6 +120,26 @@ export function SurveyCard({
                                         <Eye className="w-4 h-4" />
                                         View Details
                                     </Link>
+                                    {/* Resume or View Creation Chat based on status */}
+                                    {status === "creating" ? (
+                                        <Link
+                                            href={`/dashboard/create?id=${id}`}
+                                            className="flex items-center gap-2.5 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50"
+                                            onClick={() => setShowMenu(false)}
+                                        >
+                                            <Sparkles className="w-4 h-4" />
+                                            Resume Creation
+                                        </Link>
+                                    ) : (
+                                        <Link
+                                            href={`/dashboard/create?id=${id}`}
+                                            className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                            onClick={() => setShowMenu(false)}
+                                        >
+                                            <MessageSquare className="w-4 h-4" />
+                                            View Creation Chat
+                                        </Link>
+                                    )}
                                     <Link
                                         href={`/dashboard/surveys/${id}?tab=settings`}
                                         className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"

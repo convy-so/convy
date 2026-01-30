@@ -375,22 +375,27 @@ export default function SurveyRespondPage() {
                                 <VisualizerRing isRecording={voiceWs.isRecording} />
                             </button>
 
-                            <div className="text-center space-y-1">
+                            <div className="text-center space-y-2 w-full max-w-lg">
                                 <p className="text-gray-900 font-semibold text-lg tracking-tight">
-                                    {voiceWs.isRecording ? "Listening..." : "Tap to speak"}
+                                    {voiceWs.isRecording ? "Listening..." : 
+                                     voiceWs.isPlaying ? "AI Speaking..." : "Tap to speak"}
                                 </p>
-                                <div className="h-6 flex items-center justify-center">
-                                    {(voiceWs.transcription || voiceWs.interimTranscription) ? (
-                                        <p className="text-sm text-gray-500 max-w-md truncate px-4">
+                                <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">
+                                    {voiceWs.status === "connected" ? "AI Ready" : "Connecting..."}
+                                </p>
+
+                                {/* Live Transcription Display */}
+                                {voiceWs.isRecording && (voiceWs.transcription || voiceWs.interimTranscription) && (
+                                    <div className="mt-4 bg-gray-50 border border-gray-200 rounded-2xl p-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                                            Live Transcription
+                                        </p>
+                                        <p className="text-sm text-gray-900 leading-relaxed text-left">
                                             {voiceWs.transcription}
                                             <span className="text-gray-400 italic">{voiceWs.interimTranscription}</span>
                                         </p>
-                                    ) : (
-                                        <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">
-                                            {voiceWs.status === "connected" ? "AI Ready" : "Connecting..."}
-                                        </p>
-                                    )}
-                                </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ) : (
