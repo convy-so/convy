@@ -1,5 +1,5 @@
 import { WebSocket } from "ws";
-import { AudioBufferManager, AUDIO_CONFIG } from "@/lib/voice/audio-processing";
+import { AudioBufferManager} from "@/lib/voice/audio-processing";
 import {
   getGoogleSTTService,
   GoogleSTTStreamingSession,
@@ -7,7 +7,6 @@ import {
   type VoiceActivityEvent,
 } from "@/lib/voice/google-stt";
 import { getTTSService } from "@/lib/voice/google-tts";
-import { AuthenticatedConnection } from "../middleware/auth";
 import {
   checkMessageAllowed,
   checkAudioChunkAllowed,
@@ -15,7 +14,6 @@ import {
 import {
   createVoiceError,
   sendVoiceError,
-  type VoiceError,
 } from "@/lib/voice/errors";
 
 // Configuration constants
@@ -163,7 +161,7 @@ export abstract class BaseVoiceHandler {
 
   /**
    * Handle incoming audio chunks
-   * BUG FIX #4: Transcode WebM/Opus to LINEAR16 PCM before sending to Google STT
+   * Now accepts raw 16-bit PCM audio directly from AudioWorklet (no transcoding needed)
    */
   protected async handleAudioData(audioData: Buffer): Promise<void> {
     if (this.isProcessing) return;
@@ -176,27 +174,20 @@ export abstract class BaseVoiceHandler {
     }
 
     try {
-      // BUG FIX #4: Transcode WebM/Opus audio to LINEAR16 PCM
-      // The client sends WebM/Opus but Google STT expects LINEAR16 PCM
-      const { transcodeAudioChunk } = await import("@/lib/voice/audio-transcoding");
-      const pcmBuffer = await transcodeAudioChunk(audioData);
-
-      if (!pcmBuffer) {
-        console.error(`[VoiceHandler] Failed to transcode audio chunk (${this.identifier})`);
-        const error = createVoiceError("AUDIO_TRANSCODING_FAILED");
-        sendVoiceError(this.send.bind(this), error);
+      // Audio is already raw 16-bit PCM from AudioWorklet
+      // Just validate it's not empty
+      if (!audioData || audioData.length === 0) {
         return;
       }
 
-      // Send transcoded PCM audio to Google STT
+      // Send PCM audio directly to Google STT (now awaiting the async write)
       if (this.sttSession) {
-        this.sttSession.write(pcmBuffer);
+        await this.sttSession.write(audioData);
       }
 
       // Buffer audio only if enabled and VAD detects speech
-      // Note: We buffer the PCM audio, not the original WebM
       if (this.enableAudioBuffering) {
-          this.audioBuffer.addChunk(pcmBuffer, this.isSpeechActive);
+          this.audioBuffer.addChunk(audioData, this.isSpeechActive);
       }
       
     } catch (error) {
@@ -205,6 +196,7 @@ export abstract class BaseVoiceHandler {
       sendVoiceError(this.send.bind(this), voiceError);
     }
   }
+
 
   /**
    * Initialize STT Session
@@ -301,10 +293,12 @@ export abstract class BaseVoiceHandler {
       case "END_OF_UTTERANCE":
         this.isSpeechActive = false;
         this.send({ type: "speech_end" });
+        console.log(`[VoiceHandler] Speech ended, will process transcription in ${SPEECH_PROCESSING_DELAY_MS}ms`);
 
         if (this.speechProcessingTimeout) clearTimeout(this.speechProcessingTimeout);
         
         this.speechProcessingTimeout = setTimeout(() => {
+          console.log(`[VoiceHandler] Processing accumulated transcription now`);
           this.processAccumulatedTranscription();
         }, SPEECH_PROCESSING_DELAY_MS);
         break;
@@ -340,13 +334,18 @@ export abstract class BaseVoiceHandler {
    */
   protected async processAccumulatedTranscription(): Promise<void> {
     const text = this.pendingTranscription.trim();
-    if (!text || this.isProcessing) return;
+    if (!text || this.isProcessing) {
+      console.log(`[VoiceHandler] Skipping processing: text=${!!text}, isProcessing=${this.isProcessing}`);
+      return;
+    }
 
+    console.log(`[VoiceHandler] Processing user message: "${text}"`);
     this.pendingTranscription = "";
     this.isProcessing = true;
 
     try {
       await this.processUserMessage(text);
+      console.log(`[VoiceHandler] User message processed successfully`);
     } catch (error) {
       console.error(`[VoiceHandler] processing error (${this.identifier}):`, error);
       this.sendError("Failed to process message");

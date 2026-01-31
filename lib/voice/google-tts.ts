@@ -10,6 +10,18 @@ import { env } from "@/lib/env";
 export const TTS_COST_PER_MILLION_CHARS = 4;
 
 /**
+ * Pre-cached greeting audio for instant playback on connection
+ */
+const greetingCache = new Map<string, Buffer>();
+
+export const GREETING_TEXTS = {
+  "en-survey-creation": "Hi! I'm here to help you create the perfect survey. Let's start with the basics - what's the main objective of your survey? What do you want to learn from your respondents?",
+  "fr-survey-creation": "Bonjour! Je suis là pour vous aider à créer le sondage parfait. Commençons par les bases - quel est l'objectif principal de votre sondage?",
+  "de-survey-creation": "Hallo! Ich bin hier, um Ihnen bei der Erstellung der perfekten Umfrage zu helfen. Beginnen wir mit den Grundlagen - was ist das Hauptziel Ihrer Umfrage?",
+} as const;
+
+
+/**
  * Check if Google Cloud credentials are properly configured
  * Throws an error with helpful message if not configured
  */
@@ -494,4 +506,59 @@ export async function textToSpeech(
  */
 export function estimateTTSCost(characterCount: number): number {
   return (characterCount / 1000000) * TTS_COST_PER_MILLION_CHARS;
+}
+
+/**
+ * Get cached greeting audio for instant playback
+ */
+export function getCachedGreeting(key: string): Buffer | undefined {
+  return greetingCache.get(key);
+}
+
+/**
+ * Check if a greeting is cached
+ */
+export function isGreetingCached(key: string): boolean {
+  return greetingCache.has(key);
+}
+
+/**
+ * Warmup: Pre-synthesize common greetings at server startup
+ * Call this during WebSocket server initialization
+ */
+export async function warmupGreetings(): Promise<void> {
+  console.log("[Google TTS] Warming up greeting cache...");
+  
+  const service = getTTSService();
+  const startTime = Date.now();
+  let successCount = 0;
+
+  for (const [key, text] of Object.entries(GREETING_TEXTS)) {
+    try {
+      // Determine language and tone from key (e.g., "en-survey-creation")
+      const [lang] = key.split("-") as ["en" | "fr" | "de"];
+      
+      const result = await service.synthesizeForSurvey(text, "casual", lang);
+      
+      if ("audio" in result) {
+        greetingCache.set(key, result.audio);
+        successCount++;
+        console.log(`[Google TTS] Cached greeting: ${key} (${result.characterCount} chars)`);
+      } else {
+        console.error(`[Google TTS] Failed to cache greeting ${key}:`, result.error);
+      }
+    } catch (error) {
+      console.error(`[Google TTS] Error caching greeting ${key}:`, error);
+    }
+  }
+
+  const elapsed = Date.now() - startTime;
+  console.log(`[Google TTS] Greeting warmup complete: ${successCount}/${Object.keys(GREETING_TEXTS).length} cached in ${elapsed}ms`);
+}
+
+/**
+ * Get greeting text for a given key
+ */
+export function getGreetingText(key: keyof typeof GREETING_TEXTS): string {
+  return GREETING_TEXTS[key];
 }

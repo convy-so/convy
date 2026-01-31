@@ -264,7 +264,7 @@ CRITICAL - FOLLOW-UP QUESTIONS:
 WHEN ALL REQUIRED INFO IS COLLECTED:
 1. Confirm the specific Subject and Domain.
 2. Ask about Metrics, Tone, and Personal Info (using the examples).
-3. Summarize and offer sample surveys.`;
+3. Once optional fields are asked about, inform the user that data collection is complete and direct them to click the "Go to Sample Conversations" button to test the survey. DO NOT offer to generate sample questions or draft the survey.`;
 }
 
 /**

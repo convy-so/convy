@@ -5,12 +5,7 @@ import {
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { AUDIO_CONFIG } from "@/lib/voice/audio-processing";
-import {
-  getGoogleSTTService,
-  GoogleSTTStreamingSession,
-} from "@/lib/voice/google-stt";
-import { getTTSService } from "@/lib/voice/google-tts";
+import { getCachedGreeting, getGreetingText, GREETING_TEXTS } from "@/lib/voice/google-tts";
 import {
   getSurveyCreationSystemPrompt,
   getSurveyDataExtractionPrompt,
@@ -21,7 +16,6 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import type { AuthenticatedConnection } from "../middleware/auth";
 import { BaseVoiceHandler } from "./base-voice-handler";
-import { WebSocket } from "ws";
 
 interface CreationState {
   surveyId: string | null;
@@ -69,17 +63,19 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
 
   async initialize(): Promise<void> {
     try {
-      // Create voice session
-      await db.insert(voiceSessions).values({
-        id: this.state.voiceSessionId,
-        userId: this.userId,
-        // @ts-ignore - sessionType "survey_creation" might be missing from schema enum in some versions but valid in DB
-        sessionType: "survey_creation", 
-        status: "active",
-        startedAt: new Date(),
-      });
+      // Run DB insert and STT initialization in parallel for faster startup
+      await Promise.all([
+        db.insert(voiceSessions).values({
+          id: this.state.voiceSessionId,
+          userId: this.userId,
+          // @ts-ignore - sessionType "survey_creation" might be missing from schema enum in some versions but valid in DB
+          sessionType: "survey_creation", 
+          status: "active",
+          startedAt: new Date(),
+        }),
+        Promise.resolve(this.initializeSTTSession()),
+      ]);
 
-      this.initializeSTTSession();
       this.resetIdleTimeout();
 
       this.send({
@@ -87,16 +83,43 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
         voiceSessionId: this.state.voiceSessionId,
       });
 
-      // Send initial greeting if no messages yet
+      // Send initial greeting if no messages yet - use cached audio for instant playback
       if (this.state.messages.length === 0) {
-        const greeting = "Hi! I'm here to help you create the perfect survey. Let's start with the basics - what's the main objective of your survey? What do you want to learn from your respondents?";
-        await this.sendAssistantResponse(greeting);
+        const greetingKey = `${this.state.language}-survey-creation` as keyof typeof GREETING_TEXTS;
+        const cachedAudio = getCachedGreeting(greetingKey);
+        const greetingText = getGreetingText(greetingKey);
+
+        if (cachedAudio) {
+          // Use cached audio - instant playback!
+          console.log(`[Survey Creation Voice] Using cached greeting for ${greetingKey}`);
+          
+          // Add to message history
+          const assistantMsg = {
+            role: "assistant" as const,
+            content: greetingText,
+            timestamp: new Date().toISOString(),
+          };
+          this.state.messages.push(assistantMsg);
+
+          // Send audio directly (no TTS API call)
+          this.ws.send(cachedAudio);
+          this.send({
+            type: "audio_sent",
+            text: greetingText,
+            durationMs: 3000, // Approximate
+          });
+        } else {
+          // Fallback to regular TTS if cache miss
+          console.log(`[Survey Creation Voice] Cache miss for ${greetingKey}, using live TTS`);
+          await this.sendAssistantResponse(greetingText);
+        }
       }
     } catch (error) {
       console.error("[Survey Creation Voice] Initialization error:", error);
       this.sendError("Failed to initialize voice session");
     }
   }
+
 
   protected getLanguage(): "en" | "fr" | "de" {
     return this.state.language;
@@ -144,6 +167,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
 
   private async processTextMessage(text: string): Promise<void> {
     this.state.isProcessing = true;
+    console.log(`[Survey Creation Voice] Generating AI response for: "${text}"`);
     try {
       // Add user message
       const userMsg = {
@@ -152,11 +176,8 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
         timestamp: new Date().toISOString(),
       };
       this.state.messages.push(userMsg);
-
-      // Save to DB if surveyId exists
       await this.saveConversation();
 
-      // Generate AI response
       const systemPrompt = getSurveyCreationSystemPrompt(this.state.collectedInfo, this.state.language);
       
       const { text: responseText } = await generateText({
@@ -165,9 +186,9 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
         messages: this.state.messages.map(m => ({ role: m.role, content: m.content })),
       });
 
+      console.log(`[Survey Creation Voice] AI response generated: "${responseText}"`);
       await this.sendAssistantResponse(responseText);
       
-      // Perform extraction in background
       this.performExtraction().catch(console.error);
 
     } catch (error) {
@@ -179,6 +200,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
   }
 
   private async sendAssistantResponse(text: string): Promise<void> {
+    console.log(`[Survey Creation Voice] Sending assistant response via TTS`);
     const assistantMsg = {
       role: "assistant" as const,
       content: text,
@@ -197,10 +219,13 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
           text,
           durationMs: synthesis.duration,
         });
+        console.log(`[Survey Creation Voice] Audio response sent (${synthesis.duration}ms)`);
       } else {
         this.send({ type: "text_response", text });
+        console.log(`[Survey Creation Voice] Text response sent (TTS failed)`);
       }
     } catch (error) {
+      console.error(`[Survey Creation Voice] TTS error:`, error);
       this.send({ type: "text_response", text });
     }
   }
