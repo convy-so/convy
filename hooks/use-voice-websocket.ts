@@ -17,8 +17,10 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
     const [interimTranscription, setInterimTranscription] = useState("");
 
     const wsRef = useRef<WebSocket | null>(null);
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
+    const workletNodeRef = useRef<AudioWorkletNode | null>(null);
+    const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
+    const streamRef = useRef<MediaStream | null>(null);
     const audioQueueRef = useRef<Blob[]>([]);
     const isPlayingRef = useRef(false);
     
@@ -151,40 +153,103 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
         }
     };
 
+    /**
+     * Start recording using AudioWorklet for raw PCM capture
+     * This sends 16-bit PCM audio at 16kHz directly to the WebSocket
+     */
     const startRecording = async () => {
         if (isRecording) return;
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
-            mediaRecorderRef.current = mediaRecorder;
+            // Get microphone access
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                }
+            });
+            streamRef.current = stream;
 
-            mediaRecorder.ondataavailable = async (event) => {
-                if (event.data.size > 0 && wsRef.current?.readyState === WebSocket.OPEN) {
-                    wsRef.current.send(event.data);
+            // Create audio context (browser may use 44100 or 48000)
+            const audioContext = new AudioContext();
+            audioContextRef.current = audioContext;
+
+            // Load the AudioWorklet processor
+            await audioContext.audioWorklet.addModule('/audio-worklet-processor.js');
+
+            // Create source from microphone
+            const source = audioContext.createMediaStreamSource(stream);
+            sourceNodeRef.current = source;
+
+            // Create worklet node
+            const workletNode = new AudioWorkletNode(audioContext, 'pcm-processor');
+            workletNodeRef.current = workletNode;
+
+            // Handle PCM audio chunks from worklet
+            workletNode.port.onmessage = (event) => {
+                if (event.data.type === 'audio' && wsRef.current?.readyState === WebSocket.OPEN) {
+                    // Send raw PCM buffer directly
+                    wsRef.current.send(event.data.buffer);
                 }
             };
 
-            mediaRecorder.start(250); // Send chunks every 250ms
+            // Connect: microphone -> worklet
+            source.connect(workletNode);
+            // Note: Don't connect to destination to avoid feedback
+
             setIsRecording(true);
+            console.log("[Voice] Started recording with AudioWorklet at", audioContext.sampleRate, "Hz");
         } catch (e) {
             console.error("Failed to start recording", e);
+            onError?.(e);
         }
     };
 
-    const stopRecording = () => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-            mediaRecorderRef.current.stop();
-            mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+    const stopRecording = useCallback(() => {
+        // Stop the worklet
+        if (workletNodeRef.current) {
+            workletNodeRef.current.port.postMessage({ command: 'stop' });
+            workletNodeRef.current.disconnect();
+            workletNodeRef.current = null;
         }
+
+        // Disconnect source
+        if (sourceNodeRef.current) {
+            sourceNodeRef.current.disconnect();
+            sourceNodeRef.current = null;
+        }
+
+        // Close audio context
+        if (audioContextRef.current) {
+            audioContextRef.current.close();
+            audioContextRef.current = null;
+        }
+
+        // Stop media stream tracks
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(t => t.stop());
+            streamRef.current = null;
+        }
+
         setIsRecording(false);
-    };
+    }, []);
 
     const sendJson = (data: any) => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify(data));
         }
     };
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            stopRecording();
+            if (wsRef.current) {
+                wsRef.current.close();
+            }
+        };
+    }, [stopRecording]);
 
     return {
         status,

@@ -26,6 +26,7 @@ import { SurveyResponseVoiceHandler } from "./handlers/survey-response-voice";
 import { SampleSurveyVoiceHandler } from "./handlers/sample-survey-voice";
 import { AnalyticsHandler } from "./handlers/analytics";
 import { getRedisSubscriber } from "@/lib/redis";
+import { warmupGreetings } from "@/lib/voice/google-tts";
 
 /**
  * WebSocket Server for Voice-Enabled Surveys
@@ -638,6 +639,11 @@ wss.on("error", (error) => {
 server.listen(PORT, () => {
   // Initialize Redis pub/sub subscriber
   initializeRedisSubscriber();
+
+  // Pre-cache TTS greetings for instant playback on voice connections
+  warmupGreetings().catch((error) => {
+    console.error("[WebSocket] Failed to warmup greetings:", error);
+  });
 
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗

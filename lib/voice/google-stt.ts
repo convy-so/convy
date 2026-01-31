@@ -520,6 +520,8 @@ export class GoogleSTTStreamingSession extends EventEmitter {
   private startTime: number = 0;
   private speechStartTime: number | null = null;
   private hasSpeech: boolean = false;
+  private streamReadyPromise: Promise<void> | null = null;
+  private streamReadyResolve: (() => void) | null = null;
 
   // Restart management
   private restartAttempts: number = 0;
@@ -568,6 +570,11 @@ export class GoogleSTTStreamingSession extends EventEmitter {
     this.sessionCost = 0;
 
     try {
+      // BUG FIX: Create a promise that resolves when stream is truly ready
+      this.streamReadyPromise = new Promise((resolve) => {
+        this.streamReadyResolve = resolve;
+      });
+
       this.recognizeStream = this.client.streamingRecognize();
 
       // Send initial config - MUST be sent before any audio
@@ -576,22 +583,27 @@ export class GoogleSTTStreamingSession extends EventEmitter {
         streamingConfig: this.config,
       });
 
-      // Transition to READY state after config is sent
-      // Wait a tick to ensure config is processed
-      setImmediate(() => {
-        if (this.streamState === StreamState.INITIALIZING) {
-          this.streamState = StreamState.READY;
-          console.log("[Google STT Stream] Stream ready to receive audio");
-        }
-      });
-
       // Handle responses
       this.recognizeStream.on(
         "data",
         (
           response: speech.protos.google.cloud.speech.v1.IStreamingRecognizeResponse
         ) => {
-          // Transition to streaming on first response
+          // BUG FIX: On first response from Google, we know the config was accepted
+          // Transition to READY state and resolve the promise
+          if (this.streamState === StreamState.INITIALIZING) {
+            this.streamState = StreamState.READY;
+            console.log("[Google STT Stream] Session started successfully");
+            console.log("[Google STT Stream] Stream ready to receive audio (confirmed by API)");
+            
+            // Resolve the ready promise so pending writes can proceed
+            if (this.streamReadyResolve) {
+              this.streamReadyResolve();
+              this.streamReadyResolve = null;
+            }
+          }
+
+          // Transition to streaming on subsequent responses
           if (this.streamState === StreamState.READY) {
             this.streamState = StreamState.STREAMING;
           }
@@ -604,6 +616,13 @@ export class GoogleSTTStreamingSession extends EventEmitter {
         this.streamState = StreamState.ERROR;
         console.error("[Google STT Stream] Error:", error);
         this.emit("error", error);
+        
+        // Reject the ready promise if it's still pending
+        if (this.streamReadyResolve) {
+          this.streamReadyResolve();
+          this.streamReadyResolve = null;
+        }
+        
         this.cleanup();
       });
 
@@ -614,7 +633,17 @@ export class GoogleSTTStreamingSession extends EventEmitter {
       });
 
       this.emit("started");
-      console.log("[Google STT Stream] Session started successfully");
+      
+      // Fallback timeout: If no response within 2 seconds, assume ready
+      // This prevents deadlock if Google never sends a response
+      setTimeout(() => {
+        if (this.streamState === StreamState.INITIALIZING && this.streamReadyResolve) {
+          console.log("[Google STT Stream] Timeout waiting for API response, assuming ready");
+          this.streamState = StreamState.READY;
+          this.streamReadyResolve();
+          this.streamReadyResolve = null;
+        }
+      }, 2000);
     } catch (error) {
       console.error("[Google STT Stream] Failed to start:", error);
       this.isActive = false;
@@ -628,15 +657,24 @@ export class GoogleSTTStreamingSession extends EventEmitter {
    * @param audioBuffer - Raw PCM16 audio buffer
    * @returns true if write succeeded, false otherwise
    */
-  write(audioBuffer: Buffer): boolean {
+  async write(audioBuffer: Buffer): Promise<boolean> {
     if (!this.isActive || !this.recognizeStream) {
       return false;
     }
 
-    // BUG FIX #1: Only allow audio writes when stream is READY or STREAMING
+    // BUG FIX: Wait for stream to be ready before writing audio
+    // This ensures config is processed before any audio data
+    if (this.streamState === StreamState.INITIALIZING && this.streamReadyPromise) {
+      console.log(
+        `[Google STT Stream] Waiting for stream to be ready before writing audio...`
+      );
+      await this.streamReadyPromise;
+    }
+
+    // Double-check state after waiting
     if (this.streamState !== StreamState.READY && this.streamState !== StreamState.STREAMING) {
       console.warn(
-        `[Google STT Stream] Cannot write audio in state ${this.streamState}, waiting for READY`
+        `[Google STT Stream] Cannot write audio in state ${this.streamState}`
       );
       return false;
     }
@@ -699,7 +737,7 @@ export class GoogleSTTStreamingSession extends EventEmitter {
    * Write large audio chunk by splitting it into smaller pieces
    * BUG FIX #3: Handle chunks larger than 25KB
    */
-  private writeLargeChunk(audioBuffer: Buffer): boolean {
+  private async writeLargeChunk(audioBuffer: Buffer): Promise<boolean> {
     let offset = 0;
     let successCount = 0;
 
@@ -710,7 +748,7 @@ export class GoogleSTTStreamingSession extends EventEmitter {
       );
       const chunk = audioBuffer.subarray(offset, offset + chunkSize);
 
-      if (this.write(chunk)) {
+      if (await this.write(chunk)) {
         successCount++;
       } else {
         console.error(
@@ -896,9 +934,10 @@ export class GoogleSTTStreamingSession extends EventEmitter {
       `[Google STT Stream] Restart attempt ${this.restartAttempts}/${this.maxRestartAttempts}`
     );
 
-    // Clean up current stream
+    // BUG FIX: Properly clean up current stream with event listener removal
     if (this.recognizeStream) {
       try {
+        this.recognizeStream.removeAllListeners();
         this.recognizeStream.end();
       } catch {
         // Ignore cleanup errors
@@ -906,14 +945,20 @@ export class GoogleSTTStreamingSession extends EventEmitter {
       this.recognizeStream = null;
     }
 
+    // Reset stream state to allow restart
+    this.streamState = StreamState.IDLE;
+
     // Wait before restarting
     await new Promise((resolve) => setTimeout(resolve, this.restartDelayMs));
 
-    // Reset state but keep accumulated data
-    this.isActive = false;
+    // BUG FIX: Do NOT set isActive to false here - it prevents start() from executing
+    // The start() method has a guard: if (this.isActive) return;
+    // We want to restart, so keep isActive = true
 
     // Attempt to start again
     try {
+      // Manually reset the flag that start() checks
+      this.isActive = false;
       this.start();
       return this.isActive;
     } catch (error) {
@@ -957,6 +1002,13 @@ export class GoogleSTTStreamingSession extends EventEmitter {
     if (!this.isActive) return;
     this.isActive = false;
     this.streamState = StreamState.CLOSED;
+    
+    // Clean up ready promise
+    if (this.streamReadyResolve) {
+      this.streamReadyResolve();
+      this.streamReadyResolve = null;
+    }
+    this.streamReadyPromise = null;
     
     if (this.recognizeStream) {
       this.recognizeStream.removeAllListeners();

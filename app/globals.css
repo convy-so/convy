@@ -120,3 +120,8 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes music-bar {
+  0%, 100% { height: 40%; }
+  50% { height: 100%; }
+}

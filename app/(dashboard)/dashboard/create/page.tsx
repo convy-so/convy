@@ -65,6 +65,8 @@ function CreateSurveyContent() {
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [surveyStatus, setSurveyStatus] = useState<string | null>(null);
+  
+  // Auto-scroll ref
 
   // WebSocket Voice Hook
   const voiceWs = useVoiceWebSocket({
@@ -139,30 +141,20 @@ function CreateSurveyContent() {
       collectedInfo.domainIdentified
     );
     
-    // Check that optional fields have been ASKED ABOUT (even if user declined)
-    // The AI must have at least offered to collect this information
-    const optionalFieldsAsked = (
-      collectedInfo.hypotheses !== undefined && // Has been asked (true = provided, false would mean not asked yet)
-      collectedInfo.tone !== undefined &&
-      collectedInfo.additionalContext !== undefined &&
-      collectedInfo.metrics !== undefined &&
-      collectedInfo.personalInfo !== undefined
-    );
-    
-    // For optional fields, we accept them as "handled" if:
-    // 1. They are true (user provided info), OR
-    // 2. They are explicitly false but the collectedInfo object has the key (meaning it was asked)
-    // Since collectedInfo always has these keys initialized, we need to check if the AI has actually asked
-    // We'll require at least tone, metrics, and personalInfo to be marked as true (asked AND handled)
-    const optionalFieldsHandled = (
-      collectedInfo.tone === true &&  // Tone must be explicitly set
-      collectedInfo.metrics === true &&  // Metrics must be asked about
-      collectedInfo.personalInfo === true  // Personal info must be asked about
-    );
+    // For optional fields, check if tone has been collected (critical for conversation style)
+    // Metrics and personalInfo are less critical - can default
+    const hasTone = collectedInfo.tone === true;
     
     // IMPORTANT: Also validate that extractedData actually contains substantive values
     // The AI extraction can be too eager in marking flags as true
-    if (!allRequiredFlagsCollected || !optionalFieldsHandled || !extractedData) return false;
+    if (!allRequiredFlagsCollected || !extractedData) {
+      console.log('[isReadyForSample] Missing required flags or extractedData', {
+        allRequiredFlagsCollected,
+        hasExtractedData: !!extractedData,
+        collectedInfo
+      });
+      return false;
+    }
     
     // Validate objective has actual goal content (not just marked as collected)
     const hasObjective = extractedData.objective?.goal && 
@@ -190,12 +182,26 @@ function CreateSurveyContent() {
       extractedData.domainId <= 10;
     
     // Validate tone has been set (even if just default)
-    const hasTone = extractedData.tone && 
-      typeof extractedData.tone === 'string' && 
+    const hasToneData = extractedData.tone && 
+      typeof extractedData.tone === 'string' &&
       ['formal', 'casual', 'playful', 'empathetic'].includes(extractedData.tone);
     
+    const isReady = hasObjective && hasAudience && hasScope && hasSuccessCriteria && hasDomain && hasToneData;
+    
+    console.log('[isReadyForSample] Validation results:', {
+      isReady,
+      hasObjective,
+      hasAudience,
+      hasScope,
+      hasSuccessCriteria,
+      hasDomain,
+      hasToneData,
+      hasTone,
+      extractedDataKeys: extractedData ? Object.keys(extractedData) : []
+    });
+    
     // All validations must pass
-    return hasObjective && hasAudience && hasScope && hasSuccessCriteria && hasDomain && hasTone;
+    return isReady;
   }, [surveyId, collectedInfo, extractedData]);
 
   // Detect if the user is ready to publish based on conversation content
@@ -568,6 +574,10 @@ function CreateSurveyContent() {
           animateTyping(assistantMessageId, responseText);
         }, 100);
       }
+      
+      // Fetch updated extraction data after AI response completes
+      await fetchUpdatedData();
+      
     } catch (error) {
       console.error("Chat error:", error);
       toast.error("Failed to send message. Please try again.");
@@ -575,6 +585,28 @@ function CreateSurveyContent() {
       setMessages(prev => prev.filter(msg => msg.id !== userMessage.id));
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  // Fetch latest extraction data from server
+  const fetchUpdatedData = async () => {
+    if (!surveyId) return;
+    
+    try {
+      const response = await fetch(`/api/surveys/${surveyId}/create`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.collectedInfo) {
+          console.log('[fetchUpdatedData] Updated collectedInfo:', data.collectedInfo);
+          setCollectedInfo(data.collectedInfo);
+        }
+        if (data.extractedData) {
+          console.log('[fetchUpdatedData] Updated extractedData:', data.extractedData);
+          setExtractedData(data.extractedData);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch updated data:', error);
     }
   };
 
@@ -598,6 +630,12 @@ function CreateSurveyContent() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    if (isVoiceMode) {
+      scrollToBottom();
+    }
+  }, [isVoiceMode, transcribedText, voiceWs.interimTranscription]);
 
   // Poll for extracted data to update preview
   useEffect(() => {
@@ -965,70 +1003,189 @@ function CreateSurveyContent() {
            </div>
         )}
         
-        {/* Resume Banner (Integrated) */}
-        {!isReadOnly && surveyId && messages.length > 0 && surveyStatus === "creating" && (
-           <div className="bg-amber-50/50 border-b border-amber-100 px-4 py-2 flex items-center justify-center gap-2 text-sm text-amber-800">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span>Resuming your previous session.</span>
-           </div>
-        )}
+
 
         {/* Chat Area */}
         <div className="flex-1 overflow-hidden relative flex flex-col bg-slate-50/30">
             {isVoiceMode && !isReadyForSample && (
-              <div className="absolute inset-0 z-30 bg-white/90 backdrop-blur-md flex flex-col items-center justify-center p-6 animate-in fade-in duration-500">
-                <div className="flex-1 flex flex-col items-center justify-center w-full max-w-2xl relative">
-                   <div className="relative mb-12">
-                      {voiceWs.isRecording && (
-                        <>
-                            <div className="absolute inset-0 rounded-full bg-red-500/10 animate-ping duration-1000" />
-                        </>
-                      )}
-                      <button
-                        onClick={toggleRecording}
-                        className={cn(
-                          "relative w-32 h-32 rounded-full flex items-center justify-center transition-all duration-300 border-4 z-10",
-                          voiceWs.isRecording
-                            ? "bg-red-600 border-red-100"
-                            : "bg-gray-900 border-gray-100 hover:scale-105"
-                        )}
-                      >
-                        {voiceWs.isRecording ? (
-                          <MicOff className="w-12 h-12 text-white" />
-                        ) : (
-                          <Mic className="w-12 h-12 text-white" />
-                        )}
-                      </button>
-                   </div>
+              <div className="absolute inset-0 z-30 bg-slate-50/95 backdrop-blur-md flex flex-row animate-in fade-in duration-500">
+                
+                {/* Left Side: Chat History (WhatsApp Style) */}
+                <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth">
+                    <div className="flex flex-col space-y-4 max-w-3xl mx-auto pb-20">
+                        {/* Welcome / Context */}
+                        <div className="text-center py-8 text-gray-400 text-sm">
+                            <p>Voice Conversation Started</p>
+                            <p className="text-xs mt-1">Speak naturally to create your survey</p>
+                        </div>
 
-                   <div className="text-center space-y-4 mb-8">
-                      <h2 className="text-3xl font-bold text-gray-900 tracking-tight">
-                        {voiceWs.isRecording ? "Listening..." : voiceWs.isPlaying ? "Speaking..." : "Voice Assistant Ready"}
-                      </h2>
-                      <p className="text-gray-500 font-medium">
-                        {voiceWs.isRecording 
-                            ? "Speak naturally about your survey goals" 
-                            : "Tap the microphone to start"}
-                      </p>
-                   </div>
+                        {/* Message History */}
+                        {messages.map((msg, idx) => (
+                            <div 
+                                key={msg.id || idx} 
+                                className={cn(
+                                    "flex w-full items-end gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300",
+                                    msg.role === 'user' ? "justify-end" : "justify-start"
+                                )}
+                            >
+                                {msg.role === 'assistant' && (
+                                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                                        <Sparkles className="w-4 h-4 text-indigo-600" />
+                                    </div>
+                                )}
 
-                   {/* Live Transcript Bubble */}
-                   {(transcribedText || voiceWs.interimTranscription) && (
-                      <div className="bg-white border border-gray-200 rounded-2xl p-6 max-w-lg w-full transform transition-all animate-in slide-in-from-bottom-5">
-                          <p className="text-lg text-gray-700 leading-relaxed text-center">
-                             &ldquo;{voiceWs.interimTranscription || transcribedText}&rdquo;
-                          </p>
-                      </div>
-                   )}
+                                <div className={cn(
+                                    "px-4 py-3 max-w-[80%] rounded-2xl shadow-sm text-sm md:text-base leading-relaxed whitespace-pre-wrap",
+                                    msg.role === 'user' 
+                                        ? "bg-slate-900 text-white rounded-tr-none" 
+                                        : "bg-white border border-gray-100 text-gray-800 rounded-tl-none"
+                                )}>
+                                    {msg.content}
+                                </div>
+
+                                {msg.role === 'user' && (
+                                    <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                                        <User className="w-4 h-4 text-gray-600" />
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+
+                        {/* Live Transcription Bubble (Pending User Input) */}
+                        {(voiceWs.interimTranscription || isRecording) && (
+                           <div className="flex w-full items-end gap-2 justify-end">
+                               <div className={cn(
+                                   "px-4 py-3 max-w-[80%] rounded-2xl rounded-tr-none shadow-sm text-sm md:text-base leading-relaxed",
+                                   voiceWs.interimTranscription 
+                                    ? "bg-slate-800/80 text-white backdrop-blur-sm" 
+                                    : "bg-gray-100 text-gray-400 italic"
+                               )}>
+                                   {voiceWs.interimTranscription || "Listening..."}
+                                   {isRecording && <span className="inline-block w-1.5 h-1.5 bg-current rounded-full ml-1 animate-pulse"/>}
+                               </div>
+                               <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 animate-pulse">
+                                   <div className="w-2 h-2 bg-slate-900 rounded-full" />
+                               </div>
+                           </div>
+                        )}
+
+                        {/* AI Thinking / Speaking Indicator */}
+                        {voiceWs.isPlaying && (
+                             <div className="flex w-full items-end gap-2 justify-start">
+                                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 animate-bounce">
+                                    <Sparkles className="w-4 h-4 text-indigo-600" />
+                                </div>
+                                <div className="px-4 py-3 bg-white/50 border border-gray-100 rounded-2xl rounded-tl-none text-gray-400 text-sm italic">
+                                    Speaking...
+                                    <div className="flex gap-1 mt-1 h-3 items-end">
+                                        <div className="w-1 bg-indigo-400 rounded-full animate-[music-bar_0.5s_ease-in-out_infinite]" style={{height: '40%'}} />
+                                        <div className="w-1 bg-indigo-400 rounded-full animate-[music-bar_0.5s_ease-in-out_infinite_0.1s]" style={{height: '80%'}} />
+                                        <div className="w-1 bg-indigo-400 rounded-full animate-[music-bar_0.5s_ease-in-out_infinite_0.2s]" style={{height: '50%'}} />
+                                    </div>
+                                </div>
+                             </div>
+                        )}
+
+                        <div ref={messagesEndRef} />
+                    </div>
                 </div>
 
-                {/* Footer Controls */}
-                <div className="mt-auto pt-8 flex gap-4">
+                {/* Right Side: Voice Controls Sidebar */}
+                <div className="w-80 border-l border-gray-100 bg-white shadow-xl z-40 flex flex-col items-center justify-center p-8 relative overflow-hidden">
+                     {/* Background Ambient Effect */}
+                     <div className={cn(
+                        "absolute inset-0 bg-gradient-to-br from-indigo-50/50 to-purple-50/50 pointer-events-none transition-opacity duration-1000",
+                        voiceWs.isPlaying || voiceWs.isRecording ? "opacity-100" : "opacity-0"
+                     )}/>
+
+                     <div className="relative z-10 flex flex-col items-center gap-8">
+                        {/* Status Label */}
+                        <div className={cn(
+                            "px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-widest transition-all",
+                            voiceWs.isPlaying ? "bg-indigo-100 text-indigo-700" :
+                            voiceWs.isRecording ? "bg-red-100 text-red-700 animate-pulse" :
+                            "bg-gray-100 text-gray-500"
+                        )}>
+                            {voiceWs.isPlaying ? "AI Speaking" : 
+                             voiceWs.isRecording ? "Listening" : "Ready"}
+                        </div>
+
+                        {/* Main Interaction Button */}
+                        <div className="relative group">
+                            {/* Ripple Effects during active states */}
+                            {(voiceWs.isRecording || voiceWs.isPlaying) && (
+                                <>
+                                    <div className={cn("absolute inset-0 rounded-full opacity-20 animate-ping", 
+                                        voiceWs.isRecording ? "bg-red-500 duration-1000" : "bg-indigo-500 duration-[2000ms]")} />
+                                    <div className={cn("absolute inset-[-12px] rounded-full opacity-10 animate-pulse", 
+                                        voiceWs.isRecording ? "bg-red-500" : "bg-indigo-500")} />
+                                </>
+                            )}
+                            
+                            <button
+                                onClick={toggleRecording}
+                                className={cn(
+                                "relative w-32 h-32 rounded-full flex flex-col items-center justify-center transition-all duration-300 border-4 shadow-2xl z-20",
+                                voiceWs.isRecording
+                                    ? "bg-slate-900 border-red-500 text-white scale-110"
+                                    : voiceWs.isPlaying
+                                    ? "bg-white border-indigo-200 text-indigo-600 scale-105"
+                                    : "bg-white border-gray-100 text-slate-900 hover:scale-105 hover:bg-slate-50 hover:border-slate-200"
+                                )}
+                            >
+                                <div className="flex flex-col items-center gap-2">
+                                    {voiceWs.isRecording ? (
+                                        <>
+                                            <div className="flex gap-1 items-center h-8">
+                                                {[...Array(5)].map((_, i) => (
+                                                    <div key={i} className="w-1.5 bg-red-500 rounded-full animate-[music-bar_0.5s_ease-in-out_infinite]" 
+                                                         style={{
+                                                             height: `${Math.random() * 100}%`,
+                                                             animationDelay: `${i * 0.1}s`
+                                                         }} 
+                                                    />
+                                                ))}
+                                            </div>
+                                            <span className="text-xs font-medium text-red-400">Tap to Pause</span>
+                                        </>
+                                    ) : voiceWs.isPlaying ? (
+                                         <>
+                                            <Sparkles className="w-10 h-10 animate-spin-slow" />
+                                            <span className="text-xs font-medium">Listening...</span>
+                                         </>
+                                    ) : (
+                                        <>
+                                            <Mic className="w-10 h-10 opacity-80" />
+                                            <span className="text-xs font-medium text-gray-400">Tap to Speak</span>
+                                        </>
+                                    )}
+                                </div>
+                            </button>
+                        </div>
+
+                        {/* Text Hint */}
+                        <div className="text-center space-y-2 max-w-[200px]">
+                            <h3 className="font-bold text-gray-900">
+                                {voiceWs.isRecording ? "I'm listening..." : 
+                                 voiceWs.isPlaying ? "Speaking..." : 
+                                 "Voice Mode Active"}
+                            </h3>
+                            <p className="text-sm text-gray-500 leading-relaxed">
+                                {voiceWs.isRecording ? "Speak naturally. I'll respond when you stop." :
+                                 voiceWs.isPlaying ? "Listening to response..." :
+                                 "Click the microphone to start the conversation."}
+                            </p>
+                        </div>
+                     </div>
+                </div>
+
+                {/* Footer Exit Button */}
+                <div className="absolute top-6 right-6">
                     <button
                       onClick={toggleVoiceMode}
-                      className="px-6 py-2.5 rounded-xl bg-gray-50 border border-gray-200 hover:bg-gray-100 text-gray-600 font-medium transition-colors"
+                      className="px-4 py-2 rounded-xl bg-white/50 border border-gray-200 hover:bg-white text-gray-500 font-medium transition-colors text-sm backdrop-blur-sm"
                     >
-                      Switch to Text
+                      Exit Voice Mode
                     </button>
                 </div>
               </div>
