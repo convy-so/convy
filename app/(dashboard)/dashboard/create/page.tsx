@@ -15,6 +15,8 @@ import {
   Paperclip,
   Play,
   CheckCircle2,
+  Globe,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -32,7 +34,7 @@ type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
-  displayedContent?: string; // For typing animation
+  displayedContent?: string;
   isTyping?: boolean;
 };
 
@@ -43,7 +45,6 @@ const suggestedPrompts = [
   "I want to gather market research for a new product launch",
 ];
 
-// Typing animation delay in milliseconds per character
 const TYPING_DELAY_MS = 15;
 
 function CreateSurveyContent() {
@@ -66,6 +67,35 @@ function CreateSurveyContent() {
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [surveyStatus, setSurveyStatus] = useState<string | null>(null);
   
+  // Language state
+  const [language, setLanguage] = useState<"en" | "fr" | "de">("en");
+  const [isLanguageOpen, setIsLanguageOpen] = useState(false);
+
+  const toggleLanguage = () => setIsLanguageOpen(!isLanguageOpen);
+  
+  const updateLanguage = async (newLang: "en" | "fr" | "de") => {
+    setLanguage(newLang);
+    setIsLanguageOpen(false);
+    
+    // If survey exists, update it
+    if (surveyId) {
+      try {
+        await fetch(`/api/surveys/${surveyId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ language: newLang })
+        });
+        
+        // Also notify via WebSocket if connected
+        if (voiceWs.status === "connected") {
+          voiceWs.sendJson({ type: "set_language", language: newLang });
+        }
+      } catch (error) {
+        console.error("Failed to update language:", error);
+        toast.error("Failed to save language preference");
+      }
+    }
+  };
   // Auto-scroll ref
 
   // WebSocket Voice Hook
@@ -166,12 +196,10 @@ function CreateSurveyContent() {
       typeof extractedData.targetAudience.description === 'string' && 
       extractedData.targetAudience.description.length > 5;
     
-    // Validate scope has main topics
     const hasScope = extractedData.scope?.mainTopics && 
       Array.isArray(extractedData.scope.mainTopics) && 
       extractedData.scope.mainTopics.length > 0;
     
-    // Validate successCriteria has insights defined
     const hasSuccessCriteria = extractedData.successCriteria?.insightTypes && 
       Array.isArray(extractedData.successCriteria.insightTypes) && 
       extractedData.successCriteria.insightTypes.length > 0;
@@ -248,23 +276,36 @@ function CreateSurveyContent() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const typingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Typing animation function
   const animateTyping = useCallback((messageId: string, fullContent: string) => {
-    let charIndex = 0;
+    const startTime = Date.now();
+    const totalDuration = fullContent.length * TYPING_DELAY_MS;
     
-    const typeNextChar = () => {
-      if (charIndex < fullContent.length) {
-        charIndex++;
-        setMessages(prev => 
-          prev.map(msg => 
-            msg.id === messageId 
-              ? { ...msg, displayedContent: fullContent.slice(0, charIndex) }
-              : msg
-          )
-        );
-        typingIntervalRef.current = setTimeout(typeNextChar, TYPING_DELAY_MS);
-      } else {
-        // Finished typing
+    if (typingIntervalRef.current) {
+      clearInterval(typingIntervalRef.current);
+    }
+
+    const updateTyping = () => {
+      const now = Date.now();
+      const elapsed = now - startTime;
+      
+      // Calculate how many characters should be visible based on elapsed time
+      // This "catches up" instantly if the tab was backgrounded/throttled
+      const charIndex = Math.min(Math.floor(elapsed / TYPING_DELAY_MS), fullContent.length);
+
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === messageId 
+            ? { ...msg, displayedContent: fullContent.slice(0, charIndex) }
+            : msg
+        )
+      );
+
+      if (charIndex >= fullContent.length) {
+        if (typingIntervalRef.current) {
+          clearInterval(typingIntervalRef.current);
+          typingIntervalRef.current = null;
+        }
+        
         setMessages(prev => 
           prev.map(msg => 
             msg.id === messageId 
@@ -275,7 +316,11 @@ function CreateSurveyContent() {
       }
     };
     
-    typeNextChar();
+    // Use setInterval instead of recursive setTimeout for more reliable timing
+    typingIntervalRef.current = setInterval(updateTyping, TYPING_DELAY_MS);
+    
+    // Initial call
+    updateTyping();
   }, []);
 
   // Check authentication status using AuthContext
@@ -298,13 +343,10 @@ function CreateSurveyContent() {
     setIsInitializing(false); // Just finish init without creating draft
   }, [user, authLoading]);
 
-  // Load existing conversation if ID is provided
   useEffect(() => {
     if (idFromUrl && !authLoading && user) {
-      // Only load if we don't already have this survey loaded
-      // This prevents reload when user object reference changes
       if (surveyId === idFromUrl && messages.length > 0) {
-        return; // Already loaded, skip
+        return; 
       }
       
       setSurveyId(idFromUrl);
@@ -340,6 +382,11 @@ function CreateSurveyContent() {
             const status = surveyData.survey?.status || null;
             setSurveyStatus(status);
             
+            // Set language if available
+            if (surveyData.survey?.language) {
+               setLanguage(surveyData.survey.language);
+            }
+            
             // Read-only if survey is NOT in "creating" status
             if (status && status !== "creating") {
               setIsReadOnly(true);
@@ -366,13 +413,14 @@ function CreateSurveyContent() {
   // Helper to ensure draft exists before sending message
   const ensureDraftExists = async (): Promise<string | null> => {
     if (surveyId) return surveyId;
-    if (isCreatingDraft) return null; // Avoid dual creation
+    if (isCreatingDraft) return null;
     
     setIsCreatingDraft(true);
     try {
       const response = await fetch("/api/surveys", { 
         method: "POST",
-        credentials: "include"
+        credentials: "include",
+        body: JSON.stringify({ language }),
       });
       
       if (response.status === 401) {
@@ -478,7 +526,6 @@ function CreateSurveyContent() {
       const contentType = response.headers.get('content-type');
 
       if (contentType?.includes('text/plain') || contentType?.includes('text/stream')) {
-        // Handle streaming response - collect all content
         const reader = response.body?.getReader();
         if (!reader) throw new Error("No response body");
 
@@ -964,6 +1011,40 @@ function CreateSurveyContent() {
             {/* Actions: Play/Publish & Voice */}
             {!isReadOnly && (
             <div className="flex items-center gap-2">
+                 {/* Language Selector */}
+                <div className="relative">
+                  <button
+                    onClick={toggleLanguage}
+                    className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors text-sm font-medium border border-transparent hover:border-gray-200"
+                  >
+                    <Globe className="w-4 h-4" />
+                    <span className="uppercase">{language}</span>
+                    <ChevronDown className={cn("w-3 h-3 transition-transform", isLanguageOpen ? "rotate-180" : "")} />
+                  </button>
+                  
+                  {isLanguageOpen && (
+                    <div className="absolute top-full mt-1 right-0 w-32 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50 animate-in fade-in zoom-in-95 duration-200">
+                      {(["en", "fr", "de"] as const).map((lang) => (
+                        <button
+                          key={lang}
+                          onClick={() => updateLanguage(lang)}
+                          className={cn(
+                            "w-full px-4 py-2 text-left text-sm hover:bg-gray-50 transition-colors flex items-center justify-between",
+                            language === lang ? "text-indigo-600 font-medium bg-indigo-50/50" : "text-gray-600"
+                          )}
+                        >
+                           <span className="capitalize">
+                             {lang === "en" ? "English" : lang === "fr" ? "Français" : "Deutsch"}
+                           </span>
+                           {language === lang && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="h-6 w-px bg-gray-200 mx-1" />
+
                  <button
                     onClick={() => setShowPublishModal(true)}
                     disabled={!isReadyForSample || !surveyId}

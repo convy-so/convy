@@ -79,6 +79,9 @@ export async function PATCH(
         if (typeof body.participantLimit === 'number' || typeof body.participantLimit === 'string') {
              updates.participantLimit = Number(body.participantLimit);
         }
+        if (body.language === 'en' || body.language === 'fr' || body.language === 'de') {
+            updates.language = body.language;
+        }
 
         if (Object.keys(updates).length === 0) {
             return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });

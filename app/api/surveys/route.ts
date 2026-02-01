@@ -13,7 +13,6 @@ export async function GET() {
     try {
         const session = await getVerifiedSession();
 
-        // Fetch user's surveys
         const userSurveys = await db
             .select({
                 id: surveys.id,
@@ -31,7 +30,6 @@ export async function GET() {
             .where(eq(surveys.userId, session.user.id))
             .orderBy(desc(surveys.createdAt));
 
-        // Format the response
         const formattedSurveys = userSurveys.map(survey => ({
             id: survey.id,
             title: survey.title || "Untitled Survey",
@@ -68,6 +66,10 @@ export async function POST(request: Request) {
     // Create a new survey draft
     const surveyId = nanoid();
     const now = new Date();
+    
+    // Validate language
+    const body = await request.json();
+    const language = (body.language === "fr" || body.language === "de") ? body.language : "en";
 
     const [survey] = await db
       .insert(surveys)
@@ -76,7 +78,7 @@ export async function POST(request: Request) {
         userId: session.user.id,
         title: "Untitled Survey",
         status: "creating",
-        language: "en",
+        language: language,
         createdAt: now,
         updatedAt: now,
       })

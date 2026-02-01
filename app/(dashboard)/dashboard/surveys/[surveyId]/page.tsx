@@ -25,7 +25,6 @@ import {
   Filter,
   Search,
   Loader2,
-  
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -34,9 +33,11 @@ import {
   Check,
   AlertTriangle,
   Trash2,
+  Code,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { getSurveyEmbedCodeAction } from "@/app/actions/survey";
 
 // Types
 interface Survey {
@@ -131,6 +132,15 @@ export default function SurveyDetailPage() {
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeletingSurvey, setIsDeletingSurvey] = useState(false);
+  
+  const [embedCodes, setEmbedCodes] = useState<{
+    iframeCode: string;
+    inlineScriptSnippet: string;
+    url: string;
+  } | null>(null);
+  const [embedError, setEmbedError] = useState<string | null>(null);
+  const [isLoadingEmbed, setIsLoadingEmbed] = useState(false);
+  const [copiedEmbed, setCopiedEmbed] = useState<'iframe' | 'script' | null>(null);
 
   // Fetch survey details
   useEffect(() => {
@@ -360,6 +370,33 @@ export default function SurveyDetailPage() {
       toast.success("Link copied!");
       setTimeout(() => setCopied(false), 2000);
     }
+  };
+  
+  const generateEmbedCode = async () => {
+    setIsLoadingEmbed(true);
+    setEmbedError(null);
+    
+    const result = await getSurveyEmbedCodeAction(surveyId);
+    
+    if (result.success) {
+      setEmbedCodes(result.data);
+      toast.success("Embed code generated!");
+    } else {
+      setEmbedError(result.error || "Failed to generate embed code");
+      toast.error(result.error || "Failed to generate embed code");
+    }
+    
+    setIsLoadingEmbed(false);
+  };
+  
+  const copyEmbedCode = (type: 'iframe' | 'script') => {
+    if (!embedCodes) return;
+    
+    const code = type === 'iframe' ? embedCodes.iframeCode : embedCodes.inlineScriptSnippet;
+    navigator.clipboard.writeText(code);
+    setCopiedEmbed(type);
+    toast.success("Code copied to clipboard!");
+    setTimeout(() => setCopiedEmbed(null), 2000);
   };
 
   const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
@@ -932,7 +969,117 @@ export default function SurveyDetailPage() {
             </div>
           </div>
 
-         
+          {/* Embed Widget Section */}
+          <div className="bg-white rounded-xl border border-gray-100 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Code className="w-5 h-5 text-gray-700" />
+              <h3 className="font-semibold text-gray-900">Embed Widget</h3>
+            </div>
+            
+            {survey.status !== "active" ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-amber-900 mb-1">Survey must be active</p>
+                    <p className="text-sm text-amber-700">Publish your survey before generating an embed widget.</p>
+                  </div>
+                </div>
+              </div>
+            ) : !embedCodes ? (
+              <div className="text-center py-6">
+                <p className="text-gray-500 mb-4">Embed your survey on any website with a simple code snippet.</p>
+                <button
+                  onClick={generateEmbedCode}
+                  disabled={isLoadingEmbed}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50"
+                >
+                  {isLoadingEmbed ? <Loader2 className="w-4 h-4 animate-spin" /> : <Code className="w-4 h-4" />}
+                  {isLoadingEmbed ? "Generating..." : "Generate Embed Code"}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {/* iframe Code */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-gray-700">Option 1: iframe Embed</label>
+                    <button
+                      onClick={() => copyEmbedCode('iframe')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      {copiedEmbed === 'iframe' ? (
+                        <>
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="text-emerald-600">Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          Copy
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="bg-gray-900 rounded-xl p-4 overflow-x-auto">
+                    <pre className="text-xs text-emerald-400 font-mono">{embedCodes.iframeCode}</pre>
+                  </div>
+                </div>
+
+                {/* Inline Script Code */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-gray-700">Option 2: Inline Script</label>
+                    <button
+                      onClick={() => copyEmbedCode('script')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      {copiedEmbed === 'script' ? (
+                        <>
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="text-emerald-600">Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          Copy
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="bg-gray-900 rounded-xl p-4 overflow-x-auto">
+                    <pre className="text-xs text-emerald-400 font-mono whitespace-pre-wrap break-all">{embedCodes.inlineScriptSnippet}</pre>
+                  </div>
+                </div>
+
+                {/* Usage Instructions */}
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <h4 className="font-medium text-blue-900 mb-2 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" />
+                    How to use
+                  </h4>
+                  <ul className="text-sm text-blue-800 space-y-1.5 list-disc list-inside">
+                    <li>Copy one of the code snippets above</li>
+                    <li>Paste it into your website's HTML where you want the survey to appear</li>
+                    <li>The survey will load as an interactive iframe on your page</li>
+                    <li>Responses will be collected and visible in your dashboard</li>
+                  </ul>
+                </div>
+                
+                {/* Survey URL */}
+                <div className="pt-3 border-t border-gray-100">
+                  <p className="text-xs text-gray-500 mb-1">Direct Link:</p>
+                  <p className="text-sm text-gray-700 font-mono bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 break-all">{embedCodes.url}</p>
+                </div>
+              </div>
+            )}
+            
+            {embedError && (
+              <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-4">
+                <p className="text-sm text-red-800">{embedError}</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
       {/* Delete Confirmation Modal */}

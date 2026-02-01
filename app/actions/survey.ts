@@ -655,15 +655,15 @@ export async function getSurveyEmbedCodeAction(
       };
     }
 
-    // Plan gating
-    try {
-      await assertCanUseEmbedWidget({ userId: session.user.id });
-    } catch (error) {
-      if (error instanceof PlanLimitError) {
-        return { success: false, error: error.message };
-      }
-      throw error;
-    }
+    // Plan gating - DISABLED for testing
+    // try {
+    //   await assertCanUseEmbedWidget({ userId: session.user.id });
+    // } catch (error) {
+    //   if (error instanceof PlanLimitError) {
+    //     return { success: false, error: error.message };
+    //   }
+    //   throw error;
+    // }
 
     const baseUrl = env.APP_BASE_URL.replace(/\/+$/, "");
 

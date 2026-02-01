@@ -2,6 +2,7 @@ import { db } from "@/db";
 import {
   surveyCreationConversations,
   voiceSessions,
+  surveys,
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
@@ -28,13 +29,13 @@ interface CreationState {
   collectedInfo: CollectedInfo;
   isProcessing: boolean;
   language: "en" | "fr" | "de";
+  extractedData: any;
 }
 
 export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
   private state: CreationState;
 
   constructor(connection: AuthenticatedConnection) {
-    // Pass to base
     super(connection.ws, `creation-${connection.userId}`, connection.userId);
 
     this.state = {
@@ -58,17 +59,16 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
       },
       isProcessing: false,
       language: "en",
+      extractedData: null as any,
     };
   }
 
   async initialize(): Promise<void> {
     try {
-      // Run DB insert and STT initialization in parallel for faster startup
       await Promise.all([
         db.insert(voiceSessions).values({
           id: this.state.voiceSessionId,
           userId: this.userId,
-          // @ts-ignore - sessionType "survey_creation" might be missing from schema enum in some versions but valid in DB
           sessionType: "survey_creation", 
           status: "active",
           startedAt: new Date(),
@@ -138,6 +138,16 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
           await this.processTextMessage(message.text);
         }
         break;
+      case "set_language":
+        if (message.language && ["en", "fr", "de"].includes(message.language)) {
+          this.state.language = message.language;
+          if (this.state.surveyId) {
+             await db.update(surveys)
+               .set({ language: message.language })
+               .where(eq(surveys.id, this.state.surveyId));
+          }
+        }
+        break;
     }
   }
 
@@ -148,10 +158,21 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
       .select()
       .from(surveyCreationConversations)
       .where(eq(surveyCreationConversations.surveyId, this.state.surveyId));
+    
+    // Also fetch the survey to get the language
+    const [survey] = await db
+      .select({ language: surveys.language })
+      .from(surveys)
+      .where(eq(surveys.id, this.state.surveyId));
+
+    if (survey && (survey.language === "en" || survey.language === "fr" || survey.language === "de")) {
+      this.state.language = survey.language;
+    }
 
     if (conv) {
       this.state.messages = (conv.messages as any[]) || [];
       this.state.collectedInfo = conv.collectedInfo as CollectedInfo;
+      this.state.extractedData = conv.extractedData || null;
       
       // Update voice session with surveyId
       await db.update(voiceSessions)
@@ -178,7 +199,11 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
       this.state.messages.push(userMsg);
       await this.saveConversation();
 
-      const systemPrompt = getSurveyCreationSystemPrompt(this.state.collectedInfo, this.state.language);
+      const systemPrompt = getSurveyCreationSystemPrompt(
+        this.state.collectedInfo, 
+        this.state.language,
+        this.state.extractedData?.domainId as number | undefined
+      );
       
       const { text: responseText } = await generateText({
         model: defaultModel,
@@ -209,7 +234,6 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
     this.state.messages.push(assistantMsg);
     await this.saveConversation();
 
-    // Synthesize audio
     try {
       const synthesis = await this.tts.synthesizeForSurvey(text, "casual", this.state.language);
       if ("audio" in synthesis) {

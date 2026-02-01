@@ -135,6 +135,7 @@ export async function GET(
                 scope: survey.scope,
                 requiredQuestions: survey.requiredQuestions,
                 metrics: survey.metrics,
+                language: survey.language,
             },
             stats: {
                 totalResponses,
