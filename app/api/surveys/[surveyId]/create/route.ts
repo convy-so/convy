@@ -272,7 +272,8 @@ export async function POST(
 
     const systemPrompt = getSurveyCreationSystemPrompt(
       collectedInfo,
-      survey.language
+      survey.language,
+      creationConversation?.extractedData?.domainId as number | undefined
     );
 
     const result = streamText({
