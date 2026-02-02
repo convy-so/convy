@@ -4,18 +4,18 @@ import type { CollectedInfo } from "../prompts";
 
 /**
  * Prompts specifically for voice interactions
- * Now unified with text prompts structure while optimized for spoken delivery
+ * Unified with text prompts but optimized for spoken delivery
+ * CRITICAL: Now properly enforces subject-first logic like text version
  */
 
 /**
  * Get survey creation prompt for voice interaction
- * UNIFIED with text prompts - uses same structure and tracking as text version
+ * UNIFIED with text prompts - enforces same subject-first priority
  */
 export function getSurveyCreationPrompt(
   language: "en" | "fr" | "de" = "en",
   collectedInfo?: CollectedInfo
 ): string {
-  // Default collected info if not provided
   const collected = collectedInfo || {
     objective: false,
     targetAudience: false,
@@ -32,7 +32,6 @@ export function getSurveyCreationPrompt(
     domainIdentified: false,
   };
 
-  // Build phase and target info (same logic as text version)
   const requiredFields = Object.entries(REQUIRED_INFORMATION)
     .filter(([, info]) => info.required)
     .sort((a, b) => a[1].priority - b[1].priority);
@@ -43,171 +42,132 @@ export function getSurveyCreationPrompt(
 
   const allRequiredCollected = uncollectedRequired.length === 0;
 
-  let currentPhase: string;
-  let nextTarget: string;
-  let voiceGuidance: string;
+  // PRIORITY ORDER (same as text version)
+  let phase: string;
+  let instruction: string;
+  let voiceTip: string;
 
-  if (!allRequiredCollected) {
+  // 1. SUBJECT FIRST - Critical fix!
+  if (!collected.subjectDefined) {
+    phase = "SUBJECT_IDENTIFICATION";
+    instruction = "Ask: 'What product or service is this survey about?' Need concrete answer like 'our banking app' not 'a product'.";
+    voiceTip = "Be friendly but get the specific product/service name. Ask follow-up if vague.";
+  } 
+  // 2. Domain classification
+  else if (!collected.domainIdentified) {
+    phase = "DOMAIN_CLASSIFICATION";
+    instruction = "Classify into domain based on subject. Ask if unclear.";
+    voiceTip = "Based on what they said, identify if this is healthcare, HR, retail, etc.";
+  }
+  // 3. Required fields
+  else if (!allRequiredCollected) {
     const [nextKey, nextInfo] = uncollectedRequired[0];
-    currentPhase = "GATHERING_REQUIRED_INFO";
-    nextTarget = `Collect "${nextKey}" - ${nextInfo.description}`;
-    voiceGuidance = getVoiceGuidanceForField(nextKey, language);
-  } else if (!collected.additionalContext) {
-    currentPhase = "ASKING_ADDITIONAL_INFO";
-    nextTarget = "Ask if there's any additional context they'd like to add.";
-    voiceGuidance =
-      "Ask briefly if there's anything else important about their survey.";
-  } else if (!collected.metrics) {
-    currentPhase = "ASKING_METRICS";
-    nextTarget = "Ask about specific metrics to track.";
-    voiceGuidance = "Ask what specific things they want to measure or track.";
-  } else {
-    currentPhase = "READY_FOR_SAMPLE";
-    nextTarget = `🚨 CRITICAL - CONVERSATION MUST END NOW 🚨
-    
-ALL REQUIRED INFORMATION HAS BEEN COLLECTED.
-
-YOU MUST DO EXACTLY THIS:
-1. Say: "I have all the information I need to create your survey! Please click the 'Go to Sample Conversations' button to test how the survey will work."
-2. Do NOT ask ANY more questions
-3. Do NOT offer to help with anything else  
-4. Do NOT generate sample questions
-5. Keep it BRIEF (this is voice - 1-2 sentences max)
-
-If they continue talking, respond ONLY with: "Please click the button to continue. I can't modify the survey through voice chat."`;
-    voiceGuidance = "Confirm you have everything and direct them to click the button. Be brief.";
+    phase = "GATHERING_INFO";
+    instruction = `Collect "${nextKey}": ${nextInfo.description}`;
+    voiceTip = getVoiceGuidanceForField(nextKey, language);
+  }
+  // 4. Tone
+  else if (!collected.tone) {
+    phase = "OPTIONAL_TONE";
+    instruction = "Ask about preferred tone: formal, casual, playful, or empathetic.";
+    voiceTip = "Quick question - how should the survey feel? Professional or casual?";
+  }
+  // 5. Metrics
+  else if (!collected.metrics) {
+    phase = "OPTIONAL_METRICS";
+    instruction = "Ask about metrics to track (NPS, satisfaction scores, etc).";
+    voiceTip = "Ask if they want to measure specific scores like NPS or satisfaction.";
+  }
+  // 6. Personal info
+  else if (!collected.personalInfo) {
+    phase = "OPTIONAL_PERSONAL_INFO";
+    instruction = "Ask if they want to collect respondent info (email, name).";
+    voiceTip = "Ask if they need contact info from respondents.";
+  }
+  // 7. Additional context
+  else if (!collected.additionalContext) {
+    phase = "OPTIONAL_CONTEXT";
+    instruction = "Ask if there's anything else to add.";
+    voiceTip = "Briefly ask if there's anything else important.";
+  }
+  // 8. Complete
+  else {
+    phase = "COMPLETE";
+    instruction = "Give 1-sentence summary. Say: 'Click the Go to Sample Conversations button to test your survey.' Stop.";
+    voiceTip = "Be brief - just confirm and direct to button.";
   }
 
-  const prompts = {
-    en: `You are a friendly AI assistant guiding someone through creating a conversational survey.
+  // Build progress tracker
+  const progress = [
+    `subject:${collected.subjectDefined ? "✓" : "○"}`,
+    `domain:${collected.domainIdentified ? "✓" : "○"}`,
+    ...requiredFields.map(([k]) => `${k}:${collected[k as keyof CollectedInfo] ? "✓" : "○"}`),
+  ].join(" ");
 
-CURRENT PHASE: ${currentPhase}
-NEXT TARGET: ${nextTarget}
-VOICE TIP: ${voiceGuidance}
-
-PROGRESS TRACKING:
-${requiredFields
-  .map(([key, info]) => {
-    const status = collected[key as keyof CollectedInfo] ? "✓" : "○";
-    return `${status} ${key}: ${info.description}`;
-  })
-  .join("\n")}
-
-Additional items:
-${collected.additionalContext ? "✓" : "○"} additionalContext
-${collected.metrics ? "✓" : "○"} metrics
-${collected.personalInfo ? "✓" : "○"} personalInfo
-
-VOICE-SPECIFIC GUIDELINES:
-- Keep responses SHORT (2-3 sentences max)
-- Ask ONE thing at a time
-- Use natural contractions ("you're", "we'll", "that's")
-- Be warm and encouraging
-- Acknowledge what they said before moving on
-- If they seem unsure, offer quick examples
-
-CRITICAL - STILL ASK FOLLOW-UPS:
-Even though responses should be brief, you MUST dig deeper:
-- "Tell me more about that"
-- "What makes you say that?"
-- "Can you give me a quick example?"
-- "Why is that important to you?"
-
-CONTEXT RETENTION:
-- Remember everything they've said
-- Reference earlier answers: "You mentioned X earlier..."
-- Build connections between their responses
-- Use their own words
-
-QUALITY CHECKS FOR EACH FIELD:
-${requiredFields.map(([key, info]) => `${key}: ${info.qualityChecks.join("; ")}`).join("\n")}
-
-WHEN ALL INFO IS COLLECTED:
-1. Ask if they want to collect personal information (email, name, phone, etc.) from survey takers at the end
-2. Ask about media (images, audio up to 5 min, video up to 5 min)
-3. Give a quick summary of what you understood
-4. Explain they can now try sample conversations
-
-Remember: Brief doesn't mean shallow. Get real insights with focused questions.`,
-
-    fr: `Vous êtes un assistant IA amical guidant quelqu'un dans la création d'une enquête conversationnelle.
-
-PHASE ACTUELLE: ${currentPhase}
-PROCHAIN OBJECTIF: ${nextTarget}
-CONSEIL VOCAL: ${voiceGuidance}
-
-SUIVI DU PROGRÈS:
-${requiredFields
-  .map(([key, info]) => {
-    const status = collected[key as keyof CollectedInfo] ? "✓" : "○";
-    return `${status} ${key}: ${info.description}`;
-  })
-  .join("\n")}
-
-Éléments supplémentaires:
-${collected.additionalContext ? "✓" : "○"} contexte additionnel
-${collected.metrics ? "✓" : "○"} métriques
-
-DIRECTIVES VOCALES:
-- Réponses COURTES (2-3 phrases max)
-- Posez UNE question à la fois
-- Utilisez un langage naturel et conversationnel
-- Soyez chaleureux et encourageant
-- Reconnaissez ce qu'ils ont dit avant de continuer
-
-CRITIQUE - POSEZ DES SUIVIS:
-Même si les réponses doivent être brèves, vous DEVEZ approfondir:
-- "Dites-m'en plus"
-- "Qu'est-ce qui vous fait dire ça?"
-- "Pouvez-vous me donner un exemple rapide?"
-
-QUAND TOUTES LES INFOS SONT COLLECTÉES:
-1. Demandez s'ils veulent ajouter des médias
-2. Donnez un bref résumé
-3. Expliquez qu'ils peuvent maintenant essayer des conversations échantillons
-
-N'oubliez pas: Bref ne signifie pas superficiel.`,
-
-    de: `Sie sind ein freundlicher KI-Assistent, der jemanden durch die Erstellung einer Konversationsumfrage führt.
-
-AKTUELLE PHASE: ${currentPhase}
-NÄCHSTES ZIEL: ${nextTarget}
-SPRACHTIPP: ${voiceGuidance}
-
-FORTSCHRITTSVERFOLGUNG:
-${requiredFields
-  .map(([key, info]) => {
-    const status = collected[key as keyof CollectedInfo] ? "✓" : "○";
-    return `${status} ${key}: ${info.description}`;
-  })
-  .join("\n")}
-
-Zusätzliche Elemente:
-${collected.additionalContext ? "✓" : "○"} zusätzlicher Kontext
-${collected.metrics ? "✓" : "○"} Metriken
-
-SPRACHSPEZIFISCHE RICHTLINIEN:
-- Halten Sie Antworten KURZ (max. 2-3 Sätze)
-- Stellen Sie EINE Frage pro Mal
-- Verwenden Sie natürliche Sprache
-- Seien Sie warm und ermutigend
-- Bestätigen Sie, was sie gesagt haben
-
-KRITISCH - STELLEN SIE FOLGEFRAGEN:
-Auch wenn Antworten kurz sein sollen, müssen Sie tiefer graben:
-- "Erzählen Sie mir mehr darüber"
-- "Was lässt Sie das sagen?"
-- "Können Sie mir ein kurzes Beispiel geben?"
-
-WENN ALLE INFOS GESAMMELT SIND:
-1. Fragen Sie nach Medien
-2. Geben Sie eine kurze Zusammenfassung
-3. Erklären Sie, dass sie jetzt Beispielgespräche ausprobieren können
-
-Denken Sie daran: Kurz bedeutet nicht oberflächlich.`,
+  const languageMap: Record<string, string> = {
+    en: "English",
+    fr: "French",
+    de: "German",
   };
 
-  return prompts[language];
+  return `<role>
+You are a friendly voice assistant helping create a conversational survey.
+Speak naturally in ${languageMap[language]}. Keep responses to 2-3 sentences max.
+</role>
+
+<current_state>
+Phase: ${phase}
+Progress: ${progress}
+</current_state>
+
+<instruction priority="1">
+${instruction}
+Voice tip: ${voiceTip}
+</instruction>
+
+<voice_examples>
+These show the right conversational flow for voice:
+
+<example id="subject_first">
+User: "I want to create a survey"
+You: "Great! First, what specific product or service is this survey about? For example, is it a mobile app, a website, or a service you offer?"
+</example>
+
+<example id="clarify_vague">
+User: "It's for our app"
+You: "Got it, your app. What kind of app is it? Like a banking app, fitness app, or shopping app?"
+</example>
+
+<example id="objective">
+User: "We want to know why users are canceling"
+You: "Understood - you want to understand cancellations. What will you do with those insights? Fixing features, changing pricing, or something else?"
+</example>
+
+<example id="complete">
+User: "That's everything"
+You: "Perfect! I've got what I need - you're surveying premium users of your fitness app to understand cancellations. Click the 'Go to Sample Conversations' button to test it out!"
+</example>
+</voice_examples>
+
+<voice_rules>
+1. ONE question at a time
+2. 2-3 sentences MAX per response
+3. Use contractions (you're, we'll, that's)
+4. Acknowledge before asking next question
+5. Give 2 quick examples when asking for info
+6. NEVER skip subject identification
+</voice_rules>
+
+<validation>
+Require specificity:
+- "An app" → "What kind of app?"
+- "Customers" → "Which customers specifically?"
+- "Feedback" → "Feedback about what aspect?"
+</validation>
+
+<completion>
+When complete: Give 1-sentence summary → Say "Click the button to continue" → Stop asking questions
+</completion>`;
 }
 
 /**

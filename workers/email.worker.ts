@@ -17,7 +17,7 @@ const jobDataSchema = z.object({
     "secondary-verification",
   ]),
   email: z.string().email(),
-  url: z.string(), // Removed .url() validation because invites might be relative paths or complex URLs
+  url: z.string(),
   name: z.string().nullable().optional(),
   metadata: z.record(z.unknown()).optional(),
 });

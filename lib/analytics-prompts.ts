@@ -1,11 +1,4 @@
 
-/**
- * Analytics Prompts Module
- *
- * Production-ready prompts for extracting structured analytics from conversations.
- * Designed to work with the analytics.ts types and schemas.
- */
-
 import type { SurveyConfig } from "./prompts";
 
 // ============================================================================
@@ -30,156 +23,82 @@ export function getStructuredConversationInsightsPrompt(
     )
     .join("\n\n");
 
-  const requiredQuestionsSection =
-    config.requiredQuestions.length > 0
-      ? `Required Questions to Track:
-${config.requiredQuestions.map((q, i) => `${i + 1}. "${q}"`).join("\n")}`
-      : "No specific required questions defined.";
+  const requiredQuestions = config.requiredQuestions.length > 0
+    ? config.requiredQuestions.map((q, i) => `${i + 1}. "${q}"`).join("\n")
+    : "None specified";
 
-  const metricsSection =
-    config.metrics.length > 0
-      ? `Creator-Defined Metrics to Extract:
-${config.metrics.map((m, i) => `${i + 1}. "${m}" - Extract specific value or categorization`).join("\n")}`
-      : "No specific metrics defined by creator.";
+  const metrics = config.metrics.length > 0
+    ? config.metrics.join(", ")
+    : "None specified";
 
-  const hypothesesSection =
-    config.hypotheses && config.hypotheses.assumptions.length > 0
-      ? `Hypotheses to Evaluate (find evidence for/against):
-${config.hypotheses.assumptions.map((h, i) => `${i + 1}. "${h}"`).join("\n")}`
-      : "";
+  const hypotheses = (config.hypotheses?.assumptions?.length ?? 0) > 0
+    ? config.hypotheses!.assumptions.map((h, i) => `${i + 1}. "${h}"`).join("\n")
+    : "";
 
-  const mediaSection =
-    config.media && config.media.length > 0
-      ? `Media Assets in This Survey (analyze how participant responded to each):
-${config.media
-  .map(
-    (m, i) =>
-      `${i + 1}. [${m.type.toUpperCase()}] ID: "${m.id}"${m.priority === "high" ? " (HIGH PRIORITY)" : ""}
-   - Description: ${m.description}
-   - Content Summary: ${m.contentSummary || "Not specified"}
-   - Context for use: ${m.contextForUse}
-   - Suggested questions: ${m.infoToGather || "Not specified"}
-   - Required questions: ${m.requiredQuestions?.join("; ") || "None"}
-   - Expected insight types: ${m.expectedInsights?.join(", ") || "Any"}`
-  )
-  .join("\n")}`
-      : "";
+  const mediaAssets = (config.media?.length ?? 0) > 0
+    ? config.media!.map(m => `- ${m.type}[${m.id}]: ${m.description}`).join("\n")
+    : "";
 
-  return `You are an expert survey analyst. Analyze this conversation and extract structured insights.
+  return `<task>
+Analyze this survey conversation and extract structured insights.
+Return ONLY valid JSON matching the schema below.
+</task>
 
-SURVEY CONTEXT:
-- Goal: ${config.objective?.goal || "Gather participant feedback"}
-- Target Audience: ${config.targetAudience?.description || "General participants"}
-- Success Criteria: ${config.successCriteria?.description || "Quality insights"}
-- Insight Types Needed: ${config.successCriteria?.insightTypes?.join(", ") || "Any"}
+<survey_context>
+Goal: ${config.objective?.goal || "Gather participant feedback"}
+Audience: ${config.targetAudience?.description || "General participants"}
+Insight types needed: ${config.successCriteria?.insightTypes?.join(", ") || "Any"}
+Required questions: ${requiredQuestions}
+Metrics to extract: ${metrics}
+${hypotheses ? `Hypotheses to evaluate:\n${hypotheses}` : ""}
+${mediaAssets ? `Media assets:\n${mediaAssets}` : ""}
+</survey_context>
 
-${requiredQuestionsSection}
-
-${metricsSection}
-
-${hypothesesSection}
-
-${mediaSection}
-
-CONVERSATION:
+<conversation>
 ${conversationText}
+</conversation>
 
-Analyze this conversation and return a JSON object with the following structure. Be thorough and specific.
+<few_shot_example>
+Input conversation:
+"[1] INTERVIEWER: What frustrates you most about the checkout process?
+[2] PARTICIPANT: Honestly, it's so slow. I tried to buy something last week and it took like 5 clicks just to enter my address. I almost gave up.
+[3] INTERVIEWER: Tell me more about that experience.
+[4] PARTICIPANT: Well, the autofill didn't work, and I had to manually type everything. For a $10 purchase, it felt like too much effort. I'd rate it maybe 3 out of 10."
 
+Output:
+{"summary":"Participant is frustrated with the slow, multi-step checkout process. Address entry friction nearly caused cart abandonment.","keyFindings":["Checkout requires too many clicks (5+ for address)","Autofill functionality is broken","Low perceived value for small purchases"],"engagementLevel":"high","responseQuality":8,"sentiment":{"overall":"negative","score":-0.7,"confidence":0.9},"extractedMetrics":{"checkout_satisfaction":"3/10"},"notableQuotes":[{"text":"I tried to buy something last week and it took like 5 clicks just to enter my address","context":"Describes friction point","sentiment":"negative"}],"insightTypes":{"emotional":{"found":true,"examples":["almost gave up","felt like too much effort"]},"behavioral":{"found":true,"examples":["tried to buy","manually typed everything"]},"rational":{"found":true,"examples":["For a $10 purchase, it felt like too much effort"]}}}
+</few_shot_example>
+
+<output_schema>
 {
-  "summary": "2-3 sentence summary of what was learned from this participant",
-  
-  "keyFindings": [
-    "Finding 1 - specific insight with context",
-    "Finding 2 - another key takeaway",
-    "..."
-  ],
-  
-  "engagementLevel": "high" | "medium" | "low",
+  "summary": "2-3 sentence summary",
+  "keyFindings": ["finding1", "finding2"],
+  "engagementLevel": "high|medium|low",
   "responseQuality": 1-10,
-  
   "topicsCovered": ["topic1", "topic2"],
-  "requiredQuestionsCovered": ["exact question text that was adequately answered"],
-  "requiredQuestionsMissed": ["exact question text that was NOT answered or poorly answered"],
-  
-  "sentiment": {
-    "overall": "positive" | "negative" | "neutral" | "mixed",
-    "score": -1.0 to 1.0,
-    "confidence": 0.0 to 1.0
-  },
-  
-  "extractedMetrics": {
-    "metric_name": "extracted value or category"
-  },
-  
-  "notableQuotes": [
-    {
-      "text": "Exact quote from participant",
-      "context": "Why this quote is notable",
-      "sentiment": "positive" | "negative" | "neutral"
-    }
-  ],
-  
-  "hypothesisEvidence": [
-    {
-      "hypothesis": "The original hypothesis text",
-      "evidence": "supporting" | "contradicting" | "neutral",
-      "quote": "Relevant quote if any"
-    }
-  ],
-  
+  "requiredQuestionsCovered": ["exact question text answered"],
+  "requiredQuestionsMissed": ["exact question text NOT answered"],
+  "sentiment": {"overall": "positive|negative|neutral|mixed", "score": -1.0 to 1.0, "confidence": 0.0 to 1.0},
+  "extractedMetrics": {"metric_name": "value"},
+  "notableQuotes": [{"text": "quote", "context": "why notable", "sentiment": "positive|negative|neutral"}],
+  "hypothesisEvidence": [{"hypothesis": "text", "evidence": "supporting|contradicting|neutral", "quote": "relevant quote"}],
   "insightTypes": {
-    "emotional": {
-      "found": true | false,
-      "examples": ["feeling or emotion expressed"]
-    },
-    "behavioral": {
-      "found": true | false,
-      "examples": ["action or behavior mentioned"]
-    },
-    "rational": {
-      "found": true | false,
-      "examples": ["reasoning or logic expressed"]
-    }
+    "emotional": {"found": boolean, "examples": ["feeling expressed"]},
+    "behavioral": {"found": boolean, "examples": ["action mentioned"]},
+    "rational": {"found": boolean, "examples": ["reasoning expressed"]}
   },
-  
-  "unexpectedFindings": [
-    "Anything interesting that wasn't specifically asked about"
-  ],
-  
-  "mediaInteractions": [
-    {
-      "mediaId": "The media ID from the list above",
-      "mediaType": "image" | "audio" | "video",
-      "description": "Brief description of the media",
-      "wasReferenced": true | false,
-      "participantEngaged": true | false,
-      "participantReaction": "positive" | "negative" | "neutral" | "confused" | "not_shown",
-      "clarityScore": 1-10,
-      "insightQuality": "high" | "medium" | "low" | "none",
-      "responsesAboutMedia": ["Quote 1 specifically about this media", "Quote 2"],
-      "insightsGenerated": ["Insight derived from discussing this media"],
-      "issuesIdentified": ["Any confusion or problems with this media"]
-    }
-  ]
+  "unexpectedFindings": ["anything interesting not specifically asked"],
+  "mediaInteractions": [{"mediaId": "id", "mediaType": "image|audio|video", "wasReferenced": boolean, "participantEngaged": boolean, "participantReaction": "positive|negative|neutral|confused|not_shown", "clarityScore": 1-10, "insightQuality": "high|medium|low|none", "responsesAboutMedia": ["quotes"], "insightsGenerated": ["insights"], "issuesIdentified": ["issues"]}]
 }
+</output_schema>
 
-IMPORTANT:
-- For mediaInteractions, analyze EACH media asset listed above:
-  - wasReferenced: Did the interviewer mention or reference this media?
-  - participantEngaged: Did the participant respond specifically about the media?
-  - participantReaction: How did they react? Use "not_shown" if media wasn't referenced
-  - clarityScore: 1-10 rating of how well the media helped convey information (1=confusing, 10=very clear)
-  - responsesAboutMedia: Extract exact quotes where participant discusses the media
-  - insightsGenerated: What did we learn specifically because of this media?
-  - issuesIdentified: Any confusion, technical problems, or negative feedback about the media
-- For requiredQuestionsCovered/Missed, use the EXACT question text from the list above
-- For extractedMetrics, use the exact metric names defined above as keys
-- For notableQuotes, select the 3-5 most insightful quotes from the participant
-- Be specific and use actual content from the conversation
-- If a metric cannot be determined, use "not_determined" as the value
-
-Return ONLY the JSON object, no additional text.`;
+<extraction_rules>
+- Use exact question text for requiredQuestionsCovered/Missed
+- Extract 3-5 most insightful quotes maximum
+- Use actual metric names as keys
+- If metric undetermined, use "not_determined"
+- For media not shown, use participantReaction: "not_shown"
+</extraction_rules>`;
 }
 
 // ============================================================================

@@ -55,7 +55,6 @@ function CreateSurveyContent() {
   const [surveyId, setSurveyId] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [currentStep, setCurrentStep] = useState<CreationStep>("objective");
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -86,7 +85,6 @@ function CreateSurveyContent() {
           body: JSON.stringify({ language: newLang })
         });
         
-        // Also notify via WebSocket if connected
         if (voiceWs.status === "connected") {
           voiceWs.sendJson({ type: "set_language", language: newLang });
         }
@@ -96,7 +94,6 @@ function CreateSurveyContent() {
       }
     }
   };
-  // Auto-scroll ref
 
   // WebSocket Voice Hook
   const voiceWs = useVoiceWebSocket({
@@ -171,12 +168,8 @@ function CreateSurveyContent() {
       collectedInfo.domainIdentified
     );
     
-    // For optional fields, check if tone has been collected (critical for conversation style)
-    // Metrics and personalInfo are less critical - can default
     const hasTone = collectedInfo.tone === true;
     
-    // IMPORTANT: Also validate that extractedData actually contains substantive values
-    // The AI extraction can be too eager in marking flags as true
     if (!allRequiredFlagsCollected || !extractedData) {
       console.log('[isReadyForSample] Missing required flags or extractedData', {
         allRequiredFlagsCollected,
@@ -186,12 +179,10 @@ function CreateSurveyContent() {
       return false;
     }
     
-    // Validate objective has actual goal content (not just marked as collected)
     const hasObjective = extractedData.objective?.goal && 
       typeof extractedData.objective.goal === 'string' && 
       extractedData.objective.goal.length > 10;
     
-    // Validate targetAudience has substantive description
     const hasAudience = extractedData.targetAudience?.description && 
       typeof extractedData.targetAudience.description === 'string' && 
       extractedData.targetAudience.description.length > 5;
@@ -244,14 +235,12 @@ function CreateSurveyContent() {
       'share', 'launch', 'good to go', 'approved', 'confirmed'
     ];
     
-    // Check if user mentioned completion keywords
     const userMentionedCompletion = recentMessages.some(msg => {
       if (msg.role !== 'user') return false;
       const content = msg.content.toLowerCase();
       return completionKeywords.some(keyword => content.includes(keyword));
     });
     
-    // Check if AI confirmed survey is ready
     const aiConfirmedReady = recentMessages.some(msg => {
       if (msg.role !== 'assistant') return false;
       const content = msg.content.toLowerCase();
@@ -288,8 +277,6 @@ function CreateSurveyContent() {
       const now = Date.now();
       const elapsed = now - startTime;
       
-      // Calculate how many characters should be visible based on elapsed time
-      // This "catches up" instantly if the tab was backgrounded/throttled
       const charIndex = Math.min(Math.floor(elapsed / TYPING_DELAY_MS), fullContent.length);
 
       setMessages(prev => 

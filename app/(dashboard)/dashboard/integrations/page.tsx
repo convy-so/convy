@@ -50,7 +50,6 @@ export default function IntegrationsPage() {
     const [selectedIntegration, setSelectedIntegration] = useState<string | null>(null);
     const [apiKey, setApiKey] = useState<string | null>(null);
 
-    // Query integration statuses
     const { data: slackStatus, isLoading: isLoadingSlack } = useQuery({
         queryKey: ["slack-integration"],
         queryFn: async () => {

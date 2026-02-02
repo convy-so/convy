@@ -22,7 +22,6 @@ export default async function SurveyAnalyticsPage({ params }: PageProps) {
                      <p className="text-gray-500 text-sm">AI-powered insights and metrics</p>
                 </div>
             </div>
-
             <AnalyticsDashboard surveyId={surveyId} />
         </div>
     );
