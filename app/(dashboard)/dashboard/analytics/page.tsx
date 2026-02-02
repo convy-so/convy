@@ -18,7 +18,6 @@ export const metadata = {
 export default async function AnalyticsPage() {
   const session = await getVerifiedSession();
 
-  // Fetch all surveys for the user
   const userSurveys = await db
     .select({
        id: surveys.id,
@@ -34,7 +33,6 @@ export default async function AnalyticsPage() {
     .groupBy(surveys.id, surveys.title, surveys.createdAt)
     .orderBy(desc(surveys.createdAt));
 
-    // Calculate global stats
     const totalSurveys = userSurveys.length;
     const totalResponses = userSurveys.reduce((acc, curr) => acc + (curr._count?.conversations || 0), 0);
 

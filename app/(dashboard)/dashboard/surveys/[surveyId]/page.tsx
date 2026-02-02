@@ -39,7 +39,6 @@ import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { getSurveyEmbedCodeAction } from "@/app/actions/survey";
 
-// Types
 interface Survey {
   id: string;
   title: string;
@@ -111,7 +110,6 @@ export default function SurveyDetailPage() {
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [copied, setCopied] = useState(false);
 
-  // Real data state
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [stats, setStats] = useState<SurveyStats | null>(null);
   const [responses, setResponses] = useState<Response[]>([]);

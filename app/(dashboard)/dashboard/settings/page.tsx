@@ -23,7 +23,7 @@ import { useEffect } from "react";
 
 const tabs = [
     { id: "profile", name: "Profile", icon: User },
-    { id: "workspace", name: "Workspace", icon: Key }, // Repurposed icon or could use Settings
+    { id: "workspace", name: "Workspace", icon: Key }, 
     { id: "notifications", name: "Notifications", icon: Bell },
     { id: "security", name: "Security", icon: Shield },
     { id: "billing", name: "Billing", icon: CreditCard },
