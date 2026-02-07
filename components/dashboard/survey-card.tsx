@@ -56,7 +56,7 @@ export function SurveyCard({
     onDuplicate,
 }: SurveyCardProps) {
     const [showMenu, setShowMenu] = useState(false);
-    const statusStyle = statusConfig[status];
+    const statusStyle = statusConfig[status] || statusConfig.draft;
     const progress = maxResponses > 0 ? (responses / maxResponses) * 100 : 0;
 
     return (

@@ -25,6 +25,7 @@ export async function GET() {
                 currentParticipants: surveys.currentParticipants,
                 participantLimit: surveys.participantLimit,
                 objective: surveys.objective,
+                isVoice: surveys.isVoice,
             })
             .from(surveys)
             .where(eq(surveys.userId, session.user.id))
@@ -41,7 +42,7 @@ export async function GET() {
             createdAt: survey.createdAt?.toISOString().split('T')[0] || "",
             lastResponse: "Never",
             isOwner: true,
-            isVoice: false,
+            isVoice: survey.isVoice || false,
         }));
 
         return NextResponse.json({ surveys: formattedSurveys });
@@ -79,6 +80,7 @@ export async function POST(request: Request) {
         title: "Untitled Survey",
         status: "creating",
         language: language,
+        isVoice: typeof body.isVoice === 'boolean' ? body.isVoice : false,
         createdAt: now,
         updatedAt: now,
       })

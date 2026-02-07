@@ -10,13 +10,13 @@ import { nanoid } from "nanoid";
 import { AUDIO_CONFIG } from "@/lib/voice/audio-processing";
 import {
   STT_COST_PER_MINUTE,
-} from "@/lib/voice/google-stt";
+} from "@/lib/voice/deepgram-stt";
 import { CostTracker } from "@/lib/voice/cost-tracking";
 import {
   type SurveyConfig,
 } from "@/lib/prompts";
 import { generateText, stepCountIs } from "ai";
-import { defaultModel } from "@/lib/ai";
+import { selectModelForConversation, flashModel, flashLiteModel } from "@/lib/ai";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import {
   checkTTSAllowed,
@@ -172,6 +172,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceHandler {
       await db.insert(surveyConversations).values({
         id: conversationId,
         surveyId: survey.id,
+        participantId: this.participantId,
         rawConversation: [],
         completed: false,
       });
@@ -236,7 +237,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceHandler {
   }
 
   // Override to handle cost tracking
-  protected handleTranscriptionResult(result: import("@/lib/voice/google-stt").TranscriptionResult): void {
+  protected handleTranscriptionResult(result: import("@/lib/voice/deepgram-stt").TranscriptionResult): void {
       super.handleTranscriptionResult(result);
       
       if (result.isFinal && result.cost > 0) {
@@ -372,14 +373,28 @@ export class SurveyResponseVoiceHandler extends BaseVoiceHandler {
         }
       );
 
-      const { text: responseText } = await generateText({
-        model: defaultModel,
+      // Load or create context for this turn
+      const context = await ConversationManager.loadOrCreateContext(
+        conversationId,
+        this.state.messages,
+        config
+      );
+
+      // Intelligent model selection: use flash-lite for conversation, flash for completion
+      const userMessages = this.state.messages.filter(m => m.role === "user");
+      const minQuestions = Math.max(config.requiredQuestions?.length || 0, 3);
+      const selectedModel = selectModelForConversation(context, userMessages.length, minQuestions);
+      
+      console.log(`[Voice Model] Using:`, selectedModel === flashModel ? 'flash' : 'flash-lite');
+
+      const { text: responseText, toolCalls } = await generateText({
+        model: selectedModel,  // Use dynamically selected model
         system: systemPrompt,
         messages: [
           { role: "user", content: `Continue this conversation naturally. Latest message from participant: "${this.state.messages[this.state.messages.length - 1].content}"\n\nConversation so far:\n${conversationContext}` }
         ],
         temperature: 0.7,
-        maxOutputTokens: 500,
+        maxOutputTokens: 1000,  // Increased to allow AI to complete thought and call finishSurvey tool
         tools,
         stopWhen: stepCountIs(5), // Allow tool use loop with AI SDK v6
       });
@@ -401,6 +416,22 @@ export class SurveyResponseVoiceHandler extends BaseVoiceHandler {
           .where(eq(surveyConversations.id, this.state.conversationId));
       }
 
+      // Check if AI called finishSurvey tool (primary detection method)
+      // Check all steps because the tool call might happen in an earlier step
+      const finishSurveyCall = toolCalls?.find((call: any) => 
+          call.toolName === 'finishSurvey'
+      );
+      // Also keep string-based detection as fallback
+      const isCompletionPhrase = responseText.toLowerCase().includes("thank you for completing") ||
+          responseText.toLowerCase().includes("survey is now complete") ||
+          responseText.toLowerCase().includes("your feedback is incredibly valuable") ||
+          (this.state.context?.progress.shouldWrapUp && responseText.length < 150);
+
+      const hasToolCompletion = !!finishSurveyCall;
+      
+      // Only mark complete if we have a reasonable amount of interaction
+      const isCompleted = (hasToolCompletion || isCompletionPhrase) && userMessages.length >= minQuestions;
+      
       // Send progress update to client
       if (this.state.context) {
         this.send({
@@ -417,8 +448,20 @@ export class SurveyResponseVoiceHandler extends BaseVoiceHandler {
         await ConversationManager.saveContext(this.identifier, this.state.context);
       }
 
-      // Synthesize speech
+      // Synthesize speech first so the user hears the goodbye
       await this.synthesizeAndSendAudio(responseText);
+
+      // If completed via tool call or phrase, signal the client and close
+      if (isCompleted) {
+        console.log(`[Survey Response Voice] completion detected for ${this.state.conversationId}` +
+                    ` (tool: ${hasToolCompletion}, phrase: ${isCompletionPhrase}, messages: ${userMessages.length})`);
+        // Small delay to ensure audio message is received/processed by client
+        setTimeout(async () => {
+             this.send({ type: "survey_completed" });
+             await this.handleComplete();
+        }, 2000); 
+      }
+
     } catch (error) {
       console.error(
         "[Survey Response Voice] Response generation error:",
@@ -677,6 +720,16 @@ export class SurveyResponseVoiceHandler extends BaseVoiceHandler {
         const newStatus =
           session.status === "active" ? "abandoned" : session.status;
 
+        // Clean up orphaned conversation if no messages were exchanged
+        if (this.state.conversationId && this.state.messages.length === 0) {
+          console.log(
+            `[Survey Response Voice] Cleaning up orphaned conversation ${this.state.conversationId} (no messages)`
+          );
+          await db
+            .delete(surveyConversations)
+            .where(eq(surveyConversations.id, this.state.conversationId));
+        }
+
         await db
           .update(voiceSessions)
           .set({
@@ -711,7 +764,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceHandler {
         }
       }
 
-      // Cleanup Google STT session
+      // Cleanup Deepgram STT session
       if (this.sttSession) {
         this.sttSession.destroy();
         this.sttSession = null;

@@ -30,7 +30,6 @@ export async function POST(
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 
-        // Only finalize if still in creating status
         if (survey.status !== "creating") {
             return NextResponse.json({ 
                 error: "Survey has already been finalized",
@@ -66,7 +65,6 @@ export async function POST(
         if (extractedData.title) {
             updateData.title = extractedData.title;
         } else if (extractedData.objective?.goal) {
-            // Generate title from objective goal if no explicit title
             const goal = extractedData.objective.goal;
             updateData.title = goal.length > 60 ? goal.substring(0, 57) + "..." : goal;
         }

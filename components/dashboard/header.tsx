@@ -1,13 +1,16 @@
+
 "use client"
 import { User } from "better-auth/types";
 import { Search, LogOut, Settings, User as UserIcon, Bell } from "lucide-react";
 import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import Link from "next/link";
-import { useEffect } from "react";
-import { getNotifications, markNotificationAsRead } from "@/app/actions/notifications";
+import { markNotificationAsRead } from "@/app/actions/notifications";
+import { fetchNotifications as fetchNotificationsAPI } from "@/lib/api/notifications";
+import { queryKeys } from "@/lib/query-keys";
 
 import { useAuth } from "@/components/providers/auth-provider";
 
@@ -17,31 +20,30 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const router = useRouter();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
 
-  const fetchNotifications = async () => {
-    setIsLoading(true);
-    const result = await getNotifications();
-    if (result.success && result.data) {
-      setNotifications(result.data);
-    }
-    setIsLoading(false);
+  // Fetch notifications using React Query
+  const { data: notifications = [], isLoading, refetch: refetchNotifications } = useQuery({
+    queryKey: queryKeys.notifications.all,
+    queryFn: fetchNotificationsAPI,
+  });
+
+  // Keep fetchNotifications function for backwards compatibility (for manual refetch if needed)
+  const fetchNotifications = () => {
+    refetchNotifications();
   };
-
-  useEffect(() => {
-    fetchNotifications();
-  }, []);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const handleMarkAsRead = async (id: string) => {
     const result = await markNotificationAsRead(id);
     if (result.success) {
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+      queryClient.setQueryData(queryKeys.notifications.all, (prev: any[]) => 
+        prev ? prev.map(n => n.id === id ? { ...n, read: true } : n) : []
+      );
     }
   };
 

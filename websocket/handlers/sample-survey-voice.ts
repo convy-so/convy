@@ -126,6 +126,9 @@ export class SampleSurveyVoiceHandler extends BaseVoiceHandler {
         conversationNumber: this.state.conversationNumber,
       });
 
+      // Generate and send initial greeting automatically
+      await this.generateInitialGreeting();
+
     } catch (error) {
       console.error("[Sample Survey Voice] Initialization error:", error);
       this.sendError("Failed to initialize session");
@@ -142,6 +145,92 @@ export class SampleSurveyVoiceHandler extends BaseVoiceHandler {
 
     if (message.type === "end_session") {
        await this.cleanup();
+    }
+  }
+
+  /**
+   * Generate and send initial greeting to start the conversation
+   */
+  private async generateInitialGreeting(): Promise<void> {
+    try {
+      if (!this.state.surveyConfig) return;
+
+      const contextId = `sample:${this.state.surveyId}:${this.state.conversationNumber}:${this.userId}`;
+
+      // Get previous feedback for rehearsal
+      const previousFeedbackRows = await db
+        .select({ feedback: sampleConversations.feedback, finalComments: sampleConversations.finalComments })
+        .from(sampleConversations)
+        .where(
+            and(
+                eq(sampleConversations.surveyId, this.state.surveyId), 
+                lt(sampleConversations.conversationNumber, this.state.conversationNumber)
+            )
+        );
+      
+      const combinedFeedback = previousFeedbackRows
+        .flatMap(r => [r.feedback, r.finalComments])
+        .filter(Boolean)
+        .join("\n\n");
+
+      // Get system prompt for initial greeting
+      const systemPrompt = ConversationManager.getSystemPrompt(
+        this.state.surveyConfig,
+        this.state.context!,
+        {
+            isSample: true,
+            sampleFeedback: combinedFeedback || undefined,
+            conversationNumber: this.state.conversationNumber,
+            language: this.state.language
+        }
+      );
+
+      // Get tools from Manager
+      const tools = ConversationManager.getTools(
+          this.state.surveyConfig, 
+          (media) => {
+             this.send({ type: "display_media", media });
+          }
+      );
+
+      // Generate greeting with empty message history
+      const { text: greetingText } = await generateText({
+        model: defaultModel,
+        system: systemPrompt,
+        messages: [],
+        tools,
+        stopWhen: stepCountIs(5),
+      });
+
+      // Add greeting to conversation history
+      this.state.messages.push({
+        role: "assistant",
+        content: greetingText,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Save to database
+      if (this.state.conversationId) {
+        await db.update(sampleConversations)
+          .set({ messages: this.state.messages.map(m => ({ role: m.role, content: m.content })) })
+          .where(eq(sampleConversations.id, this.state.conversationId));
+      }
+
+      // Update context with greeting
+      this.state.context = await ConversationManager.loadOrCreateContext(
+        contextId,
+        this.state.messages.map(m => ({ role: m.role, content: m.content })),
+        this.state.surveyConfig
+      );
+
+      // Save context
+      await ConversationManager.saveContext(contextId, this.state.context!);
+
+      // Synthesize and send audio
+      await this.synthesizeAndSendAudio(greetingText);
+    } catch (error) {
+      console.error("[Sample Survey Voice] Initial greeting error:", error);
+      this.sendError("Failed to generate greeting");
     }
   }
 

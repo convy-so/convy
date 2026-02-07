@@ -91,6 +91,7 @@ const surveys = pgTable(
       onDelete: "cascade",
     }),
     title: text("title").notNull(),
+    description: text("description"),
     objective: jsonb("objective").$type<SurveyObjective>(),
     targetAudience: jsonb("target_audience").$type<SurveyTargetAudience>(),
     scope: jsonb("scope").$type<SurveyScope>(),
@@ -192,6 +193,7 @@ const surveyCreationConversations = pgTable(
         metrics?: string[];
         personalInfo?: string[];
         title?: string;
+        domainId?: number;
       }>()
       .default({}),
   },

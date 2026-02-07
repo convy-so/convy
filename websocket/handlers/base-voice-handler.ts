@@ -1,12 +1,12 @@
 import { WebSocket } from "ws";
 import { AudioBufferManager} from "@/lib/voice/audio-processing";
 import {
-  getGoogleSTTService,
-  GoogleSTTStreamingSession,
+  getDeepgramSTTService,
+  DeepgramSTTStreamingSession,
   type TranscriptionResult,
   type VoiceActivityEvent,
-} from "@/lib/voice/google-stt";
-import { getTTSService } from "@/lib/voice/google-tts";
+} from "@/lib/voice/deepgram-stt";
+import { getDeepgramTTSService } from "@/lib/voice/deepgram-tts";
 import {
   checkMessageAllowed,
   checkAudioChunkAllowed,
@@ -26,9 +26,9 @@ export abstract class BaseVoiceHandler {
   protected userId?: string;
   protected identifier: string;
   protected audioBuffer: AudioBufferManager;
-  protected sttService: ReturnType<typeof getGoogleSTTService>;
-  protected sttSession: GoogleSTTStreamingSession | null = null;
-  protected tts: ReturnType<typeof getTTSService>;
+  protected sttService: ReturnType<typeof getDeepgramSTTService>;
+  protected sttSession: DeepgramSTTStreamingSession | null = null;
+  protected tts: ReturnType<typeof getDeepgramTTSService>;
   protected isActive: boolean = true;
   
   // Transcription state
@@ -54,8 +54,8 @@ export abstract class BaseVoiceHandler {
     this.identifier = identifier;
     this.userId = userId;
     this.audioBuffer = new AudioBufferManager();
-    this.sttService = getGoogleSTTService();
-    this.tts = getTTSService();
+    this.sttService = getDeepgramSTTService();
+    this.tts = getDeepgramTTSService();
 
     this.setupBaseConnectionHandlers();
     this.setupBaseMessageHandlers();
@@ -180,7 +180,7 @@ export abstract class BaseVoiceHandler {
         return;
       }
 
-      // Send PCM audio directly to Google STT (now awaiting the async write)
+      // Send PCM audio directly to Deepgram STT
       if (this.sttSession) {
         await this.sttSession.write(audioData);
       }
@@ -199,7 +199,7 @@ export abstract class BaseVoiceHandler {
 
 
   /**
-   * Initialize STT Session
+   * Initialize Deepgram STT streaming session (via base class)
    */
   protected initializeSTTSession(): void {
     if (!this.isActive) return;
@@ -209,7 +209,7 @@ export abstract class BaseVoiceHandler {
       enableInterimResults: true,
       enableAutoPunctuation: true,
       speechEndTimeout: 1.5,
-      singleUtterance: false,
+      // Note: Deepgram handles continuous streaming via endpointing, no singleUtterance needed
     });
 
     this.sttSession.on("transcription", (result: TranscriptionResult) => {
@@ -229,7 +229,7 @@ export abstract class BaseVoiceHandler {
       
       if (mappedError.code === "SERVICE_DISABLED") {
         this.sendError(
-          "Speech recognition is currently disabled. Please contact support or enable the Google Cloud Speech-to-Text API.",
+          "Speech recognition is currently disabled. Please contact support or check your Deepgram API configuration.",
           "STT_DISABLED"
         );
         return; // Don't restart on disabled service

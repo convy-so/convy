@@ -4,11 +4,12 @@ import { surveys, surveyConversations} from "@/db/schema";
 import { eq, desc, count } from "drizzle-orm";
 import Link from "next/link";
 import {
+  Search,
+  ChevronRight,
   BarChart3,
-  TrendingUp,
-  Calendar,
-  ArrowRight,
+  MessageSquare,
 } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 
 export const metadata = {
   title: "Analytics | Convy",
@@ -22,6 +23,8 @@ export default async function AnalyticsPage() {
     .select({
        id: surveys.id,
        title: surveys.title,
+       description: surveys.description,
+       status: surveys.status,
        createdAt: surveys.createdAt,
        _count: {
            conversations: count(surveyConversations.id)
@@ -30,112 +33,110 @@ export default async function AnalyticsPage() {
     .from(surveys)
     .leftJoin(surveyConversations, eq(surveyConversations.surveyId, surveys.id))
     .where(eq(surveys.userId, session.user.id))
-    .groupBy(surveys.id, surveys.title, surveys.createdAt)
+    .groupBy(surveys.id, surveys.title, surveys.description, surveys.status, surveys.createdAt)
     .orderBy(desc(surveys.createdAt));
 
     const totalSurveys = userSurveys.length;
     const totalResponses = userSurveys.reduce((acc, curr) => acc + (curr._count?.conversations || 0), 0);
 
+    const statusConfig: Record<string, { color: string; bgColor: string; icon: React.ReactNode }> = {
+      active: { color: "text-emerald-600", bgColor: "bg-emerald-50", icon: <BarChart3 className="w-6 h-6" /> },
+      draft: { color: "text-amber-600", bgColor: "bg-amber-50", icon: <BarChart3 className="w-6 h-6" /> },
+      creating: { color: "text-blue-600", bgColor: "bg-blue-50", icon: <BarChart3 className="w-6 h-6" /> },
+      completed: { color: "text-gray-600", bgColor: "bg-gray-100", icon: <BarChart3 className="w-6 h-6" /> },
+      paused: { color: "text-orange-600", bgColor: "bg-orange-50", icon: <BarChart3 className="w-6 h-6" /> },
+    };
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Analytics Overview</h1>
-          <p className="text-gray-500 mt-1">
-            Performance metrics across all your surveys
-          </p>
+    <div className="min-h-screen bg-[#F8F9FB] p-6 sm:p-8 lg:p-10 font-sans text-slate-900">
+      <div className="max-w-6xl mx-auto space-y-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Analytics</h1>
+            <p className="text-gray-500 mt-1">
+              Overview of your survey performance and engagement
+            </p>
+          </div>
         </div>
-      </div>
 
-       {/* Overview Stats */}
-       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-2xl border border-gray-100 p-5">
-                 <div className="flex items-start justify-between mb-3">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-50 text-blue-600">
-                        <BarChart3 className="w-5 h-5" />
-                    </div>
-                 </div>
-                 <p className="text-2xl font-bold text-gray-900 mb-1">{totalSurveys}</p>
-                 <p className="text-sm text-gray-500">Total Surveys</p>
-            </div>
-            <div className="bg-white rounded-2xl border border-gray-100 p-5">
-                 <div className="flex items-start justify-between mb-3">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-purple-50 text-purple-600">
-                        <TrendingUp className="w-5 h-5" />
-                    </div>
-                 </div>
-                 <p className="text-2xl font-bold text-gray-900 mb-1">{totalResponses}</p>
-                 <p className="text-sm text-gray-500">Total Responses</p>
-            </div>
-       </div>
-
-      {/* Survey List */}
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
-            <h3 className="text-base font-semibold text-gray-900">Your Surveys</h3>
-            <p className="text-sm text-gray-500">Select a survey to view detailed AI analytics</p>
+        {/* Search (Consistent with Projects Page) */}
+        <div className="relative max-w-md">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search surveys..."
+            className="w-full pl-11 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none transition-all"
+          />
         </div>
-        
-        {userSurveys.length > 0 ? (
-            <div className="overflow-x-auto">
-            <table className="w-full">
-                <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Survey Title
-                    </th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Responses
-                    </th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Created
-                    </th>
-                    <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Action
-                    </th>
-                </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                {userSurveys.map((survey) => (
-                    <tr key={survey.id} className="hover:bg-gray-50/50 transition-colors group">
-                    <td className="px-6 py-4">
-                        <span className="text-sm font-medium text-gray-900">{survey.title}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                             <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                             <span className="text-sm font-semibold text-gray-700">{survey._count?.conversations || 0}</span>
-                        </div>
-                    </td>
-                    <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-gray-500 text-sm">
-                            <Calendar className="w-3.5 h-3.5" />
-                            {new Date(survey.createdAt).toLocaleDateString()}
-                        </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                        <Link 
+
+        {/* Survey List */}
+        <div className="space-y-4">
+          {userSurveys.length > 0 ? (
+            userSurveys.map((survey) => {
+              const config = statusConfig[survey.status as string] || statusConfig.draft;
+              
+              return (
+                <div
+                  key={survey.id}
+                  className="bg-white rounded-2xl border border-gray-100 hover:border-gray-200 transition-all duration-300"
+                >
+                  <div className="p-5 flex items-center justify-between">
+                    <div className="flex items-start gap-4 flex-1 min-w-0">
+                       {/* Icon Container */}
+                       <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform ${config.bgColor} ${config.color}`}>
+                          {config.icon}
+                       </div>
+
+                       <div className="flex-1 min-w-0">
+                          <Link 
                             href={`/dashboard/surveys/${survey.id}/analytics`}
-                            className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
-                        >
-                            View Analysis
-                            <ArrowRight className="w-4 h-4" />
-                        </Link>
-                    </td>
-                    </tr>
-                ))}
-                </tbody>
-            </table>
-            </div>
-        ) : (
-            <div className="p-12 text-center text-gray-500">
-                <p>No surveys found. Create a survey to see analytics.</p>
-                <Link href="/dashboard/create" className="text-blue-600 hover:underline mt-2 inline-block">
+                            className="font-semibold text-gray-900 text-lg hover:text-blue-600 transition-colors inline-block"
+                          >
+                              {survey.title}
+                          </Link>
+                          {survey.description && (
+                            <p className="text-sm text-gray-500 mt-0.5 truncate">
+                                {survey.description}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
+                             <span className="flex items-center gap-1.5">
+                                <MessageSquare className="w-4 h-4" />
+                                {survey._count?.conversations || 0} responses
+                             </span>
+                             <span className="text-xs text-gray-400">
+                                {formatDistanceToNow(new Date(survey.createdAt), { addSuffix: true })}
+                             </span>
+                          </div>
+                       </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 ml-4">
+                      <Link 
+                        href={`/dashboard/surveys/${survey.id}/analytics`}
+                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+             <div className="py-24 text-center bg-white rounded-2xl border border-gray-100">
+                <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-300">
+                    <BarChart3 className="w-10 h-10" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">No active surveys</h3>
+                <p className="text-gray-500 mb-8 max-w-sm mx-auto">Create and publish a survey to start seeing analytics.</p>
+                <Link href="/dashboard/create" className="bg-black text-white px-8 py-3 rounded-xl font-bold hover:scale-105 transition-transform duration-200 inline-block">
                     Create Survey
                 </Link>
             </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

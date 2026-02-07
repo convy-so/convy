@@ -53,8 +53,7 @@ export const env = {
 
   // Voice/WebSocket Configuration
   WEBSOCKET_PORT: optional("WEBSOCKET_PORT") || "3001",
-  GOOGLE_CLOUD_PROJECT_ID: optional("GOOGLE_CLOUD_PROJECT_ID"),
-  GOOGLE_APPLICATION_CREDENTIALS: optional("GOOGLE_APPLICATION_CREDENTIALS"),
+  DEEPGRAM_API_KEY: optional("DEEPGRAM_API_KEY"),
 
   // Voice Feature Toggles
   ENABLE_VOICE_FEATURES: optional("ENABLE_VOICE_FEATURES") === "true",

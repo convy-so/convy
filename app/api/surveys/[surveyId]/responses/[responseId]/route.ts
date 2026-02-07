@@ -22,7 +22,6 @@ export async function GET(
     const session = await getVerifiedSession();
     const { surveyId, responseId } = await params;
 
-    // 1. Verify survey ownership and fetch survey details (for title)
     const [survey] = await db
       .select({
         id: surveys.id,

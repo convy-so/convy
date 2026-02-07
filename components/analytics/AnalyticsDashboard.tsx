@@ -2,11 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { SurveyAnalyticsData } from "@/lib/analytics";
-import { StatCard } from "./StatCard";
 import { SentimentGauge } from "./SentimentGauge";
-import { InsightList } from "./InsightList";
-import { GoalAssessmentCard } from "./GoalAssessmentCard";
+import { DashboardGrid } from "./DashboardGrid";
 import { Loader2, AlertCircle } from "lucide-react";
+import Link from "next/link";
+import { RespondentLimitTracker } from "./RespondentLimitTracker";
 
 interface AnalyticsDashboardProps {
   surveyId: string;
@@ -35,7 +35,7 @@ export function AnalyticsDashboard({ surveyId }: AnalyticsDashboardProps) {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-gray-500">
-        <Loader2 className="w-8 h-8 animate-spin mb-4 text-blue-500" />
+        <Loader2 className="w-8 h-8 animate-spin mb-4 text-black" />
         <p>Loading analytics...</p>
       </div>
     );
@@ -58,8 +58,8 @@ export function AnalyticsDashboard({ surveyId }: AnalyticsDashboardProps) {
   if (data?.status === 'not_generated') {
       return (
          <div className="flex flex-col items-center justify-center min-h-[400px] bg-white rounded-2xl border border-dashed border-gray-200 p-8 text-center max-w-2xl mx-auto mt-8">
-            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
-                <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <Loader2 className="w-8 h-8 text-black animate-spin" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Analyzing Responses</h3>
             <p className="text-gray-500 max-w-md mx-auto mb-6">
@@ -82,102 +82,107 @@ export function AnalyticsDashboard({ surveyId }: AnalyticsDashboardProps) {
 
   const analytics = data as SurveyAnalyticsData;
   const { coreMetrics, executiveSummary, goalAssessment, discoveredInsights } = analytics;
+  // Fallback for maxLimit since it might not be in the partial type yet
+  const maxLimit = 50; 
+
+  // Combine widgets (backend provided + any frontend-injected ones like Data Gaps)
+  const allWidgets = [...analytics.dashboardWidgets];
+
+  // Inject Data Gaps if present (as it's not currently in backend widget generation)
+  if (discoveredInsights.dataGaps && discoveredInsights.dataGaps.length > 0) {
+      allWidgets.push({
+          id: "data_gaps",
+          type: "insight_list",
+          title: "Missing Information",
+          description: "Topics that could not be determined",
+          priority: 99,
+          size: "medium",
+          data: {
+              insights: discoveredInsights.dataGaps.map(g => ({ text: g, significance: 'medium' }))
+          }
+      });
+  }
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* 1. Header is handled by the Page component usually, but we can add last updated here */}
-      <div className="flex justify-between items-center">
-         <p className="text-sm text-gray-400">
-            Last updated: {new Date(analytics.lastUpdated).toLocaleString()}
-         </p>
-         <button 
-           onClick={() => fetch(`/api/surveys/${surveyId}/analytics`, { method: 'POST', body: JSON.stringify({ force: true }) })}
-           className="text-xs text-blue-600 hover:underline"
-         >
-            Regenerate Analysis
-         </button>
-      </div>
+        <div className="space-y-8 pb-12 animate-in fade-in duration-500">
+            {/* Header Actions Row */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/50 p-4 rounded-3xl border border-gray-100">
+                <div className="flex items-center gap-4 text-xs font-medium text-gray-500">
+                    <span>
+                        Last updated: {new Date(analytics.lastUpdated).toLocaleString()}
+                    </span>
+                     {/* Respondent Limit Tracker */}
+                     <div className="h-4 w-px bg-gray-200 hidden md:block" />
+                     <div className="md:block w-64 hidden">
+                         <RespondentLimitTracker currentCount={coreMetrics.totalConversations} maxLimit={maxLimit} />
+                     </div>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                     <Link
+                        href={`/dashboard/surveys/${surveyId}/analytics/conversations`}
+                        className="flex-1 sm:flex-none text-center px-5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                        View Conversations
+                    </Link>
+                    <button
+                        onClick={() => fetch(`/api/surveys/${surveyId}/analytics`, { method: 'POST', body: JSON.stringify({ force: true }) })}
+                        className="px-5 py-2.5 bg-black text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition-all"
+                    >
+                        Regenerate
+                    </button>
+                </div>
+            </div>
 
-      {/* 2. Stat Cards Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard 
-            title="Total Responses" 
-            value={coreMetrics.totalConversations} 
-            icon="Users"
-            color="bg-blue-500"
-        />
-        <StatCard 
-            title="Completion Rate" 
-            value={`${coreMetrics.completionRate}%`} 
-            trend={coreMetrics.completionRate >= 80 ? "up" : "stable"}
-            icon="CheckCircle2"
-            color="bg-emerald-500"
-        />
-        <StatCard 
-            title="Insight Quality" 
-            value={`${coreMetrics.insightQualityScore}/10`} 
-            icon="Sparkles"
-            color="bg-purple-500"
-        />
-         <StatCard 
-            title="Avg Duration" 
-            value={`${coreMetrics.medianDurationMinutes}m`} 
-            icon="Clock"
-            color="bg-amber-500"
-        />
-      </div>
+            {/* Mobile-only Respondent Tracker */}
+            <div className="md:hidden">
+                 <RespondentLimitTracker currentCount={coreMetrics.totalConversations} maxLimit={maxLimit} />
+            </div>
 
-      {/* 3. Executive Summary & Sentiment */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">{executiveSummary.headline}</h3>
-            <ul className="space-y-3 mb-6">
-                {executiveSummary.keyInsights.slice(0, 3).map((insight, i) => (
-                    <li key={i} className="flex gap-3 text-gray-600 leading-relaxed">
-                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xs font-bold mt-0.5">
-                            {i+1}
-                        </span>
-                        {insight}
-                    </li>
-                ))}
-            </ul>
+            {/* 1. Executive Summary Hero Section - Kept distinct for impact */}
+            <div className="bg-white rounded-[2.5rem] p-8 md:p-10 border border-gray-100/50">
+                <div className="flex flex-col lg:flex-row gap-10">
+                    <div className="flex-1 space-y-8">
+                        <div className="inline-flex items-center gap-2">
+                             <div className="bg-black text-white text-[10px] uppercase font-bold px-3 py-1 rounded-full tracking-widest">
+                                Executive Summary
+                             </div>
+                             <span className="text-xs font-medium text-gray-400">
+                                Based on {coreMetrics.totalConversations} conversations
+                             </span>
+                        </div>
+                        
+                        <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 leading-tight tracking-tight">
+                            {executiveSummary.headline}
+                        </h2>
+
+                        <div className="space-y-4">
+                            {executiveSummary.keyInsights.slice(0, 3).map((insight, i) => (
+                                <div key={i} className="flex gap-4 items-start group">
+                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-xs font-bold mt-0.5 group-hover:bg-black group-hover:text-white transition-colors">
+                                        {i + 1}
+                                    </span>
+                                    <p className="text-lg text-gray-600 leading-relaxed font-medium">
+                                        {insight}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Sentiment Gauge integrated into Hero */}
+                    <div className="lg:w-80 flex-shrink-0 flex items-center justify-center bg-gray-50/50 rounded-[2rem] p-6">
+                        <SentimentGauge
+                            score={executiveSummary.overallSentiment.score}
+                            confidence={executiveSummary.overallSentiment.confidence}
+                            overall={executiveSummary.overallSentiment.overall}
+                        />
+                    </div>
+                </div>
+            </div>
+
+             {/* 2. Main Dashboard Bento Grid */}
+             <DashboardGrid widgets={allWidgets} />
+             
         </div>
-        
-        <div className="grid grid-cols-1 gap-4">
-             <SentimentGauge 
-                score={executiveSummary.overallSentiment.score} 
-                confidence={executiveSummary.overallSentiment.confidence}
-                overall={executiveSummary.overallSentiment.overall}
-             />
-             <GoalAssessmentCard 
-                score={goalAssessment.achievementScore}
-                level={goalAssessment.achievementLevel}
-                objective={goalAssessment.surveyObjective}
-             />
-        </div>
-      </div>
-
-      {/* 4. Detailed Insights */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-         <InsightList 
-            title="Key Trends" 
-            insights={discoveredInsights.trends.map(t => ({
-                text: t.description,
-                significance: t.significance,
-                sentiment: t.sentiment
-            }))}
-            type="trends"
-         />
-         <InsightList 
-            title="Actionable Recommendations" 
-            insights={discoveredInsights.recommendations.map(r => ({
-                text: r.description,
-                significance: r.priority,
-            }))}
-            type="key_insights"
-         />
-      </div>
-      
-    </div>
   );
 }

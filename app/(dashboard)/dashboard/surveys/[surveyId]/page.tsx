@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import * as XLSX from "xlsx";
@@ -38,6 +39,8 @@ import {
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { getSurveyEmbedCodeAction } from "@/app/actions/survey";
+import { fetchSurveyDetails, fetchSurveyResponses } from "@/lib/api/surveys";
+import { queryKeys } from "@/lib/query-keys";
 
 interface Survey {
   id: string;
@@ -56,6 +59,7 @@ interface Survey {
   scope?: { mainTopics?: string[] };
   requiredQuestions?: string[];
   metrics?: string[];
+  isVoice?: boolean;
 }
 
 interface SurveyStats {
@@ -77,48 +81,40 @@ interface Response {
   messageCount: number;
 }
 
-// Mock analytics data (TODO: Integrate with real analytics API)
-const analyticsData = {
-  sentimentBreakdown: {
-    positive: 65,
-    neutral: 25,
-    negative: 10,
-  },
-  completionFunnel: [
-    { stage: "Started", count: 52, percentage: 100 },
-    { stage: "25% Complete", count: 48, percentage: 92 },
-    { stage: "50% Complete", count: 46, percentage: 88 },
-    { stage: "75% Complete", count: 45, percentage: 87 },
-    { stage: "Completed", count: 45, percentage: 87 },
-  ],
-  topThemes: [
-    { theme: "Product Quality", mentions: 32, sentiment: "positive" as const },
-    { theme: "Shipping Speed", mentions: 28, sentiment: "negative" as const },
-    { theme: "Customer Support", mentions: 24, sentiment: "positive" as const },
-    { theme: "Pricing", mentions: 18, sentiment: "neutral" as const },
-  ],
-};
 
-type TabType = "overview" | "responses" | "analytics" | "settings";
+
+interface AnalyticsTheme {
+  theme: string;
+  mentions: number;
+  sentiment: "neutral" | "positive" | "negative";
+}
+
+interface AnalyticsData {
+  sentimentBreakdown: {
+    positive: number;
+    neutral: number;
+    negative: number;
+  };
+  completionFunnel: {
+    stage: string;
+    count: number;
+    percentage: number;
+  }[];
+  topThemes: AnalyticsTheme[];
+}
+
+type TabType = "overview" | "responses" | "settings";
 
 export default function SurveyDetailPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
   const surveyId = params.surveyId as string;
+  const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [copied, setCopied] = useState(false);
-
-  const [survey, setSurvey] = useState<Survey | null>(null);
-  const [stats, setStats] = useState<SurveyStats | null>(null);
-  const [responses, setResponses] = useState<Response[]>([]);
-  const [analytics, setAnalytics] = useState<typeof analyticsData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingResponses, setIsLoadingResponses] = useState(false);
-  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState("all");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const ITEMS_PER_PAGE = 10;
@@ -126,6 +122,7 @@ export default function SurveyDetailPage() {
     title: "",
     additionalContext: "",
     participantLimit: 50,
+    isVoice: false,
   });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -135,67 +132,43 @@ export default function SurveyDetailPage() {
     iframeCode: string;
     inlineScriptSnippet: string;
     url: string;
-  } | null>(null);
+  } |null>(null);
   const [embedError, setEmbedError] = useState<string | null>(null);
   const [isLoadingEmbed, setIsLoadingEmbed] = useState(false);
   const [copiedEmbed, setCopiedEmbed] = useState<'iframe' | 'script' | null>(null);
 
-  // Fetch survey details
+  // Fetch survey details using React Query
+  const { data: surveyData, isLoading } = useQuery({
+    queryKey: queryKeys.surveys.detail(surveyId),
+    queryFn: () => fetchSurveyDetails(surveyId),
+    enabled: !!surveyId,
+  });
+
+  // Derive survey and stats from the data
+  const survey = surveyData?.survey || null;
+  const stats = surveyData?.stats || null;
+
+  // Update settings form when survey data loads
   useEffect(() => {
-    const fetchSurvey = async () => {
-      try {
-        const response = await fetch(`/api/surveys/${surveyId}/details`, {
-          credentials: "include",
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setSurvey(data.survey);
-          setStats(data.stats);
-          setSettingsForm({
-            title: data.survey.title,
-            additionalContext: data.survey.additionalContext || "",
-            participantLimit: data.survey.participantLimit,
-          });
-        } else {
-          toast.error("Failed to load survey");
-        }
-      } catch (error) {
-        console.error("Error fetching survey:", error);
-        toast.error("Failed to load survey");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchSurvey();
-  }, [surveyId]);
-
-  // Fetch responses when tab changes to responses or page changes
-  useEffect(() => {
-    if (activeTab === "responses") {
-      const fetchResponses = async () => {
-        setIsLoadingResponses(true);
-        try {
-          const response = await fetch(`/api/surveys/${surveyId}/responses?page=${currentPage}&limit=${ITEMS_PER_PAGE}&status=${statusFilter}`, {
-            credentials: "include",
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            setResponses(data.responses || []);
-            setTotalPages(data.pagination?.totalPages || 1);
-          }
-        } catch (error) {
-          console.error("Error fetching responses:", error);
-        } finally {
-          setIsLoadingResponses(false);
-        }
-      };
-
-      fetchResponses();
+    if (survey) {
+      setSettingsForm({
+        title: survey.title,
+        additionalContext: survey.additionalContext || "",
+        participantLimit: survey.participantLimit,
+        isVoice: survey.isVoice || false,
+      });
     }
-  }, [activeTab, surveyId, currentPage, statusFilter]);
+  }, [survey]);
+
+  // Fetch responses using React Query (conditional on activeTab)
+  const { data: responsesData, isLoading: isLoadingResponses } = useQuery({
+    queryKey: queryKeys.surveys.responses(surveyId, currentPage, statusFilter),
+    queryFn: () => fetchSurveyResponses(surveyId, currentPage, ITEMS_PER_PAGE, statusFilter),
+    enabled: !!surveyId && activeTab === "responses",
+  });
+
+  const responses = responsesData?.responses || [];
+  const totalPages = responsesData?.pagination?.totalPages || 1;
 
   const handleExport = async () => {
       const loadingToast = toast.loading("Preparing export...");
@@ -245,49 +218,7 @@ export default function SurveyDetailPage() {
       }
   };
 
-  // Fetch analytics when tab changes
-  useEffect(() => {
-    if (activeTab === "analytics" && !analytics) {
-      const fetchAnalytics = async () => {
-        setIsLoadingAnalytics(true);
-        try {
-          const response = await fetch(`/api/surveys/${surveyId}/analytics?format=full`, {
-             credentials: "include",
-          });
-          if (response.ok) {
-             const data = await response.json();
-             if (data.status === "ready") {
-                // Map API data to UI format
-                const sentiment = data.executiveSummary?.overallSentiment || { score: 0 };
-                // Simple mapping logic (expand as needed based on actual API return)
-                const mappedAnalytics = {
-                    sentimentBreakdown: {
-                        positive: Math.round((sentiment.score + 1) * 50), // Rough approx from -1..1 score
-                        neutral: 100 - Math.round((sentiment.score + 1) * 50) - 10,
-                        negative: 10
-                    },
-                     completionFunnel: [
-                        { stage: "Started", count: data.coreMetrics?.totalConversations || 0, percentage: 100 },
-                        { stage: "Completed", count: data.coreMetrics?.completedConversations || 0, percentage: data.coreMetrics?.completionRate || 0 },
-                    ],
-                    topThemes: data.discoveredInsights?.emergentTopics?.map((t: any) => ({
-                         theme: t.topic,
-                         mentions: t.count,
-                         sentiment: "neutral" // default
-                    })) || []
-                };
-                setAnalytics(mappedAnalytics as any);
-             }
-          }
-        } catch (error) {
-           console.error("Error fetching analytics", error);
-        } finally {
-           setIsLoadingAnalytics(false);
-        }
-      };
-      fetchAnalytics();
-    }
-  }, [activeTab, surveyId, analytics]);
+
 
   const handleSaveSettings = async () => {
     setIsSavingSettings(true);
@@ -301,12 +232,12 @@ export default function SurveyDetailPage() {
 
         if (response.ok) {
             toast.success("Settings saved successfully", { id: loadingToast });
-            // Update local survey state
-            setSurvey(prev => prev ? ({ ...prev, ...settingsForm }) : null);
+            // Invalidate survey query to refetch updated data
+            queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
         } else {
             toast.error("Failed to save settings", { id: loadingToast });
         }
-    } catch (error) {
+    } catch (_) {
         toast.error("An error occurred", { id: loadingToast });
     } finally {
         setIsSavingSettings(false);
@@ -316,7 +247,7 @@ export default function SurveyDetailPage() {
   // Handle tab from URL
   useEffect(() => {
     const tabParam = searchParams.get("tab") as TabType;
-    if (tabParam && ["overview", "responses", "analytics", "settings"].includes(tabParam)) {
+    if (tabParam && ["overview", "responses", "settings"].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
@@ -330,12 +261,13 @@ export default function SurveyDetailPage() {
       });
 
       if (response.ok) {
-        setSurvey((prev) => (prev ? { ...prev, status: newStatus } : null));
+        // Invalidate survey query to refetch updated data
+        queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
         toast.success(`Survey ${newStatus === "active" ? "resumed" : "paused"}`);
       } else {
         toast.error("Failed to update status");
       }
-    } catch (error) {
+    } catch (_) {
       toast.error("An error occurred");
     }
   };
@@ -353,7 +285,7 @@ export default function SurveyDetailPage() {
       } else {
         toast.error("Failed to delete survey");
       }
-    } catch (error) {
+    } catch (_) {
       toast.error("An error occurred");
     } finally {
         setIsDeletingSurvey(false);
@@ -400,7 +332,6 @@ export default function SurveyDetailPage() {
   const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
     { id: "overview", label: "Overview", icon: <MessageSquare className="w-4 h-4" /> },
     { id: "responses", label: "Responses", icon: <Users className="w-4 h-4" /> },
-    { id: "analytics", label: "Analytics", icon: <BarChart3 className="w-4 h-4" /> },
     { id: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
   ];
 
@@ -624,7 +555,7 @@ export default function SurveyDetailPage() {
               <button onClick={() => setActiveTab("responses")} className="text-sm text-gray-500 hover:text-gray-900">View all</button>
             </div>
             <div className="space-y-3">
-              {responses.length > 0 ? responses.slice(0, 3).map((response) => (
+              {responses.length > 0 ? responses.slice(0, 3).map((response: Response) => (
                 <div key={response.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-gray-50 rounded-xl gap-3 transition-colors hover:bg-gray-100/80">
                   <div className="flex items-start sm:items-center gap-3">
                     <div className={cn(
@@ -757,7 +688,7 @@ export default function SurveyDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {responses.map((response) => (
+                    {responses.map((response: Response) => (
                       <tr key={response.id} className="hover:bg-gray-50/50 transition-colors group">
                         <td className="px-6 py-4">
                           <span className="text-sm font-semibold text-gray-900">{response.participantId === 'Anonymous' ? `Participant ${response.id.slice(0,4)}` : response.participantId}</span>
@@ -859,68 +790,7 @@ export default function SurveyDetailPage() {
         </div>
       )}
 
-      {/* Analytics Tab */}
-      {activeTab === "analytics" && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {isLoadingAnalytics ? (
-             <div className="col-span-3 flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-gray-400" /></div>
-          ) : !analytics ? (
-              <div className="col-span-3 text-center py-12 text-gray-500">No analytics data available yet. Collect more responses.</div>
-          ) : (
-            <>
-              <div className="bg-white rounded-xl border border-gray-100 p-5">
-                <h3 className="font-semibold text-gray-900 mb-4">Sentiment Breakdown</h3>
-                <div className="space-y-3">
-                  {/* Using mapped analytics data */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-gray-600">Positive</span>
-                      <span className="text-sm font-medium text-gray-900">{analytics.sentimentBreakdown.positive}%</span>
-                    </div>
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${analytics.sentimentBreakdown.positive}%` }} />
-                    </div>
-                  </div>
-                   {/* ... Simplified for brevity, normally would map fully ... */}
-                </div>
-              </div>
 
-               <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 p-5">
-                <h3 className="font-semibold text-gray-900 mb-4">Completion Funnel</h3>
-                <div className="space-y-3">
-                  {analytics.completionFunnel.map((stage) => (
-                    <div key={stage.stage} className="flex items-center gap-4">
-                      <div className="w-28 text-sm text-gray-600">{stage.stage}</div>
-                      <div className="flex-1 h-8 bg-gray-100 rounded-lg overflow-hidden">
-                        <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-lg flex items-center justify-end pr-3" style={{ width: `${stage.percentage}%` }}>
-                          <span className="text-xs font-medium text-white">{stage.count}</span>
-                        </div>
-                      </div>
-                      <div className="w-12 text-sm font-medium text-gray-900 text-right">{stage.percentage}%</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="lg:col-span-3 bg-white rounded-xl border border-gray-100 p-5">
-                <h3 className="font-semibold text-gray-900 mb-4">Top Themes</h3>
-                 {analytics.topThemes.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {analytics.topThemes.map((theme) => (
-                        <div key={theme.theme} className={cn("p-4 rounded-xl border bg-gray-50 border-gray-100")}>
-                        <h4 className="font-medium text-gray-900 mb-1">{theme.theme}</h4>
-                        <p className="text-sm text-gray-500">{theme.mentions} mentions</p>
-                        </div>
-                    ))}
-                    </div>
-                 ) : (
-                     <p className="text-sm text-gray-500">No themes detected yet.</p>
-                 )}
-              </div>
-            </>
-          )}
-        </div>
-      )}
 
       {/* Settings Tab */}
       {activeTab === "settings" && (
@@ -954,6 +824,28 @@ export default function SurveyDetailPage() {
                     onChange={(e) => setSettingsForm({...settingsForm, participantLimit: Number(e.target.value)})}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none" 
                 />
+              </div>
+              
+               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-1">Voice Conversation Mode</h4>
+                    <p className="text-sm text-gray-500">Enable voice-first interaction for this survey.</p>
+                  </div>
+                  <button
+                    onClick={() => setSettingsForm({...settingsForm, isVoice: !settingsForm.isVoice})}
+                    className={cn(
+                        "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2",
+                        settingsForm.isVoice ? "bg-indigo-600" : "bg-gray-200"
+                    )}
+                  >
+                    <span
+                        aria-hidden="true"
+                        className={cn(
+                            "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                            settingsForm.isVoice ? "translate-x-5" : "translate-x-0"
+                        )}
+                    />
+                  </button>
               </div>
             </div>
             <div className="mt-6 flex justify-end">

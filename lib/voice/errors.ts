@@ -11,9 +11,7 @@ export interface VoiceError {
   technicalDetails?: string;
 }
 
-/**
- * Error code definitions with user-friendly messages
- */
+
 export const VOICE_ERRORS = {
   // Audio Format Errors
   AUDIO_FORMAT_INVALID: {

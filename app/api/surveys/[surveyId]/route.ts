@@ -82,6 +82,9 @@ export async function PATCH(
         if (body.language === 'en' || body.language === 'fr' || body.language === 'de') {
             updates.language = body.language;
         }
+        if (typeof body.isVoice === 'boolean') {
+            updates.isVoice = body.isVoice;
+        }
 
         if (Object.keys(updates).length === 0) {
             return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });

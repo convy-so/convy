@@ -324,6 +324,21 @@ export class ConversationManager {
                   };
               },
           }),
+          finishSurvey: tool({
+              description: "Signal that the survey conversation is complete and should end. Call this when you have covered all required topics and gathered sufficient information from the participant.",
+              inputSchema: z.object({
+                  reason: z.string().optional().describe("Optional brief reason for ending (e.g., 'all topics covered', 'participant request')"),
+              }),
+              execute: async ({ reason }) => {
+                  // Execution handled server-side in onFinish callback
+                  // This just returns confirmation for the AI
+                  return {
+                      success: true,
+                      message: "Survey marked as complete",
+                      reason: reason || "survey complete"
+                  };
+              },
+          }),
       };
   }
 }

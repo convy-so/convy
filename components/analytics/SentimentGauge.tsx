@@ -4,9 +4,10 @@ interface SentimentGaugeProps {
   score: number; // -1 to 1
   confidence: number;
   overall: "positive" | "negative" | "neutral" | "mixed";
+  compact?: boolean;
 }
 
-export function SentimentGauge({ score, confidence, overall }: SentimentGaugeProps) {
+export function SentimentGauge({ score, confidence, overall, compact = false }: SentimentGaugeProps) {
   // Normalize score from -1..1 to 0..100 for the gauge
   const percentage = ((score + 1) / 2) * 100;
   
@@ -29,18 +30,24 @@ export function SentimentGauge({ score, confidence, overall }: SentimentGaugePro
     barColor = "#F59E0B"; // amber-500
   } else {
     // neutral
-    colorClass = "text-blue-600";
-    bgClass = "bg-blue-50";
-    barColor = "#3B82F6"; // blue-500
+    colorClass = "text-gray-900";
+    bgClass = "bg-gray-50";
+    barColor = "#6b7280"; // gray-500
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-6 flex flex-col items-center justify-center relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-gray-300 to-emerald-500 opacity-20" />
+    <div className={cn(
+      "flex flex-col items-center justify-center relative overflow-hidden h-full",
+      !compact && "bg-white rounded-[2rem] border border-gray-50 p-8"
+    )}>
+        {!compact && (
+          <h3 className="text-xs font-bold text-gray-400 mb-6 uppercase tracking-widest text-center">Overall Sentiment</h3>
+        )}
         
-        <h3 className="text-sm font-medium text-gray-500 mb-4 uppercase tracking-wider">Overall Sentiment</h3>
-        
-        <div className="relative w-48 h-24 overflow-hidden mb-2">
+        <div className={cn(
+          "relative overflow-hidden mb-4",
+          compact ? "w-32 h-16" : "w-40 h-20"
+        )}>
             {/* Semicircle Background */}
             <div className="absolute bottom-0 w-full h-full bg-gray-100 rounded-t-full" />
             
@@ -53,16 +60,26 @@ export function SentimentGauge({ score, confidence, overall }: SentimentGaugePro
                 }}
             />
              {/* Mask to make it an arc */}
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-[1px] w-32 h-16 bg-white rounded-t-full z-10 flex items-end justify-center pb-2">
-                 <span className={cn("text-3xl font-bold", colorClass)}>
+            <div className={cn(
+              "absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-[1px] bg-white rounded-t-full z-10 flex items-end justify-center pb-1",
+              compact ? "w-24 h-12" : "w-28 h-14"
+            )}>
+                 <span className={cn(
+                   "font-extrabold tracking-tighter",
+                   compact ? "text-2xl" : "text-4xl"
+                  )}>
                     {Math.round(score * 100)}
                  </span>
             </div>
         </div>
         
-        <div className="text-center z-10 mt-2">
-            <p className={cn("text-lg font-bold capitalize", colorClass)}>{overall}</p>
-            <p className="text-xs text-gray-400 mt-1">{(confidence * 100).toFixed(0)}% Confidence</p>
+        <div className="text-center z-10">
+            <p className={cn(
+              "font-extrabold uppercase tracking-wide",
+              compact ? "text-sm" : "text-base",
+              colorClass
+            )}>{overall}</p>
+            <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-wider">{(confidence * 100).toFixed(0)}% Confidence</p>
         </div>
     </div>
   );
