@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Globe,
   ChevronDown,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -69,6 +70,7 @@ function CreateSurveyContent() {
   // Language state
   const [language, setLanguage] = useState<"en" | "fr" | "de">("en");
   const [isLanguageOpen, setIsLanguageOpen] = useState(false);
+  const [isVoiceSurvey, setIsVoiceSurvey] = useState(false);
 
   const toggleLanguage = () => setIsLanguageOpen(!isLanguageOpen);
   
@@ -76,7 +78,6 @@ function CreateSurveyContent() {
     setLanguage(newLang);
     setIsLanguageOpen(false);
     
-    // If survey exists, update it
     if (surveyId) {
       try {
         await fetch(`/api/surveys/${surveyId}`, {
@@ -95,7 +96,23 @@ function CreateSurveyContent() {
     }
   };
 
-  // WebSocket Voice Hook
+  const updateSurveyMode = async (isVoice: boolean) => {
+    setIsVoiceSurvey(isVoice);
+    
+    if (surveyId) {
+      try {
+        await fetch(`/api/surveys/${surveyId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isVoice })
+        });
+      } catch (error) {
+        console.error("Failed to update survey mode:", error);
+        toast.error("Failed to save survey mode preference");
+      }
+    }
+  };
+  
   const voiceWs = useVoiceWebSocket({
     url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-creation`,
     onReady: () => {
@@ -373,6 +390,10 @@ function CreateSurveyContent() {
             if (surveyData.survey?.language) {
                setLanguage(surveyData.survey.language);
             }
+            // Set voice mode if available
+            if (typeof surveyData.survey?.isVoice === 'boolean') {
+               setIsVoiceSurvey(surveyData.survey.isVoice);
+            }
             
             // Read-only if survey is NOT in "creating" status
             if (status && status !== "creating") {
@@ -407,7 +428,7 @@ function CreateSurveyContent() {
       const response = await fetch("/api/surveys", { 
         method: "POST",
         credentials: "include",
-        body: JSON.stringify({ language }),
+        body: JSON.stringify({ language, isVoice: isVoiceSurvey }),
       });
       
       if (response.status === 401) {
@@ -1032,6 +1053,38 @@ function CreateSurveyContent() {
 
                 <div className="h-6 w-px bg-gray-200 mx-1" />
 
+                 {/* Survey Mode Toggle */}
+                 <div className="flex bg-gray-100 p-1 rounded-lg">
+                    <button
+                        onClick={() => updateSurveyMode(false)}
+                        className={cn(
+                            "px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
+                            !isVoiceSurvey 
+                                ? "bg-white text-gray-900 shadow-sm" 
+                                : "text-gray-500 hover:text-gray-700"
+                        )}
+                        title="Text Survey Mode"
+                    >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        Text
+                    </button>
+                    <button
+                        onClick={() => updateSurveyMode(true)}
+                        className={cn(
+                            "px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
+                            isVoiceSurvey 
+                                ? "bg-white text-gray-900 shadow-sm" 
+                                : "text-gray-500 hover:text-gray-700"
+                        )}
+                        title="Voice Survey Mode"
+                    >
+                        <Mic className="w-3.5 h-3.5" />
+                        Voice
+                    </button>
+                 </div>
+
+                <div className="h-6 w-px bg-gray-200 mx-1" />
+
                  <button
                     onClick={() => setShowPublishModal(true)}
                     disabled={!isReadyForSample || !surveyId}
@@ -1454,7 +1507,8 @@ function CreateSurveyContent() {
         isOpen={showPublishModal}
         onClose={() => setShowPublishModal(false)}
         surveyId={surveyId || ""}
-        initialTitle={extractedData?.title || "Untitled Survey"}
+        initialTitle=""
+        initialIsVoice={isVoiceSurvey}
         onPublished={(shareUrl) => {
           console.log("Survey published:", shareUrl);
         }}

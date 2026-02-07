@@ -1,15 +1,15 @@
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
-import { streamText, generateText, convertToModelMessages, type UIMessage, stepCountIs } from "ai";
+import { streamText, generateText, convertToModelMessages, type UIMessage, stepCountIs, createUIMessageStream, createUIMessageStreamResponse } from "ai";
 
 import { db } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema";
 import { ConversationManager } from "@/lib/conversation-manager";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
-import { defaultModel } from "@/lib/ai";
+import { selectModelForConversation, flashModel, flashLiteModel } from "@/lib/ai";
 
-const model = defaultModel;
+const model = flashLiteModel;  // Default to lite for greetings
 
 /**
  * GET - Initialize a survey response conversation and generate AI greeting
@@ -45,7 +45,7 @@ export async function GET(
 
         // Build survey config for prompt generation
         const surveyConfig = buildCompleteSurveyConfig(survey);
-
+ 
         // Create initial context for the greeting
         const initialContext = await ConversationManager.loadOrCreateContext(
             conversationId,
@@ -58,11 +58,11 @@ export async function GET(
         const systemPrompt = ConversationManager.getSystemPrompt(surveyConfig, initialContext);
 
         const greetingResult = await generateText({
-            model: defaultModel,
+            model: flashLiteModel,  // Use lite for simple greeting
             system: systemPrompt,
             prompt: "Start the conversation by greeting the participant warmly. Introduce yourself as the interviewer, briefly explain what this survey is about based on your instructions, and ask your first opening question to get the conversation started. Keep it concise and welcoming.",
             temperature: 0.8,
-            maxOutputTokens: 300,
+            maxOutputTokens: 600,  // Increased to allow natural greeting flow
         });
 
         const greetingText = greetingResult.text;
@@ -156,71 +156,135 @@ export async function POST(
              // Side-effect callback not needed for data stream writing here
         });
 
-        // Stream the AI response
-        const result = streamText({
-            model: defaultModel,
-            system: systemPrompt,
-            messages: modelMessages,
-            tools,
-            stopWhen: stepCountIs(5), // Allow tool execution (and thus media display)
-            temperature: 0.7,
-            maxOutputTokens: 400,
-            onFinish: async ({ text, toolCalls }) => {
-                // Save conversation to database
-                const updatedMessages = [
-                    ...modelMessages,
-                    { role: "assistant" as const, content: text, toolCalls }
-                ];
+        // Intelligent model selection: use flash-lite for conversation, flash for completion
+        const userMessages = modelMessages.filter((m: any) => m.role === "user");
+        const minQuestions = Math.max((survey.requiredQuestions as any[])?.length || 0, 3);
+        const selectedModel = selectModelForConversation(rollingContext, userMessages.length, minQuestions);
+        
+        // DEBUG: Log model selection
+        console.log(`[HTTP Chat Model] Using:`, selectedModel === flashModel ? 'flash' : 'flash-lite');
+        console.log(`[HTTP Chat Tools Debug] Available tools:`, Object.keys(tools));
 
-                // Update memory in background (learning)
-                ConversationManager.updateMemoryAsync(
-                    conversationId,
-                    updatedMessages,
-                    surveyConfig,
-                    rollingContext
-                ).catch(err => console.error("Background memory update failed:", err));
+        const stream = createUIMessageStream({
+            execute: async ({ writer }) => {
+                // Stream the AI response
+                const result = streamText({
+                    model: selectedModel,  // Use dynamically selected model
+                    system: systemPrompt,
+                    messages: modelMessages,
+                    tools,
+                    toolChoice: 'auto',  // Explicitly allow model to choose tools
+                    stopWhen: stepCountIs(5), // Allow tool execution (and thus media display)
+                    temperature: 0.7,
+                    maxOutputTokens: 1000,  // Increased to allow AI to complete thought and call finishSurvey tool
+                    onFinish: async ({ text, toolCalls, toolResults, steps }) => {
+                        // Enhanced debugging
+                        console.log(`[HTTP Chat Tools Debug] Steps:`, steps?.length || 0);
+                        console.log(`[HTTP Chat Tools Debug] Tool Results:`, JSON.stringify(toolResults, null, 2));
+                        
+                        // Save conversation to database
+                        const updatedMessages = [
+                            ...modelMessages,
+                            { role: "assistant" as const, content: text, toolCalls }
+                        ];
+        
+                        // EXTENSIVE LOGGING for debugging
+                        console.log(`[HTTP Chat Debug] Conversation ${conversationId}:`);
+                        console.log(`  - AI Response Length: ${text.length} characters`);
+                        console.log(`  - AI Response Preview: "${text.substring(0, 200)}..."`);
+                        console.log(`  - Tool Calls Received:`, JSON.stringify(toolCalls, null, 2));
+                        console.log(`  - Number of Tool Calls:`, toolCalls?.length || 0);
+        
+                        // Update memory in background (learning)
+                        ConversationManager.updateMemoryAsync(
+                            conversationId,
+                            updatedMessages,
+                            surveyConfig,
+                            rollingContext
+                        ).catch(err => console.error("Background memory update failed:", err));
+        
+                        // Check if AI called finishSurvey tool (primary detection method)
+                        // Check all steps because the tool call might happen in an earlier step
+                        const finishSurveyCall = steps.flatMap(step => step.toolCalls).find(call => 
+                            call.toolName === 'finishSurvey'
+                        ) || toolCalls?.find((call: any) => 
+                            call.toolName === 'finishSurvey'
+                        );
+        
+                        // Also keep string-based detection as fallback
+                        const isCompletionPhrase = text.toLowerCase().includes("thank you for completing") ||
+                            text.toLowerCase().includes("survey is now complete") ||
+                            text.toLowerCase().includes("your feedback is incredibly valuable");
+        
+                        // Only mark complete if we have a reasonable amount of interaction (e.g. at least 3 user messages)
+                        const hasToolCompletion = !!finishSurveyCall;
+                        const userMessages = modelMessages.filter((m: any) => m.role === "user");
+                        const minQuestions = Math.max((survey.requiredQuestions as any[])?.length || 0, 3);
+                        const isCompleted = (hasToolCompletion || isCompletionPhrase) && userMessages.length >= minQuestions;
+        
+                        // Diagnostic logging for completion detection
+                        console.log(`[HTTP Chat Completion] ${conversationId}:`, {
+                            hasToolCompletion,
+                            isCompletionPhrase,
+                            userMessageCount: userMessages.length,
+                            minQuestions,
+                            willComplete: isCompleted
+                        });
+        
+                        if (conversationId) {
+                            // Normalize messages for DB storage (simple role/content strings + timestamps)
+                            const dbMessages = ConversationManager.normalizeMessages(updatedMessages, surveyConfig).map(m => ({
+                                ...m,
+                                timestamp: new Date().toISOString()
+                            }));
+        
+                            await db
+                            .update(surveyConversations)
+                            .set({
+                                rawConversation: dbMessages,
+                                completed: isCompleted,
+                                updatedAt: new Date(),
+                            })
+                            .where(eq(surveyConversations.id, conversationId));
+                        }
+        
+                        // Increment participant count if completed
+                        if (isCompleted) {
+                            await db
+                                .update(surveys)
+                                .set({
+                                    currentParticipants: (survey.currentParticipants || 0) + 1,
+                                    updatedAt: new Date(),
+                                })
+                                .where(eq(surveys.id, survey.id));
+                            
+                            // Enqueue insights generation (CRITICAL FIX)
+                            try {
+                                const { enqueueConversationInsights } = await import("@/lib/queue");
+                                await enqueueConversationInsights({
+                                    conversationId,
+                                    surveyId: survey.id,
+                                    userId: survey.userId,
+                                });
+                                console.log(`[HTTP Chat] Enqueued insights for ${conversationId}`);
+                            } catch (error) {
+                                console.error("[HTTP Chat] Failed to enqueue insights:", error);
+                            }
+                            
+                            // Signal completion via stream data
+                            writer.write({
+                                type: 'data',
+                                data: { isCompleted: true }
+                            } as any);
+                        }
+                    },
+                });
 
-                // Check if survey is complete
-                const isCompletionPhrase = text.toLowerCase().includes("thank you for completing") ||
-                    text.toLowerCase().includes("survey is now complete") ||
-                    text.toLowerCase().includes("your feedback is incredibly valuable");
-
-                // Only mark complete if we have a reasonable amount of interaction (e.g. at least 3 user messages)
-                const userMessages = modelMessages.filter((m: any) => m.role === "user");
-                const minQuestions = Math.max((survey.requiredQuestions as any[])?.length || 0, 3);
-                const isCompleted = isCompletionPhrase && userMessages.length >= minQuestions;
-
-                if (conversationId) {
-                    // Normalize messages for DB storage (simple role/content strings + timestamps)
-                    const dbMessages = ConversationManager.normalizeMessages(updatedMessages, surveyConfig).map(m => ({
-                        ...m,
-                        timestamp: new Date().toISOString()
-                    }));
-
-                    await db
-                    .update(surveyConversations)
-                    .set({
-                        rawConversation: dbMessages,
-                        completed: isCompleted,
-                        updatedAt: new Date(),
-                    })
-                    .where(eq(surveyConversations.id, conversationId));
-                }
-
-                // Increment participant count if completed
-                if (isCompleted) {
-                    await db
-                        .update(surveys)
-                        .set({
-                            currentParticipants: (survey.currentParticipants || 0) + 1,
-                            updatedAt: new Date(),
-                        })
-                        .where(eq(surveys.id, survey.id));
-                }
-            },
+                writer.merge(result.toUIMessageStream());
+            }
         });
 
-        return result.toUIMessageStreamResponse();
+        return createUIMessageStreamResponse({ stream });
     } catch (error) {
         console.error("Error in survey response:", error);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });

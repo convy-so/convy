@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { X, Loader2, Share2, Copy, Check, Sparkles, ExternalLink } from "lucide-react";
 import toast from "react-hot-toast";
+import { cn } from "@/lib/utils";
 
 interface PublishSurveyModalProps {
   isOpen: boolean;
   onClose: () => void;
   surveyId: string;
   initialTitle?: string;
+  initialIsVoice?: boolean;
   onPublished?: (shareUrl: string) => void;
 }
 
@@ -17,10 +19,12 @@ export function PublishSurveyModal({
   onClose,
   surveyId,
   initialTitle = "Untitled Survey",
+  initialIsVoice = false,
   onPublished,
 }: PublishSurveyModalProps) {
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState("");
+  const [isVoice, setIsVoice] = useState(initialIsVoice);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
@@ -55,7 +59,7 @@ export function PublishSurveyModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ title, description }),
+        body: JSON.stringify({ title, description, isVoice }),
       });
 
       if (!response.ok) {
@@ -207,6 +211,29 @@ export function PublishSurveyModal({
                 className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 resize-none"
               />
             </div>
+
+            {/* Voice Mode Toggle */}
+             <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                  <div>
+                    <h4 className="font-medium text-gray-900 text-sm mb-0.5">Voice Mode</h4>
+                    <p className="text-xs text-gray-500">Respondents will start with voice.</p>
+                  </div>
+                  <button
+                    onClick={() => setIsVoice(!isVoice)}
+                    className={cn(
+                        "relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2",
+                        isVoice ? "bg-indigo-600" : "bg-gray-200"
+                    )}
+                  >
+                    <span
+                        aria-hidden="true"
+                        className={cn(
+                            "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                            isVoice ? "translate-x-4" : "translate-x-0"
+                        )}
+                    />
+                  </button>
+              </div>
 
             {/* Actions */}
             <div className="flex gap-3 pt-2">

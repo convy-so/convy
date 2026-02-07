@@ -1,6 +1,6 @@
 /**
  * PCM Audio Worklet Processor
- * Captures raw audio and converts to 16-bit PCM at 16kHz for Google Cloud STT
+ * Captures raw audio and converts to 16-bit PCM at 16kHz for Deepgram STT
  */
 
 class PCMProcessor extends AudioWorkletProcessor {
@@ -67,7 +67,7 @@ class PCMProcessor extends AudioWorkletProcessor {
    */
   process(inputs, outputs, parameters) {
     if (this.stopped) {
-      return false; // Stop processing
+      return false;
     }
 
     const input = inputs[0];
@@ -106,9 +106,8 @@ class PCMProcessor extends AudioWorkletProcessor {
     this.port.postMessage({
       type: 'audio',
       buffer: pcm16.buffer
-    }, [pcm16.buffer]); // Transfer ownership for performance
+    }, [pcm16.buffer]);
     
-    // Reset buffer
     this.buffer = new Float32Array(this.bufferSize);
     this.bufferIndex = 0;
   }

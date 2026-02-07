@@ -39,11 +39,11 @@ import ffmpeg from "fluent-ffmpeg";
 // ============================================================================
 
 /**
- * Audio configuration optimized for Google Cloud Speech-to-Text
- * Based on Google's recommendations for LINEAR16 encoding
+ * Audio configuration optimized for Deepgram Speech-to-Text
+ * Based on Deepgram's recommendations for LINEAR16 encoding
  */
 export const AUDIO_CONFIG = {
-  SAMPLE_RATE: 16000, // 16kHz - Google STT optimal rate for speech recognition
+  SAMPLE_RATE: 16000, // 16kHz - Deepgram STT optimal rate for speech recognition
   CHANNELS: 1, // Mono - speech recognition doesn't benefit from stereo
   BIT_DEPTH: 16, // 16-bit PCM - standard for voice processing
   FRAME_SIZE: 512, // samples per frame (32ms at 16kHz) - good balance for latency/quality

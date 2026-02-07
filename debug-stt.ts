@@ -1,5 +1,5 @@
 
-import { GoogleSTTService } from "./lib/voice/google-stt";
+import { DeepgramSTTService } from "./lib/voice/deepgram-stt";
 import { env } from "./lib/env";
 import * as dotenv from 'dotenv';
 
@@ -9,16 +9,15 @@ dotenv.config();
 async function main() {
   console.log("Starting debug-stt...");
   try {
-    const service = new GoogleSTTService();
+    const service = new DeepgramSTTService();
     console.log("Service initialized");
 
     const session = service.createStreamingSession({
       language: "en-US",
       enableInterimResults: true,
       enableAutoPunctuation: true,
-       // match the config from survey-creation-voice.ts
+       // Deepgram uses flux model default
       speechEndTimeout: 1.5,
-      singleUtterance: false,
     });
 
     session.on("started", () => {
@@ -31,6 +30,10 @@ async function main() {
 
     session.on("end", () => {
       console.log("Session ended");
+    });
+    
+    session.on("transcription", (data) => {
+        console.log("Transcription:", data);
     });
 
     console.log("Starting session...");

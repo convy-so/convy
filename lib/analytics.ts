@@ -47,7 +47,6 @@ export interface CoreMetrics {
 
   // Engagement metrics
   averageMessagesPerConversation: number;
-  averageResponseLength: number; // Average participant response length in words
   averageFollowUpDepth: number; // Average chain of follow-up questions achieved
   medianDurationMinutes: number;
 
@@ -60,7 +59,6 @@ export interface CoreMetrics {
   };
 
   // Coverage metrics
-  topicCoverageRate: number; // 0-100 percentage
   requiredQuestionsCompletion: RequiredQuestionCoverage[];
 }
 
@@ -97,7 +95,7 @@ export interface CreatorMetric {
   summary: string;
 
   // For dashboard visualizations
-  chartType: "pie" | "bar" | "histogram" | "wordcloud" | "text";
+  chartType: "pie" | "bar" | "histogram" | "wordcloud" | "text" | "metric_breakdown";
   chartData: ChartDataPoint[];
 }
 
@@ -365,7 +363,6 @@ export interface ConversationInsightData {
   keyFindings: string[];
   messageCount: number;
   participantResponseCount: number;
-  averageResponseLength: number;
   durationMinutes: number;
   followUpDepth: number;
   engagementLevel: "high" | "medium" | "low";
@@ -429,7 +426,10 @@ export type WidgetType =
   | "stat_card"
   | "pie_chart"
   | "bar_chart"
+  | "histogram"
   | "line_chart"
+  | "text"
+  | "wordcloud"
   | "word_cloud"
   | "quote_carousel"
   | "progress_bar"
@@ -529,7 +529,7 @@ export const creatorMetricSchema = z.object({
     })
   ),
   summary: z.string(),
-  chartType: z.enum(["pie", "bar", "histogram", "wordcloud", "text"]),
+  chartType: z.enum(["pie", "bar", "histogram", "wordcloud", "text", "metric_breakdown"]),
   chartData: z.array(
     z.object({
       label: z.string(),
@@ -574,7 +574,6 @@ export const conversationInsightDataSchema = z.object({
   keyFindings: z.array(z.string()),
   messageCount: z.number(),
   participantResponseCount: z.number(),
-  averageResponseLength: z.number(),
   durationMinutes: z.number(),
   followUpDepth: z.number(),
   engagementLevel: z.enum(["high", "medium", "low"]),
@@ -610,7 +609,6 @@ export function calculateConversationMetrics(
 ): {
   messageCount: number;
   participantResponseCount: number;
-  averageResponseLength: number;
   followUpDepth: number;
   durationMinutes: number;
 } {
@@ -650,10 +648,6 @@ export function calculateConversationMetrics(
   return {
     messageCount: messages.length,
     participantResponseCount: participantMessages.length,
-    averageResponseLength:
-      participantMessages.length > 0
-        ? Math.round(totalWords / participantMessages.length)
-        : 0,
     followUpDepth: maxFollowUpDepth,
     durationMinutes: Math.round(durationMinutes * 10) / 10,
   };
@@ -1132,9 +1126,19 @@ export function createFallbackConversationInsights(
   }>,
   rawSummary: string
 ): ConversationInsightData {
+  const participantMessages = messages.filter((m) => m.role === "user");
+  const totalWords = participantMessages.reduce(
+    (sum, m) => sum + m.content.split(/\s+/).length,
+    0
+  );
+  const avgResponseLength =
+    participantMessages.length > 0
+      ? Math.round(totalWords / participantMessages.length)
+      : 0;
+
   const metrics = calculateConversationMetrics(messages);
   const engagementLevel = determineEngagementLevel(
-    metrics.averageResponseLength,
+    avgResponseLength,
     metrics.followUpDepth,
     metrics.participantResponseCount
   );
@@ -1436,18 +1440,15 @@ export function aggregateConversationInsights(
       completedConversations: 0,
       completionRate: 0,
       averageMessagesPerConversation: 0,
-      averageResponseLength: 0,
       averageFollowUpDepth: 0,
       medianDurationMinutes: 0,
       insightQualityScore: 0,
       responseEngagementDistribution: { high: 0, medium: 0, low: 0 },
-      topicCoverageRate: 0,
     };
   }
 
   const engagementCounts = { high: 0, medium: 0, low: 0 };
   let totalMessages = 0;
-  let totalResponseLength = 0;
   let totalFollowUpDepth = 0;
   let totalQuality = 0;
   const durations: number[] = [];
@@ -1455,7 +1456,6 @@ export function aggregateConversationInsights(
   for (const insight of conversationInsights) {
     engagementCounts[insight.engagementLevel]++;
     totalMessages += insight.messageCount;
-    totalResponseLength += insight.averageResponseLength;
     totalFollowUpDepth += insight.followUpDepth;
     totalQuality += insight.responseQuality;
     durations.push(insight.durationMinutes);
@@ -1475,7 +1475,6 @@ export function aggregateConversationInsights(
     completedConversations: total,
     completionRate: 100,
     averageMessagesPerConversation: Math.round(totalMessages / total),
-    averageResponseLength: Math.round(totalResponseLength / total),
     averageFollowUpDepth: Math.round((totalFollowUpDepth / total) * 10) / 10,
     medianDurationMinutes: Math.round(medianDuration * 10) / 10,
     insightQualityScore: Math.round((totalQuality / total) * 10) / 10,

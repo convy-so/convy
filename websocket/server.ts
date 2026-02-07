@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 
 import { createServer, IncomingMessage } from "http";
 import { WebSocketServer, WebSocket } from "ws";
@@ -26,7 +25,7 @@ import { SurveyResponseVoiceHandler } from "./handlers/survey-response-voice";
 import { SampleSurveyVoiceHandler } from "./handlers/sample-survey-voice";
 import { AnalyticsHandler } from "./handlers/analytics";
 import { getRedisSubscriber } from "@/lib/redis";
-import { warmupGreetings } from "@/lib/voice/google-tts";
+import { warmupGreetings } from "@/lib/voice/deepgram-tts";
 
 /**
  * WebSocket Server for Voice-Enabled Surveys

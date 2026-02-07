@@ -76,11 +76,10 @@ export async function transcodeWebmToPCM(
 
       // Configure ffmpeg for transcoding
       ffmpeg(inputStream)
-        .inputFormat("webm") // Input format
-        .audioCodec("pcm_s16le") // Output codec: PCM 16-bit little-endian
-        .audioChannels(AUDIO_CONFIG.CHANNELS) // Mono
-        .audioFrequency(AUDIO_CONFIG.SAMPLE_RATE) // 16kHz
-        .format("s16le") // Raw PCM output format
+        .inputFormat("webm")
+        .audioChannels(AUDIO_CONFIG.CHANNELS) 
+        .audioFrequency(AUDIO_CONFIG.SAMPLE_RATE) 
+        .format("s16le")
         .on("error", (err: Error) => {
           console.error("[Audio Transcoding] Error:", err);
           resolve({
@@ -198,6 +197,5 @@ export class AudioTranscoder {
  * Estimate transcoding time (usually very fast, <50ms for small chunks)
  */
 export function estimateTranscodingTime(inputSizeBytes: number): number {
-  // Rough estimate: ~0.1ms per KB
   return (inputSizeBytes / 1024) * 0.1;
 }

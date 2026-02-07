@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Plus, Building2, User, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getUserWorkspaces, getActiveWorkspace, setActiveWorkspace } from "@/app/actions/workspace";
+import { setActiveWorkspace } from "@/app/actions/workspace";
+import { fetchWorkspaces, fetchActiveWorkspace } from "@/lib/api/workspace";
+import { queryKeys } from "@/lib/query-keys";
 import { CreateWorkspaceModal } from "./create-workspace-modal";
 
 type Workspace = {
@@ -16,42 +19,28 @@ type Workspace = {
 
 export function WorkspaceSwitcher() {
     const [isOpen, setIsOpen] = useState(false);
-    const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-    const [activeWorkspace, setActiveWorkspaceState] = useState<Workspace | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
     const [isSwitching, setIsSwitching] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
 
-    useEffect(() => {
-        async function loadWorkspaces() {
-            try {
-                const [workspacesResult, activeResult] = await Promise.all([
-                    getUserWorkspaces(),
-                    getActiveWorkspace(),
-                ]);
+    // Fetch workspaces using React Query
+    const { data: workspaces = [], isLoading: isLoadingWorkspaces } = useQuery({
+        queryKey: queryKeys.workspaces.all,
+        queryFn: fetchWorkspaces,
+    });
 
-                if (workspacesResult.success) {
-                    setWorkspaces(workspacesResult.data);
-                }
-                if (activeResult.success) {
-                    setActiveWorkspaceState(activeResult.data);
-                }
-            } catch (error) {
-                console.error("Failed to load workspaces:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        }
+    // Fetch active workspace using React Query
+    const { data: activeWorkspace = null, isLoading: isLoadingActive } = useQuery({
+        queryKey: queryKeys.workspaces.active,
+        queryFn: fetchActiveWorkspace,
+    });
 
-        loadWorkspaces();
-    }, []);
+    const isLoading = isLoadingWorkspaces || isLoadingActive;
 
     const handleSwitchWorkspace = async (workspace: Workspace | null) => {
         setIsSwitching(true);
         try {
             const result = await setActiveWorkspace(workspace?.id || null);
             if (result.success) {
-                setActiveWorkspaceState(workspace);
                 // Refresh the page to update content
                 window.location.reload();
             }

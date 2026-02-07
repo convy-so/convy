@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { 
   Users, 
   Shield, 
@@ -16,12 +17,11 @@ import { useAuth } from "@/components/providers/auth-provider";
 import toast from "react-hot-toast";
 import { TeamMemberList } from "@/components/dashboard/team-member-list";
 import { 
-  getWorkspaceMembers, 
-  getActiveWorkspace, 
-  getWorkspaceInvitations,
   deleteWorkspace,
   leaveWorkspace
 } from "@/app/actions/workspace";
+import { fetchActiveWorkspace, fetchWorkspaceMembers, fetchWorkspaceInvitations } from "@/lib/api/workspace";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 
 type TeamMember = {
@@ -38,67 +38,60 @@ type TeamMember = {
 
 export default function TeamPage() {
   const { user } = useAuth();
-  const [activeWorkspace, setActiveWorkspace] = useState<{
-    id: string;
-    name: string;
-    slug: string;
-    role: string;
-    logo?: string | null;
-    plan?: string | null;
-  } | null>(null);
-  const [members, setMembers] = useState<TeamMember[]>([]);
-  const [pendingInvites, setPendingInvites] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  async function loadTeamData() {
-    try {
-      const workspaceResult = await getActiveWorkspace();
-      
-      if (workspaceResult.success && workspaceResult.data) {
-        setActiveWorkspace(workspaceResult.data);
-        
-        const [membersResult, invitationsResult] = await Promise.all([
-          getWorkspaceMembers({ organizationId: workspaceResult.data.id }),
-          getWorkspaceInvitations(workspaceResult.data.id)
-        ]);
-        
-        if (membersResult.success) {
-          const transformedMembers = membersResult.data.map((m: any) => ({
-            ...m,
-            role: m.role as "owner" | "member"
-          }));
-          setMembers(transformedMembers);
-        }
+  // Fetch active workspace first
+  const { data: activeWorkspace, isLoading: isLoadingWorkspace } = useQuery({
+    queryKey: queryKeys.workspaces.active,
+    queryFn: fetchActiveWorkspace,
+  });
 
-        if (invitationsResult.success) {
-            setPendingInvites(invitationsResult.data.map((i: any) => ({
-                id: i.id,
-                email: i.email,
-                role: i.role,
-                status: i.status === "pending" ? "pending" : "expired",
-                createdAt: new Date(i.createdAt).toLocaleDateString()
-            })));
-        }
-      }
-    } catch (error) {
-      console.error("Failed to load team data:", error);
-    } finally {
-      setIsLoading(false);
+  // Dependent query: Fetch members only when workspace is available
+  const { data: membersData = [], isLoading: isLoadingMembers } = useQuery({
+    queryKey: queryKeys.workspaces.members(activeWorkspace?.id || ''),
+    queryFn: () => fetchWorkspaceMembers(activeWorkspace!.id),
+    enabled: !!activeWorkspace?.id,
+    select: (data) => data.map((m: any) => ({
+      ...m,
+      role: m.role as "owner" | "member"
+    })),
+  });
+
+  // Dependent query: Fetch invitations only when workspace is available
+  const { data: pendingInvites = [], isLoading: isLoadingInvites } = useQuery({
+    queryKey: queryKeys.workspaces.invitations(activeWorkspace?.id || ''),
+    queryFn: () => fetchWorkspaceInvitations(activeWorkspace!.id),
+    enabled: !!activeWorkspace?.id,
+    select: (data) => data.map((i: any) => ({
+      id: i.id,
+      email: i.email,
+      role: i.role,
+      status: (i.status === "pending" ? "pending" : "expired") as "pending" | "expired",
+      createdAt: new Date(i.createdAt).toLocaleDateString()
+    })),
+  });
+
+  const members = membersData;
+  const isLoading = isLoadingWorkspace || isLoadingMembers || isLoadingInvites;
+
+  // Function for refreshing team data (for backwards compatibility)
+  const loadTeamData = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.active });
+    if (activeWorkspace?.id) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.members(activeWorkspace.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.invitations(activeWorkspace.id) });
     }
-  }
-
-  useEffect(() => {
-    loadTeamData();
-  }, []);
+  };
 
   const handleMemberRemoved = (id: string) => {
-    // Check if memberIdOrEmail was passed (it could be email for invites or userId for members)
-    setMembers(prev => prev.filter(m => m.userId !== id && m.user?.id !== id));
-    // Also clear from pending if it was an invite
-    setPendingInvites(prev => prev.filter(i => i.id !== id && i.email !== id));
+    // Invalidate queries to refresh data
+    if (activeWorkspace?.id) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.members(activeWorkspace.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.invitations(activeWorkspace.id) });
+    }
     toast.success("Member removed");
   };
 

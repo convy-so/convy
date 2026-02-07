@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { MessageSquare, Loader2, AlertCircle, ArrowRight, Clock, Users } from "lucide-react";
+import { Loader2, AlertCircle, ArrowRight} from "lucide-react";
 import Link from "next/link";
 
 interface Survey {
@@ -95,72 +95,60 @@ export default function ShareableSurveyPage() {
   const isFull = survey.currentParticipants >= survey.participantLimit;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-gray-900 to-gray-800 p-6 text-white">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 bg-white/10 backdrop-blur rounded-xl flex items-center justify-center">
-              <MessageSquare className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-300">Conversational Survey</p>
-              <h1 className="text-xl font-bold">{survey.title}</h1>
-            </div>
-          </div>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans selection:bg-gray-900 selection:text-white">
+      {/* Background decoration */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-full blur-3xl opacity-50" />
+      </div>
+
+      <div className="relative w-full max-w-lg">
+        <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-[0_20px_40px_-12px_rgba(0,0,0,0.1)] border border-white/50 p-8 md:p-12 text-center">
           
-          {survey.additionalContext && (
-            <p className="text-gray-300 text-sm leading-relaxed">
+          {/* Logo */}
+          <div className="w-16 h-16 bg-gray-900 rounded-2xl flex items-center justify-center mx-auto mb-8 shadow-lg shadow-gray-900/20">
+            <img
+              src="/logo.svg"
+              alt="Convy Logo"
+              width={32}
+              height={32}
+              className="w-8 h-8 object-contain invert"
+            />
+          </div>
+
+          {/* Title */}
+          <h1 className="text-3xl font-bold text-gray-900 tracking-tight mb-4 text-balance">
+            {survey.title}
+          </h1>
+
+          {/* Description */}
+          {survey.objective?.description ? (
+             <p className="text-gray-500 text-lg leading-relaxed mb-10 text-balance">
+              {survey.objective.description}
+            </p>
+          ) : survey.additionalContext ? (
+            <p className="text-gray-500 text-lg leading-relaxed mb-10 text-balance">
               {survey.additionalContext}
             </p>
-          )}
-        </div>
-
-        {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Survey Info */}
-          {survey.objective?.description && (
-            <div>
-              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                About this survey
-              </h3>
-              <p className="text-gray-700">{survey.objective.description}</p>
-            </div>
+          ) : (
+             <div className="mb-10" />
           )}
 
-          {/* Stats */}
-          <div className="flex items-center gap-6 text-sm text-gray-500">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              <span>~5 min</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              <span>{survey.currentParticipants} / {survey.participantLimit} responses</span>
-            </div>
-          </div>
-
-          {/* CTA */}
+          {/* Action */}
           {isFull ? (
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-              <p className="text-amber-800 font-medium">
-                This survey has reached its participant limit.
+            <div className="p-4 bg-gray-100 rounded-2xl border border-gray-200">
+              <p className="text-gray-600 font-medium">
+                Partipation limit reached.
               </p>
             </div>
           ) : (
             <Link
               href={`/s/${shareableLink}/respond`}
-              className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+              className="group relative w-full flex items-center justify-center gap-2 px-8 py-4 bg-gray-900 text-white rounded-2xl font-semibold text-lg hover:bg-black transition-all duration-300 shadow-xl shadow-gray-900/10 hover:shadow-gray-900/20 hover:-translate-y-0.5 active:translate-y-0"
             >
-              Start Survey
-              <ArrowRight className="w-5 h-5" />
+              Start Conversation
+              <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
             </Link>
           )}
-
-          {/* Footer note */}
-          <p className="text-center text-xs text-gray-400">
-            Your responses are anonymous and will help improve our services.
-          </p>
         </div>
       </div>
     </div>

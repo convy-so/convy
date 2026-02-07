@@ -6,7 +6,7 @@ import {
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { getCachedGreeting, getGreetingText, GREETING_TEXTS } from "@/lib/voice/google-tts";
+import { getCachedGreeting, getGreetingText, GREETING_TEXTS } from "@/lib/voice/deepgram-tts";
 import {
   getSurveyCreationSystemPrompt,
   getSurveyDataExtractionPrompt,

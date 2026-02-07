@@ -17,7 +17,7 @@ export async function POST(
         const session = await getVerifiedSession();
         const { surveyId } = await params;
         const body = await request.json();
-        const { title, description } = body as { title?: string; description?: string };
+        const { title, description, isVoice } = body as { title?: string; description?: string, isVoice?: boolean };
 
         const [survey] = await db
             .select()
@@ -51,11 +51,14 @@ export async function POST(
             updatedAt: new Date(),
         };
 
-        // Apply title from request or from extracted data
         if (title) {
             updateData.title = title;
         } else if (extractedData.title) {
             updateData.title = extractedData.title;
+        }
+
+        if (typeof isVoice === "boolean") {
+            updateData.isVoice = isVoice;
         }
 
         // Apply description
