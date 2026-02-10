@@ -8,6 +8,11 @@ import { getRedisClient } from "@/lib/redis";
  * Initiates Slack OAuth flow
  */
 export async function GET(req: NextRequest) {
+  // TEMPORARY: Slack integration is disabled
+  return NextResponse.redirect(
+    `${process.env.BETTER_AUTH_URL}/dashboard/integrations?slack_error=Feature temporarily disabled. Coming soon!`
+  );
+  
   try {
     const session = await getVerifiedSession();
 

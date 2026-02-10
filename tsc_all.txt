@@ -1,0 +1,73 @@
+.next/dev/types/validator.ts(53,39): error TS2307: Cannot find module '../../../app/(auth)/forgot-password/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(62,39): error TS2307: Cannot find module '../../../app/(auth)/reset-password/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(71,39): error TS2307: Cannot find module '../../../app/(auth)/sign-in/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(80,39): error TS2307: Cannot find module '../../../app/(auth)/sign-up/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(89,39): error TS2307: Cannot find module '../../../app/(auth)/verify-email/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(98,39): error TS2307: Cannot find module '../../../app/(auth)/workspace/accept-invitation/[id]/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(107,39): error TS2307: Cannot find module '../../../app/(dashboard)/dashboard/analytics/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(116,39): error TS2307: Cannot find module '../../../app/(dashboard)/dashboard/create/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(125,39): error TS2307: Cannot find module '../../../app/(dashboard)/dashboard/integrations/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(134,39): error TS2307: Cannot find module '../../../app/(dashboard)/dashboard/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(143,39): error TS2307: Cannot find module '../../../app/(dashboard)/dashboard/profile/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(152,39): error TS2307: Cannot find module '../../../app/(dashboard)/dashboard/projects/[projectId]/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(161,39): error TS2307: Cannot find module '../../../app/(dashboard)/dashboard/projects/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(170,39): error TS2307: Cannot find module '../../../app/(dashboard)/dashboard/settings/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(179,39): error TS2307: Cannot find module '../../../app/(dashboard)/dashboard/surveys/[surveyId]/analytics/conversations/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(188,39): error TS2307: Cannot find module '../../../app/(dashboard)/dashboard/surveys/[surveyId]/analytics/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(197,39): error TS2307: Cannot find module '../../../app/(dashboard)/dashboard/surveys/[surveyId]/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(206,39): error TS2307: Cannot find module '../../../app/(dashboard)/dashboard/surveys/[surveyId]/responses/[responseId]/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(215,39): error TS2307: Cannot find module '../../../app/(dashboard)/dashboard/surveys/[surveyId]/sample-review/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(224,39): error TS2307: Cannot find module '../../../app/(dashboard)/dashboard/surveys/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(233,39): error TS2307: Cannot find module '../../../app/(dashboard)/dashboard/team/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(242,39): error TS2307: Cannot find module '../../../app/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(251,39): error TS2307: Cannot find module '../../../app/s/[shareableLink]/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(260,39): error TS2307: Cannot find module '../../../app/s/[shareableLink]/respond/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(269,39): error TS2307: Cannot find module '../../../app/settings/zapier/page.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(486,31): error TS2344: Type 'typeof import("C:/Users/pc/convy/app/api/surveys/[surveyId]/sample/feedback/route")' does not satisfy the constraint 'RouteHandlerConfig<"/api/surveys/[surveyId]/sample/feedback">'.
+  Types of property 'POST' are incompatible.
+    Type '(req: NextRequest, { params }: { params: { surveyId: string; }; }) => Promise<NextResponse<unknown>>' is not assignable to type '(request: NextRequest, context: { params: Promise<{ surveyId: string; }>; }) => void | Response | Promise<void | Response>'.
+      Types of parameters '__1' and 'context' are incompatible.
+        Type '{ params: Promise<{ surveyId: string; }>; }' is not assignable to type '{ params: { surveyId: string; }; }'.
+          Types of property 'params' are incompatible.
+            Property 'surveyId' is missing in type 'Promise<{ surveyId: string; }>' but required in type '{ surveyId: string; }'.
+.next/dev/types/validator.ts(597,39): error TS2307: Cannot find module '../../../app/(auth)/layout.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(606,39): error TS2307: Cannot find module '../../../app/(dashboard)/layout.js' or its corresponding type declarations.
+.next/dev/types/validator.ts(615,39): error TS2307: Cannot find module '../../../app/layout.js' or its corresponding type declarations.
+app/[locale]/(auth)/forgot-password/page.tsx(23,24): error TS2551: Property 'forgetPassword' does not exist on type '{ useActiveOrganization: () => { data: Prettify<{ id: string; name: string; slug: string; createdAt: Date; logo?: string | null | undefined; metadata?: any; } & { members: { id: string; organizationId: string; role: "admin" | ... 1 more ... | "owner"; createdAt: Date; userId: string; user: { ...; }; }[]; invitations...'. Did you mean 'resetPassword'?
+app/[locale]/(auth)/forgot-password/page.tsx(30,21): error TS7006: Parameter 'ctx' implicitly has an 'any' type.
+app/[locale]/layout.tsx(6,23): error TS2307: Cannot find module '../../providers' or its corresponding type declarations.
+app/[locale]/s/[shareableLink]/respond/page.tsx(12,10): error TS2300: Duplicate identifier 'MediaDisplay'.
+app/[locale]/s/[shareableLink]/respond/page.tsx(13,10): error TS2300: Duplicate identifier 'MediaDisplay'.
+app/[locale]/s/[shareableLink]/respond/page.tsx(144,21): error TS2339: Property 'language' does not exist on type 'Survey'.
+app/[locale]/s/[shareableLink]/respond/page.tsx(144,40): error TS2339: Property 'language' does not exist on type 'Survey'.
+app/[locale]/s/[shareableLink]/respond/page.tsx(151,97): error TS2339: Property 'language' does not exist on type 'Survey'.
+app/[locale]/s/[shareableLink]/respond/page.tsx(176,9): error TS1117: An object literal cannot have multiple properties with the same name.
+app/[locale]/s/[shareableLink]/respond/page.tsx(181,9): error TS2353: Object literal may only specify known properties, and 'initialMessages' does not exist in type 'UseChatOptions<UIMessage<unknown, UIDataTypes, UITools>>'.
+app/actions/analytics.ts(439,9): error TS2322: Type 'CoreMetrics | { totalConversations: number; completedConversations: number; completionRate: number; averageMessagesPerConversation: number; averageResponseLength: number; ... 5 more ...; requiredQuestionsCompletion: never[]; }' is not assignable to type 'CoreMetrics'.
+  Object literal may only specify known properties, and 'topicCoverageRate' does not exist in type 'CoreMetrics'.
+app/actions/survey-creation.ts(300,11): error TS2322: Type '"en" | "fr" | "de" | "es" | "it"' is not assignable to type '"en" | "fr" | "de"'.
+  Type '"es"' is not assignable to type '"en" | "fr" | "de"'.
+app/api/notion/auth/route.ts(48,43): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+app/api/notion/auth/route.ts(51,46): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+app/api/notion/callback/route.ts(69,30): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+app/api/slack/auth/route.ts(45,43): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+app/api/slack/auth/route.ts(50,46): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+app/api/slack/callback/route.ts(67,30): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+app/api/slack/callback/route.ts(98,33): error TS2345: Argument of type '{ client_id: string; client_secret: string; code: string | null; redirect_uri: string; }' is not assignable to parameter of type 'string | Record<string, string> | URLSearchParams | string[][] | undefined'.
+  Types of property 'code' are incompatible.
+    Type 'string | null' is not assignable to type 'string | undefined'.
+      Type 'null' is not assignable to type 'string | undefined'.
+app/api/surveys/[surveyId]/analytics/conversations/route.ts(82,15): error TS2322: Type '{ conversationId: string; createdAt: Date; summary: string; keyFindings: string[]; messageCount: number; participantResponseCount: number; averageResponseLength: number; durationMinutes: number; ... 10 more ...; mediaInteractions: MediaInteraction[]; }' is not assignable to type 'ConversationInsightData & { createdAt: Date; }'.
+  Property 'activeDurationMinutes' is missing in type '{ conversationId: string; createdAt: Date; summary: string; keyFindings: string[]; messageCount: number; participantResponseCount: number; averageResponseLength: number; durationMinutes: number; ... 10 more ...; mediaInteractions: MediaInteraction[]; }' but required in type 'ConversationInsightData'.
+app/api/surveys/[surveyId]/analytics/conversations/route.ts(281,3): error TS2741: Property 'activeDurationMinutes' is missing in type '{ conversationId: string; summary: string; keyFindings: string[]; messageCount: number; participantResponseCount: number; averageResponseLength: number; durationMinutes: number; followUpDepth: number; ... 9 more ...; mediaInteractions: MediaInteraction[]; }' but required in type 'ConversationInsightData'.
+app/api/webhooks/coinbase/route.ts(71,44): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'BinaryLike | KeyObject'.
+  Type 'undefined' is not assignable to type 'BinaryLike | KeyObject'.
+app/api/webhooks/lemonsqueezy/route.ts(143,13): error TS1117: An object literal cannot have multiple properties with the same name.
+i18n/routing.ts(2,10): error TS2305: Module '"next-intl/navigation"' has no exported member 'createSharedPathnamesNavigation'.
+lib/billing/coinbase.ts(25,22): error TS18048: 'env.COINBASE_CDP_API_KEY_PRIVATE_KEY' is possibly 'undefined'.

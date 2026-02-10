@@ -16,6 +16,11 @@ import { initializeNotionStructure } from "@/lib/notion-oauth";
 import { getRedisClient } from "@/lib/redis";
 
 export async function GET(req: NextRequest) {
+  // TEMPORARY: Notion integration is disabled
+  return NextResponse.redirect(
+    `${process.env.BETTER_AUTH_URL}/dashboard/integrations?notion_error=Feature temporarily disabled. Coming soon!`
+  );
+  
   try {
     const session = await getVerifiedSession();
 

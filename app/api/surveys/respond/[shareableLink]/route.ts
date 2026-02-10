@@ -20,6 +20,10 @@ export async function GET(
 ) {
     try {
         const { shareableLink } = await params;
+        const { searchParams } = new URL(request.url);
+        const existingConversationId = searchParams.get('conversationId');
+        const languageParam = searchParams.get('language');
+        const language = (['en', 'fr', 'de', 'es', 'it'].includes(languageParam || '')) ? languageParam as any : undefined;
 
         // Get survey by shareable link (fetch full record for config building)
         const [survey] = await db
@@ -33,6 +37,44 @@ export async function GET(
 
         if (survey.status !== "active") {
             return NextResponse.json({ error: "Survey is not active" }, { status: 403 });
+        }
+
+        // Handle resumption if conversationId is provided
+        if (existingConversationId) {
+            const [existingConversation] = await db
+                .select()
+                .from(surveyConversations)
+                .where(eq(surveyConversations.id, existingConversationId));
+
+            if (existingConversation && existingConversation.surveyId === survey.id) {
+                // If already completed, signal client
+                if (existingConversation.completed) {
+                    return NextResponse.json({
+                        completed: true,
+                        survey: {
+                            title: survey.title,
+                            isVoice: survey.isVoice
+                        }
+                    });
+                }
+
+                // If incomplete, resume
+                return NextResponse.json({
+                    survey: {
+                        id: survey.id,
+                        title: survey.title,
+                        objective: survey.objective,
+                        targetAudience: survey.targetAudience,
+                        tone: survey.tone,
+                        requiredQuestions: survey.requiredQuestions || [],
+                        isVoice: survey.isVoice,
+                        media: survey.media,
+                    },
+                    conversationId: existingConversation.id,
+                    participantId: existingConversation.participantId,
+                    messages: existingConversation.rawConversation || [], // Resume history
+                });
+            }
         }
 
         if (survey.currentParticipants >= survey.participantLimit) {
@@ -55,7 +97,7 @@ export async function GET(
         );
 
         // Generate the AI's opening greeting
-        const systemPrompt = ConversationManager.getSystemPrompt(surveyConfig, initialContext);
+        const systemPrompt = ConversationManager.getSystemPrompt(surveyConfig, initialContext, { language });
 
         const greetingResult = await generateText({
             model: flashLiteModel,  // Use lite for simple greeting
@@ -116,7 +158,7 @@ export async function POST(
 ) {
     try {
         const body = await req.json();
-        const { messages, context } = body;
+        const { messages, context, language } = body;
         const { shareableLink } = await params;
 
         // Fetch survey by shareable link
@@ -149,7 +191,7 @@ export async function POST(
             surveyConfig
         );
 
-        const systemPrompt = ConversationManager.getSystemPrompt(surveyConfig, rollingContext);
+        const systemPrompt = ConversationManager.getSystemPrompt(surveyConfig, rollingContext, { language });
 
         // Define tools but don't use side-channel callback for media since we'll receive it in tool results
         const tools = ConversationManager.getTools(surveyConfig, () => {

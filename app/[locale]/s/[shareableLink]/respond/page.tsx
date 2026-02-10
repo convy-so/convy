@@ -4,13 +4,17 @@ import { clientEnv } from "@/lib/env.client";
 
 import { useState, useRef, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { Mic, MicOff, CheckCircle, AlertCircle, Send, Loader2 } from "lucide-react";
+import { Mic, MicOff, CheckCircle, AlertCircle, Send, Loader2, User, Sparkles, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, UIMessage } from "ai";
 import { MediaDisplay } from "@/components/surveys/media-display";
+
 import { useQuery } from "@tanstack/react-query";
+import { useLocale, useTranslations } from "next-intl";
+import { usePathname, useRouter } from "@/i18n/routing";
+import { Globe } from "lucide-react";
 
 interface Survey {
     id: string;
@@ -20,6 +24,7 @@ interface Survey {
     tone?: string;
     isVoice?: boolean;
     media?: any[];
+    language?: "en" | "fr" | "de" | "es" | "it";
 }
 
 interface InitialGreeting {
@@ -32,7 +37,9 @@ interface SurveyInitResponse {
     survey: Survey;
     conversationId: string;
     participantId: string;
-    initialGreeting: InitialGreeting;
+    initialGreeting?: InitialGreeting;
+    messages?: any[];
+    completed?: boolean;
 }
 
 interface MessageWithTools {
@@ -50,8 +57,12 @@ interface MessageWithTools {
     }>;
 }
 
-async function initializeSurvey(shareableLink: string): Promise<SurveyInitResponse> {
-    const response = await fetch(`/api/surveys/respond/${shareableLink}`);
+async function initializeSurvey(shareableLink: string, conversationId?: string | null): Promise<SurveyInitResponse> {
+    const url = conversationId 
+        ? `/api/surveys/respond/${shareableLink}?conversationId=${conversationId}`
+        : `/api/surveys/respond/${shareableLink}`;
+    
+    const response = await fetch(url);
     
     if (!response.ok) {
         if (response.status === 404) {
@@ -70,6 +81,10 @@ async function initializeSurvey(shareableLink: string): Promise<SurveyInitRespon
 export default function SurveyRespondPage() {
     const params = useParams();
     const shareableLink = params.shareableLink as string;
+    const locale = useLocale();
+    const router = useRouter();
+    const pathname = usePathname();
+    const t = useTranslations("Survey.Response");
 
     const { 
         data: initData, 
@@ -77,35 +92,92 @@ export default function SurveyRespondPage() {
         error: initError 
     } = useQuery({
         queryKey: ['survey-respond', shareableLink],
-        queryFn: () => initializeSurvey(shareableLink),
+        queryFn: () => {
+            // Check for existing session
+            let storedConversationId = null;
+            if (typeof window !== 'undefined') {
+                try {
+                    const stored = localStorage.getItem(`convy_session_${shareableLink}`);
+                    if (stored) {
+                        storedConversationId = JSON.parse(stored).conversationId;
+                    }
+                } catch (e) {
+                    console.error("Failed to parse stored session", e);
+                }
+            }
+            return initializeSurvey(shareableLink, storedConversationId);
+        },
         enabled: !!shareableLink,
         staleTime: Infinity, 
         retry: false, 
     });
     
+    // Save session when initialized
+    useEffect(() => {
+        if (initData?.conversationId && initData?.participantId) {
+            localStorage.setItem(`convy_session_${shareableLink}`, JSON.stringify({
+                conversationId: initData.conversationId,
+                participantId: initData.participantId
+            }));
+        }
+    }, [initData, shareableLink]);
+
     const survey = initData?.survey ?? null;
     const conversationId = initData?.conversationId ?? null;
     const initialGreeting = initData?.initialGreeting ?? null;
+    const resumedMessages = initData?.messages ?? [];
+    const initiallyCompleted = initData?.completed ?? false;
     const apiEndpoint = `/api/surveys/respond/${shareableLink}`;
 
     // State declarations - must be before hooks that reference them
     const [input, setInput] = useState("");
     const [isCompleted, setIsCompleted] = useState(false);
+    
+    // Sync completion state from API
+    useEffect(() => {
+        if (initiallyCompleted) {
+            setIsCompleted(true);
+        }
+    }, [initiallyCompleted]);
+
+    // Redirect to survey language if different from current locale on first load
+    useEffect(() => {
+        if (survey?.language && survey.language !== locale) {
+             const storageKey = `convy_redirected_${shareableLink}`;
+             // Only redirect if we haven't already redirected for this session
+             const hasRedirected = sessionStorage.getItem(storageKey);
+             
+             if (!hasRedirected) {
+                 sessionStorage.setItem(storageKey, 'true');
+                 router.replace({ pathname, query: { shareableLink } } as any, { locale: survey.language as any });
+             }
+        }
+    }, [survey, locale, shareableLink, pathname, router]);
+
     const [isVoiceMode, setIsVoiceMode] = useState(false);
     const [showTranscript, setShowTranscript] = useState(true);
+
+    // Prepare initial messages for useChat
+    const initialChatMessages = resumedMessages.length > 0
+        ? resumedMessages.map((msg: any, i) => ({
+            id: msg.id || `msg-${i}`,
+            role: msg.role as "system" | "user" | "assistant" | "data",
+            parts: msg.parts || (msg.content ? [{ type: 'text', text: msg.content }] : []),
+        }))
+        : initialGreeting ? [{
+            id: "greeting-" + Date.now(),
+            role: "assistant" as const,
+            parts: [{ type: 'text', text: initialGreeting.content }],
+        }] : [];
 
     // useChat hook - only meaningful after initialization (AI SDK v6)
     const { messages, setMessages: originalSetMessages, status, sendMessage } = useChat({
         id: conversationId ?? "pending",
         transport: new DefaultChatTransport({
             api: apiEndpoint,
-            body: { conversationId },
+            body: { conversationId, language: locale },
         }),
-        messages: initialGreeting ? [{
-            id: "greeting-" + Date.now(),
-            role: "assistant" as const,
-            parts: [{ type: 'text', text: initialGreeting.content }],
-        }] : [],
+        messages: initialChatMessages as any, // Cast to avoid strict type issues with mapped messages
         onFinish: ({ message }: { message: UIMessage }) => {
             // Check for explicit tool calls (robust detection)
             const hasToolCompletion = (message as MessageWithTools).toolInvocations?.some(
@@ -151,9 +223,14 @@ export default function SurveyRespondPage() {
     const isChatLoading = status === "streaming" || status === "submitted";
 
     // Voice WebSocket Integration
+    const wsUrl = `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-response?surveyId=${shareableLink}&language=${locale}`;
+    console.log("[Survey Page] WS URL:", wsUrl);
+    console.log("[Survey Page] Survey State:", { isVoice: survey?.isVoice, isVoiceMode, isCompleted });
+
     const voiceWs = useVoiceWebSocket({
-        url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-response?surveyId=${shareableLink}`,
+        url: wsUrl,
         onMessage: (data) => {
+            // ... (keep existing handler)
             if (data.type === "audio_sent" || data.type === "text_response") {
                 const assistantMessage = {
                     id: Date.now().toString(),
@@ -167,11 +244,8 @@ export default function SurveyRespondPage() {
                     setIsCompleted(true);
                 }
             } else if (data.type === "transcription" && data.isFinal) {
-                // Don't send messages if survey is completed
                 if (isCompleted) return;
                 
-                // In AI SDK v6, user messages should be sent via sendMessage, not added directly
-                // This will properly handle the message flow through the chat system
                 if (data.text && data.text.trim()) {
                     sendMessage({ text: data.text });
                 }
@@ -181,7 +255,7 @@ export default function SurveyRespondPage() {
                     setMessages((prev) => [...prev, {
                         id: Date.now().toString(),
                         role: "assistant" as const,
-                        parts: [{ type: 'text' as const, text: "Shared media" }],
+                        parts: [{ type: 'text' as const, text: t("sharedMedia") }],
                         media: fullMedia
                     }]);
                 }
@@ -196,12 +270,34 @@ export default function SurveyRespondPage() {
 
     // Auto-enable voice mode if survey is voice-based
     useEffect(() => {
+        console.log("[Survey Page] Voice Effect Triggered:", { 
+            hasSurvey: !!survey, 
+            isVoice: survey?.isVoice, 
+            currentMode: isVoiceMode 
+        });
+        
         if (survey?.isVoice && !isVoiceMode) {
+            console.log("[Survey Page] Auto-starting voice mode...");
             setIsVoiceMode(true);
             setShowTranscript(false);
-            voiceWs.connect();
+            voiceWs.connect().catch(e => console.error("[Survey Page] Auto-connect failed:", e));
         }
     }, [survey?.isVoice]);
+
+    // Handle language switch behavior
+    useEffect(() => {
+        // If the user hasn't manually switched and survey has a specific language, redirect (optional)
+        // But for now, we'll let the user choose.
+        if (isVoiceMode && voiceWs.status === 'connected') {
+             // Reconnect on language change to ensure correct voice parameters
+             voiceWs.disconnect();
+             setTimeout(() => voiceWs.connect(), 100);
+        }
+    }, [locale]);
+    
+    const handleLanguageChange = (newLocale: string) => {
+        router.replace({ pathname, query: { shareableLink } } as any, { locale: newLocale });
+    };
 
     const toggleVoiceMode = () => {
         const newMode = !isVoiceMode;
@@ -239,7 +335,6 @@ export default function SurveyRespondPage() {
         setInput("");
 
         try {
-            // AI SDK v6: sendMessage expects an object with text property
             await sendMessage({ text: currentInput });
         } catch (error) {
             console.error("Failed to send message:", error);
@@ -255,7 +350,7 @@ export default function SurveyRespondPage() {
                         <div className="w-12 h-12 rounded-full border-4 border-gray-100" />
                         <div className="absolute inset-0 rounded-full border-4 border-gray-900 border-t-transparent animate-spin" />
                     </div>
-                    <p className="text-gray-500 font-medium animate-pulse">Preparing your survey...</p>
+                    <p className="text-gray-500 font-medium animate-pulse">{t("loading")}</p>
                 </div>
             </div>
         );
@@ -270,9 +365,9 @@ export default function SurveyRespondPage() {
                         <AlertCircle className="w-10 h-10 text-red-500" />
                     </div>
                     <h1 className="text-2xl font-bold text-gray-900 mb-3">
-                        {initError instanceof Error ? initError.message : "Failed to load survey"}
+                        {initError instanceof Error ? initError.message : t("notFound")}
                     </h1>
-                    <p className="text-gray-500 text-lg">Please check the link and try again.</p>
+                    <p className="text-gray-500 text-lg">{t("errorHelp")}</p>
                 </div>
             </div>
         );
@@ -287,15 +382,15 @@ export default function SurveyRespondPage() {
                     <div className="w-24 h-24 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg shadow-emerald-500/20">
                         <CheckCircle className="w-12 h-12 text-white" />
                     </div>
-                    <h1 className="text-4xl font-bold text-gray-900 mb-4 tracking-tight">Thank You!</h1>
+                    <h1 className="text-4xl font-bold text-gray-900 mb-4 tracking-tight">{t("thankYou")}</h1>
                     <p className="text-xl text-gray-500 mb-10 leading-relaxed font-light">
-                        Your insights are incredibly valuable. We appreciate you taking the time to share your thoughts with us.
+                        {t("thankYouMessage")}
                     </p>
                     <button
                         onClick={() => window.close()}
-                        className="px-8 py-4 bg-gray-900 text-white rounded-2xl font-semibold hover:bg-gray-800 transition-all hover:shadow-xl hover:-translate-y-1 active:scale-95 w-full"
+                        className="px-8 py-4 bg-gray-900 text-white rounded-2xl font-semibold hover:bg-gray-800 transition-all hover:shadow-md hover:-translate-y-1 active:scale-95 w-full"
                     >
-                        Close Survey
+                        {t("close")}
                     </button>
                 </div>
             </div>
@@ -318,13 +413,17 @@ export default function SurveyRespondPage() {
                 </>
             )}
             <div className={cn(
-                "relative z-10 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl backdrop-blur-sm border border-white/10",
-                isRecording
-                    ? "bg-gradient-to-br from-indigo-600 to-violet-600 scale-110 shadow-indigo-500/50"
-                    : "bg-gray-900 shadow-xl hover:scale-105",
+                "relative z-10 rounded-full flex items-center justify-center transition-all duration-500 shadow-xl backdrop-blur-sm border border-white/10",
+                voiceWs.status === "error"
+                    ? "bg-red-500 shadow-red-500/50"
+                    : isRecording
+                        ? "bg-gradient-to-br from-indigo-600 to-violet-600 scale-110 shadow-indigo-500/30"
+                        : "bg-gray-900 shadow-md hover:scale-105",
                 size === "large" ? "w-32 h-32" : "w-20 h-20"
             )}>
-                {isRecording ? (
+                {voiceWs.status === "error" ? (
+                    <AlertCircle className={cn("text-white", size === "large" ? "w-12 h-12" : "w-8 h-8")} />
+                ) : isRecording ? (
                     <MicOff className={cn("text-white", size === "large" ? "w-12 h-12" : "w-8 h-8")} />
                 ) : (
                     <Mic className={cn("text-white", size === "large" ? "w-12 h-12" : "w-8 h-8")} />
@@ -337,7 +436,7 @@ export default function SurveyRespondPage() {
     return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans selection:bg-gray-900 selection:text-white">
             {/* Main Card */}
-            <div className="w-full max-w-5xl h-[85vh] bg-white rounded-3xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden relative">
+            <div className="w-full max-w-5xl h-[85vh] bg-white rounded-3xl border border-gray-200 shadow-sm flex flex-col overflow-hidden relative">
                 
                 {/* Header */}
                 <header className="bg-white border-b border-gray-100 px-6 py-4 z-10 flex-shrink-0">
@@ -347,47 +446,74 @@ export default function SurveyRespondPage() {
 
                         {/* Centered Logo & Title */}
                         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gray-900 to-gray-700 flex items-center justify-center shadow-lg shadow-gray-900/10">
                                 <img
                                     src="/logo.svg"
                                     alt="Convy Logo"
-                                    width={20}
-                                    height={20}
-                                    className="w-5 h-5 object-contain invert"
+                                    width={32}
+                                    height={32}
+                                    className="w-8 h-8 object-contain"
                                 />
-                            </div>
                             <h1 className="font-bold text-gray-900 tracking-tight text-lg">{survey?.title}</h1>
                         </div>
                         <div className="flex items-center gap-2">
-                            {isVoiceMode && (
-                                <button
-                                    onClick={() => setShowTranscript(!showTranscript)}
-                                    className="px-4 py-2.5 rounded-full text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
-                                >
-                                    {showTranscript ? "Hide Text" : "Show Text"}
-                                </button>
+                            {survey?.isVoice && (
+                                <>
+                                    {isVoiceMode && (
+                                        <button
+                                            onClick={() => setShowTranscript(!showTranscript)}
+                                            className="px-4 py-2.5 rounded-full text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+                                        >
+                                            {showTranscript ? t("hideText") : t("showText")}
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={toggleVoiceMode}
+                                        className={cn(
+                                            "flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300",
+                                            isVoiceMode
+                                                ? "bg-gray-900 text-white shadow-md scale-105"
+                                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                        )}
+                                    >
+                                        {isVoiceMode ? (
+                                            <>
+                                                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                                                {t("voiceMode")}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Mic className="w-4 h-4" />
+                                                {t("tryVoice")}
+                                            </>
+                                        )}
+                                    </button>
+                                </>
                             )}
-                            <button
-                                onClick={toggleVoiceMode}
-                                className={cn(
-                                    "flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300",
-                                    isVoiceMode
-                                        ? "bg-gray-900 text-white shadow-lg scale-105"
-                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                )}
-                            >
-                                {isVoiceMode ? (
-                                    <>
-                                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                                        Voice Mode
-                                    </>
-                                ) : (
-                                    <>
-                                        <Mic className="w-4 h-4" />
-                                        Try Voice
-                                    </>
-                                )}
-                            </button>
+                        </div>
+                        
+                        {/* Language Switcher */}
+                        <div className="ml-4 border-l border-gray-200 pl-4 flex items-center">
+                            <div className="relative group">
+                                <button className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors text-sm font-medium">
+                                    <Globe className="w-4 h-4" />
+                                    <span className="uppercase">{locale}</span>
+                                </button>
+                                <div className="absolute top-full right-0 mt-2 w-32 bg-white rounded-xl shadow-lg border border-gray-100 py-1 hidden group-hover:block z-50 animate-in fade-in zoom-in-95 duration-200">
+                                    {['en', 'fr', 'de', 'es', 'it'].map((l) => (
+                                        <button
+                                            key={l}
+                                            onClick={() => handleLanguageChange(l)}
+                                            className={cn(
+                                                "w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors flex items-center justify-between",
+                                                locale === l ? "text-indigo-600 font-medium" : "text-gray-600"
+                                            )}
+                                        >
+                                            <span className="uppercase">{l}</span>
+                                            {locale === l && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </header>
@@ -399,16 +525,31 @@ export default function SurveyRespondPage() {
                             <div
                                 key={message.id}
                                 className={cn(
-                                    "flex w-full animate-in fade-in slide-in-from-bottom-2 duration-500",
-                                    message.role === "user" ? "justify-end" : "justify-start"
+                                    "flex gap-4 max-w-3xl mx-auto w-full animate-in fade-in slide-in-from-bottom-2",
+                                    message.role === "user" ? "flex-row-reverse" : ""
                                 )}
                             >
                                 <div
                                     className={cn(
-                                        "max-w-[85%] rounded-[2rem] px-8 py-5 text-[1.05rem] leading-relaxed shadow-sm transition-all hover:shadow-md",
-                                        message.role === "user"
-                                            ? "bg-gray-900 text-white rounded-br-none"
-                                            : "bg-white border border-gray-100 text-gray-800 rounded-bl-none shadow-sm"
+                                        "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 border",
+                                        message.role === "assistant"
+                                            ? "bg-white border-gray-200"
+                                            : "bg-black border-transparent"
+                                    )}
+                                >
+                                    {message.role === "assistant" ? (
+                                        <Sparkles className="w-5 h-5 text-indigo-500" />
+                                    ) : (
+                                        <User className="w-5 h-5 text-white" />
+                                    )}
+                                </div>
+
+                                <div
+                                    className={cn(
+                                        "max-w-[85%] rounded-2xl px-6 py-4 border text-[1.05rem] leading-relaxed",
+                                        message.role === "assistant"
+                                            ? "bg-white text-gray-800 border-gray-200"
+                                            : "bg-zinc-900 text-gray-100 border-transparent"
                                     )}
                                 >
                                     <div className="whitespace-pre-wrap">
@@ -451,29 +592,57 @@ export default function SurveyRespondPage() {
                                         <button
                                             onClick={() => {
                                                 if (isCompleted) return; // Prevent recording after completion
+                                                if (voiceWs.status === "error" || voiceWs.status === "disconnected") {
+                                                    voiceWs.connect();
+                                                    return;
+                                                }
                                                 if (voiceWs.isRecording) voiceWs.stopRecording();
                                                 else voiceWs.startRecording();
                                             }}
-                                            disabled={isCompleted}
+                                            disabled={isCompleted || voiceWs.status === "connecting"}
                                             className="group focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
-                                            <VisualizerRing isRecording={voiceWs.isRecording} />
+                                            <VisualizerRing isRecording={voiceWs.isRecording} size={voiceWs.status === "error" ? "large" : "normal"} />
                                         </button>
 
                                         <div className="text-center space-y-2 w-full max-w-lg">
                                             <p className="text-gray-900 font-semibold text-lg tracking-tight">
-                                                {voiceWs.isRecording ? "Listening..." : 
-                                                voiceWs.isPlaying ? "AI Speaking..." : "Tap to speak"}
+                                                {voiceWs.status === "error" ? (
+                                                    <span className="text-red-600">{t("connectionFailed")}</span>
+                                                ) : voiceWs.status === "connecting" ? (
+                                                    t("connecting")
+                                                ) : voiceWs.isRecording ? (
+                                                    t("listening")
+                                                ) : voiceWs.isPlaying ? (
+                                                    t("aiSpeaking")
+                                                ) : (
+                                                    t("tapToSpeak")
+                                                )}
                                             </p>
-                                            <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">
-                                                {voiceWs.status === "connected" ? "AI Ready" : "Connecting..."}
-                                            </p>
+                                            
+                                            {voiceWs.status === "error" ? (
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <p className="text-sm text-red-500 font-medium px-4 py-2 bg-red-50 rounded-lg border border-red-100">
+                                                        {voiceWs.error || "Unable to connect to voice server"}
+                                                    </p>
+                                                    <button 
+                                                        onClick={() => voiceWs.connect()}
+                                                        className="text-xs text-gray-500 underline hover:text-gray-800"
+                                                    >
+                                                        Tap icon to retry
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">
+                                                    {voiceWs.status === "connected" ? t("aiReady") : t("initializing")}
+                                                </p>
+                                            )}
 
                                             {/* Live Transcription Display */}
                                             {voiceWs.isRecording && (voiceWs.transcription || voiceWs.interimTranscription) && (
                                                 <div className="mt-4 bg-gray-50 border border-gray-200 rounded-2xl p-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
                                                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                                                        Live Transcription
+                                                        {t("liveTranscription")}
                                                     </p>
                                                     <p className="text-sm text-gray-900 leading-relaxed text-left">
                                                         {voiceWs.transcription}
@@ -502,9 +671,15 @@ export default function SurveyRespondPage() {
                             </div>
                         ) : (
                             !isCompleted && (
-                            <form onSubmit={handleSubmit} className="relative group">
-                                <div className="relative flex items-end gap-2 bg-white rounded-[2rem] border border-gray-200 p-2 shadow-sm focus-within:shadow-md focus-within:border-gray-300 transition-all">
-                                    <textarea
+                            <div className="max-w-3xl mx-auto">
+                              <form onSubmit={handleSubmit} className="relative group">
+                                  <div className="relative bg-white border border-gray-200 rounded-2xl group-focus-within:border-gray-400 transition-all flex items-end overflow-hidden">
+                                      {/* Placeholder for future attachment button if needed, keeping layout consistent */}
+                                      <div className="p-3 mb-1 ml-1 text-gray-300">
+                                          <Paperclip className="w-5 h-5 opacity-50" />
+                                      </div>
+                                      
+                                      <textarea
                                         ref={inputRef}
                                         value={input}
                                         onChange={e => setInput(e.target.value)}
@@ -514,25 +689,34 @@ export default function SurveyRespondPage() {
                                                 handleSubmit(e);
                                             }
                                         }}
-                                        placeholder="Type your answer..."
+                                        placeholder={t("typeAnswer")}
                                         rows={1}
                                         disabled={isChatLoading || isCompleted}
-                                        className="w-full pl-6 pr-4 py-4 bg-transparent border-none resize-none focus:outline-none focus:ring-0 text-gray-900 placeholder:text-gray-400 text-lg max-h-32 min-h-[3.5rem]"
-                                        style={{ height: '3.5rem' }}
-                                    />
-                                    <button
-                                        type="submit"
-                                        disabled={!input.trim() || isChatLoading || isCompleted}
-                                        className="mb-1 mr-1 p-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95 flex-shrink-0"
-                                    >
-                                        {isChatLoading ? (
-                                            <Loader2 className="w-5 h-5 animate-spin" />
-                                        ) : (
-                                            <Send className="w-5 h-5" />
-                                        )}
-                                    </button>
-                                </div>
-                            </form>
+                                        className="flex-1 py-4 px-4 bg-transparent outline-none resize-none text-base text-gray-800 placeholder:text-gray-400 min-h-[96px] max-h-60"
+                                        style={{ minHeight: "96px" }}
+                                      />
+                                      
+                                      <div className="p-2 mb-1 mr-1">
+                                          <button
+                                              type="submit"
+                                              disabled={!input.trim() || isChatLoading || isCompleted}
+                                              className={cn(
+                                                  "p-2.5 rounded-xl transition-all",
+                                                  input.trim() && !isChatLoading 
+                                                      ? "bg-black text-white hover:bg-gray-800 hover:-translate-y-0.5" 
+                                                      : "bg-gray-100 text-gray-300 cursor-not-allowed"
+                                              )}
+                                          >
+                                              {isChatLoading ? (
+                                                  <Loader2 className="w-5 h-5 animate-spin" />
+                                              ) : (
+                                                  <Send className="w-5 h-5" />
+                                              )}
+                                          </button>
+                                      </div>
+                                  </div>
+                              </form>
+                            </div>
                             )
                         )}
                     </div>

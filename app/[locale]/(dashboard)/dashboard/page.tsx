@@ -60,21 +60,30 @@ export default async function DashboardPage() {
     .where(eq(surveys.userId, userId));
   const totalSurveys = surveysCountRes?.count || 0;
 
-  // Total Responses & Completed Responses
-  const [responsesStats] = await db
+
+
+  // 2. Fetch Average Duration
+  const [durationStats] = await db
     .select({
-      total: count(),
-      completed: sql<number>`sum(case when ${surveyConversations.completed} = true then 1 else 0 end)`,
+      avgDuration: sql<number>`avg(extract(epoch from ${surveyConversations.updatedAt} - ${surveyConversations.createdAt}))`
     })
     .from(surveyConversations)
     .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
-    .where(eq(surveys.userId, userId));
+    .where(
+      and(
+        eq(surveys.userId, userId),
+        eq(surveyConversations.completed, true)
+      )
+    );
 
-  const totalResponses = responsesStats?.total || 0;
-  const completedResponses = Number(responsesStats?.completed || 0);
-  const completionRate = totalResponses > 0 ? Math.round((completedResponses / totalResponses) * 100) : 0;
+  const avgSeconds = Math.round(durationStats?.avgDuration || 0);
+  const avgMinutes = Math.floor(avgSeconds / 60);
+  const remainingSeconds = avgSeconds % 60;
+  const durationDisplay = avgSeconds > 0 
+    ? `${avgMinutes}m ${remainingSeconds}s`
+    : "N/A";
 
-  // 2. Fetch Recent Surveys
+  // 3. Fetch Recent Surveys
   const recentSurveysData = await db.query.surveys.findMany({
     where: eq(surveys.userId, userId),
     orderBy: [desc(surveys.updatedAt)],
@@ -93,7 +102,7 @@ export default async function DashboardPage() {
     projectName: "Default Project", // Placeholder if project relation not fetched
   }));
 
-  // 3. Fetch Recent Activity (Responses)
+  // 4. Fetch Recent Activity (Responses)
   const recentActivitiesRaw = await db
     .select({
       id: surveyConversations.id,
@@ -115,12 +124,14 @@ export default async function DashboardPage() {
     time: new Date(activity.createdAt!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }),
   }));
 
-  // 4. Fetch Integration Status
+  // 5. Fetch Integration Status - Disabled
+  /*
   const [slackStatus, notionStatus, zapierStatus] = await Promise.all([
     getSlackIntegrationStatus(),
     getNotionIntegrationStatus(),
     getZapierIntegrationStatus(),
   ]);
+  */
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -154,26 +165,11 @@ export default async function DashboardPage() {
           icon={<MessageSquare className="w-6 h-6" />}
           iconColor="bg-blue-50 text-blue-600"
         />
-        <StatsCard
-          title="Total Responses"
-          value={totalResponses.toLocaleString()}
-          change="All time"
-          changeType="neutral"
-          icon={<Users className="w-6 h-6" />}
-          iconColor="bg-purple-50 text-purple-600"
-        />
-        <StatsCard
-          title="Completion Rate"
-          value={`${completionRate}%`}
-          change={`${completedResponses} completed`}
-          changeType="neutral"
-          icon={<BarChart3 className="w-6 h-6" />}
-          iconColor="bg-emerald-50 text-emerald-600"
-        />
+
         <StatsCard
           title="Avg. Duration"
-          value="N/A"
-          change="Coming soon"
+          value={durationDisplay}
+          change={avgSeconds > 0 ? "Per completed survey" : "No completions yet"}
           changeType="neutral"
           icon={<TrendingUp className="w-6 h-6" />}
           iconColor="bg-amber-50 text-amber-600"
@@ -240,13 +236,8 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* Sidebar Column - Activity Feed & Integrations */}
+        {/* Sidebar Column - Activity Feed Only */}
         <div className="lg:col-span-1 space-y-6">
-          <IntegrationsWidget
-            slackConnected={!!(slackStatus.success && slackStatus.data?.connected)}
-            notionConnected={notionStatus.success && notionStatus.connected}
-            zapierConnected={!!(zapierStatus.success && zapierStatus.data?.connected)}
-          />
           <ActivityFeed activities={activities} />
         </div>
       </div>

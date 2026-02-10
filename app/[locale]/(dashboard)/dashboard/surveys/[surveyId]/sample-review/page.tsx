@@ -219,6 +219,7 @@ export default function SampleReviewPage() {
         
         if (inputMode === "voice" && survey.isVoice) {
             setShowTranscript(false);
+            console.log("Connecting voice websocket...");
             voiceWs.connect();
         } else if (inputMode === "text" && messages.length === 0) {
             greetingMutation.mutate();

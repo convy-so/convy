@@ -1,0 +1,45 @@
+{
+    "Index": {
+        "title": "Convy",
+        "description": "AI-powered surveys"
+    },
+    "Survey": {
+        "Creation": {
+            "title": "Create Survey",
+            "start": "Start",
+            "language": "Language",
+            "languages": {
+                "en": "English",
+                "fr": "French",
+                "de": "German",
+                "es": "Spanish",
+                "it": "Italian"
+            }
+        },
+        "Response": {
+            "welcome": "Welcome",
+            "start": "Start Survey",
+            "loading": "Preparing your survey...",
+            "notFound": "Failed to load survey",
+            "closed": "This survey is no longer accepting responses",
+            "errorHelp": "Please check the link and try again.",
+            "thankYou": "Thank You!",
+            "thankYouMessage": "Your insights are incredibly valuable. We appreciate you taking the time to share your thoughts with us.",
+            "close": "Close Survey",
+            "hideText": "Hide Text",
+            "showText": "Show Text",
+            "voiceMode": "Voice Mode",
+            "tryVoice": "Try Voice",
+            "connectionFailed": "Connection Failed",
+            "connecting": "Connecting...",
+            "listening": "Listening...",
+            "aiSpeaking": "AI Speaking...",
+            "tapToSpeak": "Tap to speak",
+            "aiReady": "AI Ready",
+            "initializing": "Initializing...",
+            "liveTranscription": "Live Transcription",
+            "typeAnswer": "Type your answer...",
+            "sharedMedia": "Shared media"
+        }
+    }
+}

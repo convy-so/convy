@@ -2,7 +2,7 @@ import { pgEnum } from "drizzle-orm/pg-core";
 
 // Auth & General
 export const userRoleEnum = pgEnum("user_role", ["user", "admin"]);
-export const languageEnum = pgEnum("language", ["en", "fr", "de"]);
+export const languageEnum = pgEnum("language", ["en", "fr", "de", "es", "it"]);
 
 // Surveys
 export const surveyStatusEnum = pgEnum("survey_status", [

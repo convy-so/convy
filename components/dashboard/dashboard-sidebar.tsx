@@ -121,6 +121,24 @@ export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
             const isActive =
               pathname === item.href;
             const isCreateSurvey = item.href === "/dashboard/create";
+            const isIntegrations = item.name === "Integrations";
+
+            if (isIntegrations) {
+              return (
+                <div
+                  key={item.name}
+                  className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-400 cursor-not-allowed bg-gray-50/50"
+                >
+                  <div className="flex items-center gap-3">
+                    <item.icon className="w-5 h-5 opacity-70" />
+                    {item.name}
+                  </div>
+                  <span className="text-[10px] uppercase font-bold bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full tracking-wide">
+                    Soon
+                  </span>
+                </div>
+              );
+            }
 
             return (
               <Link

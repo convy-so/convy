@@ -36,7 +36,7 @@ export interface SurveyConfig {
   information: string;
   requiredQuestions: string[];
   metrics: string[];
-  language?: "en" | "fr" | "de";
+  language?: "en" | "fr" | "de" | "es" | "it";
   objective?: SurveyObjective;
   targetAudience?: SurveyTargetAudience;
   scope?: SurveyScope;
@@ -73,13 +73,15 @@ export interface CollectedInfo {
  */
 export function getSurveyCreationSystemPrompt(
   collectedInfo: CollectedInfo,
-  language: "en" | "fr" | "de" = "en",
+  language: "en" | "fr" | "de" | "es" | "it" = "en",
   domainId?: number
 ): string {
   const languageMap: Record<string, string> = {
     en: "English",
     fr: "French", 
     de: "German",
+    es: "Spanish",
+    it: "Italian",
   };
 
   const requiredFields = Object.entries(REQUIRED_INFORMATION)
@@ -337,7 +339,7 @@ When in doubt, mark FALSE.
  * Designed to gather multiple fields from a single open response
  */
 export function getEfficientCreationOpeningPrompt(
-  language: "en" | "fr" | "de" = "en"
+  language: "en" | "fr" | "de" | "es" | "it" = "en"
 ): string {
   const openings: Record<string, string> = {
     en: `Perfect! Let's create your conversational survey together. 
@@ -357,6 +359,18 @@ Par exemple, il pourrait s'agir d'une application mobile, d'une fonctionnalité 
 Zuerst muss ich wissen: **Welches spezifische Produkt, welche Dienstleistung oder welche Erfahrung ist Gegenstand dieser Umfrage?**
 
 Zum Beispiel könnte es eine mobile App, eine Website-Funktion, ein Serviceprozess, ein physisches Produkt oder etwas anderes sein. Sobald ich weiß, was wir befragen, werde ich nach Ihren Zielen fragen und wen Sie befragen werden.`,
+
+    es: `¡Perfecto! Vamos a crear su encuesta conversacional juntos.
+
+Primero, necesito saber: **¿Sobre qué producto, servicio o experiencia específica trata esta encuesta?**
+
+Por ejemplo, podría ser una aplicación móvil, una función del sitio web, un proceso de servicio, un producto físico o cualquier otra cosa. Una vez que sepa qué estamos encuestando, le preguntaré sobre sus objetivos y a quién le preguntará.`,
+
+    it: `Perfetto! Creiamo insieme il tuo sondaggio conversazionale.
+
+Per prima cosa, ho bisogno di sapere: **Di quale prodotto, servizio o esperienza specifica tratta questo sondaggio?**
+
+Ad esempio, potrebbe essere un'app mobile, una funzionalità del sito web, un processo di servizio, un prodotto fisico o qualcos'altro. Una volta che saprò cosa stiamo sondando, ti chiederò dei tuoi obiettivi e a chi lo chiederai.`,
   };
 
   return openings[language] || openings.en;
@@ -523,7 +537,7 @@ export function getSampleConversationSystemPrompt(
   config: SurveyConfig,
   feedback?: string,
   conversationNumber?: number,
-  language?: "en" | "fr" | "de",
+  language?: "en" | "fr" | "de" | "es" | "it",
   context?: RollingContext
 ): string {
   const basePrompt = getSurveyConversationSystemPrompt(config, language, context);
@@ -698,7 +712,7 @@ Your feedback will be incorporated into the next sample conversation, or you can
  */
 export function getSurveyConversationSystemPrompt(
   config: SurveyConfig,
-  language?: "en" | "fr" | "de",
+  language?: "en" | "fr" | "de" | "es" | "it",
   context?: RollingContext
 ): string {
   const lang = language || config.language || "en";
@@ -707,6 +721,8 @@ export function getSurveyConversationSystemPrompt(
     en: "You must conduct this entire conversation in English. All your responses must be in English.",
     fr: "Vous devez mener toute cette conversation en français. Toutes vos réponses doivent être en français.",
     de: "Sie müssen dieses gesamte Gespräch auf Deutsch führen. Alle Ihre Antworten müssen auf Deutsch sein.",
+    es: "Debes conducir toda esta conversación en español. Todas tus respuestas deben ser en español.",
+    it: "Devi condurre l'intera conversazione in italiano. Tutte le tue risposte devono essere in italiano.",
   };
 
   const langInstruction = languageInstructions[lang] || languageInstructions.en;

@@ -47,8 +47,10 @@ export interface CoreMetrics {
 
   // Engagement metrics
   averageMessagesPerConversation: number;
+  averageResponseLength: number; // Average words per user response
   averageFollowUpDepth: number; // Average chain of follow-up questions achieved
   medianDurationMinutes: number;
+  medianActiveDurationMinutes: number;
 
   // Quality metrics
   insightQualityScore: number; // 1-10 scale
@@ -363,7 +365,9 @@ export interface ConversationInsightData {
   keyFindings: string[];
   messageCount: number;
   participantResponseCount: number;
+  averageResponseLength: number;
   durationMinutes: number;
+  activeDurationMinutes: number;
   followUpDepth: number;
   engagementLevel: "high" | "medium" | "low";
   responseQuality: number;
@@ -574,7 +578,9 @@ export const conversationInsightDataSchema = z.object({
   keyFindings: z.array(z.string()),
   messageCount: z.number(),
   participantResponseCount: z.number(),
+  averageResponseLength: z.number(),
   durationMinutes: z.number(),
+  activeDurationMinutes: z.number(),
   followUpDepth: z.number(),
   engagementLevel: z.enum(["high", "medium", "low"]),
   responseQuality: z.number().min(1).max(10),
@@ -609,8 +615,10 @@ export function calculateConversationMetrics(
 ): {
   messageCount: number;
   participantResponseCount: number;
+  averageResponseLength: number;
   followUpDepth: number;
   durationMinutes: number;
+  activeDurationMinutes: number;
 } {
   const participantMessages = messages.filter((m) => m.role === "user");
   const totalWords = participantMessages.reduce(
@@ -648,8 +656,13 @@ export function calculateConversationMetrics(
   return {
     messageCount: messages.length,
     participantResponseCount: participantMessages.length,
+    averageResponseLength:
+      participantMessages.length > 0
+        ? Math.round(totalWords / participantMessages.length)
+        : 0,
     followUpDepth: maxFollowUpDepth,
     durationMinutes: Math.round(durationMinutes * 10) / 10,
+    activeDurationMinutes: Math.round(durationMinutes * 10) / 10, // Fallback to total duration
   };
 }
 
@@ -1131,14 +1144,14 @@ export function createFallbackConversationInsights(
     (sum, m) => sum + m.content.split(/\s+/).length,
     0
   );
-  const avgResponseLength =
+  const averageResponseLength =
     participantMessages.length > 0
       ? Math.round(totalWords / participantMessages.length)
       : 0;
 
   const metrics = calculateConversationMetrics(messages);
   const engagementLevel = determineEngagementLevel(
-    avgResponseLength,
+    averageResponseLength,
     metrics.followUpDepth,
     metrics.participantResponseCount
   );
@@ -1161,6 +1174,7 @@ export function createFallbackConversationInsights(
     extractedMetrics: {},
     notableQuotes: [],
     hypothesisEvidence: [],
+    averageResponseLength, // calculated above
     mediaInteractions: [],
   };
 }
@@ -1449,6 +1463,7 @@ export function aggregateConversationInsights(
 
   const engagementCounts = { high: 0, medium: 0, low: 0 };
   let totalMessages = 0;
+  let totalResponseLength = 0;
   let totalFollowUpDepth = 0;
   let totalQuality = 0;
   const durations: number[] = [];
@@ -1456,6 +1471,7 @@ export function aggregateConversationInsights(
   for (const insight of conversationInsights) {
     engagementCounts[insight.engagementLevel]++;
     totalMessages += insight.messageCount;
+    totalResponseLength += insight.averageResponseLength || 0;
     totalFollowUpDepth += insight.followUpDepth;
     totalQuality += insight.responseQuality;
     durations.push(insight.durationMinutes);
@@ -1464,19 +1480,37 @@ export function aggregateConversationInsights(
   // Calculate median duration
   durations.sort((a, b) => a - b);
   const medianDuration =
-    durations.length % 2 === 0
-      ? (durations[durations.length / 2 - 1] +
-          durations[durations.length / 2]) /
-        2
-      : durations[Math.floor(durations.length / 2)];
+    durations.length > 0
+      ? durations.length % 2 === 0
+        ? (durations[durations.length / 2 - 1] +
+            durations[durations.length / 2]) /
+          2
+        : durations[Math.floor(durations.length / 2)]
+      : 0;
+
+  // Calculate median active duration
+  const activeDurations: number[] = conversationInsights
+    .map((i) => i.activeDurationMinutes || i.durationMinutes) // Fallback to durationMinutes
+    .sort((a, b) => a - b);
+    
+  const medianActiveDuration =
+    activeDurations.length > 0
+      ? activeDurations.length % 2 === 0
+        ? (activeDurations[activeDurations.length / 2 - 1] +
+            activeDurations[activeDurations.length / 2]) /
+          2
+        : activeDurations[Math.floor(activeDurations.length / 2)]
+      : 0;
 
   return {
     totalConversations: total,
     completedConversations: total,
     completionRate: 100,
     averageMessagesPerConversation: Math.round(totalMessages / total),
+    averageResponseLength: Math.round(totalResponseLength / total),
     averageFollowUpDepth: Math.round((totalFollowUpDepth / total) * 10) / 10,
     medianDurationMinutes: Math.round(medianDuration * 10) / 10,
+    medianActiveDurationMinutes: Math.round(medianActiveDuration * 10) / 10,
     insightQualityScore: Math.round((totalQuality / total) * 10) / 10,
     responseEngagementDistribution: engagementCounts,
   };

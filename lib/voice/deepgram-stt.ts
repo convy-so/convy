@@ -1,5 +1,5 @@
 
-import { createClient, LiveClient, LiveSchema, LiveTranscriptionEvents } from "@deepgram/sdk";
+import { createClient, LiveClient, LiveSchema, LiveTranscriptionEvents, DeepgramClientOptions } from "@deepgram/sdk";
 import { env } from "@/lib/env";
 import { EventEmitter } from "events";
 import { AUDIO_CONFIG, validateAudioBuffer } from "./audio-processing";
@@ -14,15 +14,12 @@ import { AUDIO_CONFIG, validateAudioBuffer } from "./audio-processing";
 export const STT_COST_PER_MINUTE = 0.0043;
 
 export interface DeepgramSTTConfig {
-  language?: string; // BCP-47 code (e.g., 'en-US', 'fr-FR', 'de-DE')
+  language?: string; // BCP-47 code like "en-US", "fr-FR", etc.
+  model?: string; // Override model (e.g., for testing or specific use-case)
   enableInterimResults?: boolean;
-  enableAutoPunctuation?: boolean;
-  model?: string; // Defaults to 'flux' for conversational AI
-  encoding?: string;
-  sampleRate?: number;
-  // VAD Configuration (Built into Flux, but keeping interface for compatibility)
-  speechStartTimeout?: number; 
-  speechEndTimeout?: number; 
+  enableAutoPunctuation?: boolean;  
+  speechEndTimeout?: number; // seconds
+  sampleRate?: number; // Audio sample rate (8000-48000 Hz), defaults to 48000
 }
 
 export interface TranscriptionResult {
@@ -42,9 +39,11 @@ export interface VoiceActivityEvent {
 
 // Map Google language codes to Deepgram if needed, though they are mostly compatible BCP-47
 const LANGUAGE_CODES: Record<string, string> = {
-  en: "en", // Flux model uses 'en' for general English
-  fr: "fr",
-  de: "de",
+  en: "en", // Flux model - English only
+  fr: "fr", // Nova-3 - French
+  de: "de", // Nova-3 - German
+  es: "es", // Nova-3 - Spanish
+  it: "it", // Nova-3 - Italian
 };
 
 /**
@@ -63,12 +62,12 @@ export function validateDeepgramCredentials(): void {
  * Deepgram STT Service
  */
 export class DeepgramSTTService {
-  private client: ReturnType<typeof createClient>;
+  private client: ReturnType<typeof createClient> | null = null;
   private isInitialized: boolean = false;
 
   constructor() {
     validateDeepgramCredentials();
-    this.client = createClient(env.DEEPGRAM_API_KEY!);
+    // Client is initialized on first use to ensure options are ready
     this.isInitialized = true;
     console.log("[Deepgram STT] Service initialized successfully");
   }
@@ -82,12 +81,22 @@ export class DeepgramSTTService {
    */
   createStreamingSession(config: DeepgramSTTConfig = {}): DeepgramSTTStreamingSession {
     const language = LANGUAGE_CODES[config.language || "en"] || config.language || "en";
-    
-    // Default to 'flux-general-${lang}' model which is optimized for voice agents
-    // Flux is language-specific and requires the /v2/listen endpoint (handled by SDK)
-    // Allow override via config for testing or specific use cases
     const baseLang = (language || "en").split("-")[0];
-    const model = config.model || `flux-general-${baseLang}`; 
+    
+    const SUPPORTED_LANGUAGES = ['en', 'de', 'fr', 'es', 'it'];
+    if (!SUPPORTED_LANGUAGES.includes(baseLang)) {
+      console.warn(`[Deepgram STT] Language ${baseLang} not in supported list, defaulting to English`);
+    }
+    
+    let model: string;
+    if (baseLang === "en") {
+      model = config.model || `flux-general-en`;
+      console.log(`[Deepgram STT] Using Flux model for English (conversational AI optimized)`);
+    } else {
+      // Nova-3 supports multilingual with industry-leading accuracy
+      model = config.model || `nova-3-general`;
+      console.log(`[Deepgram STT] Using Nova-3 model for ${baseLang} (multilingual support)`);
+    }
 
     const liveOptions: LiveSchema = {
        model,
@@ -95,14 +104,57 @@ export class DeepgramSTTService {
        smart_format: true,
        interim_results: config.enableInterimResults ?? true,
        encoding: "linear16",
-       sample_rate: AUDIO_CONFIG.SAMPLE_RATE,
+       sample_rate: config.sampleRate || 48000,
        channels: 1,
-       // Flux specific settings for turn detection
-       // config.speechEndTimeout is in seconds, convert to milliseconds
-       // Default 1000ms provides good balance between responsiveness and avoiding premature cutoff
-       endpointing: config.speechEndTimeout ? Math.round(config.speechEndTimeout * 1000) : 1000, 
-       vad_events: true,
+       
+       // VAD and Endpointing Configuration:
+       // VAD and Endpointing Configuration:
+       // Flux (English): Uses smart internal turn detection + fallback endpointing
+       // Nova-3 (Multilingual): Uses utterance_end_ms for robustness in noisy environments (ignores background noise)
+       endpointing: baseLang === "en" 
+         ? (config.speechEndTimeout ? Math.round(config.speechEndTimeout * 1000) : 1000)
+         : false, // Disable audio-based VAD for Nova-3 so noise doesn't keep stream open
+       
+       utterance_end_ms: baseLang === "en"
+         ? undefined
+         : (config.speechEndTimeout ? Math.round(config.speechEndTimeout * 1000) : 1000), 
+       
+       vad_events: true, 
     };
+
+    console.log(`[Deepgram STT] Creating session with options: ${JSON.stringify(liveOptions)}`);
+    
+    // Configure Deepgram with 'ws' package implementation
+    // This avoids global scope pollution and is the recommended way to use Deepgram in Node
+    // We need to cast to any because the SDK types don't fully expose the transport options in the public interface
+    let deepgramOptions: any = {};
+    
+    try {
+        const WebSocket = require("ws");
+        deepgramOptions = {
+            global: {
+                websocket: {
+                    options: {
+                       // @ts-ignore - The SDK types don't publicize this but it's supported
+                       client: WebSocket
+                    }
+                }
+            }
+        };
+        console.log("[Deepgram STT] Configured Deepgram client with 'ws' package implementation");
+    } catch (e) {
+        console.error("[Deepgram STT] Failed to load 'ws' package:", e);
+    }
+
+    // Initialize singleton client if not already created
+    if (!this.client) {
+         if (!env.DEEPGRAM_API_KEY) {
+             console.error(`[Deepgram STT] CRITICAL: API Key missing in env during initialization`);
+             throw new Error("Deepgram API Key missing");
+         }
+         this.client = createClient(env.DEEPGRAM_API_KEY, deepgramOptions);
+         console.log(`[Deepgram STT] Initialized singleton Deepgram client. Key prefix: ${env.DEEPGRAM_API_KEY.substring(0, 4)}...`);
+    }
 
     return new DeepgramSTTStreamingSession(this.client, liveOptions);
   }
@@ -150,9 +202,11 @@ export class DeepgramSTTStreamingSession extends EventEmitter {
   private connection: LiveClient | null = null;
   private client: ReturnType<typeof createClient>;
   private options: LiveSchema;
-  private isActive: boolean = false;
+  public isActive: boolean = false;
   
-  // Stats
+  private isReady: boolean = false; 
+  private keepAliveInterval: NodeJS.Timeout | null = null;
+  
   private startTime: number = 0;
   private totalAudioBytes: number = 0;
   
@@ -165,6 +219,7 @@ export class DeepgramSTTStreamingSession extends EventEmitter {
   start(): void {
     if (this.isActive) return;
     this.isActive = true;
+    this.isReady = false; 
     this.startTime = Date.now();
     this.totalAudioBytes = 0;
 
@@ -174,11 +229,14 @@ export class DeepgramSTTStreamingSession extends EventEmitter {
 
         this.connection.on(LiveTranscriptionEvents.Open, () => {
              console.log("[Deepgram Stream] Connection opened");
+             this.isReady = true; 
+             this.startKeepAlive(); 
              this.emit("started");
         });
 
         this.connection.on(LiveTranscriptionEvents.Close, () => {
              console.log("[Deepgram Stream] Connection closed");
+             this.cleanup(); // [FIX] Ensure cleanup runs
              this.emit("end");
         });
         
@@ -191,7 +249,8 @@ export class DeepgramSTTStreamingSession extends EventEmitter {
         });
 
         this.connection.on(LiveTranscriptionEvents.Error, (err) => {
-             console.error("[Deepgram Stream] Error:", err);
+             console.error("[Deepgram Stream] Error event received:", err);
+             // ... error logging ...
              this.emit("error", err);
         });
         
@@ -215,11 +274,40 @@ export class DeepgramSTTStreamingSession extends EventEmitter {
         console.error("[Deepgram Stream] Failed to start:", error);
         this.emit("error", error);
         this.isActive = false;
+        this.isReady = false;
     }
+  }
+
+  // [FIX] KeepAlive Implementation
+  private startKeepAlive() {
+    if (this.keepAliveInterval) clearInterval(this.keepAliveInterval);
+    
+    // Send KeepAlive every 5 seconds (recommended 3-10s)
+    this.keepAliveInterval = setInterval(() => {
+        if (this.connection && this.connection.getReadyState() === 1) { // 1 = OPEN
+            this.connection.keepAlive();
+        }
+    }, 5000);
+  }
+
+  // [FIX] Cleanup helper
+  private cleanup() {
+      this.isReady = false;
+      if (this.keepAliveInterval) {
+          clearInterval(this.keepAliveInterval);
+          this.keepAliveInterval = null;
+      }
   }
 
   async write(audioBuffer: Buffer): Promise<boolean> {
     if (!this.isActive || !this.connection) return false;
+
+    // [FIX] Race condition check
+    if (!this.isReady) {
+        // Drop chunk if not ready to avoid race conditions or buffering issues
+        // In a real-time system, dropping early packets is often better than lag
+        return false;
+    }
 
     // Validate buffer format matches Deepgram expectations
     if (!Buffer.isBuffer(audioBuffer) || audioBuffer.length === 0) return false;
@@ -248,6 +336,7 @@ export class DeepgramSTTStreamingSession extends EventEmitter {
   end(): void {
     if (!this.isActive) return;
     this.isActive = false;
+    this.cleanup(); // [FIX]
     
     if (this.connection) {
         try {
@@ -290,7 +379,7 @@ export class DeepgramSTTStreamingSession extends EventEmitter {
       const result: TranscriptionResult = {
           text,
           isFinal,
-          confidence: alternative.confidence || 0, // Bug #11: Handle undefined confidence
+          confidence: alternative.confidence || 0, 
           language: this.options.language,
           duration: durationMs,
           cost: isFinal ? cost : 0, // Only charge for final results

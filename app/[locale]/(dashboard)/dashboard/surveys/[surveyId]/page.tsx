@@ -36,6 +36,7 @@ import {
   Trash2,
   Code,
 } from "lucide-react";
+import { ConversationCard } from "@/components/analytics/ConversationCard";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { getSurveyEmbedCodeAction } from "@/app/actions/survey";
@@ -79,6 +80,8 @@ interface Response {
   sentiment: "positive" | "neutral" | "negative" | null;
   keyInsights: string[];
   messageCount: number;
+  summary?: string;
+  sentimentScore?: number;
 }
 
 
@@ -675,73 +678,36 @@ export default function SurveyDetailPage() {
                 <p className="text-gray-500">No responses yet</p>
               </div>
             ) : (
-              <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      <th className="text-left px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Participant</th>
-                      <th className="text-left px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="text-left px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
-                      <th className="text-left px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Duration</th>
-                      <th className="text-left px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Sentiment</th>
-                      <th className="text-left px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider hidden md:table-cell">Key Insights</th>
-                      <th className="text-right px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {responses.map((response: Response) => (
-                      <tr key={response.id} className="hover:bg-gray-50/50 transition-colors group">
-                        <td className="px-6 py-4">
-                          <span className="text-sm font-semibold text-gray-900">{response.participantId === 'Anonymous' ? `Participant ${response.id.slice(0,4)}` : response.participantId}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                            <span className={cn(
-                                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium capitalize",
-                                response.status === "completed" ? "bg-emerald-50 text-emerald-700 border border-emerald-100" : "bg-amber-50 text-amber-700 border border-amber-100"
-                            )}>
-                                <span className={cn("w-1.5 h-1.5 rounded-full", response.status === "completed" ? "bg-emerald-500" : "bg-amber-500")} />
-                                {response.status === "completed" ? "Completed" : "In Progress"}
-                            </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex flex-col">
-                              <span className="text-sm text-gray-700">{response.completedAt ? new Date(response.completedAt).toLocaleDateString() : new Date(response.createdAt || Date.now()).toLocaleDateString()}</span>
-                              <span className="text-xs text-gray-400">{response.completedAt ? new Date(response.completedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="text-sm font-mono text-gray-600 bg-gray-50 px-2 py-1 rounded border border-gray-100">{response.duration}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          {response.sentiment ? (
-                            <span className={cn(
-                                "inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold uppercase tracking-wider", 
-                                response.sentiment === "positive" && "bg-emerald-100 text-emerald-700", 
-                                response.sentiment === "neutral" && "bg-gray-100 text-gray-600", 
-                                response.sentiment === "negative" && "bg-red-100 text-red-700"
-                            )}>
-                              {response.sentiment}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-gray-400 italic">Analysis Pending</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 hidden md:table-cell">
-                          <div className="flex flex-wrap gap-1.5">
-                            {response.keyInsights.slice(0, 2).map((insight, idx) => (
-                              <span key={idx} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-xs max-w-[150px] truncate" title={insight}>{insight}</span>
-                            ))}
-                            {response.keyInsights.length === 0 && <span className="text-xs text-gray-400">—</span>}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <Link href={`/dashboard/surveys/${surveyId}/responses/${response.id}`} className="inline-flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-900 transition-colors">
-                            <ArrowLeft className="w-4 h-4 rotate-180" />
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-              </table>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                  {responses.map((response: Response) => {
+                    // Map response data to card props
+                    // Calculate duration minutes from string "Xm Ys" or just use 5 if invalid
+                    let durationMinutes = 0;
+                    if (response.duration) {
+                        const match = response.duration.match(/(\d+)m/);
+                        if (match) durationMinutes = parseInt(match[1]);
+                    }
+
+                    // Map sentiment string to score if score is missing (approximate)
+                    let sentimentScore = response.sentimentScore ?? 0;
+                    if (response.sentiment === 'positive' && !response.sentimentScore) sentimentScore = 0.8;
+                    if (response.sentiment === 'negative' && !response.sentimentScore) sentimentScore = -0.8;
+
+                    return (
+                        <ConversationCard
+                            key={response.id}
+                            id={response.id}
+                            surveyId={surveyId}
+                            summary={response.summary || response.keyInsights?.[0] || "No summary available"}
+                            sentimentScore={sentimentScore}
+                            durationMinutes={durationMinutes}
+                            messageCount={response.messageCount || 0}
+                            isCompleted={response.status === 'completed'}
+                            createdAt={response.createdAt || new Date().toISOString()}
+                        />
+                    );
+                  })}
+                </div>
             )}
           </div>
 

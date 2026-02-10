@@ -10,6 +10,11 @@ import { env } from "@/lib/env";
 import { getRedisClient } from "@/lib/redis";
 
 export async function GET() {
+  // TEMPORARY: Notion integration is disabled
+  return NextResponse.redirect(
+    `${process.env.BETTER_AUTH_URL}/dashboard/integrations?notion_error=Feature temporarily disabled. Coming soon!`
+  );
+  
   try {
     const session = await getVerifiedSession();
 

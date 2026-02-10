@@ -118,12 +118,6 @@ export function AnalyticsDashboard({ surveyId }: AnalyticsDashboardProps) {
                      </div>
                 </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                     <Link
-                        href={`/dashboard/surveys/${surveyId}/analytics/conversations`}
-                        className="flex-1 sm:flex-none text-center px-5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-                    >
-                        View Conversations
-                    </Link>
                     <button
                         onClick={() => fetch(`/api/surveys/${surveyId}/analytics`, { method: 'POST', body: JSON.stringify({ force: true }) })}
                         className="px-5 py-2.5 bg-black text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition-all"

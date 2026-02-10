@@ -30,13 +30,14 @@ interface SampleState {
     timestamp: string;
   }>;
   survey: typeof surveys.$inferSelect | null;
-  language: "en" | "fr" | "de";
+  language: typeof surveys.$inferSelect.language;
   context: RollingContext | null;
   surveyConfig: SurveyConfig | null;
 }
 
 export class SampleSurveyVoiceHandler extends BaseVoiceHandler {
   private state: SampleState;
+  private sessionStartTime: number = Date.now();
 
   constructor(connection: AuthenticatedConnection, surveyId: string, conversationNumber: number = 1) {
     // Pass connection details to base class
@@ -89,7 +90,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceHandler {
       // Load or create rolling context using Manager
       this.state.context = await ConversationManager.loadOrCreateContext(
         contextId,
-        [], // Start with empty messages (will be filled as we go)
+        [], 
         this.state.surveyConfig
       );
 
@@ -103,15 +104,36 @@ export class SampleSurveyVoiceHandler extends BaseVoiceHandler {
         startedAt: new Date(),
       });
 
-      // Create sample conversation record (DB only)
-      const conversationId = nanoid();
-      await db.insert(sampleConversations).values({
-        id: conversationId,
-        surveyId: survey.id,
-        conversationNumber: this.state.conversationNumber,
-        messages: [],
-        confirmed: false,
-      });
+      // Check if sample conversation already exists for this survey + conversation number
+      const existingConversation = await db
+        .select()
+        .from(sampleConversations)
+        .where(
+          and(
+            eq(sampleConversations.surveyId, survey.id),
+            eq(sampleConversations.conversationNumber, this.state.conversationNumber)
+          )
+        )
+        .limit(1);
+
+      let conversationId: string;
+      
+      if (existingConversation.length > 0) {
+        // Conversation already exists - reuse it (e.g., reconnecting to same session)
+        conversationId = existingConversation[0].id;
+        console.log(`[Sample Survey Voice] Reusing existing conversation ${conversationId} for survey ${survey.id}, conversation #${this.state.conversationNumber}`);
+      } else {
+        // Create new sample conversation record
+        conversationId = nanoid();
+        await db.insert(sampleConversations).values({
+          id: conversationId,
+          surveyId: survey.id,
+          conversationNumber: this.state.conversationNumber,
+          messages: [],
+          confirmed: false,
+        });
+        console.log(`[Sample Survey Voice] Created new conversation ${conversationId} for survey ${survey.id}, conversation #${this.state.conversationNumber}`);
+      }
 
       this.state.conversationId = conversationId;
 
@@ -135,7 +157,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceHandler {
     }
   }
 
-  protected getLanguage(): "en" | "fr" | "de" {
+  protected getLanguage(): typeof surveys.$inferSelect.language {
     return this.state.language;
   }
 
@@ -193,11 +215,14 @@ export class SampleSurveyVoiceHandler extends BaseVoiceHandler {
           }
       );
 
+      console.log(`[Sample Survey Voice] Generating initial greeting. System prompt length: ${systemPrompt.length}`);
+
       // Generate greeting with empty message history
+      // Note: We provide a hidden user trigger message because some providers/models require at least one message
       const { text: greetingText } = await generateText({
         model: defaultModel,
         system: systemPrompt,
-        messages: [],
+        messages: [{ role: 'user', content: 'Start the conversation now.' }],
         tools,
         stopWhen: stepCountIs(5),
       });
@@ -338,7 +363,15 @@ export class SampleSurveyVoiceHandler extends BaseVoiceHandler {
       
       if ("audio" in synthesis) {
         this.ws.send(synthesis.audio);
-        this.send({ type: "audio_sent", durationMs: synthesis.duration });
+        this.send({ 
+          type: "audio_sent", 
+          durationMs: synthesis.duration,
+          text: text
+        });
+
+        // Update active duration tracking
+        this.activeDurationMs += synthesis.duration;
+        this.lastInteractionEndTime = Date.now() + synthesis.duration;
       } else {
         this.send({ type: "text_response", text });
       }
@@ -356,6 +389,19 @@ export class SampleSurveyVoiceHandler extends BaseVoiceHandler {
         .set({ status: "completed", endedAt: new Date() })
         .where(eq(voiceSessions.id, this.state.voiceSessionId))
         .catch(console.error);
+
+        // Update sample conversation with duration metrics
+        if (this.state.conversationId) {
+            const sessionDurationMs = Date.now() - this.sessionStartTime;
+            
+            db.update(sampleConversations)
+            .set({ 
+                durationMs: sessionDurationMs,
+                activeDurationMs: Math.round(this.activeDurationMs)
+            })
+            .where(eq(sampleConversations.id, this.state.conversationId))
+            .catch(console.error);
+        }
     }
   }
 }

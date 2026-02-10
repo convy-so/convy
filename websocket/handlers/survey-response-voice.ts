@@ -43,7 +43,7 @@ interface ResponseState {
     timestamp: string;
   }>;
   survey: typeof surveys.$inferSelect | null;
-  language: "en" | "fr" | "de";
+  language: typeof surveys.$inferSelect.language;
   context: RollingContext | null;
   surveyConfig: SurveyConfig | null;
 }
@@ -218,7 +218,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceHandler {
     }
   }
 
-  protected getLanguage(): "en" | "fr" | "de" {
+  protected getLanguage(): typeof surveys.$inferSelect.language {
     return this.state.language;
   }
 
@@ -373,17 +373,10 @@ export class SurveyResponseVoiceHandler extends BaseVoiceHandler {
         }
       );
 
-      // Load or create context for this turn
-      const context = await ConversationManager.loadOrCreateContext(
-        conversationId,
-        this.state.messages,
-        config
-      );
-
       // Intelligent model selection: use flash-lite for conversation, flash for completion
       const userMessages = this.state.messages.filter(m => m.role === "user");
-      const minQuestions = Math.max(config.requiredQuestions?.length || 0, 3);
-      const selectedModel = selectModelForConversation(context, userMessages.length, minQuestions);
+      const minQuestions = Math.max(this.state.surveyConfig.requiredQuestions?.length || 0, 3);
+      const selectedModel = selectModelForConversation(this.state.context!, userMessages.length, minQuestions);
       
       console.log(`[Voice Model] Using:`, selectedModel === flashModel ? 'flash' : 'flash-lite');
 
@@ -557,6 +550,11 @@ export class SurveyResponseVoiceHandler extends BaseVoiceHandler {
         processingTimeMs: processingTime,
       });
 
+      // Update active duration tracking with AI speech duration
+      this.activeDurationMs += synthesis.duration;
+      // Advance the last interaction time to when the AI will finish speaking
+      this.lastInteractionEndTime = Date.now() + synthesis.duration;
+
       // Send audio to client
       this.send({
         type: "audio",
@@ -597,6 +595,8 @@ export class SurveyResponseVoiceHandler extends BaseVoiceHandler {
       en: "Hello! Thank you for participating in this survey. I'd love to hear your thoughts. Let's get started!",
       fr: "Bonjour! Merci de participer à cette enquête. J'aimerais connaître votre avis. Commençons!",
       de: "Hallo! Vielen Dank für Ihre Teilnahme an dieser Umfrage. Ich würde gerne Ihre Meinung hören. Lassen Sie uns beginnen!",
+      es: "¡Hola! Gracias por participar en esta encuesta. Me encantaría conocer tus opiniones. ¡Empecemos!",
+      it: "Ciao! Grazie per aver partecipato a questo sondaggio. Mi piacerebbe conoscere la tua opinione. Iniziamo!",
     };
     return messages[this.state.language];
   }
@@ -647,6 +647,17 @@ export class SurveyResponseVoiceHandler extends BaseVoiceHandler {
           ttsCost: this.totalTtsCost.toString(),
         })
         .where(eq(voiceSessions.id, this.state.voiceSessionId));
+
+       // Update conversation with precise duration
+       if (this.state.conversationId) {
+          await db
+            .update(surveyConversations)
+            .set({ 
+                durationMs: sessionDurationMs,
+                activeDurationMs: Math.round(this.activeDurationMs)
+            })
+            .where(eq(surveyConversations.id, this.state.conversationId));
+       }
 
       this.send({
         type: "completed",
@@ -742,6 +753,17 @@ export class SurveyResponseVoiceHandler extends BaseVoiceHandler {
             ttsCost: this.totalTtsCost.toString(),
           })
           .where(eq(voiceSessions.id, this.state.voiceSessionId));
+
+        // Update conversation with precise duration
+        if (this.state.conversationId) {
+            await db
+            .update(surveyConversations)
+            .set({ 
+                durationMs: sessionDurationMs,
+                activeDurationMs: Math.round(this.activeDurationMs)
+            })
+            .where(eq(surveyConversations.id, this.state.conversationId));
+        }
 
         console.log(
           `[Survey Response Voice] Session ${this.state.voiceSessionId} cleaned up: ` +

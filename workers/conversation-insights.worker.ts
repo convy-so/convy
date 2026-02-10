@@ -42,7 +42,9 @@ function parseConversationInsightsResponse(
     content: string;
     timestamp?: string;
   }>,
-  fallbackSummary: string
+  fallbackSummary: string,
+  dbDurationMs?: number,
+  dbActiveDurationMs?: number
 ): ConversationInsightData {
   try {
     const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -60,6 +62,14 @@ function parseConversationInsightsResponse(
     const parsed: ConversationInsightsAIResponse = JSON.parse(jsonMatch[0]);
     const metrics = calculateConversationMetrics(messages);
 
+    // Prioritize precise DB duration metrics if available
+    if (dbDurationMs && dbDurationMs > 0) {
+        metrics.durationMinutes = Math.round((dbDurationMs / 60000) * 10) / 10;
+    }
+    if (dbActiveDurationMs && dbActiveDurationMs > 0) {
+        metrics.activeDurationMinutes = Math.round((dbActiveDurationMs / 60000) * 10) / 10;
+    }
+
     // Transform AI response to our structured format
     const insights: ConversationInsightData = {
       conversationId,
@@ -71,6 +81,7 @@ function parseConversationInsightsResponse(
       participantResponseCount: metrics.participantResponseCount,
       averageResponseLength: metrics.averageResponseLength,
       durationMinutes: metrics.durationMinutes,
+      activeDurationMinutes: metrics.activeDurationMinutes,
       followUpDepth: metrics.followUpDepth,
 
       // AI-determined quality metrics
@@ -214,7 +225,9 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
       insightsResponse,
       conversationId,
       conversation.rawConversation,
-      summaryText
+      summaryText,
+      conversation.durationMs || undefined,
+      conversation.activeDurationMs || undefined
     );
 
     await job.updateProgress(85);
@@ -239,6 +252,7 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
       responseQuality: structuredInsights.responseQuality,
       messageCount: structuredInsights.messageCount,
       durationMinutes: structuredInsights.durationMinutes,
+      activeDurationMinutes: structuredInsights.activeDurationMinutes,
 
       // Sentiment
       sentiment: structuredInsights.sentiment,

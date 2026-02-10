@@ -28,12 +28,13 @@ interface CreationState {
   }>;
   collectedInfo: CollectedInfo;
   isProcessing: boolean;
-  language: "en" | "fr" | "de";
+  language: typeof surveys.$inferSelect.language;
   extractedData: any;
 }
 
 export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
   private state: CreationState;
+  private sessionStartTime: number = Date.now();
 
   constructor(connection: AuthenticatedConnection) {
     super(connection.ws, `creation-${connection.userId}`, connection.userId);
@@ -121,7 +122,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
   }
 
 
-  protected getLanguage(): "en" | "fr" | "de" {
+  protected getLanguage(): typeof surveys.$inferSelect.language {
     return this.state.language;
   }
 
@@ -139,7 +140,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
         }
         break;
       case "set_language":
-        if (message.language && ["en", "fr", "de"].includes(message.language)) {
+        if (message.language && ["en", "fr", "de", "es", "it"].includes(message.language)) {
           this.state.language = message.language;
           if (this.state.surveyId) {
              await db.update(surveys)
@@ -165,7 +166,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
       .from(surveys)
       .where(eq(surveys.id, this.state.surveyId));
 
-    if (survey && (survey.language === "en" || survey.language === "fr" || survey.language === "de")) {
+    if (survey && (survey.language === "en" || survey.language === "fr" || survey.language === "de" || survey.language === "es" || survey.language === "it")) {
       this.state.language = survey.language;
     }
 
@@ -243,6 +244,11 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
           text,
           durationMs: synthesis.duration,
         });
+
+        // Update active duration tracking
+        this.activeDurationMs += synthesis.duration;
+        this.lastInteractionEndTime = Date.now() + synthesis.duration;
+
         console.log(`[Survey Creation Voice] Audio response sent (${synthesis.duration}ms)`);
       } else {
         this.send({ type: "text_response", text });
@@ -322,6 +328,20 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
     db.update(voiceSessions)
       .set({ status: "completed", endedAt: new Date() })
       .where(eq(voiceSessions.id, this.state.voiceSessionId))
+
       .catch(console.error); // Fire and forget
+
+    // Update creation conversation with duration metrics
+    if (this.state.surveyId) {
+        const sessionDurationMs = Date.now() - this.sessionStartTime;
+        
+        await db.update(surveyCreationConversations)
+        .set({ 
+            durationMs: sessionDurationMs,
+            activeDurationMs: Math.round(this.activeDurationMs)
+        })
+        .where(eq(surveyCreationConversations.surveyId, this.state.surveyId))
+        .catch(console.error);
+    }
   }
 }

@@ -33,7 +33,7 @@ type ActionResult<T> =
   | { success: false; error: string };
 
 const startSurveyCreationSchema = z.object({
-  language: z.enum(["en", "fr", "de"]).optional().default("en"),
+  language: z.enum(["en", "fr", "de", "es", "it"]).optional().default("en"),
   projectId: z.string().optional(),
 });
 
@@ -251,7 +251,7 @@ export async function getSurveyCreationStateAction(surveyId: string): Promise<
       id: string;
       title: string;
       status: string;
-      language: "en" | "fr" | "de";
+      language: "en" | "fr" | "de" | "es" | "it";
     };
     conversation: {
       id: string;
