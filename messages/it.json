@@ -1,0 +1,38 @@
+{
+    "Index": {
+        "title": "Convy",
+        "description": "Sondaggi basati sull'IA"
+    },
+    "Survey": {
+        "Creation": {
+            "title": "Crea sondaggio",
+            "start": "Inizia",
+            "language": "Lingua"
+        },
+        "Response": {
+            "welcome": "Benvenuto",
+            "start": "Inizia sondaggio",
+            "loading": "Preparazione del sondaggio...",
+            "notFound": "Impossibile caricare il sondaggio",
+            "closed": "Questo sondaggio non accetta più risposte",
+            "errorHelp": "Controlla il link e riprova.",
+            "thankYou": "Grazie!",
+            "thankYouMessage": "Le tue opinioni sono incredibilmente preziose. Apprezziamo che tu abbia dedicato del tempo a condividere i tuoi pensieri con noi.",
+            "close": "Chiudi sondaggio",
+            "hideText": "Nascondi testo",
+            "showText": "Mostra testo",
+            "voiceMode": "Modalità vocale",
+            "tryVoice": "Prova la voce",
+            "connectionFailed": "Connessione fallita",
+            "connecting": "Connessione...",
+            "listening": "Ascolto...",
+            "aiSpeaking": "IA sta parlando...",
+            "tapToSpeak": "Tocca per parlare",
+            "aiReady": "IA pronta",
+            "initializing": "Inizializzazione...",
+            "liveTranscription": "Trascrizione dal vivo",
+            "typeAnswer": "Scrivi la tua risposta...",
+            "sharedMedia": "Media condivisi"
+        }
+    }
+}

@@ -16,6 +16,8 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
     const [transcription, setTranscription] = useState("");
     const [interimTranscription, setInterimTranscription] = useState("");
 
+    const [error, setError] = useState<string | null>(null);
+
     const wsRef = useRef<WebSocket | null>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
     const workletNodeRef = useRef<AudioWorkletNode | null>(null);
@@ -32,9 +34,15 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
 
     // Initialize WebSocket
     const connect = useCallback(async () => {
-        if (wsRef.current) return;
+        console.log("[Voice WS] connect() called", { url });
+        if (wsRef.current) {
+            console.log("[Voice WS] Already have connection, skipping");
+            return;
+        }
 
+        console.log("[Voice WS] Setting status to connecting");
         setStatus("connecting");
+        setError(null);
 
         let connectionUrl = url;
 
@@ -42,29 +50,48 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
         // We do this check to avoid fetching for public endpoints
         if (url.includes("/voice/survey-creation") || url.includes("/voice/sample-conversation") || url.includes("/analytics")) {
              try {
+                console.log("[Voice WS] Fetching auth token...");
                 const res = await fetch("/api/auth/token");
+                console.log("[Voice WS] Token fetch response:", res.status, res.ok);
                 if (res.ok) {
                     const { token } = await res.json();
+                    console.log("[Voice WS] Got token:", token ? `${token.substring(0, 20)}...` : "null");
                     if (token) {
                         const urlObj = new URL(url);
                         urlObj.searchParams.set("token", token);
                         connectionUrl = urlObj.toString();
+                        console.log("[Voice WS] Updated connection URL with token");
                     }
+                } else {
+                    console.warn("[Voice WS] Token fetch failed with status:", res.status);
                 }
              } catch (e) {
-                 console.warn("Failed to fetch auth token for voice WebSocket", e);
+                 console.error("[Voice WS] Failed to fetch auth token:", e);
              }
         }
 
-        const ws = new WebSocket(connectionUrl);
-        wsRef.current = ws;
+        let ws: WebSocket;
+        try {
+            console.log("[Voice WS] Creating WebSocket connection to:", connectionUrl);
+            ws = new WebSocket(connectionUrl);
+            wsRef.current = ws;
+            console.log("[Voice WS] WebSocket object created, readyState:", ws.readyState);
+        } catch (e) {
+            console.error("[Voice WS] Failed to create WebSocket instance:", e);
+            setStatus("error");
+            setError(e instanceof Error ? e.message : "Failed to create WebSocket connection");
+            onError?.(e);
+            return;
+        }
 
         ws.onopen = () => {
+            console.log("[Voice WS] ✅ WebSocket OPENED successfully!");
             setStatus("connected");
             onReady?.();
         };
 
         ws.onmessage = async (event) => {
+            console.log("[Voice WS] Message received:", event.data instanceof Blob ? "Blob audio" : "JSON data");
             if (event.data instanceof Blob) {
                 // AI Voice Audio
                 handleIncomingAudio(event.data);
@@ -79,13 +106,22 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
         };
 
         ws.onerror = (e) => {
-            console.error("WebSocket error", e);
+            console.error("[Voice WS] ❌ WebSocket ERROR:", e);
+            console.error("[Voice WS] Error details:", { readyState: ws.readyState, url: connectionUrl });
             setStatus("error");
+            // WebSocket onError doesn't provide error details for security reasons
+            // We'll rely on server sending an error message or the close event
             onError?.(e);
         };
 
-        ws.onclose = () => {
-            setStatus("disconnected");
+        ws.onclose = (event) => {
+            console.log("[Voice WS] WebSocket CLOSED:", { code: event.code, reason: event.reason, wasClean: event.wasClean });
+            if (status !== "error") {
+                setStatus("disconnected");
+            }
+            if (event.reason) {
+                setError(event.reason);
+            }
             wsRef.current = null;
         };
     }, [url, onReady, onError]);
@@ -114,7 +150,15 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
                 break;
             case "error":
                 console.error("Server error (full data):", data);
-                console.error("Server error (error prop):", data.error);
+                // Handle both string errors and object errors
+                const errorMessage = typeof data.error === 'string' 
+                    ? data.error 
+                    : data.error?.message || JSON.stringify(data.error) || "Unknown server error";
+                
+                console.error("Server error message:", errorMessage);
+                setStatus("error");
+                setError(errorMessage);
+                if (onError) onError(errorMessage);
                 break;
         }
         onMessageRef.current?.(data);
@@ -159,6 +203,7 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
      */
     const startRecording = async () => {
         if (isRecording) return;
+        setError(null); // Clear errors on restart attempt
 
         try {
             // Get microphone access
@@ -189,7 +234,19 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
             // Handle PCM audio chunks from worklet
             workletNode.port.onmessage = (event) => {
                 if (event.data.type === 'audio' && wsRef.current?.readyState === WebSocket.OPEN) {
-                    // Send raw PCM buffer directly
+                    // Send raw PCM buffer with sample rate metadata
+                    // First send is metadata, then binary audio data
+                    const metadata = {
+                        type: 'audio_config',
+                        sampleRate: event.data.sampleRate || 48000,
+                        channels: 1,
+                        encoding: 'linear16'
+                    };
+                    
+                    // Send config on first chunk (simple approach: send every time, server caches)
+                    wsRef.current.send(JSON.stringify(metadata));
+                    
+                    // Then send raw PCM buffer
                     wsRef.current.send(event.data.buffer);
                 }
             };
@@ -202,6 +259,7 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
             console.log("[Voice] Started recording with AudioWorklet at", audioContext.sampleRate, "Hz");
         } catch (e) {
             console.error("Failed to start recording", e);
+            setError("Microphone access failed. Please check permissions.");
             onError?.(e);
         }
     };
@@ -261,6 +319,7 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
         stopRecording,
         transcription,
         interimTranscription,
-        sendJson
+        sendJson,
+        error
     };
 }

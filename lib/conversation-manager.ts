@@ -267,7 +267,7 @@ export class ConversationManager {
         isSample?: boolean;
         sampleFeedback?: string;
         conversationNumber?: number;
-        language?: "en" | "fr" | "de";
+        language?: "en" | "fr" | "de" | "es" | "it";
     } = {}
   ): string {
     const { isSample, sampleFeedback, conversationNumber, language } = options;

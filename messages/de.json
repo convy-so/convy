@@ -1,0 +1,38 @@
+{
+    "Index": {
+        "title": "Convy",
+        "description": "KI-gestützte Umfragen"
+    },
+    "Survey": {
+        "Creation": {
+            "title": "Umfrage erstellen",
+            "start": "Starten",
+            "language": "Sprache"
+        },
+        "Response": {
+            "welcome": "Willkommen",
+            "start": "Umfrage starten",
+            "loading": "Ihre Umfrage wird vorbereitet...",
+            "notFound": "Umfrage konnte nicht geladen werden",
+            "closed": "Diese Umfrage nimmt keine Antworten mehr entgegen",
+            "errorHelp": "Bitte überprüfen Sie den Link und versuchen Sie es erneut.",
+            "thankYou": "Vielen Dank!",
+            "thankYouMessage": "Ihre Erkenntnisse sind unglaublich wertvoll. Wir schätzen es, dass Sie sich die Zeit nehmen, Ihre Gedanken mit uns zu teilen.",
+            "close": "Umfrage schließen",
+            "hideText": "Text ausblenden",
+            "showText": "Text anzeigen",
+            "voiceMode": "Sprachmodus",
+            "tryVoice": "Sprache ausprobieren",
+            "connectionFailed": "Verbindung fehlgeschlagen",
+            "connecting": "Verbinden...",
+            "listening": "Zuhören...",
+            "aiSpeaking": "KI spricht...",
+            "tapToSpeak": "Tippen zum Sprechen",
+            "aiReady": "KI bereit",
+            "initializing": "Initialisierung...",
+            "liveTranscription": "Live-Transkription",
+            "typeAnswer": "Geben Sie Ihre Antwort ein...",
+            "sharedMedia": "Geteilte Medien"
+        }
+    }
+}

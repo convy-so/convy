@@ -1,16 +1,19 @@
 /**
  * PCM Audio Worklet Processor
- * Captures raw audio and converts to 16-bit PCM at 16kHz for Deepgram STT
+ * Captures raw audio and converts to 16-bit PCM at native sample rate for Deepgram STT
+ * 
+ * PRODUCTION OPTIMIZATION: Sends audio at native rate (typically 48kHz) instead of 
+ * downsampling to 16kHz in the browser. This avoids quality degradation from poor 
+ * client-side resampling. Deepgram handles professional-grade resampling internally.
  */
 
 class PCMProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this.bufferSize = 2048; // ~128ms at 16kHz
+    this.bufferSize = 1024;
     this.buffer = new Float32Array(this.bufferSize);
     this.bufferIndex = 0;
     
-    // Handle stop command from main thread
     this.port.onmessage = (event) => {
       if (event.data.command === 'stop') {
         this.stopped = true;
@@ -20,41 +23,13 @@ class PCMProcessor extends AudioWorkletProcessor {
   }
 
   /**
-   * Downsample audio from native rate to target rate
-   * Simple linear interpolation
-   */
-  downsample(inputBuffer, inputSampleRate, outputSampleRate) {
-    if (inputSampleRate === outputSampleRate) {
-      return inputBuffer;
-    }
-    
-    const ratio = inputSampleRate / outputSampleRate;
-    const outputLength = Math.floor(inputBuffer.length / ratio);
-    const output = new Float32Array(outputLength);
-    
-    for (let i = 0; i < outputLength; i++) {
-      const srcIndex = i * ratio;
-      const srcIndexFloor = Math.floor(srcIndex);
-      const srcIndexCeil = Math.min(srcIndexFloor + 1, inputBuffer.length - 1);
-      const t = srcIndex - srcIndexFloor;
-      
-      // Linear interpolation
-      output[i] = inputBuffer[srcIndexFloor] * (1 - t) + inputBuffer[srcIndexCeil] * t;
-    }
-    
-    return output;
-  }
-
-  /**
    * Convert Float32 samples to 16-bit signed integers
    */
   floatTo16BitPCM(float32Array) {
     const int16Array = new Int16Array(float32Array.length);
     
     for (let i = 0; i < float32Array.length; i++) {
-      // Clamp value between -1 and 1
       const s = Math.max(-1, Math.min(1, float32Array[i]));
-      // Convert to 16-bit signed integer
       int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
     }
     
@@ -75,17 +50,14 @@ class PCMProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // Take first channel (mono)
     const inputChannel = input[0];
     if (!inputChannel || inputChannel.length === 0) {
       return true;
     }
 
-    // Add samples to buffer
     for (let i = 0; i < inputChannel.length; i++) {
       this.buffer[this.bufferIndex++] = inputChannel[i];
       
-      // When buffer is full, send it
       if (this.bufferIndex >= this.bufferSize) {
         this.sendBuffer();
       }
@@ -95,17 +67,12 @@ class PCMProcessor extends AudioWorkletProcessor {
   }
 
   sendBuffer() {
-    // Downsample from native rate (usually 44100 or 48000) to 16000 Hz
-    // sampleRate is a global in AudioWorkletGlobalScope
-    const downsampled = this.downsample(this.buffer, sampleRate, 16000);
-    
-    // Convert to 16-bit PCM
-    const pcm16 = this.floatTo16BitPCM(downsampled);
-    
-    // Send to main thread as ArrayBuffer
+    const pcm16 = this.floatTo16BitPCM(this.buffer);
+  
     this.port.postMessage({
       type: 'audio',
-      buffer: pcm16.buffer
+      buffer: pcm16.buffer,
+      sampleRate: sampleRate 
     }, [pcm16.buffer]);
     
     this.buffer = new Float32Array(this.bufferSize);

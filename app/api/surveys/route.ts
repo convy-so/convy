@@ -70,7 +70,7 @@ export async function POST(request: Request) {
     
     // Validate language
     const body = await request.json();
-    const language = (body.language === "fr" || body.language === "de") ? body.language : "en";
+    const language = (body.language === "fr" || body.language === "de" || body.language === "es" || body.language === "it") ? body.language : "en";
 
     const [survey] = await db
       .insert(surveys)

@@ -52,6 +52,7 @@ function transformStoredInsights(
     averageResponseLength:
       (storedInsights.averageResponseLength as number) || 0,
     durationMinutes: (storedInsights.durationMinutes as number) || 0,
+    activeDurationMinutes: (storedInsights.activeDurationMinutes as number) || 0,
     followUpDepth: (storedInsights.followUpDepth as number) || 0,
     engagementLevel:
       (storedInsights.engagementLevel as "high" | "medium" | "low") || "medium",
@@ -142,6 +143,7 @@ function parseSurveyAnalyticsResponse(
         averageResponseLength: coreMetrics.averageResponseLength || 0,
         averageFollowUpDepth: coreMetrics.averageFollowUpDepth || 0,
         medianDurationMinutes: coreMetrics.medianDurationMinutes || 0,
+        medianActiveDurationMinutes: coreMetrics.medianActiveDurationMinutes || 0,
         insightQualityScore: coreMetrics.insightQualityScore || 5,
         responseEngagementDistribution:
           coreMetrics.responseEngagementDistribution || {
@@ -149,7 +151,6 @@ function parseSurveyAnalyticsResponse(
             medium: 0,
             low: 0,
           },
-        topicCoverageRate: coreMetrics.topicCoverageRate || 0,
         requiredQuestionsCompletion: transformRequiredQuestionsCompletion(
           parsed.requiredQuestionsCompletion || [],
           requiredQuestions
@@ -435,6 +436,7 @@ function createFallbackAnalytics(
       averageResponseLength: coreMetrics.averageResponseLength || 0,
       averageFollowUpDepth: coreMetrics.averageFollowUpDepth || 0,
       medianDurationMinutes: coreMetrics.medianDurationMinutes || 0,
+      medianActiveDurationMinutes: coreMetrics.medianActiveDurationMinutes || 0,
       insightQualityScore: coreMetrics.insightQualityScore || 5,
       responseEngagementDistribution:
         coreMetrics.responseEngagementDistribution || {
@@ -442,7 +444,6 @@ function createFallbackAnalytics(
           medium: 0,
           low: 0,
         },
-      topicCoverageRate: 0,
       requiredQuestionsCompletion: [],
     },
 

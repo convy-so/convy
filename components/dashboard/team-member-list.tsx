@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import {
-    Plus,
     UserPlus,
     Mail,
     Crown,
@@ -11,10 +10,7 @@ import {
     Trash2,
     User,
     X,
-    Check,
     Loader2,
-    Copy,
-    RefreshCw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { inviteToWorkspace, removeWorkspaceMember } from "@/app/actions/workspace";

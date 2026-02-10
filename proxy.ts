@@ -1,10 +1,18 @@
+import createMiddleware from "next-intl/middleware";
+import { routing } from "./i18n/routing";
 import { betterFetch } from "@better-fetch/fetch";
 import type { Session } from "better-auth/types";
 import { NextResponse, type NextRequest } from "next/server";
 
-export default async function authMiddleware(request: NextRequest) {
+const intlMiddleware = createMiddleware(routing);
+
+export default async function middleware(request: NextRequest) {
     const { nextUrl } = request;
-    const isDashboardRoute = nextUrl.pathname.startsWith("/dashboard");
+    
+    // Check if the request is for a dashboard route
+    // This includes both direct /dashboard and localized /:locale/dashboard
+    const isDashboardRoute = nextUrl.pathname.startsWith("/dashboard") || 
+                             routing.locales.some((locale: string) => nextUrl.pathname.startsWith(`/${locale}/dashboard`));
 
     if (isDashboardRoute) {
         try {
@@ -24,15 +32,15 @@ export default async function authMiddleware(request: NextRequest) {
             }
         } catch (error) {
             console.error("Auth middleware error:", error);
-            // On error, better to be safe and redirect or let it pass? 
-            // Usually redirect to sign-in if we can't verify session.
             return NextResponse.redirect(new URL("/sign-in", request.url));
         }
     }
 
-    return NextResponse.next();
+    // Run internationalization middleware
+    return intlMiddleware(request);
 }
 
 export const config = {
-    matcher: ["/dashboard/:path*"],
+    // Matcher config to cover both i18n and dashboard
+    matcher: ["/", "/(de|en|fr|es|it)/:path*", "/dashboard/:path*"],
 };

@@ -13,6 +13,15 @@ import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 export async function GET(req: NextRequest) {
+  // TEMPORARY: Zapier integration is disabled
+  return NextResponse.json(
+    {
+      status: "error",
+      message: "Zapier integration is temporarily disabled. Coming soon!",
+    },
+    { status: 503 }
+  );
+  
   try {
     const session = await getVerifiedSession();
 

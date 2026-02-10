@@ -207,6 +207,38 @@ export async function PUT(
       return new Response("Survey not found", { status: 404 });
     }
 
+    // Calculate duration metrics
+    const sortedMessages = messages
+      .filter((m) => m.timestamp)
+      .sort(
+        (a, b) =>
+          new Date(a.timestamp!).getTime() - new Date(b.timestamp!).getTime()
+      );
+
+    let durationMs = 0;
+    let activeDurationMs = 0;
+    const MAX_ACTIVE_GAP_MS = 2 * 60 * 1000; // 2 minutes threshold for "active" time per message
+
+    if (sortedMessages.length > 1) {
+      const startTime = new Date(sortedMessages[0].timestamp!).getTime();
+      const endTime = new Date(
+        sortedMessages[sortedMessages.length - 1].timestamp!
+      ).getTime();
+      durationMs = endTime - startTime;
+
+      // Calculate active duration by summing gaps, capped at threshold
+      for (let i = 1; i < sortedMessages.length; i++) {
+        const prevTime = new Date(sortedMessages[i - 1].timestamp!).getTime();
+        const currTime = new Date(sortedMessages[i].timestamp!).getTime();
+        const gap = currTime - prevTime;
+        
+        // Only valid positive gaps
+        if (gap > 0) {
+            activeDurationMs += Math.min(gap, MAX_ACTIVE_GAP_MS);
+        }
+      }
+    }
+
     await db
       .update(surveyConversations)
       .set({
@@ -216,6 +248,8 @@ export async function PUT(
           timestamp: msg.timestamp || new Date().toISOString(),
         })),
         completed: completed ?? false,
+        durationMs,
+        activeDurationMs,
       })
       .where(eq(surveyConversations.id, conversationId));
 

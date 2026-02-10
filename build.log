@@ -1,0 +1,19 @@
+
+> convy@0.1.0 build C:\Users\pc\convy
+> next build
+
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\pc\pnpm-lock.yaml as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * C:\Users\pc\convy\pnpm-lock.yaml
+
+▲ Next.js 16.1.5 (Turbopack)
+- Environments: .env
+
+
+> Build error occurred
+Error: Both middleware file "./middleware.ts" and proxy file "./proxy.ts" are detected. Please use "./proxy.ts" only. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+    at ignore-listed frames
+ ELIFECYCLE  Command failed with exit code 1.

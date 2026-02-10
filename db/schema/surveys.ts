@@ -146,6 +146,8 @@ const surveyCreationConversations = pgTable(
       >()
       .notNull()
       .default([]),
+    durationMs: integer("duration_ms").default(0),
+    activeDurationMs: integer("active_duration_ms").default(0),
     status: creationConversationStatusEnum("status")
       .default("in_progress")
       .notNull(),
@@ -215,6 +217,8 @@ const sampleConversations = pgTable(
     messages: jsonb("messages")
       .$type<Array<{ role: "user" | "assistant"; content: string }>>()
       .notNull(),
+    durationMs: integer("duration_ms").default(0),
+    activeDurationMs: integer("active_duration_ms").default(0),
     feedback: text("feedback"),
     confirmed: boolean("confirmed").default(false).notNull(),
     insights: jsonb("insights").$type<{
@@ -253,6 +257,8 @@ const surveyConversations = pgTable(
         }>
       >()
       .notNull(),
+    durationMs: integer("duration_ms").default(0),
+    activeDurationMs: integer("active_duration_ms").default(0),
     summary: text("summary"),
     completed: boolean("completed").default(false).notNull(),
   },

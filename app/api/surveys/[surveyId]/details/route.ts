@@ -136,6 +136,9 @@ export async function GET(
                 requiredQuestions: survey.requiredQuestions,
                 metrics: survey.metrics,
                 language: survey.language,
+                isVoice: survey.isVoice,  // ADD: Include voice capability flag
+                media: survey.media,  // ADD: Include media for display in sample conversations
+                sampleConversationCount: survey.sampleConversationCount,  // ADD: Include sample count
             },
             stats: {
                 totalResponses,

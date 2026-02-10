@@ -38,7 +38,7 @@ export function ConversationCard({
 
   return (
     <Link
-      href={`/dashboard/surveys/${surveyId}/analytics/conversations/${id}`}
+      href={`/dashboard/surveys/${surveyId}/responses/${id}`}
       className="group block bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 transition-all duration-200"
     >
       <div className="flex justify-between items-start mb-3">

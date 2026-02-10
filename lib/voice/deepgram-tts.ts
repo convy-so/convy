@@ -20,6 +20,8 @@ export const GREETING_TEXTS = {
   "en-survey-creation": "Hi! I'm here to help you create the perfect survey. Let's start with the basics - what's the main objective of your survey? What do you want to learn from your respondents?",
   "fr-survey-creation": "Bonjour! Je suis là pour vous aider à créer le sondage parfait. Commençons par les bases - quel est l'objectif principal de votre sondage?",
   "de-survey-creation": "Hallo! Ich bin hier, um Ihnen bei der Erstellung der perfekten Umfrage zu helfen. Beginnen wir mit den Grundlagen - was ist das Hauptziel Ihrer Umfrage?",
+  "es-survey-creation": "¡Hola! Estoy aquí para ayudarte a crear la encuesta perfecta. Empecemos por lo básico: ¿cuál es el objetivo principal de tu encuesta?",
+  "it-survey-creation": "Ciao! Sono qui per aiutarti a creare il sondaggio perfetto. Iniziamo dalle basi: qual è l'obiettivo principale del tuo sondaggio?",
 } as const;
 
 /**
@@ -55,9 +57,10 @@ export interface TTSError {
 
 /**
  * Voice configurations for different languages and tones using Aura-2 models
+ * Updated with correct multilingual Aura-2 models (Jan 2026)
  */
 export const VOICE_PROFILES = {
-  // English voices
+  // English voices (Aura-1)
   "en-casual": { // Asteria is friendly/casual
     model: "aura-asteria-en",
     language: "en-US",
@@ -75,28 +78,48 @@ export const VOICE_PROFILES = {
     language: "en-US",
   },
 
-  // French voices (Deepgram currently supports specialized Aura voices for French?)
-  // If not, we fallback to English or specific available models. 
-  // IMPORTANT: Check Deepgram docs for Aura international availability.
-  // Assuming generic support or fallback for this implementation.
-  // Update: Deepgram released Aura support for other languages.
+  // French voices (Aura-2 multilingual)
+  // Using Agathe (female, versatile) and Hector (male)
   "fr-casual": {
-    model: "aura-asteria-en", // Fallback if no FR specific Aura yet, or use specific FR model
+    model: "aura-2-agathe-fr", // Female, friendly and natural
     language: "fr-FR",
   },
   "fr-formal": {
-    model: "aura-athena-en",
+    model: "aura-2-hector-fr", // Male, clear and professional
     language: "fr-FR",
   },
 
-  // German voices
+  // German voices (Aura-2 multilingual)
+  // Using Viktoria (female, versatile) and Julius (male, featured)
   "de-casual": {
-    model: "aura-asteria-en", 
+    model: "aura-2-viktoria-de", // Female, friendly and clear
     language: "de-DE",
   },
   "de-formal": {
-    model: "aura-athena-en",
+    model: "aura-2-julius-de", // Male, professional (featured voice)
     language: "de-DE",
+  },
+
+  // Spanish voices (Aura-2 multilingual)
+  // Using Celeste and Nestor (featured voices)
+  "es-casual": {
+    model: "aura-2-celeste-es", // Female, friendly (featured)
+    language: "es-ES",
+  },
+  "es-formal": {
+    model: "aura-2-nestor-es", // Male, professional (featured)
+    language: "es-ES",
+  },
+
+  // Italian voices (Aura-2 multilingual)
+  // Using Livia and Dionisio (featured voices)
+  "it-casual": {
+    model: "aura-2-livia-it", // Female, friendly (featured)
+    language: "it-IT",
+  },
+  "it-formal": {
+    model: "aura-2-dionisio-it", // Male, professional (featured)
+    language: "it-IT",
   },
 } as const;
 
@@ -192,11 +215,11 @@ export class DeepgramTTSService {
   async synthesizeForSurvey(
     text: string,
     tone: "formal" | "casual" | "playful" | "empathetic",
-    language: "en" | "fr" | "de" = "en"
+    language: "en" | "fr" | "de" | "es" | "it" = "en"
   ): Promise<TTSResult | TTSError> {
     const profileKey = `${language}-${tone}` as keyof typeof VOICE_PROFILES;
     if (!VOICE_PROFILES[profileKey]) {
-        // Fallback
+        // Fallback to casual voice of same language
         return this.synthesizeWithProfile(text, `${language}-casual` as keyof typeof VOICE_PROFILES);
     }
     return this.synthesizeWithProfile(text, profileKey);

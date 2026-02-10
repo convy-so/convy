@@ -79,7 +79,7 @@ export async function PATCH(
         if (typeof body.participantLimit === 'number' || typeof body.participantLimit === 'string') {
              updates.participantLimit = Number(body.participantLimit);
         }
-        if (body.language === 'en' || body.language === 'fr' || body.language === 'de') {
+        if (['en', 'fr', 'de', 'es', 'it'].includes(body.language)) {
             updates.language = body.language;
         }
         if (typeof body.isVoice === 'boolean') {

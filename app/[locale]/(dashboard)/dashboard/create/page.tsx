@@ -40,10 +40,10 @@ type Message = {
 };
 
 const suggestedPrompts = [
-  "I want to understand customer satisfaction with our product",
-  "I need feedback on our new mobile app features",
-  "I'm researching employee engagement and workplace culture",
-  "I want to gather market research for a new product launch",
+  "I want to understand how students are engaging with my course material",
+  "I need feedback on our new healthcare patient portal",
+  "I'm researching customer preferences for our upcoming product",
+  "I want to assess employee satisfaction with our remote work policy",
 ];
 
 const TYPING_DELAY_MS = 15;
@@ -68,13 +68,13 @@ function CreateSurveyContent() {
   const [surveyStatus, setSurveyStatus] = useState<string | null>(null);
   
   // Language state
-  const [language, setLanguage] = useState<"en" | "fr" | "de">("en");
+  const [language, setLanguage] = useState<"en" | "fr" | "de" | "es" | "it">("en");
   const [isLanguageOpen, setIsLanguageOpen] = useState(false);
   const [isVoiceSurvey, setIsVoiceSurvey] = useState(false);
 
   const toggleLanguage = () => setIsLanguageOpen(!isLanguageOpen);
   
-  const updateLanguage = async (newLang: "en" | "fr" | "de") => {
+  const updateLanguage = async (newLang: "en" | "fr" | "de" | "es" | "it") => {
     setLanguage(newLang);
     setIsLanguageOpen(false);
     
@@ -1032,7 +1032,7 @@ function CreateSurveyContent() {
                   
                   {isLanguageOpen && (
                     <div className="absolute top-full mt-1 right-0 w-32 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50 animate-in fade-in zoom-in-95 duration-200">
-                      {(["en", "fr", "de"] as const).map((lang) => (
+                      {(["en", "fr", "de", "es", "it"] as const).map((lang) => (
                         <button
                           key={lang}
                           onClick={() => updateLanguage(lang)}
@@ -1042,7 +1042,7 @@ function CreateSurveyContent() {
                           )}
                         >
                            <span className="capitalize">
-                             {lang === "en" ? "English" : lang === "fr" ? "Français" : "Deutsch"}
+                             {lang === "en" ? "English" : lang === "fr" ? "Français" : lang === "de" ? "Deutsch" : lang === "es" ? "Español" : "Italiano"}
                            </span>
                            {language === lang && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
                         </button>
@@ -1401,13 +1401,13 @@ function CreateSurveyContent() {
             
             {/* Suggested Prompts Overlay (Bottom Center) */}
             {!isVoiceMode && messages.length === 1 && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-10">
-                   <div className="flex flex-wrap gap-2 justify-center">
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-full max-w-3xl px-4 z-10">
+                   <div className="grid grid-cols-2 gap-3">
                       {suggestedPrompts.map((prompt, index) => (
                         <button
                           key={index}
                           onClick={() => handleSuggestedPrompt(prompt)}
-                          className="px-4 py-2 bg-white/90 backdrop-blur-sm hover:bg-white border border-gray-200 rounded-full text-sm text-gray-600 transition-all hover:border-gray-300"
+                          className="px-4 py-3 bg-white/90 backdrop-blur-sm hover:bg-white border border-gray-200 rounded-xl text-sm text-gray-600 transition-all hover:border-gray-300 text-left hover:shadow-sm"
                         >
                           {prompt}
                         </button>
@@ -1465,8 +1465,8 @@ function CreateSurveyContent() {
                           onKeyDown={handleKeyDown}
                           placeholder="Describe your survey goals..."
                           rows={1}
-                          className="flex-1 py-4 px-2 bg-transparent outline-none resize-none text-base text-gray-800 placeholder:text-gray-400 min-h-[56px] max-h-40"
-                          style={{ minHeight: "56px" }}
+                          className="flex-1 py-4 px-4 bg-transparent outline-none resize-none text-base text-gray-800 placeholder:text-gray-400 min-h-[96px] max-h-60"
+                          style={{ minHeight: "96px" }}
                         />
                         
                         <div className="p-2 mb-1 mr-1">

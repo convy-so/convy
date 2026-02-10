@@ -1,3 +1,4 @@
+import { surveys } from "@/db/schema";
 import { WebSocket } from "ws";
 import { AudioBufferManager} from "@/lib/voice/audio-processing";
 import {
@@ -19,7 +20,7 @@ import {
 // Configuration constants
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes idle timeout
 const IDLE_WARNING_MS = 30 * 1000; // Warn 30 seconds before timeout
-const SPEECH_PROCESSING_DELAY_MS = 800; // Wait 800ms after speech ends for final results
+const SPEECH_PROCESSING_DELAY_MS = 20; // Effectively immediate (min buffer for event loop)
 
 export abstract class BaseVoiceHandler {
   protected ws: WebSocket;
@@ -30,6 +31,9 @@ export abstract class BaseVoiceHandler {
   protected sttSession: DeepgramSTTStreamingSession | null = null;
   protected tts: ReturnType<typeof getDeepgramTTSService>;
   protected isActive: boolean = true;
+  
+  // Audio configuration from client
+  protected audioSampleRate: number = 48000; // Default to 48kHz, updated from client
   
   // Transcription state
   protected pendingTranscription: string = "";
@@ -43,6 +47,12 @@ export abstract class BaseVoiceHandler {
   protected idleWarningTimeout: NodeJS.Timeout | null = null;
   protected lastActivityTime: number = Date.now();
   protected isRestarting: boolean = false;
+
+  // Exact duration tracking
+  protected activeDurationMs: number = 0;
+  protected lastInteractionEndTime: number = Date.now();
+  protected currentSpeechStartTime: number | null = null;
+  protected readonly MAX_SILENCE_GAP_MS = 30 * 1000; // 30 seconds cap for silence
 
 
   constructor(
@@ -66,12 +76,31 @@ export abstract class BaseVoiceHandler {
    */
   abstract initialize(): Promise<void>;
   abstract processUserMessage(text: string): Promise<void>;
-  protected abstract getLanguage(): "en" | "fr" | "de";
+  protected abstract getLanguage(): typeof surveys.$inferSelect.language;
   
   protected async handleControlMessage(message: any): Promise<void> {
     // Default implementation can be overridden
     if (message.type === "ping") {
       this.send({ type: "pong" });
+    }
+  }
+
+  /**
+   * Handle audio configuration from client
+   */
+  protected handleAudioConfig(config: { sampleRate: number; channels: number; encoding: string }): void {
+    const newSampleRate = config.sampleRate || 48000;
+    
+    // Only process if sample rate actually changed
+    if (this.audioSampleRate !== newSampleRate) {
+        this.audioSampleRate = newSampleRate;
+        console.log(`[VoiceHandler] Audio config update: ${this.audioSampleRate}Hz, ${config.channels}ch, ${config.encoding}`);
+        
+        // Reinitialize STT session with new sample rate if already active
+        if (this.sttSession && this.sttSession.isActive) {
+          console.log(`[VoiceHandler] Reinitializing STT with new sample rate: ${this.audioSampleRate}Hz`);
+          this.restartSTTSession();
+        }
     }
   }
 
@@ -140,6 +169,12 @@ export abstract class BaseVoiceHandler {
         // Try to parse as JSON (control messages)
         const message = JSON.parse(data.toString());
         
+        // Handle audio configuration from client
+        if (message.type === 'audio_config') {
+          this.handleAudioConfig(message);
+          return;
+        }
+        
         // Rate limit checks for JSON messages
         const messageCheck = await checkMessageAllowed(this.identifier);
         if (!messageCheck.allowed) {
@@ -204,11 +239,20 @@ export abstract class BaseVoiceHandler {
   protected initializeSTTSession(): void {
     if (!this.isActive) return;
 
+    const language = this.getLanguage();
+    
+    // Language-aware endpointing for optimal conversational flow:
+    // - English (Flux): 1s - Flux has advanced turn detection built-in
+    // - Other languages (Nova-3): 0.8s - Aggressive timeout for real-time feel
+    // This creates a snappy, natural voice agent experience
+    const speechEndTimeout = language === "en" ? 1.0 : 0.8;
+
     this.sttSession = this.sttService.createStreamingSession({
-      language: this.getLanguage(),
+      language,
       enableInterimResults: true,
       enableAutoPunctuation: true,
-      speechEndTimeout: 1.5,
+      speechEndTimeout, // Language-optimized timeout
+      sampleRate: this.audioSampleRate, // Use dynamic sample rate from client (48kHz)
       // Note: Deepgram handles continuous streaming via endpointing, no singleUtterance needed
     });
 
@@ -282,6 +326,15 @@ export abstract class BaseVoiceHandler {
     switch (event.type) {
       case "SPEECH_START":
         this.isSpeechActive = true;
+        
+        // Calculate gap since last interaction (User or AI)
+        const now = Date.now();
+        const gap = now - this.lastInteractionEndTime;
+        if (gap > 0) {
+            this.activeDurationMs += Math.min(gap, this.MAX_SILENCE_GAP_MS);
+        }
+        this.currentSpeechStartTime = now;
+
         if (this.speechProcessingTimeout) {
           clearTimeout(this.speechProcessingTimeout);
           this.speechProcessingTimeout = null;
@@ -292,6 +345,15 @@ export abstract class BaseVoiceHandler {
       case "SPEECH_END":
       case "END_OF_UTTERANCE":
         this.isSpeechActive = false;
+        
+        // Add speech duration
+        if (this.currentSpeechStartTime) {
+            const speechDuration = Date.now() - this.currentSpeechStartTime;
+            this.activeDurationMs += speechDuration;
+            this.currentSpeechStartTime = null;
+        }
+        this.lastInteractionEndTime = Date.now();
+
         this.send({ type: "speech_end" });
         console.log(`[VoiceHandler] Speech ended, will process transcription in ${SPEECH_PROCESSING_DELAY_MS}ms`);
 

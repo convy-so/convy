@@ -98,8 +98,10 @@ export async function GET(
               completedConversations: completedCount,
               completionRate: completionRate,
               averageMessagesPerConversation: 0,
+              averageResponseLength: 0,
               averageFollowUpDepth: 0,
               medianDurationMinutes: 0,
+              medianActiveDurationMinutes: 0,
               insightQualityScore: 0,
               responseEngagementDistribution: { high: 0, medium: 0, low: 0 },
               requiredQuestionsCompletion: []
@@ -201,8 +203,10 @@ export async function GET(
         completedConversations: analytics.totalConversations,
         completionRate: 100,
         averageMessagesPerConversation: analytics.averageConversationLength,
+        averageResponseLength: 0,
         averageFollowUpDepth: 0,
         medianDurationMinutes: 0,
+        medianActiveDurationMinutes: 0,
         insightQualityScore: 5,
         responseEngagementDistribution: { high: 0, medium: 0, low: 0 },
         requiredQuestionsCompletion: [],
@@ -457,7 +461,9 @@ export async function getConversationInsights(
           (stored.messageCount as number) || c.rawConversation?.length || 0,
         participantResponseCount:
           (stored.participantResponseCount as number) || 0,
+        averageResponseLength: (stored.averageResponseLength as number) || 0,
         durationMinutes: (stored.durationMinutes as number) || 0,
+        activeDurationMinutes: (stored.activeDurationMinutes as number) || 0,
         followUpDepth: (stored.followUpDepth as number) || 0,
         engagementLevel:
           (stored.engagementLevel as "high" | "medium" | "low") || "medium",
