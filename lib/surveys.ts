@@ -38,7 +38,6 @@ export function buildCompleteSurveyConfig(
     constraints: survey.constraints ?? undefined,
     hypotheses: survey.hypotheses ?? undefined,
     tone: (survey.tone as ToneProfile) ?? "casual",
-    additionalContext: survey.additionalContext ?? undefined,
     media: survey.media ?? undefined,
     personalInfo: survey.personalInfo ?? undefined,
     domainId: survey.domainId ?? undefined,
@@ -68,6 +67,7 @@ export const REQUIRED_INFORMATION = {
     ],
   },
 
+
   scope: {
     required: true,
     priority: 3,
@@ -80,7 +80,7 @@ export const REQUIRED_INFORMATION = {
   },
 
   successCriteria: {
-    required: true,
+    required: true, // Now mandatory to ask
     priority: 4,
     description: "What makes a response valuable",
     qualityChecks: [
@@ -107,14 +107,14 @@ export const REQUIRED_INFORMATION = {
   },
 
   tone: {
-    required: false,
+    required: true, // Now mandatory to ask
     priority: 7,
     description: "Conversation style preferences",
     qualityChecks: ["Formality level is specified"],
   },
 
   requiredQuestions: {
-    required: false,
+    required: true,
     priority: 8,
     description: "Specific questions to include in the survey",
     qualityChecks: [
@@ -131,6 +131,19 @@ export const REQUIRED_INFORMATION = {
       "Media purpose is clear",
       "Context for when to show is defined",
     ],
+  },
+  metrics: {
+    required: true,
+    priority: 10,
+    description: "Metrics to track (NPS, CSAT, CES, etc.)",
+    qualityChecks: ["Metrics align with the survey objective"],
+  },
+
+  personalInfo: {
+    required: true,
+    priority: 11,
+    description: "Whether to collect respondent personal data (name, email, age, job title, etc.)",
+    qualityChecks: ["Need for personal info is justified"],
   },
 } as const;
 

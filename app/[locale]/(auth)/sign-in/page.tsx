@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
+import { Link, useRouter } from "@/i18n/routing";
+import { useTranslations } from "next-intl";
 import { Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleButton } from "@/components/auth/google-button";
@@ -14,7 +15,10 @@ import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
 
 export default function SignInPage() {
+  const params = useParams();
+  const locale = params.locale as string;
   const router = useRouter();
+  const t = useTranslations('Auth.SignIn');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
@@ -35,7 +39,7 @@ export default function SignInPage() {
         rememberMe: formData.rememberMe,
         fetchOptions: {
           onSuccess: (ctx) => {
-            toast.success("Signed in successfully");
+            toast.success(t('Success'));
             setIsRedirecting(true);
             router.push("/dashboard");
           },
@@ -54,7 +58,7 @@ export default function SignInPage() {
   const handleGoogleSignIn = async () => {
     await authClient.signIn.social({
       provider: "google",
-      callbackURL: "/dashboard"
+      callbackURL: `/${locale}/dashboard`
     });
   };
 
@@ -62,13 +66,13 @@ export default function SignInPage() {
     <>
       {isRedirecting && (
         <LoadingOverlay 
-          message="Loading..." 
-          subtitle="Redirecting you to dashboard"
+          message={t('LoadingOverlay')}
+          subtitle={t('Redirecting')}
         />
       )}
     <AuthCard
-      title="Welcome back"
-      subtitle="Sign in to your account to continue"
+      title={t('Title')}
+      subtitle={t('Subtitle')}
     >
       <GoogleButton onClick={handleGoogleSignIn} />
 
@@ -80,22 +84,22 @@ export default function SignInPage() {
         <InputField
           id="email"
           type="email"
-          label="Email address"
+          label={t('EmailLabel')}
           icon={Mail}
           value={formData.email}
           onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-          placeholder="Enter your email"
+          placeholder={t('EmailPlaceholder')}
           required
         />
 
         <InputField
           id="password"
           type={showPassword ? "text" : "password"}
-          label="Password"
+          label={t('PasswordLabel')}
           icon={Lock}
           value={formData.password}
           onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-          placeholder="Enter your password"
+          placeholder={t('PasswordPlaceholder')}
           rightElement={
             <button
               type="button"
@@ -116,29 +120,29 @@ export default function SignInPage() {
               onChange={(e) => setFormData({ ...formData, rememberMe: e.target.checked })}
               className="w-4 h-4 text-[#292929] border-gray-300 rounded focus:ring-[#292929] focus:ring-2"
             />
-            <span className="ml-2 text-sm text-[#696969]">Remember me</span>
+            <span className="ml-2 text-sm text-[#696969]">{t('RememberMe')}</span>
           </label>
           <Link
             href="/forgot-password"
             className="text-sm text-[#292929] hover:text-[#292929]/80 font-medium transition-colors"
           >
-            Forgot password?
+            {t('ForgotPassword')}
           </Link>
         </div>
 
-        <SubmitButton isLoading={isLoading} loadingText="Signing in...">
-          Sign in
+        <SubmitButton isLoading={isLoading} loadingText={t('Loading')}>
+          {t('Button')}
         </SubmitButton>
       </form>
 
       <div className="text-center mt-6">
         <p className="text-[#696969] text-sm">
-          Don't have an account?{" "}
+          {t('NoAccount')}{" "}
           <Link
             href="/sign-up"
             className="text-[#292929] font-medium hover:text-[#292929]/80 transition-colors"
           >
-            Sign up
+           {t('SignUpLink')}
           </Link>
         </p>
       </div>

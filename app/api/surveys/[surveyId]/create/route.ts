@@ -11,6 +11,7 @@ import {
   getSurveyDataExtractionPrompt,
   type CollectedInfo,
 } from "@/lib/prompts";
+import { getTimeBasedGreeting } from "@/lib/greetings";
 import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
 
 export const maxDuration = 300;
@@ -79,7 +80,6 @@ async function performIncrementalExtraction(
       tone: z
         .enum(["formal", "casual", "playful", "empathetic"])
         .nullable(),
-      additionalContext: z.string().nullable(),
       requiredQuestions: z.array(z.string().min(5)).nullable(),
       metrics: z.array(z.string().min(2)).nullable(),
       personalInfo: z.array(z.string()).nullable(),
@@ -102,7 +102,6 @@ async function performIncrementalExtraction(
         constraints: z.boolean(),
         hypotheses: z.boolean(),
         tone: z.boolean(),
-        additionalContext: z.boolean(),
         requiredQuestions: z.boolean(),
         metrics: z.boolean(),
         personalInfo: z.boolean(),
@@ -223,6 +222,15 @@ export async function POST(
       );
     }
 
+    // If no messages, generate and return a time-adaptive greeting
+    if (messages.length === 0) {
+      const greeting = getTimeBasedGreeting('creation', survey.language || 'en');
+      return new Response(greeting, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+    }
+
     const [creationConversation] = await db
       .select()
       .from(surveyCreationConversations)
@@ -237,7 +245,6 @@ export async function POST(
         constraints: false,
         hypotheses: false,
         tone: false,
-        additionalContext: false,
         requiredQuestions: false,
         metrics: false,
         personalInfo: false,
@@ -479,7 +486,6 @@ export async function PUT(
           constraints: false,
           hypotheses: false,
           tone: false,
-          additionalContext: false,
           requiredQuestions: false,
           metrics: false,
           personalInfo: false,
@@ -542,7 +548,7 @@ export async function GET(
         JSON.stringify({
           collectedInfo: {
             objective: false, targetAudience: false, scope: false, successCriteria: false,
-            constraints: false, hypotheses: false, tone: false, additionalContext: false,
+            constraints: false, hypotheses: false, tone: false,
             requiredQuestions: false, metrics: false, personalInfo: false,
             subjectDefined: false, domainIdentified: false,
           },

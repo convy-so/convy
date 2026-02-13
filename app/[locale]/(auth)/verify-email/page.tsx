@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams, useParams } from "next/navigation";
+import { useRouter } from "@/i18n/routing";
+import { useTranslations } from "next-intl";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
 import { StatusCard } from "@/components/auth/status-card";
@@ -9,15 +11,17 @@ import { LoadingOverlay } from "@/components/auth/loading-overlay";
 
 export default function VerifyEmailPage() {
   const router = useRouter();
+  const params = useParams();
+  const locale = params.locale as string;
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
-  
+  const t = useTranslations('Auth.VerifyEmail');
+
   const [email, setEmail] = useState<string | null>(null);
   const [isResending, setIsResending] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
-    // Try to get email from URL if present (legacy support) or sessionStorage
     const emailParam = searchParams.get("email");
     if (emailParam) {
       setEmail(emailParam);
@@ -36,48 +40,47 @@ export default function VerifyEmailPage() {
             },
             fetchOptions: {
               onSuccess: () => {
-                toast.success("Email verified successfully!");
+                toast.success(t('SuccessToast'));
                 router.push("/dashboard");
               },
               onError: (ctx) => {
                 setIsVerifying(false);
-                toast.error(ctx.error.message || "Verification failed");
+                toast.error(ctx.error.message || t('ErrorToast'));
               }
             }
           });
         } catch (error) {
           setIsVerifying(false);
-          toast.error("An error occurred during verification");
+          toast.error(t('GenericError'));
         }
       };
-      
+
       verify();
     }
-  }, [token, router]);
+  }, [token, router, searchParams, t]);
 
   const handleResendVerification = async () => {
     if (!email) return;
     setIsResending(true);
-    
+
     try {
-        await authClient.sendVerificationEmail({
-            email,
-            callbackURL: "/dashboard"
-        });
-        toast.success("Verification email sent!");
-    } catch(err) {
-        toast.error("Failed to send verification email");
+      await authClient.sendVerificationEmail({
+        email,
+        callbackURL: `/${locale}/dashboard`
+      });
+      toast.success(t('ResendSuccess'));
+    } catch (err) {
+      toast.error(t('ResendError'));
     } finally {
-        setIsResending(false);   
+      setIsResending(false);
     }
   };
 
-  // Show loading overlay when verifying token
   if (isVerifying) {
     return (
-      <LoadingOverlay 
-        message="Verifying your email..." 
-        subtitle="Please wait a moment"
+      <LoadingOverlay
+        message={t('Verifying')}
+        subtitle={t('VerifyingSubtitle')}
       />
     );
   }
@@ -85,20 +88,20 @@ export default function VerifyEmailPage() {
   return (
     <StatusCard
       imageSrc="/check-email.png"
-      title="Check your email"
+      title={t('Title')}
       description={
         <>
-          We've sent a verification link to <span className="font-semibold text-[#292929]">{email || "your email"}</span>. Please check your inbox and follow the instructions to verify your account.
+          {t('Description', { email: email || t('DefaultEmail') })}
         </>
       }
       showLogo
       actionButton={email ? {
-        text: isResending ? "Sending..." : "Resend verification email",
+        text: isResending ? t('ResendingButton') : t('ResendButton'),
         onClick: handleResendVerification,
         disabled: isResending
       } : undefined}
       secondaryAction={{
-        text: "Back to sign in",
+        text: t('BackToSignIn'),
         href: "/sign-in"
       }}
     />

@@ -5,7 +5,7 @@ import { SurveyAnalyticsData } from "@/lib/analytics";
 import { SentimentGauge } from "./SentimentGauge";
 import { DashboardGrid } from "./DashboardGrid";
 import { Loader2, AlertCircle } from "lucide-react";
-import Link from "next/link";
+import { Link } from "@/i18n/routing";
 import { RespondentLimitTracker } from "./RespondentLimitTracker";
 
 interface AnalyticsDashboardProps {

@@ -50,7 +50,10 @@ export default async function LocaleLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={locale} className="bg-[#FAFAFA]">
+    <html lang={locale} className="bg-[#FAFAFA]" suppressHydrationWarning translate="no">
+      <head>
+        <meta name="google" content="notranslate" />
+      </head>
       <body
         className={`${aspekta.variable} ${fasthand.variable} font-sans antialiased bg-[#FAFAFA]`}
       >

@@ -496,7 +496,11 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
   "survey-analytics",
   async (job: Job<SurveyAnalyticsJobData>) => {
     const validatedData = jobDataSchema.parse(job.data);
-    const { surveyId } = validatedData;
+    const { surveyId, userId } = validatedData;
+
+    // Get creator's preferred language for analytics generation
+    const { getUserPreferredLanguage } = await import("@/lib/translation-service");
+    const creatorLanguage = await getUserPreferredLanguage(userId);
 
     console.log(
       `[Survey Analytics Worker] Processing job ${job.id} for survey ${surveyId}`
@@ -510,6 +514,14 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
 
     if (!survey) {
       throw new Error(`Survey ${surveyId} not found`);
+    }
+
+    // Only generate analytics for active surveys
+    if (survey.status !== "active") {
+      console.log(
+        `[Survey Analytics Worker] Survey ${surveyId} is not active (${survey.status}). Skipping analytics generation.`
+      );
+      return;
     }
 
     await job.updateProgress(10);
@@ -715,6 +727,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
           averageConversationLength:
             analyticsData.coreMetrics.averageMessagesPerConversation,
           lastUpdated: new Date(),
+          generatedLanguage: creatorLanguage,
         })
         .where(eq(surveyAnalytics.surveyId, surveyId));
     } else {
@@ -726,6 +739,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
         totalConversations: analyticsData.coreMetrics.totalConversations,
         averageConversationLength:
           analyticsData.coreMetrics.averageMessagesPerConversation,
+        generatedLanguage: creatorLanguage,
       });
     }
 

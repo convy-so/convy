@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useState, useRef } from "react";
+import { useTranslations } from "next-intl";
 import {
   getZapierIntegrationStatus,
   getZapierSubscriptions,
@@ -17,15 +18,17 @@ import {
 
 
 export default function ZapierSettingsPage() {
+  const t = useTranslations('Zapier');
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Zapier Integration
+            {t('Title')}
           </h1>
           <p className="text-gray-600">
-            Connect your surveys to thousands of apps through Zapier.
+            {t('Description')}
           </p>
         </div>
 
@@ -38,20 +41,19 @@ export default function ZapierSettingsPage() {
               </svg>
             </div>
             <span className="inline-block px-3 py-1 rounded-full text-sm font-medium bg-blue-50 text-blue-600 border border-blue-200 mb-4">
-              Coming Soon
+              {t('ComingSoon.Badge')}
             </span>
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-3">
-            Zapier Integration is Coming Soon
+            {t('ComingSoon.Title')}
           </h2>
           <p className="text-gray-600 mb-6 max-w-md mx-auto">
-            We're working on bringing powerful Zapier integration to Convy. 
-            Soon you'll be able to connect your surveys to thousands of apps and automate your workflows.
+            {t('ComingSoon.Description')}
           </p>
           <div className="space-y-2 text-sm text-gray-500">
-            <p>✨ Trigger Zaps on new responses</p>
-            <p>🔄 Send survey data to any app</p>
-            <p>⚡ Real-time webhook delivery</p>
+            <p>{t('ComingSoon.Feature1')}</p>
+            <p>{t('ComingSoon.Feature2')}</p>
+            <p>{t('ComingSoon.Feature3')}</p>
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 
 import { type SurveyObjective, type SurveyTargetAudience, type SurveyScope, type SurveySuccessCriteria, type SurveyConstraints, type SurveyHypotheses, type SurveyMedia } from "@/db/schema";
-import { getDomainById } from "./domains";
+import { getDomainById } from "./domain-expertise-loader";
 
 // Type definition matching the Zod schema in route.ts
 type ExtractedData = {
@@ -11,7 +11,6 @@ type ExtractedData = {
   constraints?: SurveyConstraints | null;
   hypotheses?: SurveyHypotheses | null;
   tone?: "formal" | "casual" | "playful" | "empathetic" | null;
-  additionalContext?: string | null;
   requiredQuestions?: string[] | null;
   metrics?: string[] | null;
   personalInfo?: string[] | null;
@@ -42,26 +41,6 @@ export function validateExtractedData(data: ExtractedData): ValidationIssue[] {
         issue: `Invalid Domain ID: ${data.domainId}`,
         severity: "critical"
       });
-    } else {
-        // Domain specific checks
-        if (domain.id === 4) { 
-             if (!data.constraints?.sensitiveTopics || data.constraints.sensitiveTopics.length === 0) {
-                 issues.push({
-                     field: "constraints.sensitiveTopics",
-                     issue: "Health surveys strictly require defined sensitive topics (PHI, privacy).",
-                     severity: "warning"
-                 });
-             }
-        }
-        if (domain.id === 8) {
-            if (data.tone && data.tone !== "formal") {
-                issues.push({
-                    field: "tone",
-                    issue: "Compliance surveys typically require a 'formal' tone.",
-                    severity: "warning"
-                });
-            }
-        }
     }
   }
 

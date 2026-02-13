@@ -376,6 +376,7 @@ export interface ConversationInsightData {
   requiredQuestionsMissed: string[];
   sentiment: SentimentAnalysis;
   extractedMetrics: Record<string, string | number | boolean>;
+  respondentData: Record<string, string>;
   notableQuotes: ExtractedQuote[];
   hypothesisEvidence: {
     hypothesis: string;
@@ -589,6 +590,7 @@ export const conversationInsightDataSchema = z.object({
   requiredQuestionsMissed: z.array(z.string()),
   sentiment: sentimentAnalysisSchema,
   extractedMetrics: z.record(z.union([z.string(), z.number(), z.boolean()])),
+  respondentData: z.record(z.string()),
   notableQuotes: z.array(extractedQuoteSchema),
   hypothesisEvidence: z.array(
     z.object({

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X, Loader2, Share2, Copy, Check, Sparkles, ExternalLink } from "lucide-react";
 import toast from "react-hot-toast";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 interface PublishSurveyModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export function PublishSurveyModal({
   initialIsVoice = false,
   onPublished,
 }: PublishSurveyModalProps) {
+  const t = useTranslations("Survey.PublishModal");
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState("");
   const [isVoice, setIsVoice] = useState(initialIsVoice);
@@ -39,9 +41,9 @@ export function PublishSurveyModal({
       // For now, just show a placeholder
       await new Promise(resolve => setTimeout(resolve, 1000));
       setTitle("Customer Satisfaction Survey");
-      toast.success("Title suggestion generated!");
+      toast.success(t("Toasts.TitleSuggestionGenerated"));
     } catch (error) {
-      toast.error("Failed to generate title suggestion");
+      toast.error(t("Toasts.TitleSuggestionFailed"));
     } finally {
       setIsGeneratingTitle(false);
     }
@@ -49,7 +51,7 @@ export function PublishSurveyModal({
 
   const handlePublish = async () => {
     if (!title.trim()) {
-      toast.error("Please enter a title for your survey");
+      toast.error(t("Toasts.TitleRequired"));
       return;
     }
 
@@ -68,11 +70,11 @@ export function PublishSurveyModal({
 
       const data = await response.json();
       setPublishedUrl(data.shareUrl);
-      toast.success("Survey published successfully!");
+      toast.success(t("Toasts.Success"));
       onPublished?.(data.shareUrl);
     } catch (error) {
       console.error("Publish error:", error);
-      toast.error("Failed to publish survey");
+      toast.error(t("Toasts.Failed"));
     } finally {
       setIsPublishing(false);
     }
@@ -84,10 +86,10 @@ export function PublishSurveyModal({
     try {
       await navigator.clipboard.writeText(publishedUrl);
       setCopied(true);
-      toast.success("Link copied to clipboard!");
+      toast.success(t("Toasts.LinkCopied"));
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      toast.error("Failed to copy link");
+      toast.error(t("Toasts.CopyFailed"));
     }
   };
 
@@ -109,12 +111,12 @@ export function PublishSurveyModal({
             </div>
             <div>
               <h2 className="text-lg font-bold text-gray-900">
-                {publishedUrl ? "Survey Published!" : "Publish Survey"}
+                {publishedUrl ? t("Title.Published") : t("Title.Publish")}
               </h2>
               <p className="text-sm text-gray-500">
                 {publishedUrl 
-                  ? "Your survey is now live and shareable" 
-                  : "Make your survey live and shareable"}
+                  ? t("Description.Published") 
+                  : t("Description.Draft")}
               </p>
             </div>
           </div>
@@ -129,41 +131,41 @@ export function PublishSurveyModal({
         {publishedUrl ? (
           // Published state - show share options
           <div className="space-y-4">
-            <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
-              <p className="text-sm text-green-800 font-medium mb-2">
-                🎉 Your survey is now live!
-              </p>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={publishedUrl}
-                  className="flex-1 bg-white border border-green-300 rounded-lg px-3 py-2 text-sm text-gray-900"
-                />
-                <button
-                  onClick={handleCopyLink}
-                  className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                </button>
+              <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+                <p className="text-sm text-green-800 font-medium mb-2">
+                  {t("SuccessMessage")}
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={publishedUrl}
+                    className="flex-1 bg-white border border-green-300 rounded-lg px-3 py-2 text-sm text-gray-900"
+                  />
+                  <button
+                    onClick={handleCopyLink}
+                    className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div className="flex gap-3">
-              <a
-                href={publishedUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors"
-              >
-                <ExternalLink className="w-4 h-4" />
-                View Survey
-              </a>
+              <div className="flex gap-3">
+                <a
+                  href={publishedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  {t("Actions.ViewSurvey")}
+                </a>
               <button
                 onClick={onClose}
                 className="px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-medium hover:bg-gray-50 transition-colors"
               >
-                Done
+                {t("Actions.Done")}
               </button>
             </div>
           </div>
@@ -173,21 +175,21 @@ export function PublishSurveyModal({
             {/* Title input */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Survey Title
+                {t("SurveyTitle")}
               </label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Enter a title for your survey"
+                  placeholder={t("Placeholders.Title")}
                   className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300"
                 />
                 <button
                   onClick={handleSuggestTitle}
                   disabled={isGeneratingTitle}
                   className="px-3 py-2 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                  title="Ask AI for title suggestions"
+                  title={t("SuggestTitle.Tooltip")}
                 >
                   {isGeneratingTitle ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -201,12 +203,12 @@ export function PublishSurveyModal({
             {/* Description input (optional) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Description <span className="text-gray-400 font-normal">(optional)</span>
+                {t("DescriptionLabel")} <span className="text-gray-400 font-normal">({t("Optional")})</span>
               </label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Add a brief description for your survey"
+                placeholder={t("Placeholders.Description")}
                 rows={3}
                 className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 resize-none"
               />
@@ -215,8 +217,8 @@ export function PublishSurveyModal({
             {/* Voice Mode Toggle */}
              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
                   <div>
-                    <h4 className="font-medium text-gray-900 text-sm mb-0.5">Voice Mode</h4>
-                    <p className="text-xs text-gray-500">Respondents will start with voice.</p>
+                    <h4 className="font-medium text-gray-900 text-sm mb-0.5">{t("VoiceMode.Title")}</h4>
+                    <p className="text-xs text-gray-500">{t("VoiceMode.Description")}</p>
                   </div>
                   <button
                     onClick={() => setIsVoice(!isVoice)}
@@ -241,7 +243,7 @@ export function PublishSurveyModal({
                 onClick={onClose}
                 className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-medium hover:bg-gray-50 transition-colors"
               >
-                Cancel
+                {t("Actions.Cancel")}
               </button>
               <button
                 onClick={handlePublish}
@@ -251,12 +253,12 @@ export function PublishSurveyModal({
                 {isPublishing ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Publishing...
+                    {t("Actions.Publishing")}
                   </>
                 ) : (
                   <>
                     <Share2 className="w-4 h-4" />
-                    Publish Survey
+                    {t("Actions.Publish")}
                   </>
                 )}
               </button>

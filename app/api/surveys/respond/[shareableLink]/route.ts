@@ -8,6 +8,7 @@ import { surveys, surveyConversations } from "@/db/schema";
 import { ConversationManager } from "@/lib/conversation-manager";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import { selectModelForConversation, flashModel, flashLiteModel } from "@/lib/ai";
+import { getTimeBasedGreeting } from "@/lib/greetings";
 
 const model = flashLiteModel;  // Default to lite for greetings
 
@@ -85,36 +86,15 @@ export async function GET(
         const conversationId = nanoid();
         const participantId = nanoid(8);
 
-        // Build survey config for prompt generation
-        const surveyConfig = buildCompleteSurveyConfig(survey);
- 
-        // Create initial context for the greeting
-        const initialContext = await ConversationManager.loadOrCreateContext(
-            conversationId,
-            [],
-            surveyConfig,
-            true 
-        );
-
-        // Generate the AI's opening greeting
-        const systemPrompt = ConversationManager.getSystemPrompt(surveyConfig, initialContext, { language });
-
-        const greetingResult = await generateText({
-            model: flashLiteModel,  // Use lite for simple greeting
-            system: systemPrompt,
-            prompt: "Start the conversation by greeting the participant warmly. Introduce yourself as the interviewer, briefly explain what this survey is about based on your instructions, and ask your first opening question to get the conversation started. Keep it concise and welcoming.",
-            temperature: 0.8,
-            maxOutputTokens: 600,  // Increased to allow natural greeting flow
-        });
-
-        const greetingText = greetingResult.text;
+        // Generate initial greeting message
         const greetingMessage = {
-            role: "assistant" as const,
-            content: greetingText,
-            timestamp: new Date().toISOString(),
+            id: nanoid(),
+            role: 'assistant' as const,
+            content: getTimeBasedGreeting('response', language || survey.language || 'en'),
+            timestamp: new Date().toISOString()
         };
 
-        // Save conversation with the initial greeting
+        // Create new conversation record with greeting
         await db.insert(surveyConversations).values({
             id: conversationId,
             surveyId: survey.id,
@@ -124,9 +104,6 @@ export async function GET(
             createdAt: new Date(),
             updatedAt: new Date(),
         });
-
-        // Save context to Redis for continuity
-        await ConversationManager.saveContext(conversationId, initialContext);
 
         return NextResponse.json({
             survey: {
@@ -141,7 +118,7 @@ export async function GET(
             },
             conversationId,
             participantId,
-            initialGreeting: greetingMessage,
+            messages: [greetingMessage],
         });
     } catch (error) {
         console.error("Error initializing survey response:", error);
@@ -178,6 +155,26 @@ export async function POST(
             return NextResponse.json({ error: "Conversation ID is required" }, { status: 400 });
         }
 
+        // Check if survey is active (unless resuming an existing valid conversation)
+        // For new messages in an existing conversation, we generally allow completion unless strictly paused?
+        // Let's enforce pause check for all interactions to be safe, or just for new ones?
+        // The requirement is "when you pause... no more participants who can participate... resume or max is reached".
+        // Use stricter check: if paused, no interaction allowed.
+        if (survey.status !== "active") {
+             // Optional: Allow reading history but not sending new messages?
+             // For now, strict block on POST implies no new messages.
+             return NextResponse.json({ error: "Survey is not active" }, { status: 403 });
+        }
+
+        // Check participant limit (though usually checked at creation, good to double check or if strictly enforced)
+        if (survey.currentParticipants >= survey.participantLimit) {
+            // Check if this specific conversation is already counted (i.e. completed)
+             // If this conversation is NOT completed, they are "in progress" and should be allowed to finish?
+             // "until... max is reached". Usually implies new starts are blocked. 
+             // Existing participants should probably be allowed to finish to avoid bad UX.
+             // We'll skip strict limit check here for existing conversations to allow completion.
+        }
+
         // Prepare survey config
         const surveyConfig = buildCompleteSurveyConfig(survey);
 
@@ -198,10 +195,16 @@ export async function POST(
              // Side-effect callback not needed for data stream writing here
         });
 
-        // Intelligent model selection: use flash-lite for conversation, flash for completion
+        // Intelligent model selection: use flash for media/completion, flash-lite for conversation
         const userMessages = modelMessages.filter((m: any) => m.role === "user");
         const minQuestions = Math.max((survey.requiredQuestions as any[])?.length || 0, 3);
-        const selectedModel = selectModelForConversation(rollingContext, userMessages.length, minQuestions);
+        const hasMedia = (survey.media as any[])?.length > 0;
+        const selectedModel = selectModelForConversation(
+            rollingContext, 
+            userMessages.length, 
+            minQuestions,
+            hasMedia
+        );
         
         // DEBUG: Log model selection
         console.log(`[HTTP Chat Model] Using:`, selectedModel === flashModel ? 'flash' : 'flash-lite');

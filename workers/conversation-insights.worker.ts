@@ -23,6 +23,7 @@ import {
   createFallbackConversationInsights,
   type ConversationInsightData,
 } from "@/lib/analytics";
+import type { SupportedLanguage } from "@/lib/voice/deepgram-voice-agent";
 
 const jobDataSchema = z.object({
   conversationId: z.string().min(1),
@@ -111,6 +112,7 @@ function parseConversationInsightsResponse(
 
       // Extracted data
       extractedMetrics: parsed.extractedMetrics || {},
+      respondentData: parsed.respondentData || {},
       notableQuotes: (parsed.notableQuotes || []).map((q) => ({
         text: q.text,
         conversationId,
@@ -164,7 +166,7 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
       `[Conversation Insights Worker] Processing job ${job.id} for conversation ${conversationId}`
     );
 
-    // Fetch conversation
+     // Fetch conversation
     const [conversation] = await db
       .select()
       .from(surveyConversations)
@@ -183,6 +185,11 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
     if (!survey) {
       throw new Error(`Survey ${surveyId} not found`);
     }
+
+    // Get creator's preferred language for translation
+    const { getUserPreferredLanguage, translateConversation } = await import("@/lib/translation-service");
+    const creatorLanguage = await getUserPreferredLanguage(validatedData.userId);
+    const conversationLanguage = (conversation.originalLanguage as SupportedLanguage) || "en";
 
     const surveyConfig = buildCompleteSurveyConfig(survey);
 
@@ -220,7 +227,26 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
 
     await job.updateProgress(70);
 
-    // Step 3: Parse and structure the response
+    // Step 3: Translate conversation if needed
+    let translatedConversation = null;
+    if (conversationLanguage !== creatorLanguage) {
+      try {
+        const translation = await translateConversation(
+          conversation.rawConversation,
+          conversationLanguage,
+          creatorLanguage
+        );
+        translatedConversation = translation.translatedConversation;
+        console.log(`[Conversation Insights Worker] Translated conversation from ${conversationLanguage} to ${creatorLanguage}`);
+      } catch (error) {
+        console.error(`[Conversation Insights Worker] Translation failed:`, error);
+        // Continue without translation
+      }
+    }
+
+    await job.updateProgress(75);
+
+    // Step 4: Parse and structure the response
     const structuredInsights = parseConversationInsightsResponse(
       insightsResponse,
       conversationId,
@@ -230,14 +256,19 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
       conversation.activeDurationMs || undefined
     );
 
-    await job.updateProgress(85);
+    await job.updateProgress(80);
 
-    // Step 4: Save to database
-    // Update conversation with summary
+    // Step 5: Save to database
+    // Update conversation with summary and translated conversation
     await db
       .update(surveyConversations)
-      .set({ summary: structuredInsights.summary })
+      .set({ 
+        summary: structuredInsights.summary,
+        translatedConversation: translatedConversation || undefined,
+      })
       .where(eq(surveyConversations.id, conversationId));
+
+    await job.updateProgress(90);
 
     // Upsert conversation insights
     const [existingInsight] = await db
@@ -264,6 +295,7 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
 
       // Extracted data
       extractedMetrics: structuredInsights.extractedMetrics,
+      respondentData: structuredInsights.respondentData,
       notableQuotes: structuredInsights.notableQuotes,
       hypothesisEvidence: structuredInsights.hypothesisEvidence,
 

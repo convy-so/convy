@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/routing";
 import {
   FolderOpen,
   Plus,
@@ -31,8 +31,10 @@ import {
     useAvailableSurveys
 } from "@/components/dashboard/projects/hooks";
 import { formatDistanceToNow } from "date-fns";
+import { useTranslations } from "next-intl";
 
 export default function ProjectsPage() {
+  const t = useTranslations('ProjectsPage');
   const { data: projects, isLoading: isLoadingProjects } = useProjects();
   const createProjectMutation = useCreateProject();
   const updateProjectMutation = useUpdateProject();
@@ -110,9 +112,9 @@ export default function ProjectsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Projects</h1>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('Header.Title')}</h1>
           <p className="text-gray-500 mt-1">
-            Organize your surveys into projects for better management
+            {t('Header.Description')}
           </p>
         </div>
         <button
@@ -120,7 +122,7 @@ export default function ProjectsPage() {
           className="flex items-center justify-center gap-2 px-5 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors"
         >
           <Plus className="w-5 h-5" />
-          New Project
+          {t('Header.CreateButton')}
         </button>
       </div>
 
@@ -129,7 +131,7 @@ export default function ProjectsPage() {
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
           type="text"
-          placeholder="Search projects..."
+          placeholder={t('Search.Placeholder')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full pl-11 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none transition-all"
@@ -169,11 +171,11 @@ export default function ProjectsPage() {
                     <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                       <span className="flex items-center gap-1.5">
                         <MessageSquare className="w-4 h-4" />
-                        {project.surveyCount} surveys
+                        {project.surveyCount} {t('Card.Surveys')}
                       </span>
                       <span className="flex items-center gap-1.5">
                         <BarChart3 className="w-4 h-4" />
-                        {project.totalResponses} responses
+                        {project.totalResponses} {t('Card.Responses')}
                       </span>
                       <span className="text-xs text-gray-400">
                           {formatDistanceToNow(new Date(project.createdAt), { addSuffix: true })}
@@ -206,7 +208,7 @@ export default function ProjectsPage() {
                             onClick={() => setShowMenuFor(null)}
                           >
                             <ExternalLink className="w-4 h-4" />
-                            View Details
+                            {t('Card.Menu.ViewDetails')}
                           </Link>
                           <button
                             onClick={() => {
@@ -216,7 +218,7 @@ export default function ProjectsPage() {
                             className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                           >
                             <Plus className="w-4 h-4" />
-                            Add Survey
+                            {t('Card.Menu.AddSurvey')}
                           </button>
                           <button
                             onClick={() => {
@@ -226,7 +228,7 @@ export default function ProjectsPage() {
                             className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                           >
                             <Edit className="w-4 h-4" />
-                            Edit Project
+                            {t('Card.Menu.Edit')}
                           </button>
                           <div className="border-t border-gray-100 my-1" />
                           <button
@@ -234,7 +236,7 @@ export default function ProjectsPage() {
                             className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
                           >
                             <Trash2 className="w-4 h-4" />
-                            Delete
+                            {t('Card.Menu.Delete')}
                           </button>
                         </div>
                       </>
@@ -259,8 +261,8 @@ export default function ProjectsPage() {
           <div className="w-12 h-12 rounded-xl bg-gray-200 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
             <Plus className="w-6 h-6 text-gray-500" />
           </div>
-          <p className="font-medium text-gray-700">Create New Project</p>
-          <p className="text-sm text-gray-500 mt-1">Organize your surveys</p>
+          <p className="font-medium text-gray-700">{t('Empty.CreateNew.Title')}</p>
+          <p className="text-sm text-gray-500 mt-1">{t('Empty.CreateNew.Description')}</p>
         </button>
       </div>
       )}
@@ -269,7 +271,7 @@ export default function ProjectsPage() {
       {!isLoadingProjects && filteredProjects.length === 0 && searchQuery && (
         <div className="text-center py-12">
           <FolderOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500">No projects found matching "{searchQuery}"</p>
+          <p className="text-gray-500">{t('Empty.NoMatching', { query: searchQuery })}</p>
         </div>
       )}
 
@@ -283,7 +285,7 @@ export default function ProjectsPage() {
 
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Create Project</h3>
+              <h3 className="text-lg font-semibold text-gray-900">{t('CreateModal.Title')}</h3>
               <button
                 onClick={() => setShowCreateModal(false)}
                 className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
@@ -295,25 +297,25 @@ export default function ProjectsPage() {
             <div className="px-6 py-5 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Project Name
+                  {t('CreateModal.NameLabel')}
                 </label>
                 <input
                   type="text"
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
-                  placeholder="e.g., Q1 Customer Research"
+                  placeholder={t('CreateModal.NamePlaceholder')}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Description (optional)
+                  {t('CreateModal.DescriptionLabel')}
                 </label>
                 <textarea
                   value={newProjectDescription}
                   onChange={(e) => setNewProjectDescription(e.target.value)}
-                  placeholder="What is this project about?"
+                  placeholder={t('CreateModal.DescriptionPlaceholder')}
                   rows={3}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all resize-none"
                 />
@@ -325,7 +327,7 @@ export default function ProjectsPage() {
                 onClick={() => setShowCreateModal(false)}
                 className="px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                Cancel
+                {t('CreateModal.Cancel')}
               </button>
               <button
                 onClick={handleCreateProject}
@@ -335,12 +337,12 @@ export default function ProjectsPage() {
                 {createProjectMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Creating...
+                    {t('CreateModal.Creating')}
                   </>
                 ) : (
                   <>
                     <Plus className="w-4 h-4" />
-                    Create Project
+                    {t('CreateModal.Confirm')}
                   </>
                 )}
               </button>
@@ -364,7 +366,7 @@ export default function ProjectsPage() {
 
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Edit Project</h3>
+              <h3 className="text-lg font-semibold text-gray-900">{t('EditModal.Title')}</h3>
               <button
                 onClick={() => setEditingProject(null)}
                 className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
@@ -376,25 +378,25 @@ export default function ProjectsPage() {
             <div className="px-6 py-5 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Project Name
+                  {t('EditModal.NameLabel')}
                 </label>
                 <input
                   type="text"
                   value={editingProject.name}
                   onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
-                  placeholder="e.g., Q1 Customer Research"
+                  placeholder={t('EditModal.NamePlaceholder')}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Description (optional)
+                  {t('EditModal.DescriptionLabel')}
                 </label>
                 <textarea
                   value={editingProject.description || ""}
                   onChange={(e) => setEditingProject({ ...editingProject, description: e.target.value })}
-                  placeholder="What is this project about?"
+                  placeholder={t('EditModal.DescriptionPlaceholder')}
                   rows={3}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all resize-none"
                 />
@@ -406,7 +408,7 @@ export default function ProjectsPage() {
                 onClick={() => setEditingProject(null)}
                 className="px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                Cancel
+                {t('EditModal.Cancel')}
               </button>
               <button
                 onClick={handleUpdateProject}
@@ -414,7 +416,7 @@ export default function ProjectsPage() {
                 className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50"
               >
                 {updateProjectMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                Save Changes
+                {t('EditModal.Confirm')}
               </button>
             </div>
           </div>
@@ -433,10 +435,9 @@ export default function ProjectsPage() {
               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <AlertTriangle className="w-8 h-8 text-red-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Project</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">{t('DeleteModal.Title')}</h3>
               <p className="text-gray-500">
-                Are you sure you want to delete <span className="font-semibold text-gray-900">"{projectToDelete.name}"</span>? 
-                This action cannot be undone and will remove all survey associations.
+                {t('DeleteModal.Description', { name: projectToDelete.name })}
               </p>
             </div>
 
@@ -445,7 +446,7 @@ export default function ProjectsPage() {
                 onClick={() => setProjectToDelete(null)}
                 className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
               >
-                Cancel
+                {t('DeleteModal.Cancel')}
               </button>
               <button
                 onClick={confirmDeleteProject}
@@ -455,12 +456,12 @@ export default function ProjectsPage() {
                 {deleteProjectMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Deleting...
+                    {t('DeleteModal.Deleting')}
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4" />
-                    Delete Project
+                    {t('DeleteModal.Confirm')}
                   </>
                 )}
               </button>
@@ -473,6 +474,7 @@ export default function ProjectsPage() {
 }
 
 function ProjectSurveysList({ projectId, onAddSurvey }: { projectId: string; onAddSurvey: () => void }) {
+    const t = useTranslations('ProjectsPage');
     const { data: project, isLoading } = useProject(projectId);
     const removeSurveyMutation = useRemoveSurveyFromProject();
 
@@ -486,13 +488,13 @@ function ProjectSurveysList({ projectId, onAddSurvey }: { projectId: string; onA
             {surveys.length === 0 ? (
                 <div className="p-8 text-center">
                 <MessageSquare className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 mb-3">No surveys in this project yet</p>
+                <p className="text-gray-500 mb-3">{t('ProjectSurveys.Empty.Description')}</p>
                 <button
                     onClick={onAddSurvey}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors"
                 >
                     <Plus className="w-4 h-4" />
-                    Add Survey
+                    {t('ProjectSurveys.Empty.Button')}
                 </button>
                 </div>
             ) : (
@@ -515,7 +517,7 @@ function ProjectSurveysList({ projectId, onAddSurvey }: { projectId: string; onA
                         <Link href={`/dashboard/surveys/${survey.id}`} className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors">
                             {survey.title}
                         </Link>
-                        <p className="text-xs text-gray-500">{survey.currentParticipants} responses</p>
+                        <p className="text-xs text-gray-500">{survey.currentParticipants} {t('Card.Responses')}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -541,7 +543,7 @@ function ProjectSurveysList({ projectId, onAddSurvey }: { projectId: string; onA
                     className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-500 hover:border-gray-300 hover:text-gray-700 transition-colors"
                 >
                     <Plus className="w-4 h-4" />
-                    Add another survey
+                    {t('ProjectSurveys.AddAnother')}
                 </button>
                 </div>
             )}
@@ -550,6 +552,7 @@ function ProjectSurveysList({ projectId, onAddSurvey }: { projectId: string; onA
 }
 
 function AddSurveyModal({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+    const t = useTranslations('ProjectsPage');
     const { data: availableSurveys, isLoading } = useAvailableSurveys();
     const addSurveyMutation = useAddSurveyToProject();
 
@@ -570,7 +573,7 @@ function AddSurveyModal({ projectId, onClose }: { projectId: string; onClose: ()
 
             <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Add Survey to Project</h3>
+                <h3 className="text-lg font-semibold text-gray-900">{t('AddSurveyModal.Title')}</h3>
                 <button
                 onClick={onClose}
                 className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
@@ -585,7 +588,7 @@ function AddSurveyModal({ projectId, onClose }: { projectId: string; onClose: ()
                 ) : !availableSurveys || availableSurveys.length === 0 ? (
                 <div className="text-center py-8">
                     <Check className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
-                    <p className="text-gray-600">All surveys are already in a project!</p>
+                    <p className="text-gray-600">{t('AddSurveyModal.Empty')}</p>
                 </div>
                 ) : (
                 <div className="space-y-2">
@@ -606,7 +609,7 @@ function AddSurveyModal({ projectId, onClose }: { projectId: string; onClose: ()
                         </div>
                         <div>
                             <p className="text-sm font-medium text-gray-900">{survey.title}</p>
-                            <p className="text-xs text-gray-500">{survey.currentParticipants} responses</p>
+                            <p className="text-xs text-gray-500">{survey.currentParticipants} {t('Card.Responses')}</p>
                         </div>
                         </div>
                         {addSurveyMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-5 h-5 text-gray-400" />}
@@ -621,7 +624,7 @@ function AddSurveyModal({ projectId, onClose }: { projectId: string; onClose: ()
                 onClick={onClose}
                 className="w-full px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                Cancel
+                {t('AddSurveyModal.Cancel')}
                 </button>
             </div>
             </div>

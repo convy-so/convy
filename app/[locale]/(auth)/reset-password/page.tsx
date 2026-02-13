@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { Eye, EyeOff, Lock, Check, AlertCircle } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Link, useRouter } from "@/i18n/routing";
+import { useTranslations } from "next-intl";
+import { Eye, EyeOff, Lock, Check } from "lucide-react";
 import { AuthCard } from "@/components/auth/auth-card";
 import { StatusCard } from "@/components/auth/status-card";
 import { InputField } from "@/components/auth/input-field";
@@ -14,9 +15,9 @@ import toast from "react-hot-toast";
 
 export default function ResetPasswordPage() {
   const searchParams = useSearchParams();
-  const token = searchParams.get("token"); // Better-auth might handle this automatically or pass it via props/query
+  const token = searchParams.get("token");
   const router = useRouter();
-
+  const t = useTranslations('Auth.ResetPassword');
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -32,11 +33,8 @@ export default function ResetPasswordPage() {
     uppercase: false,
     number: false,
     special: false,
-    specialChar: false, // Added to match type if needed, but original code used 'special'
+    specialChar: false,
   });
-
-  // Correction: Match the original state structure exactly to avoid type errors
-  // If original had 'special', keep 'special'.
 
   const handlePasswordChange = (password: string) => {
     setFormData({ ...formData, password });
@@ -45,7 +43,7 @@ export default function ResetPasswordPage() {
       uppercase: /[A-Z]/.test(password),
       number: /[0-9]/.test(password),
       special: /[^A-Za-z0-9]/.test(password),
-      specialChar: /[^A-Za-z0-9]/.test(password), // Just in case
+      specialChar: /[^A-Za-z0-9]/.test(password),
     });
   };
 
@@ -61,7 +59,7 @@ export default function ResetPasswordPage() {
     try {
       await authClient.resetPassword({
         newPassword: formData.password,
-        token: token || "", 
+        token: token || "",
         fetchOptions: {
           onSuccess: () => {
             setIsSubmitted(true);
@@ -73,34 +71,24 @@ export default function ResetPasswordPage() {
       });
     } catch (error) {
       console.error(error);
-      toast.error("Failed to reset password");
+      toast.error(t('Errors.Failed'));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const isPasswordValid = passwordStrength.length; // Simplified check for now or use full check
+  const isPasswordValid = passwordStrength.length;
   const passwordsMatch = formData.password === formData.confirmPassword;
-
-  // If no token, show error state - actually better-auth might verify token on load.
-  // For now we keep the check if we rely on it being in URL param 'token'
-  // Note: better-auth usually uses 'token' or 'code' query param.
-
-  if (!token && !isSubmitted) {
-    // Sometimes the token is hidden or handled differently. 
-    // But for a typical reset link it's visible. 
-  }
-
 
   if (isSubmitted) {
     return (
       <StatusCard
         icon={Check}
         iconColor="green"
-        title="Password reset successful"
-        description="Your password has been successfully reset. You can now sign in with your new password."
+        title={t('Success.Title')}
+        description={t('Success.Description')}
         actionButton={{
-          text: "Sign in to your account",
+          text: t('Success.Button'),
           href: "/sign-in"
         }}
       />
@@ -109,19 +97,19 @@ export default function ResetPasswordPage() {
 
   return (
     <AuthCard
-      title="Reset your password"
-      subtitle="Enter your new password below"
+      title={t('Title')}
+      subtitle={t('Subtitle')}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <InputField
             id="password"
             type={showPassword ? "text" : "password"}
-            label="New password"
+            label={t('PasswordLabel')}
             icon={Lock}
             value={formData.password}
             onChange={(e) => handlePasswordChange(e.target.value)}
-            placeholder="Enter your new password"
+            placeholder={t('PasswordPlaceholder')}
             rightElement={
               <button
                 type="button"
@@ -149,12 +137,12 @@ export default function ResetPasswordPage() {
         <InputField
           id="confirmPassword"
           type={showConfirmPassword ? "text" : "password"}
-          label="Confirm new password"
+          label={t('ConfirmPasswordLabel')}
           icon={Lock}
           value={formData.confirmPassword}
           onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-          placeholder="Confirm your new password"
-          error={formData.confirmPassword && !passwordsMatch ? "Passwords don't match" : undefined}
+          placeholder={t('ConfirmPasswordPlaceholder')}
+          error={formData.confirmPassword && !passwordsMatch ? t('Errors.Mismatch') : undefined}
           rightElement={
             <button
               type="button"
@@ -170,16 +158,16 @@ export default function ResetPasswordPage() {
         {formData.confirmPassword && passwordsMatch && (
           <p className="text-sm text-green-600 flex items-center gap-1">
             <Check className="w-4 h-4" />
-            Passwords match
+            {t('PasswordsMatch')}
           </p>
         )}
 
         <SubmitButton
           isLoading={isLoading}
-          loadingText="Resetting password..."
+          loadingText={t('Loading')}
           disabled={!isPasswordValid || !passwordsMatch}
         >
-          Reset password
+          {t('Button')}
         </SubmitButton>
       </form>
 
@@ -188,7 +176,7 @@ export default function ResetPasswordPage() {
           href="/sign-in"
           className="text-[#696969] text-sm hover:text-[#292929] transition-colors"
         >
-          Back to sign in
+          {t('Success.Button')}
         </Link>
       </div>
     </AuthCard>

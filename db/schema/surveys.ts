@@ -99,7 +99,6 @@ const surveys = pgTable(
     constraints: jsonb("constraints").$type<SurveyConstraints>(),
     hypotheses: jsonb("hypotheses").$type<SurveyHypotheses>(),
     tone: toneEnum("tone").default("casual"),
-    additionalContext: text("additional_context"),
     requiredQuestions: text("required_questions").array().default([]),
     metrics: text("metrics").array().default([]),
     media: jsonb("media").$type<SurveyMedia[]>().default([]),
@@ -160,7 +159,6 @@ const surveyCreationConversations = pgTable(
         constraints: boolean;
         hypotheses: boolean;
         tone: boolean;
-        additionalContext: boolean;
         requiredQuestions: boolean;
         metrics: boolean;
         personalInfo: boolean;
@@ -175,7 +173,6 @@ const surveyCreationConversations = pgTable(
         constraints: false,
         hypotheses: false,
         tone: false,
-        additionalContext: false,
         requiredQuestions: false,
         metrics: false,
         personalInfo: false,
@@ -191,7 +188,6 @@ const surveyCreationConversations = pgTable(
         constraints?: SurveyConstraints;
         hypotheses?: SurveyHypotheses;
         tone?: "formal" | "casual" | "playful" | "empathetic";
-        additionalContext?: string;
         metrics?: string[];
         personalInfo?: string[];
         title?: string;
@@ -261,6 +257,15 @@ const surveyConversations = pgTable(
     activeDurationMs: integer("active_duration_ms").default(0),
     summary: text("summary"),
     completed: boolean("completed").default(false).notNull(),
+    originalLanguage: text("original_language").default("en"),
+    translatedConversation: jsonb("translated_conversation")
+      .$type<
+        Array<{
+          role: "user" | "assistant";
+          content: string;
+          timestamp: string;
+        }>
+      >(),
   },
   (table) => [
     index("survey_conversations_survey_id_idx").on(table.surveyId),
@@ -305,6 +310,7 @@ const surveyAnalytics = pgTable(
     })
       .defaultNow()
       .notNull(),
+    generatedLanguage: text("generated_language").default("en"),
   },
   (table) => [index("survey_analytics_survey_id_idx").on(table.surveyId)]
 );

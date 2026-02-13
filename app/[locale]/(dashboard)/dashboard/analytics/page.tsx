@@ -1,8 +1,8 @@
 import { getVerifiedSession } from "@/lib/auth/session";
 import { db } from "@/db";
 import { surveys, surveyConversations} from "@/db/schema";
-import { eq, desc, count } from "drizzle-orm";
-import Link from "next/link";
+import { eq, desc, count, and } from "drizzle-orm";
+import { Link } from "@/i18n/routing";
 import {
   Search,
   ChevronRight,
@@ -10,6 +10,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { getTranslations } from "next-intl/server";
 
 export const metadata = {
   title: "Analytics | Convy",
@@ -18,6 +19,7 @@ export const metadata = {
 
 export default async function AnalyticsPage() {
   const session = await getVerifiedSession();
+  const t = await getTranslations('AnalyticsPage');
 
   const userSurveys = await db
     .select({
@@ -32,7 +34,12 @@ export default async function AnalyticsPage() {
     })
     .from(surveys)
     .leftJoin(surveyConversations, eq(surveyConversations.surveyId, surveys.id))
-    .where(eq(surveys.userId, session.user.id))
+    .where(
+      and(
+        eq(surveys.userId, session.user.id),
+        eq(surveys.status, 'active')
+      )
+    )
     .groupBy(surveys.id, surveys.title, surveys.description, surveys.status, surveys.createdAt)
     .orderBy(desc(surveys.createdAt));
 
@@ -53,9 +60,9 @@ export default async function AnalyticsPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Analytics</h1>
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('Header.Title')}</h1>
             <p className="text-gray-500 mt-1">
-              Overview of your survey performance and engagement
+              {t('Header.Description')}
             </p>
           </div>
         </div>
@@ -65,7 +72,7 @@ export default async function AnalyticsPage() {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search surveys..."
+            placeholder={t('Search.Placeholder')}
             className="w-full pl-11 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none transition-all"
           />
         </div>
@@ -103,7 +110,7 @@ export default async function AnalyticsPage() {
                           <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                              <span className="flex items-center gap-1.5">
                                 <MessageSquare className="w-4 h-4" />
-                                {survey._count?.conversations || 0} responses
+                                {survey._count?.conversations || 0} {t('Card.Responses')}
                              </span>
                              <span className="text-xs text-gray-400">
                                 {formatDistanceToNow(new Date(survey.createdAt), { addSuffix: true })}
@@ -129,10 +136,10 @@ export default async function AnalyticsPage() {
                 <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-300">
                     <BarChart3 className="w-10 h-10" />
                 </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">No active surveys</h3>
-                <p className="text-gray-500 mb-8 max-w-sm mx-auto">Create and publish a survey to start seeing analytics.</p>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">{t('Empty.Title')}</h3>
+                <p className="text-gray-500 mb-8 max-w-sm mx-auto">{t('Empty.Description')}</p>
                 <Link href="/dashboard/create" className="bg-black text-white px-8 py-3 rounded-xl font-bold hover:scale-105 transition-transform duration-200 inline-block">
-                    Create Survey
+                    {t('Empty.Button')}
                 </Link>
             </div>
           )}

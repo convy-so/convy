@@ -21,6 +21,7 @@ const users = pgTable(
     name: text("name").notNull(),
     image: text("image"),
     role: userRoleEnum("role").default("user").notNull(),
+    preferredLanguage: text("preferred_language").default("en"),
   },
   (table) => [unique("users_email_unique").on(table.email)]
 );

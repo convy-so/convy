@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
+import { Link, useRouter } from "@/i18n/routing";
 import {
   ArrowLeft,
   FolderOpen,

@@ -61,12 +61,7 @@ export async function POST(
             updateData.isVoice = isVoice;
         }
 
-        // Apply description
-        if (description) {
-            updateData.additionalContext = description;
-        } else if (extractedData.additionalContext) {
-            updateData.additionalContext = extractedData.additionalContext;
-        }
+        // Copy extracted data to survey fields
 
         // Copy extracted data to survey fields
         if (extractedData.objective) {

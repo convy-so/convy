@@ -1,5 +1,5 @@
 import { ArrowLeft, Search, SlidersHorizontal } from "lucide-react";
-import Link from "next/link";
+import { Link } from "@/i18n/routing";
 import { db } from "@/db";
 import { surveyConversations, conversationInsights } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";

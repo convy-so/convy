@@ -127,7 +127,6 @@ export async function GET(
                 objective: survey.objective,
                 targetAudience: survey.targetAudience,
                 tone: survey.tone,
-                additionalContext: survey.additionalContext,
                 shareableLink: survey.shareableLink,
                 shareableUrl,
                 participantLimit: survey.participantLimit,

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
+import { Link, useRouter } from "@/i18n/routing";
+import { useTranslations } from "next-intl";
 import { Eye, EyeOff, Mail, Lock, User } from "lucide-react";
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleButton } from "@/components/auth/google-button";
@@ -12,10 +13,13 @@ import { PasswordStrength } from "@/components/auth/password-strength";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { LoadingOverlay } from "@/components/auth/loading-overlay";
 import { authClient } from "@/lib/auth-client";
-import toast from "react-hot-toast"; // Assuming sonner
+import toast from "react-hot-toast"; 
 
 export default function SignUpPage() {
+  const params = useParams();
+  const locale = params.locale as string;
   const router = useRouter();
+  const t = useTranslations('Auth.SignUp');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
@@ -52,7 +56,7 @@ export default function SignUpPage() {
         email: formData.email,
         password: formData.password,
         name: formData.name,
-        callbackURL: "/dashboard",
+        callbackURL: `/${locale}/dashboard`,
         fetchOptions: {
           onError: (ctx) => {
             toast.error(ctx.error.message);
@@ -65,18 +69,18 @@ export default function SignUpPage() {
         if (typeof window !== 'undefined') {
           sessionStorage.setItem('verification_email', formData.email);
         }
-        toast.success("Account created! Please check your email to verify your account.");
+        toast.success(t('Success'));
         setIsRedirecting(true);
         router.push("/verify-email");
       } else if (result.data?.token) {
         // This shouldn't happen with requireEmailVerification: true, but handle it
-        toast.success("Account created and verified!");
+        toast.success(t('SuccessVerified'));
         setIsRedirecting(true);
         router.push("/dashboard");
       }
     } catch (error) {
       console.error("Sign-up error:", error);
-      toast.error("Something went wrong. Please try again.");
+      toast.error(t('Error'));
     } finally {
       setIsLoading(false);
     }
@@ -85,7 +89,7 @@ export default function SignUpPage() {
   const handleGoogleSignUp = async () => {
     await authClient.signIn.social({
       provider: "google",
-      callbackURL: "/dashboard"
+      callbackURL: `/${locale}/dashboard`
     });
   };
 
@@ -95,13 +99,13 @@ export default function SignUpPage() {
     <>
       {isRedirecting && (
         <LoadingOverlay 
-          message="Loading ..." 
-          subtitle="Redirecting you shortly"
+          message={t('LoadingOverlay')}
+          subtitle={t('Redirecting')}
         />
       )}
       <AuthCard
-        title="Create your account"
-        subtitle="Start creating conversational surveys today"
+        title={t('Title')}
+        subtitle={t('Subtitle')}
       >
       <GoogleButton onClick={handleGoogleSignUp} />
 
@@ -113,22 +117,22 @@ export default function SignUpPage() {
         <InputField
           id="name"
           type="text"
-          label="Full name"
+          label={t('NameLabel')}
           icon={User}
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          placeholder="Enter your full name"
+          placeholder={t('NamePlaceholder')}
           required
         />
 
         <InputField
           id="email"
           type="email"
-          label="Email address"
+          label={t('EmailLabel')}
           icon={Mail}
           value={formData.email}
           onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-          placeholder="Enter your email"
+          placeholder={t('EmailPlaceholder')}
           required
         />
 
@@ -136,11 +140,11 @@ export default function SignUpPage() {
           <InputField
             id="password"
             type={showPassword ? "text" : "password"}
-            label="Password"
+            label={t('PasswordLabel')}
             icon={Lock}
             value={formData.password}
             onChange={(e) => handlePasswordChange(e.target.value)}
-            placeholder="Create a strong password"
+            placeholder={t('PasswordPlaceholder')}
             rightElement={
               <button
                 type="button"
@@ -170,34 +174,34 @@ export default function SignUpPage() {
             required
           />
           <label htmlFor="terms" className="text-sm text-[#696969]">
-            I agree to the{" "}
+            {t('AgreeTo')}{" "}
             <Link href="/terms" className="text-[#292929] hover:text-[#292929]/80 font-medium transition-colors">
-              Terms of Service
+              {t('Terms')}
             </Link>{" "}
-            and{" "}
+            {t('And')}{" "}
             <Link href="/privacy" className="text-[#292929] hover:text-[#292929]/80 font-medium transition-colors">
-              Privacy Policy
+              {t('Privacy')}
             </Link>
           </label>
         </div>
 
         <SubmitButton
           isLoading={isLoading}
-          loadingText="Creating account..."
+          loadingText={t('Loading')}
           disabled={!isPasswordValid || !formData.agreeToTerms}
         >
-          Create account
+          {t('Button')}
         </SubmitButton>
       </form>
 
       <div className="text-center mt-6">
         <p className="text-[#696969] text-sm">
-          Already have an account?{" "}
+          {t('HasAccount')}{" "}
           <Link
             href="/sign-in"
             className="text-[#292929] font-medium hover:text-[#292929]/80 transition-colors"
           >
-            Sign in
+            {t('SignInLink')}
           </Link>
         </p>
       </div>

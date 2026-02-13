@@ -17,7 +17,6 @@ export async function GET() {
             .select({
                 id: surveys.id,
                 title: surveys.title,
-                additionalContext: surveys.additionalContext,
                 status: surveys.status,
                 shareableLink: surveys.shareableLink,
                 createdAt: surveys.createdAt,
@@ -34,7 +33,7 @@ export async function GET() {
         const formattedSurveys = userSurveys.map(survey => ({
             id: survey.id,
             title: survey.title || "Untitled Survey",
-            description: survey.additionalContext || (survey.objective as any)?.description || "",
+            description: (survey.objective as any)?.description || "",
             status: survey.status,
             shareableLink: survey.shareableLink,
             responses: survey.currentParticipants,

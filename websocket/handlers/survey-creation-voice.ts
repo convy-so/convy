@@ -6,17 +6,25 @@ import {
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { getCachedGreeting, getGreetingText, GREETING_TEXTS } from "@/lib/voice/deepgram-tts";
+
 import {
   getSurveyCreationSystemPrompt,
   getSurveyDataExtractionPrompt,
   type CollectedInfo,
 } from "@/lib/prompts";
-import { defaultModel, analysisModel } from "@/lib/ai";
+import { getTimeBasedGreeting } from "@/lib/greetings";
+import { analysisModel } from "@/lib/ai";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import type { AuthenticatedConnection } from "../middleware/auth";
-import { BaseVoiceHandler } from "./base-voice-handler";
+import { BaseVoiceAgentHandler } from "./base-voice-agent-handler";
+import {
+  buildVoiceAgentSettings,
+  type VoiceAgentSettings,
+  type ConversationTextEvent,
+  type FunctionCallRequestEvent,
+  type SupportedLanguage,
+} from "@/lib/voice/deepgram-voice-agent";
 
 interface CreationState {
   surveyId: string | null;
@@ -28,11 +36,11 @@ interface CreationState {
   }>;
   collectedInfo: CollectedInfo;
   isProcessing: boolean;
-  language: typeof surveys.$inferSelect.language;
+  language: SupportedLanguage;
   extractedData: any;
 }
 
-export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
+export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
   private state: CreationState;
   private sessionStartTime: number = Date.now();
 
@@ -51,7 +59,6 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
         constraints: false,
         hypotheses: false,
         tone: false,
-        additionalContext: false,
         requiredQuestions: false,
         metrics: false,
         personalInfo: false,
@@ -66,16 +73,14 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
 
   async initialize(): Promise<void> {
     try {
-      await Promise.all([
-        db.insert(voiceSessions).values({
-          id: this.state.voiceSessionId,
-          userId: this.userId,
-          sessionType: "survey_creation", 
-          status: "active",
-          startedAt: new Date(),
-        }),
-        Promise.resolve(this.initializeSTTSession()),
-      ]);
+      // Start DB insert in background
+      const dbInsertPromise = db.insert(voiceSessions).values({
+        id: this.state.voiceSessionId,
+        userId: this.userId,
+        sessionType: "survey_creation",
+        status: "active",
+        startedAt: new Date(),
+      });
 
       this.resetIdleTimeout();
 
@@ -84,68 +89,100 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
         voiceSessionId: this.state.voiceSessionId,
       });
 
-      // Send initial greeting if no messages yet - use cached audio for instant playback
-      if (this.state.messages.length === 0) {
-        const greetingKey = `${this.state.language}-survey-creation` as keyof typeof GREETING_TEXTS;
-        const cachedAudio = getCachedGreeting(greetingKey);
-        const greetingText = getGreetingText(greetingKey);
+      // Voice Agent connection is deferred until start_conversation
+      // (to allow set_survey_id and set_language to be called first)
 
-        if (cachedAudio) {
-          // Use cached audio - instant playback!
-          console.log(`[Survey Creation Voice] Using cached greeting for ${greetingKey}`);
-          
-          // Add to message history
-          const assistantMsg = {
-            role: "assistant" as const,
-            content: greetingText,
-            timestamp: new Date().toISOString(),
-          };
-          this.state.messages.push(assistantMsg);
-
-          // Send audio directly (no TTS API call)
-          this.ws.send(cachedAudio);
-          this.send({
-            type: "audio_sent",
-            text: greetingText,
-            durationMs: 3000, // Approximate
-          });
-        } else {
-          // Fallback to regular TTS if cache miss
-          console.log(`[Survey Creation Voice] Cache miss for ${greetingKey}, using live TTS`);
-          await this.sendAssistantResponse(greetingText);
-        }
-      }
+      await dbInsertPromise;
     } catch (error) {
       console.error("[Survey Creation Voice] Initialization error:", error);
       this.sendError("Failed to initialize voice session");
     }
   }
 
-
-  protected getLanguage(): typeof surveys.$inferSelect.language {
+  protected getLanguage(): SupportedLanguage {
     return this.state.language;
   }
 
-  protected async handleControlMessage(message: any): Promise<void> {
-    await super.handleControlMessage(message);
+  protected async getVoiceAgentSettings(): Promise<VoiceAgentSettings> {
+    const systemPrompt = getSurveyCreationSystemPrompt(
+      this.state.collectedInfo,
+      this.state.language,
+      this.state.extractedData?.domainId as number | undefined
+    );
 
+    return buildVoiceAgentSettings({
+      language: this.state.language,
+      systemPrompt,
+      greeting: getTimeBasedGreeting('creation', this.state.language),
+      conversationHistory: this.state.messages.length > 0
+        ? this.state.messages.map(m => ({ role: m.role, content: m.content }))
+        : undefined,
+    });
+  }
+
+  protected async onConversationText(event: ConversationTextEvent): Promise<void> {
+    // Add to conversation history
+    this.state.messages.push({
+      role: event.role,
+      content: event.content,
+      timestamp: new Date().toISOString(),
+    });
+
+    await this.saveConversation();
+
+    // Trigger extraction after assistant messages
+    if (event.role === "assistant") {
+      this.performExtraction().catch(console.error);
+    }
+  }
+
+  protected async onFunctionCall(event: FunctionCallRequestEvent): Promise<void> {
+    // Survey creation doesn't use function calling
+    // Respond with a no-op to not block the agent
+    this.voiceAgent?.sendFunctionCallResponse(
+      event.function_call_id,
+      JSON.stringify({ status: "ok" })
+    );
+  }
+
+  protected async handleControlMessage(message: any): Promise<void> {
     switch (message.type) {
       case "set_survey_id":
         this.state.surveyId = message.surveyId;
         await this.loadExistingState();
         break;
-      case "text_message":
-        if (message.text) {
-          await this.processTextMessage(message.text);
+
+      case "update_collected_info":
+        if (message.collectedInfo) {
+          this.state.collectedInfo = { ...this.state.collectedInfo, ...message.collectedInfo };
         }
         break;
+
+      case "start_conversation":
+        console.log(`[Survey Creation Voice] Starting conversation. History length: ${this.state.messages.length}`);
+        // Connect the Voice Agent (with greeting if new session)
+        await this.connectVoiceAgent();
+        break;
+
+      case "text_message":
+        if (message.text) {
+          if (this.voiceAgent?.connected) {
+            this.voiceAgent.sendInjectUserMessage(message.text);
+          }
+        }
+        break;
+
       case "set_language":
         if (message.language && ["en", "fr", "de", "es", "it"].includes(message.language)) {
           this.state.language = message.language;
           if (this.state.surveyId) {
-             await db.update(surveys)
-               .set({ language: message.language })
-               .where(eq(surveys.id, this.state.surveyId));
+            await db.update(surveys)
+              .set({ language: message.language })
+              .where(eq(surveys.id, this.state.surveyId));
+          }
+          // Reconnect Voice Agent with new language if already connected
+          if (this.voiceAgent?.connected) {
+            await this.reconnectVoiceAgent();
           }
         }
         break;
@@ -159,22 +196,22 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
       .select()
       .from(surveyCreationConversations)
       .where(eq(surveyCreationConversations.surveyId, this.state.surveyId));
-    
+
     // Also fetch the survey to get the language
     const [survey] = await db
       .select({ language: surveys.language })
       .from(surveys)
       .where(eq(surveys.id, this.state.surveyId));
 
-    if (survey && (survey.language === "en" || survey.language === "fr" || survey.language === "de" || survey.language === "es" || survey.language === "it")) {
-      this.state.language = survey.language;
+    if (survey && ["en", "fr", "de", "es", "it"].includes(survey.language)) {
+      this.state.language = survey.language as SupportedLanguage;
     }
 
     if (conv) {
       this.state.messages = (conv.messages as any[]) || [];
       this.state.collectedInfo = conv.collectedInfo as CollectedInfo;
       this.state.extractedData = conv.extractedData || null;
-      
+
       // Update voice session with surveyId
       await db.update(voiceSessions)
         .set({ surveyId: this.state.surveyId })
@@ -182,91 +219,13 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
     }
   }
 
-  // Override to perform extraction in background
-  async processUserMessage(text: string): Promise<void> {
-     await this.processTextMessage(text);
-  }
-
-  private async processTextMessage(text: string): Promise<void> {
-    this.state.isProcessing = true;
-    console.log(`[Survey Creation Voice] Generating AI response for: "${text}"`);
-    try {
-      // Add user message
-      const userMsg = {
-        role: "user" as const,
-        content: text,
-        timestamp: new Date().toISOString(),
-      };
-      this.state.messages.push(userMsg);
-      await this.saveConversation();
-
-      const systemPrompt = getSurveyCreationSystemPrompt(
-        this.state.collectedInfo, 
-        this.state.language,
-        this.state.extractedData?.domainId as number | undefined
-      );
-      
-      const { text: responseText } = await generateText({
-        model: defaultModel,
-        system: systemPrompt,
-        messages: this.state.messages.map(m => ({ role: m.role, content: m.content })),
-      });
-
-      console.log(`[Survey Creation Voice] AI response generated: "${responseText}"`);
-      await this.sendAssistantResponse(responseText);
-      
-      this.performExtraction().catch(console.error);
-
-    } catch (error) {
-      console.error("[Survey Creation Voice] Processing error:", error);
-      this.sendError("Sorry, I had trouble processing that.");
-    } finally {
-      this.state.isProcessing = false;
-    }
-  }
-
-  private async sendAssistantResponse(text: string): Promise<void> {
-    console.log(`[Survey Creation Voice] Sending assistant response via TTS`);
-    const assistantMsg = {
-      role: "assistant" as const,
-      content: text,
-      timestamp: new Date().toISOString(),
-    };
-    this.state.messages.push(assistantMsg);
-    await this.saveConversation();
-
-    try {
-      const synthesis = await this.tts.synthesizeForSurvey(text, "casual", this.state.language);
-      if ("audio" in synthesis) {
-        this.ws.send(synthesis.audio);
-        this.send({
-          type: "audio_sent",
-          text,
-          durationMs: synthesis.duration,
-        });
-
-        // Update active duration tracking
-        this.activeDurationMs += synthesis.duration;
-        this.lastInteractionEndTime = Date.now() + synthesis.duration;
-
-        console.log(`[Survey Creation Voice] Audio response sent (${synthesis.duration}ms)`);
-      } else {
-        this.send({ type: "text_response", text });
-        console.log(`[Survey Creation Voice] Text response sent (TTS failed)`);
-      }
-    } catch (error) {
-      console.error(`[Survey Creation Voice] TTS error:`, error);
-      this.send({ type: "text_response", text });
-    }
-  }
-
   private async saveConversation(): Promise<void> {
     if (!this.state.surveyId) return;
 
     await db.update(surveyCreationConversations)
-      .set({ 
+      .set({
         messages: this.state.messages,
-        status: "in_progress"
+        status: "in_progress",
       })
       .where(eq(surveyCreationConversations.surveyId, this.state.surveyId));
   }
@@ -276,10 +235,10 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
 
     try {
       const extractionPrompt = getSurveyDataExtractionPrompt(this.state.messages);
-      
+
       const { output: parsed } = await generateText({
         model: analysisModel,
-        output: Output.object({ 
+        output: Output.object({
           schema: z.object({
             objective: z.any().nullable(),
             targetAudience: z.any().nullable(),
@@ -288,7 +247,6 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
             constraints: z.any().nullable(),
             hypotheses: z.any().nullable(),
             tone: z.any().nullable(),
-            additionalContext: z.any().nullable(),
             requiredQuestions: z.any().nullable(),
             metrics: z.any().nullable(),
             personalInfo: z.any().nullable(),
@@ -296,17 +254,17 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
             isVoice: z.boolean().nullable(),
             title: z.any().nullable(),
             collectedInfo: z.any(),
-          }) as any
+          }) as any,
         }),
         prompt: extractionPrompt,
       });
 
       const { collectedInfo, ...extractedData } = parsed as any;
-      
+
       this.state.collectedInfo = collectedInfo;
 
       await db.update(surveyCreationConversations)
-        .set({ 
+        .set({
           extractedData: extractedData,
           collectedInfo: collectedInfo,
         })
@@ -324,21 +282,20 @@ export class SurveyCreationVoiceHandler extends BaseVoiceHandler {
 
   protected async cleanup(): Promise<void> {
     await super.cleanup();
-    
+
     db.update(voiceSessions)
       .set({ status: "completed", endedAt: new Date() })
       .where(eq(voiceSessions.id, this.state.voiceSessionId))
-
-      .catch(console.error); // Fire and forget
+      .catch(console.error);
 
     // Update creation conversation with duration metrics
     if (this.state.surveyId) {
-        const sessionDurationMs = Date.now() - this.sessionStartTime;
-        
-        await db.update(surveyCreationConversations)
-        .set({ 
-            durationMs: sessionDurationMs,
-            activeDurationMs: Math.round(this.activeDurationMs)
+      const sessionDurationMs = Date.now() - this.sessionStartTime;
+
+      await db.update(surveyCreationConversations)
+        .set({
+          durationMs: sessionDurationMs,
+          activeDurationMs: Math.round(this.activeDurationMs),
         })
         .where(eq(surveyCreationConversations.surveyId, this.state.surveyId))
         .catch(console.error);

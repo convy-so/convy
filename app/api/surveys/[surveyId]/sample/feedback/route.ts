@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { surveys, sampleConversations } from "@/db/schema";
+import { surveys } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { auth } from "@/lib/auth"; // Access existing auth lib (better-auth)
+import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { nanoid } from "nanoid";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { surveyId: string } }
+  props: { params: Promise<{ surveyId: string }> }
 ) {
+  const params = await props.params;
   try {
     const session = await auth.api.getSession({
       headers: await headers()

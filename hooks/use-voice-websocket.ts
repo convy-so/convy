@@ -13,8 +13,11 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
     const [status, setStatus] = useState<"disconnected" | "connecting" | "connected" | "error">("disconnected");
     const [isRecording, setIsRecording] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [hasAudioPlayed, setHasAudioPlayed] = useState(false);
     const [transcription, setTranscription] = useState("");
     const [interimTranscription, setInterimTranscription] = useState("");
+    const [isMicMuted, setIsMicMutedState] = useState(false); // Exposed state
+    const isMicMutedRef = useRef(false); // Ref for audio loop access
 
     const [error, setError] = useState<string | null>(null);
 
@@ -25,6 +28,7 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
     const streamRef = useRef<MediaStream | null>(null);
     const audioQueueRef = useRef<Blob[]>([]);
     const isPlayingRef = useRef(false);
+    const activeAudioRef = useRef<HTMLAudioElement | null>(null);
     
     // Keep latest callback in ref to avoid stale closures in ws.onmessage
     const onMessageRef = useRef(onMessage);
@@ -42,6 +46,7 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
 
         console.log("[Voice WS] Setting status to connecting");
         setStatus("connecting");
+        setHasAudioPlayed(false);
         setError(null);
 
         let connectionUrl = url;
@@ -91,13 +96,14 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
         };
 
         ws.onmessage = async (event) => {
-            console.log("[Voice WS] Message received:", event.data instanceof Blob ? "Blob audio" : "JSON data");
             if (event.data instanceof Blob) {
+                console.log(`[Voice WS] 📥 Audio Blob received: ${event.data.size} bytes`);
                 // AI Voice Audio
                 handleIncomingAudio(event.data);
             } else {
                 try {
                     const data = JSON.parse(event.data);
+                    console.log("[Voice WS] 📥 JSON Message received:", data.type);
                     handleJsonMessage(data);
                 } catch (e) {
                     console.error("Failed to parse WS message", e);
@@ -145,8 +151,39 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
             case "transcription_interim":
                 setInterimTranscription(data.text);
                 break;
+            case "conversation_text":
+                // Voice Agent API: unified conversation text event
+                if (data.role === "user") {
+                    setTranscription(data.content);
+                    setInterimTranscription("");
+                }
+                break;
             case "audio_sent":
-                // AI started speaking
+                // AI started speaking (legacy)
+                break;
+            case "agent_thinking":
+                // AI is processing (Voice Agent API)
+                break;
+            case "agent_started_speaking":
+                // AI started speaking (Voice Agent API)
+                break;
+            case "agent_audio_done":
+                // AI finished speaking (Voice Agent API)
+                break;
+            case "speech_start":
+                // User started speaking
+                break;
+            case "interrupt":
+                console.log("[Voice WS] Interruption signal received");
+                // Clear queue
+                audioQueueRef.current = [];
+                // Stop current playback
+                if (activeAudioRef.current) {
+                    activeAudioRef.current.pause();
+                    activeAudioRef.current = null;
+                }
+                setIsPlaying(false);
+                isPlayingRef.current = false;
                 break;
             case "error":
                 console.error("Server error (full data):", data);
@@ -165,7 +202,11 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
     };
 
     const handleIncomingAudio = async (blob: Blob) => {
-        audioQueueRef.current.push(blob);
+        // Explicitly set the MIME type to audio/mp3 so the browser knows how to decode it
+        // Deepgram Voice Agent output is MP3 by default (from our configurations)
+        const audioBlob = new Blob([blob], { type: "audio/mp3" });
+        audioQueueRef.current.push(audioBlob);
+        
         if (!isPlayingRef.current) {
             playNextInQueue();
         }
@@ -175,6 +216,7 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
         if (audioQueueRef.current.length === 0) {
             setIsPlaying(false);
             isPlayingRef.current = false;
+            activeAudioRef.current = null;
             return;
         }
 
@@ -183,14 +225,18 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
         const blob = audioQueueRef.current.shift()!;
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
+        activeAudioRef.current = audio;
 
         audio.onended = () => {
             URL.revokeObjectURL(url);
+            activeAudioRef.current = null;
             playNextInQueue();
         };
 
         try {
             await audio.play();
+            // Mark that we have successfully started playing at least once
+            setHasAudioPlayed(true); 
         } catch (e) {
             console.error("Playback failed", e);
             playNextInQueue();
@@ -199,7 +245,8 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
 
     /**
      * Start recording using AudioWorklet for raw PCM capture
-     * This sends 16-bit PCM audio at 16kHz directly to the WebSocket
+     * The worklet handles downsampling from the native sample rate (typically 48kHz) to 16kHz
+     * and buffers audio into ~80ms chunks (2560 bytes) as required by Deepgram Flux
      */
     const startRecording = async () => {
         if (isRecording) return;
@@ -231,22 +278,27 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
             const workletNode = new AudioWorkletNode(audioContext, 'pcm-processor');
             workletNodeRef.current = workletNode;
 
+            // Send initial configuration immediately to ensure server is ready
+            // The worklet outputs 16kHz audio after decimation
+            const initialConfig = {
+                type: 'audio_config',
+                sampleRate: 16000,  // Fixed: worklet outputs 16kHz
+                encoding: 'linear16'
+            };
+            
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+                console.log("[Voice] Sending initial audio config:", initialConfig);
+                wsRef.current.send(JSON.stringify(initialConfig));
+            }
+
             // Handle PCM audio chunks from worklet
             workletNode.port.onmessage = (event) => {
-                if (event.data.type === 'audio' && wsRef.current?.readyState === WebSocket.OPEN) {
-                    // Send raw PCM buffer with sample rate metadata
-                    // First send is metadata, then binary audio data
-                    const metadata = {
-                        type: 'audio_config',
-                        sampleRate: event.data.sampleRate || 48000,
-                        channels: 1,
-                        encoding: 'linear16'
-                    };
+                // Only send audio if mic is NOT muted
+                if (event.data.type === 'audio' 
+                    && wsRef.current?.readyState === WebSocket.OPEN 
+                    && !isMicMutedRef.current) {
                     
-                    // Send config on first chunk (simple approach: send every time, server caches)
-                    wsRef.current.send(JSON.stringify(metadata));
-                    
-                    // Then send raw PCM buffer
+                    // Send raw PCM buffer
                     wsRef.current.send(event.data.buffer);
                 }
             };
@@ -295,9 +347,17 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
 
     const sendJson = (data: any) => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
+            console.log("[Voice WS] 📤 Sending JSON:", data.type);
             wsRef.current.send(JSON.stringify(data));
+        } else {
+            console.warn("[Voice WS] ⚠️ Cannot send JSON, socket state:", wsRef.current?.readyState);
         }
     };
+
+    const setMicMuted = useCallback((muted: boolean) => {
+        isMicMutedRef.current = muted;
+        setIsMicMutedState(muted);
+    }, []);
 
     // Cleanup on unmount
     useEffect(() => {
@@ -320,6 +380,9 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
         transcription,
         interimTranscription,
         sendJson,
-        error
+        error,
+        isMicMuted,
+        setMicMuted,
+        hasAudioPlayed
     };
 }

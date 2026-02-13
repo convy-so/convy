@@ -3,9 +3,8 @@
 import { User } from "better-auth/types";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Link, usePathname, useRouter } from "@/i18n/routing";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   MessageSquare,
@@ -13,35 +12,20 @@ import {
   Settings,
   Users,
   FolderOpen,
-  Plus,
   Menu,
   X,
   Plug,
-  Sparkles,
   LogOut,
   User as UserIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
-const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Surveys", href: "/dashboard/surveys", icon: MessageSquare },
-  { name: "Projects", href: "/dashboard/projects", icon: FolderOpen },
-  { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
-  { name: "Team", href: "/dashboard/team", icon: Users },
-  { name: "Integrations", href: "/dashboard/integrations", icon: Plug },
-];
-
-const bottomNavigation = [
-  { name: "Profile", href: "/dashboard/profile", icon: UserIcon },
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
-];
+import { useTranslations } from "next-intl";
 
 import { useAuth } from "@/components/providers/auth-provider";
 
 import { authClient } from "@/lib/auth-client";
-import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 
 interface DashboardSidebarProps {
@@ -53,6 +37,21 @@ export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const t = useTranslations('Sidebar');
+
+  const navigation = [
+    { name: t('Dashboard'), href: "/dashboard", icon: LayoutDashboard },
+    { name: t('Surveys'), href: "/dashboard/surveys", icon: MessageSquare },
+    { name: t('Projects'), href: "/dashboard/projects", icon: FolderOpen },
+    { name: t('Analytics'), href: "/dashboard/analytics", icon: BarChart3 },
+    { name: t('Team'), href: "/dashboard/team", icon: Users },
+    { name: t('Integrations'), href: "/dashboard/integrations", icon: Plug },
+  ];
+
+  const bottomNavigation = [
+    { name: t('Profile'), href: "/dashboard/profile", icon: UserIcon },
+    { name: t('Settings'), href: "/dashboard/settings", icon: Settings },
+  ];
 
   const handleSignOut = async () => {
     await authClient.signOut({
@@ -121,7 +120,7 @@ export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
             const isActive =
               pathname === item.href;
             const isCreateSurvey = item.href === "/dashboard/create";
-            const isIntegrations = item.name === "Integrations";
+            const isIntegrations = item.href === "/dashboard/integrations";
 
             if (isIntegrations) {
               return (
@@ -134,7 +133,7 @@ export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
                     {item.name}
                   </div>
                   <span className="text-[10px] uppercase font-bold bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full tracking-wide">
-                    Soon
+                    {t('ComingSoon')}
                   </span>
                 </div>
               );
@@ -197,14 +196,14 @@ export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
               className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 transition-all duration-200 border border-transparent hover:border-red-100 group shadow-sm bg-white"
             >
               <LogOut className="w-5 h-5 group-hover:scale-110 transition-transform" />
-              Sign Out
+              {t('SignOut')}
             </button>
           ) : (
             <Link
               href="/sign-in"
               className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-all duration-200"
             >
-              Sign In
+              {t('SignIn')}
             </Link>
           )}
         </div>

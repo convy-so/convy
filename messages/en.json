@@ -4,32 +4,215 @@
         "description": "AI-powered surveys"
     },
     "Survey": {
-        "Creation": {
-            "title": "Create Survey",
-            "start": "Start",
-            "language": "Language",
-            "languages": {
-                "en": "English",
-                "fr": "French",
-                "de": "German",
-                "es": "Spanish",
-                "it": "Italian"
+        "Create": {
+            "Title": {
+                "Create": "Create New Survey",
+                "View": "View Creation Conversation"
+            },
+            "Badges": {
+                "AIDraft": "AI DRAFT",
+                "ReadOnly": "Read Only"
+            },
+            "Header": {
+                "Title": "Create Survey",
+                "Publish": "Publish",
+                "VoiceMode": "Voice Mode",
+                "StopVoice": "Stop Voice",
+                "Mode": {
+                    "Voice": "Voice",
+                    "VoiceActive": "Voice Active",
+                    "Text": "Text"
+                },
+                "Language": "Language"
+            },
+            "ReadOnlyBanner": {
+                "Message": "You are viewing a completed conversation.",
+                "Link": "Go to Survey Details →"
+            },
+            "Chat": {
+                "Started": "Voice Conversation Started",
+                "Instruction": "Speak naturally to create your survey",
+                "Listening": "Listening...",
+                "Speaking": "Speaking...",
+                "VoiceActive": "Voice Mode Active",
+                "VoiceInstruction": "Speak naturally. I'll respond when you stop.",
+                "VoiceListening": "Listening to response...",
+                "VoiceStart": "Click the microphone to start the conversation.",
+                "ExitVoice": "Exit Voice Mode",
+                "Welcome": "Hi! I'm here to help you create the perfect survey. Let's start with the basics - what's the main objective of your survey? What do you want to learn from your respondents?"
+            },
+            "Status": {
+                "AISpeaking": "AI Speaking",
+                "Listening": "Listening",
+                "Ready": "Ready",
+                "TapToPause": "Tap to Pause",
+                "TapToSpeak": "Tap to Speak"
+            },
+            "Completion": {
+                "Title": "Excellent! We're Ready.",
+                "Message": "I have all the information I need. Let's switch back to view the summary and start testing.",
+                "Button": "View Summary & Test"
+            },
+            "ReadyCard": {
+                "Title": "Ready to Test!",
+                "Description": "I have everything I need to draft your survey.",
+                "Button": "Start Testing",
+                "Finalizing": "Finalizing..."
+            },
+            "Menu": {
+                "UploadFile": "Upload File",
+                "AddMedia": "Add Media",
+                "MediaTypes": "Images, Video, Audio",
+                "VoiceMode": "Voice Mode",
+                "TalkToAI": "Talk to AI"
+            },
+            "Input": {
+                "Placeholder": "Describe your survey goals...",
+                "AddMedia": "Add Context/Media",
+                "Send": "Send"
+            },
+            "SuggestedPrompts": {
+                "CustomerSat": "Create a customer satisfaction survey",
+                "ProductFeedback": "Gather feedback on a new product feature",
+                "EmployeeEngagement": "Measure employee engagement and culture",
+                "MarketResearch": "Conduct market research for a new idea"
+            },
+            "Authentication": {
+                "Required": "Authentication Required",
+                "VerifyEmail": "Verify Email",
+                "GoBack": "Go Back",
+                "SignIn": "Sign In",
+                "GoHome": "Go Home"
+            },
+            "Toasts": {
+                "LanguageUpdateFailed": "Failed to save language preference",
+                "ModeUpdateFailed": "Failed to save survey mode preference",
+                "LoadFailed": "Failed to load survey conversation",
+                "InitFailed": "Failed to initialize survey",
+                "SendFailed": "Failed to send message. Please try again.",
+                "MicDenied": "Microphone access denied",
+                "VoiceSendFailed": "Failed to send voice message",
+                "FinalizeFailed": "Failed to finalize survey. Please try again.",
+                "Finalized": "Survey finalized! Loading sample conversations..."
+            }
+        },
+        "PublishModal": {
+            "Title": "Publish Survey",
+            "TitlePublished": "Survey Published!",
+            "Subtitle": "Make your survey live and shareable",
+            "SubtitlePublished": "Your survey is now live and shareable",
+            "SuccessMessage": "🎉 Your survey is now live!",
+            "Buttons": {
+                "CopyLink": "Copy Link",
+                "ViewSurvey": "View Survey",
+                "Done": "Done",
+                "Cancel": "Cancel",
+                "Publish": "Publish Survey",
+                "Publishing": "Publishing..."
+            },
+            "Inputs": {
+                "TitleLabel": "Survey Title",
+                "TitlePlaceholder": "Enter a title for your survey",
+                "DescLabel": "Description",
+                "DescOptional": "(optional)",
+                "DescPlaceholder": "Add a brief description for your survey",
+                "VoiceModeLabel": "Voice Mode",
+                "VoiceModeDesc": "Respondents will start with voice."
+            },
+            "Toasts": {
+                "TitleGenerated": "Title suggestion generated!",
+                "GenerateFailed": "Failed to generate title suggestion",
+                "EnterTitle": "Please enter a title for your survey",
+                "Success": "Survey published successfully!",
+                "Failed": "Failed to publish survey",
+                "Copied": "Link copied to clipboard!",
+                "CopyFailed": "Failed to copy link"
+            }
+        },
+        "AddMediaModal": {
+            "Title": "Add Media",
+            "DropZone": {
+                "Default": "Click to upload image, audio or video",
+                "Drag": "Drop file here"
+            },
+            "Inputs": {
+                "DescriptionLabel": "Description",
+                "DescriptionPlaceholder": "e.g. A photo of our new logo",
+                "DescriptionHint": "What is this media showing?",
+                "ContextLabel": "Context for Use",
+                "ContextPlaceholder": "e.g. Show this when asking about brand perception",
+                "ContextHint": "When should the AI show this to the user?"
+            },
+            "Buttons": {
+                "Cancel": "Cancel",
+                "Add": "Add Media",
+                "Uploading": "Uploading..."
+            },
+            "Toasts": {
+                "FillAll": "Please fill in all fields",
+                "DescShort": "Description must be at least 10 characters",
+                "ContextShort": "Context must be at least 10 characters",
+                "Success": "Media added successfully",
+                "Failed": "Upload failed"
+            }
+        },
+        "SampleReview": {
+            "Header": {
+                "Title": "Sample Conversation Review",
+                "Back": "Back to Survey"
+            },
+            "Actions": {
+                "ShowText": "Show Text",
+                "HideText": "Hide Text",
+                "Publish": "Publish Survey"
+            },
+            "VoiceVisualizer": {
+                "Listening": "Listening...",
+                "AISpeaking": "AI Speaking...",
+                "TapToSpeak": "Tap to speak",
+                "SpeakInstruction": "Speak continuously. The AI will respond naturally.",
+                "Connecting": "Connecting to voice service..."
+            },
+            "EmptyState": {
+                "StartTitle": "Start the conversation",
+                "VoiceInstruction": "Tap the microphone below to start speaking.",
+                "TextInstruction": "Type a greeting to begin the test."
+            },
+            "Input": {
+                "Voice": "Voice",
+                "Text": "Text",
+                "Placeholder": "Type your message...",
+                "LiveTranscription": "Live Transcription"
+            },
+            "Feedback": {
+                "Title": "Refine Simulation",
+                "Description": "Not satisfied with the AI's behavior? Provide instructions below to adjust the next sample.",
+                "Placeholder": "e.g. 'Be more concise', 'Ask about budget earlier', 'Don't use emojis'...",
+                "Chars": "{count} chars",
+                "RetriesLeft": "{count} retries left",
+                "Button": "Update & Restart",
+                "Applying": "Applying...",
+                "LimitReached": "You have used all available sample conversations. Please publish or edit the survey directly."
+            },
+            "Toasts": {
+                "Finished": "Conversation finished! You can now refine or publish.",
+                "Limitreached": "You've used all 3 sample conversations",
+                "FeedbackApplied": "Feedback applied! Starting new conversation...",
+                "FeedbackFailed": "Failed to apply feedback",
+                "Confirmed": "Survey confirmed and published!",
+                "ConfirmFailed": "Failed to confirm survey",
+                "ResponseFailed": "Failed to get response",
+                "AIResponseFailed": "Failed to get AI response",
+                "NoRetries": "You've used all 3 sample conversations",
+                "FeedbackError": "Error applying feedback",
+                "StartFailed": "Failed to start conversation"
             }
         },
         "Response": {
             "welcome": "Welcome",
             "start": "Start Survey",
-            "loading": "Preparing your survey...",
-            "notFound": "Failed to load survey",
-            "closed": "This survey is no longer accepting responses",
-            "errorHelp": "Please check the link and try again.",
-            "thankYou": "Thank You!",
-            "thankYouMessage": "Your insights are incredibly valuable. We appreciate you taking the time to share your thoughts with us.",
-            "close": "Close Survey",
-            "hideText": "Hide Text",
-            "showText": "Show Text",
             "voiceMode": "Voice Mode",
-            "tryVoice": "Try Voice",
+            "tryVoice": "Try Voice with AI",
             "connectionFailed": "Connection Failed",
             "connecting": "Connecting...",
             "listening": "Listening...",
@@ -39,7 +222,794 @@
             "initializing": "Initializing...",
             "liveTranscription": "Live Transcription",
             "typeAnswer": "Type your answer...",
-            "sharedMedia": "Shared media"
+            "sharedMedia": "Shared media",
+            "tapToRetry": "Tap icon to retry",
+            "loadFailed": "Failed to load survey",
+            "loading": "Preparing your survey experience...",
+            "closed": "This survey is no longer accepting responses",
+            "notFound": "Survey not found",
+            "errorHelp": "Please check the URL or contact the survey creator.",
+            "thankYou": "Thank You!",
+            "thankYouMessage": "Your responses have been saved. We appreciate your feedback.",
+            "close": "Close Window",
+            "hideText": "Hide transcript",
+            "showText": "Show transcript"
+        },
+        "Detail": {
+            "Header": {
+                "Copied": "Copied",
+                "CopyLink": "Copy Link",
+                "Pause": "Pause",
+                "Resume": "Resume",
+                "Continue": "Continue Creating",
+                "Preview": "Preview",
+                "NoDescription": "No description provided."
+            },
+            "SampleReview": {
+                "Badge": "Required Step",
+                "Title": "Ready for Sample Conversations",
+                "Description": "Your survey logic has been generated! Conduct a sample voice conversation with the AI to verify the experience before going live.",
+                "Button": "Start Sample Conversation"
+            },
+            "Tabs": {
+                "Overview": "Overview",
+                "Responses": "Responses",
+                "Settings": "Settings"
+            },
+            "Overview": {
+                "Responses": {
+                    "Title": "Responses",
+                    "Target": "of {limit} target"
+                },
+                "Completion": {
+                    "Title": "Completion",
+                    "Completed": "{count} completed"
+                },
+                "Duration": {
+                    "Title": "Avg. Duration",
+                    "Unit": "minutes"
+                },
+                "Created": {
+                    "Title": "Created"
+                },
+                "ShareLink": "Share Link",
+                "Configuration": {
+                    "Title": "Survey Configuration",
+                    "Objective": "Objective",
+                    "TargetAudience": "Target Audience",
+                    "Tone": "Conversation Tone",
+                    "NotSpecified": "Not specified"
+                },
+                "RecentResponses": {
+                    "Title": "Recent Responses",
+                    "ViewAll": "View all",
+                    "NoResponses": "No responses yet"
+                }
+            },
+            "Responses": {
+                "SearchPlaceholder": "Search responses...",
+                "Filter": {
+                    "All": "All Status",
+                    "Completed": "Completed",
+                    "InProgress": "In Progress"
+                },
+                "Export": "Export",
+                "Table": {
+                    "Empty": "No responses yet",
+                    "Participant": "Participant {id}",
+                    "Anonymous": "Anonymous",
+                    "Status": {
+                        "Completed": "Completed",
+                        "InProgress": "In Progress"
+                    },
+                    "Summary": "No summary available"
+                },
+                "Pagination": {
+                    "Page": "Page {current} of {total}"
+                }
+            },
+            "Settings": {
+                "Title": "Survey Settings",
+                "Fields": {
+                    "Title": "Survey Title",
+                    "Description": "Description",
+                    "Limit": "Response Limit"
+                },
+                "VoiceMode": {
+                    "Title": "Voice Conversation Mode",
+                    "Description": "Enable voice-first interaction for this survey."
+                },
+                "Save": "Save Changes",
+                "Saving": "Saving..."
+            },
+            "Embed": {
+                "Title": "Embed Widget",
+                "ActiveWarning": {
+                    "Title": "Survey must be active",
+                    "Description": "Publish your survey before generating an embed widget."
+                },
+                "Generate": {
+                    "Description": "Embed your survey on any website with a simple code snippet.",
+                    "Button": "Generate Embed Code",
+                    "Generating": "Generating..."
+                },
+                "Options": {
+                    "Iframe": "Option 1: iframe Embed",
+                    "Script": "Option 2: Inline Script",
+                    "Copy": "Copy",
+                    "Copied": "Copied!"
+                },
+                "Instructions": {
+                    "Title": "How to use",
+                    "Step1": "Copy one of the code snippets above",
+                    "Step2": "Paste it into your website's HTML where you want the survey to appear",
+                    "Step3": "The survey will load as an interactive iframe on your page",
+                    "Step4": "Responses will be collected and visible in your dashboard"
+                },
+                "DirectLink": "Direct Link:"
+            },
+            "DeleteModal": {
+                "Title": "Delete Survey",
+                "Description": "Are you sure you want to delete \"{title}\"? This action cannot be undone and will permanently remove all responses.",
+                "Cancel": "Cancel",
+                "Delete": "Delete Survey",
+                "Deleting": "Deleting..."
+            },
+            "Toasts": {
+                "ExportStarted": "Export started",
+                "ExportFailed": "Export failed",
+                "NoData": "No data to export",
+                "SettingsSaved": "Settings saved successfully",
+                "SettingsFailed": "Failed to save settings",
+                "StatusUpdated": "Survey {status}",
+                "StatusFailed": "Failed to update status",
+                "Deleted": "Survey deleted",
+                "DeleteFailed": "Failed to delete survey",
+                "LinkCopied": "Link copied!",
+                "EmbedGenerated": "Embed code generated!",
+                "EmbedFailed": "Failed to generate embed code",
+                "CodeCopied": "Code copied to clipboard!",
+                "Error": "An error occurred"
+            }
         }
+    },
+    "SurveysPage": {
+        "Status": {
+            "Published": "Published",
+            "Draft": "Draft",
+            "Creating": "Creating",
+            "Completed": "Completed",
+            "Paused": "Paused"
+        },
+        "Header": {
+            "Title": "Surveys",
+            "Description": "Create and manage your AI-powered voice surveys.",
+            "CreateButton": "New Survey"
+        },
+        "Tabs": {
+            "All": "All",
+            "Published": "Published",
+            "Unpublished": "Drafts"
+        },
+        "Search": {
+            "Placeholder": "Search surveys..."
+        },
+        "Loading": "Loading surveys...",
+        "Card": {
+            "Responses": "Responses",
+            "Created": "Created",
+            "Menu": {
+                "Continue": "Continue",
+                "ViewDetails": "View Details",
+                "Analytics": "Analytics",
+                "Edit": "Edit",
+                "CopyLink": "Copy Link",
+                "Duplicate": "Duplicate",
+                "Delete": "Delete"
+            },
+            "Toasts": {
+                "Deleted": "Survey deleted successfully",
+                "DeleteFailed": "Failed to delete survey",
+                "Duplicating": "Duplicating survey...",
+                "Duplicated": "Survey duplicated successfully",
+                "DuplicateFailed": "Failed to duplicate survey",
+                "LinkCopied": "Link copied to clipboard",
+                "CopyFailed": "Failed to copy link"
+            }
+        },
+        "Empty": {
+            "NoMatching": {
+                "Title": "No matching surveys",
+                "Description": "Try adjusting your search or filters to find what you're looking for.",
+                "Clear": "Clear search"
+            },
+            "NoPublished": {
+                "Title": "No published surveys yet",
+                "Description": "When you publish a survey, it will appear here.",
+                "Button": "Create New Survey"
+            },
+            "NoUnpublished": {
+                "Title": "No drafts found",
+                "Description": "All your work is published!"
+            },
+            "NoSurveys": {
+                "Title": "No surveys yet",
+                "Description": "Get started by creating your first AI-powered voice survey.",
+                "Button": "Create New Survey"
+            }
+        },
+        "DeleteModal": {
+            "Title": "Delete Survey",
+            "Description": "Are you sure you want to delete \"{title}\"? This action cannot be undone.",
+            "Cancel": "Cancel",
+            "Delete": "Delete",
+            "Deleting": "Deleting...",
+            "Confirm": "Delete Survey"
+        }
+    },
+    "Sidebar": {
+        "Dashboard": "Dashboard",
+        "Surveys": "Surveys",
+        "Projects": "Projects",
+        "Analytics": "Analytics",
+        "Team": "Team",
+        "Integrations": "Integrations",
+        "Profile": "Profile",
+        "Settings": "Settings",
+        "SignIn": "Sign In",
+        "SignOut": "Sign Out",
+        "ComingSoon": "Soon"
+    },
+    "Header": {
+        "Search": "Search anything...",
+        "Notifications": "Notifications",
+        "NewNotifications": "{count} new",
+        "NoNotifications": "No notifications yet",
+        "ViewAll": "View all notifications",
+        "Profile": "Profile",
+        "Settings": "Settings",
+        "LogOut": "Log out"
+    },
+    "Dashboard": {
+        "Welcome": {
+            "Title": "Welcome back! 👋",
+            "Subtitle": "Here's what's happening with your surveys today."
+        },
+        "CreateSurvey": "Create Survey",
+        "Stats": {
+            "TotalSurveys": "Total Surveys",
+            "AllTime": "All time",
+            "AvgDuration": "Avg. Duration",
+            "PerCompleted": "Per completed survey",
+            "NoCompletions": "No completions yet"
+        },
+        "QuickActions": {
+            "CreateSurvey": {
+                "Title": "Create Survey",
+                "Description": "Build AI-powered forms"
+            },
+            "ViewAnalytics": {
+                "Title": "View Analytics",
+                "Description": "Insights & reports"
+            },
+            "ManageProjects": {
+                "Title": "Manage Projects",
+                "Description": "Organize your surveys"
+            }
+        },
+        "RecentSurveys": {
+            "Title": "Recent Surveys",
+            "ViewAll": "View all",
+            "NoSurveys": "No surveys yet",
+            "GetStarted": "Get started by creating your first AI-powered survey",
+            "CreateFirst": "Create Your First Survey"
+        },
+        "Activity": {
+            "NewResponse": "New response received"
+        }
+    },
+    "ProjectsPage": {
+        "Header": {
+            "Title": "Projects",
+            "Description": "Organize your surveys into projects.",
+            "CreateButton": "Create Project"
+        },
+        "Search": {
+            "Placeholder": "Search projects..."
+        },
+        "Card": {
+            "Surveys": "Surveys",
+            "Responses": "Responses",
+            "Menu": {
+                "ViewDetails": "View Details",
+                "AddSurvey": "Add Survey",
+                "Edit": "Edit Project",
+                "Delete": "Delete Project"
+            }
+        },
+        "Empty": {
+            "CreateNew": {
+                "Title": "Create New Project",
+                "Description": "Click to create a new project folder"
+            },
+            "NoMatching": "No projects found matching \"{query}\""
+        },
+        "CreateModal": {
+            "Title": "Create New Project",
+            "NameLabel": "Project Name",
+            "NamePlaceholder": "e.g. Q1 Marketing Surveys",
+            "DescriptionLabel": "Description",
+            "DescriptionPlaceholder": "What is this project for?",
+            "Cancel": "Cancel",
+            "Creating": "Creating...",
+            "Confirm": "Create Project"
+        },
+        "EditModal": {
+            "Title": "Edit Project",
+            "NameLabel": "Project Name",
+            "NamePlaceholder": "Enter project name",
+            "DescriptionLabel": "Description",
+            "DescriptionPlaceholder": "Enter project description",
+            "Cancel": "Cancel",
+            "Confirm": "Save Changes"
+        },
+        "DeleteModal": {
+            "Title": "Delete Project",
+            "Description": "Are you sure you want to delete \"{name}\"? This will not delete the surveys within the project.",
+            "Cancel": "Cancel",
+            "Deleting": "Deleting...",
+            "Confirm": "Delete Project"
+        },
+        "ProjectSurveys": {
+            "Empty": {
+                "Description": "No surveys in this project yet.",
+                "Button": "Add Survey"
+            },
+            "AddAnother": "Add another survey"
+        },
+        "AddSurveyModal": {
+            "Title": "Add Survey to Project",
+            "Empty": "All surveys are already in this project or none exist.",
+            "Cancel": "Cancel"
+        }
+    },
+    "AnalyticsPage": {
+        "Header": {
+            "Title": "Analytics",
+            "Description": "Overview of your survey performance and engagement"
+        },
+        "Search": {
+            "Placeholder": "Search surveys..."
+        },
+        "Card": {
+            "Responses": "responses"
+        },
+        "Empty": {
+            "Title": "No active surveys",
+            "Description": "Create and publish a survey to start seeing analytics.",
+            "Button": "Create Survey"
+        }
+    },
+    "TeamPage": {
+        "Header": {
+            "Title": "Team Management",
+            "Description": "Manage members, roles, and permissions for"
+        },
+        "Stats": {
+            "TotalMembers": "Total Members",
+            "YourRole": "Your Role",
+            "WorkspacePlan": "Workspace Plan",
+            "Upgrade": "Upgrade",
+            "Free": "Free"
+        },
+        "Permissions": {
+            "Title": "Role Permissions",
+            "Owner": "Owner",
+            "OwnerDesc": "Full access to workspace settings, billing, and team management. Can delete workspace.",
+            "Member": "Member",
+            "MemberDesc": "Can create and manage surveys, view analytics, and collaborate with other members."
+        },
+        "Upgrade": {
+            "Title": "Need more seats?",
+            "Description": "Upgrade to Pro to add unlimited team members and access advanced collaboration features.",
+            "Button": "Upgrade Plan"
+        },
+        "Danger": {
+            "Title": "Danger Zone",
+            "DeleteWorkspace": "Delete Workspace",
+            "DeleteDesc": "Deleting a workspace is permanent and cannot be undone. All surveys and data will be lost.",
+            "LeaveWorkspace": "Leave Workspace",
+            "LeaveDesc": "Leaving this workspace will revoke your access to all surveys and data."
+        },
+        "Modals": {
+            "Delete": {
+                "Title": "Delete Workspace",
+                "Description": "Are you sure you want to delete \"{name}\"? This action is permanent and will delete all surveys, responses, and members.",
+                "Cancel": "Cancel",
+                "Confirm": "Delete Workspace",
+                "Deleting": "Deleting..."
+            },
+            "Leave": {
+                "Title": "Leave Workspace",
+                "Description": "Are you sure you want to leave \"{name}\"? You will lose access to all surveys and data in this workspace.",
+                "Cancel": "Cancel",
+                "Confirm": "Leave Workspace",
+                "Leaving": "Leaving..."
+            }
+        },
+        "PersonalSpace": {
+            "Title": "Personal Space",
+            "Description": "You are currently in your personal space. To manage a team, please switch to a workspace or create a new one."
+        },
+        "Toasts": {
+            "MemberRemoved": "Member removed",
+            "InvitationSent": "Invitation sent successfully",
+            "WorkspaceDeleted": "Workspace deleted",
+            "DeleteFailed": "Failed to delete workspace",
+            "LeftWorkspace": "Left workspace",
+            "LeaveFailed": "Failed to leave workspace"
+        },
+        "MemberList": {
+            "Header": "Team Members",
+            "Count": "{count, plural, one {# member} other {# members}}",
+            "PendingCount": "• {count} pending",
+            "InviteButton": "Invite",
+            "You": "(you)",
+            "Menu": {
+                "Remove": "Remove"
+            },
+            "Pending": {
+                "Status": "Invitation pending",
+                "Badge": "Pending"
+            },
+            "Empty": {
+                "Title": "No team members yet",
+                "Description": "Invite colleagues to collaborate on surveys together",
+                "Button": "Invite Team Members"
+            },
+            "InviteModal": {
+                "Title": "Invite Team Member",
+                "EmailLabel": "Email Address",
+                "EmailPlaceholder": "colleague@company.com",
+                "RoleLabel": "Role",
+                "Roles": {
+                    "Member": "Member",
+                    "MemberDesc": "Can view surveys and analytics",
+                    "Owner": "Owner",
+                    "OwnerDesc": "Full access to workspace"
+                },
+                "Cancel": "Cancel",
+                "Submit": "Send Invitation",
+                "Submitting": "Sending...",
+                "Success": "Invitation sent successfully",
+                "Error": "Failed to send invitation"
+            }
+        }
+    },
+    "IntegrationsPage": {
+        "Title": "Integrations Coming Soon",
+        "Description": "We're working hard to bring you seamless integrations with your favorite tools like Slack, Notion, and Zapier."
+    },
+    "Settings": {
+        "Header": {
+            "Title": "Settings",
+            "Description": "Manage your account preferences and settings"
+        },
+        "Tabs": {
+            "Profile": "Profile",
+            "Workspace": "Workspace",
+            "Notifications": "Notifications",
+            "Preferences": "Preferences",
+            "Security": "Security",
+            "Billing": "Billing"
+        },
+        "Preferences": {
+            "Title": "Preferences",
+            "Description": "Manage your language and display settings",
+            "Language": "Language",
+            "Toast": "Language changed"
+        },
+        "Profile": {
+            "Title": "Profile Information",
+            "Description": "Update your personal details",
+            "RemovePhoto": "Remove photo",
+            "FullName": "Full Name",
+            "Email": "Email Address",
+            "EmailHint": "Email cannot be changed directly.",
+            "Save": "Save Changes",
+            "Saving": "Saving..."
+        },
+        "Workspace": {
+            "Title": "Workspace Settings",
+            "Description": "Manage your workspace identity",
+            "Logo": "Workspace Logo",
+            "LogoHint": "Recommended: 256x256px",
+            "Remove": "Remove",
+            "Name": "Workspace Name",
+            "Slug": "Workspace Slug",
+            "Update": "Update Workspace",
+            "Updating": "Updating..."
+        },
+        "Notifications": {
+            "Title": "Notification Preferences",
+            "Description": "Choose how you want to be notified",
+            "Email": "Email Notifications",
+            "Push": "Push Notifications",
+            "Saved": "Notification preferences saved",
+            "Types": {
+                "NewResponse": "New survey responses",
+                "NewResponseDesc": "Get notified when someone completes your survey",
+                "WeeklySummary": "Weekly summary",
+                "WeeklySummaryDesc": "Receive a weekly digest of your survey analytics",
+                "TeamUpdates": "Team updates",
+                "TeamUpdatesDesc": "Get notified about team member actions",
+                "RealTime": "New responses",
+                "RealTimeDesc": "Real-time alerts for new responses",
+                "MilestonesDesc": "When surveys reach response goals"
+            },
+            "Error": "An error occurred",
+            "Saving": "Saving...",
+            "Save": "Save Changes"
+        },
+        "Security": {
+            "Title": "Change Password",
+            "Description": "Update your account password",
+            "Current": "Current Password",
+            "New": "New Password",
+            "Confirm": "Confirm New Password",
+            "Update": "Update Password",
+            "Updating": "Updating...",
+            "TwoFactor": {
+                "Title": "Two-Factor Authentication",
+                "Description": "Add an extra layer of security to your account",
+                "Enable": "Enable"
+            },
+            "Delete": {
+                "Title": "Delete Account",
+                "Description": "Once you delete your account, there is no going back. Please be certain.",
+                "Button": "Delete Account"
+            },
+            "PasswordMismatch": "Passwords do not match"
+        },
+        "Billing": {
+            "Plan": "Current Plan",
+            "Active": "Active",
+            "Description": "Billing is currently frozen for testing. You have full access to all features.",
+            "Disabled": "Billing Disabled",
+            "Usage": "Usage This Month",
+            "Surveys": "Surveys",
+            "Responses": "Responses",
+            "Unlimited": "Unlimited"
+        }
+    },
+    "Landing": {
+        "Navbar": {
+            "Pricing": "Pricing",
+            "SignIn": "Sign in",
+            "GetStarted": "Get started"
+        },
+        "Hero": {
+            "Badge": "Forms 2.0",
+            "Title": "The chat layer <br />your forms always needed.",
+            "Description": "Convy replaces rigid forms with dynamic chat flows that move like a real convo and feel built just for you.",
+            "CTA": "Get started free",
+            "NoCreditCard": "no credit card required"
+        },
+        "Insights": {
+            "Badge": "Hear it out",
+            "Title": "Convos That Actually Work",
+            "Description": "Old forms feel dead and confusing, but AI chats turn interactions into clear insights.",
+            "Cards": {
+                "AI": {
+                    "Title": "AI-Powered Conversations, Not Questions",
+                    "Description": "Static questions trap users in a box, while real conversations reveal their priorities, pain points, and true thoughts."
+                },
+                "Alive": {
+                    "Title": "From Rigid to Alive",
+                    "Description": "Dead forms treat every user the same and kill engagement, while small changes can make every interaction feel human."
+                },
+                "Flow": {
+                    "Title": "Forms That Actually Flow",
+                    "Description": "Users hit dead ends, get frustrated, and drop off, but smooth flows keep them engaged and willing to share more."
+                },
+                "Data": {
+                    "Title": "Smart Data Chats",
+                    "Description": "Convy turns messy answers, typos, and slang into clear insights you can actually use."
+                }
+            }
+        },
+        "Features": {
+            "Badge": "Features",
+            "Title": "Everything you need to talk to users",
+            "Description": "Convy turns static question lists into living conversations, so you can capture richer signals without adding more work.",
+            "Cards": {
+                "Builder": {
+                    "Title": "AI Form Builder",
+                    "Description": "Auto-generate conversational flows from plain text prompts."
+                },
+                "Integrations": {
+                    "Title": "Integrations",
+                    "Description": "Plug into tools like Notion, Slack, and Zapier in one click."
+                },
+                "ChatData": {
+                    "Title": "Chat with Data",
+                    "Description": "Talk directly to your collected responses and analytics."
+                },
+                "Logic": {
+                    "Title": "Smart Logic",
+                    "Description": "AI detects intent and dynamically changes questions mid-chat."
+                },
+                "Summaries": {
+                    "Title": "Auto Summaries",
+                    "Description": "Get instant structured insights and summaries from every conversation."
+                }
+            }
+        },
+        "Pricing": {
+            "Badge": "Pricing",
+            "Title": "Plans to Fit Up to Your Needs",
+            "Description": "From startups to enterprises, QP Widget has a plan that brings you closer to your customers.",
+            "Mo": "/ mo",
+            "GetStarted": "Get started",
+            "ComingSoon": "Coming soon",
+            "Free": {
+                "Title": "Free Plan",
+                "Description": "Try Convy’s AI magic and see how chat-native forms change your flow.",
+                "Features": {
+                    "Limited": "Limited conversations",
+                    "Unlimited": "Unlimited responses",
+                    "Builder": "AI Form Builder",
+                    "ChatData": "Chat with Data",
+                    "Branding": "Convy branding",
+                    "NoIntegrations": "No integrations",
+                    "NoSupport": "No community support"
+                }
+            },
+            "Pro": {
+                "Title": "Pro Plan",
+                "Description": "Go pro to own your chat experience — fully branded, unlimited, and powered by AI.",
+                "Features": {
+                    "UnlimitedConversations": "Unlimited conversations",
+                    "CustomDomain": "Custom domain & email",
+                    "UniqueBranding": "Unique branding",
+                    "UnlimitedUploads": "Unlimited file uploads",
+                    "VoiceMode": "Voice mode",
+                    "Integrations": "Full integrations (Zapier, Notion, Slack, etc.)",
+                    "PrioritySupport": "Priority support"
+                }
+            }
+        },
+        "Waitlist": {
+            "Badge": "Waitlist",
+            "Title": "Sign up with Waitlist",
+            "Description": "Your users are talking — are you listening? <br />Sign up for Convy today, and let&apos;s create something extraordinary, together.",
+            "CTA": "Get started free"
+        },
+        "Footer": {
+            "Message": "Start improving your product today with <br /> real-time data from Convy.",
+            "Contact": "Contact us on X",
+            "Rights": "© {year} convy. All rights reserved.",
+            "Privacy": "Privacy Policy",
+            "Cookies": "Cookie Policy",
+            "Blog": "Blog"
+        }
+    },
+    "Auth": {
+        "SignIn": {
+            "Title": "Welcome back",
+            "Subtitle": "Sign in to your account to continue",
+            "EmailLabel": "Email address",
+            "EmailPlaceholder": "Enter your email",
+            "PasswordLabel": "Password",
+            "PasswordPlaceholder": "Enter your password",
+            "RememberMe": "Remember me",
+            "ForgotPassword": "Forgot password?",
+            "Button": "Sign in",
+            "Loading": "Signing in...",
+            "NoAccount": "Don't have an account?",
+            "SignUpLink": "Sign up",
+            "Success": "Signed in successfully",
+            "LoadingOverlay": "Loading...",
+            "Redirecting": "Redirecting you to dashboard"
+        },
+        "SignUp": {
+            "Title": "Create your account",
+            "Subtitle": "Start creating conversational surveys today",
+            "NameLabel": "Full name",
+            "NamePlaceholder": "Enter your full name",
+            "EmailLabel": "Email address",
+            "EmailPlaceholder": "Enter your email",
+            "PasswordLabel": "Password",
+            "PasswordPlaceholder": "Create a strong password",
+            "AgreeTo": "I agree to the",
+            "Terms": "Terms of Service",
+            "And": "and",
+            "Privacy": "Privacy Policy",
+            "Button": "Create account",
+            "Loading": "Creating account...",
+            "HasAccount": "Already have an account?",
+            "SignInLink": "Sign in",
+            "Success": "Account created! Please check your email to verify your account.",
+            "SuccessVerified": "Account created and verified!",
+            "Error": "Something went wrong. Please try again.",
+            "LoadingOverlay": "Loading ...",
+            "Redirecting": "Redirecting you shortly"
+        },
+        "ForgotPassword": {
+            "Title": "Forgot your password?",
+            "Subtitle": "No worries! Enter your email and we'll send you a reset link.",
+            "EmailLabel": "Email address",
+            "EmailPlaceholder": "Enter your email address",
+            "Button": "Send reset link",
+            "Loading": "Sending reset link...",
+            "BackToSignIn": "Back to sign in",
+            "Success": {
+                "Title": "Check your email",
+                "Description": "We've sent a password reset link to {email}",
+                "Button": "Try again"
+            }
+        },
+        "ResetPassword": {
+            "Title": "Reset your password",
+            "Subtitle": "Enter your new password below",
+            "PasswordLabel": "New password",
+            "PasswordPlaceholder": "Enter your new password",
+            "ConfirmPasswordLabel": "Confirm new password",
+            "ConfirmPasswordPlaceholder": "Confirm your new password",
+            "Button": "Reset password",
+            "Loading": "Resetting password...",
+            "Success": {
+                "Title": "Password reset successful",
+                "Description": "Your password has been successfully reset. You can now sign in with your new password.",
+                "Button": "Sign in to your account"
+            },
+            "Errors": {
+                "Mismatch": "Passwords don't match",
+                "Failed": "Failed to reset password"
+            },
+            "PasswordsMatch": "Passwords match"
+        },
+        "VerifyEmail": {
+            "Title": "Check your email",
+            "Description": "We've sent a verification link to {email}. Please check your inbox and follow the instructions to verify your account.",
+            "DefaultEmail": "your email",
+            "Verifying": "Verifying your email...",
+            "VerifyingSubtitle": "Please wait a moment",
+            "ResendButton": "Resend verification email",
+            "ResendingButton": "Sending...",
+            "BackToSignIn": "Back to sign in",
+            "SuccessToast": "Email verified successfully!",
+            "ErrorToast": "Verification failed",
+            "GenericError": "An error occurred during verification",
+            "ResendSuccess": "Verification email sent!",
+            "ResendError": "Failed to send verification email"
+        }
+    },
+    "Profile": {
+        "Title": "My Profile",
+        "EditButton": "Edit Profile",
+        "PersonalInfo": "Personal Information",
+        "FirstName": "First Name",
+        "LastName": "Last Name",
+        "Email": "Email Address",
+        "JoinDate": "Join Date",
+        "UserRole": "User Role",
+        "DefaultRole": "Member"
+    },
+    "Zapier": {
+        "Title": "Zapier Integration",
+        "Description": "Connect your surveys to thousands of apps through Zapier.",
+        "ComingSoon": {
+            "Badge": "Coming Soon",
+            "Title": "Zapier Integration is Coming Soon",
+            "Description": "We're working on bringing powerful Zapier integration to Convy. Soon you'll be able to connect your surveys to thousands of apps and automate your workflows.",
+            "Feature1": "✨ Trigger Zaps on new responses",
+            "Feature2": "🔄 Send survey data to any app",
+            "Feature3": "⚡ Real-time webhook delivery"
+        }
+    },
+    "SurveyAnalytics": {
+        "Title": "Survey Analysis",
+        "Subtitle": "AI-powered insights and metrics"
     }
 }

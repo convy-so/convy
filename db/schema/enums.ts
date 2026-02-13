@@ -10,6 +10,7 @@ export const surveyStatusEnum = pgEnum("survey_status", [
   "creating",
   "sample_review",
   "active",
+  "paused",
   "completed",
   "archived",
 ]);
