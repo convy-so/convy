@@ -8,7 +8,6 @@ import { env } from "@/lib/env";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 
 export async function addSecondaryEmail(email: string) {
   const session = await auth.api.getSession({ headers: await headers() });

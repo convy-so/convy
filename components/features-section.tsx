@@ -5,8 +5,11 @@ import {
   FaBrain,
   FaFileAlt,
 } from "react-icons/fa";
+import { useTranslations } from "next-intl";
 
 export default function FeaturesSection() {
+  const t = useTranslations('Landing.Features');
+
   return (
     <section className="p-[12px] bg-[#FAFAFA]">
       <div className="mx-auto max-w-[1920px] py-10 sm:py-12 px-4 sm:px-6 lg:px-12">
@@ -17,13 +20,13 @@ export default function FeaturesSection() {
               className="text-[#8D8D8D] italic text-[24px] md:text-[32px] font-normal leading-[33px] md:leading-[44px] tracking-[-0.24px] md:tracking-[-0.32px] mb-4"
               style={{ fontFamily: "var(--font-fasthand)" }}
             >
-              Features
+              {t('Badge')}
             </p>
             <h2 className="text-[32px] md:text-[40px] font-[500] text-[#080808] leading-[40px] md:leading-[50px] tracking-[-0.48px] md:tracking-[-0.64px] mb-4">
-              Everything you need to talk to users
+              {t('Title')}
             </h2>
             <p className="text-[20px] md:text-[22px] font-normal text-[#696969] leading-[30px] md:leading-[32px] tracking-normal max-w-3xl mx-auto">
-              Convy turns static question lists into living conversations, so you can capture richer signals without adding more work.
+              {t('Description')}
             </p>
           </div>
 
@@ -36,10 +39,10 @@ export default function FeaturesSection() {
               </div>
               <div>
                 <h3 className="text-[20px] font-[500] text-[#080808] leading-[26px] tracking-[-0.24px] mb-1">
-                  AI Form Builder
+                  {t('Cards.Builder.Title')}
                 </h3>
                 <p className="text-[16px] font-normal text-[#696969] leading-[22px]">
-                  Auto-generate conversational flows from plain text prompts.
+                  {t('Cards.Builder.Description')}
                 </p>
               </div>
             </div>
@@ -51,10 +54,10 @@ export default function FeaturesSection() {
               </div>
               <div>
                 <h3 className="text-[20px] font-[500] text-[#080808] leading-[26px] tracking-[-0.24px] mb-1">
-                  Integrations
+                  {t('Cards.Integrations.Title')}
                 </h3>
                 <p className="text-[16px] font-normal text-[#696969] leading-[22px]">
-                  Plug into tools like Notion, Slack, and Zapier in one click.
+                  {t('Cards.Integrations.Description')}
                 </p>
               </div>
             </div>
@@ -66,10 +69,10 @@ export default function FeaturesSection() {
               </div>
               <div>
                 <h3 className="text-[20px] font-[500] text-[#080808] leading-[26px] tracking-[-0.24px] mb-1">
-                  Chat with Data
+                  {t('Cards.ChatData.Title')}
                 </h3>
                 <p className="text-[16px] font-normal text-[#696969] leading-[22px]">
-                  Talk directly to your collected responses and analytics.
+                  {t('Cards.ChatData.Description')}
                 </p>
               </div>
             </div>
@@ -81,10 +84,10 @@ export default function FeaturesSection() {
               </div>
               <div>
                 <h3 className="text-[20px] font-[500] text-[#080808] leading-[26px] tracking-[-0.24px] mb-1">
-                  Smart Logic
+                  {t('Cards.Logic.Title')}
                 </h3>
                 <p className="text-[16px] font-normal text-[#696969] leading-[22px]">
-                  AI detects intent and dynamically changes questions mid-chat.
+                  {t('Cards.Logic.Description')}
                 </p>
               </div>
             </div>
@@ -96,10 +99,10 @@ export default function FeaturesSection() {
               </div>
               <div>
                 <h3 className="text-[20px] font-[500] text-[#080808] leading-[26px] tracking-[-0.24px] mb-1">
-                  Auto Summaries
+                  {t('Cards.Summaries.Title')}
                 </h3>
                 <p className="text-[16px] font-normal text-[#696969] leading-[22px]">
-                  Get instant structured insights and summaries from every conversation.
+                  {t('Cards.Summaries.Description')}
                 </p>
               </div>
             </div>

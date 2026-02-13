@@ -25,7 +25,7 @@ import { SurveyResponseVoiceHandler } from "./handlers/survey-response-voice";
 import { SampleSurveyVoiceHandler } from "./handlers/sample-survey-voice";
 import { AnalyticsHandler } from "./handlers/analytics";
 import { getRedisSubscriber } from "@/lib/redis";
-import { warmupGreetings } from "@/lib/voice/deepgram-tts";
+
 
 /**
  * WebSocket Server for Voice-Enabled Surveys
@@ -305,8 +305,12 @@ async function handleSurveyResponse(
   }
 
   try {
-    // Create handler
-    const handler = new SurveyResponseVoiceHandler(ws, surveyId, identifier);
+    // Extract language from URL
+    const url = parse(req.url || "", true);
+    const language = (url.query?.language as string) || "en";
+    
+    // Create handler with language
+    const handler = new SurveyResponseVoiceHandler(ws, surveyId, identifier, language);
     await handler.initialize();
 
     // Track connection with timestamp for cleanup
@@ -639,10 +643,7 @@ server.listen(PORT, () => {
   // Initialize Redis pub/sub subscriber
   initializeRedisSubscriber();
 
-  // Pre-cache TTS greetings for instant playback on voice connections
-  warmupGreetings().catch((error) => {
-    console.error("[WebSocket] Failed to warmup greetings:", error);
-  });
+
 
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗

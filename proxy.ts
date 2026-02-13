@@ -6,6 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const intlMiddleware = createMiddleware(routing);
 
+
 export default async function middleware(request: NextRequest) {
     const { nextUrl } = request;
     
@@ -13,7 +14,7 @@ export default async function middleware(request: NextRequest) {
     // This includes both direct /dashboard and localized /:locale/dashboard
     const isDashboardRoute = nextUrl.pathname.startsWith("/dashboard") || 
                              routing.locales.some((locale: string) => nextUrl.pathname.startsWith(`/${locale}/dashboard`));
-
+    
     if (isDashboardRoute) {
         try {
             const { data: session } = await betterFetch<Session>(
@@ -40,7 +41,8 @@ export default async function middleware(request: NextRequest) {
     return intlMiddleware(request);
 }
 
+
 export const config = {
-    // Matcher config to cover both i18n and dashboard
-    matcher: ["/", "/(de|en|fr|es|it)/:path*", "/dashboard/:path*"],
+    // Matcher excluding API, Next.js internals, and static files
+    matcher: ['/((?!api|_next|.*\\..*).*)'],
 };

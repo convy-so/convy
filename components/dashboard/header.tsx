@@ -5,14 +5,15 @@ import { Search, LogOut, Settings, User as UserIcon, Bell } from "lucide-react";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
-import { useRouter } from "next/navigation";
-import toast from "react-hot-toast";
-import Link from "next/link";
+import { useRouter, Link } from "@/i18n/routing";
 import { markNotificationAsRead } from "@/app/actions/notifications";
 import { fetchNotifications as fetchNotificationsAPI } from "@/lib/api/notifications";
 import { queryKeys } from "@/lib/query-keys";
+import toast from "react-hot-toast";
 
 import { useAuth } from "@/components/providers/auth-provider";
+
+import { useTranslations } from "next-intl";
 
 interface DashboardHeaderProps {
   user?: User | null;
@@ -24,6 +25,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
   const router = useRouter();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const t = useTranslations('Header');
 
   // Fetch notifications using React Query
   const { data: notifications = [], isLoading, refetch: refetchNotifications } = useQuery({
@@ -69,7 +71,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search anything..."
+            placeholder={t('Search')}
             className="w-full pl-10 pr-4 py-2 rounded-xl bg-gray-50 border-none text-sm focus:ring-2 focus:ring-gray-200 transition-all outline-none"
           />
         </div>
@@ -96,10 +98,10 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
               />
               <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl border border-gray-100 shadow-xl z-20 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                 <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
-                  <h3 className="font-semibold text-gray-900">Notifications</h3>
+                  <h3 className="font-semibold text-gray-900">{t('Notifications')}</h3>
                   {unreadCount > 0 && (
                     <span className="px-2 py-0.5 bg-red-50 text-red-600 text-xs font-medium rounded-full">
-                      {unreadCount} new
+                      {t('NewNotifications', { count: unreadCount })}
                     </span>
                   )}
                 </div>
@@ -128,13 +130,13 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
                     ))
                   ) : (
                     <div className="p-8 text-center">
-                      <p className="text-sm text-gray-500">No notifications yet</p>
+                      <p className="text-sm text-gray-500">{t('NoNotifications')}</p>
                     </div>
                   )}
                 </div>
                 <div className="px-4 py-2 bg-gray-50 border-t border-gray-100">
                   <button className="text-xs text-gray-600 hover:text-gray-900 font-medium w-full text-center py-1">
-                    View all notifications
+                    {t('ViewAll')}
                   </button>
                 </div>
               </div>
@@ -185,7 +187,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
                     className="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                   >
                     <UserIcon className="w-4 h-4 text-gray-400" />
-                    Profile
+                    {t('Profile')}
                   </Link>
                   <Link
                     href="/dashboard/settings"
@@ -193,7 +195,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
                     className="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                   >
                     <Settings className="w-4 h-4 text-gray-400" />
-                    Settings
+                    {t('Settings')}
                   </Link>
 
                   <div className="h-px bg-gray-100 my-1" />
@@ -203,7 +205,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
                     className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                   >
                     <LogOut className="w-4 h-4" />
-                    Log out
+                    {t('LogOut')}
                   </button>
                 </div>
               </>

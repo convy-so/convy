@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { useParams } from "next/navigation";
+import { Link } from "@/i18n/routing";
+import { useTranslations } from "next-intl";
 import { Mail, ArrowLeft, Check } from "lucide-react";
 import { AuthCard } from "@/components/auth/auth-card";
 import { StatusCard } from "@/components/auth/status-card";
@@ -11,6 +13,9 @@ import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
 
 export default function ForgotPasswordPage() {
+  const params = useParams();
+  const locale = params.locale as string;
+  const t = useTranslations('Auth.ForgotPassword');
   const [email, setEmail] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -20,9 +25,9 @@ export default function ForgotPasswordPage() {
     setIsLoading(true);
 
     try {
-      await authClient.forgetPassword({
+      await authClient.requestPasswordReset({
         email,
-        redirectTo: "/reset-password",
+        redirectTo: `/${locale}/reset-password`,
         fetchOptions: {
           onSuccess: () => {
             setIsSubmitted(true);
@@ -44,14 +49,14 @@ export default function ForgotPasswordPage() {
       <StatusCard
         icon={Check}
         iconColor="green"
-        title="Check your email"
-        description={`We've sent a password reset link to ${email}`}
+        title={t('Success.Title')}
+        description={t('Success.Description', { email })}
         actionButton={{
-          text: "Try again",
+          text: t('Success.Button'),
           onClick: () => setIsSubmitted(false)
         }}
         secondaryAction={{
-          text: "Back to sign in",
+          text: t('BackToSignIn'),
           href: "/sign-in"
         }}
       />
@@ -60,23 +65,23 @@ export default function ForgotPasswordPage() {
 
   return (
     <AuthCard
-      title="Forgot your password?"
-      subtitle="No worries! Enter your email and we'll send you a reset link."
+      title={t('Title')}
+      subtitle={t('Subtitle')}
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         <InputField
           id="email"
           type="email"
-          label="Email address"
+          label={t('EmailLabel')}
           icon={Mail}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="Enter your email address"
+          placeholder={t('EmailPlaceholder')}
           required
         />
 
-        <SubmitButton isLoading={isLoading} loadingText="Sending reset link...">
-          Send reset link
+        <SubmitButton isLoading={isLoading} loadingText={t('Loading')}>
+          {t('Button')}
         </SubmitButton>
       </form>
 
@@ -86,7 +91,7 @@ export default function ForgotPasswordPage() {
           className="inline-flex items-center gap-2 text-[#696969] text-sm hover:text-[#292929] transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to sign in
+          {t('BackToSignIn')}
         </Link>
       </div>
     </AuthCard>

@@ -1,5 +1,6 @@
 
 import type { SurveyConfig } from "./prompts";
+import { getAnalyticsExpertise } from "./domain-expertise-loader";
 
 // ============================================================================
 // CONVERSATION-LEVEL INSIGHTS PROMPT
@@ -54,6 +55,22 @@ ${hypotheses ? `Hypotheses to evaluate:\n${hypotheses}` : ""}
 ${mediaAssets ? `Media assets:\n${mediaAssets}` : ""}
 </survey_context>
 
+${config.domainId ? (() => {
+    const expert = getAnalyticsExpertise(config.domainId);
+    return expert ? `<domain_analytics_lens>
+You are analyzing this as a ${expert.analysisPhilosophy}.
+
+KEY METRICS TO WATCH:
+${expert.keyMetrics.map(m => `- ${m.name}: ${m.description} [Benchmark: ${m.benchmark ?? 'N/A'}]`).join('\n')}
+
+SIGNAL VS NOISE:
+${expert.signalVsNoise.map(s => `- Signal: "${s.signal}" vs Noise: "${s.noise}" (Distinguish by: ${s.howToDistinguish})`).join('\n')}
+
+STATISTICAL CONSIDERATIONS:
+${expert.statisticalConsiderations.map(sc => `- ${sc}`).join('\n')}
+</domain_analytics_lens>` : "";
+  })() : ""}
+
 <conversation>
 ${conversationText}
 </conversation>
@@ -80,6 +97,7 @@ Output:
   "requiredQuestionsMissed": ["exact question text NOT answered"],
   "sentiment": {"overall": "positive|negative|neutral|mixed", "score": -1.0 to 1.0, "confidence": 0.0 to 1.0},
   "extractedMetrics": {"metric_name": "value"},
+  "respondentData": {"data_label": "value"},
   "notableQuotes": [{"text": "quote", "context": "why notable", "sentiment": "positive|negative|neutral"}],
   "hypothesisEvidence": [{"hypothesis": "text", "evidence": "supporting|contradicting|neutral", "quote": "relevant quote"}],
   "insightTypes": {
@@ -97,6 +115,7 @@ Output:
 - Extract 3-5 most insightful quotes maximum
 - Use actual metric names as keys
 - If metric undetermined, use "not_determined"
+- For respondentData: Extract specific personal info (name, email, job title, etc.) if requested by the creator and provided by the participant. Map the creator's label (e.g., "Full Name") to the participant's answer.
 - For media not shown, use participantReaction: "not_shown"
 </extraction_rules>`;
 }
@@ -204,6 +223,24 @@ ${metricsToAggregate}
 ${hypothesesToValidate}
 
 ${mediaToAnalyze}
+
+${config.domainId ? (() => {
+    const expert = getAnalyticsExpertise(config.domainId);
+    return expert ? `DOMAIN ANALYTICS GUIDANCE:
+Analysis Philosophy: ${expert.analysisPhilosophy}
+
+Key Metrics to Prioritize:
+${expert.keyMetrics.map(m => `- ${m.name}: ${m.description}`).join('\n')}
+
+Segmentation Strategy:
+${expert.segmentationStrategies.map(s => `- Break down by ${s.dimension}: ${s.example}`).join('\n')}
+
+Reporting Guidance:
+- Audience: ${expert.reportingGuidance.audienceFraming}
+- Key Viz: ${expert.reportingGuidance.keyVisualization}
+- Narrative: ${expert.reportingGuidance.narrativeStructure}
+- Actionable Format: ${expert.reportingGuidance.actionableFormat}` : "";
+  })() : ""}
 
 INDIVIDUAL CONVERSATION INSIGHTS:
 ${insightsText}
@@ -561,6 +598,7 @@ export interface ConversationInsightsAIResponse {
     confidence: number;
   };
   extractedMetrics: Record<string, string | number | boolean>;
+  respondentData: Record<string, string>;
   notableQuotes: Array<{
     text: string;
     context?: string;

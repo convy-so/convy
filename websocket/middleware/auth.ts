@@ -15,7 +15,7 @@ export interface AuthenticatedConnection {
   sessionId: string;
   userEmail: string;
   emailVerified: boolean;
-  role: "user" | "admin" | "org_admin" | "org_member"; // Added role for Issue 5
+  role: "user" | "admin" | "org_admin" | "org_member"; 
 }
 
 export interface AuthError {

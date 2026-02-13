@@ -18,7 +18,6 @@ export async function GET(
             .select({
                 id: surveys.id,
                 title: surveys.title,
-                additionalContext: surveys.additionalContext,
                 objective: surveys.objective,
                 targetAudience: surveys.targetAudience,
                 status: surveys.status,

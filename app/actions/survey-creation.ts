@@ -93,7 +93,6 @@ const extractedDataSchema = z.object({
     .enum(["formal", "casual", "playful", "empathetic"])
     .optional()
     .nullable(),
-  additionalContext: z.string().optional().nullable(),
   requiredQuestions: z.array(z.string()).optional().nullable(),
   metrics: z.array(z.string()).optional().nullable(),
   personalInfo: z.array(z.string()).optional().nullable(),
@@ -107,7 +106,6 @@ const extractedDataSchema = z.object({
     constraints: z.boolean(),
     hypotheses: z.boolean(),
     tone: z.boolean(),
-    additionalContext: z.boolean(),
     requiredQuestions: z.boolean(),
     metrics: z.boolean(),
     personalInfo: z.boolean(),
@@ -208,7 +206,6 @@ export async function startSurveyCreationAction(
         constraints: false,
         hypotheses: false,
         tone: false,
-        additionalContext: false,
         requiredQuestions: false,
         metrics: false,
         personalInfo: false,
@@ -312,7 +309,6 @@ export async function getSurveyCreationStateAction(surveyId: string): Promise<
                 constraints: false,
                 hypotheses: false,
                 tone: false,
-                additionalContext: false,
                 requiredQuestions: false,
                 metrics: false,
                 personalInfo: false,
@@ -519,7 +515,6 @@ export async function finalizeSurveyCreationAction(
       constraints?: SurveyConstraints;
       hypotheses?: SurveyHypotheses;
       tone?: ToneProfile;
-      additionalContext?: string;
       requiredQuestions?: string[];
       metrics?: string[];
       personalInfo?: string[];
@@ -540,7 +535,6 @@ export async function finalizeSurveyCreationAction(
         constraints: data.constraints,
         hypotheses: data.hypotheses,
         tone: data.tone || "casual",
-        additionalContext: data.additionalContext,
         requiredQuestions: data.requiredQuestions || [],
         metrics: data.metrics || [],
         personalInfo: data.personalInfo || [],
@@ -706,7 +700,6 @@ export async function resumeSurveyCreationAction(surveyId: string): Promise<
           constraints: false,
           hypotheses: false,
           tone: false,
-          additionalContext: false,
           requiredQuestions: false,
           metrics: false,
           personalInfo: false,

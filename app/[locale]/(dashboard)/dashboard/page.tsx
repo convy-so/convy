@@ -1,5 +1,5 @@
 
-import Link from "next/link";
+import { Link } from "@/i18n/routing";
 import {
   MessageSquare,
   Users,
@@ -22,35 +22,36 @@ import { IntegrationsWidget } from "@/components/dashboard/integrations-widget";
 import { getSlackIntegrationStatus } from "@/app/actions/slack";
 import { getNotionIntegrationStatus } from "@/app/actions/notion";
 import { getZapierIntegrationStatus } from "@/app/actions/zapier";
-
-const quickActions = [
-  {
-    title: "Create Survey",
-    description: "Build AI-powered forms",
-    icon: Sparkles,
-    href: "/dashboard/create",
-    color: "from-blue-500 to-cyan-500",
-  },
-  {
-    title: "View Analytics",
-    description: "Insights & reports",
-    icon: BarChart3,
-    href: "/dashboard/analytics",
-    color: "from-purple-500 to-pink-500",
-  },
-  {
-    title: "Manage Projects",
-    description: "Organize your surveys",
-    icon: FolderOpen,
-    href: "/dashboard/projects",
-    color: "from-amber-500 to-orange-500",
-  },
-];
-
+import { getTranslations } from "next-intl/server";
 
 export default async function DashboardPage() {
   const session = await getVerifiedSession();
   const userId = session.user.id;
+  const t = await getTranslations('Dashboard');
+
+  const quickActions = [
+    {
+      title: t('QuickActions.CreateSurvey.Title'),
+      description: t('QuickActions.CreateSurvey.Description'),
+      icon: Sparkles,
+      href: "/dashboard/create",
+      color: "from-blue-500 to-cyan-500",
+    },
+    {
+      title: t('QuickActions.ViewAnalytics.Title'),
+      description: t('QuickActions.ViewAnalytics.Description'),
+      icon: BarChart3,
+      href: "/dashboard/analytics",
+      color: "from-purple-500 to-pink-500",
+    },
+    {
+      title: t('QuickActions.ManageProjects.Title'),
+      description: t('QuickActions.ManageProjects.Description'),
+      icon: FolderOpen,
+      href: "/dashboard/projects",
+      color: "from-amber-500 to-orange-500",
+    },
+  ];
 
   // 1. Fetch Stats
   // Total Surveys
@@ -119,7 +120,7 @@ export default async function DashboardPage() {
   const activities = recentActivitiesRaw.map(activity => ({
     id: activity.id,
     type: "new_response" as const,
-    title: "New response received",
+    title: t('Activity.NewResponse'),
     description: activity.surveyTitle,
     time: new Date(activity.createdAt!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }),
   }));
@@ -139,10 +140,10 @@ export default async function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
-            Welcome back! 👋
+            {t('Welcome.Title')}
           </h1>
           <p className="text-gray-500 mt-1">
-            Here's what's happening with your surveys today.
+            {t('Welcome.Subtitle')}
           </p>
         </div>
         <Link
@@ -150,7 +151,7 @@ export default async function DashboardPage() {
           className="flex items-center justify-center gap-2 px-5 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors group w-full sm:w-auto"
         >
           <Plus className="w-5 h-5" />
-          Create Survey
+          {t('CreateSurvey')}
           <ArrowUpRight className="w-4 h-4 opacity-50 group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
         </Link>
       </div>
@@ -158,18 +159,18 @@ export default async function DashboardPage() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <StatsCard
-          title="Total Surveys"
+          title={t('Stats.TotalSurveys')}
           value={totalSurveys.toString()}
-          change="All time"
+          change={t('Stats.AllTime')}
           changeType="neutral"
           icon={<MessageSquare className="w-6 h-6" />}
           iconColor="bg-blue-50 text-blue-600"
         />
 
         <StatsCard
-          title="Avg. Duration"
+          title={t('Stats.AvgDuration')}
           value={durationDisplay}
-          change={avgSeconds > 0 ? "Per completed survey" : "No completions yet"}
+          change={avgSeconds > 0 ? t('Stats.PerCompleted') : t('Stats.NoCompletions')}
           changeType="neutral"
           icon={<TrendingUp className="w-6 h-6" />}
           iconColor="bg-amber-50 text-amber-600"
@@ -200,12 +201,12 @@ export default async function DashboardPage() {
         {/* Recent Surveys - Takes 2 columns */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Recent Surveys</h2>
+            <h2 className="text-lg font-semibold text-gray-900">{t('RecentSurveys.Title')}</h2>
             <Link
               href="/dashboard/surveys"
               className="text-sm font-medium text-gray-500 hover:text-gray-900 flex items-center gap-1 transition-colors"
             >
-              View all
+              {t('RecentSurveys.ViewAll')}
               <ArrowUpRight className="w-4 h-4" />
             </Link>
           </div>
@@ -221,16 +222,16 @@ export default async function DashboardPage() {
               <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-4">
                 <MessageSquare className="w-8 h-8 text-gray-400" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No surveys yet</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('RecentSurveys.NoSurveys')}</h3>
               <p className="text-gray-500 mb-6 max-w-sm mx-auto">
-                Get started by creating your first AI-powered survey
+                {t('RecentSurveys.GetStarted')}
               </p>
               <Link
                 href="/dashboard/create"
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                Create Your First Survey
+                {t('RecentSurveys.CreateFirst')}
               </Link>
             </div>
           )}

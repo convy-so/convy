@@ -1,10 +1,11 @@
 
+
 import {
   REQUIRED_INFORMATION,
   TONE_PROFILES,
   type ToneProfile,
 } from "./surveys";
-import { SURVEY_DOMAINS, getDomainById, type SurveyDomainId } from "./domains";
+import { getDomainById, getDomainExpertise } from "./domain-expertise-loader";
 import type {
   SurveyObjective,
   SurveyTargetAudience,
@@ -19,6 +20,8 @@ import type {
   ConversationState,
   ParticipantStyle,
 } from "./conversation-memory";
+
+
 
 /**
  * Prompt templates for different AI tasks in the survey application
@@ -44,7 +47,6 @@ export interface SurveyConfig {
   constraints?: SurveyConstraints;
   hypotheses?: SurveyHypotheses;
   tone?: ToneProfile;
-  additionalContext?: string;
   media?: SurveyMedia[];
   personalInfo?: string[];
   domainId?: number;
@@ -59,7 +61,6 @@ export interface CollectedInfo {
   constraints: boolean;
   hypotheses: boolean;
   tone: boolean;
-  additionalContext: boolean;
   requiredQuestions: boolean;
   metrics: boolean;
   personalInfo: boolean;
@@ -111,27 +112,64 @@ export function getSurveyCreationSystemPrompt(
   } else if (!allRequiredCollected) {
     const [nextKey, nextInfo] = uncollectedRequired[0];
     phase = "GATHERING_INFO";
-    instruction = `Collect "${nextKey}": ${nextInfo.description}`;
-  } else if (!collectedInfo.tone) {
-    phase = "OPTIONAL_TONE";
-    instruction = "Ask about preferred tone: formal, casual, playful, or empathetic. Default to casual if no preference.";
-  } else if (!collectedInfo.metrics) {
-    phase = "OPTIONAL_METRICS";
-    instruction = "Ask about metrics to track (NPS, CSAT, CES). Mark collected if declined.";
-  } else if (!collectedInfo.personalInfo) {
-    phase = "OPTIONAL_PERSONAL_INFO";
-    instruction = "Ask if they want to collect respondent info (email, name). Mark collected if declined.";
-  } else if (!collectedInfo.additionalContext) {
-    phase = "OPTIONAL_CONTEXT";
-    instruction = "Ask if there's any additional context. Mark collected if none.";
+    instruction = `Topic: "${nextKey}". Description: ${nextInfo.description}. 
+    Instruction: Ask the user about this topic. Be professional but conversational. If the user provides info for multiple topics at once, acknowledge them but ensure this specific topic is clear. If the user wants to skip or has nothing to add, mark it as collected but acknowledge their preference.`;
   } else {
     phase = "COMPLETE";
-    instruction = "Summarize collected info briefly. Say: 'Please click the Go to Sample Conversations button below to test your survey.' Stop asking questions.";
+    instruction = "Briefly summarize all collected survey parameters. Then say: 'I have everything I need! Please click the Go to Sample Conversations button below to test your survey.' DO NOT ask any more questions.";
   }
 
-  // Build domain context
+  // Build domain expertise context
   let domainContext = "";
-  if (domainId) {
+  const domainExpertise = domainId ? getDomainExpertise(domainId) : null;
+  const creationExpert = domainExpertise?.creationExpert;
+
+  if (creationExpert) {
+    // AI acts as domain specialist with expert knowledge
+    domainContext = `<domain_expertise>
+You are now acting as a ${domainExpertise!.name} survey specialist.
+
+<core_principle>
+${domainExpertise!.corePrinciple}
+</core_principle>
+
+<methodology>
+When collecting information, apply domain-specific best practices:
+${creationExpert.creationProcess.slice(0, 2).map(step => `
+${step.stepNumber}. ${step.title}
+   ${step.description}
+   - ${step.guidance.join('\n   - ')}
+`).join('\n')}
+</methodology>
+
+<onboarding_questions>
+Before standard questions, ask domain-specific onboarding:
+${creationExpert.onboardingQuestions.map(q => `
+- ${q.question}
+  Purpose: ${q.purpose}
+  ${q.options ? `Suggest: ${q.options.slice(0, 3).join(', ')}${q.options.length > 3 ? ', or other' : ''}` : ''}
+`).join('\n')}
+</onboarding_questions>
+
+<question_guidance>
+When asking standard questions (objective, audience, scope), frame them with domain expertise:
+${creationExpert.questionPrinciples.slice(0, 2).map(p => `
+✓ ${p.principle}: ${p.explanation}
+  Good: "${p.goodExample}"
+  Bad: "${p.badExample}"
+`).join('\n')}
+</question_guidance>
+
+<avoid>
+${creationExpert.antiPatterns.slice(0, 2).map(ap => `
+✗ ${ap.pattern}
+  Why: ${ap.whyBad}
+  Instead: ${ap.whatToDoInstead}
+`).join('\n')}
+</avoid>
+</domain_expertise>`;
+  } else if (domainId) {
+    // Fallback to basic domain info if no expertise available
     const domain = getDomainById(domainId);
     if (domain) {
       domainContext = `<domain_context>
@@ -152,7 +190,7 @@ Focus: ${domain.shadowRequirements.slice(0, 3).join(", ")}
   ].join(" | ");
 
   return `<role>
-You are an expert survey designer, helping create effective conversational surveys by replacing static forms with intelligent dialogue.
+You are an expert survey designer${domainExpertise ? `, specializing in ${domainExpertise.name}` : ''}, helping create effective conversational surveys by replacing static forms with intelligent dialogue.
 You collect information through natural dialogue to create effective conversational surveys.
 Language: ${languageMap[language]}
 </role>
@@ -186,6 +224,13 @@ Assistant: "Understanding churn is valuable! You mentioned users are leaving - i
 <example id="audience_specificity">
 User: "We'll survey our customers"
 Assistant: "Perfect. To tailor the questions, I need more detail about which customers. Are these recent purchasers, long-time users, or churned customers? And what's their relationship to your product - are they enterprise clients, individual consumers, or something else?"
+</example>
+
+<example id="personal_info_collection">
+User: "I want to collect some info about the respondents"
+Assistant: "That makes sense for segmentation! What specific personal data should I collect? I can ask for things like name, email, job title, or age. Or we can keep it completely anonymous if you prefer."
+User: "Just name and job title, please"
+Assistant: "Got it. I'll make sure to collect names and job titles at the very end of the conversation."
 </example>
 
 <example id="redirect_off_topic">
@@ -225,14 +270,12 @@ Require specificity. Transform vague inputs:
 <domains>
 1. Customer Experience (CX) - Product/service feedback
 2. Employee Experience (HR) - Workplace surveys
-3. Healthcare - Patient/provider feedback
-4. Education - Student/teacher assessments
-5. Market Research - Consumer insights
-6. Product/UX - Feature testing, usability
-7. Events - Conference/event feedback
-8. Hospitality - Guest experience
-9. Financial Services - Banking/insurance
-10. Public Sector - Government/nonprofit
+3. Workforce & Organizational Development - Internal health
+5. Education - Student/teacher assessments
+6. Civic Engagement - Public opinion
+7. Scientific & Academic Research - Thesis/Studies
+9. Demographic - Census/population
+10. Infrastructure - Systems performance
 </domains>
 
 <tone_options>
@@ -287,8 +330,6 @@ Output: {"objective":{"goal":"Get feedback on service","context":null,"decision"
   "constraints": {"timeLimit":"number|null","sensitiveTopics":["string"],"otherConstraints":"string|null"},
   "hypotheses": {"assumptions":["string"]},
   "tone": "formal|casual|playful|empathetic|null",
-  "additionalContext": "string|null",
-  "requiredQuestions": ["string"],
   "metrics": ["string"],
   "personalInfo": ["string"],
   "title": "string - concise survey title",
@@ -302,7 +343,6 @@ Output: {"objective":{"goal":"Get feedback on service","context":null,"decision"
     "constraints": "boolean",
     "hypotheses": "boolean",
     "tone": "boolean",
-    "additionalContext": "boolean",
     "requiredQuestions": "boolean",
     "metrics": "boolean",
     "personalInfo": "boolean",
@@ -330,7 +370,7 @@ When in doubt, mark FALSE.
 </validation_rules>
 
 <domains>
-1=CX, 2=HR, 3=Healthcare, 4=Education, 5=Market Research, 6=Product/UX, 7=Events, 8=Hospitality, 9=Financial, 10=Public Sector
+1=CX, 2=Market Research, 3=Workforce, 5=Education, 6=Civic, 7=Scientific, 9=Demographic, 10=Infrastructure
 </domains>`;
 }
 
@@ -342,7 +382,7 @@ export function getEfficientCreationOpeningPrompt(
   language: "en" | "fr" | "de" | "es" | "it" = "en"
 ): string {
   const openings: Record<string, string> = {
-    en: `Perfect! Let's create your conversational survey together. 
+    en: `Perfect! Let's create your conversational survey together.
 
 First, I need to know: **What specific product, service, or experience is this survey about?**
 
@@ -489,7 +529,6 @@ export const surveyDataExtractionSchema = {
       type: ["string", "null"],
       enum: ["formal", "casual", "playful", "empathetic", null],
     },
-    additionalContext: { type: ["string", "null"] },
     metrics: { type: ["array", "null"], items: { type: "string" } },
     personalInfo: { type: ["array", "null"], items: { type: "string" } },
     title: { type: "string" },
@@ -505,7 +544,7 @@ export const surveyDataExtractionSchema = {
         constraints: { type: "boolean" },
         hypotheses: { type: "boolean" },
         tone: { type: "boolean" },
-        additionalContext: { type: "boolean" },
+        requiredQuestions: { type: "boolean" },
         metrics: { type: "boolean" },
         personalInfo: { type: "boolean" },
         subjectDefined: { type: "boolean" },
@@ -519,7 +558,7 @@ export const surveyDataExtractionSchema = {
         "constraints",
         "hypotheses",
         "tone",
-        "additionalContext",
+        "requiredQuestions",
         "metrics",
         "personalInfo",
         "subjectDefined",
@@ -733,8 +772,43 @@ export function getSurveyConversationSystemPrompt(
     ? `\nCONVERSATION STYLE (${tone}):\n- ${toneProfile.guidelines}\n- Example phrasing: "${toneProfile.example}"`
     : "";
 
+  // Build domain expertise for execution
   let domainPersona = "";
-  if (config.domainId) {
+  const domainExpertise = config.domainId ? getDomainExpertise(config.domainId) : null;
+  const conductingExpert = domainExpertise?.conductingExpert;
+
+  if (domainExpertise && conductingExpert) {
+    // AI acts as domain specialist interviewer
+    domainPersona = `\nDOMAIN EXPERTISE: ${domainExpertise.name}
+
+CORE PRINCIPLE:
+${domainExpertise.corePrinciple}
+
+INTERACTION PATTERNS - How to respond in specific scenarios:
+${conductingExpert.interactionPatterns.map(pattern => `
+WHEN: ${pattern.scenario}
+YOUR APPROACH: ${pattern.aiGuidance}
+EXAMPLE: "${pattern.example}"
+`).join('\n')}
+
+QUALITY SIGNALS - High-quality responses include:
+${conductingExpert.qualityIndicators.map(qi => `- ${qi}`).join('\n')}
+
+AVOID THESE ANTI-PATTERNS:
+${conductingExpert.antiPatterns.map(ap => `
+✗ ${ap.pattern}
+  Why it's bad: ${ap.whyBad}
+  Do instead: ${ap.whatToDoInstead}
+`).join('\n')}
+
+QUESTION PRINCIPLES - Apply these when asking questions:
+${conductingExpert.questionPrinciples.map(p => `
+✓ ${p.principle}
+  Good: "${p.goodExample}"
+  Bad: "${p.badExample}"
+`).join('\n')}`;
+  } else if (config.domainId) {
+    // Fallback to basic domain info
     const domain = getDomainById(config.domainId);
     if (domain) {
       domainPersona = `\nDOMAIN CONTEXT: ${domain.name}\nGUIDELINES: ${domain.personaInstruction}\nSCOPE: ${domain.scope}`;
@@ -763,7 +837,12 @@ export function getSurveyConversationSystemPrompt(
 - Boundaries: ${config.scope.boundaries}`;
   }
 
-  if (config.successCriteria) {
+  // Use domain expertise quality indicators instead of user-defined success criteria
+  if (conductingExpert) {
+    contextSection += `\n\nQUALITY SIGNALS - Recognize high-quality responses that include:
+${conductingExpert.qualityIndicators.map(qi => `- ${qi}`).join('\n')}`;
+  } else if (config.successCriteria) {
+    // Fallback to user-defined criteria if no domain expertise
     contextSection += `\n\nSUCCESS CRITERIA:
 - Insight types needed: ${config.successCriteria.insightTypes.join(", ")}
 - Detail level: ${config.successCriteria.detailLevel}
@@ -802,9 +881,6 @@ When exploring hypotheses:
 - Probe for specific examples that support or contradict each hypothesis`;
   }
 
-  if (config.additionalContext) {
-    contextSection += `\n\nADDITIONAL CONTEXT:\n${config.additionalContext}`;
-  }
 
   if (config.improvementFeedback) {
     contextSection += `\n\nCRITICAL INSTRUCTIONS FROM SURVEY CREATOR:\n${config.improvementFeedback}\n(You MUST strictly adhere to these instructions regarding your behavior/questions)`;

@@ -1,0 +1,12 @@
+--- Testing Nova-3 Model WebSocket Connection ---
+Time: 2026-02-11T08:47:34.104Z
+API Key prefix: 337c...
+
+Attempting WebSocket connection with Nova-3...
+URL: wss://api.deepgram.com/v1/listen?model=nova-3&language=en&encoding=linear16
+✅ WebSocket upgrade successful!
+Status Code: 101
+✅ WebSocket connection opened successfully!
+Ready State: 1
+
+WebSocket closed: Code 1005, Reason: 

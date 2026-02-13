@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useState } from "react";
+import { useParams } from "next/navigation";
+import { Link, useRouter } from "@/i18n/routing";
 import { AuthCard } from "@/components/auth/auth-card";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { authClient } from "@/lib/auth-client";
 import { useAuth } from "@/components/providers/auth-provider";
 import toast from "react-hot-toast";
-import { CheckCircle2, XCircle, Users, ArrowRight, Loader2 } from "lucide-react";
-import Link from "next/link";
+import { CheckCircle2, XCircle, Users, Loader2 } from "lucide-react";
+
 
 export default function AcceptInvitationPage() {
   const params = useParams();

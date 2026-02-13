@@ -1,7 +1,7 @@
 "use client";
 
 import { Bell, Search, ChevronDown, Plus, Command } from "lucide-react";
-import Link from "next/link";
+import { Link } from "@/i18n/routing";
 import { useState } from "react";
 
 export function DashboardHeader() {

@@ -1,6 +1,7 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/i18n/routing";
+import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/providers/auth-provider";
 import { getActiveWorkspace } from "@/app/actions/workspace";
 import { useEffect, useState } from "react";
@@ -8,6 +9,7 @@ import { useEffect, useState } from "react";
 
 export default function ProfilePage() {
     const { user, session } = useAuth();
+    const t = useTranslations('Profile');
     const [workspace, setWorkspace] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -28,7 +30,7 @@ export default function ProfilePage() {
         <div className="max-w-4xl mx-auto space-y-6 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Header */}
             <div className="flex items-center justify-between">
-                <h1 className="text-xl font-semibold text-gray-900">My Profile</h1>
+                <h1 className="text-xl font-semibold text-gray-900">{t('Title')}</h1>
             </div>
 
             {/* Profile Header Card */}
@@ -47,7 +49,7 @@ export default function ProfilePage() {
 
                 <div className="flex-1 text-center md:text-left space-y-1">
                     <h2 className="text-2xl font-semibold text-gray-900">{user.name}</h2>
-                    <p className="text-sm font-medium text-gray-500">{workspace?.role || 'Member'}</p>
+                    <p className="text-sm font-medium text-gray-500">{workspace?.role || t('DefaultRole')}</p>
                 </div>
 
                 <div className="flex gap-3">
@@ -55,7 +57,7 @@ export default function ProfilePage() {
                         href="/dashboard/settings"
                         className="px-5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all font-sans"
                     >
-                        Edit Profile
+                        {t('EditButton')}
                     </Link>
                 </div>
             </div>
@@ -63,32 +65,32 @@ export default function ProfilePage() {
             {/* Personal Information */}
             <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden">
                 <div className="px-8 py-6 border-b border-gray-50 flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-gray-900">Personal Information</h3>
-                   
+                    <h3 className="text-lg font-semibold text-gray-900">{t('PersonalInfo')}</h3>
+
                 </div>
 
                 <div className="p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-8 gap-x-12">
                     <div>
-                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest block mb-1">First Name</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest block mb-1">{t('FirstName')}</label>
                         <p className="text-gray-900 font-medium">{user.name?.split(' ')[0] || '-'}</p>
                     </div>
                     <div>
-                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest block mb-1">Last Name</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest block mb-1">{t('LastName')}</label>
                         <p className="text-gray-900 font-medium">{user.name?.split(' ').slice(1).join(' ') || '-'}</p>
                     </div>
                     <div>
-                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest block mb-1">Email Address</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest block mb-1">{t('Email')}</label>
                         <p className="text-gray-900 font-medium">{user.email}</p>
                     </div>
                     <div>
-                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest block mb-1">Join Date</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest block mb-1">{t('JoinDate')}</label>
                         <p className="text-gray-900 font-medium">{new Date(user.createdAt).toLocaleDateString()}</p>
                     </div>
                     <div>
-                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest block mb-1">User Role</label>
-                        <p className="text-gray-900 font-medium capitalize">{workspace?.role || 'Member'}</p>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest block mb-1">{t('UserRole')}</label>
+                        <p className="text-gray-900 font-medium capitalize">{workspace?.role || t('DefaultRole')}</p>
                     </div>
-                    
+
                 </div>
             </div>
         </div>

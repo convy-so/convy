@@ -91,9 +91,6 @@ export async function POST(
         if (extractedData.tone) {
             updateData.tone = extractedData.tone;
         }
-        if (extractedData.additionalContext) {
-            updateData.additionalContext = extractedData.additionalContext;
-        }
         if (extractedData.requiredQuestions) {
             updateData.requiredQuestions = extractedData.requiredQuestions;
         }

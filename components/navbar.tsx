@@ -1,7 +1,10 @@
-import Link from "next/link";
+import { Link } from "@/i18n/routing";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 
 export default function Navbar() {
+  const t = useTranslations('Landing.Navbar');
+
   return (
     <nav className="w-full bg-[#FAFAFA] pt-4 sm:pt-6">
       <div className="mx-auto max-w-[1824px] grid h-14 sm:h-16 grid-cols-3 items-center px-[30px]">
@@ -25,19 +28,19 @@ export default function Navbar() {
             href="/pricing"
             className="text-sm sm:text-base md:text-[18px] font-medium text-[#292929] tracking-[-0.28px] transition-colors hover:text-[#292929]/80"
           >
-            Pricing
+            {t('Pricing')}
           </Link>
           <Link
             href="/sign-in"
             className="text-sm sm:text-base md:text-[18px] font-medium text-[#292929] tracking-[-0.28px] transition-colors hover:text-[#292929]/80"
           >
-            Sign in
+            {t('SignIn')}
           </Link>
           <Link
             href="/sign-up"
             className="rounded-full bg-[#292929] px-3 py-1.5 sm:px-4 sm:py-2 md:px-[16px] md:py-[10px] text-sm sm:text-base md:text-[18px] font-medium tracking-[-0.28px] text-[#FAFAFA] transition-colors hover:bg-[#3a3a3a] whitespace-nowrap"
           >
-            Get started
+            {t('GetStarted')}
           </Link>
         </div>
       </div>

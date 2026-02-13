@@ -4,7 +4,7 @@ import { clientEnv } from "@/lib/env.client";
 
 import { useState, useRef, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { Mic, MicOff, CheckCircle, AlertCircle, Send, Loader2, User, Sparkles, Paperclip } from "lucide-react";
+import { Mic, MicOff, CheckCircle, AlertCircle, Send, Loader2, User, Sparkles, Paperclip, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
 import { useChat } from "@ai-sdk/react";
@@ -27,17 +27,10 @@ interface Survey {
     language?: "en" | "fr" | "de" | "es" | "it";
 }
 
-interface InitialGreeting {
-    role: "assistant";
-    content: string;
-    timestamp: string;
-}
-
 interface SurveyInitResponse {
     survey: Survey;
     conversationId: string;
     participantId: string;
-    initialGreeting?: InitialGreeting;
     messages?: any[];
     completed?: boolean;
 }
@@ -58,12 +51,12 @@ interface MessageWithTools {
 }
 
 async function initializeSurvey(shareableLink: string, conversationId?: string | null): Promise<SurveyInitResponse> {
-    const url = conversationId 
+    const url = conversationId
         ? `/api/surveys/respond/${shareableLink}?conversationId=${conversationId}`
         : `/api/surveys/respond/${shareableLink}`;
-    
+
     const response = await fetch(url);
-    
+
     if (!response.ok) {
         if (response.status === 404) {
             throw new Error("Survey not found");
@@ -74,7 +67,7 @@ async function initializeSurvey(shareableLink: string, conversationId?: string |
             throw new Error("Failed to load survey");
         }
     }
-    
+
     return response.json();
 }
 
@@ -86,10 +79,10 @@ export default function SurveyRespondPage() {
     const pathname = usePathname();
     const t = useTranslations("Survey.Response");
 
-    const { 
-        data: initData, 
-        isLoading: isInitializing, 
-        error: initError 
+    const {
+        data: initData,
+        isLoading: isInitializing,
+        error: initError
     } = useQuery({
         queryKey: ['survey-respond', shareableLink],
         queryFn: () => {
@@ -108,10 +101,10 @@ export default function SurveyRespondPage() {
             return initializeSurvey(shareableLink, storedConversationId);
         },
         enabled: !!shareableLink,
-        staleTime: Infinity, 
-        retry: false, 
+        staleTime: Infinity,
+        retry: false,
     });
-    
+
     // Save session when initialized
     useEffect(() => {
         if (initData?.conversationId && initData?.participantId) {
@@ -124,7 +117,6 @@ export default function SurveyRespondPage() {
 
     const survey = initData?.survey ?? null;
     const conversationId = initData?.conversationId ?? null;
-    const initialGreeting = initData?.initialGreeting ?? null;
     const resumedMessages = initData?.messages ?? [];
     const initiallyCompleted = initData?.completed ?? false;
     const apiEndpoint = `/api/surveys/respond/${shareableLink}`;
@@ -132,7 +124,7 @@ export default function SurveyRespondPage() {
     // State declarations - must be before hooks that reference them
     const [input, setInput] = useState("");
     const [isCompleted, setIsCompleted] = useState(false);
-    
+
     // Sync completion state from API
     useEffect(() => {
         if (initiallyCompleted) {
@@ -143,14 +135,14 @@ export default function SurveyRespondPage() {
     // Redirect to survey language if different from current locale on first load
     useEffect(() => {
         if (survey?.language && survey.language !== locale) {
-             const storageKey = `convy_redirected_${shareableLink}`;
-             // Only redirect if we haven't already redirected for this session
-             const hasRedirected = sessionStorage.getItem(storageKey);
-             
-             if (!hasRedirected) {
-                 sessionStorage.setItem(storageKey, 'true');
-                 router.replace({ pathname, query: { shareableLink } } as any, { locale: survey.language as any });
-             }
+            const storageKey = `convy_redirected_${shareableLink}`;
+            // Only redirect if we haven't already redirected for this session
+            const hasRedirected = sessionStorage.getItem(storageKey);
+
+            if (!hasRedirected) {
+                sessionStorage.setItem(storageKey, 'true');
+                router.replace({ pathname, query: { shareableLink } } as any, { locale: survey.language as any });
+            }
         }
     }, [survey, locale, shareableLink, pathname, router]);
 
@@ -164,11 +156,7 @@ export default function SurveyRespondPage() {
             role: msg.role as "system" | "user" | "assistant" | "data",
             parts: msg.parts || (msg.content ? [{ type: 'text', text: msg.content }] : []),
         }))
-        : initialGreeting ? [{
-            id: "greeting-" + Date.now(),
-            role: "assistant" as const,
-            parts: [{ type: 'text', text: initialGreeting.content }],
-        }] : [];
+        : [];
 
     // useChat hook - only meaningful after initialization (AI SDK v6)
     const { messages, setMessages: originalSetMessages, status, sendMessage } = useChat({
@@ -190,7 +178,7 @@ export default function SurveyRespondPage() {
                 .map((part: any) => part.text)
                 .join(' ')
                 .toLowerCase() || "";
-            
+
             const hasTextCompletion = messageText.includes("thank you for completing") ||
                 messageText.includes("survey is now complete");
 
@@ -202,7 +190,7 @@ export default function SurveyRespondPage() {
 
 
 
-    
+
     // Safety check: Watch messages for any missed completion signals
     useEffect(() => {
         if (isCompleted) return;
@@ -245,7 +233,7 @@ export default function SurveyRespondPage() {
                 }
             } else if (data.type === "transcription" && data.isFinal) {
                 if (isCompleted) return;
-                
+
                 if (data.text && data.text.trim()) {
                     sendMessage({ text: data.text });
                 }
@@ -268,33 +256,40 @@ export default function SurveyRespondPage() {
         }
     });
 
-    // Auto-enable voice mode if survey is voice-based
+    const [hasStarted, setHasStarted] = useState(false);
+
+    // Initial setup based on survey type
     useEffect(() => {
-        console.log("[Survey Page] Voice Effect Triggered:", { 
-            hasSurvey: !!survey, 
-            isVoice: survey?.isVoice, 
-            currentMode: isVoiceMode 
-        });
-        
-        if (survey?.isVoice && !isVoiceMode) {
-            console.log("[Survey Page] Auto-starting voice mode...");
+        if (survey?.isVoice) {
             setIsVoiceMode(true);
             setShowTranscript(false);
-            voiceWs.connect().catch(e => console.error("[Survey Page] Auto-connect failed:", e));
         }
     }, [survey?.isVoice]);
+
+    // Handle initial start (User Gesture)
+    const handleStartSurvey = async () => {
+        setHasStarted(true);
+        if (isVoiceMode) {
+            try {
+                await voiceWs.connect();
+            } catch (e) {
+                console.error("Failed to connect voice:", e);
+                // Fallback to allowing manual retry
+            }
+        }
+    };
 
     // Handle language switch behavior
     useEffect(() => {
         // If the user hasn't manually switched and survey has a specific language, redirect (optional)
         // But for now, we'll let the user choose.
         if (isVoiceMode && voiceWs.status === 'connected') {
-             // Reconnect on language change to ensure correct voice parameters
-             voiceWs.disconnect();
-             setTimeout(() => voiceWs.connect(), 100);
+            // Reconnect on language change to ensure correct voice parameters
+            voiceWs.disconnect();
+            setTimeout(() => voiceWs.connect(), 100);
         }
     }, [locale]);
-    
+
     const handleLanguageChange = (newLocale: string) => {
         router.replace({ pathname, query: { shareableLink } } as any, { locale: newLocale });
     };
@@ -325,10 +320,10 @@ export default function SurveyRespondPage() {
         if (e) {
             e.preventDefault();
         }
-        
+
         // Prevent sending messages after survey completion
         if (isCompleted) return;
-        
+
         if (!input.trim() || isChatLoading || !conversationId) return;
 
         const currentInput = input;
@@ -365,7 +360,11 @@ export default function SurveyRespondPage() {
                         <AlertCircle className="w-10 h-10 text-red-500" />
                     </div>
                     <h1 className="text-2xl font-bold text-gray-900 mb-3">
-                        {initError instanceof Error ? initError.message : t("notFound")}
+                        {initError instanceof Error && initError.message === "This survey is no longer accepting responses"
+                            ? t("closed")
+                            : initError instanceof Error && initError.message === "Failed to load survey"
+                                ? t("loadFailed")
+                                : t("notFound")}
                     </h1>
                     <p className="text-gray-500 text-lg">{t("errorHelp")}</p>
                 </div>
@@ -435,9 +434,47 @@ export default function SurveyRespondPage() {
     // Main UI Render
     return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans selection:bg-gray-900 selection:text-white">
+            {/* Start Survey Overlay for Voice Mode */}
+            {survey?.isVoice && !hasStarted && !isCompleted && !isInitializing && (
+                <div className="fixed inset-0 z-50 bg-white/95 backdrop-blur-md flex items-center justify-center p-4 transition-all duration-700">
+                    <div className="flex flex-col items-center max-w-sm w-full animate-in fade-in zoom-in-95 duration-700 slide-in-from-bottom-4">
+
+                        {/* Minimalist Pulse Icon */}
+                        <div className="relative mb-8 group cursor-pointer" onClick={handleStartSurvey}>
+                            <div className="absolute inset-0 bg-indigo-500/20 rounded-full animate-ping opacity-20 duration-3000" />
+                            <div className="relative w-24 h-24 bg-gradient-to-tr from-indigo-50 to-white rounded-full flex items-center justify-center shadow-lg shadow-indigo-500/5 ring-1 ring-indigo-50 group-hover:scale-105 transition-transform duration-500">
+                                <Mic className="w-8 h-8 text-indigo-600/80" />
+                            </div>
+                        </div>
+
+                        {/* Typography */}
+                        <h2 className="text-3xl font-bold text-gray-900 mb-3 tracking-tight text-center">
+                            {t("voiceSurveyTitle") || "Voice Survey"}
+                        </h2>
+                        <p className="text-gray-500 mb-10 text-center leading-relaxed font-light text-lg max-w-xs mx-auto">
+                            {t("voiceSurveyIntro") || "Tap below to start speaking."}
+                        </p>
+
+                        {/* Premium Button */}
+                        <button
+                            onClick={handleStartSurvey}
+                            className="group relative px-8 py-4 bg-gray-900 text-white rounded-full font-medium text-lg hover:bg-black transition-all duration-300 hover:shadow-xl hover:shadow-gray-900/10 hover:-translate-y-0.5 active:scale-95 w-full max-w-[200px] overflow-hidden"
+                        >
+                            <span className="relative z-10 flex items-center justify-center gap-2">
+                                {t("startConversation") || "Start"}
+                                <ArrowRight className="w-4 h-4 opacity-70 group-hover:translate-x-1 transition-transform" />
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Main Card */}
-            <div className="w-full max-w-5xl h-[85vh] bg-white rounded-3xl border border-gray-200 shadow-sm flex flex-col overflow-hidden relative">
-                
+            <div className={cn(
+                "w-full max-w-5xl h-[85vh] bg-white rounded-3xl border border-gray-200 shadow-sm flex flex-col overflow-hidden relative transition-opacity duration-500",
+                (survey?.isVoice && !hasStarted) ? "opacity-0" : "opacity-100"
+            )}>
+
                 {/* Header */}
                 <header className="bg-white border-b border-gray-100 px-6 py-4 z-10 flex-shrink-0">
                     <div className="relative flex items-center justify-between h-14">
@@ -446,13 +483,13 @@ export default function SurveyRespondPage() {
 
                         {/* Centered Logo & Title */}
                         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-3">
-                                <img
-                                    src="/logo.svg"
-                                    alt="Convy Logo"
-                                    width={32}
-                                    height={32}
-                                    className="w-8 h-8 object-contain"
-                                />
+                            <img
+                                src="/logo.svg"
+                                alt="Convy Logo"
+                                width={32}
+                                height={32}
+                                className="w-8 h-8 object-contain"
+                            />
                             <h1 className="font-bold text-gray-900 tracking-tight text-lg">{survey?.title}</h1>
                         </div>
                         <div className="flex items-center gap-2">
@@ -490,29 +527,37 @@ export default function SurveyRespondPage() {
                                 </>
                             )}
                         </div>
-                        
+
                         {/* Language Switcher */}
                         <div className="ml-4 border-l border-gray-200 pl-4 flex items-center">
                             <div className="relative group">
-                                <button className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors text-sm font-medium">
+                                <button
+                                    disabled={messages.length > 0 || hasStarted}
+                                    className={cn(
+                                        "flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors text-sm font-medium",
+                                        (messages.length > 0 || hasStarted) && "opacity-50 cursor-not-allowed hover:text-gray-500"
+                                    )}
+                                >
                                     <Globe className="w-4 h-4" />
                                     <span className="uppercase">{locale}</span>
                                 </button>
-                                <div className="absolute top-full right-0 mt-2 w-32 bg-white rounded-xl shadow-lg border border-gray-100 py-1 hidden group-hover:block z-50 animate-in fade-in zoom-in-95 duration-200">
-                                    {['en', 'fr', 'de', 'es', 'it'].map((l) => (
-                                        <button
-                                            key={l}
-                                            onClick={() => handleLanguageChange(l)}
-                                            className={cn(
-                                                "w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors flex items-center justify-between",
-                                                locale === l ? "text-indigo-600 font-medium" : "text-gray-600"
-                                            )}
-                                        >
-                                            <span className="uppercase">{l}</span>
-                                            {locale === l && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
-                                        </button>
-                                    ))}
-                                </div>
+                                {messages.length === 0 && !hasStarted && (
+                                    <div className="absolute top-full right-0 mt-2 w-32 bg-white rounded-xl shadow-lg border border-gray-100 py-1 hidden group-hover:block z-50 animate-in fade-in zoom-in-95 duration-200">
+                                        {['en', 'fr', 'de', 'es', 'it'].map((l) => (
+                                            <button
+                                                key={l}
+                                                onClick={() => handleLanguageChange(l)}
+                                                className={cn(
+                                                    "w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors flex items-center justify-between",
+                                                    locale === l ? "text-indigo-600 font-medium" : "text-gray-600"
+                                                )}
+                                            >
+                                                <span className="uppercase">{l}</span>
+                                                {locale === l && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -554,10 +599,10 @@ export default function SurveyRespondPage() {
                                 >
                                     <div className="whitespace-pre-wrap">
                                         {/* AI SDK v6 recommended: use parts for rendering */}
-                                        {message.parts?.map((part: any, index: number) => 
+                                        {message.parts?.map((part: any, index: number) =>
                                             part.type === 'text' ? <span key={index}>{part.text}</span> : null
                                         )}
-                                        
+
                                         {/* Fallback for backwards compatibility */}
                                         {!message.parts && message.content}
 
@@ -619,17 +664,17 @@ export default function SurveyRespondPage() {
                                                     t("tapToSpeak")
                                                 )}
                                             </p>
-                                            
+
                                             {voiceWs.status === "error" ? (
                                                 <div className="flex flex-col items-center gap-2">
                                                     <p className="text-sm text-red-500 font-medium px-4 py-2 bg-red-50 rounded-lg border border-red-100">
-                                                        {voiceWs.error || "Unable to connect to voice server"}
+                                                        {voiceWs.error || t("connectionFailed")}
                                                     </p>
-                                                    <button 
+                                                    <button
                                                         onClick={() => voiceWs.connect()}
                                                         className="text-xs text-gray-500 underline hover:text-gray-800"
                                                     >
-                                                        Tap icon to retry
+                                                        {t("tapToRetry")}
                                                     </button>
                                                 </div>
                                             ) : (
@@ -654,11 +699,11 @@ export default function SurveyRespondPage() {
                                     </>
                                 ) : (
                                     // Minimal Footer for Focused Mode
-                                     <div className="w-full">
-                                         {voiceWs.isRecording && (voiceWs.transcription || voiceWs.interimTranscription) && (
+                                    <div className="w-full">
+                                        {voiceWs.isRecording && (voiceWs.transcription || voiceWs.interimTranscription) && (
                                             <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 animate-in fade-in slide-in-from-bottom-2 duration-200 max-w-lg mx-auto">
                                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 text-center">
-                                                    Live Transcription
+                                                    {t("liveTranscription")}
                                                 </p>
                                                 <p className="text-sm text-gray-900 leading-relaxed text-center">
                                                     {voiceWs.transcription}
@@ -666,57 +711,57 @@ export default function SurveyRespondPage() {
                                                 </p>
                                             </div>
                                         )}
-                                     </div>
+                                    </div>
                                 )}
                             </div>
                         ) : (
                             !isCompleted && (
-                            <div className="max-w-3xl mx-auto">
-                              <form onSubmit={handleSubmit} className="relative group">
-                                  <div className="relative bg-white border border-gray-200 rounded-2xl group-focus-within:border-gray-400 transition-all flex items-end overflow-hidden">
-                                      {/* Placeholder for future attachment button if needed, keeping layout consistent */}
-                                      <div className="p-3 mb-1 ml-1 text-gray-300">
-                                          <Paperclip className="w-5 h-5 opacity-50" />
-                                      </div>
-                                      
-                                      <textarea
-                                        ref={inputRef}
-                                        value={input}
-                                        onChange={e => setInput(e.target.value)}
-                                        onKeyDown={e => {
-                                            if (e.key === "Enter" && !e.shiftKey) {
-                                                e.preventDefault();
-                                                handleSubmit(e);
-                                            }
-                                        }}
-                                        placeholder={t("typeAnswer")}
-                                        rows={1}
-                                        disabled={isChatLoading || isCompleted}
-                                        className="flex-1 py-4 px-4 bg-transparent outline-none resize-none text-base text-gray-800 placeholder:text-gray-400 min-h-[96px] max-h-60"
-                                        style={{ minHeight: "96px" }}
-                                      />
-                                      
-                                      <div className="p-2 mb-1 mr-1">
-                                          <button
-                                              type="submit"
-                                              disabled={!input.trim() || isChatLoading || isCompleted}
-                                              className={cn(
-                                                  "p-2.5 rounded-xl transition-all",
-                                                  input.trim() && !isChatLoading 
-                                                      ? "bg-black text-white hover:bg-gray-800 hover:-translate-y-0.5" 
-                                                      : "bg-gray-100 text-gray-300 cursor-not-allowed"
-                                              )}
-                                          >
-                                              {isChatLoading ? (
-                                                  <Loader2 className="w-5 h-5 animate-spin" />
-                                              ) : (
-                                                  <Send className="w-5 h-5" />
-                                              )}
-                                          </button>
-                                      </div>
-                                  </div>
-                              </form>
-                            </div>
+                                <div className="max-w-3xl mx-auto">
+                                    <form onSubmit={handleSubmit} className="relative group">
+                                        <div className="relative bg-white border border-gray-200 rounded-2xl group-focus-within:border-gray-400 transition-all flex items-end overflow-hidden">
+                                            {/* Placeholder for future attachment button if needed, keeping layout consistent */}
+                                            <div className="p-3 mb-1 ml-1 text-gray-300">
+                                                <Paperclip className="w-5 h-5 opacity-50" />
+                                            </div>
+
+                                            <textarea
+                                                ref={inputRef}
+                                                value={input}
+                                                onChange={e => setInput(e.target.value)}
+                                                onKeyDown={e => {
+                                                    if (e.key === "Enter" && !e.shiftKey) {
+                                                        e.preventDefault();
+                                                        handleSubmit(e);
+                                                    }
+                                                }}
+                                                placeholder={t("typeAnswer")}
+                                                rows={1}
+                                                disabled={isChatLoading || isCompleted}
+                                                className="flex-1 py-4 px-4 bg-transparent outline-none resize-none text-base text-gray-800 placeholder:text-gray-400 min-h-[96px] max-h-60"
+                                                style={{ minHeight: "96px" }}
+                                            />
+
+                                            <div className="p-2 mb-1 mr-1">
+                                                <button
+                                                    type="submit"
+                                                    disabled={!input.trim() || isChatLoading || isCompleted}
+                                                    className={cn(
+                                                        "p-2.5 rounded-xl transition-all",
+                                                        input.trim() && !isChatLoading
+                                                            ? "bg-black text-white hover:bg-gray-800 hover:-translate-y-0.5"
+                                                            : "bg-gray-100 text-gray-300 cursor-not-allowed"
+                                                    )}
+                                                >
+                                                    {isChatLoading ? (
+                                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                                    ) : (
+                                                        <Send className="w-5 h-5" />
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
                             )
                         )}
                     </div>

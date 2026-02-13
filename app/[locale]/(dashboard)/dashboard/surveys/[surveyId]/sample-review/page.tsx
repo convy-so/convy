@@ -3,23 +3,24 @@
 import { clientEnv } from "@/lib/env.client";
 
 import { useState, useRef, useEffect, FormEvent } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
+import { useParams } from "next/navigation";
+import { Link, useRouter } from "@/i18n/routing";
 import {
-  Mic,
-  MicOff,
-  Loader2,
-  ArrowLeft,
-  CheckCircle,
-  MessageSquare,
-  RefreshCcw,
-  Bot,
-  Send,
-  Keyboard,
-  Volume2,
+    Mic,
+    MicOff,
+    Loader2,
+    ArrowLeft,
+    CheckCircle,
+    MessageSquare,
+    RefreshCcw,
+    Bot,
+    Send,
+    Keyboard,
+    Volume2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
 import { MediaDisplay } from "@/components/surveys/media-display";
@@ -36,6 +37,7 @@ type Message = {
 };
 
 export default function SampleReviewPage() {
+    const t = useTranslations("Survey.SampleReview");
     const params = useParams();
     const router = useRouter();
     const { user } = useAuth();
@@ -46,7 +48,7 @@ export default function SampleReviewPage() {
     const [feedback, setFeedback] = useState("");
     // showFeedbackModal is removed as we are moving it to sidebar
     const [isRetrying, setIsRetrying] = useState(false);
-    const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
+    const [inputMode, setInputMode] = useState<"voice" | "text">("text");
     const [textInput, setTextInput] = useState("");
     const [isTextLoading, setIsTextLoading] = useState(false);
     const [hasAutoGreeted, setHasAutoGreeted] = useState(false);
@@ -122,8 +124,8 @@ export default function SampleReviewPage() {
                 };
                 return newMessages;
             });
-            
-            toast.success("Conversation finished! You can now refine or publish.");
+
+            toast.success(t("Toasts.Finished"));
         }
     }, [messages]);
 
@@ -135,32 +137,32 @@ export default function SampleReviewPage() {
         },
         onMessage: (data) => {
             if (data.type === "audio_sent" || data.type === "text_response") {
-                 setMessages(prev => [...prev, {
+                setMessages(prev => [...prev, {
                     id: Date.now().toString(),
                     role: "assistant",
                     content: data.text,
                     timestamp: new Date().toISOString()
-                 }]);
+                }]);
             } else if (data.type === "transcription" && data.isFinal) {
-                 setMessages(prev => [...prev, {
+                setMessages(prev => [...prev, {
                     id: Date.now().toString(),
                     role: "user",
                     content: data.text,
                     timestamp: new Date().toISOString()
-                 }]);
+                }]);
             } else if (data.type === 'display_media') {
-                 if (survey?.media) {
-                     const fullMedia = survey.media.find((m: any) => m.id === data.media.id);
-                     if (fullMedia) {
-                         setMessages(prev => [...prev, {
-                             id: Date.now().toString(),
-                             role: "assistant",
-                             content: "Shared media",
-                             timestamp: new Date().toISOString(),
-                             media: fullMedia
-                         }]);
-                     }
-                 }
+                if (survey?.media) {
+                    const fullMedia = survey.media.find((m: any) => m.id === data.media.id);
+                    if (fullMedia) {
+                        setMessages(prev => [...prev, {
+                            id: Date.now().toString(),
+                            role: "assistant",
+                            content: "Shared media",
+                            timestamp: new Date().toISOString(),
+                            media: fullMedia
+                        }]);
+                    }
+                }
             }
         }
     });
@@ -185,7 +187,7 @@ export default function SampleReviewPage() {
             const decoder = new TextDecoder();
             let greetingContent = "";
             const greetingId = Date.now().toString();
-            
+
             // Add placeholder message
             setMessages(prev => [...prev, {
                 id: greetingId,
@@ -200,23 +202,23 @@ export default function SampleReviewPage() {
                 if (done) break;
                 const chunk = decoder.decode(value, { stream: true });
                 greetingContent += chunk;
-                
-                setMessages(prev => prev.map(m => 
-                    m.id === greetingId 
+
+                setMessages(prev => prev.map(m =>
+                    m.id === greetingId
                         ? { ...m, content: greetingContent }
                         : m
                 ));
             }
         },
         onError: () => {
-            toast.error("Failed to start conversation");
+            toast.error(t("Toasts.StartFailed"));
         }
     });
 
     // Auto-connect voice or trigger text greeting when survey loads
     useEffect(() => {
         if (!survey || hasAutoGreeted) return;
-        
+
         if (inputMode === "voice" && survey.isVoice) {
             setShowTranscript(false);
             console.log("Connecting voice websocket...");
@@ -224,9 +226,17 @@ export default function SampleReviewPage() {
         } else if (inputMode === "text" && messages.length === 0) {
             greetingMutation.mutate();
         }
-        
+
         setHasAutoGreeted(true);
     }, [survey, inputMode, hasAutoGreeted]);
+
+    // Initialize inputMode based on survey type
+    useEffect(() => {
+        if (survey?.isVoice) {
+            setInputMode("voice");
+            setShowTranscript(false);
+        }
+    }, [survey?.isVoice]);
 
     // Handle text message submission
     const handleTextSubmit = async (e: FormEvent) => {
@@ -278,19 +288,19 @@ export default function SampleReviewPage() {
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                
+
                 const chunk = decoder.decode(value, { stream: true });
                 assistantContent += chunk;
-                
+
                 // Update the assistant message in place
-                setMessages(prev => prev.map(m => 
-                    m.id === assistantId 
+                setMessages(prev => prev.map(m =>
+                    m.id === assistantId
                         ? { ...m, content: assistantContent }
                         : m
                 ));
             }
         } catch (error) {
-            toast.error("Failed to get AI response");
+            toast.error(t("Toasts.AIResponseFailed"));
             // Remove the last user message on error
             setMessages(prev => prev.slice(0, -1));
         } finally {
@@ -300,7 +310,7 @@ export default function SampleReviewPage() {
 
     const handleRetry = async () => {
         if (!canRetry) {
-            toast.error("You've used all 3 sample conversations");
+            toast.error(t("Toasts.NoRetries"));
             return;
         }
 
@@ -314,37 +324,37 @@ export default function SampleReviewPage() {
             });
 
             if (response.ok) {
-                toast.success("Feedback applied! Starting new conversation...");
+                toast.success(t("Toasts.FeedbackApplied"));
                 setFeedback("");
                 setMessages([]);
-                
+
                 // Refresh survey data to get new conversation count
                 await refetchSurvey(); // FIX: Using refetch instead of setSurvey
-                
+
                 // Reconnect WS with new number if in voice mode
                 if (inputMode === "voice") {
                     voiceWs.disconnect();
                     setTimeout(() => voiceWs.connect(), 500);
                 }
-                
+
                 // If in text mode, trigger greeting again
-                 if (inputMode === "text") {
-                     // small delay to allow state reset
-                     setTimeout(() => greetingMutation.mutate(), 500);
-                 }
+                if (inputMode === "text") {
+                    // small delay to allow state reset
+                    setTimeout(() => greetingMutation.mutate(), 500);
+                }
             } else {
-                toast.error("Failed to apply feedback");
+                toast.error(t("Toasts.FeedbackFailed"));
             }
         } catch (error) {
-            toast.error("Error applying feedback");
+            toast.error(t("Toasts.FeedbackError"));
         } finally {
             setIsRetrying(false);
         }
     };
 
     const handleConfirm = async () => {
-        if (!confirm("Are you satisfied with the conversation flow? This will mark the survey as reviewed and ready for publishing.")) return;
-        
+        if (!confirm(t("ConfirmDialog.Message"))) return;
+
         setIsConfirming(true);
         try {
             const response = await fetch(`/api/surveys/${surveyId}/publish`, {
@@ -354,13 +364,13 @@ export default function SampleReviewPage() {
             });
 
             if (response.ok) {
-                toast.success("Survey confirmed and published!");
+                toast.success(t("Toasts.Confirmed"));
                 router.push(`/dashboard/surveys/${surveyId}`);
             } else {
-                toast.error("Failed to confirm survey");
+                toast.error(t("Toasts.ConfirmFailed"));
             }
         } catch (error) {
-            toast.error("An error occurred");
+            toast.error(t("Toasts.Error")); // Was "An error occurred" - generic
         } finally {
             setIsConfirming(false);
         }
@@ -376,14 +386,14 @@ export default function SampleReviewPage() {
 
     return (
         <div className="flex flex-row h-[calc(100vh-4rem)] bg-white overflow-hidden">
-            
+
             {/* Main Application Area (Left/Center) */}
             <div className="flex-1 flex flex-col min-w-0 bg-white relative">
-                
+
                 {/* Header (Non-sticky to avoid overlap issues) */}
                 <header className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white z-10">
                     <div className="flex items-center gap-4">
-                        <Link 
+                        <Link
                             href={`/dashboard/surveys/${surveyId}`}
                             className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors text-gray-500 hover:text-gray-900"
                         >
@@ -391,25 +401,25 @@ export default function SampleReviewPage() {
                         </Link>
                         <div className="flex flex-col">
                             <h1 className="text-lg font-semibold text-gray-900 tracking-tight">{survey?.title}</h1>
-                            <span className="text-xs text-gray-500 font-medium">Sample Conversation Review</span>
+                            <span className="text-xs text-gray-500 font-medium">{t("Header.Title")}</span>
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
                         {inputMode === "voice" && (
-                             <button
+                            <button
                                 onClick={() => setShowTranscript(!showTranscript)}
                                 className="px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                             >
-                                {showTranscript ? "Hide Text" : "Show Text"}
+                                {showTranscript ? t("Actions.HideText") : t("Actions.ShowText")}
                             </button>
                         )}
-                        <button 
+                        <button
                             onClick={handleConfirm}
                             disabled={isConfirming || messages.length < 2}
                             className="flex items-center gap-2 px-5 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-black transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {isConfirming ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                            Publish Survey
+                            {t("Actions.Publish")}
                         </button>
                     </div>
                 </header>
@@ -432,15 +442,15 @@ export default function SampleReviewPage() {
                             >
                                 <VisualizerRing isRecording={voiceWs.isRecording} size="large" />
                             </button>
-                            
+
                             <div className="text-center max-w-md animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
                                 <p className="text-xl font-medium text-gray-900 mb-2">
-                                    {voiceWs.isRecording ? "Listening..." : voiceWs.isPlaying ? "AI Speaking..." : "Tap to speak"}
+                                    {voiceWs.isRecording ? t("VoiceVisualizer.Listening") : voiceWs.isPlaying ? t("VoiceVisualizer.AISpeaking") : t("VoiceVisualizer.TapToSpeak")}
                                 </p>
                                 <p className="text-gray-500">
-                                    {voiceWs.status === "connected" 
-                                        ? "Speak continuously. The AI will respond naturally." 
-                                        : "Connecting to voice service..."}
+                                    {voiceWs.status === "connected"
+                                        ? t("VoiceVisualizer.SpeakInstruction")
+                                        : t("VoiceVisualizer.Connecting")}
                                 </p>
                             </div>
                         </div>
@@ -452,22 +462,22 @@ export default function SampleReviewPage() {
                                         <Bot className="w-8 h-8 text-gray-400" />
                                     </div>
                                     <div className="space-y-2 max-w-xs">
-                                        <p className="text-sm font-medium text-gray-900">Start the conversation</p>
+                                        <p className="text-sm font-medium text-gray-900">{t("EmptyState.StartTitle")}</p>
                                         <p className="text-xs text-gray-500">
-                                            {inputMode === "voice" 
-                                                ? "Tap the microphone below to start speaking."
-                                                : "Type a greeting to begin the test."}
+                                            {inputMode === "voice"
+                                                ? t("EmptyState.VoiceInstruction")
+                                                : t("EmptyState.TextInstruction")}
                                         </p>
                                     </div>
                                 </div>
                             )}
-                            
+
                             {messages.map((msg) => (
                                 <div key={msg.id} className={cn("flex flex-col gap-2 max-w-[85%]", msg.role === "user" ? "self-end items-end" : "self-start items-start")}>
                                     <div className={cn(
                                         "px-5 py-3 rounded-2xl text-[15px] leading-relaxed shadow-sm",
-                                        msg.role === "assistant" 
-                                            ? "bg-gray-50 text-gray-800 rounded-tl-sm border border-gray-100" 
+                                        msg.role === "assistant"
+                                            ? "bg-gray-50 text-gray-800 rounded-tl-sm border border-gray-100"
                                             : "bg-black text-white rounded-tr-sm"
                                     )}>
                                         {msg.content}
@@ -475,7 +485,7 @@ export default function SampleReviewPage() {
                                     </div>
                                 </div>
                             ))}
-                            
+
                             {isTextLoading && (
                                 <div className="self-start">
                                     <div className="px-4 py-3 bg-gray-50 rounded-2xl rounded-tl-sm border border-gray-100 flex items-center gap-1.5 ">
@@ -503,12 +513,12 @@ export default function SampleReviewPage() {
                                 }}
                                 className={cn(
                                     "px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5",
-                                    inputMode === "voice" 
-                                        ? "bg-gray-100 text-gray-900" 
+                                    inputMode === "voice"
+                                        ? "bg-gray-100 text-gray-900"
                                         : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
                                 )}
                             >
-                                <Volume2 className="w-3 h-3" /> Voice
+                                <Volume2 className="w-3 h-3" /> {t("Input.Voice")}
                             </button>
                             <button
                                 onClick={() => {
@@ -518,12 +528,12 @@ export default function SampleReviewPage() {
                                 }}
                                 className={cn(
                                     "px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5",
-                                    inputMode === "text" 
-                                        ? "bg-gray-100 text-gray-900" 
+                                    inputMode === "text"
+                                        ? "bg-gray-100 text-gray-900"
                                         : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
                                 )}
                             >
-                                <Keyboard className="w-3 h-3" /> Text
+                                <Keyboard className="w-3 h-3" /> {t("Input.Text")}
                             </button>
                         </div>
 
@@ -531,11 +541,11 @@ export default function SampleReviewPage() {
                             <div className="flex flex-col items-center justify-center space-y-3 pb-2 pt-2">
                                 {!showTranscript ? (
                                     // Helper text or Live Transcription only
-                                     <div className="w-full">
-                                         {voiceWs.isRecording && (voiceWs.transcription || voiceWs.interimTranscription) && (
+                                    <div className="w-full">
+                                        {voiceWs.isRecording && (voiceWs.transcription || voiceWs.interimTranscription) && (
                                             <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 animate-in fade-in slide-in-from-bottom-2 duration-200 max-w-lg mx-auto">
                                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 text-center">
-                                                    Live Transcription
+                                                    {t("Input.LiveTranscription")}
                                                 </p>
                                                 <p className="text-sm text-gray-900 leading-relaxed text-center">
                                                     {voiceWs.transcription}
@@ -543,7 +553,7 @@ export default function SampleReviewPage() {
                                                 </p>
                                             </div>
                                         )}
-                                     </div>
+                                    </div>
                                 ) : (
                                     <>
                                         <button
@@ -559,19 +569,19 @@ export default function SampleReviewPage() {
                                             className={cn(
                                                 "relative w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300",
                                                 voiceWs.status !== "connected" ? "bg-gray-100 text-gray-400" :
-                                                voiceWs.isRecording ? "bg-red-50 text-red-600 ring-2 ring-red-100" : 
-                                                "bg-black text-white hover:scale-105 shadow-md"
+                                                    voiceWs.isRecording ? "bg-red-50 text-red-600 ring-2 ring-red-100" :
+                                                        "bg-black text-white hover:scale-105 shadow-md"
                                             )}
                                         >
                                             {voiceWs.isRecording && (
                                                 <span className="absolute inset-0 rounded-full bg-red-500/10 animate-ping" />
                                             )}
-                                            {voiceWs.status !== "connected" ? <Loader2 className="w-5 h-5 animate-spin" /> : 
-                                            voiceWs.isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                                            {voiceWs.status !== "connected" ? <Loader2 className="w-5 h-5 animate-spin" /> :
+                                                voiceWs.isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
                                         </button>
-                                        
+
                                         <p className="text-xs text-center h-4 text-gray-500 font-medium truncate max-w-sm">
-                                            {voiceWs.isRecording ? (voiceWs.transcription || "Listening...") : (voiceWs.status !== "connected" ? "Connecting..." : "Tap to speak")}
+                                            {voiceWs.isRecording ? (voiceWs.transcription || t("VoiceVisualizer.Listening")) : (voiceWs.status !== "connected" ? t("VoiceVisualizer.Connecting") : t("VoiceVisualizer.TapToSpeak"))}
                                         </p>
                                     </>
                                 )}
@@ -581,7 +591,7 @@ export default function SampleReviewPage() {
                                 <input
                                     value={textInput}
                                     onChange={(e) => setTextInput(e.target.value)}
-                                    placeholder="Type your message..."
+                                    placeholder={t("Input.Placeholder")}
                                     className="w-full pl-5 pr-12 py-3.5 bg-gray-50 border-transparent focus:border-gray-200 focus:bg-white focus:ring-4 focus:ring-gray-100 rounded-xl transition-all outline-none text-sm placeholder:text-gray-400 text-gray-900"
                                     autoFocus
                                 />
@@ -604,10 +614,10 @@ export default function SampleReviewPage() {
                     <div>
                         <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-1 flex items-center gap-2">
                             <MessageSquare className="w-3 h-3 text-gray-500" />
-                            Refine Simulation
+                            {t("Feedback.Title")}
                         </h3>
                         <p className="text-xs text-gray-500 leading-relaxed">
-                            Not satisfied with the AI's behavior? Provide instructions below to adjust the next sample.
+                            {t("Feedback.Description")}
                         </p>
                     </div>
 
@@ -615,13 +625,13 @@ export default function SampleReviewPage() {
                         <textarea
                             value={feedback}
                             onChange={(e) => setFeedback(e.target.value)}
-                            placeholder="e.g. 'Be more concise', 'Ask about budget earlier', 'Don't use emojis'..."
+                            placeholder={t("Feedback.Placeholder")}
                             className="w-full h-40 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-gray-900/5 focus:border-gray-300 outline-none resize-none bg-white text-sm placeholder:text-gray-400"
                         />
-                        
+
                         <div className="flex items-center justify-between text-xs text-gray-400 px-1">
-                            <span>{feedback.length} chars</span>
-                            <span>{samplesRemaining} retries left</span>
+                            <span>{t("Feedback.Chars", { count: feedback.length })}</span>
+                            <span>{t("Feedback.RetriesLeft", { count: samplesRemaining })}</span>
                         </div>
 
                         <button
@@ -635,14 +645,14 @@ export default function SampleReviewPage() {
                             )}
                         >
                             {isRetrying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
-                            {isRetrying ? "Applying..." : "Update & Restart"}
+                            {isRetrying ? t("Feedback.Applying") : t("Feedback.Button")}
                         </button>
                     </div>
 
                     {!canRetry && (
-                       <div className="p-3 bg-amber-50 rounded-lg border border-amber-100 text-amber-800 text-xs">
-                           You have used all available sample conversations. Please publish or edit the survey directly.
-                       </div>
+                        <div className="p-3 bg-amber-50 rounded-lg border border-amber-100 text-amber-800 text-xs">
+                            {t("Feedback.LimitReached")}
+                        </div>
                     )}
                 </div>
             </div>

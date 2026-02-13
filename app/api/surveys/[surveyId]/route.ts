@@ -75,7 +75,6 @@ export async function PATCH(
         // Validate allowed fields (basic validation)
         const updates: Partial<typeof survey> = {};
         if (typeof body.title === 'string') updates.title = body.title;
-        if (typeof body.additionalContext === 'string') updates.additionalContext = body.additionalContext;
         if (typeof body.participantLimit === 'number' || typeof body.participantLimit === 'string') {
              updates.participantLimit = Number(body.participantLimit);
         }

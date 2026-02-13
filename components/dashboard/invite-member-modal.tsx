@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { X, Loader2, UserPlus, Mail, ChevronDown, Check, Eye, Edit3, Shield, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { inviteToWorkspace } from "@/app/actions/workspace";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/routing";
 
 type InviteMemberModalProps = {
     isOpen: boolean;

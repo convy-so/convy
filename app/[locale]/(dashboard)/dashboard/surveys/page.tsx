@@ -2,8 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { Link, useRouter } from "@/i18n/routing";
 import {
   Plus,
   Search,
@@ -21,8 +20,6 @@ import {
   Globe,
   FileEdit,
   Sparkles,
-  Calendar,
-  ArrowUpRight,
   Play,
   AlertTriangle,
   Mic,
@@ -32,6 +29,7 @@ import toast from "react-hot-toast";
 import { deleteSurveyAction, duplicateSurveyAction } from "@/app/actions/survey";
 import { fetchSurveys } from "@/lib/api/surveys";
 import { queryKeys } from "@/lib/query-keys";
+import { useTranslations } from "next-intl";
 
 interface Survey {
   id: string;
@@ -49,17 +47,10 @@ interface Survey {
   role?: string;
 }
 
-const statusConfig: Record<string, { label: string; color: string; bgColor: string; icon: React.ReactNode }> = {
-  active: { label: "Published", color: "text-emerald-700", bgColor: "bg-emerald-50 border-emerald-200", icon: <Globe className="w-3 h-3" /> },
-  draft: { label: "Draft", color: "text-amber-700", bgColor: "bg-amber-50 border-amber-200", icon: <FileEdit className="w-3 h-3" /> },
-  creating: { label: "Creating", color: "text-blue-700", bgColor: "bg-blue-50 border-blue-200", icon: <Sparkles className="w-3 h-3" /> },
-  completed: { label: "Completed", color: "text-gray-600", bgColor: "bg-gray-100 border-gray-200", icon: <Check className="w-3 h-3" /> },
-  paused: { label: "Paused", color: "text-orange-700", bgColor: "bg-orange-50 border-orange-200", icon: <Clock className="w-3 h-3" /> },
-};
-
 type FilterTab = "all" | "published" | "unpublished";
 
 export default function SurveysPage() {
+  const t = useTranslations('SurveysPage');
   const router = useRouter();
   const queryClient = useQueryClient();
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
@@ -68,6 +59,14 @@ export default function SurveysPage() {
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [surveyToDelete, setSurveyToDelete] = useState<{ id: string; title: string } | null>(null);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
+
+  const statusConfig: Record<string, { label: string; color: string; bgColor: string; icon: React.ReactNode }> = {
+    active: { label: t('Status.Published'), color: "text-emerald-700", bgColor: "bg-emerald-50 border-emerald-200", icon: <Globe className="w-3 h-3" /> },
+    draft: { label: t('Status.Draft'), color: "text-amber-700", bgColor: "bg-amber-50 border-amber-200", icon: <FileEdit className="w-3 h-3" /> },
+    creating: { label: t('Status.Creating'), color: "text-blue-700", bgColor: "bg-blue-50 border-blue-200", icon: <Sparkles className="w-3 h-3" /> },
+    completed: { label: t('Status.Completed'), color: "text-gray-600", bgColor: "bg-gray-100 border-gray-200", icon: <Check className="w-3 h-3" /> },
+    paused: { label: t('Status.Paused'), color: "text-orange-700", bgColor: "bg-orange-50 border-orange-200", icon: <Clock className="w-3 h-3" /> },
+  };
 
   // Fetch surveys using React Query
   const { data: surveys = [], isLoading } = useQuery<Survey[]>({
@@ -93,13 +92,13 @@ export default function SurveysPage() {
       if (result.success) {
         // Invalidate queries to refetch surveys list
         queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all });
-        toast.success("Survey deleted successfully");
+        toast.success(t('Card.Toasts.Deleted'));
         setSurveyToDelete(null);
       } else {
-        toast.error(result.error || "Failed to delete survey");
+        toast.error(result.error || t('Card.Toasts.DeleteFailed'));
       }
     } catch (error) {
-      toast.error("Failed to delete survey");
+      toast.error(t('Card.Toasts.DeleteFailed'));
     } finally {
       setIsDeleting(null);
     }
@@ -114,20 +113,20 @@ export default function SurveysPage() {
   // Duplicate survey (creates a copy)
   const handleDuplicate = async (survey: Survey) => {
     setShowMenuFor(null);
-    const loadingToast = toast.loading("Duplicating survey...");
+    const loadingToast = toast.loading(t('Card.Toasts.Duplicating'));
 
     try {
       const result = await duplicateSurveyAction(survey.id);
 
       if (result.success) {
-        toast.success("Survey duplicated!", { id: loadingToast });
+        toast.success(t('Card.Toasts.Duplicated'), { id: loadingToast });
         // Invalidate queries to refetch surveys list
         queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all });
       } else {
-        toast.error(result.error || "Failed to duplicate survey", { id: loadingToast });
+        toast.error(result.error || t('Card.Toasts.DuplicateFailed'), { id: loadingToast });
       }
     } catch (error) {
-      toast.error("Failed to duplicate survey", { id: loadingToast });
+      toast.error(t('Card.Toasts.DuplicateFailed'), { id: loadingToast });
     }
   };
 
@@ -140,10 +139,10 @@ export default function SurveysPage() {
     try {
       await navigator.clipboard.writeText(url);
       setCopiedLink(shareableLink);
-      toast.success("Link copied to clipboard!");
+      toast.success(t('Card.Toasts.LinkCopied'));
       setTimeout(() => setCopiedLink(null), 2000);
     } catch (error) {
-      toast.error("Failed to copy link");
+      toast.error(t('Card.Toasts.CopyFailed'));
     }
   };
 
@@ -175,9 +174,9 @@ export default function SurveysPage() {
   }, [surveys, filterTab, searchQuery]);
 
   const filterTabs: { id: FilterTab; label: string; count: number }[] = [
-    { id: "all", label: "All Surveys", count: counts.all },
-    { id: "published", label: "Published", count: counts.published },
-    { id: "unpublished", label: "Unpublished", count: counts.unpublished },
+    { id: "all", label: t('Tabs.All'), count: counts.all },
+    { id: "published", label: t('Tabs.Published'), count: counts.published },
+    { id: "unpublished", label: t('Tabs.Unpublished'), count: counts.unpublished },
   ];
 
   return (
@@ -185,15 +184,15 @@ export default function SurveysPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Surveys</h1>
-          <p className="text-gray-500 mt-1">Manage and monitor your conversational surveys</p>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('Header.Title')}</h1>
+          <p className="text-gray-500 mt-1">{t('Header.Description')}</p>
         </div>
         <Link
           href="/dashboard/create"
           className="flex items-center justify-center gap-2 px-5 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5"
         >
           <Plus className="w-5 h-5" />
-          Create Survey
+          {t('Header.CreateButton')}
         </Link>
       </div>
 
@@ -232,7 +231,7 @@ export default function SurveysPage() {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search surveys..."
+            placeholder={t('Search.Placeholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none transition-all text-sm"
@@ -245,7 +244,7 @@ export default function SurveysPage() {
         <div className="flex items-center justify-center py-16">
           <div className="text-center">
             <Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto mb-3" />
-            <p className="text-sm text-gray-500">Loading your surveys...</p>
+            <p className="text-sm text-gray-500">{t('Loading')}</p>
           </div>
         </div>
       ) : (
@@ -301,12 +300,12 @@ export default function SurveysPage() {
                   <div className="flex items-center gap-6 mt-4 sm:mt-0 sm:ml-6 flex-shrink-0">
                      <div className="flex flex-col items-end min-w-[80px]">
                         <span className="text-sm font-medium text-gray-900">{survey.responses}</span>
-                        <span className="text-xs text-gray-400">Responses</span>
+                        <span className="text-xs text-gray-400">{t('Card.Responses')}</span>
                      </div>
                      
                      <div className="hidden md:flex flex-col items-end min-w-[100px]">
                         <span className="text-sm font-medium text-gray-900">{survey.createdAt}</span>
-                        <span className="text-xs text-gray-400">Created</span>
+                        <span className="text-xs text-gray-400">{t('Card.Created')}</span>
                      </div>
 
                      <div className={cn(
@@ -338,7 +337,7 @@ export default function SurveysPage() {
                                     className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-emerald-600 hover:bg-emerald-50 font-medium"
                                   >
                                     <Play className="w-4 h-4" />
-                                    Continue Creating
+                                    {t('Card.Menu.Continue')}
                                   </button>
                                   <div className="border-t border-gray-100 my-1" />
                                 </>
@@ -350,7 +349,7 @@ export default function SurveysPage() {
                                 onClick={() => setShowMenuFor(null)}
                               >
                                 <Eye className="w-4 h-4 text-gray-400" />
-                                View Details
+                                {t('Card.Menu.ViewDetails')}
                               </Link>
                               
                               {survey.status === "active" && (
@@ -360,7 +359,7 @@ export default function SurveysPage() {
                                   onClick={() => setShowMenuFor(null)}
                                 >
                                   <BarChart3 className="w-4 h-4 text-gray-400" />
-                                  Analytics
+                                  {t('Card.Menu.Analytics')}
                                 </Link>
                               )}
                               
@@ -370,7 +369,7 @@ export default function SurveysPage() {
                                 onClick={() => setShowMenuFor(null)}
                               >
                                 <Edit className="w-4 h-4 text-gray-400" />
-                                Edit
+                                {t('Card.Menu.Edit')}
                               </Link>
                               
                               <div className="border-t border-gray-100 my-1" />
@@ -384,7 +383,7 @@ export default function SurveysPage() {
                                     className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                   >
                                     <LinkIcon className="w-4 h-4 text-gray-400" />
-                                    Copy Link
+                                    {t('Card.Menu.CopyLink')}
                                   </button>
                                )}
 
@@ -393,7 +392,7 @@ export default function SurveysPage() {
                                 className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                               >
                                 <Copy className="w-4 h-4 text-gray-400" />
-                                Duplicate
+                                {t('Card.Menu.Duplicate')}
                               </button>
                               
                               <div className="border-t border-gray-100 my-1" />
@@ -407,7 +406,7 @@ export default function SurveysPage() {
                                 ) : (
                                   <Trash2 className="w-4 h-4" />
                                 )}
-                                Delete
+                                {t('Card.Menu.Delete')}
                               </button>
                             </div>
                           </>
@@ -425,45 +424,45 @@ export default function SurveysPage() {
               {searchQuery ? (
                 <>
                   <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No matching surveys</h3>
-                  <p className="text-gray-500 mb-4">Try adjusting your search criteria</p>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">{t('Empty.NoMatching.Title')}</h3>
+                  <p className="text-gray-500 mb-4">{t('Empty.NoMatching.Description')}</p>
                   <button
                     onClick={() => setSearchQuery("")}
                     className="text-sm font-medium text-gray-600 hover:text-gray-900"
                   >
-                    Clear search
+                    {t('Empty.NoMatching.Clear')}
                   </button>
                 </>
               ) : filterTab === "published" ? (
                 <>
                   <Globe className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No published surveys</h3>
-                  <p className="text-gray-500 mb-6">Create a survey and publish it to start collecting responses</p>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">{t('Empty.NoPublished.Title')}</h3>
+                  <p className="text-gray-500 mb-6">{t('Empty.NoPublished.Description')}</p>
                   <Link
                     href="/dashboard/create"
                     className="inline-flex items-center gap-2 px-5 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors"
                   >
                     <Plus className="w-5 h-5" />
-                    Create Survey
+                    {t('Empty.NoPublished.Button')}
                   </Link>
                 </>
               ) : filterTab === "unpublished" ? (
                 <>
                   <FileEdit className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No drafts or creating surveys</h3>
-                  <p className="text-gray-500">All your surveys are published!</p>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">{t('Empty.NoUnpublished.Title')}</h3>
+                  <p className="text-gray-500">{t('Empty.NoUnpublished.Description')}</p>
                 </>
               ) : (
                 <>
                   <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No surveys yet</h3>
-                  <p className="text-gray-500 mb-6">Get started by creating your first conversational survey</p>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">{t('Empty.NoSurveys.Title')}</h3>
+                  <p className="text-gray-500 mb-6">{t('Empty.NoSurveys.Description')}</p>
                   <Link
                     href="/dashboard/create"
                     className="inline-flex items-center gap-2 px-5 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors"
                   >
                     <Plus className="w-5 h-5" />
-                    Create Your First Survey
+                    {t('Empty.NoSurveys.Button')}
                   </Link>
                 </>
               )}
@@ -484,10 +483,9 @@ export default function SurveysPage() {
               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <AlertTriangle className="w-8 h-8 text-red-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Survey</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">{t('DeleteModal.Title')}</h3>
               <p className="text-gray-500">
-                Are you sure you want to delete <span className="font-semibold text-gray-900">"{surveyToDelete.title}"</span>?
-                This action cannot be undone and will permanently remove all responses.
+                {t('DeleteModal.Description', { title: surveyToDelete.title })}
               </p>
             </div>
 
@@ -497,7 +495,7 @@ export default function SurveysPage() {
                 className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
                 disabled={isDeleting !== null}
               >
-                Cancel
+                {t('DeleteModal.Cancel')}
               </button>
               <button
                 onClick={confirmDeleteSurvey}
@@ -507,12 +505,12 @@ export default function SurveysPage() {
                 {isDeleting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Deleting...
+                    {t('DeleteModal.Deleting')}
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4" />
-                    Delete Survey
+                    {t('DeleteModal.Confirm')}
                   </>
                 )}
               </button>

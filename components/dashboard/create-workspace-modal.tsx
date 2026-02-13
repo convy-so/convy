@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Loader2, Plus, Building2 } from "lucide-react";
 import { createWorkspace, setActiveWorkspace } from "@/app/actions/workspace";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/routing";
 
 type CreateWorkspaceModalProps = {
     isOpen: boolean;

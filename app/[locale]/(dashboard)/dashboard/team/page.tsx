@@ -16,13 +16,10 @@ import {
 import { useAuth } from "@/components/providers/auth-provider";
 import toast from "react-hot-toast";
 import { TeamMemberList } from "@/components/dashboard/team-member-list";
-import { 
-  deleteWorkspace,
-  leaveWorkspace
-} from "@/app/actions/workspace";
 import { fetchActiveWorkspace, fetchWorkspaceMembers, fetchWorkspaceInvitations } from "@/lib/api/workspace";
+import { deleteWorkspace, leaveWorkspace } from "@/app/actions/workspace";
 import { queryKeys } from "@/lib/query-keys";
-import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 type TeamMember = {
   id: string;
@@ -37,6 +34,7 @@ type TeamMember = {
 };
 
 export default function TeamPage() {
+  const t = useTranslations('TeamPage');
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -92,7 +90,7 @@ export default function TeamPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.members(activeWorkspace.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.invitations(activeWorkspace.id) });
     }
-    toast.success("Member removed");
+    toast.success(t('Toasts.MemberRemoved'));
   };
 
   const handleWorkspaceDelete = async () => {
@@ -101,15 +99,15 @@ export default function TeamPage() {
     try {
       const result = await deleteWorkspace(activeWorkspace.id);
       if (result.success) {
-        toast.success("Workspace deleted");
+        toast.success(t('Toasts.WorkspaceDeleted'));
         window.location.href = "/dashboard";
       } else {
-        toast.error(result.error);
+        toast.error(result.error || t('Toasts.DeleteFailed'));
         setIsProcessing(false);
         setShowDeleteModal(false);
       }
     } catch (error) {
-      toast.error("Failed to delete workspace");
+      toast.error(t('Toasts.DeleteFailed'));
       setIsProcessing(false);
       setShowDeleteModal(false);
     }
@@ -121,15 +119,15 @@ export default function TeamPage() {
     try {
       const result = await leaveWorkspace(activeWorkspace.id);
       if (result.success) {
-        toast.success("Left workspace");
+        toast.success(t('Toasts.LeftWorkspace'));
         window.location.href = "/dashboard";
       } else {
-        toast.error(result.error);
+        toast.error(result.error || t('Toasts.LeaveFailed'));
         setIsProcessing(false);
         setShowLeaveModal(false);
       }
     } catch (error) {
-      toast.error("Failed to leave workspace");
+      toast.error(t('Toasts.LeaveFailed'));
       setIsProcessing(false);
       setShowLeaveModal(false);
     }
@@ -150,9 +148,9 @@ export default function TeamPage() {
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto">
             <Users className="w-8 h-8 text-gray-400" />
           </div>
-          <h2 className="text-2xl font-semibold text-gray-900">Personal Space</h2>
+          <h2 className="text-2xl font-semibold text-gray-900">{t('PersonalSpace.Title')}</h2>
           <p className="text-gray-500 max-w-md mx-auto">
-            You are currently in your personal space. To manage a team, please switch to a workspace or create a new one.
+            {t('PersonalSpace.Description')}
           </p>
           {/* We could add a create workspace button here */}
         </div>
@@ -166,10 +164,10 @@ export default function TeamPage() {
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight mb-2">
-            Team Management
+            {t('Header.Title')}
           </h1>
           <p className="text-gray-500">
-            Manage members, roles, and permissions for <span className="font-semibold text-gray-900">{activeWorkspace.name}</span>
+            {t('Header.Description', { name: activeWorkspace.name })}
           </p>
         </div>
 
@@ -177,7 +175,7 @@ export default function TeamPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="exclude-from-layout bg-white rounded-xl border border-gray-100 p-4 flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500 mb-1">Total Members</p>
+              <p className="text-sm font-medium text-gray-500 mb-1">{t('Stats.TotalMembers')}</p>
               <p className="text-2xl font-bold text-gray-900">{members.length}</p>
             </div>
             <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
@@ -187,7 +185,7 @@ export default function TeamPage() {
 
           <div className="exclude-from-layout bg-white rounded-xl border border-gray-100 p-4 flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500 mb-1">Your Role</p>
+              <p className="text-sm font-medium text-gray-500 mb-1">{t('Stats.YourRole')}</p>
               <p className="text-2xl font-bold text-gray-900 capitalize">{activeWorkspace.role}</p>
             </div>
             <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
@@ -197,12 +195,12 @@ export default function TeamPage() {
 
           <div className="exclude-from-layout bg-white rounded-xl border border-gray-100 p-4 flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500 mb-1">Workspace Plan</p>
+              <p className="text-sm font-medium text-gray-500 mb-1">{t('Stats.WorkspacePlan')}</p>
               <div className="flex items-center gap-2">
                 <p className="text-2xl font-bold text-gray-900">{activeWorkspace.plan || "Free"}</p>
                 {(activeWorkspace.plan === "Free" || !activeWorkspace.plan) && (
                   <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium cursor-pointer hover:bg-gray-200 transition-colors">
-                    Upgrade
+                    {t('Stats.Upgrade')}
                   </span>
                 )}
               </div>
@@ -225,7 +223,7 @@ export default function TeamPage() {
               workspaceId={activeWorkspace.id}
               onMemberRemoved={handleMemberRemoved}
               onInviteSent={() => {
-                toast.success("Invitation sent successfully");
+                toast.success(t('Toasts.InvitationSent'));
                 loadTeamData();
               }}
             />
@@ -237,18 +235,18 @@ export default function TeamPage() {
             <div className="bg-white rounded-xl border border-gray-100 p-5">
               <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <Settings className="w-4 h-4 text-gray-500" />
-                Role Permissions
+                {t('Permissions.Title')}
               </h3>
               
               <div className="space-y-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 uppercase tracking-wide">
-                      Owner
+                      {t('Permissions.Owner.Title')}
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 leading-relaxed">
-                    Full access to workspace settings, billing, and team management. Can delete workspace.
+                    {t('Permissions.Owner.Description')}
                   </p>
                 </div>
                 
@@ -257,11 +255,11 @@ export default function TeamPage() {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-gray-50 text-gray-600 border border-gray-200 uppercase tracking-wide">
-                      Member
+                      {t('Permissions.Member.Title')}
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 leading-relaxed">
-                    Can create and manage surveys, view analytics, and collaborate with other members.
+                    {t('Permissions.Member.Description')}
                   </p>
                 </div>
               </div>
@@ -273,12 +271,12 @@ export default function TeamPage() {
                 <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center mb-4">
                   <Users className="w-5 h-5 text-white" />
                 </div>
-                <h3 className="font-semibold mb-1">Need more seats?</h3>
+                <h3 className="font-semibold mb-1">{t('Upgrade.Title')}</h3>
                 <p className="text-sm text-gray-300 mb-4">
-                  Upgrade to Pro to add unlimited team members and access advanced collaboration features.
+                  {t('Upgrade.Description')}
                 </p>
                 <button className="w-full py-2 bg-white text-gray-900 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-                  Upgrade Plan
+                  {t('Upgrade.Button')}
                 </button>
               </div>
             )}
@@ -287,31 +285,31 @@ export default function TeamPage() {
             <div className="bg-red-50 rounded-xl border border-red-100 p-5">
               <h3 className="font-semibold text-red-900 mb-4 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4" />
-                Danger Zone
+                {t('DangerZone.Title')}
               </h3>
               
               {activeWorkspace.role === "owner" ? (
                 <div>
                   <p className="text-xs text-red-700 mb-3">
-                    Deleting a workspace is permanent and cannot be undone. All surveys and data will be lost.
+                    {t('DangerZone.Delete.Description')}
                   </p>
                   <button 
                     onClick={() => setShowDeleteModal(true)}
                     className="w-full py-2 bg-white border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 hover:border-red-300 transition-colors"
                   >
-                    Delete Workspace
+                    {t('DangerZone.Delete.Button')}
                   </button>
                 </div>
               ) : (
                 <div>
                   <p className="text-xs text-red-700 mb-3">
-                    Leaving this workspace will revoke your access to all surveys and data.
+                    {t('DangerZone.Leave.Description')}
                   </p>
                   <button 
                     onClick={() => setShowLeaveModal(true)}
                     className="w-full py-2 bg-white border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 hover:border-red-300 transition-colors"
                   >
-                    Leave Workspace
+                    {t('DangerZone.Leave.Button')}
                   </button>
                 </div>
               )}
@@ -333,10 +331,9 @@ export default function TeamPage() {
               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <AlertTriangle className="w-8 h-8 text-red-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Workspace</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">{t('DeleteModal.Title')}</h3>
               <p className="text-gray-500">
-                Are you sure you want to delete <span className="font-semibold text-gray-900">"{activeWorkspace.name}"</span>? 
-                This action is permanent and will delete all surveys, responses, and members.
+                {t('DeleteModal.Description', { name: activeWorkspace.name })}
               </p>
             </div>
 
@@ -346,7 +343,7 @@ export default function TeamPage() {
                 className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
                 disabled={isProcessing}
               >
-                Cancel
+                {t('DeleteModal.Cancel')}
               </button>
               <button
                 onClick={handleWorkspaceDelete}
@@ -356,12 +353,12 @@ export default function TeamPage() {
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Deleting...
+                    {t('DeleteModal.Deleting')}
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4" />
-                    Delete Workspace
+                    {t('DeleteModal.Confirm')}
                   </>
                 )}
               </button>
@@ -383,10 +380,9 @@ export default function TeamPage() {
               <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <LogOut className="w-8 h-8 text-orange-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Leave Workspace</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">{t('LeaveModal.Title')}</h3>
               <p className="text-gray-500">
-                Are you sure you want to leave <span className="font-semibold text-gray-900">"{activeWorkspace.name}"</span>? 
-                You will lose access to all surveys and data in this workspace.
+                {t('LeaveModal.Description', { name: activeWorkspace.name })}
               </p>
             </div>
 
@@ -396,7 +392,7 @@ export default function TeamPage() {
                 className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
                 disabled={isProcessing}
               >
-                Cancel
+                {t('LeaveModal.Cancel')}
               </button>
               <button
                 onClick={handleWorkspaceLeave}
@@ -406,12 +402,12 @@ export default function TeamPage() {
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Leaving...
+                    {t('LeaveModal.Leaving')}
                   </>
                 ) : (
                   <>
                     <LogOut className="w-4 h-4" />
-                    Leave Workspace
+                    {t('LeaveModal.Confirm')}
                   </>
                 )}
               </button>
