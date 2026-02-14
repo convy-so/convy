@@ -73,6 +73,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
 
   async initialize(): Promise<void> {
     try {
+      console.log(`[Survey Creation Voice] Initializing session: ${this.state.voiceSessionId} for user: ${this.userId}`);
       // Start DB insert in background
       const dbInsertPromise = db.insert(voiceSessions).values({
         id: this.state.voiceSessionId,
@@ -88,11 +89,13 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
         type: "ready",
         voiceSessionId: this.state.voiceSessionId,
       });
+      console.log("[Survey Creation Voice] Sent 'ready' message to client");
 
       // Voice Agent connection is deferred until start_conversation
       // (to allow set_survey_id and set_language to be called first)
 
       await dbInsertPromise;
+      console.log("[Survey Creation Voice] Session DB record created");
     } catch (error) {
       console.error("[Survey Creation Voice] Initialization error:", error);
       this.sendError("Failed to initialize voice session");
@@ -109,15 +112,20 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       this.state.language,
       this.state.extractedData?.domainId as number | undefined
     );
+    console.log(`[Survey Creation Voice] System Prompt Length: ${systemPrompt.length}`);
 
     return buildVoiceAgentSettings({
       language: this.state.language,
       systemPrompt,
-      greeting: getTimeBasedGreeting('creation', this.state.language),
+      // Greeting is now handled by getGreeting() and injected on connection
       conversationHistory: this.state.messages.length > 0
         ? this.state.messages.map(m => ({ role: m.role, content: m.content }))
         : undefined,
     });
+  }
+
+  protected getGreeting(): string | null {
+    return getTimeBasedGreeting('creation', this.state.language);
   }
 
   protected async onConversationText(event: ConversationTextEvent): Promise<void> {
@@ -141,6 +149,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
     // Respond with a no-op to not block the agent
     this.voiceAgent?.sendFunctionCallResponse(
       event.function_call_id,
+      event.function_name,
       JSON.stringify({ status: "ok" })
     );
   }
@@ -148,8 +157,18 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
   protected async handleControlMessage(message: any): Promise<void> {
     switch (message.type) {
       case "set_survey_id":
+        console.log(`[Survey Creation Voice] Received 'set_survey_id' for survey: ${message.surveyId}`);
         this.state.surveyId = message.surveyId;
-        await this.loadExistingState();
+        try {
+          console.log(`[Survey Creation Voice] Loading existing state for survey: ${message.surveyId}...`);
+          await this.loadExistingState();
+          console.log(`[Survey Creation Voice] State loaded. Sending 'survey_state_loaded' to client.`);
+          // Notify client that state is loaded so it can safely start conversation
+          this.send({ type: "survey_state_loaded" });
+        } catch (error) {
+          console.error(`[Survey Creation Voice] Error loading state for survey ${message.surveyId}:`, error);
+          this.sendError("Failed to load survey state");
+        }
         break;
 
       case "update_collected_info":
@@ -159,9 +178,10 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
         break;
 
       case "start_conversation":
-        console.log(`[Survey Creation Voice] Starting conversation. History length: ${this.state.messages.length}`);
+        console.log(`[Survey Creation Voice] Received 'start_conversation'. History length: ${this.state.messages.length}`);
         // Connect the Voice Agent (with greeting if new session)
         await this.connectVoiceAgent();
+        console.log("[Survey Creation Voice] connectVoiceAgent() completed (or initiated)");
         break;
 
       case "text_message":
@@ -234,6 +254,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
     if (!this.state.surveyId || this.state.messages.length < 2) return;
 
     try {
+      console.log(`[Survey Creation Voice] Starting extraction. Message count: ${this.state.messages.length}`);
       const extractionPrompt = getSurveyDataExtractionPrompt(this.state.messages);
 
       const { output: parsed } = await generateText({
@@ -259,6 +280,8 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
         prompt: extractionPrompt,
       });
 
+      console.log("[Survey Creation Voice] Extraction completed. Data:", JSON.stringify(parsed, null, 2));
+
       const { collectedInfo, ...extractedData } = parsed as any;
 
       this.state.collectedInfo = collectedInfo;
@@ -270,11 +293,14 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
         })
         .where(eq(surveyCreationConversations.surveyId, this.state.surveyId));
 
+      console.log("[Survey Creation Voice] Updated DB with extracted data.");
+
       this.send({
         type: "update_extracted_data",
         extractedData,
         collectedInfo,
       });
+      console.log("[Survey Creation Voice] Sent 'update_extracted_data' to client.");
     } catch (error) {
       console.error("[Survey Creation Voice] Extraction error:", error);
     }

@@ -124,16 +124,20 @@ function CreateSurveyContent() {
 
 
 
+  const [surveyStateLoaded, setSurveyStateLoaded] = useState(false);
+  const [isServerReady, setIsServerReady] = useState(false);
+
   const voiceWs = useVoiceWebSocket({
     url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-creation`,
     onReady: () => {
-      if (surveyId) {
-        voiceWs.sendJson({ type: "set_survey_id", surveyId });
-      }
+      console.log("[Client] WebSocket open, waiting for server ready signal...");
     },
     onMessage: (data) => {
       // Handle speech activity events from Deepgram
-      if (data.type === "speech_start") {
+      if (data.type === "ready") {
+        console.log("[Client] Server sent READY signal");
+        setIsServerReady(true);
+      } else if (data.type === "speech_start") {
         console.log("[Client] 🗣️ Speech started (from Deepgram)");
         setIsSpeaking(true);
       } else if (data.type === "speech_end") {
@@ -174,60 +178,44 @@ function CreateSurveyContent() {
         setMessages(prev => [...prev, userMessage]);
       } else if (data.type === "transcription_interim") {
         console.log("[Client] 💬 Interim transcription:", data.text);
+      } else if (data.type === "survey_state_loaded") {
+        console.log("[Client] Survey state loaded on server — safe to start conversation");
+        setSurveyStateLoaded(true);
       }
     }
   });
 
   // Monitor playback to handle the "Mute until Greeting Ends" flow
   useEffect(() => {
-    // Safety check: if connecting for too long without greeting, force clear state
-    // This prevents "stuck in yellow" issues if the greeting packet is dropped
-    let safetyTimeout: NodeJS.Timeout;
-
-    if (isConnecting) {
-      safetyTimeout = setTimeout(() => {
-        console.warn("[Voice UI] ⚠️ Greeting safety timeout reached. Forcing state clear.");
-        setIsConnecting(false);
-        setHasGreetingPlayed(true);
-        voiceWs.setMicMuted(false); // Ensure user can speak
-      }, 8000); // 8 seconds max wait for greeting
-    }
-
     // New Logic: We trust 'voiceWs.hasAudioPlayed' to tell us if the greeting actually started
-    if (isConnecting && (voiceWs.isPlaying || voiceWs.hasAudioPlayed)) {
+    console.log("[Voice UI] Effect Check -> isConnecting:", isConnecting, "isPlaying:", voiceWs.isPlaying, "hasRecordedAudio:", voiceWs.hasAudioPlayed, "hasGreetingPlayed:", hasGreetingPlayed, "MicMuted:", voiceWs.isMicMuted, "isRecording:", voiceWs.isRecording);
+
+    if (isConnecting && voiceWs.hasAudioPlayed) {
       // Audio started playing (The greeting arrived!)
-      console.log("[Voice UI] 🟣 Audio started (Greeting detected)");
+      console.log("[Voice UI] 🟣 Audio started (Greeting detected) - Transitioning to Speaking State");
       setIsConnecting(false);
       setHasGreetingPlayed(true);
-    } else if (hasGreetingPlayed && !voiceWs.isPlaying && voiceWs.isRecording) {
-      // Greeting finished playing! Now we can UNMUTE the mic
-      if (voiceWs.isMicMuted) {
-        console.log("[Voice UI] 🟢 Greeting finished (isPlaying=false), unmuting microphone");
-        voiceWs.setMicMuted(false);
-      }
     }
-
-    return () => {
-      if (safetyTimeout) clearTimeout(safetyTimeout);
-    };
   }, [
-    voiceWs.isPlaying,
-    voiceWs.hasAudioPlayed, // Added dependency
+    voiceWs.hasAudioPlayed,
     isConnecting,
-    hasGreetingPlayed,
-    voiceWs.isRecording,
-    voiceWs.isMicMuted,
-    voiceWs.setMicMuted,
     voiceWs.status
   ]);
 
-
-  // Effect to sync surveyId with WebSocket
+  // Effect to sync surveyId with WebSocket - ONLY when server is ready
   useEffect(() => {
-    if (surveyId && voiceWs.status === "connected") {
+    if (surveyId && voiceWs.status === "connected" && isServerReady) {
+      console.log("[Client] Server ready, sending survey ID:", surveyId);
       voiceWs.sendJson({ type: "set_survey_id", surveyId });
     }
-  }, [surveyId, voiceWs.status]);
+  }, [surveyId, voiceWs.status, isServerReady]);
+
+  // Reset ready state on disconnect
+  useEffect(() => {
+    if (voiceWs.status !== "connected") {
+      setIsServerReady(false);
+    }
+  }, [voiceWs.status]);
 
   // Chat state
   const [messages, setMessages] = useState<Message[]>([
@@ -862,48 +850,39 @@ function CreateSurveyContent() {
     const newMode = !isVoiceMode;
     setIsVoiceMode(newMode);
     if (newMode) {
+      setSurveyStateLoaded(false); // Reset for fresh session
       voiceWs.connect();
     } else {
       voiceWs.disconnect();
     }
   };
 
+  const [hasSentStartSignal, setHasSentStartSignal] = useState(false);
+
+  // New Effect: Handle start_conversation signal (replaces the stale setInterval)
+  useEffect(() => {
+    if (isConnecting && voiceWs.status === "connected" && surveyStateLoaded && !hasSentStartSignal) {
+      console.log("[Client] 📤 Connection ready & State Loaded. Sending start_conversation signal...");
+      voiceWs.sendJson({ type: "start_conversation" });
+      setHasSentStartSignal(true);
+    }
+  }, [isConnecting, voiceWs.status, surveyStateLoaded, hasSentStartSignal]);
+
   const toggleRecording = async () => {
     // Voice-activated mode with AI-First flow
-    // 1. Start recording (get permissions) but MUTE immediately
-    // 2. Send start signal
-    // 3. Wait for AI greeting to finish playing
-    // 4. Unmute mic
+    // 1. Start recording (get permissions) - NO MUTING
+    // 2. Wait for WS connected AND server state loaded (via Effects)
+    // 3. Send start signal (via Effects)
     if (!voiceWs.isRecording) {
       console.log("[Client] 🎤 Starting recording sequence...");
       setIsConnecting(true);
       setHasGreetingPlayed(false); // Reset greeting flag on new session
+      setHasSentStartSignal(false); // Reset signal flag
 
       try {
-        voiceWs.setMicMuted(true); // Mute FIRST to be safe
         await voiceWs.startRecording();
-        console.log("[Client] ✅ Recording started (Muted)");
-
-        // Wait for WebSocket to be fully ready before sending start signal
-        // Poll every 100ms, max 50 tries (5 seconds)
-        let attempts = 0;
-        const maxAttempts = 50;
-
-        const waitForConnection = setInterval(() => {
-          attempts++;
-          if (voiceWs.status === "connected") {
-            clearInterval(waitForConnection);
-            console.log("[Client] 📤 Connection ready. Sending start_conversation signal...");
-            voiceWs.sendJson({ type: "start_conversation" });
-          } else if (attempts >= maxAttempts) {
-            clearInterval(waitForConnection);
-            console.error("[Client] ❌ Timed out waiting for WebSocket connection");
-            toast.error("Connection timed out. Please try again.");
-            setIsConnecting(false);
-            voiceWs.stopRecording();
-          }
-        }, 100);
-
+        console.log("[Client] ✅ Recording started");
+        // We no longer poll here. The useEffect above handles the handshake.
       } catch (err) {
         console.error("[Client] ❌ Failed to start recording:", err);
         setIsConnecting(false);

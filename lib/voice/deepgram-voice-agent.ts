@@ -46,7 +46,7 @@ export interface VoiceAgentSettings {
       functions?: VoiceAgentFunction[];
     };
     speak?: { provider: { type: string; model?: string } };
-    greeting?: string;
+    // greeting removed - handled via InjectAgentMessage
     context?: {
       messages: Array<{ role: string; content: string }>;
     };
@@ -124,7 +124,7 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
       });
 
       this.ws.on("open", () => {
-        console.log("[VoiceAgent] WebSocket connected to Deepgram");
+        console.log("[VoiceAgent] WebSocket connected to Deepgram. Sending settings...");
         this.isConnected = true;
 
         // Send Settings message immediately on connection
@@ -132,8 +132,8 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         resolve();
       });
 
-      this.ws.on("message", (data: Buffer | string) => {
-        this.handleMessage(data);
+      this.ws.on("message", (data: Buffer, isBinary: boolean) => {
+        this.handleMessage(data, isBinary);
       });
 
       this.ws.on("error", (error) => {
@@ -145,7 +145,7 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
       });
 
       this.ws.on("close", (code, reason) => {
-        console.log(`[VoiceAgent] WebSocket closed: ${code} ${reason}`);
+        console.log(`[VoiceAgent] WebSocket closed: Code=${code} Reason=${reason}`);
         this.isConnected = false;
         this.emit("close", code, reason.toString());
       });
@@ -161,17 +161,27 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
       ...this.settings,
     };
 
-    console.log("[VoiceAgent] Sending Settings:", JSON.stringify({
+    console.log("[VoiceAgent] Sending 'Settings' message to Deepgram...");
+    console.log("[VoiceAgent] Audio Config -> Input:", JSON.stringify(this.settings.audio?.input), "Output:", JSON.stringify(this.settings.audio?.output));
+    console.log("[VoiceAgent] Agent Config -> Language:", this.settings.agent.language, "Model:", this.settings.agent.listen?.provider?.model);
+    
+    // Greeting is no longer part of settings
+    // console.log("[VoiceAgent] Greeting will be injected via InjectAgentMessage after settings applied.");
+    
+    // Log redacted settings for debugging
+    /*
+    console.log("[VoiceAgent] Full Settings (Redacted):", JSON.stringify({
       ...settingsMessage,
       agent: {
         ...settingsMessage.agent,
         think: {
           ...settingsMessage.agent.think,
           prompt: settingsMessage.agent.think.prompt.substring(0, 100) + "...",
-          endpoint: settingsMessage.agent.think.endpoint ? { url: "***" } : undefined,
+          endpoint: settingsMessage.agent.think.endpoint ? { ...settingsMessage.agent.think.endpoint, url: "***" } : undefined,
         },
       },
     }));
+    */
 
     this.sendJson(settingsMessage);
   }
@@ -189,24 +199,34 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
    * Inject a text message as if the user spoke it
    */
   sendInjectUserMessage(text: string): void {
+    console.log(`[VoiceAgent] Injecting user message: "${text}"`);
     this.sendJson({
       type: "InjectUserMessage",
-      content: text,
+      message: text,
+    });
+  }
+
+  /**
+   * Inject a text message as if the agent spoke it (triggers TTS)
+   */
+  sendInjectAgentMessage(message: string): void {
+    console.log(`[VoiceAgent] Injecting agent message: "${message}"`);
+    this.sendJson({
+      type: "InjectAgentMessage",
+      message,
     });
   }
 
   /**
    * Respond to a function call request from the agent
    */
-  sendFunctionCallResponse(functionCallId: string, output: string): void {
+  sendFunctionCallResponse(functionCallId: string, name: string, output: string): void {
+    console.log(`[VoiceAgent] Sending function call response for ID: ${functionCallId}, Name: ${name}`);
     this.sendJson({
       type: "FunctionCallResponse",
-      function_call_id: functionCallId,
       id: functionCallId, // V1 requires 'id'
-      name: "unknown", // V1 requires 'name', but we don't track it here. 
-                       // In a robust impl, we'd need to pass this in.
-                       // For now, 'unknown' might work or we rely on ID.
-      content: output, // V1 requires 'content', not 'output'
+      name, 
+      content: output, // V2+ content, but V1 also uses content/output depending on specific SDK/spec nuances. The research confirmed 'content' and 'name' are required.
     });
   }
 
@@ -214,6 +234,7 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
    * Send updated settings (e.g., language change)
    */
   updateSettings(settings: VoiceAgentSettings): void {
+    console.log("[VoiceAgent] Updating settings...");
     this.settings = settings;
     if (this.isConnected) {
       this.sendSettings();
@@ -224,6 +245,7 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
    * Close the connection
    */
   close(): void {
+    console.log("[VoiceAgent] Closing connection...");
     this.stopKeepAlive();
     if (this.ws) {
       this.ws.close();
@@ -241,9 +263,10 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
 
   // ── Private Helpers ──────────────────────────────────────────────────────
 
-  private handleMessage(data: Buffer | string): void {
+  private handleMessage(data: Buffer | string, isBinary: boolean): void {
     // Binary data = audio from agent
-    if (Buffer.isBuffer(data)) {
+    if (isBinary) {
+      // console.log(`[VoiceAgent] Received audio chunk: ${data.length} bytes`); // Commented out to reduce noise
       this.emit("audio", data);
       return;
     }
@@ -251,9 +274,10 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
     // String data = JSON event
     try {
       const message = JSON.parse(data.toString());
+      console.log(`[VoiceAgent] 📥 Received JSON: ${message.type}`);
       this.handleJsonMessage(message);
     } catch (error) {
-      console.error("[VoiceAgent] Failed to parse message:", error);
+      console.error("[VoiceAgent] Failed to parse message:", error, "Raw data:", data.toString().substring(0, 50));
     }
   }
 
@@ -317,7 +341,12 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
 
   private sendJson(data: any): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
+      if (data.type !== "Settings") { // Settings already logged in detail
+          console.log(`[VoiceAgent] 📤 Sending JSON: ${data.type}`);
+      }
       this.ws.send(JSON.stringify(data));
+    } else {
+        console.warn(`[VoiceAgent] ⚠️ Cannot send JSON (WS not open): ${data.type}`);
     }
   }
 
@@ -338,11 +367,11 @@ export function buildVoiceAgentSettings(options: {
   language: SupportedLanguage;
   tone?: "casual" | "formal" | "playful" | "empathetic";
   systemPrompt: string;
-  greeting?: string;
+  // greeting removed from settings builder
   functions?: VoiceAgentFunction[];
   conversationHistory?: Array<{ role: string; content: string }>;
 }): VoiceAgentSettings {
-  const { language, tone = "casual", systemPrompt, greeting, functions, conversationHistory } = options;
+  const { language, tone = "casual", systemPrompt, functions, conversationHistory } = options;
 
   const googleApiKey = env.GOOGLE_GENERATIVE_AI_API_KEY;
   const voiceModel = getVoiceModel(language, tone);
@@ -350,7 +379,7 @@ export function buildVoiceAgentSettings(options: {
   return {
     audio: {
       input: { encoding: "linear16", sample_rate: 16000 },
-      output: { encoding: "mp3", sample_rate: 24000, container: "none" },
+      output: { encoding: "linear16", sample_rate: 24000, container: "none" },
     },
     agent: {
       language,
@@ -358,20 +387,32 @@ export function buildVoiceAgentSettings(options: {
         provider: { type: "deepgram", model: "nova-3" },
       },
       think: {
-        provider: { type: "google", model: "gemini-2.5-flash" },
+        // Deepgram requirement for Custom Google endpoints: 
+        // 1. Model name must be in the URL
+        // 2. Model name must NOT be in the provider settings
+        provider: { type: "google" }, 
         endpoint: {
-          url: "https://generativelanguage.googleapis.com/v1beta/chat/completions",
-          headers: { authorization: `Bearer ${googleApiKey}` },
+          url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash`,
+          headers: { "x-goog-api-key": googleApiKey || "" },
         },
         prompt: systemPrompt,
+        // Only include functions if they exist and are not empty
         ...(functions && functions.length > 0 ? { functions } : {}),
       },
       speak: {
         provider: { type: "deepgram", model: voiceModel },
       },
-      ...(greeting ? { greeting } : {}),
+      // greeting removed
       ...(conversationHistory && conversationHistory.length > 0
-        ? { context: { messages: conversationHistory } }
+        ? {
+            context: {
+              messages: conversationHistory.map(m => ({
+                type: "History" as const,
+                role: m.role as "user" | "assistant",
+                content: m.content,
+              }))
+            }
+          }
         : {}),
     },
   };

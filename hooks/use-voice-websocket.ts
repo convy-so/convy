@@ -48,6 +48,7 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
         setStatus("connecting");
         setHasAudioPlayed(false);
         setError(null);
+        console.log("[Voice WS] Connection state reset. hasAudioPlayed=false");
 
         let connectionUrl = url;
 
@@ -201,46 +202,84 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
         onMessageRef.current?.(data);
     };
 
+    // --- Audio Playback Logic (PCM Streaming) ---
+
     const handleIncomingAudio = async (blob: Blob) => {
-        // Explicitly set the MIME type to audio/mp3 so the browser knows how to decode it
-        // Deepgram Voice Agent output is MP3 by default (from our configurations)
-        const audioBlob = new Blob([blob], { type: "audio/mp3" });
-        audioQueueRef.current.push(audioBlob);
-        
-        if (!isPlayingRef.current) {
-            playNextInQueue();
+        // We now receive raw PCM (linear16, 24kHz) from Deepgram
+        // Convert Blob -> ArrayBuffer -> Int16Array -> Float32Array -> AudioBuffer
+        try {
+            const arrayBuffer = await blob.arrayBuffer();
+            const audioCtx = getAudioContext();
+            
+            // Create audio buffer (1 channel, length, sampleRate)
+            // Deepgram output is 16-bit linear PCM at 24000Hz (mono)
+            const sampleRate = 24000;
+            const int16Data = new Int16Array(arrayBuffer);
+            const float32Data = new Float32Array(int16Data.length);
+            
+            // Convert Int16 to Float32 [-1.0, 1.0]
+            for (let i = 0; i < int16Data.length; i++) {
+                float32Data[i] = int16Data[i] / 32768.0;
+            }
+
+            const audioBuffer = audioCtx.createBuffer(1, float32Data.length, sampleRate);
+            audioBuffer.getChannelData(0).set(float32Data);
+
+            // Queue and play
+            queueAudioBuffer(audioBuffer);
+        } catch (err) {
+            console.error("[Voice WS] Error processing audio chunk:", err);
         }
     };
 
-    const playNextInQueue = async () => {
-        if (audioQueueRef.current.length === 0) {
-            setIsPlaying(false);
-            isPlayingRef.current = false;
-            activeAudioRef.current = null;
-            return;
+    // Queue for scheduling audio chunks continuously
+    const nextStartTimeRef = useRef<number>(0);
+
+    const queueAudioBuffer = (audioBuffer: AudioBuffer) => {
+        const audioCtx = getAudioContext();
+        const source = audioCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioCtx.destination);
+
+        // Schedule playback
+        // Ensure we don't schedule in the past
+        const currentTime = audioCtx.currentTime;
+        // Add a small buffering delay if we fell behind (re-sync)
+        if (nextStartTimeRef.current < currentTime) {
+            nextStartTimeRef.current = currentTime + 0.05; // 50ms buffer
         }
 
+        source.start(nextStartTimeRef.current);
+        nextStartTimeRef.current += audioBuffer.duration;
+        
         setIsPlaying(true);
         isPlayingRef.current = true;
-        const blob = audioQueueRef.current.shift()!;
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        activeAudioRef.current = audio;
 
-        audio.onended = () => {
-            URL.revokeObjectURL(url);
-            activeAudioRef.current = null;
-            playNextInQueue();
+        // Reset playing state when this chunk ends (approximate, for UI)
+        // In a real stream, we might stay "playing" until silence.
+        // For now, we rely on the stream continuing or checking if startTime > currentTime
+        source.onended = () => {
+             // Check if we have more audio pending or if this was the last one
+             if (audioCtx.currentTime >= nextStartTimeRef.current - 0.1) {
+                 setIsPlaying(false);
+                 isPlayingRef.current = false;
+             }
         };
+    };
 
-        try {
-            await audio.play();
-            // Mark that we have successfully started playing at least once
-            setHasAudioPlayed(true); 
-        } catch (e) {
-            console.error("Playback failed", e);
-            playNextInQueue();
+    const getAudioContext = () => {
+        if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         }
+        if (audioContextRef.current.state === 'suspended') {
+            audioContextRef.current.resume();
+        }
+        return audioContextRef.current;
+    };
+
+
+    const playNextInQueue = async () => {
+       // Legacy method - no longer used for PCM streaming
     };
 
     /**
@@ -293,10 +332,9 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
 
             // Handle PCM audio chunks from worklet
             workletNode.port.onmessage = (event) => {
-                // Only send audio if mic is NOT muted
+                // Send audio buffer directly without muting check
                 if (event.data.type === 'audio' 
-                    && wsRef.current?.readyState === WebSocket.OPEN 
-                    && !isMicMutedRef.current) {
+                    && wsRef.current?.readyState === WebSocket.OPEN) {
                     
                     // Send raw PCM buffer
                     wsRef.current.send(event.data.buffer);

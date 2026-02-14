@@ -64,6 +64,9 @@ export abstract class BaseVoiceAgentHandler {
   /** Initialize the handler (load data, create voice agent, etc.) */
   abstract initialize(): Promise<void>;
 
+  /** Get the greeting message for this session */
+  protected abstract getGreeting(): string | null;
+
   /** Get the language for this session */
   protected abstract getLanguage(): SupportedLanguage;
 
@@ -92,11 +95,18 @@ export abstract class BaseVoiceAgentHandler {
     this.voiceAgent.on("audio", (audioData: Buffer) => {
       // Relay agent audio to browser
       if (this.ws.readyState === WebSocket.OPEN) {
+        // Log every 50th chunk to avoid spam, but confirm flow
+        if (Math.random() < 0.05) {
+             console.log(`[BaseVoiceAgent] Relaying audio chunk to browser: ${audioData.length} bytes (sample)`); 
+        }
         this.ws.send(audioData);
+      } else {
+        console.warn("[BaseVoiceAgent] Cannot relay audio: Browser WS not open");
       }
     });
 
     this.voiceAgent.on("conversationText", async (event: ConversationTextEvent) => {
+      console.log(`[BaseVoiceAgent] Received text from agent (${event.role}): "${event.content.substring(0, 50)}..."`);
       this.resetIdleTimeout();
       
       // Send to browser for UI display
@@ -137,12 +147,14 @@ export abstract class BaseVoiceAgentHandler {
         // Respond with error so the agent can continue
         this.voiceAgent?.sendFunctionCallResponse(
           event.function_call_id,
+          event.function_name,
           JSON.stringify({ error: "Function execution failed" })
         );
       }
     });
 
     this.voiceAgent.on("userStartedSpeaking", () => {
+      console.log("[BaseVoiceAgent] Event: userStartedSpeaking - Interrupting agent");
       this.resetIdleTimeout();
       // Track active duration
       const now = Date.now();
@@ -156,20 +168,30 @@ export abstract class BaseVoiceAgentHandler {
     });
 
     this.voiceAgent.on("agentThinking", () => {
+      console.log("[BaseVoiceAgent] Event: agentThinking");
       this.send({ type: "agent_thinking" });
     });
 
     this.voiceAgent.on("agentStartedSpeaking", () => {
+      console.log("[BaseVoiceAgent] Event: agentStartedSpeaking");
       this.send({ type: "agent_started_speaking" });
     });
 
     this.voiceAgent.on("agentAudioDone", () => {
+      console.log("[BaseVoiceAgent] Event: agentAudioDone");
       this.lastInteractionEndTime = Date.now();
       this.send({ type: "agent_audio_done" });
     });
 
     this.voiceAgent.on("settingsApplied", () => {
       console.log(`[VoiceAgentHandler] Voice Agent settings applied for ${this.identifier}`);
+      
+      // Inject greeting if configured
+      const greeting = this.getGreeting();
+      if (greeting) {
+        console.log(`[VoiceAgentHandler] Injecting greeting: "${greeting}"`);
+        this.voiceAgent?.sendInjectAgentMessage(greeting);
+      }
     });
 
     this.voiceAgent.on("error", (error: Error) => {
@@ -182,6 +204,7 @@ export abstract class BaseVoiceAgentHandler {
     });
 
     // Connect
+    console.log(`[BaseVoiceAgent] Connecting Voice Agent for ${this.identifier}...`);
     await this.voiceAgent.connect();
     console.log(`[VoiceAgentHandler] Voice Agent connected for ${this.identifier}`);
   }
@@ -190,6 +213,7 @@ export abstract class BaseVoiceAgentHandler {
    * Reconnect the Voice Agent with new settings (e.g., language change)
    */
   protected async reconnectVoiceAgent(): Promise<void> {
+    console.log(`[BaseVoiceAgent] Reconnecting Voice Agent for ${this.identifier}...`);
     if (this.voiceAgent) {
       this.voiceAgent.close();
       this.voiceAgent = null;
@@ -201,6 +225,7 @@ export abstract class BaseVoiceAgentHandler {
 
   private setupBrowserConnectionHandlers(): void {
     this.ws.on("close", async () => {
+      console.log(`[BaseVoiceAgent] Browser WebSocket closed for ${this.identifier}`);
       await this.cleanup();
     });
 
@@ -211,40 +236,51 @@ export abstract class BaseVoiceAgentHandler {
   }
 
   private setupBrowserMessageHandlers(): void {
-    this.ws.on("message", async (data: Buffer) => {
+    this.ws.on("message", async (data: Buffer, isBinary: boolean) => {
+      // console.log(`[BaseVoiceAgent] Raw WS message received: ${data.length} bytes, isBinary: ${isBinary}`);
       if (!this.isActive) return;
 
       this.resetIdleTimeout();
 
-      try {
-        // Try to parse as JSON (control messages)
-        const message = JSON.parse(data.toString());
+      if (!isBinary) {
+        try {
+          // Try to parse as JSON (control messages)
+          const strData = data.toString();
+          
+          const message = JSON.parse(strData);
+          if (message.type !== "ping") {
+            console.log(`[BaseVoiceAgent] Received control message: ${message.type}`);
+          }
 
-        // Handle audio configuration (legacy — ignored since Voice Agent handles this)
-        if (message.type === "audio_config") {
-          return;
+          // Handle audio configuration (legacy — ignored since Voice Agent handles this)
+          if (message.type === "audio_config") {
+            return;
+          }
+
+          // Handle ping
+          if (message.type === "ping") {
+            this.send({ type: "pong" });
+            return;
+          }
+
+          // Rate limit checks for JSON messages
+          const messageCheck = await checkMessageAllowed(this.identifier);
+          if (!messageCheck.allowed) {
+            console.warn(`[BaseVoiceAgent] Rate limit exceeded for ${this.identifier}`);
+            this.send({
+              type: "rate_limit",
+              error: messageCheck.reason,
+              retryAfter: messageCheck.retryAfter,
+            });
+            return;
+          }
+
+          await this.handleControlMessage(message);
+        } catch (error) {
+          console.error(`[BaseVoiceAgent] Failed to parse non-binary message as JSON:`, error);
         }
-
-        // Handle ping
-        if (message.type === "ping") {
-          this.send({ type: "pong" });
-          return;
-        }
-
-        // Rate limit checks for JSON messages
-        const messageCheck = await checkMessageAllowed(this.identifier);
-        if (!messageCheck.allowed) {
-          this.send({
-            type: "rate_limit",
-            error: messageCheck.reason,
-            retryAfter: messageCheck.retryAfter,
-          });
-          return;
-        }
-
-        await this.handleControlMessage(message);
-      } catch {
-        // Not JSON — treat as audio data from browser
+      } else {
+        // Treat as audio data from browser
         await this.handleBrowserAudio(data);
       }
     });
@@ -262,6 +298,10 @@ export abstract class BaseVoiceAgentHandler {
 
     // Relay to Voice Agent
     if (this.voiceAgent?.connected) {
+       // Log occasional chunk to verify flow
+       if (Math.random() < 0.01) {
+          console.log(`[BaseVoiceAgent] Relaying browser audio to Agent: ${audioData.length} bytes (sample)`);
+       }
       this.voiceAgent.sendAudio(audioData);
     }
   }
@@ -270,7 +310,12 @@ export abstract class BaseVoiceAgentHandler {
 
   protected send(data: any): void {
     if (this.ws.readyState === WebSocket.OPEN) {
+      if (data.type !== "audio" && data.type !== "pong") {
+         console.log(`[BaseVoiceAgent] Sending to browser: ${data.type}`);
+      }
       this.ws.send(JSON.stringify(data));
+    } else {
+       console.warn(`[BaseVoiceAgent] Cannot send to browser (closed): ${data.type}`);
     }
   }
 
