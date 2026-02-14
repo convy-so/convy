@@ -162,6 +162,10 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
     return this.state.language;
   }
 
+  protected getGreeting(): string | null {
+    return getTimeBasedGreeting('sample', this.state.language);
+  }
+
   protected async getVoiceAgentSettings(): Promise<VoiceAgentSettings> {
     if (!this.state.surveyConfig || !this.state.context) {
       throw new Error("Survey config or context not initialized");
@@ -203,7 +207,8 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       language: this.state.language,
       tone,
       systemPrompt,
-      greeting: getTimeBasedGreeting('sample', this.state.language),
+
+      // Greeting is now handled by getGreeting() and injected on connection
       functions,
       conversationHistory: this.state.messages.length > 0
         ? this.state.messages.map(m => ({ role: m.role, content: m.content }))
@@ -270,11 +275,13 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
           });
           this.voiceAgent?.sendFunctionCallResponse(
             event.function_call_id,
+            event.function_name,
             JSON.stringify({ success: true, media: { id: media.id, type: media.type, description: media.description } })
           );
         } else {
           this.voiceAgent?.sendFunctionCallResponse(
             event.function_call_id,
+            event.function_name,
             JSON.stringify({ error: "Media not found" })
           );
         }
@@ -284,6 +291,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       case "finishSurvey": {
         this.voiceAgent?.sendFunctionCallResponse(
           event.function_call_id,
+          event.function_name,
           JSON.stringify({ success: true, message: "Survey marked as complete" })
         );
         // End session after a brief delay for the agent to speak a farewell
@@ -297,6 +305,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       default:
         this.voiceAgent?.sendFunctionCallResponse(
           event.function_call_id,
+          event.function_name,
           JSON.stringify({ error: `Unknown function: ${event.function_name}` })
         );
     }
@@ -340,6 +349,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
             description: "Optional brief reason for ending (e.g., 'all topics covered', 'participant request')",
           },
         },
+        required: [],
       },
     });
 

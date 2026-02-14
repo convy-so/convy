@@ -219,6 +219,10 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
     return this.state.language;
   }
 
+  protected getGreeting(): string | null {
+    return getTimeBasedGreeting('response', this.state.language);
+  }
+
   protected async getVoiceAgentSettings(): Promise<VoiceAgentSettings> {
     if (!this.state.surveyConfig || !this.state.context) {
       throw new Error("Survey config or context not initialized");
@@ -240,7 +244,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       language: this.state.language,
       tone,
       systemPrompt,
-      greeting: getTimeBasedGreeting('response', this.state.language),
+      // Greeting is now handled by getGreeting() and injected on connection
       functions,
       conversationHistory: this.state.messages.length > 0
         ? this.state.messages.map(m => ({ role: m.role, content: m.content }))
@@ -338,11 +342,13 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
           });
           this.voiceAgent?.sendFunctionCallResponse(
             event.function_call_id,
+            event.function_name,
             JSON.stringify({ success: true, media: { id: media.id, type: media.type, description: media.description } })
           );
         } else {
           this.voiceAgent?.sendFunctionCallResponse(
             event.function_call_id,
+            event.function_name,
             JSON.stringify({ error: "Media not found" })
           );
         }
@@ -357,6 +363,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
         if (userMessages.length >= minQuestions) {
           this.voiceAgent?.sendFunctionCallResponse(
             event.function_call_id,
+            event.function_name,
             JSON.stringify({ success: true, message: "Survey marked as complete" })
           );
 
@@ -372,6 +379,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
           // Not enough interaction yet — tell the agent to continue
           this.voiceAgent?.sendFunctionCallResponse(
             event.function_call_id,
+            event.function_name,
             JSON.stringify({
               error: "Cannot finish yet - more questions need to be covered",
               currentQuestions: userMessages.length,
@@ -385,6 +393,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       default:
         this.voiceAgent?.sendFunctionCallResponse(
           event.function_call_id,
+          event.function_name,
           JSON.stringify({ error: `Unknown function: ${event.function_name}` })
         );
     }
@@ -434,6 +443,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
             description: "Optional brief reason for ending (e.g., 'all topics covered', 'participant request')",
           },
         },
+        required: [],
       },
     });
 
