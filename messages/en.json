@@ -45,6 +45,7 @@
                 "AISpeaking": "AI Speaking",
                 "Listening": "Listening",
                 "Ready": "Ready",
+                "Speaking": "Speaking",
                 "TapToPause": "Tap to Pause",
                 "TapToSpeak": "Tap to Speak"
             },
@@ -68,14 +69,63 @@
             },
             "Input": {
                 "Placeholder": "Describe your survey goals...",
+                "PlaceholderLocked": "Select a topic above to start...",
                 "AddMedia": "Add Context/Media",
                 "Send": "Send"
             },
+            "DomainSelection": {
+                "Title": "Choose your survey path",
+                "Description": "Select a domain to get specialized AI guidance and industry-standard templates."
+            },
             "SuggestedPrompts": {
-                "CustomerSat": "Create a customer satisfaction survey",
-                "ProductFeedback": "Gather feedback on a new product feature",
-                "EmployeeEngagement": "Measure employee engagement and culture",
-                "MarketResearch": "Conduct market research for a new idea"
+                "1": [
+                    "Create a customer satisfaction survey (CSAT)",
+                    "Map a customer journey touchpoint",
+                    "Measure Net Promoter Score (NPS)",
+                    "Evaluate a support interaction"
+                ],
+                "2": [
+                    "Test a new product concept",
+                    "Analyze market trends",
+                    "Understand pricing sensitivity",
+                    "Conduct a competitor analysis"
+                ],
+                "3": [
+                    "Measure employee engagement",
+                    "Assess organizational culture",
+                    "Gather 360-degree feedback",
+                    "Evaluate manager effectiveness"
+                ],
+                "5": [
+                    "Evaluate a course or training",
+                    "Assess learning outcomes",
+                    "Gather student feedback",
+                    "Review curriculum effectiveness"
+                ],
+                "6": [
+                    "Survey public opinion on a local issue",
+                    "Measure civic engagement",
+                    "Gather community feedback",
+                    "Assess policy support"
+                ],
+                "7": [
+                    "Design a longitudinal study",
+                    "Test a social psychology hypothesis",
+                    "Validate a psychometric scale",
+                    "Conduct an experimental survey"
+                ],
+                "9": [
+                    "Collect demographic data",
+                    "Profile a household",
+                    "Analyze population trends",
+                    "Conduct a census-style survey"
+                ],
+                "10": [
+                    "Report a system outage",
+                    "Evaluate IT infrastructure",
+                    "Log a bug report",
+                    "Assess service reliability"
+                ]
             },
             "Authentication": {
                 "Required": "Authentication Required",
@@ -196,7 +246,7 @@
             },
             "Toasts": {
                 "Finished": "Conversation finished! You can now refine or publish.",
-                "Limitreached": "You've used all 3 sample conversations",
+                "LimitReached": "You've used all 3 sample conversations",
                 "FeedbackApplied": "Feedback applied! Starting new conversation...",
                 "FeedbackFailed": "Failed to apply feedback",
                 "Confirmed": "Survey confirmed and published!",
@@ -206,6 +256,12 @@
                 "NoRetries": "You've used all 3 sample conversations",
                 "FeedbackError": "Error applying feedback",
                 "StartFailed": "Failed to start conversation"
+            },
+            "ConfirmDialog": {
+                "Title": "Publish Survey?",
+                "Message": "Are you sure you want to publish this survey? You won't be able to edit the core questions once it's live.",
+                "Confirm": "Publish",
+                "Cancel": "Keep Editing"
             }
         },
         "Response": {

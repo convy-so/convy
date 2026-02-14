@@ -163,7 +163,13 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
   }
 
   protected getGreeting(): string | null {
-    return getTimeBasedGreeting('sample', this.state.language);
+    // Return null to disable static greeting. We use getInitialUserInput to trigger AI generation instead.
+    return null;
+  }
+
+  protected getInitialUserInput(): string | null {
+    // Triggers the AI to generate the greeting based on the system prompt (Expert Persona)
+    return "Start the conversation now. Greet the participant according to the system prompt instructions.";
   }
 
   protected async getVoiceAgentSettings(): Promise<VoiceAgentSettings> {

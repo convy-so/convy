@@ -220,7 +220,13 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
   }
 
   protected getGreeting(): string | null {
-    return getTimeBasedGreeting('response', this.state.language);
+    // Disable static greeting to use dynamic LLM generation
+    return null;
+  }
+
+  protected getInitialUserInput(): string | null {
+    // Trigger the AI to start the survey response dynamically
+    return "Start the survey interaction. Greet the participant and ask the first question according to the system prompt.";
   }
 
   protected async getVoiceAgentSettings(): Promise<VoiceAgentSettings> {

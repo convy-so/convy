@@ -2,12 +2,12 @@
 
 import { DashboardWidget } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
-import {  
-  PieChart, Pie, Tooltip, ResponsiveContainer, 
+import {
+  PieChart, Pie, Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Sector, Rectangle
 } from "recharts";
-import { 
-  Users, CheckCircle, Star, Target, 
+import {
+  Users, CheckCircle, Star, Target,
   ArrowUp, ArrowDown, Minus, Quote, PlayCircle
 } from "lucide-react";
 import { SentimentGauge } from "./SentimentGauge";
@@ -18,7 +18,7 @@ interface DashboardGridProps {
 }
 
 const COLORS = [
-  "#111827", "#9CA3AF", "#4b5563", "#10b981", 
+  "#111827", "#9CA3AF", "#4b5563", "#10b981",
   "#f59e0b", "#6366f1", "#ec4899"
 ];
 
@@ -88,20 +88,27 @@ function WidgetContent({ widget }: { widget: DashboardWidget }) {
     case "hypothesis_card":
       return <HypothesisContent data={data} />;
     case "recommendation_card":
-       return <RecommendationContent data={data} />;
+      return <RecommendationContent data={data} />;
+
     case "media_effectiveness":
-       return <MediaEffectivenessContent data={data} />;
+      return <MediaEffectivenessContent data={data} />;
+    case "insight_list":
+      return <InsightListContent data={data} />;
+    case "coverage_matrix":
+      return <CoverageMatrixContent data={data} />;
+    case "media_card":
+      return <MediaCardContent data={data} />;
     case "sentiment_gauge":
-       // SentimentGauge usually expects specific props, adapting here
+      // SentimentGauge usually expects specific props, adapting here
       return (
-         <div className="h-full flex items-center justify-center">
-            <SentimentGauge 
-              score={data.score} 
-              confidence={data.confidence} 
-              overall={data.overall} 
-              compact={true}
-            />
-         </div>
+        <div className="h-full flex items-center justify-center">
+          <SentimentGauge
+            score={data.score}
+            confidence={data.confidence}
+            overall={data.overall}
+            compact={true}
+          />
+        </div>
       );
     default:
       return (
@@ -116,7 +123,7 @@ function WidgetContent({ widget }: { widget: DashboardWidget }) {
 
 function StatCardContent({ data }: { data: any }) {
   const Icon = getIcon(data.icon);
-  
+
   return (
     <div className="flex flex-col justify-between h-full py-2">
       <div className="flex items-baseline gap-2">
@@ -124,17 +131,17 @@ function StatCardContent({ data }: { data: any }) {
           {data.value}
         </span>
       </div>
-      
+
       <div className="flex items-center justify-between">
-         <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+        <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">
           {data.label}
         </span>
         {data.trend && (
           <div className={cn(
             "flex items-center px-2 py-1 rounded-full text-[10px] font-bold",
             data.trend === "up" ? "bg-green-50 text-green-600" :
-            data.trend === "down" ? "bg-red-50 text-red-600" :
-            "bg-gray-50 text-gray-500"
+              data.trend === "down" ? "bg-red-50 text-red-600" :
+                "bg-gray-50 text-gray-500"
           )}>
             {data.trend === "up" && <ArrowUp className="w-3 h-3 mr-1" />}
             {data.trend === "down" && <ArrowDown className="w-3 h-3 mr-1" />}
@@ -143,20 +150,20 @@ function StatCardContent({ data }: { data: any }) {
           </div>
         )}
       </div>
-      
-       {/* Absolute positioned icon for visual flair */}
-       {Icon && (
-         <div className="absolute top-0 right-0 p-2 opacity-5">
-           <Icon className="w-16 h-16 text-black" />
-         </div>
-       )}
+
+      {/* Absolute positioned icon for visual flair */}
+      {Icon && (
+        <div className="absolute top-0 right-0 p-2 opacity-5">
+          <Icon className="w-16 h-16 text-black" />
+        </div>
+      )}
     </div>
   );
 }
 
 function PieChartContent({ data }: { data: any }) {
   if (!data?.segments?.length) return <EmptyState />;
-  
+
   return (
     <div className="w-full h-full flex flex-col md:flex-row items-center gap-4">
       <div className="w-32 h-32 md:w-36 md:h-36 flex-shrink-0 relative">
@@ -173,9 +180,9 @@ function PieChartContent({ data }: { data: any }) {
               shape={(props: any) => {
                 const { index, payload } = props;
                 return (
-                  <Sector 
-                    {...props} 
-                    fill={payload.color || COLORS[index % COLORS.length]} 
+                  <Sector
+                    {...props}
+                    fill={payload.color || COLORS[index % COLORS.length]}
                   />
                 );
               }}
@@ -184,18 +191,18 @@ function PieChartContent({ data }: { data: any }) {
         </ResponsiveContainer>
         {/* Center label if needed */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-           <span className="text-xs font-bold text-gray-300">
-             {data.total ? data.total : ""}
-           </span>
+          <span className="text-xs font-bold text-gray-300">
+            {data.total ? data.total : ""}
+          </span>
         </div>
       </div>
-      
+
       <div className="flex flex-col justify-center gap-2 flex-grow min-w-0 w-full">
         {data.segments.slice(0, 4).map((entry: any, i: number) => (
           <div key={i} className="flex justify-between items-center w-full">
             <div className="flex items-center gap-2 min-w-0">
-               <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color || COLORS[i % COLORS.length] }} />
-               <span className="text-xs text-gray-500 truncate" title={entry.label}>{entry.label}</span>
+              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color || COLORS[i % COLORS.length] }} />
+              <span className="text-xs text-gray-500 truncate" title={entry.label}>{entry.label}</span>
             </div>
             <span className="text-xs font-semibold text-gray-900 ml-2">{entry.value}</span>
           </div>
@@ -209,219 +216,287 @@ function PieChartContent({ data }: { data: any }) {
 }
 
 function BarChartContent({ data }: { data: any[] }) {
-    // Adapter for legacy format or new format
-    const chartData = Array.isArray(data) ? data : (data as any).bars || [];
-    
-    if (!chartData.length) return <EmptyState />;
+  // Adapter for legacy format or new format
+  const chartData = Array.isArray(data) ? data : (data as any).bars || [];
 
-    return (
-        <div className="w-full h-full min-h-[160px]">
-            <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                    <XAxis 
-                        dataKey="label" 
-                        fontSize={10} 
-                        tickLine={false} 
-                        axisLine={false} 
-                        stroke="#9ca3af"
-                        interval={0}
-                        // truncate long labels
-                        tickFormatter={(v) => v.length > 10 ? `${v.slice(0, 10)}...` : v}
-                    />
-                    <YAxis 
-                        fontSize={10} 
-                        tickLine={false} 
-                        axisLine={false} 
-                        stroke="#9ca3af" 
-                    />
-                    <Tooltip 
-                        cursor={{ fill: '#f9fafb' }}
-                        contentStyle={{ borderRadius: '12px', border: 'none' }}
-                        itemStyle={{ fontSize: '12px', fontWeight: 600 }}
-                    />
-                    <Bar 
-                        dataKey="value" 
-                        barSize={32}
-                        shape={(props: any) => {
-                            const { payload } = props;
-                            return (
-                                <Rectangle 
-                                    {...props} 
-                                    fill={payload.color || "#111827"} 
-                                    radius={[4, 4, 0, 0]} 
-                                />
-                            );
-                        }}
-                    />
-                </BarChart>
-            </ResponsiveContainer>
-        </div>
-    )
+  if (!chartData.length) return <EmptyState />;
+
+  return (
+    <div className="w-full h-full min-h-[160px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+          <XAxis
+            dataKey="label"
+            fontSize={10}
+            tickLine={false}
+            axisLine={false}
+            stroke="#9ca3af"
+            interval={0}
+            // truncate long labels
+            tickFormatter={(v) => v.length > 10 ? `${v.slice(0, 10)}...` : v}
+          />
+          <YAxis
+            fontSize={10}
+            tickLine={false}
+            axisLine={false}
+            stroke="#9ca3af"
+          />
+          <Tooltip
+            cursor={{ fill: '#f9fafb' }}
+            contentStyle={{ borderRadius: '12px', border: 'none' }}
+            itemStyle={{ fontSize: '12px', fontWeight: 600 }}
+          />
+          <Bar
+            dataKey="value"
+            barSize={32}
+            shape={(props: any) => {
+              const { payload } = props;
+              return (
+                <Rectangle
+                  {...props}
+                  fill={payload.color || "#111827"}
+                  radius={[4, 4, 0, 0]}
+                />
+              );
+            }}
+          />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
 }
 
 function ListContent({ data }: { data: any[] }) {
-    if (!data?.length) return <EmptyState />;
-    // Assuming data is array of { value, count, percentage } or similar
-    // We sort and take top 5
-    const limit = 5;
-    const sorted = [...data].sort((a,b) => (b.count || b.value) - (a.count || a.value));
-    const maxVal = sorted[0]?.count || sorted[0]?.value || 1;
-    
-    return (
-        <div className="space-y-3 pt-2">
-            {sorted.slice(0, limit).map((item, i) => (
-                <div key={i} className="group">
-                    <div className="flex justify-between items-center mb-1 text-xs">
-                        <span className="font-medium text-gray-700 truncate max-w-[70%]">
-                             {/* Handle both string/number values */}
-                             {typeof item.value === 'boolean' ? (item.value ? 'Yes' : 'No') : item.value}
-                        </span>
-                        <span className="text-gray-400">
-                            {item.percentage ? `${Math.round(item.percentage)}%` : item.count}
-                        </span>
-                    </div>
-                    <div className="h-1.5 w-full bg-gray-50 rounded-full overflow-hidden">
-                         <div 
-                            className="h-full rounded-full bg-gray-900 group-hover:bg-black transition-all duration-500"
-                            style={{ 
-                                width: `${((item.count || item.value) / maxVal) * 100}%`,
-                                backgroundColor: COLORS[i % COLORS.length]
-                            }}
-                         />
-                    </div>
-                </div>
-            ))}
-            {data.length > limit && (
-                <div className="text-[10px] text-center text-gray-400 pt-1">
-                    + {data.length - limit} more
-                </div>
-            )}
+  if (!data?.length) return <EmptyState />;
+  // Assuming data is array of { value, count, percentage } or similar
+  // We sort and take top 5
+  const limit = 5;
+  const sorted = [...data].sort((a, b) => (b.count || b.value) - (a.count || a.value));
+  const maxVal = sorted[0]?.count || sorted[0]?.value || 1;
+
+  return (
+    <div className="space-y-3 pt-2">
+      {sorted.slice(0, limit).map((item, i) => {
+        // Determine the label to display: prioritize explicit 'label' or 'topic', fallback to item.value
+        const displayLabel = item.label || item.topic || (typeof item.value === 'string' ? item.value : 'Unknown');
+        // Determine the numeric value for the count
+        const displayCount = item.count ?? item.value;
+        const displayPercentage = item.percentage;
+
+        return (
+          <div key={i} className="group">
+            <div className="flex justify-between items-center mb-1 text-xs">
+              <span className="font-medium text-gray-700 truncate max-w-[70%]">
+                {/* Handle both string/number values */}
+                {typeof displayLabel === 'boolean' ? (displayLabel ? 'Yes' : 'No') : displayLabel}
+              </span>
+              <span className="text-gray-400">
+                {displayPercentage ? `${Math.round(displayPercentage)}%` : displayCount}
+              </span>
+            </div>
+            <div className="h-1.5 w-full bg-gray-50 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gray-900 group-hover:bg-black transition-all duration-500"
+                style={{
+                  width: `${((displayCount) / maxVal) * 100}%`,
+                  backgroundColor: COLORS[i % COLORS.length]
+                }}
+              />
+            </div>
+          </div>
+        )
+      })}
+      {data.length > limit && (
+        <div className="text-[10px] text-center text-gray-400 pt-1">
+          + {data.length - limit} more
         </div>
-    )
+      )}
+    </div>
+  )
 }
 
 function InsightListContent({ data }: { data: any }) {
-    const insights = data.insights || [];
-    if (!insights.length) return <EmptyState />;
-    
-    return (
-        <div className="space-y-3 h-full overflow-y-auto custom-scrollbar pr-2">
-            {insights.map((insight: any, i: number) => (
-                <div key={i} className="flex gap-3 items-start p-3 bg-gray-50/50 rounded-xl hover:bg-gray-50 transition-colors">
-                     <span className={cn(
-                        "w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0",
-                        insight.significance === 'high' ? "bg-black" : 
-                        insight.significance === 'medium' ? "bg-gray-400" : "bg-gray-200"
-                     )} />
-                     <p className="text-sm text-gray-600 leading-relaxed">
-                        {insight.text}
-                     </p>
-                </div>
-            ))}
+  const insights = data.insights || [];
+  if (!insights.length) return <EmptyState />;
+
+  return (
+    <div className="space-y-3 h-full overflow-y-auto custom-scrollbar pr-2">
+      {insights.map((insight: any, i: number) => (
+        <div key={i} className="flex gap-3 items-start p-3 bg-gray-50/50 rounded-xl hover:bg-gray-50 transition-colors">
+          <span className={cn(
+            "w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0",
+            insight.significance === 'high' ? "bg-black" :
+              insight.significance === 'medium' ? "bg-gray-400" : "bg-gray-200"
+          )} />
+          <p className="text-sm text-gray-600 leading-relaxed">
+            {insight.text}
+          </p>
         </div>
-    )
+      ))}
+    </div>
+  )
+}
+
+function CoverageMatrixContent({ data }: { data: any[] }) {
+  if (!data?.length) return <EmptyState />;
+
+  return (
+    <div className="space-y-3 h-full overflow-y-auto custom-scrollbar pr-2">
+      {data.map((item: any, i: number) => (
+        <div key={i} className="p-3 bg-gray-50/50 rounded-xl hover:bg-gray-50 transition-colors">
+          <div className="flex justify-between items-start gap-4 mb-2">
+            <p className="text-xs font-medium text-gray-900 line-clamp-2">{item.question}</p>
+            <div className={cn(
+              "flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap",
+              item.coverageRate >= 80 ? "bg-green-100 text-green-700" :
+                item.coverageRate >= 50 ? "bg-yellow-100 text-yellow-700" :
+                  "bg-red-100 text-red-700"
+            )}>
+              {Math.round(item.coverageRate)}% covered
+            </div>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-1 mb-2">
+            <div
+              className="bg-gray-900 h-1.5 rounded-full"
+              style={{ width: `${item.coverageRate}%`, opacity: item.coverageRate / 100 }}
+            />
+          </div>
+          {item.sampleResponses && item.sampleResponses.length > 0 && (
+            <p className="text-[10px] text-gray-500 italic line-clamp-1 border-l-2 border-gray-200 pl-2">
+              "{item.sampleResponses[0]}"
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function EmptyState() {
-    return (
-        <div className="flex flex-col items-center justify-center text-gray-300 h-full min-h-[100px]">
-            <Target className="w-8 h-8 mb-2 opacity-20" />
-            <p className="text-xs">No data available</p>
-        </div>
-    )
+  return (
+    <div className="flex flex-col items-center justify-center text-gray-300 h-full min-h-[100px]">
+      <Target className="w-8 h-8 mb-2 opacity-20" />
+      <p className="text-xs">No data available</p>
+    </div>
+  )
 }
 
 // Helper to map icon strings to Lucide components
 function getIcon(name?: string) {
-    if (!name) return null;
-    const map: Record<string, any> = {
-        users: Users,
-        "check-circle": CheckCircle,
-        star: Star,
-        target: Target,
-        image: Users, // Fallback
-        "play-circle": PlayCircle,
-    };
-    return map[name] || null;
+  if (!name) return null;
+  const map: Record<string, any> = {
+    users: Users,
+    "check-circle": CheckCircle,
+    star: Star,
+    target: Target,
+    image: Users, // Fallback
+    "play-circle": PlayCircle,
+  };
+  return map[name] || null;
 }
 
 function QuoteListContent({ data }: { data: any }) {
-    const quotes = data.quotes || [];
-    if (!quotes.length) return <EmptyState />;
-    
-    return (
-        <div className="space-y-4 h-full overflow-y-auto custom-scrollbar p-1">
-            {quotes.slice(0, 3).map((q: any, i: number) => (
-                <div key={i} className="relative pl-6 italic text-sm text-gray-600">
-                    <Quote className="absolute left-0 top-0 w-4 h-4 text-gray-300" />
-                    <p>"{q.text}"</p>
-                </div>
-            ))}
+  const quotes = data.quotes || [];
+  if (!quotes.length) return <EmptyState />;
+
+  return (
+    <div className="space-y-4 h-full overflow-y-auto custom-scrollbar p-1">
+      {quotes.map((q: any, i: number) => (
+        <div key={i} className="relative pl-6 italic text-sm text-gray-600">
+          <Quote className="absolute left-0 top-0 w-4 h-4 text-gray-300" />
+          <p>"{q.text}"</p>
+          {q.context && <p className="text-[10px] text-gray-400 not-italic mt-1">— {q.context}</p>}
         </div>
-    )
+      ))}
+    </div>
+  )
 }
 
 function HypothesisContent({ data }: { data: any }) {
-    return (
-        <div className="flex flex-col h-full justify-between">
-            <div>
-                 <p className="text-sm font-medium text-gray-900 mb-2">{data.hypothesis}</p>
-                 <div className={cn(
-                    "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
-                    data.status === 'validated' ? "bg-green-100 text-green-800" :
-                    data.status === 'refuted' ? "bg-red-100 text-red-800" :
-                    "bg-yellow-100 text-yellow-800"
-                 )}>
-                    {data.status}
-                 </div>
-            </div>
-            <p className="text-xs text-gray-500 mt-4 line-clamp-3">{data.summary}</p>
+  return (
+    <div className="flex flex-col h-full justify-between">
+      <div>
+        <p className="text-sm font-medium text-gray-900 mb-2">{data.hypothesis}</p>
+        <div className={cn(
+          "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
+          data.status === 'validated' ? "bg-green-100 text-green-800" :
+            data.status === 'refuted' ? "bg-red-100 text-red-800" :
+              "bg-yellow-100 text-yellow-800"
+        )}>
+          {data.status}
         </div>
-    )
+      </div>
+      <p className="text-xs text-gray-500 mt-4 line-clamp-3">{data.summary}</p>
+    </div>
+  )
 }
 
 function RecommendationContent({ data }: { data: any[] }) {
-    if(!data?.length) return <EmptyState />;
-    
-    return (
-        <div className="space-y-3 h-full overflow-y-auto custom-scrollbar">
-             {data.slice(0, 4).map((rec: any, i: number) => (
-                <div key={i} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
-                    <div className={cn(
-                        "w-1 h-full rounded-full flex-shrink-0 bg-gray-300",
-                        rec.priority === 'high' && "bg-black",
-                        rec.priority === 'medium' && "bg-gray-500"
-                    )} />
-                    <div>
-                        <h4 className="text-sm font-semibold text-gray-900">{rec.title}</h4>
-                        <p className="text-xs text-gray-500 mt-1">{rec.description}</p>
-                    </div>
-                </div>
-             ))}
+  if (!data?.length) return <EmptyState />;
+
+  return (
+    <div className="space-y-3 h-full overflow-y-auto custom-scrollbar">
+      {data.slice(0, 4).map((rec: any, i: number) => (
+        <div key={i} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
+          <div className={cn(
+            "w-1 h-full rounded-full flex-shrink-0 bg-gray-300",
+            rec.priority === 'high' && "bg-black",
+            rec.priority === 'medium' && "bg-gray-500"
+          )} />
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900">{rec.title}</h4>
+            <p className="text-xs text-gray-500 mt-1">{rec.description}</p>
+          </div>
         </div>
-    )
+      ))}
+    </div>
+  )
 }
 
 function MediaEffectivenessContent({ data }: { data: any[] }) {
-    if(!data?.length) return <EmptyState />;
-    
-    return (
-        <div className="space-y-2">
-            {data.slice(0, 5).map((media: any, i: number) => (
-                <div key={i} className="flex items-center justify-between text-xs">
-                    <span className="truncate max-w-[60%] text-gray-600">{media.description}</span>
-                    <div className="flex items-center gap-2">
-                        <span className="font-medium">{Math.round(media.effectivenessScore * 10)}/10</span>
-                        <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                            <div 
-                                className="h-full bg-gray-800" 
-                                style={{ width: `${media.usageRate}%` }} 
-                            />
-                        </div>
-                    </div>
-                </div>
-            ))}
+  if (!data?.length) return <EmptyState />;
+
+  return (
+    <div className="space-y-2">
+      {data.slice(0, 5).map((media: any, i: number) => (
+        <div key={i} className="flex items-center justify-between text-xs">
+          <span className="truncate max-w-[60%] text-gray-600">{media.description}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{Math.round(media.effectivenessScore * 10)}/10</span>
+            <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gray-800"
+                style={{ width: `${media.usageRate}%` }}
+              />
+            </div>
+          </div>
         </div>
-    )
+      ))}
+    </div>
+  )
+}
+
+function MediaCardContent({ data }: { data: any }) {
+  if (!data) return <EmptyState />;
+  return (
+    <div className="flex flex-col h-full bg-gray-50 rounded-xl p-3 overflow-hidden">
+      <div className="flex justify-between items-start mb-2">
+        <div className="text-xs font-bold uppercase tracking-wider text-gray-500">{data.type}</div>
+        <div className="text-xs font-bold text-gray-900">{Math.round(data.effectivenessScore * 10)}/10 Score</div>
+      </div>
+      <p className="text-sm font-medium text-gray-900 line-clamp-2 mb-2">{data.description}</p>
+      <div className="mt-auto space-y-2">
+        <div className="flex justify-between text-[10px] text-gray-500">
+          <span>Usage: {data.usageRate}%</span>
+          <span>Insights: {data.insightsGenerated}</span>
+        </div>
+        {data.topQuotes && data.topQuotes.length > 0 && (
+          <p className="text-xs italic text-gray-600 bg-white p-2 rounded border border-gray-100 line-clamp-2">
+            "{data.topQuotes[0].text}"
+          </p>
+        )}
+      </div>
+    </div>
+  )
 }

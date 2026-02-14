@@ -28,6 +28,7 @@ import { AddMediaModal } from "@/components/surveys/add-media-modal";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
 import { clientEnv } from "@/lib/env.client";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
+import { DOMAIN_EXPERTISE, SURVEY_DOMAINS, type SurveyDomainId } from "@/lib/domain-expertise-loader";
 
 
 type CreationStep = "objective" | "audience" | "questions" | "tone" | "review";
@@ -53,13 +54,11 @@ function CreateSurveyContent() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false); // Track when user is actively speaking
-  // Define prompts inside component to use translations
-  const suggestedPrompts = [
-    t("SuggestedPrompts.CustomerSat"),
-    t("SuggestedPrompts.ProductFeedback"),
-    t("SuggestedPrompts.EmployeeEngagement"),
-    t("SuggestedPrompts.MarketResearch"),
-  ];
+
+  // Domain Selection
+  const [selectedDomainId, setSelectedDomainId] = useState<SurveyDomainId | null>(null);
+
+
 
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -76,6 +75,47 @@ function CreateSurveyContent() {
   const [isLanguageOpen, setIsLanguageOpen] = useState(false);
   const [isVoiceSurvey, setIsVoiceSurvey] = useState(false);
   const [isInputMenuOpen, setIsInputMenuOpen] = useState(false);
+
+  const handleDomainSelect = async (domainId: SurveyDomainId) => {
+    setSelectedDomainId(domainId);
+
+    // Don't inject fake greeting anymore. 
+    // The backend will generate a real expert greeting via the POST request.
+    const updatedMessages: Message[] = [];
+    if (messages.length === 0) {
+      setMessages([]);
+    }
+
+    // Ensure draft exists and then save domain
+    let currentSurveyId = surveyId;
+    if (!currentSurveyId) {
+      currentSurveyId = await ensureDraftExists();
+      if (!currentSurveyId) return; // Error handled in ensureDraftExists
+    }
+
+    try {
+      await fetch(`/api/surveys/${currentSurveyId}/create`, {
+        method: "PUT", // Use PUT to update existing conversation state
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: updatedMessages.map(m => ({
+            role: m.role,
+            content: m.content
+          })),
+          extractedData: { domainId }
+        })
+      });
+      console.log(`[Client] Domain ${domainId} saved for survey ${currentSurveyId}`);
+
+      // If this is the start of the conversation, trigger the AI expert to introduce itself
+      if (messages.length === 0) {
+        triggerAIInitialResponse(currentSurveyId);
+      }
+    } catch (error) {
+      console.error("Failed to save domain selection:", error);
+      toast.error("Failed to save topic selection");
+    }
+  };
 
   const toggleLanguage = () => setIsLanguageOpen(!isLanguageOpen);
   const toggleInputMenu = () => setIsInputMenuOpen(!isInputMenuOpen);
@@ -181,6 +221,25 @@ function CreateSurveyContent() {
       } else if (data.type === "survey_state_loaded") {
         console.log("[Client] Survey state loaded on server — safe to start conversation");
         setSurveyStateLoaded(true);
+      } else if (data.type === "survey_completed") {
+        console.log("[Client] ✅ Survey completed signal received from Voice Agent");
+        // Refresh survey data to ensure we have the latest status/extracted info
+        // This will trigger the 'isReadyForSample' check in the main effect
+        router.refresh();
+
+        // Optimistically set status to allow immediate UI update
+        setSurveyStatus("completed");
+
+        // Force a fetch of the latest data
+        if (surveyId) {
+          fetch(`/api/surveys/${surveyId}/create`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.status) setSurveyStatus(data.status);
+              if (data.collectedInfo) setCollectedInfo(data.collectedInfo);
+            })
+            .catch(console.error);
+        }
       }
     }
   });
@@ -217,29 +276,8 @@ function CreateSurveyContent() {
     }
   }, [voiceWs.status]);
 
-  // Chat state
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content: "Hi! I'm here to help you create the perfect survey. Let's start with the basics - what's the main objective of your survey? What do you want to learn from your respondents?",
-      displayedContent: "Hi! I'm here to help you create the perfect survey. Let's start with the basics - what's the main objective of your survey? What do you want to learn from your respondents?",
-      isTyping: false,
-    }
-  ]);
-
-  // Update initial message when translation loads
-  useEffect(() => {
-    setMessages(prev => prev.map(msg =>
-      msg.id === "welcome"
-        ? {
-          ...msg,
-          content: t("Chat.Welcome"),
-          displayedContent: msg.displayedContent === msg.content ? t("Chat.Welcome") : msg.displayedContent // Only update display if fully shown/matching
-        }
-        : msg
-    ));
-  }, []);
+  // Chat state - Start empty, populated on domain selection
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -259,30 +297,36 @@ function CreateSurveyContent() {
 
     // 2. Main Logic: Check all truly required flags are collected
     // These must now match our REQUIRED_INFORMATION priorities
-    const allRequiredFlagsCollected = (
+    const criticalFlagsCollected = (
       collectedInfo.objective &&
       collectedInfo.targetAudience &&
-      collectedInfo.scope &&
-      collectedInfo.successCriteria &&
-      collectedInfo.constraints &&
-      collectedInfo.tone &&
-      collectedInfo.requiredQuestions &&
-      collectedInfo.metrics &&
-      collectedInfo.personalInfo &&
       collectedInfo.subjectDefined &&
       collectedInfo.domainIdentified
     );
 
     // If AI mentioned samples, we skip strict structural validation and trust the AI
-    if (aiMentionedSamples && allRequiredFlagsCollected) {
-      console.log('[isReadyForSample] ✅ AI explicitly mentioned samples and all info is collected');
+    // We only enforce that we have the absolute minimums (objective, audience, domain)
+    if (aiMentionedSamples && criticalFlagsCollected) {
+      console.log('[isReadyForSample] ✅ AI explicitly mentioned samples and critical info is collected');
       return true;
     }
 
     // 3. Structural Validation (Strict path)
+    // If AI hasn't explicitly said "click the button", we fall back to strict validation
+    const allRequiredFlagsCollected = (
+      criticalFlagsCollected &&
+      collectedInfo.scope &&
+      collectedInfo.successCriteria &&
+      collectedInfo.constraints &&
+      collectedInfo.tone &&
+      collectedInfo.requiredQuestions
+    );
+
     if (!allRequiredFlagsCollected || !extractedData) {
       console.log('[isReadyForSample] ⏳ Missing required flags or extractedData', {
+        criticalFlagsCollected,
         allRequiredFlagsCollected,
+        aiMentionedSamples,
         hasExtractedData: !!extractedData,
         collectedInfo
       });
@@ -482,7 +526,13 @@ function CreateSurveyContent() {
             }
 
             if (data.collectedInfo) setCollectedInfo(data.collectedInfo);
-            if (data.extractedData) setExtractedData(data.extractedData);
+            if (data.collectedInfo) setCollectedInfo(data.collectedInfo);
+            if (data.extractedData) {
+              setExtractedData(data.extractedData);
+              if (data.extractedData.domainId) {
+                setSelectedDomainId(data.extractedData.domainId as SurveyDomainId);
+              }
+            }
           }
 
           // Get survey status to determine read-only mode
@@ -748,6 +798,158 @@ function CreateSurveyContent() {
     }
   };
 
+  const triggerAIInitialResponse = async (currentSurveyId: string) => {
+    if (authError) return;
+
+    // Clear any existing typing animation
+    if (typingIntervalRef.current) {
+      clearInterval(typingIntervalRef.current);
+      typingIntervalRef.current = null;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`/api/surveys/${currentSurveyId}/create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          messages: []
+        }),
+      });
+
+      if (response.status === 401) {
+        setAuthError(t("Authentication.Required"));
+        return;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        if (errorText === "EMAIL_NOT_VERIFIED") {
+          setAuthError(t("Authentication.VerifyEmail"));
+          return;
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Collect full response content first, then animate
+      let fullContent = "";
+      const assistantMessageId = (Date.now() + 1).toString();
+
+      // Check if response is streaming
+      const contentType = response.headers.get('content-type');
+
+      if (contentType?.includes('text/plain') || contentType?.includes('text/stream')) {
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("No response body");
+
+        // Add placeholder message with typing indicator
+        const assistantMessage: Message = {
+          id: assistantMessageId,
+          role: "assistant",
+          content: "",
+          displayedContent: "",
+          isTyping: true,
+        };
+        setMessages([assistantMessage]);
+
+        const decoder = new TextDecoder();
+        let done = false;
+        let buffer = '';
+
+        while (!done) {
+          const { value, done: readerDone } = await reader.read();
+          done = readerDone;
+
+          if (value) {
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+
+            // Process complete lines
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              if (line.trim()) {
+                // Handle AI SDK streaming format
+                if (line.startsWith('0:')) {
+                  const lineContent = line.slice(2);
+                  if (lineContent) {
+                    fullContent += lineContent;
+                  }
+                } else if (line.startsWith('data: ')) {
+                  const lineContent = line.slice(6);
+                  if (lineContent && lineContent !== '[DONE]') {
+                    try {
+                      const parsed = JSON.parse(lineContent);
+                      if (parsed.choices?.[0]?.delta?.content) {
+                        fullContent += parsed.choices[0].delta.content;
+                      }
+                    } catch (e) {
+                      fullContent += lineContent;
+                    }
+                  }
+                } else {
+                  fullContent += line;
+                }
+              }
+            }
+          }
+        }
+
+        // Process any remaining buffer content
+        if (buffer.trim()) {
+          fullContent += buffer;
+        }
+
+        // Update the message with full content and start typing animation
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === assistantMessageId
+              ? { ...msg, content: fullContent, displayedContent: "", isTyping: true }
+              : msg
+          )
+        );
+
+        // Start typing animation after a short delay
+        setTimeout(() => {
+          animateTyping(assistantMessageId, fullContent);
+        }, 100);
+
+      } else {
+        // Handle non-streaming response (fallback)
+        const responseText = await response.text();
+
+        const assistantMessage: Message = {
+          id: assistantMessageId,
+          role: "assistant",
+          content: responseText,
+          displayedContent: "",
+          isTyping: true,
+        };
+
+        setMessages([assistantMessage]);
+
+        // Start typing animation
+        setTimeout(() => {
+          animateTyping(assistantMessageId, responseText);
+        }, 100);
+      }
+
+      // Fetch updated extraction data after AI response completes
+      await fetchUpdatedData();
+
+    } catch (error) {
+      console.error("Initial AI response error:", error);
+      toast.error(t("Toasts.SendFailed"));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Fetch latest extraction data from server
   const fetchUpdatedData = async () => {
     if (!surveyId) return;
@@ -840,11 +1042,7 @@ function CreateSurveyContent() {
     }
   };
 
-  const handleSuggestedPrompt = (prompt: string) => {
-    if (!authError) {
-      setInput(prompt);
-    }
-  };
+
 
   const toggleVoiceMode = () => {
     const newMode = !isVoiceMode;
@@ -1123,8 +1321,8 @@ function CreateSurveyContent() {
 
   return (
     <>
-      <div className="h-[calc(100vh-7rem)] flex flex-col md:flex-row gap-6 max-w-7xl mx-auto p-4 overflow-hidden">
-        <div className="flex-1 bg-white rounded-3xl border border-gray-200 flex flex-col overflow-hidden relative">
+      <div className="h-[calc(100vh-2rem)] md:h-[calc(100vh-4rem)] flex flex-col md:flex-row gap-6 max-w-7xl mx-auto p-4 overflow-hidden">
+        <div className="flex-1 bg-white rounded-3xl border border-gray-200 flex flex-col overflow-hidden relative shadow-sm">
 
           {/* Integrated Header */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6 border-b border-gray-100">
@@ -1390,7 +1588,7 @@ function CreateSurveyContent() {
 
                       <button
                         onClick={toggleRecording}
-                        disabled={voiceWs.isRecording} // Disable once activated
+                        disabled={voiceWs.isRecording || !selectedDomainId} // Disable if no domain selected
                         className={cn(
                           "relative w-32 h-32 rounded-full flex flex-col items-center justify-center transition-all duration-300 border-4 shadow-2xl z-20",
                           isSpeaking
@@ -1421,6 +1619,8 @@ function CreateSurveyContent() {
                             </>
                           ) : isConnecting ? (
                             <Loader2 className="h-10 w-10 animate-spin text-amber-500" />
+                          ) : !selectedDomainId ? (
+                            <span className="text-xs font-medium text-gray-400 text-center px-2">Select Topic First</span>
                           ) : voiceWs.isPlaying ? (
                             <>
                               <Sparkles className="w-10 h-10 animate-spin-slow" />
@@ -1549,27 +1749,38 @@ function CreateSurveyContent() {
               )}
 
               <div ref={messagesEndRef} className="h-4" />
+
+              {/* Suggested Prompts Grid - Minimalist & Integrated */}
+              {/* Step 1: Domain Selection */}
+              {!selectedDomainId && !isReadyForSample && !isReadOnly && (
+                <div className="w-full max-w-6xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4">
+                  <div className="text-center mb-10">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-3">{t("DomainSelection.Title")}</h2>
+                    <p className="text-base text-gray-500 max-w-2xl mx-auto leading-relaxed">{t("DomainSelection.Description")}</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-12">
+                    {Object.values(SURVEY_DOMAINS).map((domain) => (
+                      <button
+                        key={domain.id}
+                        onClick={() => handleDomainSelect(domain.id)}
+                        className="flex flex-col text-left p-5 bg-white border border-gray-200 hover:border-black rounded-xl transition-all hover:shadow-lg hover:-translate-y-1 group h-full duration-300"
+                      >
+                        <div className="mb-4 p-2.5 bg-gray-50 rounded-lg w-fit group-hover:bg-black group-hover:text-white transition-colors duration-300">
+                          <Sparkles className="w-5 h-5" />
+                        </div>
+                        <h3 className="text-base font-bold text-gray-900 mb-2 leading-tight">{domain.name}</h3>
+                        <p className="text-sm text-gray-500 leading-relaxed line-clamp-3 group-hover:text-gray-600 transition-colors">{domain.description}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+
             </div>
 
-            {/* Suggested Prompts Overlay (Bottom Center) - Minimalist & Larger */}
-            {!isVoiceMode && messages.length === 1 && (
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-4xl px-4 z-10">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {suggestedPrompts.map((prompt, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleSuggestedPrompt(prompt)}
-                      className="px-6 py-5 bg-white/50 hover:bg-white border border-gray-200/60 hover:border-gray-300/80 rounded-2xl text-base font-medium text-gray-700 transition-all hover:scale-[1.01] active:scale-[0.99] text-left group"
-                    >
-                      <span className="flex items-center justify-between w-full">
-                        {prompt}
-                        <ArrowLeft className="w-4 h-4 opacity-0 -translate-x-2 group-hover:translate-x-0 group-hover:opacity-50 transition-all rotate-180" />
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+
           </div>
 
           <div className="bg-slate-50/30 p-4 pb-6 relative z-20">
@@ -1599,8 +1810,11 @@ function CreateSurveyContent() {
             )}
 
             {/* Main Input */}
-            {(!isReadyForSample && !isReadOnly && !isVoiceMode) && (
-              <div className="max-w-3xl mx-auto">
+            {/* Main Input - Only shown when domain is selected */}
+            {(selectedDomainId && !isReadyForSample && !isReadOnly && !isVoiceMode) && (
+              <div className="max-w-3xl mx-auto space-y-4">
+
+
                 <form onSubmit={handleSubmit} className="relative group">
                   {/* Simple Minimalist Input Bar */}
                   <div className="relative bg-white border border-gray-200 rounded-2xl group-focus-within:border-gray-400 transition-all flex items-end p-2">
@@ -1650,6 +1864,7 @@ function CreateSurveyContent() {
                       value={input}
                       onChange={handleInputChange}
                       onKeyDown={handleKeyDown}
+                      disabled={isLoading}
                       placeholder={t("Input.Placeholder")}
                       rows={1}
                       className="flex-1 py-4 px-4 bg-transparent outline-none resize-none text-base text-gray-800 placeholder:text-gray-400 min-h-[96px] max-h-60 my-auto"

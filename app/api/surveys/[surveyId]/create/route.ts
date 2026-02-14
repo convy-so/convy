@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { streamText, generateText, Output } from "ai";
+import { streamText, generateText, Output, tool, stepCountIs } from "ai";
 import { z } from "zod";
 
 import { db } from "@/db";
@@ -11,7 +11,6 @@ import {
   getSurveyDataExtractionPrompt,
   type CollectedInfo,
 } from "@/lib/prompts";
-import { getTimeBasedGreeting } from "@/lib/greetings";
 import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
 
 export const maxDuration = 300;
@@ -222,14 +221,7 @@ export async function POST(
       );
     }
 
-    // If no messages, generate and return a time-adaptive greeting
-    if (messages.length === 0) {
-      const greeting = getTimeBasedGreeting('creation', survey.language || 'en');
-      return new Response(greeting, {
-        status: 200,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-      });
-    }
+
 
     const [creationConversation] = await db
       .select()
@@ -283,12 +275,28 @@ export async function POST(
       creationConversation?.extractedData?.domainId as number | undefined
     );
 
+    // Fix for "Stuck" AI: If messages are empty, we need to prompt the AI to start.
+    // We inject a transient system message that acts as the "trigger" but isn't saved to the DB as a user message.
+    const messagesToLLM = messages.length > 0 
+      ? messages 
+      : [{ role: "user", content: "Start the conversation by introducing yourself as the expert on this domain and asking the first question." }];
+
     const result = streamText({
       model: defaultModel,
-      messages,
+      messages: messagesToLLM as any, // Cast to any to satisfy type checker if needed
       system: systemPrompt,
       temperature: 0.7,
       maxOutputTokens: 1500,
+      stopWhen: stepCountIs(5),// Allow tool use and follow-up response
+      tools: {
+        finishSurvey: tool({
+          description: "Call this tool when the user has provided all necessary information to create the survey.",
+          inputSchema: z.object({}),
+          execute: async () => {
+            return "Survey creation marked as complete. Inform the user that the survey is ready.";
+          },
+        }),
+      },
       onFinish: async ({ text }) => {
         // Save the assistant's response when done
         try {

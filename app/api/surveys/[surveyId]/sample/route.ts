@@ -149,9 +149,19 @@ export async function POST(
     // Define tools for the AI to call using Manager
     const tools = ConversationManager.getTools(surveyConfig);
 
+    // Inject a transient user message to trigger the greeting if history is empty
+    const messagesToLLM = [...messages];
+    if (messagesToLLM.length === 0) {
+      messagesToLLM.push({
+        role: "user",
+        // This message is invisible to the user but prompts the AI to start
+        content: "Start the conversation now. Greet the participant according to the system prompt instructions.",
+      });
+    }
+
     const result = streamText({
       model: defaultModel,
-      messages,
+      messages: messagesToLLM,
       system: systemPrompt,
       temperature: 0.8,
       maxOutputTokens: 2000,

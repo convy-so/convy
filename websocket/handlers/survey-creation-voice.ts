@@ -21,9 +21,10 @@ import { BaseVoiceAgentHandler } from "./base-voice-agent-handler";
 import {
   buildVoiceAgentSettings,
   type VoiceAgentSettings,
-  type ConversationTextEvent,
-  type FunctionCallRequestEvent,
   type SupportedLanguage,
+  type VoiceAgentFunction,
+  type FunctionCallRequestEvent,
+  type ConversationTextEvent,
 } from "@/lib/voice/deepgram-voice-agent";
 
 interface CreationState {
@@ -114,9 +115,12 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
     );
     console.log(`[Survey Creation Voice] System Prompt Length: ${systemPrompt.length}`);
 
+    const functions = this.buildFunctionDefinitions();
+
     return buildVoiceAgentSettings({
       language: this.state.language,
       systemPrompt,
+      functions,
       // Greeting is now handled by getGreeting() and injected on connection
       conversationHistory: this.state.messages.length > 0
         ? this.state.messages.map(m => ({ role: m.role, content: m.content }))
@@ -124,8 +128,73 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
     });
   }
 
+  private buildFunctionDefinitions(): VoiceAgentFunction[] {
+    const functions: VoiceAgentFunction[] = [];
+
+    // 1. finishSurvey
+    functions.push({
+      name: "finishSurvey",
+      description: "Signal that the survey creation conversation is complete. Call this when you have collected all necessary information (objective, questions, etc.) and the user is satisfied.",
+      parameters: {
+        type: "object",
+        properties: {
+          reason: {
+            type: "string",
+            description: "Optional brief reason for ending (e.g., 'configuration complete', 'user request')",
+          },
+        },
+        required: [],
+      },
+    });
+
+    return functions;
+  }
+
+  protected async onFunctionCall(event: FunctionCallRequestEvent): Promise<void> {
+    console.log(`[SurveyCreationVoiceHandler] 🛠️ Tool Call: ${event.function_name}`, event.input);
+
+    try {
+      if (event.function_name === "finishSurvey") {
+        const { reason } = event.input;
+        console.log(`[SurveyCreationVoiceHandler] finishSurvey called. Reason: ${reason}`);
+
+        // Perform final extraction
+        await this.performExtraction();
+
+        // Notify client
+        this.send({ type: "survey_completed" }); // Client should handle this to show "Go to Sample" button
+
+        this.voiceAgent?.sendFunctionCallResponse(
+          event.function_call_id,
+          event.function_name,
+          JSON.stringify({ success: true })
+        );
+      } else {
+        // Unknown function
+         this.voiceAgent?.sendFunctionCallResponse(
+          event.function_call_id,
+          event.function_name,
+          JSON.stringify({ error: "Function not found" })
+        );
+      }
+    } catch (error) {
+       console.error(`[SurveyCreationVoiceHandler] Tool Call Error:`, error);
+       this.voiceAgent?.sendFunctionCallResponse(
+          event.function_call_id,
+          event.function_name,
+          JSON.stringify({ error: "Internal error executing function" })
+        );
+    }
+  }
+
   protected getGreeting(): string | null {
-    return getTimeBasedGreeting('creation', this.state.language);
+    // Disable static greeting to use dynamic LLM generation
+    return null;
+  }
+
+  protected getInitialUserInput(): string | null {
+    // Trigger the AI to start the survey creation process dynamically
+    return "Start the survey creation conversation. Greet the user warmly and ask about their survey objective.";
   }
 
   protected async onConversationText(event: ConversationTextEvent): Promise<void> {
@@ -144,15 +213,6 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
     }
   }
 
-  protected async onFunctionCall(event: FunctionCallRequestEvent): Promise<void> {
-    // Survey creation doesn't use function calling
-    // Respond with a no-op to not block the agent
-    this.voiceAgent?.sendFunctionCallResponse(
-      event.function_call_id,
-      event.function_name,
-      JSON.stringify({ status: "ok" })
-    );
-  }
 
   protected async handleControlMessage(message: any): Promise<void> {
     switch (message.type) {
@@ -178,7 +238,11 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
         break;
 
       case "start_conversation":
-        console.log(`[Survey Creation Voice] Received 'start_conversation'. History length: ${this.state.messages.length}`);
+        console.log(`[Survey Creation Voice] Received 'start_conversation'. Reloading state to ensure fresh context...`);
+        // Reload state to get latest domain/messages from DB (e.g. if updated via REST API or text chat)
+        await this.loadExistingState();
+        
+        console.log(`[Survey Creation Voice] State reloaded. History length: ${this.state.messages.length}`);
         // Connect the Voice Agent (with greeting if new session)
         await this.connectVoiceAgent();
         console.log("[Survey Creation Voice] connectVoiceAgent() completed (or initiated)");
@@ -285,7 +349,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       const { collectedInfo, ...extractedData } = parsed as any;
 
       this.state.collectedInfo = collectedInfo;
-
+      
       await db.update(surveyCreationConversations)
         .set({
           extractedData: extractedData,

@@ -129,6 +129,7 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
 
         // Send Settings message immediately on connection
         this.sendSettings();
+        this.startKeepAlive();
         resolve();
       });
 
@@ -145,8 +146,9 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
       });
 
       this.ws.on("close", (code, reason) => {
-        console.log(`[VoiceAgent] WebSocket closed: Code=${code} Reason=${reason}`);
+        console.log(`[VoiceAgent] WebSocket closed: Code=${code} Reason=${reason.toString()}`);
         this.isConnected = false;
+        this.stopKeepAlive();
         this.emit("close", code, reason.toString());
       });
     });
@@ -195,14 +197,11 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
     }
   }
 
-  /**
-   * Inject a text message as if the user spoke it
-   */
   sendInjectUserMessage(text: string): void {
     console.log(`[VoiceAgent] Injecting user message: "${text}"`);
     this.sendJson({
       type: "InjectUserMessage",
-      message: text,
+      content: text,
     });
   }
 
@@ -305,7 +304,7 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         break;
 
       case "AgentThinking":
-        this.emit("agentThinking");
+        this.emit("agentThinking", message.content);
         break;
 
       case "AgentStartedSpeaking":
@@ -317,20 +316,35 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         break;
 
       case "FunctionCallRequest":
-        // V1 schema: { type: "FunctionCallRequest", functions: [{ id, name, arguments, ... }] }
-        if (message.functions && message.functions.length > 0) {
-          const fn = message.functions[0];
-          this.emit("functionCallRequest", {
-            function_call_id: fn.id,
-            function_name: fn.name,
-            input: fn.arguments ? JSON.parse(fn.arguments) : {},
-          } as FunctionCallRequestEvent);
+        // V1 schema: { type: "FunctionCallRequest", functions: [{ id, name, arguments, client_side, ... }] }
+        if (message.functions && Array.isArray(message.functions)) {
+          for (const fn of message.functions) {
+            // Only emit if it's a client-side function
+            if (fn.client_side) {
+              this.emit("functionCallRequest", {
+                function_call_id: fn.id,
+                function_name: fn.name,
+                input: fn.arguments ? JSON.parse(fn.arguments) : {},
+              } as FunctionCallRequestEvent);
+            } else {
+              // Server-side function (handled internally by Deepgram or not relevant to client)
+              console.log(`[VoiceAgent] Server-side function call received (ignoring): ${fn.name}`);
+            }
+          }
         }
         break;
 
       case "Error":
         console.error("[VoiceAgent] Error from Deepgram:", message);
-        this.emit("error", new Error(message.message || JSON.stringify(message)));
+        this.emit("error", {
+          description: message.description || JSON.stringify(message),
+          code: message.code
+        });
+        break;
+
+      case "Warning":
+        console.warn("[VoiceAgent] Warning from Deepgram:", message);
+        this.emit("warning", message);
         break;
 
       default:
@@ -355,6 +369,16 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
       clearInterval(this.keepAliveInterval);
       this.keepAliveInterval = null;
     }
+  }
+
+  /**
+   * Start sending KeepAlive messages
+   */
+  private startKeepAlive(): void {
+    this.stopKeepAlive();
+    this.keepAliveInterval = setInterval(() => {
+      this.sendJson({ type: "KeepAlive" });
+    }, KEEP_ALIVE_INTERVAL_MS);
   }
 }
 
@@ -387,12 +411,9 @@ export function buildVoiceAgentSettings(options: {
         provider: { type: "deepgram", model: "nova-3" },
       },
       think: {
-        // Deepgram requirement for Custom Google endpoints: 
-        // 1. Model name must be in the URL
-        // 2. Model name must NOT be in the provider settings
         provider: { type: "google" }, 
         endpoint: {
-          url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash`,
+          url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse`,
           headers: { "x-goog-api-key": googleApiKey || "" },
         },
         prompt: systemPrompt,
