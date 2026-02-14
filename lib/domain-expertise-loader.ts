@@ -178,7 +178,7 @@ export interface DomainExpertise {
 // Domain Expertise Data
 // ============================================================================
 
-const DOMAIN_EXPERTISE: Record<number, DomainExpertise> = {
+export const DOMAIN_EXPERTISE: Record<number, DomainExpertise> = {
   // Domain 1: Customer Experience & Satisfaction
   1: {
     id: 1,

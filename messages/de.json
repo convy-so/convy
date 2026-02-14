@@ -38,8 +38,9 @@
             "Status": {
                 "AISpeaking": "AI Speaking",
                 "Listening": "Listening",
-                "Ready": "Ready",
-                "TapToPause": "Tap to Pause",
+                "Ready": "Bereit",
+                "Speaking": "Spricht",
+                "TapToPause": "Zum Pausieren tippen",
                 "TapToSpeak": "Tap to Speak"
             },
             "Completion": {
@@ -54,8 +55,9 @@
                 "Finalizing": "Finalizing..."
             },
             "Input": {
-                "Placeholder": "Describe your survey goals...",
-                "AddMedia": "Add Context/Media",
+                "Placeholder": "Beschreiben Sie Ihre Umfrageziele...",
+                "PlaceholderLocked": "Wählen Sie oben ein Thema, um zu beginnen...",
+                "AddMedia": "Kontext/Medien hinzufügen",
                 "Send": "Send"
             },
             "SuggestedPrompts": {

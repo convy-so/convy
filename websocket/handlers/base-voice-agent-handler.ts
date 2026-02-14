@@ -70,6 +70,11 @@ export abstract class BaseVoiceAgentHandler {
   /** Get the language for this session */
   protected abstract getLanguage(): SupportedLanguage;
 
+  /** Get optional initial user input to trigger AI generation (e.g. "Start conversation") */
+  protected getInitialUserInput(): string | null {
+    return null;
+  }
+
   /** Build the Voice Agent settings for this session */
   protected abstract getVoiceAgentSettings(): Promise<VoiceAgentSettings>;
 
@@ -186,17 +191,28 @@ export abstract class BaseVoiceAgentHandler {
     this.voiceAgent.on("settingsApplied", () => {
       console.log(`[VoiceAgentHandler] Voice Agent settings applied for ${this.identifier}`);
       
-      // Inject greeting if configured
+      // 1. Static Greeting (Instant, TTS only)
       const greeting = this.getGreeting();
       if (greeting) {
-        console.log(`[VoiceAgentHandler] Injecting greeting: "${greeting}"`);
+        console.log(`[VoiceAgentHandler] Injecting static greeting: "${greeting}"`);
         this.voiceAgent?.sendInjectAgentMessage(greeting);
+      }
+
+      // 2. Initial User Input (Triggers LLM generation)
+      // Used for scenarios where the AI must "start" the conversation dynamically
+      const initialInput = this.getInitialUserInput();
+      if (initialInput) {
+        console.log(`[VoiceAgentHandler] Injecting initial user input: "${initialInput}"`);
+        // Small delay to ensure greeting (if any) is queued first, though usually sequential
+        setTimeout(() => {
+            this.voiceAgent?.sendInjectUserMessage(initialInput);
+        }, 100);
       }
     });
 
-    this.voiceAgent.on("error", (error: Error) => {
+    this.voiceAgent.on("error", (error: { description: string; code?: string }) => {
       console.error(`[VoiceAgentHandler] Voice Agent error (${this.identifier}):`, error);
-      this.sendError("Voice agent error: " + error.message);
+      this.sendError("Voice agent error: " + error.description, error.code);
     });
 
     this.voiceAgent.on("close", () => {
@@ -319,12 +335,12 @@ export abstract class BaseVoiceAgentHandler {
     }
   }
 
-  protected sendError(message: string, code?: string): void {
+  protected sendError(description: string, code?: string): void {
     if (code) {
-      const voiceError = createVoiceError(code as any, message);
+      const voiceError = createVoiceError(code as any, description);
       sendVoiceError(this.send.bind(this), voiceError);
     } else {
-      this.send({ type: "error", error: message, code: code || "UNKNOWN_ERROR" });
+      this.send({ type: "error", description, code: code || "UNKNOWN_ERROR" });
     }
   }
 

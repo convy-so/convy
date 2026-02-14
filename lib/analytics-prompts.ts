@@ -112,7 +112,7 @@ Output:
 
 <extraction_rules>
 - Use exact question text for requiredQuestionsCovered/Missed
-- Extract 3-5 most insightful quotes maximum
+- Extract 3-5 most insightful quotes maximum. QUOTES MUST BE SELF-EXPLANATORY and meaningful. Avoid "Yes", "I agree", or short snippets.
 - Use actual metric names as keys
 - If metric undetermined, use "not_determined"
 - For respondentData: Extract specific personal info (name, email, job title, etc.) if requested by the creator and provided by the participant. Map the creator's label (e.g., "Full Name") to the participant's answer.
@@ -210,7 +210,7 @@ ${config.media
   return `You are a senior survey analytics expert. Aggregate these ${totalConversations} conversation insights into comprehensive survey analytics.
 
 SURVEY CONTEXT:
-- Title: ${config.information}
+- Title: ${config.information || "Untitled Survey"}
 - Goal: ${config.objective?.goal || "Gather participant feedback"}
 - Target Audience: ${config.targetAudience?.description || "General participants"}
 - Success Criteria: ${config.successCriteria?.description || "Quality insights"}
@@ -251,8 +251,8 @@ Generate comprehensive analytics in this exact JSON structure:
   "executiveSummary": {
     "headline": "One powerful sentence summarizing the most important finding",
     "keyInsights": [
-      "Top insight 1 - actionable and specific",
-      "Top insight 2",
+      "Top insight 1 - explanation + 'because' statement + concrete example",
+      "Top insight 2 - explanation + 'because' statement + concrete example",
       "Top insight 3",
       "Top insight 4",
       "Top insight 5"
@@ -318,7 +318,7 @@ Generate comprehensive analytics in this exact JSON structure:
         "id": "trend_1",
         "type": "trend" | "pattern" | "correlation",
         "title": "Short title",
-        "description": "Detailed description of the pattern",
+        "description": "Detailed description of the pattern including WHY it is happening",
         "frequency": 8,
         "frequencyPercentage": 80.0,
         "significance": "high" | "medium" | "low",
@@ -478,21 +478,14 @@ Generate comprehensive analytics in this exact JSON structure:
 }
 
 CRITICAL INSTRUCTIONS:
-1. For creatorMetrics: Create one entry for EACH metric the survey creator defined. Aggregate values across all conversations.
-2. For hypothesisValidations: Create one entry for EACH hypothesis. Include all evidence from conversations.
-3. For trends: Look for patterns across multiple conversations (things appearing in 3+ conversations).
-4. For outliers: Identify 1-3 responses that stand out as unusual or particularly insightful.
-5. For recommendations: Provide 3-5 actionable recommendations based on the data.
-6. For emergentTopics: Identify topics that participants brought up that WEREN'T explicitly asked about.
-7. Use actual quotes and conversation IDs from the data.
-8. Assign appropriate chart types based on the data (pie for categories, bar for comparisons, etc.)
-9. Color suggestions: Use positive colors (#22c55e green) for positive values, (#ef4444 red) for negative, (#3b82f6 blue) for neutral.
-10. For mediaAnalytics: ONLY include if the survey has media assets. Analyze each media's effectiveness based on:
-    - How often it was shown vs available
-    - How participants reacted to it
-    - What insights it generated
-    - Any issues or confusion it caused
-    - Provide specific recommendations for each underperforming media
+1.  **EXPLANATORY INSIGHTS**: Do not just state facts. Explain WHY participants think this way. Use "because" or "due to" constructions.
+    *   BAD: "Participants liked the feature."
+    *   GOOD: "Participants liked the feature *because* it saved them time, as exemplified by users who mentioned 'cutting 15 minutes off their workflow'."
+2.  **CONCRETE EXAMPLES**: Every major insight MUST include a short, specific examle or quote snippet in the text itself.
+3.  **SPECIFIC QUOTES**: For \`supportingQuotes\`, choose meaningful, full sentences that clearly illustrate the point. Avoid generic phrases like "It was good".
+4.  **For executiveSummary.keyInsights**: Provide 5 distinct, high-impact findings. Each finding must be a full sentence explaining WHAT, WHY, and WHO.
+5.  **For discoveredInsights.trends**: Look for subtle patterns. Explain the trend with depth.
+6.  **Avoid Vague Language**: Words like "some", "many", "interesting" are banned unless followed by specific numbers or reasons.
 
 Return ONLY the JSON object, no additional text.`;
 }

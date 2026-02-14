@@ -99,24 +99,36 @@ export function getSurveyCreationSystemPrompt(
 
   const allRequiredCollected = uncollectedRequired.length === 0;
   
+  const uncollectedOptional = optionalFields.filter(
+    ([key]) => !collectedInfo[key as keyof CollectedInfo]
+  );
+  
   // Determine current phase with priority order
   let phase: string;
   let instruction: string;
   
   if (!collectedInfo.subjectDefined) {
     phase = "SUBJECT_IDENTIFICATION";
-    instruction = "Ask: 'What specific product, service, or experience is this survey about?' Require concrete answers like 'our mobile banking app' or 'the hospital discharge process'. Reject vague answers.";
+    instruction = "Ask: 'What specific product, service, or experience is this survey about?'";
   } else if (!collectedInfo.domainIdentified) {
     phase = "DOMAIN_CLASSIFICATION";
     instruction = "Classify into one of 10 domains based on subject. Ask clarifying questions if ambiguous.";
   } else if (!allRequiredCollected) {
     const [nextKey, nextInfo] = uncollectedRequired[0];
-    phase = "GATHERING_INFO";
+    phase = "GATHERING_REQUIRED_INFO";
     instruction = `Topic: "${nextKey}". Description: ${nextInfo.description}. 
-    Instruction: Ask the user about this topic. Be professional but conversational. If the user provides info for multiple topics at once, acknowledge them but ensure this specific topic is clear. If the user wants to skip or has nothing to add, mark it as collected but acknowledge their preference.`;
+    Instruction: Ask the user about this topic. Be professional but conversational.`;
+  } else if (uncollectedOptional.length > 0) {
+    // New phase for optional fields
+    const [nextKey, nextInfo] = uncollectedOptional[0];
+    phase = "GATHERING_OPTIONAL_INFO";
+    instruction = `Topic: "${nextKey}" (Optional). Description: ${nextInfo.description}.
+    Instruction: Ask the user if they want to provide this information. seamlessley integrate it into the conversation.
+    Example phrasing: "Would you like to add specific ${nextKey == 'requiredQuestions' ? 'questions' : nextKey}?" or "Do you need to collect ${nextKey}?"
+    If they say no or skip it, mark it as collected so we move on.`;
   } else {
     phase = "COMPLETE";
-    instruction = "Briefly summarize all collected survey parameters. Then say: 'I have everything I need! Please click the Go to Sample Conversations button below to test your survey.' DO NOT ask any more questions.";
+    instruction = "Briefly summarize all collected survey parameters. Then call the 'finishSurvey' tool to wrap up. DO NOT ask any more questions.";
   }
 
   // Build domain expertise context

@@ -123,9 +123,7 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
 
         ws.onclose = (event) => {
             console.log("[Voice WS] WebSocket CLOSED:", { code: event.code, reason: event.reason, wasClean: event.wasClean });
-            if (status !== "error") {
-                setStatus("disconnected");
-            }
+            setStatus(prev => prev !== "error" ? "disconnected" : prev);
             if (event.reason) {
                 setError(event.reason);
             }
@@ -254,6 +252,7 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
         
         setIsPlaying(true);
         isPlayingRef.current = true;
+        setHasAudioPlayed(true);
 
         // Reset playing state when this chunk ends (approximate, for UI)
         // In a real stream, we might stay "playing" until silence.
