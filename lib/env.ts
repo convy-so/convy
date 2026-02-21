@@ -17,7 +17,7 @@ const optional = (key: string): string | undefined => {
   return process.env[key];
 };
 
-const betterAuthUrl = optional("BETTER_AUTH_URL")|| "http://localhost:3000";
+const betterAuthUrl = optional("BETTER_AUTH_URL") || "http://localhost:3000";
 
 export const env = {
   NODE_ENV: process.env.NODE_ENV ?? "development",
@@ -35,21 +35,12 @@ export const env = {
   UPSTASH_REDIS_REST_TOKEN: required("UPSTASH_REDIS_REST_TOKEN"),
   NEXT_PUBLIC_SUPABASE_URL: required("NEXT_PUBLIC_SUPABASE_URL"),
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: required(
-    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
   ),
-  // Notion Integration (Optional - for fallback)
-  NOTION_API_KEY: optional("NOTION_API_KEY"),
-  // Notion OAuth Integration
-  NOTION_CLIENT_ID: optional("NOTION_CLIENT_ID"),
-  NOTION_CLIENT_SECRET: optional("NOTION_CLIENT_SECRET"),
-  NOTION_REDIRECT_URI: optional("NOTION_REDIRECT_URI"),
+  convy_supabase_secret_key: required("convy_supabase_secret_key"),
+
   // Encryption for tokens
   ENCRYPTION_KEY: optional("ENCRYPTION_KEY"),
-
-  // Slack OAuth Integration
-  SLACK_CLIENT_ID: optional("SLACK_CLIENT_ID"),
-  SLACK_CLIENT_SECRET: optional("SLACK_CLIENT_SECRET"),
-  SLACK_REDIRECT_URI: optional("SLACK_REDIRECT_URI"),
 
   // Voice/WebSocket Configuration
   WEBSOCKET_PORT: optional("WEBSOCKET_PORT") || "3001",
@@ -60,22 +51,6 @@ export const env = {
   VAD_SENSITIVITY: optional("VAD_SENSITIVITY") || "0.5",
   MAX_AUDIO_DURATION_MS: optional("MAX_AUDIO_DURATION_MS") || "300000", // 5 minutes
 
-  // Zapier Integration
-  ZAPIER_EMBED_ID: optional("ZAPIER_EMBED_ID"),
-
-  // Billing / Payments - Stripe
-  // Billing / Payments - Lemon Squeezy
-  LEMONSQUEEZY_API_KEY: optional("LEMONSQUEEZY_API_KEY"),
-  LEMONSQUEEZY_STORE_ID: optional("LEMONSQUEEZY_STORE_ID"),
-  LEMONSQUEEZY_WEBHOOK_SECRET: optional("LEMONSQUEEZY_WEBHOOK_SECRET"),
-
-  // Billing / Payments - Coinbase Commerce (CDP Keys)
-  COINBASE_CDP_API_KEY_NAME: optional("COINBASE_CDP_API_KEY_NAME"),
-  COINBASE_CDP_API_KEY_PRIVATE_KEY: optional("COINBASE_CDP_API_KEY_PRIVATE_KEY"),
-  COINBASE_COMMERCE_WEBHOOK_SECRET: optional(
-    "COINBASE_COMMERCE_WEBHOOK_SECRET"
-  ),
-
   // Application base URL (for public links & embeds), e.g. https://app.convy.com
   APP_BASE_URL: optional("APP_BASE_URL") || "http://localhost:3000",
   betterAuthUrl: optional("BETTER_AUTH_URL") || "http://localhost:3000",
@@ -83,9 +58,10 @@ export const env = {
   // Better Auth Client URL (for frontend)
   NEXT_PUBLIC_BETTER_AUTH_URL:
     optional("NEXT_PUBLIC_BETTER_AUTH_URL") || betterAuthUrl,
-    
-  NEXT_PUBLIC_WEBSOCKET_URL: optional("NEXT_PUBLIC_WEBSOCKET_URL") || "ws://localhost:3001",
-  
+
+  NEXT_PUBLIC_WEBSOCKET_URL:
+    optional("NEXT_PUBLIC_WEBSOCKET_URL") || "ws://localhost:3001",
+
   // External Tools
   FFMPEG_PATH: optional("FFMPEG_PATH"),
 };

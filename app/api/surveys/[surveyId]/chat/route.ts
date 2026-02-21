@@ -1,10 +1,9 @@
 import { nanoid } from "nanoid";
 import { eq } from "drizzle-orm";
-import { streamText, stepCountIs } from "ai";
+import { stepCountIs } from "ai";
 
 import { db } from "@/db";
 import { surveyConversations, surveys } from "@/db/schema";
-import { defaultModel } from "@/lib/ai";
 import { chatRateLimiter, getClientIP } from "@/lib/ratelimit";
 import {
   logPromptInjectionAttempt,
@@ -12,12 +11,14 @@ import {
 } from "@/lib/prompt-injection-detection";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import { ConversationManager } from "@/lib/conversation-manager";
+import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
+import type { AgentContext } from "@/lib/agents/types";
 
 export const maxDuration = 300;
 
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ surveyId: string }> }
+  { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
     const clientIP = getClientIP(request);
@@ -38,14 +39,14 @@ export async function POST(
             "X-RateLimit-Remaining": rateLimitResult.remaining.toString(),
             "X-RateLimit-Reset": rateLimitResult.reset.toString(),
           },
-        }
+        },
       );
     }
 
     const { surveyId } = await params;
     const body = await request.json();
     const { messages, conversationId } = body as {
-      messages: Array<{ role: "user" | "assistant"; content: string }>;
+      messages: Array<any>;
       conversationId?: string;
     };
 
@@ -114,14 +115,7 @@ export async function POST(
     const context = await ConversationManager.loadOrCreateContext(
       convId,
       sanitizedMessages,
-      surveyConfig
-    );
-
-    // Generate system prompt with context injection using Manager
-    const systemPrompt = ConversationManager.getSystemPrompt(
       surveyConfig,
-      context,
-      { language: survey.language }
     );
 
     // Use the compressed messages for the AI call
@@ -130,41 +124,102 @@ export async function POST(
         ? context.recentMessages
         : sanitizedMessages;
 
-    // Define tools for the AI to call using Manager
-    const tools = ConversationManager.getTools(surveyConfig);
+    // --- AGENT INTEGRATION: Use ConductingSpecialist for agentic behavior ---
+    const agentContext: AgentContext = {
+      conversationId: convId,
+      messages: messagesForAI as any,
+      surveyConfig,
+      rollingContext: context,
+      language: survey.language as "en" | "fr" | "de" | "es" | "it" | undefined,
+    };
 
-    const result = streamText({
-      model: defaultModel,
-      messages: messagesForAI,
-      system: systemPrompt,
-      temperature: 0.7,
-      maxOutputTokens: 2000,
-      tools,
-      stopWhen: stepCountIs(5), // Enable multi-step agent behavior with AI SDK v6
-    });
+    const conductingAgent = new ConductingSpecialist(agentContext);
+
+    // Preload pattern learnings and skills for the agent
+    await Promise.all([
+      conductingAgent.preloadSkills(),
+      conductingAgent.preloadPatternLearnings(
+        ["questioning", "probing", "engagement"],
+        2,
+      ),
+    ]).catch((error) =>
+      console.warn("[Chat Route] Failed to preload agent capabilities:", error),
+    );
+
+    // Use the agent's stream method which includes domain expertise, checklist, and tools
+    // Pass onFinish callback for persistence
+    const result = conductingAgent.stream(
+      messagesForAI as any,
+      undefined, // onMediaDisplay - not needed for text chat
+      async ({ text, response }) => {
+        // Persistence logic for participant chat
+        try {
+          const assistantMessage = response.messages.find(
+            (m: any) => m.role === "assistant",
+          );
+
+          const [currentConv] = await db
+            .select()
+            .from(surveyConversations)
+            .where(eq(surveyConversations.id, convId!));
+
+          if (currentConv) {
+            const currentMessages = currentConv.rawConversation as Array<any>;
+            const updatedMessages = [
+              ...currentMessages,
+              {
+                role: "assistant" as const,
+                content: text,
+                parts:
+                  (assistantMessage as any)?.content &&
+                  Array.isArray((assistantMessage as any).content)
+                    ? (assistantMessage as any).content
+                    : undefined,
+                timestamp: new Date().toISOString(),
+              },
+            ];
+
+            await db
+              .update(surveyConversations)
+              .set({
+                rawConversation: updatedMessages,
+              })
+              .where(eq(surveyConversations.id, convId!));
+          }
+        } catch (error) {
+          console.error(
+            "Error saving participant conversation message:",
+            error,
+          );
+        }
+      },
+    );
 
     // Trigger async memory update (non-blocking) using Manager
-    ConversationManager.updateMemoryAsync(convId, sanitizedMessages, surveyConfig, context).catch(
-      console.error
-    );
+    ConversationManager.updateMemoryAsync(
+      convId,
+      sanitizedMessages,
+      surveyConfig,
+      context,
+    ).catch(console.error);
 
     // Save updated context to Redis using Manager
     await ConversationManager.saveContext(convId, context);
 
-    const response = result.toTextStreamResponse();
+    const response = result.toUIMessageStreamResponse();
     response.headers.set("X-Conversation-Id", convId);
     response.headers.set(
       "X-Conversation-Progress",
-      context.progress.completionPercentage.toString()
+      context.progress.completionPercentage.toString(),
     );
     response.headers.set(
       "X-Conversation-State",
-      context.stateContext.currentState
+      context.stateContext.currentState,
     );
     response.headers.set("X-RateLimit-Limit", "20");
     response.headers.set(
       "X-RateLimit-Remaining",
-      rateLimitResult.remaining.toString()
+      rateLimitResult.remaining.toString(),
     );
     response.headers.set("X-RateLimit-Reset", rateLimitResult.reset.toString());
     return response;
@@ -179,18 +234,14 @@ export async function POST(
  */
 export async function PUT(
   request: Request,
-  { params }: { params: Promise<{ surveyId: string }> }
+  { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
     const { surveyId } = await params;
     const body = await request.json();
     const { conversationId, messages, completed } = body as {
       conversationId: string;
-      messages: Array<{
-        role: "user" | "assistant";
-        content: string;
-        timestamp?: string;
-      }>;
+      messages: Array<any>;
       completed?: boolean;
     };
 
@@ -212,7 +263,7 @@ export async function PUT(
       .filter((m) => m.timestamp)
       .sort(
         (a, b) =>
-          new Date(a.timestamp!).getTime() - new Date(b.timestamp!).getTime()
+          new Date(a.timestamp!).getTime() - new Date(b.timestamp!).getTime(),
       );
 
     let durationMs = 0;
@@ -222,7 +273,7 @@ export async function PUT(
     if (sortedMessages.length > 1) {
       const startTime = new Date(sortedMessages[0].timestamp!).getTime();
       const endTime = new Date(
-        sortedMessages[sortedMessages.length - 1].timestamp!
+        sortedMessages[sortedMessages.length - 1].timestamp!,
       ).getTime();
       durationMs = endTime - startTime;
 
@@ -231,10 +282,10 @@ export async function PUT(
         const prevTime = new Date(sortedMessages[i - 1].timestamp!).getTime();
         const currTime = new Date(sortedMessages[i].timestamp!).getTime();
         const gap = currTime - prevTime;
-        
+
         // Only valid positive gaps
         if (gap > 0) {
-            activeDurationMs += Math.min(gap, MAX_ACTIVE_GAP_MS);
+          activeDurationMs += Math.min(gap, MAX_ACTIVE_GAP_MS);
         }
       }
     }
@@ -243,8 +294,10 @@ export async function PUT(
       .update(surveyConversations)
       .set({
         rawConversation: messages.map((msg) => ({
+          id: msg.id,
           role: msg.role,
           content: msg.content,
+          parts: msg.parts,
           timestamp: msg.timestamp || new Date().toISOString(),
         })),
         completed: completed ?? false,
@@ -264,36 +317,11 @@ export async function PUT(
           userId: survey.userId,
         });
         console.log(
-          `[Chat Route] Enqueued conversation insights for conversation ${conversationId}`
+          `[Chat Route] Enqueued conversation insights for conversation ${conversationId}`,
         );
       } catch (error) {
         console.error("Failed to enqueue conversation insights:", error);
         // Don't fail the conversation save if insights enqueue fails
-      }
-
-      // Trigger Slack auto-post for new conversation
-      try {
-        const { autoPostNewConversation } = await import("@/app/actions/slack");
-        autoPostNewConversation(survey.userId, survey.id, conversationId).catch(
-          (error) => {
-            console.error("Failed to auto-post conversation to Slack:", error);
-            // Don't fail the conversation save if Slack post fails
-          }
-        );
-      } catch (error) {
-        console.error("Failed to import Slack auto-post function:", error);
-      }
-
-      // Trigger Zapier webhook for new conversation
-      try {
-        const { triggerNewConversationWebhook } = await import("@/lib/zapier/webhook-delivery");
-        triggerNewConversationWebhook(conversationId, survey.id, survey.userId).catch(
-          (error) => {
-            console.error("Failed to trigger Zapier new conversation webhook:", error);
-          }
-        );
-      } catch (error) {
-        console.error("Failed to import Zapier webhook function:", error);
       }
     }
 

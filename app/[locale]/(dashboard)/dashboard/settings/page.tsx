@@ -5,7 +5,7 @@ import {
     User,
     Bell,
     Shield,
-    CreditCard,
+
     Key,
     Mail,
     Smartphone,
@@ -30,18 +30,17 @@ export default function SettingsPage() {
     const pathname = usePathname();
     const currentLocale = useLocale();
     const t = useTranslations('Settings');
-    
+
     const [activeTab, setActiveTab] = useState("profile");
     const [isSaving, setIsSaving] = useState(false);
     const [profileImage, setProfileImage] = useState<string | null>(null);
 
     const tabs = [
         { id: "profile", name: t('Tabs.Profile'), icon: User },
-        { id: "workspace", name: t('Tabs.Workspace'), icon: Key }, 
+        { id: "workspace", name: t('Tabs.Workspace'), icon: Key },
         { id: "notifications", name: t('Tabs.Notifications'), icon: Bell },
         { id: "preferences", name: t('Tabs.Preferences'), icon: Globe },
         { id: "security", name: t('Tabs.Security'), icon: Shield },
-        { id: "billing", name: t('Tabs.Billing'), icon: CreditCard },
     ];
 
     // Profile state
@@ -259,9 +258,9 @@ export default function SettingsPage() {
                                 <div className="flex items-center gap-5">
                                     <div className="relative">
                                         {profileImage || profile.image ? (
-                                            <img 
-                                                src={profileImage || profile.image} 
-                                                alt="Profile" 
+                                            <img
+                                                src={profileImage || profile.image}
+                                                alt="Profile"
                                                 className="w-20 h-20 rounded-2xl object-cover"
                                             />
                                         ) : (
@@ -291,7 +290,7 @@ export default function SettingsPage() {
                                     <div>
                                         <p className="font-medium text-gray-900">{profile.name}</p>
                                         <p className="text-sm text-gray-500">{profile.email}</p>
-                                        <button 
+                                        <button
                                             onClick={() => setProfileImage(null)}
                                             className="text-xs text-red-500 hover:text-red-600 mt-1"
                                             style={{ display: profileImage ? 'block' : 'none' }}
@@ -370,9 +369,9 @@ export default function SettingsPage() {
                                         <div className="flex items-center gap-5">
                                             <div className="relative">
                                                 {wsLogo ? (
-                                                    <img 
-                                                        src={wsLogo} 
-                                                        alt="Workspace Logo" 
+                                                    <img
+                                                        src={wsLogo}
+                                                        alt="Workspace Logo"
                                                         className="w-16 h-16 rounded-xl object-cover border border-gray-100"
                                                     />
                                                 ) : (
@@ -403,7 +402,7 @@ export default function SettingsPage() {
                                                 <p className="font-medium text-gray-900">{t('Workspace.Logo')}</p>
                                                 <p className="text-xs text-gray-500">{t('Workspace.LogoHint')}</p>
                                                 {wsLogo && (
-                                                    <button 
+                                                    <button
                                                         onClick={() => setWsLogo(null)}
                                                         className="text-xs text-red-500 hover:text-red-600 mt-1"
                                                     >
@@ -659,7 +658,7 @@ export default function SettingsPage() {
                                     </div>
                                 </div>
                                 <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
-                                    <button 
+                                    <button
                                         onClick={handlePasswordUpdate}
                                         disabled={isSaving}
                                         className="px-5 py-2.5 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center gap-2"
@@ -711,55 +710,6 @@ export default function SettingsPage() {
                                         <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
                                             {t('Security.Delete.Button')}
                                         </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Billing Tab */}
-                    {activeTab === "billing" && (
-                        <div className="space-y-6">
-                            {/* Current Plan */}
-                            <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 text-white">
-                                <div className="flex items-start justify-between mb-4">
-                                    <div>
-                                        <p className="text-sm text-gray-300 mb-1">{t('Billing.Plan')}</p>
-                                        <h2 className="text-2xl font-bold">Enterprise (Test Mode)</h2>
-                                    </div>
-                                    <span className="px-3 py-1 bg-white/10 rounded-full text-sm font-medium">
-                                        {t('Billing.Active')}
-                                    </span>
-                                </div>
-                                <p className="text-gray-300 mb-6">
-                                    {t('Billing.Description')}
-                                </p>
-                                <button disabled className="w-full py-3 bg-gray-600 text-gray-300 rounded-xl font-semibold cursor-not-allowed">
-                                    {t('Billing.Disabled')}
-                                </button>
-                            </div>
-
-                            {/* Usage */}
-                            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                                <h3 className="font-semibold text-gray-900 mb-4">{t('Billing.Usage')}</h3>
-                                <div className="space-y-4">
-                                    <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="text-sm text-gray-600">{t('Billing.Surveys')}</span>
-                                            <span className="text-sm font-medium text-gray-900">{t('Billing.Unlimited')}</span>
-                                        </div>
-                                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                            <div className="h-full w-full bg-blue-500 rounded-full" />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="text-sm text-gray-600">{t('Billing.Responses')}</span>
-                                            <span className="text-sm font-medium text-gray-900">{t('Billing.Unlimited')}</span>
-                                        </div>
-                                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                            <div className="h-full w-full bg-purple-500 rounded-full" />
-                                        </div>
                                     </div>
                                 </div>
                             </div>

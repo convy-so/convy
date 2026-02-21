@@ -1,14 +1,14 @@
 /**
- * PCM Audio Worklet Processor with Downsampling and 80ms Buffering
+ * PCM Audio Worklet Processor with 80ms Buffering
  * 
  * DEEPGRAM FLUX OPTIMIZATIONS:
- * 1. Downsamples from 48kHz to 16kHz using 3:1 integer decimation
+ * 1. Receives 16kHz audio directly (Native Browser Resampling)
  * 2. Buffers audio to send in ~80ms chunks (2560 bytes at 16kHz)
  * 
  * Why 16kHz?
  * - Deepgram Flux is optimized for 16kHz audio
- * - Reduces bandwidth by 3x without quality loss (speech is 300-3400Hz)
- * - 48kHz -> 16kHz is a clean 3:1 ratio (no interpolation needed)
+ * - Reduces bandwidth significantly
+ * - Browser handles high-quality resampling from hardware rate (44.1/48kHz)
  * 
  * Why 80ms chunks?
  * - Deepgram Flux requires ~80ms chunks for optimal turn detection
@@ -23,9 +23,6 @@ class PCMProcessor extends AudioWorkletProcessor {
     this.targetSamples16k = 1280;
     this.buffer16k = new Int16Array(this.targetSamples16k);
     this.bufferIndex = 0;
-    
-    // Decimation counter (take every 3rd sample for 48kHz -> 16kHz)
-    this.decimationCounter = 0;
     
     this.port.onmessage = (event) => {
       if (event.data.command === 'stop') {
@@ -44,8 +41,8 @@ class PCMProcessor extends AudioWorkletProcessor {
   }
 
   /**
-   * Process audio input with downsampling and buffering
-   * Called for each 128-sample audio block at native sample rate (typically 48kHz)
+   * Process audio input with buffering (Input is already 16kHz from AudioContext)
+   * Called for each 128-sample audio block
    */
   process(inputs, outputs, parameters) {
     if (this.stopped) return false;
@@ -58,9 +55,7 @@ class PCMProcessor extends AudioWorkletProcessor {
 
     // Process each sample
     for (let i = 0; i < inputChannel.length; i++) {
-      // 3:1 decimation: only process every 3rd sample
-      // Assumes 48kHz input -> 16kHz output
-      if (this.decimationCounter === 0) {
+        // Input is already 16kHz, so we process every sample
         // Convert to 16-bit PCM and store
         const pcmSample = this.floatTo16Bit(inputChannel[i]);
         this.buffer16k[this.bufferIndex] = pcmSample;
@@ -70,10 +65,6 @@ class PCMProcessor extends AudioWorkletProcessor {
         if (this.bufferIndex >= this.targetSamples16k) {
           this.sendBuffer();
         }
-      }
-
-      // Increment and wrap decimation counter
-      this.decimationCounter = (this.decimationCounter + 1) % 3;
     }
 
     return true;

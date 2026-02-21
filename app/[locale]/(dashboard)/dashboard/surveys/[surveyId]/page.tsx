@@ -7,7 +7,6 @@ import { Link, useRouter } from "@/i18n/routing";
 import * as XLSX from "xlsx";
 import {
   ArrowLeft,
-  BarChart3,
   MessageSquare,
   Sparkles,
   Users,
@@ -17,7 +16,6 @@ import {
   Play,
   Pause,
   Copy,
-  ExternalLink,
   TrendingUp,
   Calendar,
   Mic,
@@ -130,12 +128,12 @@ export default function SurveyDetailPage() {
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeletingSurvey, setIsDeletingSurvey] = useState(false);
-  
+
   const [embedCodes, setEmbedCodes] = useState<{
     iframeCode: string;
     inlineScriptSnippet: string;
     url: string;
-  } |null>(null);
+  } | null>(null);
   const [embedError, setEmbedError] = useState<string | null>(null);
   const [isLoadingEmbed, setIsLoadingEmbed] = useState(false);
   const [copiedEmbed, setCopiedEmbed] = useState<'iframe' | 'script' | null>(null);
@@ -173,51 +171,51 @@ export default function SurveyDetailPage() {
   const totalPages = responsesData?.pagination?.totalPages || 1;
 
   const handleExport = async () => {
-      const loadingToast = toast.loading(t("Toasts.ExportStarted"));
-      try {
-          // Fetch all data for export (high limit)
-          const response = await fetch(`/api/surveys/${surveyId}/responses?limit=10000&status=${statusFilter}`, {
-              credentials: "include",
-          });
-          
-          if (!response.ok) throw new Error("Failed to fetch data");
-          
-          const data = await response.json();
-          const responsesToExport = data.responses || [];
-          
-          if (responsesToExport.length === 0) {
-              toast.dismiss(loadingToast);
-              toast.error(t("Toasts.NoData"));
-              return;
-          }
+    const loadingToast = toast.loading(t("Toasts.ExportStarted"));
+    try {
+      // Fetch all data for export (high limit)
+      const response = await fetch(`/api/surveys/${surveyId}/responses?limit=10000&status=${statusFilter}`, {
+        credentials: "include",
+      });
 
-          // Format for Excel
-          const exportData = responsesToExport.map((r: any) => ({
-              "Participant ID": r.participantId,
-              "Status": r.status,
-              "Date": new Date(r.createdAt).toLocaleDateString(),
-              "Time": new Date(r.createdAt).toLocaleTimeString(),
-              "Duration": r.duration,
-              "Message Count": r.messageCount,
-              "Sentiment": r.sentiment || "N/A",
-              "Key Insights": r.keyInsights.join("; ")
-          }));
+      if (!response.ok) throw new Error("Failed to fetch data");
 
-          // Create workbook
-          const wb = XLSX.utils.book_new();
-          const ws = XLSX.utils.json_to_sheet(exportData);
-          XLSX.utils.book_append_sheet(wb, ws, "Responses");
-          
-          // Download
-          XLSX.writeFile(wb, `Survey_Responses_${surveyId}_${new Date().toISOString().split('T')[0]}.xlsx`);
-          
-          toast.dismiss(loadingToast);
-          toast.success(t("Toasts.ExportStarted"));
-      } catch (error) {
-          console.error("Export failed:", error);
-          toast.dismiss(loadingToast);
-          toast.error(t("Toasts.ExportFailed"));
+      const data = await response.json();
+      const responsesToExport = data.responses || [];
+
+      if (responsesToExport.length === 0) {
+        toast.dismiss(loadingToast);
+        toast.error(t("Toasts.NoData"));
+        return;
       }
+
+      // Format for Excel
+      const exportData = responsesToExport.map((r: any) => ({
+        "Participant ID": r.participantId,
+        "Status": r.status,
+        "Date": new Date(r.createdAt).toLocaleDateString(),
+        "Time": new Date(r.createdAt).toLocaleTimeString(),
+        "Duration": r.duration,
+        "Message Count": r.messageCount,
+        "Sentiment": r.sentiment || "N/A",
+        "Key Insights": r.keyInsights.join("; ")
+      }));
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      XLSX.utils.book_append_sheet(wb, ws, "Responses");
+
+      // Download
+      XLSX.writeFile(wb, `Survey_Responses_${surveyId}_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      toast.dismiss(loadingToast);
+      toast.success(t("Toasts.ExportStarted"));
+    } catch (error) {
+      console.error("Export failed:", error);
+      toast.dismiss(loadingToast);
+      toast.error(t("Toasts.ExportFailed"));
+    }
   };
 
 
@@ -226,23 +224,23 @@ export default function SurveyDetailPage() {
     setIsSavingSettings(true);
     const loadingToast = toast.loading(t("Settings.Saving"));
     try {
-        const response = await fetch(`/api/surveys/${surveyId}`, {
-            method: "PATCH",
-             headers: { "Content-Type": "application/json" },
-             body: JSON.stringify(settingsForm),
-        });
+      const response = await fetch(`/api/surveys/${surveyId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settingsForm),
+      });
 
-        if (response.ok) {
-            toast.success(t("Toasts.SettingsSaved"), { id: loadingToast });
-            // Invalidate survey query to refetch updated data
-            queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
-        } else {
-            toast.error(t("Toasts.SettingsFailed"), { id: loadingToast });
-        }
+      if (response.ok) {
+        toast.success(t("Toasts.SettingsSaved"), { id: loadingToast });
+        // Invalidate survey query to refetch updated data
+        queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
+      } else {
+        toast.error(t("Toasts.SettingsFailed"), { id: loadingToast });
+      }
     } catch (_) {
-        toast.error(t("Toasts.Error"), { id: loadingToast });
+      toast.error(t("Toasts.Error"), { id: loadingToast });
     } finally {
-        setIsSavingSettings(false);
+      setIsSavingSettings(false);
     }
   };
 
@@ -265,7 +263,7 @@ export default function SurveyDetailPage() {
       if (response.ok) {
         // Invalidate survey query to refetch updated data
         queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
-        toast.success(t("Toasts.StatusUpdated", {status: newStatus === "active" ? "resumed" : "paused"}));
+        toast.success(t("Toasts.StatusUpdated", { status: newStatus === "active" ? "resumed" : "paused" }));
       } else {
         toast.error(t("Toasts.StatusFailed"));
       }
@@ -290,8 +288,8 @@ export default function SurveyDetailPage() {
     } catch (_) {
       toast.error(t("Toasts.Error"));
     } finally {
-        setIsDeletingSurvey(false);
-        setShowDeleteModal(false);
+      setIsDeletingSurvey(false);
+      setShowDeleteModal(false);
     }
   };
 
@@ -303,13 +301,13 @@ export default function SurveyDetailPage() {
       setTimeout(() => setCopied(false), 2000);
     }
   };
-  
+
   const generateEmbedCode = async () => {
     setIsLoadingEmbed(true);
     setEmbedError(null);
-    
+
     const result = await getSurveyEmbedCodeAction(surveyId);
-    
+
     if (result.success) {
       setEmbedCodes(result.data);
       toast.success(t("Toasts.EmbedGenerated"));
@@ -317,13 +315,13 @@ export default function SurveyDetailPage() {
       setEmbedError(result.error || t("Toasts.EmbedFailed"));
       toast.error(result.error || t("Toasts.EmbedFailed"));
     }
-    
+
     setIsLoadingEmbed(false);
   };
-  
+
   const copyEmbedCode = (type: 'iframe' | 'script') => {
     if (!embedCodes) return;
-    
+
     const code = type === 'iframe' ? embedCodes.iframeCode : embedCodes.inlineScriptSnippet;
     navigator.clipboard.writeText(code);
     setCopiedEmbed(type);
@@ -389,7 +387,7 @@ export default function SurveyDetailPage() {
             </button>
 
             {survey.status === "active" ? (
-              <button 
+              <button
                 onClick={() => handleStatusUpdate("paused")}
                 className="flex items-center gap-2 px-3 py-2 bg-orange-50 text-orange-700 border border-orange-200 rounded-xl text-sm font-medium hover:bg-orange-100 transition-colors"
                 title={t("Header.Pause")}
@@ -398,7 +396,7 @@ export default function SurveyDetailPage() {
                 <span className="hidden sm:inline">{t("Header.Pause")}</span>
               </button>
             ) : survey.status === "paused" ? (
-              <button 
+              <button
                 onClick={() => handleStatusUpdate("active")}
                 className="flex items-center gap-2 px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-sm font-medium hover:bg-emerald-100 transition-colors"
                 title={t("Header.Resume")}
@@ -407,7 +405,7 @@ export default function SurveyDetailPage() {
                 <span className="hidden sm:inline">{t("Header.Resume")}</span>
               </button>
             ) : null}
-            
+
             {(survey.status === "draft" || survey.status === "creating" || survey.status === "sample_review") && (
               <Link
                 href={`/dashboard/create?id=${survey.id}`}
@@ -418,12 +416,12 @@ export default function SurveyDetailPage() {
               </Link>
             )}
 
-            <button 
+            <button
               onClick={() => setShowDeleteModal(true)}
               className="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all border border-transparent hover:border-red-100"
               title="Delete Survey"
             >
-               <Trash2 className="w-5 h-5" />
+              <Trash2 className="w-5 h-5" />
             </button>
 
 
@@ -434,28 +432,28 @@ export default function SurveyDetailPage() {
 
       {/* Sample Review Banner */}
       {survey.status === "sample_review" && (
-         <div className="mb-6 p-6 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl text-white shadow-lg overflow-hidden relative group">
-            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-500">
-                <Mic className="w-32 h-32" />
+        <div className="mb-6 p-6 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl text-white shadow-lg overflow-hidden relative group">
+          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-500">
+            <Mic className="w-32 h-32" />
+          </div>
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="px-2 py-0.5 bg-white/20 backdrop-blur-sm rounded text-[10px] font-bold uppercase tracking-wider">{t("SampleReview.Badge")}</span>
+              <Sparkles className="w-4 h-4" />
             </div>
-            <div className="relative z-10">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 bg-white/20 backdrop-blur-sm rounded text-[10px] font-bold uppercase tracking-wider">{t("SampleReview.Badge")}</span>
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <h2 className="text-2xl font-bold mb-2">{t("SampleReview.Title")}</h2>
-              <p className="text-blue-100 mb-6 max-w-xl">
-                {t("SampleReview.Description")}
-              </p>
-              <Link 
-                href={`/dashboard/surveys/${surveyId}/sample-review`}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-white text-blue-700 rounded-xl font-bold hover:bg-blue-50 transition-all shadow-md hover:shadow-xl hover:-translate-y-0.5"
-              >
-                <Play className="w-4 h-4 fill-current" />
-                {t("SampleReview.Button")}
-              </Link>
-            </div>
-         </div>
+            <h2 className="text-2xl font-bold mb-2">{t("SampleReview.Title")}</h2>
+            <p className="text-blue-100 mb-6 max-w-xl">
+              {t("SampleReview.Description")}
+            </p>
+            <Link
+              href={`/dashboard/surveys/${surveyId}/sample-review`}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-white text-blue-700 rounded-xl font-bold hover:bg-blue-50 transition-all shadow-md hover:shadow-xl hover:-translate-y-0.5"
+            >
+              <Play className="w-4 h-4 fill-current" />
+              {t("SampleReview.Button")}
+            </Link>
+          </div>
+        </div>
       )}
 
       {/* Tabs */}
@@ -489,7 +487,7 @@ export default function SurveyDetailPage() {
                 <span className="text-sm">{t("Overview.Responses.Title")}</span>
               </div>
               <p className="text-2xl font-bold text-gray-900">{stats?.totalResponses || 0}</p>
-              <p className="text-xs text-gray-400 mt-1">{t("Overview.Responses.Target", {limit: survey.participantLimit})}</p>
+              <p className="text-xs text-gray-400 mt-1">{t("Overview.Responses.Target", { limit: survey.participantLimit })}</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-100 p-4">
               <div className="flex items-center gap-2 text-gray-500 mb-2">
@@ -497,14 +495,14 @@ export default function SurveyDetailPage() {
                 <span className="text-sm">{t("Overview.Completion.Title")}</span>
               </div>
               <p className="text-2xl font-bold text-gray-900">{stats?.completionRate || 0}%</p>
-              <p className="text-xs text-gray-400 mt-1">{t("Overview.Completion.Completed", {count: stats?.completedResponses || 0})}</p>
+              <p className="text-xs text-gray-400 mt-1">{t("Overview.Completion.Completed", { count: stats?.completedResponses || 0 })}</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-100 p-4">
               <div className="flex items-center gap-2 text-gray-500 mb-2">
                 <Clock className="w-4 h-4" />
                 <span className="text-sm">{t("Overview.Duration.Title")}</span>
               </div>
-              <p className="text-2xl font-bold text-gray-900">{stats?.avgDuration || '0 min'}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats?.avgDuration || '0s'}</p>
               <p className="text-xs text-gray-400 mt-1">{t("Overview.Duration.Unit")}</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-100 p-4">
@@ -512,8 +510,8 @@ export default function SurveyDetailPage() {
                 <Calendar className="w-4 h-4" />
                 <span className="text-sm">{t("Overview.Created.Title")}</span>
               </div>
-              <p className="text-2xl font-bold text-gray-900">{new Date(survey.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
-              <p className="text-xs text-gray-400 mt-1">{survey.createdAt}</p>
+              <p className="text-2xl font-bold text-gray-900">{survey.createdAt ? new Date(survey.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}</p>
+              <p className="text-xs text-gray-400 mt-1">{survey.createdAt ? new Date(survey.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : ''}</p>
             </div>
           </div>
 
@@ -558,11 +556,11 @@ export default function SurveyDetailPage() {
                 <div key={response.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-gray-50 rounded-xl gap-3 transition-colors hover:bg-gray-100/80">
                   <div className="flex items-start sm:items-center gap-3">
                     <div className={cn(
-                      "w-2.5 h-2.5 rounded-full mt-1.5 sm:mt-0 shrink-0", 
+                      "w-2.5 h-2.5 rounded-full mt-1.5 sm:mt-0 shrink-0",
                       response.status === "completed" ? "bg-emerald-500 shadow-sm shadow-emerald-200" : "bg-amber-400 shadow-sm shadow-amber-200"
                     )} />
                     <div className="flex flex-col">
-                      <span className="text-sm font-semibold text-gray-900">{response.participantId === 'Anonymous' ? t("Responses.Table.Anonymous") : t("Responses.Table.Participant", {id: response.id.slice(0,4)})}</span>
+                      <span className="text-sm font-semibold text-gray-900">{response.participantId === 'Anonymous' ? t("Responses.Table.Anonymous") : t("Responses.Table.Participant", { id: response.id.slice(0, 4) })}</span>
                       <div className="flex items-center gap-2 text-xs text-gray-500">
                         <span>{response.status === 'completed' ? t("Responses.Table.Status.Completed") : t("Responses.Table.Status.InProgress")}</span>
                         <span>•</span>
@@ -570,22 +568,22 @@ export default function SurveyDetailPage() {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center gap-2 ml-5 sm:ml-0">
-                     {response.sentiment && (
-                       <span className={cn(
-                         "px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider",
-                         response.sentiment === "positive" && "bg-emerald-100 text-emerald-700",
-                         response.sentiment === "neutral" && "bg-gray-200 text-gray-700",
-                         response.sentiment === "negative" && "bg-red-100 text-red-700"
-                       )}>
-                         {response.sentiment}
-                       </span>
-                     )}
-                     <span className="flex items-center gap-1 text-xs font-medium text-gray-600 bg-white px-2 py-1 rounded-md border border-gray-200 shadow-sm">
-                        <Clock className="w-3 h-3" />
-                        {response.duration}
-                     </span>
+                    {response.sentiment && (
+                      <span className={cn(
+                        "px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider",
+                        response.sentiment === "positive" && "bg-emerald-100 text-emerald-700",
+                        response.sentiment === "neutral" && "bg-gray-200 text-gray-700",
+                        response.sentiment === "negative" && "bg-red-100 text-red-700"
+                      )}>
+                        {response.sentiment}
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1 text-xs font-medium text-gray-600 bg-white px-2 py-1 rounded-md border border-gray-200 shadow-sm">
+                      <Clock className="w-3 h-3" />
+                      {response.duration}
+                    </span>
                   </div>
                 </div>
               )) : (
@@ -604,7 +602,7 @@ export default function SurveyDetailPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input type="text" placeholder={t("Responses.SearchPlaceholder")} className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none text-sm" />
             </div>
-            
+
             <div className="relative">
               <button
                 onClick={() => setIsFilterOpen(!isFilterOpen)}
@@ -623,8 +621,8 @@ export default function SurveyDetailPage() {
 
               {isFilterOpen && (
                 <>
-                  <div 
-                    className="fixed inset-0 z-10" 
+                  <div
+                    className="fixed inset-0 z-10"
                     onClick={() => setIsFilterOpen(false)}
                   />
                   <div className="absolute top-full mt-2 right-0 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-20 animate-in fade-in zoom-in-95 duration-200">
@@ -654,15 +652,15 @@ export default function SurveyDetailPage() {
               )}
             </div>
 
-            <button 
-                onClick={handleExport}
-                className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50"
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               <Download className="w-4 h-4" />
               {t("Responses.Export")}
             </button>
           </div>
- 
+
           <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
             {isLoadingResponses ? (
               <div className="flex items-center justify-center py-12">
@@ -674,36 +672,36 @@ export default function SurveyDetailPage() {
                 <p className="text-gray-500">{t("Responses.Table.Empty")}</p>
               </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
-                  {responses.map((response: Response) => {
-                    // Map response data to card props
-                    // Calculate duration minutes from string "Xm Ys" or just use 5 if invalid
-                    let durationMinutes = 0;
-                    if (response.duration) {
-                        const match = response.duration.match(/(\d+)m/);
-                        if (match) durationMinutes = parseInt(match[1]);
-                    }
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                {responses.map((response: Response) => {
+                  // Map response data to card props
+                  // Calculate duration minutes from string "Xm Ys" or just use 5 if invalid
+                  let durationMinutes = 0;
+                  if (response.duration) {
+                    const match = response.duration.match(/(\d+)m/);
+                    if (match) durationMinutes = parseInt(match[1]);
+                  }
 
-                    // Map sentiment string to score if score is missing (approximate)
-                    let sentimentScore = response.sentimentScore ?? 0;
-                    if (response.sentiment === 'positive' && !response.sentimentScore) sentimentScore = 0.8;
-                    if (response.sentiment === 'negative' && !response.sentimentScore) sentimentScore = -0.8;
+                  // Map sentiment string to score if score is missing (approximate)
+                  let sentimentScore = response.sentimentScore ?? 0;
+                  if (response.sentiment === 'positive' && !response.sentimentScore) sentimentScore = 0.8;
+                  if (response.sentiment === 'negative' && !response.sentimentScore) sentimentScore = -0.8;
 
-                    return (
-                        <ConversationCard
-                            key={response.id}
-                            id={response.id}
-                            surveyId={surveyId}
-                            summary={response.summary || response.keyInsights?.[0] || t("Responses.Table.Summary")}
-                            sentimentScore={sentimentScore}
-                            durationMinutes={durationMinutes}
-                            messageCount={response.messageCount || 0}
-                            isCompleted={response.status === 'completed'}
-                            createdAt={response.createdAt || new Date().toISOString()}
-                        />
-                    );
-                  })}
-                </div>
+                  return (
+                    <ConversationCard
+                      key={response.id}
+                      id={response.id}
+                      surveyId={surveyId}
+                      summary={response.summary || response.keyInsights?.[0] || t("Responses.Table.Summary")}
+                      sentimentScore={sentimentScore}
+                      durationMinutes={durationMinutes}
+                      messageCount={response.messageCount || 0}
+                      isCompleted={response.status === 'completed'}
+                      createdAt={response.createdAt || new Date().toISOString()}
+                    />
+                  );
+                })}
+              </div>
             )}
           </div>
 
@@ -712,9 +710,9 @@ export default function SurveyDetailPage() {
             <div className="flex items-center justify-between border-t border-gray-200 pt-4">
               <div className="text-sm text-gray-500">
                 {t.rich("Responses.Pagination.Page", {
-                    current: currentPage,
-                    total: totalPages,
-                    span: (chunks) => <span className="font-medium text-gray-900">{chunks}</span>
+                  current: currentPage,
+                  total: totalPages,
+                  span: (chunks) => <span className="font-medium text-gray-900">{chunks}</span>
                 })}
               </div>
               <div className="flex items-center gap-2">
@@ -766,47 +764,47 @@ export default function SurveyDetailPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t("Settings.Fields.Title")}</label>
-                <input 
-                    type="text" 
-                    value={settingsForm.title}
-                    onChange={(e) => setSettingsForm({...settingsForm, title: e.target.value})}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none" 
+                <input
+                  type="text"
+                  value={settingsForm.title}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, title: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t("Settings.Fields.Limit")}</label>
-                <input 
-                    type="number" 
-                    value={settingsForm.participantLimit}
-                    onChange={(e) => setSettingsForm({...settingsForm, participantLimit: Number(e.target.value)})}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none" 
+                <input
+                  type="number"
+                  value={settingsForm.participantLimit}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, participantLimit: Number(e.target.value) })}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none"
                 />
               </div>
-              
-               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-1">{t("Settings.VoiceMode.Title")}</h4>
-                    <p className="text-sm text-gray-500">{t("Settings.VoiceMode.Description")}</p>
-                  </div>
-                  <button
-                    onClick={() => setSettingsForm({...settingsForm, isVoice: !settingsForm.isVoice})}
+
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-1">{t("Settings.VoiceMode.Title")}</h4>
+                  <p className="text-sm text-gray-500">{t("Settings.VoiceMode.Description")}</p>
+                </div>
+                <button
+                  onClick={() => setSettingsForm({ ...settingsForm, isVoice: !settingsForm.isVoice })}
+                  className={cn(
+                    "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2",
+                    settingsForm.isVoice ? "bg-indigo-600" : "bg-gray-200"
+                  )}
+                >
+                  <span
+                    aria-hidden="true"
                     className={cn(
-                        "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2",
-                        settingsForm.isVoice ? "bg-indigo-600" : "bg-gray-200"
+                      "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                      settingsForm.isVoice ? "translate-x-5" : "translate-x-0"
                     )}
-                  >
-                    <span
-                        aria-hidden="true"
-                        className={cn(
-                            "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                            settingsForm.isVoice ? "translate-x-5" : "translate-x-0"
-                        )}
-                    />
-                  </button>
+                  />
+                </button>
               </div>
             </div>
             <div className="mt-6 flex justify-end">
-              <button 
+              <button
                 onClick={handleSaveSettings}
                 disabled={isSavingSettings}
                 className="px-4 py-2.5 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50"
@@ -822,7 +820,7 @@ export default function SurveyDetailPage() {
               <Code className="w-5 h-5 text-gray-700" />
               <h3 className="font-semibold text-gray-900">{t("Embed.Title")}</h3>
             </div>
-            
+
             {survey.status !== "active" ? (
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                 <div className="flex items-start gap-3">
@@ -912,7 +910,7 @@ export default function SurveyDetailPage() {
                     <li>{t("Embed.Instructions.Step4")}</li>
                   </ul>
                 </div>
-                
+
                 {/* Survey URL */}
                 <div className="pt-3 border-t border-gray-100">
                   <p className="text-xs text-gray-500 mb-1">{t("Embed.DirectLink")}</p>
@@ -920,7 +918,7 @@ export default function SurveyDetailPage() {
                 </div>
               </div>
             )}
-            
+
             {embedError && (
               <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-4">
                 <p className="text-sm text-red-800">{embedError}</p>
@@ -945,8 +943,8 @@ export default function SurveyDetailPage() {
               <h3 className="text-xl font-bold text-gray-900 mb-2">{t("DeleteModal.Title")}</h3>
               <p className="text-gray-500">
                 {t.rich("DeleteModal.Description", {
-                    title: survey.title,
-                    span: (chunks) => <span className="font-semibold text-gray-900">"{chunks}"</span>
+                  title: survey.title,
+                  span: (chunks) => <span className="font-semibold text-gray-900">"{chunks}"</span>
                 })}
               </p>
             </div>

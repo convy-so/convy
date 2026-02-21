@@ -6,72 +6,181 @@
     "Survey": {
         "Create": {
             "Title": {
-                "Create": "Create New Survey",
-                "View": "View Creation Conversation"
+                "Create": "Crear una nueva encuesta",
+                "View": "Ver conversación de creación",
+                "ChooseTopic": "Elige el tema de tu encuesta"
+            },
+            "Subtitle": "Selecciona un tema para comenzar tu encuesta. Nuestra IA experta te guará durante todo el proceso.",
+            "TextMode": "Modo Texto",
+            "VoiceMode": "Modo de Voz",
+            "CreationMode": {
+                "Title": "Modo Diseñador IA",
+                "Description": "Elige cómo quieres construir tu encuesta con nuestra IA experta.",
+                "Text": "Diseñador de Texto",
+                "Voice": "Diseñador de Voz"
+            },
+            "RespondentFormat": {
+                "Title": "Experiencia del Participante",
+                "Description": "¿Cómo debe participar la gente en esta encuesta? Elige la interfaz que utilizarán.",
+                "Text": "Encuesta de Texto",
+                "Voice": "Encuesta de Voz"
+            },
+            "PageTitle": "Crear una nueva encuesta",
+            "PageSubtitle": "Selecciona la especialidad para tu encuesta o describe tus necesidades",
+            "AIExpertLabel": "Experto IA",
+            "Domains": {
+                "1": {
+                    "Title": "Experiencia y Satisfacción del Cliente",
+                    "Description": "Evaluación de una transacción o servicio que YA HA OCURRIDO."
+                },
+                "2": {
+                    "Title": "Investigación de Mercado e Inteligencia del Consumidor",
+                    "Description": "Comprender mercados, preferencias y comportamientos para informar decisiones FUTURAS."
+                },
+                "3": {
+                    "Title": "Desarrollo Organizacional y de la Fuerza Laboral",
+                    "Description": "Evaluación de la salud interna, la eficacia y el sentimiento de los empleados."
+                },
+                "4": {
+                    "Title": "Diseño de Producto e Investigación de Usuarios",
+                    "Description": "Optimización de la usabilidad, la accesibilidad y la eficacia de la interfaz."
+                },
+                "5": {
+                    "Title": "Educación y Evaluación del Aprendizaje",
+                    "Description": "Medición de conocimientos, habilidades, resultados de aprendizaje o experiencias educativas."
+                },
+                "6": {
+                    "Title": "Compromiso Cívico y Opinión Pública",
+                    "Description": "Captura de las opiniones de los ciudadanos sobre asuntos políticos, políticas o gobernanza comunitaria."
+                },
+                "7": {
+                    "Title": "Investigación Científica y Académica",
+                    "Description": "Realización de investigaciones rigurosas para generar conocimientos generalizables."
+                },
+                "8": {
+                    "Title": "Salud y Experiencia del Paciente",
+                    "Description": "Medición de la calidad de la atención, los resultados de los pacientes y la comunicación clínica."
+                },
+                "9": {
+                    "Title": "Caracterización Demográfica y Social",
+                    "Description": "Contar, describir y comprender los perfiles de la población."
+                },
+                "10": {
+                    "Title": "Rendimiento de Infraestructuras y Sistemas",
+                    "Description": "Evaluación del funcionamiento de sistemas físicos o plataformas técnicas."
+                }
             },
             "Badges": {
-                "AIDraft": "AI DRAFT",
-                "ReadOnly": "Read Only"
+                "AIDraft": "BORRADOR IA",
+                "ReadOnly": "Solo lectura"
             },
             "Header": {
-                "Publish": "Publish",
-                "VoiceMode": "Voice Mode",
-                "StopVoice": "Stop Voice",
-                "TextMode": "Text",
-                "VoiceModeToggle": "Voice"
+                "Title": "Crear encuesta",
+                "Publish": "Publicar",
+                "VoiceMode": "Modo de voz",
+                "StopVoice": "Detener voz",
+                "Mode": {
+                    "Voice": "Voz",
+                    "VoiceActive": "Voz activa",
+                    "Text": "Texto"
+                },
+                "Language": "Idioma"
             },
             "ReadOnlyBanner": {
-                "Message": "You are viewing a completed conversation.",
-                "Link": "Go to Survey Details →"
+                "Message": "Estás viendo una conversación completada.",
+                "Link": "Ir a los detalles de la encuesta →"
             },
             "Chat": {
-                "Started": "Voice Conversation Started",
-                "Instruction": "Speak naturally to create your survey",
-                "Listening": "Listening...",
-                "Speaking": "Speaking...",
-                "VoiceActive": "Voice Mode Active",
-                "VoiceInstruction": "Speak naturally. I'll respond when you stop.",
-                "VoiceListening": "Listening to response...",
-                "VoiceStart": "Click the microphone to start the conversation.",
-                "ExitVoice": "Exit Voice Mode"
+                "Started": "Conversación de voz iniciada",
+                "Instruction": "Habla con naturalidad para crear tu encuesta",
+                "Listening": "Escuchando...",
+                "Speaking": "Hablando...",
+                "VoiceActive": "Modo de voz activo",
+                "VoiceInstruction": "Habla con naturalidad. Responderé cuando te detengas.",
+                "VoiceListening": "Escuchando respuesta...",
+                "VoiceStart": "Haz clic en el micrófono para iniciar la conversación.",
+                "ExitVoice": "Salir del modo de voz",
+                "Welcome": "¡Hola! Estoy aquí para ayudarte a crear la encuesta perfecta. Comencemos con lo básico: ¿cuál es el objetivo principal de tu encuesta? ¿Qué quieres aprender de tus encuestados?"
             },
             "Status": {
-                "AISpeaking": "AI Speaking",
-                "Listening": "Listening",
+                "AISpeaking": "IA hablando",
+                "Listening": "Escuchando",
+                "Connecting": "Conectando...",
                 "Ready": "Listo",
                 "Speaking": "Hablando",
+                "SpeakingUser": "Estás hablando",
                 "TapToPause": "Toca para pausar",
-                "TapToSpeak": "Tap to Speak"
+                "TapToSpeak": "Toca para hablar",
+                "SelectTopicFirst": "Selecciona un tema primero"
             },
             "Completion": {
-                "Title": "Excellent! We're Ready.",
-                "Message": "I have all the information I need. Let's switch back to view the summary and start testing.",
-                "Button": "View Summary & Test"
+                "Title": "¡Excelente! Estamos listos.",
+                "Message": "Tengo toda la información que necesito. Volvamos para ver el resumen y comenzar a probar.",
+                "Button": "Ver resumen y probar"
             },
             "ReadyCard": {
-                "Title": "Ready to Test!",
-                "Description": "I have everything I need to draft your survey.",
-                "Button": "Start Testing",
-                "Finalizing": "Finalizing..."
+                "Title": "¡Listo para probar!",
+                "Description": "Tengo todo lo que necesito para redactar tu encuesta.",
+                "Button": "Empezar prueba",
+                "Finalizing": "Finalizando..."
+            },
+            "Menu": {
+                "UploadFile": "Cargar archivo",
+                "AddMedia": "Añadir medios",
+                "MediaTypes": "Imágenes, Vídeo, Audio",
+                "VoiceMode": "Modo de voz",
+                "TalkToAI": "Hablar con la IA"
             },
             "Input": {
                 "Placeholder": "Describe los objetivos de tu encuesta...",
                 "PlaceholderLocked": "Selecciona un tema arriba para comenzar...",
                 "AddMedia": "Añadir contexto/medios",
-                "Send": "Send"
+                "Send": "Enviar",
+                "ActionsTitle": "Acciones"
+            },
+            "DomainSelection": {
+                "Title": "Elige el camino de tu encuesta",
+                "Description": "Selecciona un dominio para obtener orientación de IA especializada y plantillas estándar de la industria."
             },
             "SuggestedPrompts": {
-                "CustomerSat": "Create a customer satisfaction survey",
-                "ProductFeedback": "Gather feedback on a new product feature",
-                "EmployeeEngagement": "Measure employee engagement and culture",
-                "MarketResearch": "Conduct market research for a new idea"
+                "1": [
+                    "Crear una encuesta de satisfacción del cliente (CSAT)",
+                    "Mapear un punto de contacto del viaje del cliente",
+                    "Medir el Net Promoter Score (NPS)",
+                    "Evaluar una interacción de soporte"
+                ],
+                "2": [
+                    "Investigación de mercado para un nuevo producto",
+                    "Análisis de la percepción de la marca",
+                    "Encuesta sobre hábitos de consumo",
+                    "Prueba de concepto publicitario"
+                ],
+                "3": [
+                    "Encuesta de compromiso de los empleados",
+                    "Evaluación de la cultura de la empresa",
+                    "Encuesta de bienestar en el lugar de trabajo",
+                    "Comentarios sobre capacitación interna"
+                ]
             },
             "Authentication": {
-                "Required": "Authentication Required",
-                "VerifyEmail": "Verify Email",
-                "GoBack": "Go Back",
-                "SignIn": "Sign In",
-                "GoHome": "Go Home"
+                "Required": "Autenticación requerida",
+                "VerifyEmail": "Verificar correo",
+                "GoBack": "Volver",
+                "SignIn": "Iniciar sesión",
+                "GoHome": "Inicio"
+            },
+            "Toasts": {
+                "LanguageUpdateFailed": "Error al guardar la preferencia de idioma",
+                "ModeUpdateFailed": "Error al guardar la preferencia del modo de encuesta",
+                "LoadFailed": "Error al cargar los datos de la encuesta",
+                "InitFailed": "Error al inicializar la encuesta",
+                "SendFailed": "Error al enviar el mensaje. Por favor, inténtalo de nuevo.",
+                "MicDenied": "Acceso al micrófono denegado",
+                "VoiceSendFailed": "Error al enviar el mensaje de voz",
+                "FinalizeFailed": "Error al finalizar la encuesta. Por favor, inténtalo de nuevo.",
+                "Finalized": "¡Encuesta finalizada! Cargando conversaciones de ejemplo...",
+                "SaveTopicFailed": "Error al guardar la selección del tema",
+                "GenericError": "Ocurrió un error. Por favor, inténtalo de nuevo."
             }
         },
         "PublishModal": {
@@ -527,8 +636,7 @@
             "Workspace": "Espacio de trabajo",
             "Notifications": "Notificaciones",
             "Preferences": "Preferencias",
-            "Security": "Seguridad",
-            "Billing": "Facturación"
+            "Security": "Seguridad"
         },
         "Preferences": {
             "Title": "Preferencias",
@@ -596,21 +704,10 @@
                 "Button": "Eliminar cuenta"
             },
             "PasswordMismatch": "Las contraseñas no coinciden"
-        },
-        "Billing": {
-            "Plan": "Plan actual",
-            "Active": "Activo",
-            "Description": "La facturación está actualmente congelada para pruebas. Tienes acceso completo a todas las funciones.",
-            "Disabled": "Facturación deshabilitada",
-            "Usage": "Uso este mes",
-            "Surveys": "Encuestas",
-            "Responses": "Respuestas",
-            "Unlimited": "Ilimitado"
         }
     },
     "Landing": {
         "Navbar": {
-            "Pricing": "Precios",
             "SignIn": "Iniciar sesión",
             "GetStarted": "Empezar"
         },
@@ -653,10 +750,6 @@
                     "Title": "Constructor de formularios IA",
                     "Description": "Genera automáticamente flujos conversacionales a partir de indicaciones de texto simples."
                 },
-                "Integrations": {
-                    "Title": "Integraciones",
-                    "Description": "Conéctate a herramientas como Notion, Slack y Zapier con un clic."
-                },
                 "ChatData": {
                     "Title": "Chat con datos",
                     "Description": "Habla directamente con tus respuestas recopiladas y tus análisis."
@@ -668,40 +761,6 @@
                 "Summaries": {
                     "Title": "Resúmenes automáticos",
                     "Description": "Obtén ideas estructuradas instantáneas y resúmenes de cada conversación."
-                }
-            }
-        },
-        "Pricing": {
-            "Badge": "Precios",
-            "Title": "Planes que se ajustan a tus necesidades",
-            "Description": "Desde startups hasta empresas, QP Widget tiene un plan que te acerca a tus clientes.",
-            "Mo": "/ mes",
-            "GetStarted": "Empezar",
-            "ComingSoon": "Próximamente",
-            "Free": {
-                "Title": "Plan Gratis",
-                "Description": "Prueba la magia de la IA de Convy y mira cómo los formularios nativos de chat cambian tu flujo.",
-                "Features": {
-                    "Limited": "Conversaciones limitadas",
-                    "Unlimited": "Respuestas ilimitadas",
-                    "Builder": "Constructor de formularios IA",
-                    "ChatData": "Chat con datos",
-                    "Branding": "Marca Convy",
-                    "NoIntegrations": "Sin integraciones",
-                    "NoSupport": "Sin soporte comunitario"
-                }
-            },
-            "Pro": {
-                "Title": "Plan Pro",
-                "Description": "Hazte pro para ser dueño de tu experiencia de chat — totalmente personalizada, ilimitada e impulsada por IA.",
-                "Features": {
-                    "UnlimitedConversations": "Conversaciones ilimitadas",
-                    "CustomDomain": "Dominio y correo personalizados",
-                    "UniqueBranding": "Marca única",
-                    "UnlimitedUploads": "Cargas de archivos ilimitadas",
-                    "VoiceMode": "Modo de voz",
-                    "Integrations": "Integraciones completas (Zapier, Notion, Slack, etc.)",
-                    "PrioritySupport": "Soporte prioritario"
                 }
             }
         },

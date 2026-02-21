@@ -9,11 +9,6 @@ import { surveys, users, organizations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getSurveyAccessLevel } from "@/lib/workspace-access";
 import { env } from "@/lib/env";
-import {
-  assertCanUseCustomUrl,
-  assertCanUseEmbedWidget,
-  PlanLimitError,
-} from "@/lib/billing/entitlements";
 
 type ActionResult<T> =
   | { success: true; data: T }
@@ -40,7 +35,7 @@ const updateSurveySchema = z.object({
  * and cannot be manually edited. Use the conversational creation flow to make content changes.
  */
 export async function updateSurveyAction(
-  input: z.infer<typeof updateSurveySchema>
+  input: z.infer<typeof updateSurveySchema>,
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const session = await getVerifiedSession();
@@ -56,7 +51,10 @@ export async function updateSurveyAction(
       return { success: false, error: "Survey not found" };
     }
 
-    const access = await getSurveyAccessLevel(session.user.id, existingSurvey.id);
+    const access = await getSurveyAccessLevel(
+      session.user.id,
+      existingSurvey.id,
+    );
     if (access !== "owner" && access !== "editor") {
       return { success: false, error: "Unauthorized: Editor access required" };
     }
@@ -169,8 +167,8 @@ export async function getSurveysAction(): Promise<
         .where(
           and(
             eq(surveys.userId, session.user.id),
-            isNull(surveys.organizationId)
-          )
+            isNull(surveys.organizationId),
+          ),
         )
         .orderBy(surveys.createdAt);
 
@@ -194,7 +192,7 @@ export async function getSurveysAction(): Promise<
  * Get a single survey by ID
  */
 export async function getSurveyAction(
-  surveyId: string
+  surveyId: string,
 ): Promise<ActionResult<typeof surveys.$inferSelect>> {
   try {
     const session = await getVerifiedSession();
@@ -235,7 +233,7 @@ export async function getSurveyAction(
  * This activates the survey and makes it available for participants
  */
 export async function confirmSurveyAction(
-  surveyId: string
+  surveyId: string,
 ): Promise<
   ActionResult<{ id: string; shareableLink: string; publicUrl: string }>
 > {
@@ -301,30 +299,6 @@ export async function confirmSurveyAction(
       })
       .where(eq(surveys.id, surveyId));
 
-    // Trigger Zapier Webhook (async)
-    try {
-      const { triggerSurveyCreatedWebhook } = await import("@/lib/zapier/webhook-delivery");
-      triggerSurveyCreatedWebhook(surveyId, session.user.id).catch(console.error);
-    } catch (e) {
-      console.error("Failed to trigger Zapier webhook:", e);
-    }
-
-    // Enqueue Slack Auto-Post (via Notification Queue)
-    try {
-      const { enqueueNotification } = await import("@/lib/queue");
-      await enqueueNotification({
-        type: "slack",
-        userId: session.user.id,
-        message: "Survey Created",
-        metadata: {
-          event: "survey_created",
-          surveyId,
-        },
-      });
-    } catch (e) {
-      console.error("Failed to enqueue Slack notification:", e);
-    }
-
     const publicUrl = `/s/${shareableLink}`;
 
     return {
@@ -353,7 +327,7 @@ export async function confirmSurveyAction(
  * Get the shareable link for a survey
  */
 export async function getShareableLinkAction(
-  surveyId: string
+  surveyId: string,
 ): Promise<
   ActionResult<{ shareableLink: string; publicUrl: string; isActive: boolean }>
 > {
@@ -424,7 +398,7 @@ export async function setSurveyCustomSlugAction(input: {
         .max(64)
         .regex(
           /^[a-z0-9-]+$/,
-          "Slug can only contain lowercase letters, numbers, and hyphens"
+          "Slug can only contain lowercase letters, numbers, and hyphens",
         ),
     });
 
@@ -444,16 +418,6 @@ export async function setSurveyCustomSlugAction(input: {
       return { success: false, error: "Unauthorized" };
     }
 
-    // Plan gating
-    try {
-      await assertCanUseCustomUrl({ userId: session.user.id });
-    } catch (error) {
-      if (error instanceof PlanLimitError) {
-        return { success: false, error: error.message };
-      }
-      throw error;
-    }
-
     // Check uniqueness against other surveys' customSlug and shareableLink
     const [conflict] = await db
       .select({ id: surveys.id })
@@ -463,9 +427,9 @@ export async function setSurveyCustomSlugAction(input: {
           ne(surveys.id, survey.id),
           or(
             eq(surveys.customSlug, body.slug),
-            eq(surveys.shareableLink, body.slug)
-          )
-        )
+            eq(surveys.shareableLink, body.slug),
+          ),
+        ),
       );
 
     if (conflict) {
@@ -515,7 +479,7 @@ export async function setSurveyCustomSlugAction(input: {
  * Clear the custom slug for a survey, falling back to random shareable link
  */
 export async function clearSurveyCustomSlugAction(
-  surveyId: string
+  surveyId: string,
 ): Promise<ActionResult<{ success: boolean }>> {
   try {
     const session = await getVerifiedSession();
@@ -557,9 +521,7 @@ export async function clearSurveyCustomSlugAction(
 /**
  * Get public URLs for a survey (default random link + optional custom slug)
  */
-export async function getSurveyPublicUrlsAction(
-  surveyId: string
-): Promise<
+export async function getSurveyPublicUrlsAction(surveyId: string): Promise<
   ActionResult<{
     shareableLink: string | null;
     shareableUrl: string | null;
@@ -622,9 +584,7 @@ export async function getSurveyPublicUrlsAction(
  * This does not create any UI route; it only returns HTML snippets your
  * frontend can display to users on eligible plans.
  */
-export async function getSurveyEmbedCodeAction(
-  surveyId: string
-): Promise<
+export async function getSurveyEmbedCodeAction(surveyId: string): Promise<
   ActionResult<{
     iframeCode: string;
     inlineScriptSnippet: string;
@@ -654,16 +614,6 @@ export async function getSurveyEmbedCodeAction(
         error: "Survey must be active to generate an embed widget",
       };
     }
-
-    // Plan gating - DISABLED for testing
-    // try {
-    //   await assertCanUseEmbedWidget({ userId: session.user.id });
-    // } catch (error) {
-    //   if (error instanceof PlanLimitError) {
-    //     return { success: false, error: error.message };
-    //   }
-    //   throw error;
-    // }
 
     const baseUrl = env.APP_BASE_URL.replace(/\/+$/, "");
 
@@ -719,7 +669,7 @@ export async function getSurveyEmbedCodeAction(
  * Deactivate a survey (pause it from receiving new responses)
  */
 export async function deactivateSurveyAction(
-  surveyId: string
+  surveyId: string,
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const session = await getVerifiedSession();
@@ -766,7 +716,7 @@ export async function deactivateSurveyAction(
  * Reactivate a completed survey
  */
 export async function reactivateSurveyAction(
-  surveyId: string
+  surveyId: string,
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const session = await getVerifiedSession();
@@ -822,7 +772,7 @@ export async function reactivateSurveyAction(
  * Removes survey and all related data (cascade). Notifies workspace members.
  */
 export async function deleteSurveyAction(
-  surveyId: string
+  surveyId: string,
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const session = await getVerifiedSession();
@@ -861,27 +811,28 @@ export async function deleteSurveyAction(
       // We run this asynchronously to not block the UI response
       (async () => {
         try {
-          const { getWorkspaceMembers } = await import("@/app/actions/workspace");
+          const { getWorkspaceMembers } =
+            await import("@/app/actions/workspace");
           const { sendSurveyDeletedEmail } = await import("@/lib/email");
 
           const membersResult = await getWorkspaceMembers({ organizationId });
-          
+
           const [org] = await db
             .select({ name: organizations.name })
             .from(organizations)
             .where(eq(organizations.id, organizationId));
-             
+
           const workspaceName = org?.name || "Workspace";
 
           if (membersResult.success) {
             for (const member of membersResult.data) {
               if (member.user.email) {
-                 await sendSurveyDeletedEmail({
-                   email: member.user.email,
-                   surveyTitle,
-                   deletedBy: session.user.name || session.user.email,
-                   workspaceName,
-                 });
+                await sendSurveyDeletedEmail({
+                  email: member.user.email,
+                  surveyTitle,
+                  deletedBy: session.user.name || session.user.email,
+                  workspaceName,
+                });
               }
             }
           }
@@ -893,7 +844,7 @@ export async function deleteSurveyAction(
 
     return { success: true, data: { id: surveyId } };
   } catch (error) {
-     if (error instanceof Error) {
+    if (error instanceof Error) {
       if (
         error.message === "UNAUTHENTICATED" ||
         error.message === "EMAIL_NOT_VERIFIED"
@@ -910,7 +861,7 @@ export async function deleteSurveyAction(
  * Duplicate a survey
  */
 export async function duplicateSurveyAction(
-  surveyId: string
+  surveyId: string,
 ): Promise<ActionResult<{ id: string; survey: any }>> {
   try {
     const session = await getVerifiedSession();
@@ -924,9 +875,15 @@ export async function duplicateSurveyAction(
       return { success: false, error: "Survey not found" };
     }
 
-    const access = await getSurveyAccessLevel(session.user.id, existingSurvey.id);
+    const access = await getSurveyAccessLevel(
+      session.user.id,
+      existingSurvey.id,
+    );
     if (access !== "owner") {
-      return { success: false, error: "Unauthorized: Only the creator can duplicate this survey" };
+      return {
+        success: false,
+        error: "Unauthorized: Only the creator can duplicate this survey",
+      };
     }
 
     const newSurveyId = nanoid();
@@ -954,18 +911,24 @@ export async function duplicateSurveyAction(
     const formattedSurvey = {
       id: newSurvey.id,
       title: newSurvey.title || "Untitled Survey",
-      description: (newSurvey.additionalContext) || (newSurvey.objective as any)?.description || "",
+      description:
+        newSurvey.description ||
+        (newSurvey.objective as any)?.description ||
+        "",
       status: newSurvey.status,
       shareableLink: newSurvey.shareableLink,
       responses: newSurvey.currentParticipants,
       completionRate: 0,
-      createdAt: newSurvey.createdAt?.toISOString().split('T')[0] || "",
+      createdAt: newSurvey.createdAt?.toISOString().split("T")[0] || "",
       lastResponse: "Never",
       isOwner: true,
       isVoice: newSurvey.isVoice || false,
     };
 
-    return { success: true, data: { id: newSurveyId, survey: formattedSurvey } };
+    return {
+      success: true,
+      data: { id: newSurveyId, survey: formattedSurvey },
+    };
   } catch (error) {
     console.error("Error duplicating survey:", error);
     return { success: false, error: "Failed to duplicate survey" };

@@ -17,6 +17,8 @@ import {
 import type { AuthenticatedConnection } from "../middleware/auth";
 import { BaseVoiceAgentHandler } from "./base-voice-agent-handler";
 import { ConversationManager } from "@/lib/conversation-manager";
+import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
+import type { AgentContext } from "@/lib/agents/types";
 import {
   buildVoiceAgentSettings,
   type VoiceAgentSettings,
@@ -162,11 +164,6 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
     return this.state.language;
   }
 
-  protected getGreeting(): string | null {
-    // Return null to disable static greeting. We use getInitialUserInput to trigger AI generation instead.
-    return null;
-  }
-
   protected getInitialUserInput(): string | null {
     // Triggers the AI to generate the greeting based on the system prompt (Expert Persona)
     return "Start the conversation now. Greet the participant according to the system prompt instructions.";
@@ -193,19 +190,44 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       .filter(Boolean)
       .join("\n\n");
 
-    const systemPrompt = ConversationManager.getSystemPrompt(
-      this.state.surveyConfig,
-      this.state.context,
-      {
-        isSample: true,
-        sampleFeedback: combinedFeedback || undefined,
-        conversationNumber: this.state.conversationNumber,
-        language: this.state.language,
-      }
-    );
+    // --- AGENT INTEGRATION: Use ConductingSpecialist for agentic behavior ---
+    const agentContext: AgentContext = {
+      conversationId: `sample-${this.state.surveyId}-${this.state.conversationNumber}`,
+      messages: this.state.messages.map(m => ({ 
+        role: m.role, 
+        content: m.content 
+      })) as any[],
+      surveyConfig: this.state.surveyConfig,
+      rollingContext: this.state.context,
+      language: this.state.language,
+      knowledgeContext: combinedFeedback || undefined, // Pass feedback as knowledge context
+    };
 
-    // Build Voice Agent function definitions from the tools
-    const functions = this.buildFunctionDefinitions();
+    const conductingAgent = new ConductingSpecialist(agentContext);
+
+    // Preload capabilities
+    await Promise.all([
+      conductingAgent.preloadSkills(),
+      conductingAgent.preloadPatternLearnings(["questioning", "probing", "engagement"], 2)
+    ]);
+
+    // Use the agent's system prompt (includes domain expertise, checklist, questioning strategy)
+    let systemPrompt = conductingAgent.buildSystemPrompt();
+
+    // Add sample-specific instructions
+    const sampleInstructions = `
+Additional guidance for this rehearsal with the survey creator:
+- Treat the survey creator exactly like a participant so they can experience the real flow
+- After covering every required topic, wrap up politely just as you would with a participant
+- This is sample conversation #${this.state.conversationNumber || 1}${this.state.conversationNumber && this.state.conversationNumber > 1 ? ". Adjust your tone and pacing based on previous feedback." : ""}
+${combinedFeedback ? `- Apply the survey creator's latest feedback precisely:\n${combinedFeedback}` : ""}
+- CRITICAL: When the survey is finished and you have said goodbye, output this exact token at the very end: [[SURVEY_COMPLETED]]
+`;
+
+    systemPrompt = systemPrompt + "\n\n" + sampleInstructions;
+
+    // Use the agent's function definitions (converted to Deepgram format)
+    const functions = conductingAgent.getDeepgramFunctions();
 
     const tone = (this.state.survey?.tone || "casual") as "casual" | "formal" | "playful" | "empathetic";
 
@@ -213,8 +235,6 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       language: this.state.language,
       tone,
       systemPrompt,
-
-      // Greeting is now handled by getGreeting() and injected on connection
       functions,
       conversationHistory: this.state.messages.length > 0
         ? this.state.messages.map(m => ({ role: m.role, content: m.content }))
@@ -223,12 +243,27 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
   }
 
   protected async onConversationText(event: ConversationTextEvent): Promise<void> {
-    // Add to conversation history
-    this.state.messages.push({
-      role: event.role,
-      content: event.content,
-      timestamp: new Date().toISOString(),
-    });
+    const now = new Date();
+    const lastMessage = this.state.messages[this.state.messages.length - 1];
+
+    // Aggregation logic: Same role and within 5 seconds
+    if (
+      lastMessage &&
+      lastMessage.role === event.role &&
+      lastMessage.timestamp &&
+      now.getTime() - new Date(lastMessage.timestamp).getTime() < 3000
+    ) {
+      console.log(`[SampleSurveyVoiceHandler] 🔄 Aggregating ${event.role} message in DB`);
+      lastMessage.content += " " + event.content;
+      lastMessage.timestamp = now.toISOString(); // Refresh timestamp for consecutive merges
+    } else {
+      // Add as a new message
+      this.state.messages.push({
+        role: event.role,
+        content: event.content,
+        timestamp: now.toISOString(),
+      });
+    }
 
     // Save to database
     if (this.state.conversationId) {
@@ -304,7 +339,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
         setTimeout(() => {
           this.send({ type: "survey_completed" });
           this.cleanup();
-        }, 3000);
+        }, 500);
         break;
       }
 
@@ -323,44 +358,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
     }
   }
 
-  private buildFunctionDefinitions(): VoiceAgentFunction[] {
-    const functions: VoiceAgentFunction[] = [];
-
-    // Only add showMedia if the survey has media
-    if (this.state.surveyConfig?.media && this.state.surveyConfig.media.length > 0) {
-      functions.push({
-        name: "showMedia",
-        description: "Display a media item (image, audio, or video) to the participant in the conversation",
-        parameters: {
-          type: "object",
-          properties: {
-            mediaId: {
-              type: "string",
-              description: "The unique ID of the media item to display",
-            },
-          },
-          required: ["mediaId"],
-        },
-      });
-    }
-
-    functions.push({
-      name: "finishSurvey",
-      description: "Signal that the survey conversation is complete and should end. Call this when you have covered all required topics and gathered sufficient information from the participant.",
-      parameters: {
-        type: "object",
-        properties: {
-          reason: {
-            type: "string",
-            description: "Optional brief reason for ending (e.g., 'all topics covered', 'participant request')",
-          },
-        },
-        required: [],
-      },
-    });
-
-    return functions;
-  }
+  // Removed buildFunctionDefinitions() - now using ConductingSpecialist.getDeepgramFunctions()
 
   protected async cleanup(): Promise<void> {
     await super.cleanup();

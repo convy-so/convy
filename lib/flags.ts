@@ -1,12 +1,9 @@
-
 import { CacheService, CacheKeys, TTL } from "./cache";
 
-export type FeatureFlag = 
+export type FeatureFlag =
   | "voice_surveys"
   | "advanced_analytics"
-  | "zapier_integration"
-  | "slack_integration"
-  | "notion_integration";
+  | "advanced_analytics";
 
 export class FeatureFlags {
   /**
@@ -16,7 +13,7 @@ export class FeatureFlags {
    */
   static async isEnabled(flag: FeatureFlag, userId: string): Promise<boolean> {
     const cacheKey = `${CacheKeys.featureFlags(userId)}:${flag}`;
-    
+
     // Check cache first
     const cached = await CacheService.get<boolean>(cacheKey);
     if (cached !== null) {
@@ -29,13 +26,16 @@ export class FeatureFlags {
     let enabled = true;
 
     // Environment-based overrides (kill switches)
-    if (flag === "voice_surveys" && process.env.ENABLE_VOICE_FEATURES === "false") {
+    if (
+      flag === "voice_surveys" &&
+      process.env.ENABLE_VOICE_FEATURES === "false"
+    ) {
       enabled = false;
     }
 
     // Cache the result
     await CacheService.set(cacheKey, enabled, TTL.featureFlags);
-    
+
     return enabled;
   }
 
@@ -43,7 +43,7 @@ export class FeatureFlags {
    * Invalidate feature flag cache for a user
    */
   static async invalidate(userId: string) {
-    // Note: This only invalidates known flags if we list them, 
+    // Note: This only invalidates known flags if we list them,
     // or we rely on TTL expiry (1 min) which is usually fine for flags.
     // To properly invalidate, we'd need scan or a set of keys.
     // For now, TTL is sufficient.

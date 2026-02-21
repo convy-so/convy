@@ -20,7 +20,6 @@ export interface VoiceAgentFunction {
   name: string;
   description: string;
   parameters: Record<string, any>;
-  /** If omitted, function is client-executed (server handles FunctionCallRequest) */
   endpoint?: {
     url: string;
     method: string;
@@ -46,7 +45,6 @@ export interface VoiceAgentSettings {
       functions?: VoiceAgentFunction[];
     };
     speak?: { provider: { type: string; model?: string } };
-    // greeting removed - handled via InjectAgentMessage
     context?: {
       messages: Array<{ role: string; content: string }>;
     };
@@ -126,7 +124,7 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
       this.ws.on("open", () => {
         console.log("[VoiceAgent] WebSocket connected to Deepgram. Sending settings...");
         this.isConnected = true;
-
+        
         // Send Settings message immediately on connection
         this.sendSettings();
         this.startKeepAlive();
@@ -166,24 +164,7 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
     console.log("[VoiceAgent] Sending 'Settings' message to Deepgram...");
     console.log("[VoiceAgent] Audio Config -> Input:", JSON.stringify(this.settings.audio?.input), "Output:", JSON.stringify(this.settings.audio?.output));
     console.log("[VoiceAgent] Agent Config -> Language:", this.settings.agent.language, "Model:", this.settings.agent.listen?.provider?.model);
-    
-    // Greeting is no longer part of settings
-    // console.log("[VoiceAgent] Greeting will be injected via InjectAgentMessage after settings applied.");
-    
-    // Log redacted settings for debugging
-    /*
-    console.log("[VoiceAgent] Full Settings (Redacted):", JSON.stringify({
-      ...settingsMessage,
-      agent: {
-        ...settingsMessage.agent,
-        think: {
-          ...settingsMessage.agent.think,
-          prompt: settingsMessage.agent.think.prompt.substring(0, 100) + "...",
-          endpoint: settingsMessage.agent.think.endpoint ? { ...settingsMessage.agent.think.endpoint, url: "***" } : undefined,
-        },
-      },
-    }));
-    */
+  
 
     this.sendJson(settingsMessage);
   }
@@ -202,17 +183,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
     this.sendJson({
       type: "InjectUserMessage",
       content: text,
-    });
-  }
-
-  /**
-   * Inject a text message as if the agent spoke it (triggers TTS)
-   */
-  sendInjectAgentMessage(message: string): void {
-    console.log(`[VoiceAgent] Injecting agent message: "${message}"`);
-    this.sendJson({
-      type: "InjectAgentMessage",
-      message,
     });
   }
 
@@ -297,6 +267,11 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
           role: message.role,
           content: message.content,
         } as ConversationTextEvent);
+        break;
+
+      case "InjectionRefused":
+        console.warn("[VoiceAgent] InjectionRefused received — will retry inject.");
+        this.emit("injectionRefused", message);
         break;
 
       case "UserStartedSpeaking":
@@ -417,7 +392,6 @@ export function buildVoiceAgentSettings(options: {
           headers: { "x-goog-api-key": googleApiKey || "" },
         },
         prompt: systemPrompt,
-        // Only include functions if they exist and are not empty
         ...(functions && functions.length > 0 ? { functions } : {}),
       },
       speak: {

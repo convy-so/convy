@@ -122,6 +122,34 @@ const sampleConversationInsightsWorker =
 
       await job.updateProgress(100);
 
+      // Trigger pattern extraction for self-improvement
+      try {
+        const { enqueuePatternExtraction } = await import("@/lib/queue");
+        const [sampleConv] = await db
+          .select({ id: sampleConversations.id })
+          .from(sampleConversations)
+          .where(
+            and(
+              eq(sampleConversations.surveyId, surveyId),
+              eq(sampleConversations.conversationNumber, conversationNumber)
+            )
+          )
+          .limit(1);
+
+        if (sampleConv) {
+          await enqueuePatternExtraction({
+            conversationId: sampleConv.id,
+            surveyId,
+            conversationType: "sample",
+            domainId: survey.domainId ?? null,
+          });
+          console.log(`[Sample Conversation Insights Worker] Enqueued pattern extraction for sample conversation ${sampleConv.id}`);
+        }
+      } catch (error) {
+        console.error(`[Sample Conversation Insights Worker] Pattern extraction enqueue failed:`, error);
+        // Don't fail the insights job if pattern extraction fails
+      }
+
       console.log(
         `[Sample Conversation Insights Worker] Completed job ${job.id} for survey ${surveyId}, conversation ${conversationNumber}`
       );

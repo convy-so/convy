@@ -14,17 +14,14 @@ import { env } from "@/lib/env";
 
 import { testRedisConnection } from "@/lib/redis";
 
-// Import all workers - this actually starts them since each worker file
-// creates a Worker instance that begins processing immediately
+
 import conversationInsightsWorker from "./conversation-insights.worker";
 import surveyAnalyticsWorker from "./survey-analytics.worker";
 import sampleConversationInsightsWorker from "./sample-conversation-insights.worker";
 import emailWorker from "./email.worker";
-import notionSyncWorker from "./notion-sync.worker";
-import notionBulkOperationWorker from "./notion-bulk-operation.worker";
-import subscriptionMonitorWorker from "./subscription-monitor.worker";
-import { webhookWorker } from "./webhook.worker";
-import { notificationWorker } from "./notification.worker";
+import patternExtractionWorker from "./pattern-extraction.worker";
+import experimentEvaluationWorker from "./experiment-evaluation.worker";
+import { scheduleExperimentEvaluation } from "@/lib/queue";
 
 // Collect all workers for coordinated shutdown
 const workers = [
@@ -35,11 +32,8 @@ const workers = [
     worker: sampleConversationInsightsWorker,
   },
   { name: "Email", worker: emailWorker },
-  { name: "Notion Sync", worker: notionSyncWorker },
-  { name: "Notion Bulk Operation", worker: notionBulkOperationWorker },
-  { name: "Subscription Monitor", worker: subscriptionMonitorWorker },
-  { name: "Webhook", worker: webhookWorker },
-  { name: "Notification", worker: notificationWorker },
+  { name: "Pattern Extraction", worker: patternExtractionWorker },
+  { name: "Experiment Evaluation", worker: experimentEvaluationWorker },
 ];
 
 console.log("🚀 Starting all workers...");
@@ -53,12 +47,15 @@ console.log("🚀 Starting all workers...");
     console.error("\n❌ Redis connection failed!");
     console.error("Make sure UPSTASH_REDIS_URL is set correctly in .env");
     console.error(
-      "Get it from: Upstash Console > Your Database > Connect > Redis URL"
+      "Get it from: Upstash Console > Your Database > Connect > Redis URL",
     );
     process.exit(1);
   }
 
   console.log("✅ Redis connection successful\n");
+
+  // Schedule recurring jobs
+  await scheduleExperimentEvaluation();
 
   // Log all workers that are now running
   for (const { name } of workers) {
@@ -84,7 +81,7 @@ async function gracefulShutdown(signal: string) {
 
   isShuttingDown = true;
   console.log(
-    `\n👋 Received ${signal}, shutting down all workers gracefully...`
+    `\n👋 Received ${signal}, shutting down all workers gracefully...`,
   );
 
   try {
@@ -102,7 +99,7 @@ async function gracefulShutdown(signal: string) {
     await Promise.race([
       Promise.all(closePromises),
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Shutdown timeout")), 30000)
+        setTimeout(() => reject(new Error("Shutdown timeout")), 30000),
       ),
     ]);
 

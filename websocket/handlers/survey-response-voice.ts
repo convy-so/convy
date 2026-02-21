@@ -1,15 +1,8 @@
 import { db } from "@/db";
-import {
-  surveys,
-  surveyConversations,
-  voiceSessions,
-} from "@/db/schema";
+import { surveys, surveyConversations, voiceSessions } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import {
-  type SurveyConfig,
-} from "@/lib/prompts";
-import { getTimeBasedGreeting } from "@/lib/greetings";
+import { type SurveyConfig } from "@/lib/prompts";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import {
   type RollingContext,
@@ -17,15 +10,16 @@ import {
   getStartTimeKey,
 } from "@/lib/conversation-memory";
 import { enqueueConversationInsights } from "@/lib/queue";
-import { UsageService } from "@/lib/billing/usage";
 import { getRedisClient } from "@/lib/redis";
 import { WebSocket } from "ws";
 import { BaseVoiceAgentHandler } from "./base-voice-agent-handler";
 import { ConversationManager } from "@/lib/conversation-manager";
+import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
+import type { AgentContext } from "@/lib/agents/types";
+import type { ModelMessage } from "ai";
 import {
   buildVoiceAgentSettings,
   type VoiceAgentSettings,
-  type VoiceAgentFunction,
   type ConversationTextEvent,
   type FunctionCallRequestEvent,
   type SupportedLanguage,
@@ -52,20 +46,25 @@ interface ResponseState {
 
 export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
   private state: ResponseState;
-  
+
   // Specific to response handler
   private participantId: string;
   private sessionStartTime: number = Date.now();
   private cleanupStarted: boolean = false;
-  
+
   // Billing & State context
   private ownerId: string | null = null;
   private organizationId: string | null = null;
 
-  constructor(ws: WebSocket, surveyId: string, identifier: string, language?: string) {
+  constructor(
+    ws: WebSocket,
+    surveyId: string,
+    identifier: string,
+    language?: string,
+  ) {
     // Pass to base (no userId for respondent sessions)
     super(ws, identifier);
-    
+
     this.participantId = nanoid();
 
     this.state = {
@@ -100,39 +99,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
         return;
       }
 
-      // Check plan-based concurrent participant limit
-      try {
-        const { assertCanAddVoiceParticipant } = await import("../../lib/billing/entitlements");
-        const { getWorkspaceOwnerId } = await import("../../lib/workspace-access");
-        
-        let targetUserId = survey.userId;
-        if (survey.organizationId) {
-          const ownerId = await getWorkspaceOwnerId(survey.organizationId);
-          if (ownerId) targetUserId = ownerId;
-        }
-        
-        this.ownerId = targetUserId;
-        this.organizationId = survey.organizationId ?? null;
-
-        await assertCanAddVoiceParticipant(
-          { userId: targetUserId, organizationId: survey.organizationId ?? null },
-          survey.currentParticipants
-        );
-
-        const { assertVoiceDurationAllowed } = await import("../../lib/billing/entitlements");
-        await assertVoiceDurationAllowed(
-          { userId: targetUserId, organizationId: survey.organizationId ?? null },
-          1 // Start with 1 minute check
-        );
-      } catch (error) {
-        if (error instanceof Error && error.name === "PlanLimitError") {
-          this.sendError(error.message);
-          this.ws.close();
-          return;
-        }
-        console.error("[Survey Response Voice] Entitlement check error:", error);
-      }
-
       if (survey.currentParticipants >= survey.participantLimit) {
         this.sendError("Survey has reached participant limit");
         this.ws.close();
@@ -140,21 +106,37 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       }
 
       this.state.survey = survey;
-      this.state.language = survey.language as SupportedLanguage;
+
+      // CRITICAL: Respect respondent's language choice (from WebSocket URL parameter)
+      // Only use survey.language as fallback if no language was provided by respondent
+      if (!this.state.language || this.state.language === "en") {
+        // If respondent didn't explicitly choose a language, use survey's default
+        this.state.language = (survey.language as SupportedLanguage) || "en";
+        console.log(
+          `[Survey Response Voice] Using survey default language: ${this.state.language}`,
+        );
+      } else {
+        console.log(
+          `[Survey Response Voice] Using respondent's chosen language: ${this.state.language}`,
+        );
+      }
+
       this.state.surveyConfig = buildCompleteSurveyConfig(survey);
-      
+
       // Load or create context using Manager
       this.state.context = await ConversationManager.loadOrCreateContext(
         this.identifier,
         [],
-        this.state.surveyConfig
+        this.state.surveyConfig,
       );
 
       // Restore start time from redis or use current
       const redis = getRedisClient();
       const startTimeKey = getStartTimeKey(this.identifier);
       const startTimeStr = await redis.get(startTimeKey);
-      this.sessionStartTime = startTimeStr ? new Date(startTimeStr).getTime() : Date.now();
+      this.sessionStartTime = startTimeStr
+        ? new Date(startTimeStr).getTime()
+        : Date.now();
 
       // Create voice session in database
       await db.insert(voiceSessions).values({
@@ -184,15 +166,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
           currentParticipants: sql`current_participants + 1`,
         })
         .where(eq(surveys.id, survey.id));
-        
-      // Track usage
-      if (this.ownerId) {
-        await UsageService.incrementUsage(
-          this.ownerId,
-          this.organizationId,
-          "voiceResponsesCount"
-        );
-      }
 
       // Start idle timeout
       this.resetIdleTimeout();
@@ -207,7 +180,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
       // Connect Voice Agent (greeting/welcome handled via Settings)
       await this.connectVoiceAgent();
-
     } catch (error) {
       console.error("[Survey Response Voice] Initialization error:", error);
       this.sendError("Failed to initialize voice session");
@@ -217,11 +189,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
   protected getLanguage(): SupportedLanguage {
     return this.state.language;
-  }
-
-  protected getGreeting(): string | null {
-    // Disable static greeting to use dynamic LLM generation
-    return null;
   }
 
   protected getInitialUserInput(): string | null {
@@ -234,37 +201,82 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       throw new Error("Survey config or context not initialized");
     }
 
-    // Generate system prompt with context injection
-    const systemPrompt = ConversationManager.getSystemPrompt(
-      this.state.surveyConfig,
-      this.state.context,
-      { language: this.state.language }
-    );
+    // --- AGENT INTEGRATION: Use ConductingSpecialist for agentic behavior ---
+    const agentContext: AgentContext = {
+      conversationId: this.identifier,
+      messages: this.state.messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      })) as ModelMessage[],
+      surveyConfig: this.state.surveyConfig!,
+      rollingContext: this.state.context!,
+      language: this.state.language,
+    };
 
-    // Build function definitions
-    const functions = this.buildFunctionDefinitions();
+    const conductingAgent = new ConductingSpecialist(agentContext);
 
-    const tone = (this.state.survey?.tone || "casual") as "casual" | "formal" | "playful" | "empathetic";
+    // Preload capabilities
+    await Promise.all([
+      conductingAgent.preloadSkills(),
+      conductingAgent.preloadPatternLearnings(
+        ["questioning", "probing", "engagement"],
+        2,
+      ),
+    ]);
+
+    // Use the agent's system prompt (includes domain expertise, checklist, questioning strategy)
+    const systemPrompt = conductingAgent.buildSystemPrompt();
+
+    // Use the agent's function definitions (converted to Deepgram format)
+    const functions = conductingAgent.getDeepgramFunctions();
+
+    const tone = (this.state.survey?.tone || "casual") as
+      | "casual"
+      | "formal"
+      | "playful"
+      | "empathetic";
 
     return buildVoiceAgentSettings({
       language: this.state.language,
       tone,
       systemPrompt,
-      // Greeting is now handled by getGreeting() and injected on connection
       functions,
-      conversationHistory: this.state.messages.length > 0
-        ? this.state.messages.map(m => ({ role: m.role, content: m.content }))
-        : undefined,
+      conversationHistory:
+        this.state.messages.length > 0
+          ? this.state.messages.map((m) => ({
+              role: m.role,
+              content: m.content,
+            }))
+          : undefined,
     });
   }
 
-  protected async onConversationText(event: ConversationTextEvent): Promise<void> {
-    // Add to conversation history
-    this.state.messages.push({
-      role: event.role,
-      content: event.content,
-      timestamp: new Date().toISOString(),
-    });
+  protected async onConversationText(
+    event: ConversationTextEvent,
+  ): Promise<void> {
+    const now = new Date();
+    const lastMessage = this.state.messages[this.state.messages.length - 1];
+
+    // Aggregation logic: Same role and within 5 seconds
+    if (
+      lastMessage &&
+      lastMessage.role === event.role &&
+      lastMessage.timestamp &&
+      now.getTime() - new Date(lastMessage.timestamp).getTime() < 3000
+    ) {
+      console.log(
+        `[SurveyResponseVoiceHandler] 🔄 Aggregating ${event.role} message in DB`,
+      );
+      lastMessage.content += " " + event.content;
+      lastMessage.timestamp = now.toISOString(); // Refresh timestamp for consecutive merges
+    } else {
+      // Add as a new message
+      this.state.messages.push({
+        role: event.role,
+        content: event.content,
+        timestamp: now.toISOString(),
+      });
+    }
 
     // Update conversation in database
     if (this.state.conversationId) {
@@ -280,12 +292,15 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
     if (this.state.surveyConfig && this.state.context) {
       this.state.context = await ConversationManager.loadOrCreateContext(
         this.identifier,
-        this.state.messages.map(m => ({ role: m.role, content: m.content })),
-        this.state.surveyConfig
+        this.state.messages.map((m) => ({ role: m.role, content: m.content })),
+        this.state.surveyConfig,
       );
 
       // Save context to Redis for persistence
-      await ConversationManager.saveContext(this.identifier, this.state.context);
+      await ConversationManager.saveContext(
+        this.identifier,
+        this.state.context,
+      );
 
       // Send progress update to client
       this.send({
@@ -297,29 +312,44 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
     }
 
     // Trigger async memory update after assistant messages (non-blocking)
-    if (event.role === "assistant" && this.state.surveyConfig && this.state.context) {
+    if (
+      event.role === "assistant" &&
+      this.state.surveyConfig &&
+      this.state.context
+    ) {
       ConversationManager.updateMemoryAsync(
         this.identifier,
         this.state.messages,
         this.state.surveyConfig,
-        this.state.context
+        this.state.context,
       ).catch(console.error);
     }
 
     // Fallback completion detection via phrases
     if (event.role === "assistant") {
-      const userMessages = this.state.messages.filter(m => m.role === "user");
-      const minQuestions = Math.max(this.state.surveyConfig?.requiredQuestions?.length || 0, 3);
+      const userMessages = this.state.messages.filter((m) => m.role === "user");
+      const minQuestions = Math.max(
+        this.state.surveyConfig?.requiredQuestions?.length || 0,
+        3,
+      );
 
       const isCompletionPhrase =
         event.content.toLowerCase().includes("thank you for completing") ||
         event.content.toLowerCase().includes("survey is now complete") ||
-        event.content.toLowerCase().includes("your feedback is incredibly valuable") ||
-        (this.state.context?.progress.shouldWrapUp && event.content.length < 150);
+        event.content
+          .toLowerCase()
+          .includes("your feedback is incredibly valuable") ||
+        event.content.toLowerCase().includes("thank you for your time") ||
+        event.content.toLowerCase().includes("have a great day") ||
+        event.content.toLowerCase().includes("goodbye") ||
+        (this.state.context?.progress.shouldWrapUp &&
+          event.content.length < 150);
 
       if (isCompletionPhrase && userMessages.length >= minQuestions) {
-        console.log(`[Survey Response Voice] Phrase-based completion detected ` +
-          `(messages: ${userMessages.length})`);
+        console.log(
+          `[Survey Response Voice] Phrase-based completion detected ` +
+            `(messages: ${userMessages.length})`,
+        );
         setTimeout(() => {
           this.send({ type: "survey_completed" });
           this.handleComplete();
@@ -328,11 +358,15 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
     }
   }
 
-  protected async onFunctionCall(event: FunctionCallRequestEvent): Promise<void> {
+  protected async onFunctionCall(
+    event: FunctionCallRequestEvent,
+  ): Promise<void> {
     switch (event.function_name) {
       case "showMedia": {
         const mediaId = event.input?.mediaId;
-        const media = this.state.surveyConfig?.media?.find(m => m.id === mediaId);
+        const media = this.state.surveyConfig?.media?.find(
+          (m) => m.id === mediaId,
+        );
 
         if (media) {
           this.send({
@@ -349,38 +383,55 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
           this.voiceAgent?.sendFunctionCallResponse(
             event.function_call_id,
             event.function_name,
-            JSON.stringify({ success: true, media: { id: media.id, type: media.type, description: media.description } })
+            JSON.stringify({
+              success: true,
+              media: {
+                id: media.id,
+                type: media.type,
+                description: media.description,
+              },
+            }),
           );
         } else {
           this.voiceAgent?.sendFunctionCallResponse(
             event.function_call_id,
             event.function_name,
-            JSON.stringify({ error: "Media not found" })
+            JSON.stringify({ error: "Media not found" }),
           );
         }
         break;
       }
 
       case "finishSurvey": {
-        const userMessages = this.state.messages.filter(m => m.role === "user");
-        const minQuestions = Math.max(this.state.surveyConfig?.requiredQuestions?.length || 0, 3);
+        const userMessages = this.state.messages.filter(
+          (m) => m.role === "user",
+        );
+        const minQuestions = Math.max(
+          this.state.surveyConfig?.requiredQuestions?.length || 0,
+          3,
+        );
 
         // Only complete if enough interaction happened
         if (userMessages.length >= minQuestions) {
           this.voiceAgent?.sendFunctionCallResponse(
             event.function_call_id,
             event.function_name,
-            JSON.stringify({ success: true, message: "Survey marked as complete" })
+            JSON.stringify({
+              success: true,
+              message: "Survey marked as complete",
+            }),
           );
 
-          console.log(`[Survey Response Voice] Tool-based completion for ${this.state.conversationId} ` +
-            `(messages: ${userMessages.length})`);
+          console.log(
+            `[Survey Response Voice] Tool-based completion for ${this.state.conversationId} ` +
+              `(messages: ${userMessages.length})`,
+          );
 
           // Delay to let agent speak farewell
           setTimeout(() => {
             this.send({ type: "survey_completed" });
             this.handleComplete();
-          }, 3000);
+          }, 500);
         } else {
           // Not enough interaction yet — tell the agent to continue
           this.voiceAgent?.sendFunctionCallResponse(
@@ -390,7 +441,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
               error: "Cannot finish yet - more questions need to be covered",
               currentQuestions: userMessages.length,
               minimumRequired: minQuestions,
-            })
+            }),
           );
         }
         break;
@@ -400,11 +451,12 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
         this.voiceAgent?.sendFunctionCallResponse(
           event.function_call_id,
           event.function_name,
-          JSON.stringify({ error: `Unknown function: ${event.function_name}` })
+          JSON.stringify({ error: `Unknown function: ${event.function_name}` }),
         );
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   protected async handleControlMessage(message: any): Promise<void> {
     switch (message.type) {
       case "stop_speaking":
@@ -417,44 +469,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
     }
   }
 
-  private buildFunctionDefinitions(): VoiceAgentFunction[] {
-    const functions: VoiceAgentFunction[] = [];
-
-    // Only add showMedia if the survey has media
-    if (this.state.surveyConfig?.media && this.state.surveyConfig.media.length > 0) {
-      functions.push({
-        name: "showMedia",
-        description: "Display a media item (image, audio, or video) to the participant in the conversation",
-        parameters: {
-          type: "object",
-          properties: {
-            mediaId: {
-              type: "string",
-              description: "The unique ID of the media item to display",
-            },
-          },
-          required: ["mediaId"],
-        },
-      });
-    }
-
-    functions.push({
-      name: "finishSurvey",
-      description: "Signal that the survey conversation is complete and should end. Call this when you have covered all required topics and gathered sufficient information from the participant.",
-      parameters: {
-        type: "object",
-        properties: {
-          reason: {
-            type: "string",
-            description: "Optional brief reason for ending (e.g., 'all topics covered', 'participant request')",
-          },
-        },
-        required: [],
-      },
-    });
-
-    return functions;
-  }
+  // Removed buildFunctionDefinitions() - now using ConductingSpecialist.getDeepgramFunctions()
 
   /**
    * Handle completion of survey
@@ -475,11 +490,16 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
             surveyId: this.state.survey?.id || "",
             userId: this.ownerId || "",
           });
-          console.log(`[Survey Response Voice] Enqueued insights for ${this.state.conversationId}`);
+          console.log(
+            `[Survey Response Voice] Enqueued insights for ${this.state.conversationId}`,
+          );
         } catch (error) {
-          console.error("[Survey Response Voice] Failed to enqueue insights:", error);
+          console.error(
+            "[Survey Response Voice] Failed to enqueue insights:",
+            error,
+          );
         }
-        
+
         // Cleanup Redis context on successful completion
         const redis = getRedisClient();
         await redis.del(getContextKey(this.identifier));
@@ -495,9 +515,10 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
       // Estimate TTS cost from total assistant characters
       const totalAssistantChars = this.state.messages
-        .filter(m => m.role === "assistant")
+        .filter((m) => m.role === "assistant")
         .reduce((sum, m) => sum + m.content.length, 0);
-      const estimatedTtsCost = totalAssistantChars * ESTIMATED_TTS_COST_PER_CHAR;
+      const estimatedTtsCost =
+        totalAssistantChars * ESTIMATED_TTS_COST_PER_CHAR;
       const totalCost = estimatedSttCost + estimatedTtsCost;
 
       // Update voice session status with metrics
@@ -514,16 +535,16 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
         })
         .where(eq(voiceSessions.id, this.state.voiceSessionId));
 
-       // Update conversation with precise duration
-       if (this.state.conversationId) {
+      // Update conversation with precise duration
+      if (this.state.conversationId) {
         await db
           .update(surveyConversations)
-          .set({ 
+          .set({
             durationMs: sessionDurationMs,
-            activeDurationMs: Math.round(this.activeDurationMs)
+            activeDurationMs: Math.round(this.activeDurationMs),
           })
           .where(eq(surveyConversations.id, this.state.conversationId));
-       }
+      }
 
       this.send({
         type: "completed",
@@ -546,11 +567,13 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
   protected async cleanup(): Promise<void> {
     // Prevent double cleanup
     if (this.cleanupStarted) {
-      console.log(`[Survey Response Voice] Cleanup already in progress for session ${this.state.voiceSessionId}`);
+      console.log(
+        `[Survey Response Voice] Cleanup already in progress for session ${this.state.voiceSessionId}`,
+      );
       return;
     }
     this.cleanupStarted = true;
-    
+
     try {
       // Call base cleanup (closes Voice Agent, clears timeouts)
       await super.cleanup();
@@ -565,12 +588,13 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
         .where(eq(voiceSessions.id, this.state.voiceSessionId));
 
       if (session) {
-        const newStatus = session.status === "active" ? "abandoned" : session.status;
+        const newStatus =
+          session.status === "active" ? "abandoned" : session.status;
 
         // Clean up orphaned conversation if no messages were exchanged
         if (this.state.conversationId && this.state.messages.length === 0) {
           console.log(
-            `[Survey Response Voice] Cleaning up orphaned conversation ${this.state.conversationId} (no messages)`
+            `[Survey Response Voice] Cleaning up orphaned conversation ${this.state.conversationId} (no messages)`,
           );
           await db
             .delete(surveyConversations)
@@ -579,11 +603,13 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
         // Estimate costs for session level tracking
         const durationMinutes = sessionDurationMs / 60000;
-        const estimatedSttCost = durationMinutes * ESTIMATED_STT_COST_PER_MINUTE;
+        const estimatedSttCost =
+          durationMinutes * ESTIMATED_STT_COST_PER_MINUTE;
         const totalAssistantChars = this.state.messages
-          .filter(m => m.role === "assistant")
+          .filter((m) => m.role === "assistant")
           .reduce((sum, m) => sum + m.content.length, 0);
-        const estimatedTtsCost = totalAssistantChars * ESTIMATED_TTS_COST_PER_CHAR;
+        const estimatedTtsCost =
+          totalAssistantChars * ESTIMATED_TTS_COST_PER_CHAR;
         const totalCost = estimatedSttCost + estimatedTtsCost;
 
         await db
@@ -603,31 +629,18 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
         if (this.state.conversationId) {
           await db
             .update(surveyConversations)
-            .set({ 
+            .set({
               durationMs: sessionDurationMs,
-              activeDurationMs: Math.round(this.activeDurationMs)
+              activeDurationMs: Math.round(this.activeDurationMs),
             })
             .where(eq(surveyConversations.id, this.state.conversationId));
         }
 
         console.log(
           `[Survey Response Voice] Session ${this.state.voiceSessionId} cleaned up: ` +
-          `duration=${sessionDurationMs}ms, activeDuration=${this.activeDurationMs}ms, ` +
-          `estimatedCost=$${totalCost.toFixed(4)}`
+            `duration=${sessionDurationMs}ms, activeDuration=${this.activeDurationMs}ms, ` +
+            `estimatedCost=$${totalCost.toFixed(4)}`,
         );
-        
-        // Track usage (Minutes)
-        if (this.ownerId) {
-          const minutes = this.activeDurationMs / 60000;
-          if (minutes > 0) {
-            await UsageService.incrementUsage(
-              this.ownerId,
-              this.organizationId,
-              "voiceMinutesUsed",
-              minutes
-            );
-          }
-        }
       }
     } catch (error) {
       console.error("[Survey Response Voice] Cleanup error:", error);

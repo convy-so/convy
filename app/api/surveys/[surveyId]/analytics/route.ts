@@ -37,7 +37,7 @@ import {
  */
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ surveyId: string }> }
+  { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
     const session = await getVerifiedSession();
@@ -78,78 +78,99 @@ export async function GET(
 
       const totalCount = conversations.length;
       const completedCount = conversations.filter((c) => c.completed).length;
-      
-      const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+      const completionRate =
+        totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
       // Construct a "live" partial analytics object
       const partialAnalytics: SurveyAnalyticsData = {
-          surveyId,
-          surveyTitle: survey.title,
-          generatedAt: new Date().toISOString(),
-          dataVersion: ANALYTICS_DATA_VERSION,
-          executiveSummary: {
-              headline: totalCount > 0 ? "Data collection in progress" : "Ready to collect responses",
-              keyInsights: [],
-              overallSentiment: { overall: "neutral", score: 0, confidence: 0 },
-              recommendedActions: []
+        surveyId,
+        surveyTitle: survey.title,
+        generatedAt: new Date().toISOString(),
+        dataVersion: ANALYTICS_DATA_VERSION,
+        executiveSummary: {
+          headline:
+            totalCount > 0
+              ? "Data collection in progress"
+              : "Ready to collect responses",
+          keyInsights: [],
+          overallSentiment: { overall: "neutral", score: 0, confidence: 0 },
+          recommendedActions: [],
+        },
+        coreMetrics: {
+          totalConversations: totalCount,
+          completedConversations: completedCount,
+          completionRate: completionRate,
+          averageMessagesPerConversation: 0,
+          averageResponseLength: 0,
+          averageFollowUpDepth: 0,
+          medianDurationMinutes: 0,
+          medianActiveDurationMinutes: 0,
+          insightQualityScore: 0,
+          responseEngagementDistribution: { high: 0, medium: 0, low: 0 },
+          requiredQuestionsCompletion: [],
+          topicCoverageRate: 0,
+        },
+        creatorMetrics: [],
+        hypothesisValidations: [],
+        discoveredInsights: {
+          trends: [],
+          outliers: [],
+          recommendations: [],
+          emergentTopics: [],
+          surprisingFindings: [],
+          dataGaps: [],
+        },
+        goalAssessment: {
+          surveyObjective: "",
+          achievementScore: 0,
+          achievementLevel: "not_met",
+          insightTypesCollected: {
+            emotional: {
+              collected: false,
+              count: 0,
+              quality: "low",
+              examples: [],
+            },
+            behavioral: {
+              collected: false,
+              count: 0,
+              quality: "low",
+              examples: [],
+            },
+            rational: {
+              collected: false,
+              count: 0,
+              quality: "low",
+              examples: [],
+            },
           },
-          coreMetrics: {
-              totalConversations: totalCount,
-              completedConversations: completedCount,
-              completionRate: completionRate,
-              averageMessagesPerConversation: 0,
-              averageResponseLength: 0,
-              averageFollowUpDepth: 0,
-              medianDurationMinutes: 0,
-              medianActiveDurationMinutes: 0,
-              insightQualityScore: 0,
-              responseEngagementDistribution: { high: 0, medium: 0, low: 0 },
-              requiredQuestionsCompletion: []
-          },
-          creatorMetrics: [],
-          hypothesisValidations: [],
-          discoveredInsights: {
-              trends: [],
-              outliers: [],
-              recommendations: [],
-              emergentTopics: [],
-              surprisingFindings: [],
-              dataGaps: []
-          },
-          goalAssessment: {
-              surveyObjective: "",
-              achievementScore: 0,
-              achievementLevel: "not_met",
-              insightTypesCollected: {
-                  emotional: { collected: false, count: 0, quality: "low", examples: [] },
-                  behavioral: { collected: false, count: 0, quality: "low", examples: [] },
-                  rational: { collected: false, count: 0, quality: "low", examples: [] }
-              },
-              successfulAspects: [],
-              gapsIdentified: [],
-              recommendedNextSteps: [],
-              suggestedFollowUpQuestions: []
-          },
-          conversationCount: totalCount,
-          lastUpdated: new Date().toISOString(),
-          dashboardWidgets: [] // Will be generated below
+          successfulAspects: [],
+          gapsIdentified: [],
+          recommendedNextSteps: [],
+          suggestedFollowUpQuestions: [],
+        },
+        conversationCount: totalCount,
+        lastUpdated: new Date().toISOString(),
+        dashboardWidgets: [], // Will be generated below
       };
 
       // Generate widgets for this partial data
-      partialAnalytics.dashboardWidgets = createDashboardWidgets(partialAnalytics);
+      partialAnalytics.dashboardWidgets =
+        createDashboardWidgets(partialAnalytics);
 
       if (format === "widgets") {
-          return NextResponse.json({
-            status: "ready",
-            surveyId,
-            lastUpdated: partialAnalytics.lastUpdated,
-            widgets: partialAnalytics.dashboardWidgets,
-          });
+        return NextResponse.json({
+          status: "ready",
+          surveyId,
+          lastUpdated: partialAnalytics.lastUpdated,
+          widgets: partialAnalytics.dashboardWidgets,
+        });
       }
 
       return NextResponse.json({
-          status: "ready",
-          ...partialAnalytics
+        status: "ready",
+        ...partialAnalytics,
       });
     }
 
@@ -210,6 +231,7 @@ export async function GET(
         insightQualityScore: 5,
         responseEngagementDistribution: { high: 0, medium: 0, low: 0 },
         requiredQuestionsCompletion: [],
+        topicCoverageRate: 0,
       },
 
       creatorMetrics: storedMetrics.creatorMetrics || [],
@@ -296,7 +318,7 @@ export async function GET(
     console.error("[Analytics API] Error:", error);
     return NextResponse.json(
       { error: "Failed to fetch analytics" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -313,7 +335,7 @@ export async function GET(
  */
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ surveyId: string }> }
+  { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
     const session = await getVerifiedSession();
@@ -353,7 +375,7 @@ export async function POST(
           message:
             "Complete some survey conversations first, then insights will be generated automatically.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -408,7 +430,7 @@ export async function POST(
     console.error("[Analytics API] Error:", error);
     return NextResponse.json(
       { error: "Failed to trigger analytics generation" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -421,7 +443,7 @@ export async function POST(
  */
 export async function getConversationInsights(
   surveyId: string,
-  userId: string
+  userId: string,
 ): Promise<ConversationInsightData[]> {
   // Verify survey ownership
   const [survey] = await db
@@ -445,7 +467,7 @@ export async function getConversationInsights(
     .from(surveyConversations)
     .leftJoin(
       conversationInsights,
-      eq(conversationInsights.conversationId, surveyConversations.id)
+      eq(conversationInsights.conversationId, surveyConversations.id),
     )
     .where(eq(surveyConversations.surveyId, surveyId));
 
@@ -490,6 +512,7 @@ export async function getConversationInsights(
         hypothesisEvidence:
           (stored.hypothesisEvidence as ConversationInsightData["hypothesisEvidence"]) ||
           [],
+        respondentData: (stored.respondentData as Record<string, string>) || {},
         mediaInteractions:
           (stored.mediaInteractions as ConversationInsightData["mediaInteractions"]) ||
           [],

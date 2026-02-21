@@ -9,7 +9,7 @@
 import { auth } from "@/lib/auth";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { db } from "@/db";
-import { organizations, members, invitations, subscriptions } from "@/db/schema";
+import { organizations, members, invitations } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 
 export type ActionResult<T> =
@@ -104,9 +104,7 @@ export async function getUserWorkspaces(): Promise<
     return {
       success: false,
       error:
-        error instanceof Error
-          ? error.message
-          : "Failed to get workspaces",
+        error instanceof Error ? error.message : "Failed to get workspaces",
     };
   }
 }
@@ -121,7 +119,7 @@ export async function getActiveWorkspace(): Promise<
     slug: string;
     role: string;
     logo?: string | null;
-    plan?:string | null;
+    plan?: string | null;
   } | null>
 > {
   try {
@@ -153,15 +151,8 @@ export async function getActiveWorkspace(): Promise<
     const member = await db.query.members.findFirst({
       where: and(
         eq(members.organizationId, activeOrganizationId),
-        eq(members.userId, session.user.id)
+        eq(members.userId, session.user.id),
       ),
-    });
-
-    const subscription = await db.query.subscriptions.findFirst({
-      where: (subs, { eq }) => eq(subs.organizationId, activeOrganizationId),
-      with: {
-        plan: true
-      }
     });
 
     return {
@@ -172,7 +163,7 @@ export async function getActiveWorkspace(): Promise<
         slug: org.slug,
         role: member?.role || "member",
         logo: org.logo || null,
-        plan: subscription?.plan?.name || "Free",
+        plan: "Free",
       },
     };
   } catch (error) {
@@ -191,7 +182,7 @@ export async function getActiveWorkspace(): Promise<
  * Set active workspace
  */
 export async function setActiveWorkspace(
-  organizationId: string | null
+  organizationId: string | null,
 ): Promise<ActionResult<void>> {
   try {
     await getVerifiedSession();
@@ -291,10 +282,7 @@ export async function removeWorkspaceMember(data: {
     console.error("Error removing workspace member:", error);
     return {
       success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Failed to remove member",
+      error: error instanceof Error ? error.message : "Failed to remove member",
     };
   }
 }
@@ -399,9 +387,7 @@ export async function updateWorkspace(data: {
     return {
       success: false,
       error:
-        error instanceof Error
-          ? error.message
-          : "Failed to update workspace",
+        error instanceof Error ? error.message : "Failed to update workspace",
     };
   }
 }
@@ -410,7 +396,7 @@ export async function updateWorkspace(data: {
  * Leave workspace
  */
 export async function leaveWorkspace(
-  organizationId: string
+  organizationId: string,
 ): Promise<ActionResult<void>> {
   try {
     await getVerifiedSession();
@@ -441,7 +427,7 @@ export async function leaveWorkspace(
  * Delete workspace (owner only)
  */
 export async function deleteWorkspace(
-  organizationId: string
+  organizationId: string,
 ): Promise<ActionResult<void>> {
   try {
     await getVerifiedSession();
@@ -463,9 +449,7 @@ export async function deleteWorkspace(
     return {
       success: false,
       error:
-        error instanceof Error
-          ? error.message
-          : "Failed to delete workspace",
+        error instanceof Error ? error.message : "Failed to delete workspace",
     };
   }
 }
@@ -486,13 +470,10 @@ async function getSessionHeaders(): Promise<Headers> {
   return headers;
 }
 
-
 /**
  * Get workspace invitations
  */
-export async function getWorkspaceInvitations(
-  organizationId: string
-): Promise<
+export async function getWorkspaceInvitations(organizationId: string): Promise<
   ActionResult<
     Array<{
       id: string;
@@ -512,12 +493,12 @@ export async function getWorkspaceInvitations(
       orderBy: [desc(invitations.createdAt)],
       with: {
         inviter: {
-            columns: {
-                name: true,
-                email: true,
-            }
-        }
-      }
+          columns: {
+            name: true,
+            email: true,
+          },
+        },
+      },
     });
 
     return {
@@ -545,7 +526,9 @@ export async function getWorkspaceInvitations(
 /**
  * Accept a workspace invitation
  */
-export async function acceptInvitationAction(invitationId: string): Promise<ActionResult<void>> {
+export async function acceptInvitationAction(
+  invitationId: string,
+): Promise<ActionResult<void>> {
   try {
     const session = await getVerifiedSession();
 
@@ -564,7 +547,8 @@ export async function acceptInvitationAction(invitationId: string): Promise<Acti
     console.error("Error accepting invitation:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to accept invitation",
+      error:
+        error instanceof Error ? error.message : "Failed to accept invitation",
     };
   }
 }

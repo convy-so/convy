@@ -63,8 +63,7 @@ export type SurveyMedia = {
   type: "image" | "audio" | "video";
   description: string;
   contextForUse: string;
-  contentSummary?: string;
-  infoToGather?: string;
+
   durationMs?: number | null;
   mimeType?: string;
   priority?: "high" | "medium" | "low";
@@ -123,7 +122,7 @@ const surveys = pgTable(
     index("surveys_shareable_link_idx").on(table.shareableLink),
     index("surveys_custom_slug_idx").on(table.customSlug),
     index("surveys_status_idx").on(table.status),
-  ]
+  ],
 );
 
 const surveyCreationConversations = pgTable(
@@ -138,8 +137,10 @@ const surveyCreationConversations = pgTable(
     messages: jsonb("messages")
       .$type<
         Array<{
+          id?: string;
           role: "user" | "assistant";
           content: string;
+          parts?: any[]; // For AI SDK v6 parts (tool calls, etc.)
           timestamp: string;
         }>
       >()
@@ -164,6 +165,8 @@ const surveyCreationConversations = pgTable(
         personalInfo: boolean;
         subjectDefined: boolean;
         domainIdentified: boolean;
+        media: boolean;
+        subjectModelComplete: boolean;
       }>()
       .default({
         objective: false,
@@ -178,6 +181,8 @@ const surveyCreationConversations = pgTable(
         personalInfo: false,
         subjectDefined: false,
         domainIdentified: false,
+        media: false,
+        subjectModelComplete: false,
       }),
     extractedData: jsonb("extracted_data")
       .$type<{
@@ -192,13 +197,14 @@ const surveyCreationConversations = pgTable(
         personalInfo?: string[];
         title?: string;
         domainId?: number;
+        media?: SurveyMedia[];
       }>()
       .default({}),
   },
   (table) => [
     index("survey_creation_conversations_survey_id_idx").on(table.surveyId),
     index("survey_creation_conversations_status_idx").on(table.status),
-  ]
+  ],
 );
 
 const sampleConversations = pgTable(
@@ -211,7 +217,15 @@ const sampleConversations = pgTable(
       .references(() => surveys.id, { onDelete: "cascade" }),
     conversationNumber: integer("conversation_number").notNull(),
     messages: jsonb("messages")
-      .$type<Array<{ role: "user" | "assistant"; content: string }>>()
+      .$type<
+        Array<{
+          id?: string;
+          role: "user" | "assistant";
+          content: string;
+          parts?: any[];
+          timestamp?: string;
+        }>
+      >()
       .notNull(),
     durationMs: integer("duration_ms").default(0),
     activeDurationMs: integer("active_duration_ms").default(0),
@@ -230,9 +244,9 @@ const sampleConversations = pgTable(
     index("sample_conversations_survey_id_idx").on(table.surveyId),
     unique("sample_conversations_survey_number_unique").on(
       table.surveyId,
-      table.conversationNumber
+      table.conversationNumber,
     ),
-  ]
+  ],
 );
 
 const surveyConversations = pgTable(
@@ -247,8 +261,10 @@ const surveyConversations = pgTable(
     rawConversation: jsonb("raw_conversation")
       .$type<
         Array<{
+          id?: string;
           role: "user" | "assistant";
           content: string;
+          parts?: any[];
           timestamp: string;
         }>
       >()
@@ -258,19 +274,20 @@ const surveyConversations = pgTable(
     summary: text("summary"),
     completed: boolean("completed").default(false).notNull(),
     originalLanguage: text("original_language").default("en"),
-    translatedConversation: jsonb("translated_conversation")
-      .$type<
-        Array<{
-          role: "user" | "assistant";
-          content: string;
-          timestamp: string;
-        }>
-      >(),
+    translatedConversation: jsonb("translated_conversation").$type<
+      Array<{
+        id?: string;
+        role: "user" | "assistant";
+        content: string;
+        parts?: any[];
+        timestamp: string;
+      }>
+    >(),
   },
   (table) => [
     index("survey_conversations_survey_id_idx").on(table.surveyId),
     index("survey_conversations_completed_idx").on(table.completed),
-  ]
+  ],
 );
 
 const conversationInsights = pgTable(
@@ -286,7 +303,7 @@ const conversationInsights = pgTable(
   },
   (table) => [
     index("conversation_insights_conversation_id_idx").on(table.conversationId),
-  ]
+  ],
 );
 
 const surveyAnalytics = pgTable(
@@ -312,9 +329,8 @@ const surveyAnalytics = pgTable(
       .notNull(),
     generatedLanguage: text("generated_language").default("en"),
   },
-  (table) => [index("survey_analytics_survey_id_idx").on(table.surveyId)]
+  (table) => [index("survey_analytics_survey_id_idx").on(table.surveyId)],
 );
-
 
 const surveysRelations = relations(surveys, ({ one, many }) => ({
   user: one(users, {
@@ -339,7 +355,6 @@ const surveysRelations = relations(surveys, ({ one, many }) => ({
     fields: [surveys.id],
     references: [surveyAnalytics.surveyId],
   }),
-
 }));
 
 const surveyCreationConversationsRelations = relations(
@@ -349,7 +364,7 @@ const surveyCreationConversationsRelations = relations(
       fields: [surveyCreationConversations.surveyId],
       references: [surveys.id],
     }),
-  })
+  }),
 );
 
 const sampleConversationsRelations = relations(
@@ -359,7 +374,7 @@ const sampleConversationsRelations = relations(
       fields: [sampleConversations.surveyId],
       references: [surveys.id],
     }),
-  })
+  }),
 );
 
 const surveyConversationsRelations = relations(
@@ -373,7 +388,7 @@ const surveyConversationsRelations = relations(
       fields: [surveyConversations.id],
       references: [conversationInsights.conversationId],
     }),
-  })
+  }),
 );
 
 const conversationInsightsRelations = relations(
@@ -383,18 +398,15 @@ const conversationInsightsRelations = relations(
       fields: [conversationInsights.conversationId],
       references: [surveyConversations.id],
     }),
-  })
+  }),
 );
 
-const surveyAnalyticsRelations = relations(
-  surveyAnalytics,
-  ({ one }) => ({
-    survey: one(surveys, {
-      fields: [surveyAnalytics.surveyId],
-      references: [surveys.id],
-    }),
-  })
-);
+const surveyAnalyticsRelations = relations(surveyAnalytics, ({ one }) => ({
+  survey: one(surveys, {
+    fields: [surveyAnalytics.surveyId],
+    references: [surveys.id],
+  }),
+}));
 
 export {
   surveys,
