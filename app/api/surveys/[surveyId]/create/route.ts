@@ -7,11 +7,13 @@ import { surveys, surveyCreationConversations } from "@/db/schema";
 import { defaultModel, analysisModel } from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
-  getSurveyCreationSystemPrompt,
   getSurveyDataExtractionPrompt,
   type CollectedInfo,
 } from "@/lib/prompts";
 import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
+import { CreationSpecialist } from "@/lib/agents/creation-specialist";
+import { buildCompleteSurveyConfig } from "@/lib/surveys";
+import type { AgentContext } from "@/lib/agents/types";
 
 export const maxDuration = 300;
 
@@ -21,13 +23,15 @@ export const maxDuration = 300;
  */
 async function performIncrementalExtraction(
   surveyId: string,
-  messages: Array<{ role: "user" | "assistant"; content: string }>
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
 ): Promise<void> {
   try {
     // Extract after at least 2 messages (1 user message + AI welcome)
     if (messages.length < 2) return;
 
-    console.log(`[Create Route] Starting extraction for survey ${surveyId} with ${messages.length} messages`);
+    console.log(
+      `[Create Route] Starting extraction for survey ${surveyId} with ${messages.length} messages`,
+    );
 
     const extractionPrompt = getSurveyDataExtractionPrompt(messages);
 
@@ -36,7 +40,10 @@ async function performIncrementalExtraction(
         .object({
           goal: z.string().min(5, "Goal must be descriptive").nullable(),
           context: z.string().min(5, "Context must be descriptive").nullable(),
-          decision: z.string().min(5, "Decision must be descriptive").nullable(),
+          decision: z
+            .string()
+            .min(5, "Decision must be descriptive")
+            .nullable(),
           subjectDomain: z.string().min(2).nullable(),
           subjectDescription: z.string().min(5).nullable(),
         })
@@ -76,9 +83,7 @@ async function performIncrementalExtraction(
           assumptions: z.array(z.string().min(5)).nullable(),
         })
         .nullable(),
-      tone: z
-        .enum(["formal", "casual", "playful", "empathetic"])
-        .nullable(),
+      tone: z.enum(["formal", "casual", "playful", "empathetic"]).nullable(),
       requiredQuestions: z.array(z.string().min(5)).nullable(),
       metrics: z.array(z.string().min(2)).nullable(),
       personalInfo: z.array(z.string()).nullable(),
@@ -90,7 +95,7 @@ async function performIncrementalExtraction(
             description: z.string().min(5),
             contextForUse: z.string().min(5),
             priority: z.enum(["high", "medium", "low"]).nullable(),
-          })
+          }),
         )
         .nullable(),
       collectedInfo: z.object({
@@ -115,7 +120,8 @@ async function performIncrementalExtraction(
       model: analysisModel,
       output: Output.object({ schema: extractionSchema }),
       prompt: extractionPrompt,
-      system: "You are an expert survey designer. Extract structured data from the conversation.",
+      system:
+        "You are an expert survey designer. Extract structured data from the conversation.",
       temperature: 0.3,
     });
 
@@ -141,16 +147,37 @@ async function performIncrementalExtraction(
     }
 
     // Update conversation with incremental extraction
+    const defaultCollectedInfo: CollectedInfo = {
+      objective: false,
+      targetAudience: false,
+      scope: false,
+      successCriteria: false,
+      constraints: false,
+      hypotheses: false,
+      tone: false,
+      requiredQuestions: false,
+      metrics: false,
+      personalInfo: false,
+      subjectDefined: false,
+      domainIdentified: false,
+      media: false,
+      subjectModelComplete: false,
+    };
+
     await db
       .update(surveyCreationConversations)
       .set({
         extractedData: mergedData,
-        collectedInfo: collectedInfo || currentConv.collectedInfo,
+        collectedInfo: {
+          ...defaultCollectedInfo,
+          ...(currentConv.collectedInfo || {}),
+          ...(collectedInfo || {}),
+        },
       })
       .where(eq(surveyCreationConversations.surveyId, surveyId));
 
     console.log(
-      `[Create Route] Incremental extraction completed for survey ${surveyId}`
+      `[Create Route] Incremental extraction completed for survey ${surveyId}`,
     );
   } catch (error) {
     console.error("[Create Route] Incremental extraction error:", error);
@@ -161,11 +188,11 @@ async function performIncrementalExtraction(
 /**
  * Stream a survey creation conversation
  * This guides the survey maker through providing all necessary information
- * Now includes incremental data extraction for better reliability
+ * Now uses the CreationSpecialist agent for domain-specific interactions
  */
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ surveyId: string }> }
+  { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
     const clientIP = getClientIP(request);
@@ -186,7 +213,7 @@ export async function POST(
             "X-RateLimit-Remaining": rateLimitResult.remaining.toString(),
             "X-RateLimit-Reset": rateLimitResult.reset.toString(),
           },
-        }
+        },
       );
     }
 
@@ -194,7 +221,7 @@ export async function POST(
     const { surveyId } = await params;
     const body = await request.json();
     const { messages } = body as {
-      messages: Array<{ role: "user" | "assistant"; content: string }>;
+      messages: Array<any>;
     };
 
     if (!Array.isArray(messages)) {
@@ -217,11 +244,9 @@ export async function POST(
     if (survey.status !== "creating") {
       return new Response(
         "Survey is not in creation mode. Status: " + survey.status,
-        { status: 400 }
+        { status: 400 },
       );
     }
-
-
 
     const [creationConversation] = await db
       .select()
@@ -242,6 +267,8 @@ export async function POST(
         personalInfo: false,
         subjectDefined: false,
         domainIdentified: false,
+        media: false,
+        subjectModelComplete: false,
       };
 
     // SAVE CONVERSATION STATE (Important for extraction to work)
@@ -269,37 +296,122 @@ export async function POST(
       });
     }
 
-    const systemPrompt = getSurveyCreationSystemPrompt(
-      collectedInfo,
-      survey.language,
-      creationConversation?.extractedData?.domainId as number | undefined
+    // --- AGENT INTEGRATION START ---
+
+    // 1. Build Agent Context
+    // We update the survey config with latest extracted data for the agent
+    const currentConfig = buildCompleteSurveyConfig(survey);
+    const extractedData = creationConversation?.extractedData;
+
+    // Overlay extracted data onto config so agent sees what has been collected
+    if (extractedData?.domainId)
+      currentConfig.domainId = extractedData.domainId;
+    if (extractedData?.objective)
+      currentConfig.objective = extractedData.objective;
+    if (extractedData?.targetAudience)
+      currentConfig.targetAudience = extractedData.targetAudience;
+    // ... other fields are less critical for immediate context, or are handled by extractedData updates
+
+    const outputMessages =
+      messages.length > 0
+        ? messages
+        : [
+            {
+              role: "user",
+              content:
+                "Start the conversation by introducing yourself as the expert on this domain and asking the first question.",
+            },
+          ];
+
+    const agentContext: AgentContext = {
+      surveyConfig: currentConfig,
+      language: survey.language,
+      conversationId: creationConversation?.id || crypto.randomUUID(),
+    };
+
+    // 2. Instantiate Creation Specialist
+    const agent = new CreationSpecialist(agentContext);
+
+    // Preload capabilities
+    await Promise.all([
+      agent.preloadSkills(),
+      agent.preloadPatternLearnings(["creation", "general"], 2),
+    ]).catch((error) =>
+      console.warn(
+        "[Create Route] Failed to preload agent capabilities:",
+        error,
+      ),
     );
 
-    // Fix for "Stuck" AI: If messages are empty, we need to prompt the AI to start.
-    // We inject a transient system message that acts as the "trigger" but isn't saved to the DB as a user message.
-    const messagesToLLM = messages.length > 0 
-      ? messages 
-      : [{ role: "user", content: "Start the conversation by introducing yourself as the expert on this domain and asking the first question." }];
+    // 3. Get System Prompt from Agent
+    const systemPrompt = agent.buildSystemPrompt();
 
-    const result = streamText({
+    // 4. Stream response using Agent's prompt and tool logic
+    // We recreate the tools here to ensure we can hook into onFinish correctly
+    // mirroring the logic from CreationSpecialist.stream() but adding the route-specific side effects.
+
+    const streamResult = streamText({
       model: defaultModel,
-      messages: messagesToLLM as any, // Cast to any to satisfy type checker if needed
+      messages: outputMessages as any,
       system: systemPrompt,
       temperature: 0.7,
-      maxOutputTokens: 1500,
-      stopWhen: stepCountIs(5),// Allow tool use and follow-up response
+      maxOutputTokens: 1500, // Agentic responses can be longer
+      stopWhen: stepCountIs(10), // Use stepCountIs as requested by user
       tools: {
-        finishSurvey: tool({
-          description: "Call this tool when the user has provided all necessary information to create the survey.",
-          inputSchema: z.object({}),
-          execute: async () => {
-            return "Survey creation marked as complete. Inform the user that the survey is ready.";
+        loadSkill: tool({
+          description:
+            "Load detailed instructions for a specific specialized skill.",
+          inputSchema: z.object({
+            skillId: z
+              .string()
+              .describe("The ID of the skill to load (e.g., 'BiasDetector')"),
+          }),
+          execute: async ({ skillId }) => {
+            const { SkillRegistry } =
+              await import("@/lib/agents/skill-registry");
+            const skill = await SkillRegistry.getSkill(skillId);
+            if (!skill) return { error: "Skill not found" };
+            return { instructions: skill.content };
           },
         }),
+        finishSurvey: tool({
+          description:
+            "Signal that all required survey information has been collected and the survey design is complete.",
+          inputSchema: z.object({
+            summary: z
+              .string()
+              .describe("Brief summary of the survey that was designed"),
+          }),
+          execute: async ({ summary }) => ({
+            success: true,
+            message: "Survey design complete",
+            summary,
+          }),
+        }),
+        requestMediaUpload: tool({
+          description:
+            "Request the user to upload media (image, audio, or video) to include in the survey.",
+          inputSchema: z.object({
+            reason: z
+              .string()
+              .describe(
+                "Why you are requesting media and how it will be used in the survey",
+              ),
+          }),
+          execute: async ({ reason }) => ({
+            success: true,
+            message: "Media upload requested",
+            reason,
+          }),
+        }),
       },
-      onFinish: async ({ text }) => {
+      onFinish: async ({ text, response }) => {
         // Save the assistant's response when done
         try {
+          const assistantMessage = response.messages.find(
+            (m) => m.role === "assistant",
+          );
+
           // Re-fetch to get latest state in case extraction updated it
           const [latestConv] = await db
             .select()
@@ -318,6 +430,11 @@ export async function POST(
               {
                 role: "assistant" as const,
                 content: text,
+                parts:
+                  (assistantMessage as any)?.content &&
+                  Array.isArray((assistantMessage as any).content)
+                    ? (assistantMessage as any).content
+                    : undefined,
                 timestamp: new Date().toISOString(),
               },
             ];
@@ -329,7 +446,7 @@ export async function POST(
               })
               .where(eq(surveyCreationConversations.surveyId, surveyId));
 
-            // Trigger incremental extraction more frequently to ensure button appears
+            // Logic for triggering extraction and completion checks
             const completionPhrases = [
               "ready to publish",
               "all set",
@@ -338,17 +455,13 @@ export async function POST(
               "looks good",
               "finalized",
               "try sample",
-              "i have all the information",
               "go to sample conversations",
-              "click the button",
-              "everything you need",
-              "everything we need",
+              "survey design complete",
             ];
             const isCompletionVariable = completionPhrases.some((phrase) =>
-              text.toLowerCase().includes(phrase)
+              text.toLowerCase().includes(phrase),
             );
 
-            // Extract more frequently: first 2 messages, completion phrase, or every 2nd message
             const shouldExtract =
               updatedMessages.length <= 2 ||
               isCompletionVariable ||
@@ -356,52 +469,21 @@ export async function POST(
 
             if (shouldExtract) {
               console.log(
-                `[Create Route] Triggering extraction for survey ${surveyId} (Reason: ${isCompletionVariable ? "Completion Phrase" : "Regular Interval"
-                })`
+                `[Create Route] Triggering extraction (Reason: ${isCompletionVariable ? "Completion" : "Interval"})`,
               );
               await performIncrementalExtraction(surveyId, updatedMessages);
-              
-              // Check if we're now in completion state
-              const [updatedConv] = await db
-                .select()
-                .from(surveyCreationConversations)
-                .where(eq(surveyCreationConversations.surveyId, surveyId));
-
-              if (updatedConv?.collectedInfo) {
-                const info = updatedConv.collectedInfo as any;
-                const allCollected = info.objective && info.targetAudience && 
-                                   info.scope && info.successCriteria && 
-                                   info.constraints && info.subjectDefined && 
-                                   info.domainIdentified;
-                
-                if (allCollected) {
-                  console.log(`[Create Route] ✅ All required info collected for ${surveyId} - conversation should end`);
-                  console.log(`[Create Route] collectedInfo:`, JSON.stringify(info, null, 2));
-                } else {
-                  const missing = [];
-                  if (!info.objective) missing.push("objective");
-                  if (!info.targetAudience) missing.push("targetAudience");
-                  if (!info.scope) missing.push("scope");
-                  if (!info.successCriteria) missing.push("successCriteria");
-                  if (!info.constraints) missing.push("constraints");
-                  if (!info.subjectDefined) missing.push("subjectDefined");
-                  if (!info.domainIdentified) missing.push("domainIdentified");
-                  console.log(`[Create Route] ⏳ Still missing: ${missing.join(", ")}`);
-                }
-              }
-            } else {
-              console.log(
-                `[Create Route] Skipping extraction for survey ${surveyId} (throttled)`
-              );
             }
           }
         } catch (error) {
-          console.error("Error saving conversation or performing extraction:", error);
+          console.error(
+            "Error saving conversation or performing extraction:",
+            error,
+          );
         }
       },
     });
 
-    return result.toTextStreamResponse();
+    return streamResult.toUIMessageStreamResponse();
   } catch (error) {
     if (error instanceof Error) {
       if (
@@ -422,24 +504,20 @@ export async function POST(
  */
 export async function PUT(
   request: Request,
-  { params }: { params: Promise<{ surveyId: string }> }
+  { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
     const body = await request.json();
     const { messages, collectedInfo, extractedData } = body as {
-      messages: Array<{
-        role: "user" | "assistant";
-        content: string;
-        timestamp?: string;
-      }>;
+      messages?: Array<any>;
       collectedInfo?: CollectedInfo;
       extractedData?: Record<string, unknown>;
     };
 
-    if (!Array.isArray(messages)) {
-      return new Response("Invalid request", { status: 400 });
+    if (messages && !Array.isArray(messages)) {
+      return new Response("Invalid messages format", { status: 400 });
     }
 
     const [survey] = await db
@@ -460,17 +538,19 @@ export async function PUT(
       .from(surveyCreationConversations)
       .where(eq(surveyCreationConversations.surveyId, surveyId));
 
-    const messagesWithTimestamp = messages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-      timestamp: msg.timestamp || new Date().toISOString(),
-    }));
-
     if (existingConversation) {
       await db
         .update(surveyCreationConversations)
         .set({
-          messages: messagesWithTimestamp,
+          ...(messages && {
+            messages: messages.map((msg) => ({
+              id: msg.id,
+              role: msg.role,
+              content: msg.content,
+              parts: msg.parts,
+              timestamp: msg.timestamp || new Date().toISOString(),
+            })),
+          }),
           ...(collectedInfo && { collectedInfo }),
           ...(extractedData && {
             extractedData: {
@@ -484,7 +564,15 @@ export async function PUT(
       await db.insert(surveyCreationConversations).values({
         id: crypto.randomUUID(),
         surveyId,
-        messages: messagesWithTimestamp,
+        messages: messages
+          ? messages.map((msg) => ({
+              id: msg.id,
+              role: msg.role,
+              content: msg.content,
+              parts: msg.parts,
+              timestamp: msg.timestamp || new Date().toISOString(),
+            }))
+          : [],
         status: "in_progress",
         collectedInfo: collectedInfo || {
           objective: false,
@@ -499,6 +587,8 @@ export async function PUT(
           personalInfo: false,
           subjectDefined: false,
           domainIdentified: false,
+          media: false,
+          subjectModelComplete: false,
         },
         extractedData: extractedData || {},
       });
@@ -527,7 +617,7 @@ export async function PUT(
  */
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ surveyId: string }> }
+  { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
     const session = await getVerifiedSession();
@@ -555,14 +645,22 @@ export async function GET(
       return new Response(
         JSON.stringify({
           collectedInfo: {
-            objective: false, targetAudience: false, scope: false, successCriteria: false,
-            constraints: false, hypotheses: false, tone: false,
-            requiredQuestions: false, metrics: false, personalInfo: false,
-            subjectDefined: false, domainIdentified: false,
+            objective: false,
+            targetAudience: false,
+            scope: false,
+            successCriteria: false,
+            constraints: false,
+            hypotheses: false,
+            tone: false,
+            requiredQuestions: false,
+            metrics: false,
+            personalInfo: false,
+            subjectDefined: false,
+            domainIdentified: false,
           },
-          extractedData: {}
+          extractedData: {},
         }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
+        { status: 200, headers: { "Content-Type": "application/json" } },
       );
     }
 
@@ -573,7 +671,7 @@ export async function GET(
         extractedData: creationConversation.extractedData,
         status: creationConversation.status,
       }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
+      { status: 200, headers: { "Content-Type": "application/json" } },
     );
   } catch (error) {
     if (error instanceof Error) {
@@ -588,4 +686,3 @@ export async function GET(
     return new Response("Internal server error", { status: 500 });
   }
 }
-

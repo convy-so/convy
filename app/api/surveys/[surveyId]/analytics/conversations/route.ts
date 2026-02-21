@@ -24,7 +24,7 @@ import type { ConversationInsightData } from "@/lib/analytics";
  */
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ surveyId: string }> }
+  { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
     const session = await getVerifiedSession();
@@ -35,7 +35,7 @@ export async function GET(
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
     const limit = Math.min(
       100,
-      Math.max(1, parseInt(searchParams.get("limit") || "20"))
+      Math.max(1, parseInt(searchParams.get("limit") || "20")),
     );
     const sortBy = searchParams.get("sortBy") || "date";
     const sortOrder = searchParams.get("sortOrder") || "desc";
@@ -69,7 +69,7 @@ export async function GET(
       .from(surveyConversations)
       .leftJoin(
         conversationInsights,
-        eq(conversationInsights.conversationId, surveyConversations.id)
+        eq(conversationInsights.conversationId, surveyConversations.id),
       )
       .where(eq(surveyConversations.surveyId, surveyId));
 
@@ -118,6 +118,9 @@ export async function GET(
           hypothesisEvidence:
             (stored.hypothesisEvidence as ConversationInsightData["hypothesisEvidence"]) ||
             [],
+          activeDurationMinutes: (stored.activeDurationMinutes as number) || 0,
+          respondentData:
+            (stored.respondentData as Record<string, string>) || {},
           mediaInteractions:
             (stored.mediaInteractions as ConversationInsightData["mediaInteractions"]) ||
             [],
@@ -129,7 +132,7 @@ export async function GET(
     // Apply engagement filter
     if (engagementFilter !== "all") {
       transformedConversations = transformedConversations.filter(
-        (c) => c.engagementLevel === engagementFilter
+        (c) => c.engagementLevel === engagementFilter,
       );
     }
 
@@ -163,7 +166,7 @@ export async function GET(
     const startIndex = (page - 1) * limit;
     const paginatedConversations = transformedConversations.slice(
       startIndex,
-      startIndex + limit
+      startIndex + limit,
     );
 
     // Calculate aggregate stats
@@ -171,10 +174,10 @@ export async function GET(
       totalConversations: totalCount,
       byEngagement: {
         high: transformedConversations.filter(
-          (c) => c.engagementLevel === "high"
+          (c) => c.engagementLevel === "high",
         ).length,
         medium: transformedConversations.filter(
-          (c) => c.engagementLevel === "medium"
+          (c) => c.engagementLevel === "medium",
         ).length,
         low: transformedConversations.filter((c) => c.engagementLevel === "low")
           .length,
@@ -184,24 +187,24 @@ export async function GET(
           ? Math.round(
               (transformedConversations.reduce(
                 (sum, c) => sum + c.responseQuality,
-                0
+                0,
               ) /
                 totalCount) *
-                10
+                10,
             ) / 10
           : 0,
       sentimentBreakdown: {
         positive: transformedConversations.filter(
-          (c) => c.sentiment.overall === "positive"
+          (c) => c.sentiment.overall === "positive",
         ).length,
         negative: transformedConversations.filter(
-          (c) => c.sentiment.overall === "negative"
+          (c) => c.sentiment.overall === "negative",
         ).length,
         neutral: transformedConversations.filter(
-          (c) => c.sentiment.overall === "neutral"
+          (c) => c.sentiment.overall === "neutral",
         ).length,
         mixed: transformedConversations.filter(
-          (c) => c.sentiment.overall === "mixed"
+          (c) => c.sentiment.overall === "mixed",
         ).length,
       },
     };
@@ -230,7 +233,7 @@ export async function GET(
     console.error("[Conversation Insights API] Error:", error);
     return NextResponse.json(
       { error: "Failed to fetch conversation insights" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -244,7 +247,7 @@ export async function GET(
 export async function getConversationDetail(
   surveyId: string,
   conversationId: string,
-  userId: string
+  userId: string,
 ): Promise<ConversationInsightData | null> {
   // Verify survey ownership
   const [survey] = await db
@@ -268,7 +271,7 @@ export async function getConversationDetail(
     .from(surveyConversations)
     .leftJoin(
       conversationInsights,
-      eq(conversationInsights.conversationId, surveyConversations.id)
+      eq(conversationInsights.conversationId, surveyConversations.id),
     )
     .where(eq(surveyConversations.id, conversationId));
 
@@ -310,6 +313,8 @@ export async function getConversationDetail(
     hypothesisEvidence:
       (stored.hypothesisEvidence as ConversationInsightData["hypothesisEvidence"]) ||
       [],
+    activeDurationMinutes: (stored.activeDurationMinutes as number) || 0,
+    respondentData: (stored.respondentData as Record<string, string>) || {},
     mediaInteractions:
       (stored.mediaInteractions as ConversationInsightData["mediaInteractions"]) ||
       [],

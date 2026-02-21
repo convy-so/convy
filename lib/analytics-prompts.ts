@@ -1,6 +1,4 @@
-
 import type { SurveyConfig } from "./prompts";
-import { getAnalyticsExpertise } from "./domain-expertise-loader";
 
 // ============================================================================
 // CONVERSATION-LEVEL INSIGHTS PROMPT
@@ -15,30 +13,36 @@ export function getStructuredConversationInsightsPrompt(
     content: string;
     timestamp?: string;
   }>,
-  config: SurveyConfig
+  config: SurveyConfig,
 ): string {
   const conversationText = conversation
     .map(
       (msg, i) =>
-        `[${i + 1}] ${msg.role === "user" ? "PARTICIPANT" : "INTERVIEWER"}: ${msg.content}`
+        `[${i + 1}] ${msg.role === "user" ? "PARTICIPANT" : "INTERVIEWER"}: ${msg.content}`,
     )
     .join("\n\n");
 
-  const requiredQuestions = config.requiredQuestions.length > 0
-    ? config.requiredQuestions.map((q, i) => `${i + 1}. "${q}"`).join("\n")
-    : "None specified";
+  const requiredQuestions =
+    config.requiredQuestions.length > 0
+      ? config.requiredQuestions.map((q, i) => `${i + 1}. "${q}"`).join("\n")
+      : "None specified";
 
-  const metrics = config.metrics.length > 0
-    ? config.metrics.join(", ")
-    : "None specified";
+  const metrics =
+    config.metrics.length > 0 ? config.metrics.join(", ") : "None specified";
 
-  const hypotheses = (config.hypotheses?.assumptions?.length ?? 0) > 0
-    ? config.hypotheses!.assumptions.map((h, i) => `${i + 1}. "${h}"`).join("\n")
-    : "";
+  const hypotheses =
+    (config.hypotheses?.assumptions?.length ?? 0) > 0
+      ? config
+          .hypotheses!.assumptions.map((h, i) => `${i + 1}. "${h}"`)
+          .join("\n")
+      : "";
 
-  const mediaAssets = (config.media?.length ?? 0) > 0
-    ? config.media!.map(m => `- ${m.type}[${m.id}]: ${m.description}`).join("\n")
-    : "";
+  const mediaAssets =
+    (config.media?.length ?? 0) > 0
+      ? config
+          .media!.map((m) => `- ${m.type}[${m.id}]: ${m.description}`)
+          .join("\n")
+      : "";
 
   return `<task>
 Analyze this survey conversation and extract structured insights.
@@ -55,21 +59,7 @@ ${hypotheses ? `Hypotheses to evaluate:\n${hypotheses}` : ""}
 ${mediaAssets ? `Media assets:\n${mediaAssets}` : ""}
 </survey_context>
 
-${config.domainId ? (() => {
-    const expert = getAnalyticsExpertise(config.domainId);
-    return expert ? `<domain_analytics_lens>
-You are analyzing this as a ${expert.analysisPhilosophy}.
 
-KEY METRICS TO WATCH:
-${expert.keyMetrics.map(m => `- ${m.name}: ${m.description} [Benchmark: ${m.benchmark ?? 'N/A'}]`).join('\n')}
-
-SIGNAL VS NOISE:
-${expert.signalVsNoise.map(s => `- Signal: "${s.signal}" vs Noise: "${s.noise}" (Distinguish by: ${s.howToDistinguish})`).join('\n')}
-
-STATISTICAL CONSIDERATIONS:
-${expert.statisticalConsiderations.map(sc => `- ${sc}`).join('\n')}
-</domain_analytics_lens>` : "";
-  })() : ""}
 
 <conversation>
 ${conversationText}
@@ -159,7 +149,7 @@ export function getSurveyAnalyticsPrompt(
     }>;
   }>,
   config: SurveyConfig,
-  totalConversations: number
+  totalConversations: number,
 ): string {
   const insightsText = conversationInsights
     .map(
@@ -177,11 +167,11 @@ Media Interactions: ${
         insight.mediaInteractions
           ?.map(
             (m) =>
-              `${m.mediaType}[${m.mediaId}]: ${m.wasReferenced ? "shown" : "not shown"}, reaction: ${m.participantReaction}, clarity: ${m.clarityScore}/10, insights: ${m.insightQuality}${m.issuesIdentified.length > 0 ? `, issues: ${m.issuesIdentified.join("; ")}` : ""}`
+              `${m.mediaType}[${m.mediaId}]: ${m.wasReferenced ? "shown" : "not shown"}, reaction: ${m.participantReaction}, clarity: ${m.clarityScore}/10, insights: ${m.insightQuality}${m.issuesIdentified.length > 0 ? `, issues: ${m.issuesIdentified.join("; ")}` : ""}`,
           )
           .join("; ") || "No media"
       }
-`
+`,
     )
     .join("\n");
 
@@ -202,7 +192,7 @@ ${config.hypotheses.assumptions.map((h, i) => `${i + 1}. "${h}"`).join("\n")}`
       ? `Media Assets to Analyze for Effectiveness:
 ${config.media
   .map(
-    (m, i) => `${i + 1}. [${m.type.toUpperCase()}] "${m.id}": ${m.description}`
+    (m, i) => `${i + 1}. [${m.type.toUpperCase()}] "${m.id}": ${m.description}`,
   )
   .join("\n")}`
       : "";
@@ -224,23 +214,7 @@ ${hypothesesToValidate}
 
 ${mediaToAnalyze}
 
-${config.domainId ? (() => {
-    const expert = getAnalyticsExpertise(config.domainId);
-    return expert ? `DOMAIN ANALYTICS GUIDANCE:
-Analysis Philosophy: ${expert.analysisPhilosophy}
 
-Key Metrics to Prioritize:
-${expert.keyMetrics.map(m => `- ${m.name}: ${m.description}`).join('\n')}
-
-Segmentation Strategy:
-${expert.segmentationStrategies.map(s => `- Break down by ${s.dimension}: ${s.example}`).join('\n')}
-
-Reporting Guidance:
-- Audience: ${expert.reportingGuidance.audienceFraming}
-- Key Viz: ${expert.reportingGuidance.keyVisualization}
-- Narrative: ${expert.reportingGuidance.narrativeStructure}
-- Actionable Format: ${expert.reportingGuidance.actionableFormat}` : "";
-  })() : ""}
 
 INDIVIDUAL CONVERSATION INSIGHTS:
 ${insightsText}
@@ -500,7 +474,7 @@ Return ONLY the JSON object, no additional text.`;
 export function getAIDiscoveryPrompt(
   allQuotes: Array<{ text: string; conversationId: string }>,
   allTopics: string[],
-  config: SurveyConfig
+  config: SurveyConfig,
 ): string {
   const quotesText = allQuotes
     .slice(0, 50)
@@ -548,12 +522,12 @@ Return ONLY the JSON array.`;
  */
 export function getImprovedConversationSummaryPrompt(
   conversation: Array<{ role: "user" | "assistant"; content: string }>,
-  config: SurveyConfig
+  config: SurveyConfig,
 ): string {
   const conversationText = conversation
     .map(
       (msg) =>
-        `${msg.role === "user" ? "Participant" : "Interviewer"}: ${msg.content}`
+        `${msg.role === "user" ? "Participant" : "Interviewer"}: ${msg.content}`,
     )
     .join("\n\n");
 

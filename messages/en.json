@@ -7,7 +7,68 @@
         "Create": {
             "Title": {
                 "Create": "Create New Survey",
-                "View": "View Creation Conversation"
+                "View": "View Creation Conversation",
+                "ChooseTopic": "Choose your survey topic"
+            },
+            "Subtitle": "Select a topic to start your survey. Our expert AI will guide you through the process.",
+            "TextMode": "Text Mode",
+            "VoiceMode": "Voice Mode",
+            "CreationMode": {
+                "Title": "AI Designer Mode",
+                "Description": "Choose how you want to build your survey with our expert AI.",
+                "Text": "Text Designer",
+                "Voice": "Voice Designer"
+            },
+            "RespondentFormat": {
+                "Title": "Participant Experience",
+                "Description": "How should people take this survey? Choose the interface they will use.",
+                "Text": "Text Survey",
+                "Voice": "Voice Survey"
+            },
+            "PageTitle": "Create a new survey",
+            "PageSubtitle": "Select the domain expertise for your survey or describe your needs",
+            "AIExpertLabel": "AI Expert",
+            "Domains": {
+                "1": {
+                    "Title": "Customer Experience & Satisfaction",
+                    "Description": "Evaluating a transaction or service that has ALREADY OCCURRED."
+                },
+                "2": {
+                    "Title": "Market Research & Consumer Intelligence",
+                    "Description": "Understanding markets, preferences, and behaviors to inform FUTURE decisions."
+                },
+                "3": {
+                    "Title": "Workforce & Organizational Development",
+                    "Description": "Assessing internal health, effectiveness, and employee sentiment."
+                },
+                "4": {
+                    "Title": "Product Design & User Research",
+                    "Description": "Optimizing usability, accessibility, and interface effectiveness."
+                },
+                "5": {
+                    "Title": "Education & Learning Assessment",
+                    "Description": "Measuring knowledge, skills, learning outcomes, or educational experiences."
+                },
+                "6": {
+                    "Title": "Civic Engagement & Public Opinion",
+                    "Description": "Capturing citizen views on political matters, policy, or community governance."
+                },
+                "7": {
+                    "Title": "Scientific & Academic Research",
+                    "Description": "Conducting rigorous research for generalizable knowledge."
+                },
+                "8": {
+                    "Title": "Health & Patient Experience",
+                    "Description": "Measuring care quality, patient outcomes, and clinical communication."
+                },
+                "9": {
+                    "Title": "Demographic & Social Characterization",
+                    "Description": "Counting, describing, and understanding population profiles."
+                },
+                "10": {
+                    "Title": "Infrastructure & Systems Performance",
+                    "Description": "Evaluating how physical systems or technical platforms are functioning."
+                }
             },
             "Badges": {
                 "AIDraft": "AI DRAFT",
@@ -44,10 +105,13 @@
             "Status": {
                 "AISpeaking": "AI Speaking",
                 "Listening": "Listening",
+                "Connecting": "Connecting...",
                 "Ready": "Ready",
                 "Speaking": "Speaking",
+                "SpeakingUser": "You're Speaking",
                 "TapToPause": "Tap to Pause",
-                "TapToSpeak": "Tap to Speak"
+                "TapToSpeak": "Tap to Speak",
+                "SelectTopicFirst": "Select Topic First"
             },
             "Completion": {
                 "Title": "Excellent! We're Ready.",
@@ -71,7 +135,8 @@
                 "Placeholder": "Describe your survey goals...",
                 "PlaceholderLocked": "Select a topic above to start...",
                 "AddMedia": "Add Context/Media",
-                "Send": "Send"
+                "Send": "Send",
+                "ActionsTitle": "Actions"
             },
             "DomainSelection": {
                 "Title": "Choose your survey path",
@@ -137,13 +202,41 @@
             "Toasts": {
                 "LanguageUpdateFailed": "Failed to save language preference",
                 "ModeUpdateFailed": "Failed to save survey mode preference",
-                "LoadFailed": "Failed to load survey conversation",
+                "LoadFailed": "Failed to load survey data",
                 "InitFailed": "Failed to initialize survey",
                 "SendFailed": "Failed to send message. Please try again.",
                 "MicDenied": "Microphone access denied",
                 "VoiceSendFailed": "Failed to send voice message",
                 "FinalizeFailed": "Failed to finalize survey. Please try again.",
-                "Finalized": "Survey finalized! Loading sample conversations..."
+                "Finalized": "Survey finalized! Loading sample conversations...",
+                "SaveTopicFailed": "Failed to save topic selection",
+                "GenericError": "An error occurred. Please try again."
+            }
+        },
+        "AddMedia": {
+            "Title": "Add Media Context",
+            "DropZone": {
+                "Instructions": "Click to upload or drag and drop"
+            },
+            "DescriptionLabel": "Title / Short Description",
+            "DescriptionHelp": "Give this media a short, descriptive name.",
+            "ContextLabel": "Context for AI",
+            "ContextHelp": "Explain how the AI should use this media (e.g., 'Ask the user what they think of this design').",
+            "Placeholders": {
+                "Description": "e.g., promotional video, logo options",
+                "Context": "e.g., Show this to the user and ask for their first impression."
+            },
+            "Actions": {
+                "Cancel": "Cancel",
+                "AddMedia": "Add Media",
+                "Uploading": "Uploading..."
+            },
+            "Toasts": {
+                "FillAllFields": "Please fill in all fields",
+                "DescriptionLength": "Description must be at least 10 characters",
+                "ContextLength": "Context must be at least 10 characters",
+                "Success": "Media uploaded successfully",
+                "Failed": "Failed to upload media"
             }
         },
         "PublishModal": {
@@ -509,12 +602,8 @@
         "Projects": "Projects",
         "Analytics": "Analytics",
         "Team": "Team",
-        "Integrations": "Integrations",
         "Profile": "Profile",
-        "Settings": "Settings",
-        "SignIn": "Sign In",
-        "SignOut": "Sign Out",
-        "ComingSoon": "Soon"
+        "Settings": "Settings"
     },
     "Header": {
         "Search": "Search anything...",
@@ -665,11 +754,7 @@
             "Member": "Member",
             "MemberDesc": "Can create and manage surveys, view analytics, and collaborate with other members."
         },
-        "Upgrade": {
-            "Title": "Need more seats?",
-            "Description": "Upgrade to Pro to add unlimited team members and access advanced collaboration features.",
-            "Button": "Upgrade Plan"
-        },
+
         "Danger": {
             "Title": "Danger Zone",
             "DeleteWorkspace": "Delete Workspace",
@@ -742,10 +827,6 @@
             }
         }
     },
-    "IntegrationsPage": {
-        "Title": "Integrations Coming Soon",
-        "Description": "We're working hard to bring you seamless integrations with your favorite tools like Slack, Notion, and Zapier."
-    },
     "Settings": {
         "Header": {
             "Title": "Settings",
@@ -756,8 +837,7 @@
             "Workspace": "Workspace",
             "Notifications": "Notifications",
             "Preferences": "Preferences",
-            "Security": "Security",
-            "Billing": "Billing"
+            "Security": "Security"
         },
         "Preferences": {
             "Title": "Preferences",
@@ -826,21 +906,10 @@
                 "Button": "Delete Account"
             },
             "PasswordMismatch": "Passwords do not match"
-        },
-        "Billing": {
-            "Plan": "Current Plan",
-            "Active": "Active",
-            "Description": "Billing is currently frozen for testing. You have full access to all features.",
-            "Disabled": "Billing Disabled",
-            "Usage": "Usage This Month",
-            "Surveys": "Surveys",
-            "Responses": "Responses",
-            "Unlimited": "Unlimited"
         }
     },
     "Landing": {
         "Navbar": {
-            "Pricing": "Pricing",
             "SignIn": "Sign in",
             "GetStarted": "Get started"
         },
@@ -848,8 +917,7 @@
             "Badge": "Forms 2.0",
             "Title": "The chat layer <br />your forms always needed.",
             "Description": "Convy replaces rigid forms with dynamic chat flows that move like a real convo and feel built just for you.",
-            "CTA": "Get started free",
-            "NoCreditCard": "no credit card required"
+            "CTA": "Get started free"
         },
         "Insights": {
             "Badge": "Hear it out",
@@ -883,10 +951,6 @@
                     "Title": "AI Form Builder",
                     "Description": "Auto-generate conversational flows from plain text prompts."
                 },
-                "Integrations": {
-                    "Title": "Integrations",
-                    "Description": "Plug into tools like Notion, Slack, and Zapier in one click."
-                },
                 "ChatData": {
                     "Title": "Chat with Data",
                     "Description": "Talk directly to your collected responses and analytics."
@@ -898,40 +962,6 @@
                 "Summaries": {
                     "Title": "Auto Summaries",
                     "Description": "Get instant structured insights and summaries from every conversation."
-                }
-            }
-        },
-        "Pricing": {
-            "Badge": "Pricing",
-            "Title": "Plans to Fit Up to Your Needs",
-            "Description": "From startups to enterprises, QP Widget has a plan that brings you closer to your customers.",
-            "Mo": "/ mo",
-            "GetStarted": "Get started",
-            "ComingSoon": "Coming soon",
-            "Free": {
-                "Title": "Free Plan",
-                "Description": "Try Convy’s AI magic and see how chat-native forms change your flow.",
-                "Features": {
-                    "Limited": "Limited conversations",
-                    "Unlimited": "Unlimited responses",
-                    "Builder": "AI Form Builder",
-                    "ChatData": "Chat with Data",
-                    "Branding": "Convy branding",
-                    "NoIntegrations": "No integrations",
-                    "NoSupport": "No community support"
-                }
-            },
-            "Pro": {
-                "Title": "Pro Plan",
-                "Description": "Go pro to own your chat experience — fully branded, unlimited, and powered by AI.",
-                "Features": {
-                    "UnlimitedConversations": "Unlimited conversations",
-                    "CustomDomain": "Custom domain & email",
-                    "UniqueBranding": "Unique branding",
-                    "UnlimitedUploads": "Unlimited file uploads",
-                    "VoiceMode": "Voice mode",
-                    "Integrations": "Full integrations (Zapier, Notion, Slack, etc.)",
-                    "PrioritySupport": "Priority support"
                 }
             }
         },
@@ -1051,18 +1081,6 @@
         "JoinDate": "Join Date",
         "UserRole": "User Role",
         "DefaultRole": "Member"
-    },
-    "Zapier": {
-        "Title": "Zapier Integration",
-        "Description": "Connect your surveys to thousands of apps through Zapier.",
-        "ComingSoon": {
-            "Badge": "Coming Soon",
-            "Title": "Zapier Integration is Coming Soon",
-            "Description": "We're working on bringing powerful Zapier integration to Convy. Soon you'll be able to connect your surveys to thousands of apps and automate your workflows.",
-            "Feature1": "✨ Trigger Zaps on new responses",
-            "Feature2": "🔄 Send survey data to any app",
-            "Feature3": "⚡ Real-time webhook delivery"
-        }
     },
     "SurveyAnalytics": {
         "Title": "Survey Analysis",

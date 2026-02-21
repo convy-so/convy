@@ -45,7 +45,6 @@ export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
     { name: t('Projects'), href: "/dashboard/projects", icon: FolderOpen },
     { name: t('Analytics'), href: "/dashboard/analytics", icon: BarChart3 },
     { name: t('Team'), href: "/dashboard/team", icon: Users },
-    { name: t('Integrations'), href: "/dashboard/integrations", icon: Plug },
   ];
 
   const bottomNavigation = [
@@ -120,24 +119,6 @@ export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
             const isActive =
               pathname === item.href;
             const isCreateSurvey = item.href === "/dashboard/create";
-            const isIntegrations = item.href === "/dashboard/integrations";
-
-            if (isIntegrations) {
-              return (
-                <div
-                  key={item.name}
-                  className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-400 cursor-not-allowed bg-gray-50/50"
-                >
-                  <div className="flex items-center gap-3">
-                    <item.icon className="w-5 h-5 opacity-70" />
-                    {item.name}
-                  </div>
-                  <span className="text-[10px] uppercase font-bold bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full tracking-wide">
-                    {t('ComingSoon')}
-                  </span>
-                </div>
-              );
-            }
 
             return (
               <Link

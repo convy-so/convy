@@ -126,6 +126,21 @@ export async function POST(
             })
             .where(eq(surveyCreationConversations.surveyId, surveyId));
 
+        // Trigger pattern extraction for self-improvement
+        try {
+            const { enqueuePatternExtraction } = await import("@/lib/queue");
+            await enqueuePatternExtraction({
+                conversationId: creationConversation.id,
+                surveyId,
+                conversationType: "creation",
+                domainId: updatedSurvey.domainId ?? null,
+            });
+            console.log(`[Finalize Creation] Enqueued pattern extraction for creation conversation ${creationConversation.id}`);
+        } catch (error) {
+            console.error(`[Finalize Creation] Pattern extraction enqueue failed:`, error);
+            // Don't fail the finalization if pattern extraction fails
+        }
+
         console.log(`[Finalize Creation] ✅ Survey ${surveyId} finalized successfully`);
         console.log(`[Finalize Creation] Updated fields:`, Object.keys(updateData));
 

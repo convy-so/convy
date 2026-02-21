@@ -4,9 +4,9 @@ export * from "./auth";
 export * from "./organization";
 export * from "./surveys";
 export * from "./voice";
-export * from "./billing";
-export * from "./integrations";
 export * from "./notifications";
+export * from "./vectors";
+export * from "./learning";
 export * from "./relations";
 
 // Re-export specific authSchema if needed by better-auth or others

@@ -42,9 +42,9 @@ function WidgetCard({ widget }: { widget: DashboardWidget }) {
   // Determine grid span based on size
   const spanClasses = {
     small: "col-span-1 row-span-1",
-    medium: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1", // 2x1
-    large: "col-span-1 md:col-span-2 lg:col-span-2 row-span-2", // 2x2
-    full: "col-span-1 md:col-span-2 lg:col-span-4", // Full width
+    medium: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1", 
+    large: "col-span-1 md:col-span-2 lg:col-span-2 row-span-2", 
+    full: "col-span-1 md:col-span-2 lg:col-span-4",
   };
 
   return (
@@ -56,7 +56,7 @@ function WidgetCard({ widget }: { widget: DashboardWidget }) {
         <div>
           <h3 className="text-sm font-semibold text-gray-900 tracking-tight">{widget.title}</h3>
           {widget.description && (
-            <p className="text-xs text-gray-400 mt-1 line-clamp-1">{widget.description}</p>
+            <p className="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">{widget.description}</p>
           )}
         </div>
       </div>
@@ -233,8 +233,8 @@ function BarChartContent({ data }: { data: any[] }) {
             axisLine={false}
             stroke="#9ca3af"
             interval={0}
-            // truncate long labels
-            tickFormatter={(v) => v.length > 10 ? `${v.slice(0, 10)}...` : v}
+            // allow longer labels before truncating
+            tickFormatter={(v) => v.length > 20 ? `${v.slice(0, 20)}...` : v}
           />
           <YAxis
             fontSize={10}
@@ -287,7 +287,7 @@ function ListContent({ data }: { data: any[] }) {
         return (
           <div key={i} className="group">
             <div className="flex justify-between items-center mb-1 text-xs">
-              <span className="font-medium text-gray-700 truncate max-w-[70%]">
+              <span className="font-medium text-gray-700">
                 {/* Handle both string/number values */}
                 {typeof displayLabel === 'boolean' ? (displayLabel ? 'Yes' : 'No') : displayLabel}
               </span>
@@ -346,7 +346,7 @@ function CoverageMatrixContent({ data }: { data: any[] }) {
       {data.map((item: any, i: number) => (
         <div key={i} className="p-3 bg-gray-50/50 rounded-xl hover:bg-gray-50 transition-colors">
           <div className="flex justify-between items-start gap-4 mb-2">
-            <p className="text-xs font-medium text-gray-900 line-clamp-2">{item.question}</p>
+            <p className="text-xs font-medium text-gray-900 leading-snug">{item.question}</p>
             <div className={cn(
               "flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap",
               item.coverageRate >= 80 ? "bg-green-100 text-green-700" :
@@ -363,7 +363,7 @@ function CoverageMatrixContent({ data }: { data: any[] }) {
             />
           </div>
           {item.sampleResponses && item.sampleResponses.length > 0 && (
-            <p className="text-[10px] text-gray-500 italic line-clamp-1 border-l-2 border-gray-200 pl-2">
+            <p className="text-[10px] text-gray-500 italic border-l-2 border-gray-200 pl-2 leading-relaxed">
               "{item.sampleResponses[0]}"
             </p>
           )}
@@ -427,7 +427,7 @@ function HypothesisContent({ data }: { data: any }) {
           {data.status}
         </div>
       </div>
-      <p className="text-xs text-gray-500 mt-4 line-clamp-3">{data.summary}</p>
+      <p className="text-xs text-gray-500 mt-4 leading-relaxed">{data.summary}</p>
     </div>
   )
 }
@@ -485,14 +485,14 @@ function MediaCardContent({ data }: { data: any }) {
         <div className="text-xs font-bold uppercase tracking-wider text-gray-500">{data.type}</div>
         <div className="text-xs font-bold text-gray-900">{Math.round(data.effectivenessScore * 10)}/10 Score</div>
       </div>
-      <p className="text-sm font-medium text-gray-900 line-clamp-2 mb-2">{data.description}</p>
+      <p className="text-sm font-medium text-gray-900 mb-2 leading-snug">{data.description}</p>
       <div className="mt-auto space-y-2">
         <div className="flex justify-between text-[10px] text-gray-500">
           <span>Usage: {data.usageRate}%</span>
           <span>Insights: {data.insightsGenerated}</span>
         </div>
         {data.topQuotes && data.topQuotes.length > 0 && (
-          <p className="text-xs italic text-gray-600 bg-white p-2 rounded border border-gray-100 line-clamp-2">
+          <p className="text-xs italic text-gray-600 bg-white p-2 rounded border border-gray-100 leading-relaxed">
             "{data.topQuotes[0].text}"
           </p>
         )}

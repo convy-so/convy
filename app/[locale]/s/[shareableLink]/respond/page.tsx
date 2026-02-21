@@ -35,19 +35,8 @@ interface SurveyInitResponse {
     completed?: boolean;
 }
 
-interface MessageWithTools {
-    id: string;
-    role: "assistant" | "user";
-    parts: { type: "text"; text: string }[];
-    content?: string;
+interface MessageWithTools extends UIMessage {
     media?: any;
-    toolInvocations?: Array<{
-        toolCallId: string;
-        toolName: string;
-        state: "partial-call" | "call" | "result";
-        args?: any;
-        result?: any;
-    }>;
 }
 
 async function initializeSurvey(shareableLink: string, conversationId?: string | null): Promise<SurveyInitResponse> {
@@ -148,6 +137,7 @@ export default function SurveyRespondPage() {
 
     const [isVoiceMode, setIsVoiceMode] = useState(false);
     const [showTranscript, setShowTranscript] = useState(true);
+    const [selectedLanguage, setSelectedLanguage] = useState<"en" | "fr" | "de" | "es" | "it">(locale as any || "en");
 
     // Prepare initial messages for useChat
     const initialChatMessages = resumedMessages.length > 0
@@ -168,8 +158,8 @@ export default function SurveyRespondPage() {
         messages: initialChatMessages as any, // Cast to avoid strict type issues with mapped messages
         onFinish: ({ message }: { message: UIMessage }) => {
             // Check for explicit tool calls (robust detection)
-            const hasToolCompletion = (message as MessageWithTools).toolInvocations?.some(
-                (tool) => tool.toolName === 'finishSurvey'
+            const hasToolCompletion = message.parts?.some(
+                (part: any) => (part.type === 'tool-call' || part.type === 'tool-result') && part.toolName === 'finishSurvey'
             );
 
             // Fallback to text detection
@@ -198,8 +188,8 @@ export default function SurveyRespondPage() {
         const lastMessage = messages[messages.length - 1] as MessageWithTools;
         if (!lastMessage || lastMessage.role !== 'assistant') return;
 
-        const hasToolCompletion = lastMessage.toolInvocations?.some(
-            (tool) => tool.toolName === 'finishSurvey'
+        const hasToolCompletion = lastMessage.parts?.some(
+            (part: any) => (part.type === 'tool-call' || part.type === 'tool-result') && part.toolName === 'finishSurvey'
         );
 
         if (hasToolCompletion) {
@@ -211,7 +201,7 @@ export default function SurveyRespondPage() {
     const isChatLoading = status === "streaming" || status === "submitted";
 
     // Voice WebSocket Integration
-    const wsUrl = `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-response?surveyId=${shareableLink}&language=${locale}`;
+    const wsUrl = `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-response?surveyId=${shareableLink}&language=${selectedLanguage}`;
     console.log("[Survey Page] WS URL:", wsUrl);
     console.log("[Survey Page] Survey State:", { isVoice: survey?.isVoice, isVoiceMode, isCompleted });
 
@@ -433,35 +423,71 @@ export default function SurveyRespondPage() {
 
     // Main UI Render
     return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans selection:bg-gray-900 selection:text-white">
+        <div className="min-h-[100dvh] bg-gray-50 flex items-center justify-center p-0 sm:p-4 font-sans selection:bg-gray-900 selection:text-white">
             {/* Start Survey Overlay for Voice Mode */}
             {survey?.isVoice && !hasStarted && !isCompleted && !isInitializing && (
                 <div className="fixed inset-0 z-50 bg-white/95 backdrop-blur-md flex items-center justify-center p-4 transition-all duration-700">
-                    <div className="flex flex-col items-center max-w-sm w-full animate-in fade-in zoom-in-95 duration-700 slide-in-from-bottom-4">
+                    <div className="flex flex-col items-center max-w-md w-full animate-in fade-in zoom-in-95 duration-700 slide-in-from-bottom-4">
 
                         {/* Minimalist Pulse Icon */}
-                        <div className="relative mb-8 group cursor-pointer" onClick={handleStartSurvey}>
+                        <div className="relative mb-6 group">
                             <div className="absolute inset-0 bg-indigo-500/20 rounded-full animate-ping opacity-20 duration-3000" />
-                            <div className="relative w-24 h-24 bg-gradient-to-tr from-indigo-50 to-white rounded-full flex items-center justify-center shadow-lg shadow-indigo-500/5 ring-1 ring-indigo-50 group-hover:scale-105 transition-transform duration-500">
-                                <Mic className="w-8 h-8 text-indigo-600/80" />
+                            <div className="relative w-20 h-20 bg-gradient-to-tr from-indigo-50 to-white rounded-full flex items-center justify-center shadow-lg shadow-indigo-500/5 ring-1 ring-indigo-50 transition-transform duration-500">
+                                <Mic className="w-7 h-7 text-indigo-600/80" />
                             </div>
                         </div>
 
                         {/* Typography */}
-                        <h2 className="text-3xl font-bold text-gray-900 mb-3 tracking-tight text-center">
+                        <h2 className="text-2xl font-bold text-gray-900 mb-2 tracking-tight text-center">
                             {t("voiceSurveyTitle") || "Voice Survey"}
                         </h2>
-                        <p className="text-gray-500 mb-10 text-center leading-relaxed font-light text-lg max-w-xs mx-auto">
-                            {t("voiceSurveyIntro") || "Tap below to start speaking."}
+                        <p className="text-gray-500 mb-6 text-center leading-relaxed font-light text-base max-w-xs mx-auto">
+                            {t("voiceSurveyIntro") || "Choose your language and start speaking."}
                         </p>
+
+                        {/* Language Selection */}
+                        <div className="w-full mb-6">
+                            <label className="block text-sm font-medium text-gray-700 mb-3 text-center">
+                                <Globe className="w-4 h-4 inline mr-2" />
+                                {t("selectLanguage") || "Select Language"}
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {[
+                                    { code: "en", name: "English", flag: "🇺🇸" },
+                                    { code: "fr", name: "Français", flag: "🇫🇷" },
+                                    { code: "de", name: "Deutsch", flag: "🇩🇪" },
+                                    { code: "es", name: "Español", flag: "🇪🇸" },
+                                    { code: "it", name: "Italiano", flag: "🇮🇹" },
+                                ].map((lang) => (
+                                    <button
+                                        key={lang.code}
+                                        onClick={() => setSelectedLanguage(lang.code as any)}
+                                        className={cn(
+                                            "flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all text-left text-sm",
+                                            selectedLanguage === lang.code
+                                                ? "border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600/20"
+                                                : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                                        )}
+                                    >
+                                        <span className="text-lg">{lang.flag}</span>
+                                        <span className={cn(
+                                            "font-medium",
+                                            selectedLanguage === lang.code ? "text-indigo-900" : "text-gray-700"
+                                        )}>
+                                            {lang.name}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
 
                         {/* Premium Button */}
                         <button
                             onClick={handleStartSurvey}
-                            className="group relative px-8 py-4 bg-gray-900 text-white rounded-full font-medium text-lg hover:bg-black transition-all duration-300 hover:shadow-xl hover:shadow-gray-900/10 hover:-translate-y-0.5 active:scale-95 w-full max-w-[200px] overflow-hidden"
+                            className="group relative px-8 py-4 bg-gray-900 text-white rounded-full font-medium text-base hover:bg-black transition-all duration-300 hover:shadow-xl hover:shadow-gray-900/10 hover:-translate-y-0.5 active:scale-95 w-full max-w-[240px] overflow-hidden"
                         >
                             <span className="relative z-10 flex items-center justify-center gap-2">
-                                {t("startConversation") || "Start"}
+                                {t("startConversation") || "Start Survey"}
                                 <ArrowRight className="w-4 h-4 opacity-70 group-hover:translate-x-1 transition-transform" />
                             </span>
                         </button>
@@ -471,7 +497,7 @@ export default function SurveyRespondPage() {
 
             {/* Main Card */}
             <div className={cn(
-                "w-full max-w-5xl h-[85vh] bg-white rounded-3xl border border-gray-200 shadow-sm flex flex-col overflow-hidden relative transition-opacity duration-500",
+                "w-full max-w-5xl h-[100dvh] sm:h-[85vh] bg-white rounded-none sm:rounded-3xl border-0 sm:border border-gray-200 shadow-sm flex flex-col overflow-hidden relative transition-opacity duration-500",
                 (survey?.isVoice && !hasStarted) ? "opacity-0" : "opacity-100"
             )}>
 
@@ -610,11 +636,11 @@ export default function SurveyRespondPage() {
                                         {message.media && <MediaDisplay media={message.media} />}
 
                                         {/* Handle tool invocations for media */}
-                                        {(message as MessageWithTools).toolInvocations?.map((toolInvocation) => {
-                                            if (toolInvocation.toolName === 'showMedia' && 'result' in toolInvocation) {
-                                                const result = toolInvocation.result;
+                                        {message.parts?.map((part: any, idx: number) => {
+                                            if (part.type === 'tool-showMedia') {
+                                                const result = part.output;
                                                 if (result && result.media) {
-                                                    return <MediaDisplay key={toolInvocation.toolCallId} media={result.media} />;
+                                                    return <MediaDisplay key={part.toolCallId || idx} media={result.media} />;
                                                 }
                                             }
                                             return null;
@@ -628,144 +654,155 @@ export default function SurveyRespondPage() {
                 </main>
 
                 {/* Input Area */}
-                <div className="bg-white border-t border-gray-100 p-4 z-20 flex-shrink-0">
-                    <div className="max-w-3xl mx-auto">
-                        {isVoiceMode ? (
-                            <div className="flex flex-col items-center gap-6 animate-in slide-in-from-bottom-4 duration-500">
-                                {showTranscript ? (
-                                    <>
-                                        <button
-                                            onClick={() => {
-                                                if (isCompleted) return; // Prevent recording after completion
-                                                if (voiceWs.status === "error" || voiceWs.status === "disconnected") {
-                                                    voiceWs.connect();
-                                                    return;
-                                                }
-                                                if (voiceWs.isRecording) voiceWs.stopRecording();
-                                                else voiceWs.startRecording();
-                                            }}
-                                            disabled={isCompleted || voiceWs.status === "connecting"}
-                                            className="group focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            <VisualizerRing isRecording={voiceWs.isRecording} size={voiceWs.status === "error" ? "large" : "normal"} />
-                                        </button>
+                {!isCompleted ? (
+                    <div className="bg-white border-t border-gray-100 p-4 z-20 flex-shrink-0">
+                        <div className="max-w-3xl mx-auto">
+                            {isVoiceMode ? (
+                                <div className="flex flex-col items-center gap-6 animate-in slide-in-from-bottom-4 duration-500">
+                                    {showTranscript ? (
+                                        <>
+                                            <button
+                                                onClick={() => {
+                                                    if (isCompleted) return; // Prevent recording after completion
+                                                    if (voiceWs.status === "error" || voiceWs.status === "disconnected") {
+                                                        voiceWs.connect();
+                                                        return;
+                                                    }
+                                                    if (voiceWs.isRecording) voiceWs.stopRecording();
+                                                    else voiceWs.startRecording();
+                                                }}
+                                                disabled={isCompleted || voiceWs.status === "connecting"}
+                                                className="group focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                <VisualizerRing isRecording={voiceWs.isRecording} size={voiceWs.status === "error" ? "large" : "normal"} />
+                                            </button>
 
-                                        <div className="text-center space-y-2 w-full max-w-lg">
-                                            <p className="text-gray-900 font-semibold text-lg tracking-tight">
-                                                {voiceWs.status === "error" ? (
-                                                    <span className="text-red-600">{t("connectionFailed")}</span>
-                                                ) : voiceWs.status === "connecting" ? (
-                                                    t("connecting")
-                                                ) : voiceWs.isRecording ? (
-                                                    t("listening")
-                                                ) : voiceWs.isPlaying ? (
-                                                    t("aiSpeaking")
-                                                ) : (
-                                                    t("tapToSpeak")
-                                                )}
-                                            </p>
-
-                                            {voiceWs.status === "error" ? (
-                                                <div className="flex flex-col items-center gap-2">
-                                                    <p className="text-sm text-red-500 font-medium px-4 py-2 bg-red-50 rounded-lg border border-red-100">
-                                                        {voiceWs.error || t("connectionFailed")}
-                                                    </p>
-                                                    <button
-                                                        onClick={() => voiceWs.connect()}
-                                                        className="text-xs text-gray-500 underline hover:text-gray-800"
-                                                    >
-                                                        {t("tapToRetry")}
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">
-                                                    {voiceWs.status === "connected" ? t("aiReady") : t("initializing")}
+                                            <div className="text-center space-y-2 w-full max-w-lg">
+                                                <p className="text-gray-900 font-semibold text-lg tracking-tight">
+                                                    {voiceWs.status === "error" ? (
+                                                        <span className="text-red-600">{t("connectionFailed")}</span>
+                                                    ) : voiceWs.status === "connecting" ? (
+                                                        t("connecting")
+                                                    ) : voiceWs.isRecording ? (
+                                                        t("listening")
+                                                    ) : voiceWs.isPlaying ? (
+                                                        t("aiSpeaking")
+                                                    ) : (
+                                                        t("tapToSpeak")
+                                                    )}
                                                 </p>
-                                            )}
 
-                                            {/* Live Transcription Display */}
+                                                {voiceWs.status === "error" ? (
+                                                    <div className="flex flex-col items-center gap-2">
+                                                        <p className="text-sm text-red-500 font-medium px-4 py-2 bg-red-50 rounded-lg border border-red-100">
+                                                            {voiceWs.error || t("connectionFailed")}
+                                                        </p>
+                                                        <button
+                                                            onClick={() => voiceWs.connect()}
+                                                            className="text-xs text-gray-500 underline hover:text-gray-800"
+                                                        >
+                                                            {t("tapToRetry")}
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">
+                                                        {voiceWs.status === "connected" ? t("aiReady") : t("initializing")}
+                                                    </p>
+                                                )}
+
+                                                {/* Live Transcription Display */}
+                                                {voiceWs.isRecording && (voiceWs.transcription || voiceWs.interimTranscription) && (
+                                                    <div className="mt-4 bg-gray-50 border border-gray-200 rounded-2xl p-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                                                            {t("liveTranscription")}
+                                                        </p>
+                                                        <p className="text-sm text-gray-900 leading-relaxed text-left">
+                                                            {voiceWs.transcription}
+                                                            <span className="text-gray-400 italic">{voiceWs.interimTranscription}</span>
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        // Minimal Footer for Focused Mode
+                                        <div className="w-full">
                                             {voiceWs.isRecording && (voiceWs.transcription || voiceWs.interimTranscription) && (
-                                                <div className="mt-4 bg-gray-50 border border-gray-200 rounded-2xl p-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                                                <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 animate-in fade-in slide-in-from-bottom-2 duration-200 max-w-lg mx-auto">
+                                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 text-center">
                                                         {t("liveTranscription")}
                                                     </p>
-                                                    <p className="text-sm text-gray-900 leading-relaxed text-left">
+                                                    <p className="text-sm text-gray-900 leading-relaxed text-center">
                                                         {voiceWs.transcription}
                                                         <span className="text-gray-400 italic">{voiceWs.interimTranscription}</span>
                                                     </p>
                                                 </div>
                                             )}
                                         </div>
-                                    </>
-                                ) : (
-                                    // Minimal Footer for Focused Mode
-                                    <div className="w-full">
-                                        {voiceWs.isRecording && (voiceWs.transcription || voiceWs.interimTranscription) && (
-                                            <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 animate-in fade-in slide-in-from-bottom-2 duration-200 max-w-lg mx-auto">
-                                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 text-center">
-                                                    {t("liveTranscription")}
-                                                </p>
-                                                <p className="text-sm text-gray-900 leading-relaxed text-center">
-                                                    {voiceWs.transcription}
-                                                    <span className="text-gray-400 italic">{voiceWs.interimTranscription}</span>
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            !isCompleted && (
-                                <div className="max-w-3xl mx-auto">
-                                    <form onSubmit={handleSubmit} className="relative group">
-                                        <div className="relative bg-white border border-gray-200 rounded-2xl group-focus-within:border-gray-400 transition-all flex items-end overflow-hidden">
-                                            {/* Placeholder for future attachment button if needed, keeping layout consistent */}
-                                            <div className="p-3 mb-1 ml-1 text-gray-300">
-                                                <Paperclip className="w-5 h-5 opacity-50" />
-                                            </div>
-
-                                            <textarea
-                                                ref={inputRef}
-                                                value={input}
-                                                onChange={e => setInput(e.target.value)}
-                                                onKeyDown={e => {
-                                                    if (e.key === "Enter" && !e.shiftKey) {
-                                                        e.preventDefault();
-                                                        handleSubmit(e);
-                                                    }
-                                                }}
-                                                placeholder={t("typeAnswer")}
-                                                rows={1}
-                                                disabled={isChatLoading || isCompleted}
-                                                className="flex-1 py-4 px-4 bg-transparent outline-none resize-none text-base text-gray-800 placeholder:text-gray-400 min-h-[96px] max-h-60"
-                                                style={{ minHeight: "96px" }}
-                                            />
-
-                                            <div className="p-2 mb-1 mr-1">
-                                                <button
-                                                    type="submit"
-                                                    disabled={!input.trim() || isChatLoading || isCompleted}
-                                                    className={cn(
-                                                        "p-2.5 rounded-xl transition-all",
-                                                        input.trim() && !isChatLoading
-                                                            ? "bg-black text-white hover:bg-gray-800 hover:-translate-y-0.5"
-                                                            : "bg-gray-100 text-gray-300 cursor-not-allowed"
-                                                    )}
-                                                >
-                                                    {isChatLoading ? (
-                                                        <Loader2 className="w-5 h-5 animate-spin" />
-                                                    ) : (
-                                                        <Send className="w-5 h-5" />
-                                                    )}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </form>
+                                    )}
                                 </div>
-                            )
-                        )}
+                            ) : (
+                                !isCompleted && (
+                                    <div className="max-w-3xl mx-auto">
+                                        <form onSubmit={handleSubmit} className="relative group">
+                                            <div className="relative bg-white border border-gray-200 rounded-2xl group-focus-within:border-gray-400 transition-all flex items-end overflow-hidden">
+                                                {/* Placeholder for future attachment button if needed, keeping layout consistent */}
+                                                <div className="p-3 mb-1 ml-1 text-gray-300">
+                                                    <Paperclip className="w-5 h-5 opacity-50" />
+                                                </div>
+
+                                                <textarea
+                                                    ref={inputRef}
+                                                    value={input}
+                                                    onChange={e => setInput(e.target.value)}
+                                                    onKeyDown={e => {
+                                                        if (e.key === "Enter" && !e.shiftKey) {
+                                                            e.preventDefault();
+                                                            handleSubmit(e);
+                                                        }
+                                                    }}
+                                                    placeholder={t("typeAnswer")}
+                                                    rows={1}
+                                                    disabled={isChatLoading || isCompleted}
+                                                    className="flex-1 py-4 px-4 bg-transparent outline-none resize-none text-base text-gray-800 placeholder:text-gray-400 min-h-[60px] sm:min-h-[96px] max-h-60 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                />
+
+                                                <div className="p-2 mb-1 mr-1">
+                                                    <button
+                                                        type="submit"
+                                                        disabled={!input.trim() || isChatLoading || isCompleted}
+                                                        className={cn(
+                                                            "p-2.5 rounded-xl transition-all",
+                                                            input.trim() && !isChatLoading
+                                                                ? "bg-black text-white hover:bg-gray-800 hover:-translate-y-0.5"
+                                                                : "bg-gray-100 text-gray-300 cursor-not-allowed"
+                                                        )}
+                                                    >
+                                                        {isChatLoading ? (
+                                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                                        ) : (
+                                                            <Send className="w-5 h-5" />
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                )
+                            )}
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    <div className="bg-white border-t border-gray-100 p-6 z-20 flex-shrink-0">
+                        <div className="max-w-xl mx-auto text-center animate-in slide-in-from-bottom-4 fade-in duration-700">
+                            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Sparkles className="w-8 h-8 text-emerald-600" />
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900 mb-2">{t("SurveyCompleted.Title") || "Survey Completed"}</h3>
+                            <p className="text-gray-500">{t("SurveyCompleted.Description") || "Thank you for your time. Your feedback has been recorded."}</p>
+                        </div>
+                    </div>
+                )}
 
             </div>
         </div>

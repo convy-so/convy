@@ -12,9 +12,9 @@ const jobDataSchema = z.object({
     "verification",
     "password-reset",
     "workspace-invitation",
-    "subscription-expiration",
     "workspace-welcome",
     "secondary-verification",
+    "survey-deleted",
   ]),
   email: z.string().email(),
   url: z.string(),
@@ -33,7 +33,7 @@ const emailWorker = new Worker<EmailJobData>(
     const { type, email, url, name } = validatedData;
 
     console.log(
-      `[Email Worker] Processing job ${job.id} - ${type} email to ${email}`
+      `[Email Worker] Processing job ${job.id} - ${type} email to ${email}`,
     );
 
     await job.updateProgress(30);
@@ -78,34 +78,11 @@ const emailWorker = new Worker<EmailJobData>(
         "",
         "If you didn't expect this invitation, you can ignore this email.",
       ].join("\n");
-    } else if (type === "subscription-expiration") {
-      const planId = (validatedData.metadata?.planId as string) || "your plan";
-      const expiryDate = validatedData.metadata?.expiryDate as string;
-      const formattedDate = expiryDate 
-        ? new Date(expiryDate).toLocaleDateString('en-US', { 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          })
-        : "soon";
-      
-      subject = "Your Convy subscription is expiring soon";
-      text = [
-        `Hi ${name ?? "there"},`,
-        "",
-        `Your ${planId} subscription will expire on ${formattedDate}.`,
-        "",
-        "To continue enjoying Convy's features, please renew your subscription:",
-        url,
-        "",
-        "If you have any questions, feel free to reach out to our support team.",
-        "",
-        "Thank you for using Convy!",
-      ].join("\n");
     } else if (type === "workspace-welcome") {
-      const workspaceName = (validatedData.metadata?.workspaceName as string) || "the workspace";
+      const workspaceName =
+        (validatedData.metadata?.workspaceName as string) || "the workspace";
       subject = `Welcome to ${workspaceName} on Convy`;
-     text = [
+      text = [
         `Hi ${name ?? "there"},`,
         "",
         `You have been added to ${workspaceName} on Convy.`,
@@ -115,7 +92,7 @@ const emailWorker = new Worker<EmailJobData>(
         "",
         "We're excited to have you on board!",
       ].join("\n");
-   } else if (type === "secondary-verification") {
+    } else if (type === "secondary-verification") {
       subject = "Verify your secondary email address";
       text = [
         `Hi ${name ?? "there"},`,
@@ -125,7 +102,18 @@ const emailWorker = new Worker<EmailJobData>(
         "",
         "If you didn't request this, you can ignore this email.",
       ].join("\n");
-   } else {
+    } else if (type === "survey-deleted") {
+      const surveyTitle =
+        (validatedData.metadata?.surveyTitle as string) || "your survey";
+      subject = "Your survey has been deleted";
+      text = [
+        `Hi ${name ?? "there"},`,
+        "",
+        `The survey "${surveyTitle}" has been successfully deleted from your account.`,
+        "",
+        "If you have any questions, feel free to reach out to our support team.",
+      ].join("\n");
+    } else {
       throw new Error(`Unknown email type: ${type}`);
     }
 
@@ -145,7 +133,7 @@ const emailWorker = new Worker<EmailJobData>(
     await job.updateProgress(100);
 
     console.log(
-      `[Email Worker] Completed job ${job.id} - ${type} email to ${email}`
+      `[Email Worker] Completed job ${job.id} - ${type} email to ${email}`,
     );
 
     return {
@@ -161,7 +149,7 @@ const emailWorker = new Worker<EmailJobData>(
       max: 50,
       duration: 60000,
     },
-  }
+  },
 );
 
 emailWorker.on("completed", (job) => {
@@ -175,8 +163,5 @@ emailWorker.on("failed", (job, err) => {
 emailWorker.on("error", (err) => {
   console.error("[Email Worker] Worker error:", err);
 });
-
-// Note: Signal handlers are managed by the main index.ts when running all workers together
-// Individual signal handlers removed to prevent conflicts
 
 export default emailWorker;

@@ -13,27 +13,22 @@ import {
   getContextKey,
   getStartTimeKey,
 } from "@/lib/conversation-memory";
-import {
-  getSurveyConversationSystemPrompt,
-  getSampleConversationSystemPrompt,
-  type SurveyConfig,
-} from "@/lib/prompts";
+import { type SurveyConfig } from "@/lib/prompts";
 import { analysisModel } from "@/lib/ai";
 import { getRedisClient } from "@/lib/redis";
 
 /**
  * ConversationManager
- * 
+ *
  * Centralizes the core logic for:
  * 1. Context Management (Loading/Creating/Compressing)
  * 2. System Prompt Generation (with Context Injection)
  * 3. Tool Definitions (e.g. showMedia)
  * 4. Asynchronous Memory Updates
- * 
+ *
  * This ensures parity between Text and Voice implementations (Actual & Sample).
  */
 export class ConversationManager {
-  
   /**
    * Normalize messages from various formats (AI SDK ModelMessage/CoreMessage or simple object)
    * to the internal { role, content } format used for analysis and DB storage.
@@ -41,9 +36,10 @@ export class ConversationManager {
    */
   static normalizeMessages(
     messages: Array<any>,
-    config?: SurveyConfig
+    config?: SurveyConfig,
   ): Array<{ role: "user" | "assistant"; content: string }> {
-    const normalized: Array<{ role: "user" | "assistant"; content: string }> = [];
+    const normalized: Array<{ role: "user" | "assistant"; content: string }> =
+      [];
 
     messages.forEach((m) => {
       // Skip system or tool messages for the base list, but we'll extract events from them if needed
@@ -69,7 +65,9 @@ export class ConversationManager {
             if (toolName === "showMedia") {
               const mediaId = inv.args?.mediaId;
               const media = config?.media?.find((item) => item.id === mediaId);
-              const label = media ? `${media.type} "${media.description}"` : `media ${mediaId}`;
+              const label = media
+                ? `${media.type} "${media.description}"`
+                : `media ${mediaId}`;
               return `[ACTION: Displayed ${label}]`;
             }
             return `[ACTION: Called tool ${toolName}]`;
@@ -83,7 +81,9 @@ export class ConversationManager {
 
       normalized.push({
         role: m.role as "user" | "assistant",
-        content: content || (m.role === "assistant" ? "[AI Response]" : "[Empty Message]"),
+        content:
+          content ||
+          (m.role === "assistant" ? "[AI Response]" : "[Empty Message]"),
       });
     });
 
@@ -96,13 +96,16 @@ export class ConversationManager {
    */
   static async loadOrCreateContext(
     conversationId: string,
-    messages: Array<{ role: "user" | "assistant"; content: string }> | ModelMessage[] | any[],
+    messages:
+      | Array<{ role: "user" | "assistant"; content: string }>
+      | ModelMessage[]
+      | any[],
     config: SurveyConfig,
-    forceNew: boolean = false
+    forceNew: boolean = false,
   ): Promise<RollingContext> {
     // Normalize messages for analysis
     const normalizedMessages = this.normalizeMessages(messages, config);
-    
+
     const redis = getRedisClient();
     const contextKey = getContextKey(conversationId);
     const startTimeKey = getStartTimeKey(conversationId);
@@ -112,30 +115,35 @@ export class ConversationManager {
     let startTime = new Date();
 
     if (!forceNew) {
-        const existingContext = await redis.get(contextKey);
-        const startTimeStr = await redis.get(startTimeKey);
-    
-        if (startTimeStr) {
-            startTime = new Date(startTimeStr);
+      const existingContext = await redis.get(contextKey);
+      const startTimeStr = await redis.get(startTimeKey);
+
+      if (startTimeStr) {
+        startTime = new Date(startTimeStr);
+      }
+
+      if (existingContext) {
+        try {
+          const parsedContext = JSON.parse(existingContext) as RollingContext;
+
+          // Security check: ensure the conversation belongs to this survey
+          if (parsedContext.surveyId !== config.id) {
+            console.warn(
+              `[ConversationManager] Security alert: Conversation ${conversationId} attempted to access survey ${config.id} but belongs to ${parsedContext.surveyId}`,
+            );
+            // Re-initialize for this survey or throw error.
+            // To be safe, we'll treat it as a new conversation for the correct survey.
+            context = null;
+          } else {
+            context = parsedContext;
+          }
+        } catch (error) {
+          console.warn(
+            `[ConversationManager] Failed to parse existing context for ${conversationId}, recreating fresh session.`,
+            error,
+          );
         }
-    
-        if (existingContext) {
-            try {
-                const parsedContext = JSON.parse(existingContext) as RollingContext;
-                
-                // Security check: ensure the conversation belongs to this survey
-                if (parsedContext.surveyId !== config.id) {
-                    console.warn(`[ConversationManager] Security alert: Conversation ${conversationId} attempted to access survey ${config.id} but belongs to ${parsedContext.surveyId}`);
-                    // Re-initialize for this survey or throw error. 
-                    // To be safe, we'll treat it as a new conversation for the correct survey.
-                    context = null;
-                } else {
-                    context = parsedContext;
-                }
-            } catch (error) {
-                console.warn(`[ConversationManager] Failed to parse existing context for ${conversationId}, recreating fresh session.`, error);
-            }
-        }
+      }
     }
 
     // Initialize if needed
@@ -152,14 +160,15 @@ export class ConversationManager {
     context.qualitySignals = calculateQualitySignals(normalizedMessages);
 
     // Detect participant style
-    context.memory.participantStyle = detectParticipantStyle(normalizedMessages);
+    context.memory.participantStyle =
+      detectParticipantStyle(normalizedMessages);
 
     // Calculate progress
     context.progress = calculateProgress(
       normalizedMessages,
       config,
       startTime,
-      context.memory.topicsCovered
+      context.memory.topicsCovered,
     );
 
     // Update conversation state
@@ -169,7 +178,7 @@ export class ConversationManager {
       currentState: determineConversationState(
         context.progress,
         normalizedMessages.length,
-        config
+        config,
       ),
       stateEnteredAt: normalizedMessages.length,
       transitionReason: null,
@@ -184,21 +193,25 @@ export class ConversationManager {
    */
   static async updateMemoryAsync(
     conversationId: string,
-    messages: Array<{ role: "user" | "assistant"; content: string }> | ModelMessage[] | any[],
+    messages:
+      | Array<{ role: "user" | "assistant"; content: string }>
+      | ModelMessage[]
+      | any[],
     config: SurveyConfig,
-    existingContext: RollingContext
+    existingContext: RollingContext,
   ): Promise<void> {
     try {
       // Normalize messages for analysis
       const normalizedMessages = this.normalizeMessages(messages, config);
 
       // Only update every 2-3 exchanges to save costs and avoid thrashing
-      if (normalizedMessages.length < 4 || normalizedMessages.length % 2 !== 0) return;
+      if (normalizedMessages.length < 4 || normalizedMessages.length % 2 !== 0)
+        return;
 
       const memoryPrompt = getMemoryUpdatePrompt(
         normalizedMessages,
         config,
-        existingContext.memory
+        existingContext.memory,
       );
 
       const schema = z.object({
@@ -213,24 +226,31 @@ export class ConversationManager {
         timelineEvents: z.array(z.string()).optional(),
         peerContext: z.array(z.string()).optional(),
         participantSuggestedSolutions: z.array(z.string()).optional(),
-        hypothesesEvidence: z.record(z.object({
-          supporting: z.array(z.string()),
-          contradicting: z.array(z.string())
-        })).optional()
+        hypothesesEvidence: z
+          .record(
+            z.object({
+              supporting: z.array(z.string()),
+              contradicting: z.array(z.string()),
+            }),
+          )
+          .optional(),
       });
 
-      const { output: update } = await import("ai").then(ai => ai.generateText({
-        model: analysisModel,
-        output: Output.object({ schema }),
-        system: "You are an expert conversation analyst. Update the memory based on the latest messages.",
-        prompt: memoryPrompt,
-        temperature: 0.3,
-      }));
+      const { output: update } = await import("ai").then((ai) =>
+        ai.generateText({
+          model: analysisModel,
+          output: Output.object({ schema }),
+          system:
+            "You are an expert conversation analyst. Update the memory based on the latest messages.",
+          prompt: memoryPrompt,
+          temperature: 0.3,
+        }),
+      );
 
       const updatedMemory = applyMemoryUpdate(
         existingContext.memory,
         update,
-        config
+        config,
       );
 
       // Save updated context to Redis
@@ -251,9 +271,17 @@ export class ConversationManager {
    * Save the current context state to Redis immediately.
    * Useful for ensuring state is persisted between turns even if memory update hasn't run.
    */
-  static async saveContext(conversationId: string, context: RollingContext): Promise<void> {
-      const redis = getRedisClient();
-      await redis.set(getContextKey(conversationId), JSON.stringify(context), "EX", 7200);
+  static async saveContext(
+    conversationId: string,
+    context: RollingContext,
+  ): Promise<void> {
+    const redis = getRedisClient();
+    await redis.set(
+      getContextKey(conversationId),
+      JSON.stringify(context),
+      "EX",
+      7200,
+    );
   }
 
   /**
@@ -264,30 +292,32 @@ export class ConversationManager {
     config: SurveyConfig,
     context: RollingContext,
     options: {
-        isSample?: boolean;
-        sampleFeedback?: string;
-        conversationNumber?: number;
-        language?: "en" | "fr" | "de" | "es" | "it";
-    } = {}
+      isSample?: boolean;
+      sampleFeedback?: string;
+      conversationNumber?: number;
+      language?: "en" | "fr" | "de" | "es" | "it";
+    } = {},
   ): string {
     const { isSample, sampleFeedback, conversationNumber, language } = options;
-    const finalLanguage = language || config.language || 'en';
+    const finalLanguage = language || config.language || "en";
 
     if (isSample) {
-        return getSampleConversationSystemPrompt(
-            config,
-            sampleFeedback,
-            conversationNumber,
-            finalLanguage,
-            context
-        );
-    } 
+      return `You are conducting a sample survey conversation for testing purposes. Survey goal: ${config.objective?.goal ?? config.information}. Conversation ${conversationNumber ?? 1} of 3.
 
-    return getSurveyConversationSystemPrompt(
-        config,
-        finalLanguage,
-        context
-    );
+<reflection_protocol>
+Before EVERY response you write, open a <scratchpad> block and silently reason through your checks (Acknowledgment, One Question, Natural Transition, Depth). 
+The scratchpad is NEVER shown to the participant. 
+Write your actual response AFTER the </scratchpad> tag.
+</reflection_protocol>`;
+    }
+
+    return `You are a conversational AI interviewer conducting a survey. Survey goal: ${config.objective?.goal ?? config.information}.
+
+<reflection_protocol>
+Before EVERY response you write, open a <scratchpad> block and silently reason through your checks (Acknowledgment, One Question, Natural Transition, Depth). 
+The scratchpad is NEVER shown to the participant. 
+Write your actual response AFTER the </scratchpad> tag.
+</reflection_protocol>`;
   }
 
   /**
@@ -295,50 +325,59 @@ export class ConversationManager {
    * Specifically handles 'showMedia'.
    */
   static getTools(config: SurveyConfig, onMediaDisplay?: (media: any) => void) {
-      return {
-          showMedia: tool({
-              description: "Display a media item (image, audio, or video) to the participant in the conversation",
-              inputSchema: z.object({
-                  mediaId: z.string().describe("The unique ID of the media item to display"),
-              }),
-              execute: async ({ mediaId }) => {
-                  const media = config.media?.find((m) => m.id === mediaId);
-                  
-                  if (!media) {
-                      return { error: "Media not found" };
-                  }
+    return {
+      showMedia: tool({
+        description:
+          "Display a media item (image, audio, or video) to the participant in the conversation",
+        inputSchema: z.object({
+          mediaId: z
+            .string()
+            .describe("The unique ID of the media item to display"),
+        }),
+        execute: async ({ mediaId }) => {
+          const media = config.media?.find((m) => m.id === mediaId);
 
-                  // Execute callback if provided (e.g., for WebSocket)
-                  if (onMediaDisplay) {
-                      onMediaDisplay(media);
-                  }
+          if (!media) {
+            return { error: "Media not found" };
+          }
 
-                  return {
-                      success: true,
-                      media: {
-                          id: media.id,
-                          type: media.type,
-                          description: media.description,
-                          url: media.url,
-                      }
-                  };
-              },
-          }),
-          finishSurvey: tool({
-              description: "Signal that the survey conversation is complete and should end. Call this when you have covered all required topics and gathered sufficient information from the participant.",
-              inputSchema: z.object({
-                  reason: z.string().optional().describe("Optional brief reason for ending (e.g., 'all topics covered', 'participant request')"),
-              }),
-              execute: async ({ reason }) => {
-                  // Execution handled server-side in onFinish callback
-                  // This just returns confirmation for the AI
-                  return {
-                      success: true,
-                      message: "Survey marked as complete",
-                      reason: reason || "survey complete"
-                  };
-              },
-          }),
-      };
+          // Execute callback if provided (e.g., for WebSocket)
+          if (onMediaDisplay) {
+            onMediaDisplay(media);
+          }
+
+          return {
+            success: true,
+            media: {
+              id: media.id,
+              type: media.type,
+              description: media.description,
+              url: media.url,
+            },
+          };
+        },
+      }),
+      finishSurvey: tool({
+        description:
+          "Signal that the survey conversation is complete and should end. Call this when you have covered all required topics and gathered sufficient information from the participant.",
+        inputSchema: z.object({
+          reason: z
+            .string()
+            .optional()
+            .describe(
+              "Optional brief reason for ending (e.g., 'all topics covered', 'participant request')",
+            ),
+        }),
+        execute: async ({ reason }) => {
+          // Execution handled server-side in onFinish callback
+          // This just returns confirmation for the AI
+          return {
+            success: true,
+            message: "Survey marked as complete",
+            reason: reason || "survey complete",
+          };
+        },
+      }),
+    };
   }
 }

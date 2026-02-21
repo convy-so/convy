@@ -17,13 +17,13 @@ function getEncryptionKey(): Buffer {
 
   if (!key) {
     throw new Error(
-      "ENCRYPTION_KEY environment variable is required for token encryption"
+      "ENCRYPTION_KEY environment variable is required for token encryption",
     );
   }
 
   if (key.length !== 64) {
     throw new Error(
-      "ENCRYPTION_KEY must be 64 hex characters (32 bytes) for AES-256"
+      "ENCRYPTION_KEY must be 64 hex characters (32 bytes) for AES-256",
     );
   }
 
@@ -89,28 +89,6 @@ export function decrypt(encrypted: string, iv: string, tag: string): string {
     console.error("Decryption failed:", error);
     throw new Error("Failed to decrypt data. Token may be corrupted.");
   }
-}
-
-/**
- * Encrypt Notion token for storage
- */
-export function encryptNotionToken(token: string) {
-  if (!token || !token.startsWith("secret_")) {
-    throw new Error("Invalid Notion token format");
-  }
-
-  return encrypt(token);
-}
-
-/**
- * Decrypt Notion token from storage
- */
-export function decryptNotionToken(
-  encrypted: string,
-  iv: string,
-  tag: string
-): string {
-  return decrypt(encrypted, iv, tag);
 }
 
 /**

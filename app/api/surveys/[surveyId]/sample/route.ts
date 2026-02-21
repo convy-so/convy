@@ -1,11 +1,20 @@
-import { streamText, stepCountIs } from "ai";
+import {
+  streamText,
+  stepCountIs,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+} from "ai";
 import { and, eq, lt } from "drizzle-orm";
 
 import { db } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
 import { defaultModel } from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { MAX_SAMPLE_CONVERSATIONS, buildCompleteSurveyConfig } from "@/lib/surveys";
+import { createUIMessageFilter } from "@/lib/agents/scratchpad-filter";
+import {
+  MAX_SAMPLE_CONVERSATIONS,
+  buildCompleteSurveyConfig,
+} from "@/lib/surveys";
 import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
 import { ConversationManager } from "@/lib/conversation-manager";
 
@@ -18,7 +27,7 @@ export const maxDuration = 300;
  */
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ surveyId: string }> }
+  { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
     // Rate limiting check
@@ -40,7 +49,7 @@ export async function POST(
             "X-RateLimit-Remaining": rateLimitResult.remaining.toString(),
             "X-RateLimit-Reset": rateLimitResult.reset.toString(),
           },
-        }
+        },
       );
     }
 
@@ -64,7 +73,7 @@ export async function POST(
     ) {
       return new Response(
         `Invalid conversation number. Must be between 1 and ${MAX_SAMPLE_CONVERSATIONS}`,
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -85,7 +94,7 @@ export async function POST(
     if (survey.status !== "draft" && survey.status !== "sample_review") {
       return new Response(
         "Survey must be in draft or sample_review status for sample conversations",
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -108,8 +117,8 @@ export async function POST(
       .where(
         and(
           eq(sampleConversations.surveyId, surveyId),
-          lt(sampleConversations.conversationNumber, conversationNumber)
-        )
+          lt(sampleConversations.conversationNumber, conversationNumber),
+        ),
       );
 
     // Combine all previous feedback
@@ -132,18 +141,18 @@ export async function POST(
       conversationId,
       messages,
       surveyConfig,
-      isStart // forceNew
+      isStart, // forceNew
     );
 
     const systemPrompt = ConversationManager.getSystemPrompt(
       surveyConfig,
       context,
       {
-         isSample: true,
-         sampleFeedback: combinedFeedback,
-         conversationNumber,
-         language: survey.language
-      }
+        isSample: true,
+        sampleFeedback: combinedFeedback,
+        conversationNumber,
+        language: survey.language,
+      },
     );
 
     // Define tools for the AI to call using Manager
@@ -155,7 +164,8 @@ export async function POST(
       messagesToLLM.push({
         role: "user",
         // This message is invisible to the user but prompts the AI to start
-        content: "Start the conversation now. Greet the participant according to the system prompt instructions.",
+        content:
+          "Start the conversation now. Greet the participant according to the system prompt instructions.",
       });
     }
 
@@ -170,22 +180,31 @@ export async function POST(
     });
 
     // Trigger async memory update (non-blocking) using Manager
-    ConversationManager.updateMemoryAsync(conversationId, messages, surveyConfig, context).catch(
-      console.error
-    );
+    ConversationManager.updateMemoryAsync(
+      conversationId,
+      messages,
+      surveyConfig,
+      context,
+    ).catch(console.error);
 
     // Save updated context to Redis using Manager
     await ConversationManager.saveContext(conversationId, context);
 
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        writer.merge(
+          result.toUIMessageStream().pipeThrough(createUIMessageFilter()),
+        );
+      },
+    });
 
-
-    // Include remaining sample count in response headers
     const remainingSamples = MAX_SAMPLE_CONVERSATIONS - conversationNumber;
-    const response = result.toTextStreamResponse();
+
+    const response = createUIMessageStreamResponse({ stream });
     response.headers.set("X-Remaining-Samples", remainingSamples.toString());
     response.headers.set(
       "X-Conversation-Number",
-      conversationNumber.toString()
+      conversationNumber.toString(),
     );
 
     return response;

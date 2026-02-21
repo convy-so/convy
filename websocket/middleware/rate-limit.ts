@@ -31,7 +31,7 @@ const RATE_LIMIT_CONFIG = {
   TTS_PER_MINUTE: 30, // Max 30 TTS requests per minute
 
   // Burst protection
-  AUDIO_CHUNKS_PER_SECOND: 10, // Max 10 audio chunks per second
+  AUDIO_CHUNKS_PER_SECOND: 50, // Max 50 audio chunks per second (approx 2.5x standard rate)
 } as const;
 
 // ============================================================================

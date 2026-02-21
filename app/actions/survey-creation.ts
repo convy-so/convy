@@ -23,10 +23,6 @@ import {
   type CollectedInfo,
 } from "@/lib/prompts";
 import type { ToneProfile } from "@/lib/surveys";
-import {
-  assertCanCreateTextSurvey,
-  PlanLimitError,
-} from "@/lib/billing/entitlements";
 
 type ActionResult<T> =
   | { success: true; data: T }
@@ -111,6 +107,7 @@ const extractedDataSchema = z.object({
     personalInfo: z.boolean(),
     subjectDefined: z.boolean(),
     domainIdentified: z.boolean(),
+    media: z.boolean(),
   }),
 });
 
@@ -119,7 +116,7 @@ const extractedDataSchema = z.object({
  * Creates a survey in "creating" status with a creation conversation record
  */
 export async function startSurveyCreationAction(
-  input: z.infer<typeof startSurveyCreationSchema> = { language: "en" }
+  input: z.infer<typeof startSurveyCreationSchema> = { language: "en" },
 ): Promise<ActionResult<{ surveyId: string; conversationId: string }>> {
   try {
     const session = await getVerifiedSession();
@@ -152,29 +149,16 @@ export async function startSurveyCreationAction(
       // Project must belong to the active workspace (if any) or user (if personal)
       if (organizationId) {
         if (project.organizationId !== organizationId) {
-           return { success: false, error: "Project does not belong to this workspace" };
+          return {
+            success: false,
+            error: "Project does not belong to this workspace",
+          };
         }
       } else {
         if (project.userId !== session.user.id || project.organizationId) {
-           return { success: false, error: "Unauthorized project access" };
+          return { success: false, error: "Unauthorized project access" };
         }
       }
-    }
-
-    // Enforce plan limits with organizationId context
-    try {
-      await assertCanCreateTextSurvey({
-        userId: session.user.id,
-        organizationId: organizationId ?? null,
-      });
-    } catch (error) {
-      if (error instanceof PlanLimitError) {
-        return {
-          success: false,
-          error: error.message,
-        };
-      }
-      throw error;
     }
 
     // Assign projectId if valid
@@ -211,6 +195,8 @@ export async function startSurveyCreationAction(
         personalInfo: false,
         subjectDefined: false,
         domainIdentified: false,
+        media: false,
+        subjectModelComplete: false,
       },
       extractedData: {},
     });
@@ -252,11 +238,7 @@ export async function getSurveyCreationStateAction(surveyId: string): Promise<
     };
     conversation: {
       id: string;
-      messages: Array<{
-        role: "user" | "assistant";
-        content: string;
-        timestamp: string;
-      }>;
+      messages: Array<any>;
       status: string;
       collectedInfo: CollectedInfo;
       extractedData: Record<string, unknown>;
@@ -314,6 +296,8 @@ export async function getSurveyCreationStateAction(surveyId: string): Promise<
                 personalInfo: false,
                 subjectDefined: false,
                 domainIdentified: false,
+                media: false,
+                subjectModelComplete: false,
               },
               extractedData: conversation.extractedData ?? {},
             }
@@ -339,7 +323,7 @@ export async function getSurveyCreationStateAction(surveyId: string): Promise<
  * This analyzes the conversation and extracts structured data
  */
 export async function extractSurveyDataAction(
-  surveyId: string
+  surveyId: string,
 ): Promise<ActionResult<z.infer<typeof extractedDataSchema>>> {
   try {
     const session = await getVerifiedSession();
@@ -367,7 +351,7 @@ export async function extractSurveyDataAction(
     }
 
     const extractionPrompt = getSurveyDataExtractionPrompt(
-      conversation.messages.map((m) => ({ role: m.role, content: m.content }))
+      conversation.messages.map((m) => ({ role: m.role, content: m.content })),
     );
 
     const extractedText = await generateAIResponse(
@@ -377,7 +361,7 @@ export async function extractSurveyDataAction(
         model: analysisModel,
         temperature: 0.3,
         maxTokens: 2000,
-      }
+      },
     );
 
     let extractedData: z.infer<typeof extractedDataSchema>;
@@ -408,14 +392,16 @@ export async function extractSurveyDataAction(
       Object.entries(dataWithoutCollectedInfo).map(([key, value]) => [
         key,
         value === null ? undefined : value,
-      ])
+      ]),
     );
 
     await db
       .update(surveyCreationConversations)
       .set({
         extractedData: cleanedData,
-        collectedInfo: collectedInfo,
+        collectedInfo: collectedInfo as typeof collectedInfo & {
+          subjectModelComplete: boolean;
+        },
       })
       .where(eq(surveyCreationConversations.surveyId, surveyId));
 
@@ -445,7 +431,7 @@ export async function extractSurveyDataAction(
  * This applies the extracted data to the survey and prepares it for sample conversations
  */
 export async function finalizeSurveyCreationAction(
-  surveyId: string
+  surveyId: string,
 ): Promise<ActionResult<{ surveyId: string; status: string }>> {
   try {
     const session = await getVerifiedSession();
@@ -497,7 +483,7 @@ export async function finalizeSurveyCreationAction(
     ];
 
     const missingFields = requiredFields.filter(
-      (field) => !collectedInfo[field]
+      (field) => !collectedInfo[field],
     );
 
     if (missingFields.length > 0) {
@@ -549,14 +535,32 @@ export async function finalizeSurveyCreationAction(
       .set({ status: "completed" })
       .where(eq(surveyCreationConversations.surveyId, surveyId));
 
-    // Trigger Zapier webhook for survey created
+    // Trigger pattern extraction for self-improvement
     try {
-      const { triggerSurveyCreatedWebhook } = await import("@/lib/zapier/webhook-delivery");
-      triggerSurveyCreatedWebhook(surveyId, session.user.id).catch((error) => {
-        console.error("Failed to trigger Zapier survey created webhook:", error);
-      });
+      const { enqueuePatternExtraction } = await import("@/lib/queue");
+      const [creationConv] = await db
+        .select({ id: surveyCreationConversations.id })
+        .from(surveyCreationConversations)
+        .where(eq(surveyCreationConversations.surveyId, surveyId))
+        .limit(1);
+
+      if (creationConv) {
+        await enqueuePatternExtraction({
+          conversationId: creationConv.id,
+          surveyId,
+          conversationType: "creation",
+          domainId: data.domainId ?? null,
+        });
+        console.log(
+          `[Finalize Survey Creation] Enqueued pattern extraction for creation conversation ${creationConv.id}`,
+        );
+      }
     } catch (error) {
-      console.error("Failed to import Zapier webhook function:", error);
+      console.error(
+        `[Finalize Survey Creation] Pattern extraction enqueue failed:`,
+        error,
+      );
+      // Don't fail the finalization if pattern extraction fails
     }
 
     return {
@@ -583,7 +587,7 @@ export async function finalizeSurveyCreationAction(
  */
 export async function abandonSurveyCreationAction(
   surveyId: string,
-  deleteSurvey: boolean = false
+  deleteSurvey: boolean = false,
 ): Promise<ActionResult<{ success: boolean }>> {
   try {
     const session = await getVerifiedSession();
@@ -632,11 +636,7 @@ export async function resumeSurveyCreationAction(surveyId: string): Promise<
   ActionResult<{
     surveyId: string;
     conversationId: string;
-    messages: Array<{
-      role: "user" | "assistant";
-      content: string;
-      timestamp: string;
-    }>;
+    messages: Array<any>;
     collectedInfo: CollectedInfo;
   }>
 > {
@@ -692,7 +692,7 @@ export async function resumeSurveyCreationAction(surveyId: string): Promise<
         surveyId,
         conversationId: conversation.id,
         messages: conversation.messages,
-        collectedInfo: conversation.collectedInfo ?? {
+        collectedInfo: {
           objective: false,
           targetAudience: false,
           scope: false,
@@ -705,6 +705,9 @@ export async function resumeSurveyCreationAction(surveyId: string): Promise<
           personalInfo: false,
           subjectDefined: false,
           domainIdentified: false,
+          media: false,
+          subjectModelComplete: false,
+          ...((conversation.collectedInfo as any) || {}),
         },
       },
     };

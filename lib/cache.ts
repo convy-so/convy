@@ -1,4 +1,3 @@
-
 import { Redis } from "@upstash/redis";
 import { env } from "@/lib/env";
 
@@ -9,20 +8,11 @@ const redis = new Redis({
 });
 
 export const CacheKeys = {
-  subscription: (userId: string, orgId?: string | null) =>
-    orgId ? `subscription:${userId}:org:${orgId}` : `subscription:${userId}`,
-  entitlements: (userId: string, orgId?: string | null) =>
-    orgId ? `entitlements:${userId}:org:${orgId}` : `entitlements:${userId}`,
   featureFlags: (userId: string) => `flags:${userId}`,
-  usage: (userId: string, period: string, orgId?: string | null) =>
-    orgId ? `usage:${userId}:${period}:org:${orgId}` : `usage:${userId}:${period}`,
 } as const;
 
 export const TTL = {
-  subscription: 300, // 5 minutes
-  entitlements: 60, // 1 minute
   featureFlags: 60, // 1 minute
-  usage: 60, // 1 minute (for fast checking, mostly strict consistency needed though)
 } as const;
 
 export class CacheService {
@@ -35,7 +25,11 @@ export class CacheService {
     }
   }
 
-  static async set<T>(key: string, value: T, ttlSeconds?: number): Promise<void> {
+  static async set<T>(
+    key: string,
+    value: T,
+    ttlSeconds?: number,
+  ): Promise<void> {
     try {
       if (ttlSeconds) {
         await redis.set(key, value, { ex: ttlSeconds });

@@ -52,7 +52,6 @@ export const REQUIRED_INFORMATION = {
     description: "What they're trying to learn or decide",
     qualityChecks: [
       "Has a clear decision or learning goal",
-      "Includes context about why this matters",
       "Is specific enough to guide conversation design",
     ],
   },
@@ -80,7 +79,7 @@ export const REQUIRED_INFORMATION = {
   },
 
   successCriteria: {
-    required: true, // Now mandatory to ask
+    required: true, 
     priority: 4,
     description: "What makes a response valuable",
     qualityChecks: [
@@ -107,7 +106,7 @@ export const REQUIRED_INFORMATION = {
   },
 
   tone: {
-    required: true, // Now mandatory to ask
+    required: true, 
     priority: 7,
     description: "Conversation style preferences",
     qualityChecks: ["Formality level is specified"],

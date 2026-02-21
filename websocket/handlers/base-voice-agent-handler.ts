@@ -32,6 +32,8 @@ export abstract class BaseVoiceAgentHandler {
   protected userId?: string;
   protected identifier: string;
   protected isActive: boolean = true;
+  protected hasStartedAudio: boolean = false;
+  protected settingsApplied: boolean = false; // Bug 5 fix: Track settings application state
 
   // Voice Agent connection
   protected voiceAgent: DeepgramVoiceAgentConnection | null = null;
@@ -45,6 +47,9 @@ export abstract class BaseVoiceAgentHandler {
   protected activeDurationMs: number = 0;
   protected lastInteractionEndTime: number = Date.now();
   protected readonly MAX_SILENCE_GAP_MS = 30 * 1000;
+
+  // Track the last injected user input to filter it from UI
+  protected lastInjectedInput: string | null = null;
 
   constructor(
     ws: WebSocket,
@@ -63,9 +68,6 @@ export abstract class BaseVoiceAgentHandler {
 
   /** Initialize the handler (load data, create voice agent, etc.) */
   abstract initialize(): Promise<void>;
-
-  /** Get the greeting message for this session */
-  protected abstract getGreeting(): string | null;
 
   /** Get the language for this session */
   protected abstract getLanguage(): SupportedLanguage;
@@ -113,6 +115,12 @@ export abstract class BaseVoiceAgentHandler {
     this.voiceAgent.on("conversationText", async (event: ConversationTextEvent) => {
       console.log(`[BaseVoiceAgent] Received text from agent (${event.role}): "${event.content.substring(0, 50)}..."`);
       this.resetIdleTimeout();
+
+      // Filter out the injected initial user message so it doesn't show in the UI
+      if (event.role === "user" && this.lastInjectedInput && event.content.trim() === this.lastInjectedInput.trim()) {
+        console.log(`[BaseVoiceAgent] 🤫 Skipping display of injected initial user message: "${event.content.substring(0, 30)}..."`);
+        return;
+      }
       
       // Send to browser for UI display
       this.send({
@@ -120,20 +128,6 @@ export abstract class BaseVoiceAgentHandler {
         role: event.role,
         content: event.content,
       });
-
-      // Also send legacy transcription event for backward compatibility
-      if (event.role === "user") {
-        this.send({
-          type: "transcription",
-          text: event.content,
-          isFinal: true,
-        });
-      } else if (event.role === "assistant") {
-        this.send({
-          type: "audio_sent",
-          text: event.content,
-        });
-      }
 
       // Let subclass handle persistence, extraction, etc.
       try {
@@ -190,24 +184,18 @@ export abstract class BaseVoiceAgentHandler {
 
     this.voiceAgent.on("settingsApplied", () => {
       console.log(`[VoiceAgentHandler] Voice Agent settings applied for ${this.identifier}`);
+      this.settingsApplied = true;
       
-      // 1. Static Greeting (Instant, TTS only)
-      const greeting = this.getGreeting();
-      if (greeting) {
-        console.log(`[VoiceAgentHandler] Injecting static greeting: "${greeting}"`);
-        this.voiceAgent?.sendInjectAgentMessage(greeting);
+      // If audio already started flowing but we were waiting for settings, inject now
+      if (this.hasStartedAudio) {
+        console.log(`[VoiceAgentHandler] Audio already started, triggering deferred injection...`);
+        this.triggerInitialInjection();
       }
+    });
 
-      // 2. Initial User Input (Triggers LLM generation)
-      // Used for scenarios where the AI must "start" the conversation dynamically
-      const initialInput = this.getInitialUserInput();
-      if (initialInput) {
-        console.log(`[VoiceAgentHandler] Injecting initial user input: "${initialInput}"`);
-        // Small delay to ensure greeting (if any) is queued first, though usually sequential
-        setTimeout(() => {
-            this.voiceAgent?.sendInjectUserMessage(initialInput);
-        }, 100);
-      }
+    this.voiceAgent.on("injectionRefused", () => {
+      console.warn(`[VoiceAgentHandler] Injection refused for ${this.identifier}, retrying in 500ms...`);
+      setTimeout(() => this.triggerInitialInjection(), 500);
     });
 
     this.voiceAgent.on("error", (error: { description: string; code?: string }) => {
@@ -234,7 +222,23 @@ export abstract class BaseVoiceAgentHandler {
       this.voiceAgent.close();
       this.voiceAgent = null;
     }
+    // Reset audio state so we inject again on new connection
+    // Reset audio state so we inject again on new connection
+    this.hasStartedAudio = false; 
+    this.settingsApplied = false; 
     await this.connectVoiceAgent();
+  }
+
+  private triggerInitialInjection(): void {
+
+    const initialInput = this.getInitialUserInput();
+    if (initialInput) {
+      this.lastInjectedInput = initialInput;
+      console.log(`[VoiceAgentHandler] Injecting initial user input: "${initialInput}"`);
+      setTimeout(() => {
+        this.voiceAgent?.sendInjectUserMessage(initialInput);
+      }, 100);
+    }
   }
 
   // ── Browser Connection Handlers ────────────────────────────────────────
@@ -308,17 +312,35 @@ export abstract class BaseVoiceAgentHandler {
   private async handleBrowserAudio(audioData: Buffer): Promise<void> {
     // Check audio chunk rate limit
     const audioCheck = await checkAudioChunkAllowed(this.identifier);
-    if (!audioCheck.allowed) return;
+    if (!audioCheck.allowed) {
+        if (Math.random() < 0.01) console.warn(`[BaseVoiceAgent] Audio chunk dropped due to rate limit`);
+        return;
+    }
 
     if (!audioData || audioData.length === 0) return;
 
     // Relay to Voice Agent
     if (this.voiceAgent?.connected) {
        // Log occasional chunk to verify flow
-       if (Math.random() < 0.01) {
-          console.log(`[BaseVoiceAgent] Relaying browser audio to Agent: ${audioData.length} bytes (sample)`);
+       if (Math.random() < 0.05) {
+          console.log(`[BaseVoiceAgent] 🎤 Relaying browser audio to Agent: ${audioData.length} bytes`);
        }
       this.voiceAgent.sendAudio(audioData);
+
+      // Fire initial injection ONCE, after audio is confirmed flowing AND settings are applied
+      if (!this.hasStartedAudio) {
+        this.hasStartedAudio = true;
+        
+        if (this.settingsApplied) {
+           this.triggerInitialInjection();
+        } else {
+           console.log(`[VoiceAgentHandler] Audio started but waiting for settings confirmation before injecting...`);
+        }
+      }
+    } else {
+        if (Math.random() < 0.01) {
+            console.warn(`[BaseVoiceAgent] ⚠️ Cannot relay audio: Voice Agent NOT connected`);
+        }
     }
   }
 

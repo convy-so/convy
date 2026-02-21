@@ -38,7 +38,7 @@ export function DashboardHeader() {
 
         {/* Right side */}
         <div className="flex items-center gap-2">
-        
+
 
           {/* Notifications */}
           <div className="relative">
@@ -124,13 +124,7 @@ export function DashboardHeader() {
                     >
                       Team Management
                     </Link>
-                    <Link
-                      href="/dashboard/billing"
-                      className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
-                      onClick={() => setShowUserMenu(false)}
-                    >
-                      Billing & Plans
-                    </Link>
+
                   </div>
                   <div className="border-t border-gray-100 py-1">
                     <button className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">

@@ -8,7 +8,7 @@ export default function FooterSection() {
 
   return (
     <section className="py-20 sm:py-24 px-4 sm:px-6 lg:px-12 bg-[#FAFAFA]">
-      <div className="bg-[#232323] text-white rounded-[32px] px-6 sm:px-10 lg:px-16 py-16 sm:py-20 mx-auto max-w-[1920px]">
+      <div className="bg-[#232323] text-white rounded-[32px] px-6 sm:px-10 lg:px-16 py-12 sm:py-20 mx-auto max-w-[1920px]">
         <div className="max-w-5xl mx-auto flex flex-col items-center text-center gap-10">
           {/* Logo mark */}
           <div className="w-14 h-14 rounded-[18px] border border-white/20 flex items-center justify-center">
@@ -23,7 +23,7 @@ export default function FooterSection() {
 
           {/* Main message */}
           <div>
-            <p className="text-[18px] md:text-[22px] font-[500] text-[#E5E5E5] leading-[28px] md:leading-[32px]" dangerouslySetInnerHTML={{ __html: t.raw('Message') }} />
+            <p className="text-[16px] md:text-[22px] font-[500] text-[#E5E5E5] leading-[24px] md:leading-[32px]" dangerouslySetInnerHTML={{ __html: t.raw('Message') }} />
           </div>
 
           {/* Contact on X */}

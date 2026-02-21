@@ -1,9 +1,5 @@
 "use client";
 
-// Client-side environment variables
-// These are safe to use in browser components
-// They must be prefixed with NEXT_PUBLIC_
-
 const optional = (key: string): string | undefined => {
   return process.env[key];
 };

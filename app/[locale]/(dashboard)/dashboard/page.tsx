@@ -18,10 +18,6 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { db } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema/surveys";
 import { eq, desc, count, and, sql } from "drizzle-orm";
-import { IntegrationsWidget } from "@/components/dashboard/integrations-widget";
-import { getSlackIntegrationStatus } from "@/app/actions/slack";
-import { getNotionIntegrationStatus } from "@/app/actions/notion";
-import { getZapierIntegrationStatus } from "@/app/actions/zapier";
 import { getTranslations } from "next-intl/server";
 
 export default async function DashboardPage() {
@@ -80,7 +76,7 @@ export default async function DashboardPage() {
   const avgSeconds = Math.round(durationStats?.avgDuration || 0);
   const avgMinutes = Math.floor(avgSeconds / 60);
   const remainingSeconds = avgSeconds % 60;
-  const durationDisplay = avgSeconds > 0 
+  const durationDisplay = avgSeconds > 0
     ? `${avgMinutes}m ${remainingSeconds}s`
     : "N/A";
 
@@ -125,14 +121,7 @@ export default async function DashboardPage() {
     time: new Date(activity.createdAt!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }),
   }));
 
-  // 5. Fetch Integration Status - Disabled
-  /*
-  const [slackStatus, notionStatus, zapierStatus] = await Promise.all([
-    getSlackIntegrationStatus(),
-    getNotionIntegrationStatus(),
-    getZapierIntegrationStatus(),
-  ]);
-  */
+
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">

@@ -339,6 +339,30 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
         `engagement: ${structuredInsights.engagementLevel}`
     );
 
+    // Trigger RAG ingestion
+    try {
+      const { ingestConversation } = await import("@/lib/rag/ingest");
+      await ingestConversation(conversationId);
+      console.log(`[Conversation Insights Worker] Ingested conversation ${conversationId} into RAG`);
+    } catch (error) {
+      console.error(`[Conversation Insights Worker] RAG ingestion failed:`, error);
+    }
+
+    // Trigger pattern extraction for self-improvement
+    try {
+      const { enqueuePatternExtraction } = await import("@/lib/queue");
+      await enqueuePatternExtraction({
+        conversationId,
+        surveyId,
+        conversationType: "response",
+        domainId: survey.domainId ?? null,
+      });
+      console.log(`[Conversation Insights Worker] Enqueued pattern extraction for conversation ${conversationId}`);
+    } catch (error) {
+      console.error(`[Conversation Insights Worker] Pattern extraction enqueue failed:`, error);
+      // Don't fail the insights job if pattern extraction fails
+    }
+    
     // Schedule analytics generation via scheduler
     try {
       const { scheduleAnalyticsOnNewResponse } =

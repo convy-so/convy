@@ -23,7 +23,7 @@ type ActionResult<T> =
  * This aggregates all conversations and generates comprehensive analytics
  */
 export async function generateSurveyAnalyticsAction(
-  surveyId: string
+  surveyId: string,
 ): Promise<ActionResult<{ jobId: string }>> {
   try {
     const session = await getVerifiedSession();
@@ -56,7 +56,7 @@ export async function generateSurveyAnalyticsAction(
       return {
         success: false,
         error:
-          "No completed conversations found. Generate insights for conversations first."
+          "No completed conversations found. Generate insights for conversations first.",
       };
     }
 
@@ -67,7 +67,7 @@ export async function generateSurveyAnalyticsAction(
     } catch (error) {
       console.error(
         "Failed to reset analytics counter for manual trigger:",
-        error
+        error,
       );
     }
 
@@ -149,12 +149,12 @@ export async function getSurveyAnalyticsAction(surveyId: string): Promise<
             await import("@/lib/analytics-scheduler");
           await scheduleAnalyticsOnNewResponse(surveyId, session.user.id);
           console.log(
-            `[Analytics Action] Scheduled analytics generation for survey ${surveyId}`
+            `[Analytics Action] Scheduled analytics generation for survey ${surveyId}`,
           );
         } catch (error) {
           console.error(
             "[Analytics Action] Failed to schedule analytics generation:",
-            error
+            error,
           );
         }
 
@@ -253,14 +253,14 @@ export async function getDashboardDataAction(surveyId: string): Promise<
 
     const conversationsCount = allConversations.length;
     const completedConversationsCount = allConversations.filter(
-      (c) => c.completed
+      (c) => c.completed,
     ).length;
 
     // If analytics don't exist but there are completed conversations with summaries,
     // auto-trigger analytics generation
     if (!analytics) {
       const completedWithSummaries = allConversations.filter(
-        (c) => c.completed && c.summary
+        (c) => c.completed && c.summary,
       );
 
       if (completedWithSummaries.length > 0) {
@@ -269,12 +269,12 @@ export async function getDashboardDataAction(surveyId: string): Promise<
             await import("@/lib/analytics-scheduler");
           await scheduleAnalyticsOnNewResponse(surveyId, session.user.id);
           console.log(
-            `[Dashboard Action] Scheduled analytics generation for survey ${surveyId}`
+            `[Dashboard Action] Scheduled analytics generation for survey ${surveyId}`,
           );
         } catch (error) {
           console.error(
             "[Dashboard Action] Failed to schedule analytics generation:",
-            error
+            error,
           );
         }
       }
@@ -324,7 +324,7 @@ export async function getDashboardDataAction(surveyId: string): Promise<
  * Returns full structured analytics with dashboard widgets
  */
 export async function getComprehensiveAnalyticsAction(
-  surveyId: string
+  surveyId: string,
 ): Promise<
   ActionResult<{
     status: "ready" | "generating" | "not_generated";
@@ -434,6 +434,7 @@ export async function getComprehensiveAnalyticsAction(
         averageResponseLength: 0,
         averageFollowUpDepth: 0,
         medianDurationMinutes: 0,
+        medianActiveDurationMinutes: 0,
         insightQualityScore: 5,
         responseEngagementDistribution: { high: 0, medium: 0, low: 0 },
         topicCoverageRate: 0,

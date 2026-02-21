@@ -21,8 +21,7 @@ const addSurveyMediaSchema = z.object({
   url: z.string().url("Invalid media URL"),
   description: z.string().min(10, "Description must be at least 10 characters"),
   contextForUse: z.string().min(10, "Context for use must be at least 10 characters"),
-  contentSummary: z.string().min(10).optional(),
-  infoToGather: z.string().min(5).optional(),
+
   durationMs: z.number().max(5 * 60 * 1000, "Duration exceeds 5 minutes").optional(),
   type: z.enum(["image", "audio", "video"]).default("image"),
 });
@@ -33,8 +32,7 @@ const updateSurveyMediaSchema = z.object({
   url: z.string().url("Invalid media URL").optional(),
   description: z.string().min(10).optional(),
   contextForUse: z.string().min(10).optional(),
-  contentSummary: z.string().min(10).optional(),
-  infoToGather: z.string().min(5).optional(),
+
   durationMs: z.number().max(5 * 60 * 1000, "Duration exceeds 5 minutes").optional(),
   mimeType: z.string().optional(),
 });
@@ -48,8 +46,7 @@ const uploadSurveyMediaSchema = z.object({
   surveyId: z.string().min(1),
   description: z.string().min(10, "Description must be at least 10 characters"),
   contextForUse: z.string().min(10, "Context for use must be at least 10 characters"),
-  contentSummary: z.string().optional(),
-  infoToGather: z.string().optional(),
+
   durationMs: z.number().optional(),
   type: z.enum(["image", "audio", "video"]),
 });
@@ -67,8 +64,7 @@ export async function uploadSurveyMediaAction(
     const surveyId = formData.get("surveyId") as string;
     const description = formData.get("description") as string;
     const contextForUse = formData.get("contextForUse") as string;
-    const contentSummary = formData.get("contentSummary") as string;
-    const infoToGather = formData.get("infoToGather") as string;
+
     const type = (formData.get("type") as "image" | "audio" | "video") || "image"; // Default to image if not specified
     const durationMs = Number(formData.get("durationMs"));
     const file = formData.get("file") as File;
@@ -77,10 +73,9 @@ export async function uploadSurveyMediaAction(
       surveyId,
       description,
       contextForUse,
-      contentSummary,
-      infoToGather,
+
       type,
-      durationMs: isNaN(durationMs) ? undefined : durationMs,
+      durationMs: isNaN(durationMs) || durationMs === 0 ? undefined : durationMs,
     });
 
     if (!file || !(file instanceof File)) {
@@ -155,8 +150,7 @@ export async function uploadSurveyMediaAction(
       type: type,
       description: validation.description,
       contextForUse: validation.contextForUse,
-      contentSummary: validation.contentSummary || validation.description, // Fallback for images
-      infoToGather: validation.infoToGather || validation.contextForUse, // Fallback for images
+
       durationMs: validation.durationMs || null,
       mimeType: file.type,
     };
@@ -233,9 +227,7 @@ export async function updateSurveyMediaAction(
       ...currentMedia[mediaIndex],
       ...(body.url && { url: body.url }),
       ...(body.description && { description: body.description }),
-      ...(body.contentSummary && { contentSummary: body.contentSummary }),
-      ...(body.contextForUse && { contextForUse: body.contextForUse }),
-      ...(body.infoToGather && { infoToGather: body.infoToGather }),
+
       ...(durationMsUpdate !== undefined && { durationMs: durationMsUpdate }),
       ...(body.mimeType && { mimeType: body.mimeType }),
     };
@@ -393,8 +385,7 @@ export async function addSurveyMediaAction(
       type: body.type,
       description: body.description,
       contextForUse: body.contextForUse,
-      contentSummary: body.contentSummary || body.description,
-      infoToGather: body.infoToGather || body.contextForUse,
+
       durationMs: body.durationMs || null,
     };
 

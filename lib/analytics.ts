@@ -1,4 +1,3 @@
-
 /**
  * Analytics Module
  *
@@ -61,6 +60,7 @@ export interface CoreMetrics {
   };
 
   // Coverage metrics
+  topicCoverageRate: number; // 0-100 percentage
   requiredQuestionsCompletion: RequiredQuestionCoverage[];
 }
 
@@ -97,7 +97,13 @@ export interface CreatorMetric {
   summary: string;
 
   // For dashboard visualizations
-  chartType: "pie" | "bar" | "histogram" | "wordcloud" | "text" | "metric_breakdown";
+  chartType:
+    | "pie"
+    | "bar"
+    | "histogram"
+    | "wordcloud"
+    | "text"
+    | "metric_breakdown";
   chartData: ChartDataPoint[];
 }
 
@@ -454,7 +460,7 @@ export interface DashboardWidget {
   description?: string;
   priority: number;
   size: "small" | "medium" | "large" | "full";
-  data: unknown; 
+  data: unknown;
 }
 
 // Specific widget data types
@@ -531,17 +537,24 @@ export const creatorMetricSchema = z.object({
       count: z.number(),
       percentage: z.number(),
       examples: z.array(extractedQuoteSchema),
-    })
+    }),
   ),
   summary: z.string(),
-  chartType: z.enum(["pie", "bar", "histogram", "wordcloud", "text", "metric_breakdown"]),
+  chartType: z.enum([
+    "pie",
+    "bar",
+    "histogram",
+    "wordcloud",
+    "text",
+    "metric_breakdown",
+  ]),
   chartData: z.array(
     z.object({
       label: z.string(),
       value: z.number(),
       color: z.string().optional(),
       metadata: z.record(z.unknown()).optional(),
-    })
+    }),
   ),
 });
 
@@ -597,7 +610,7 @@ export const conversationInsightDataSchema = z.object({
       hypothesis: z.string(),
       evidence: z.enum(["supporting", "contradicting", "neutral"]),
       quote: z.string().optional(),
-    })
+    }),
   ),
 });
 
@@ -613,7 +626,7 @@ export function calculateConversationMetrics(
     role: "user" | "assistant";
     content: string;
     timestamp?: string;
-  }>
+  }>,
 ): {
   messageCount: number;
   participantResponseCount: number;
@@ -625,7 +638,7 @@ export function calculateConversationMetrics(
   const participantMessages = messages.filter((m) => m.role === "user");
   const totalWords = participantMessages.reduce(
     (sum, m) => sum + m.content.split(/\s+/).length,
-    0
+    0,
   );
 
   // Calculate follow-up depth (consecutive assistant questions after user responses)
@@ -674,7 +687,7 @@ export function calculateConversationMetrics(
 export function determineEngagementLevel(
   averageResponseLength: number,
   followUpDepth: number,
-  participantResponseCount: number
+  participantResponseCount: number,
 ): "high" | "medium" | "low" {
   const lengthScore =
     averageResponseLength > 50 ? 3 : averageResponseLength > 20 ? 2 : 1;
@@ -700,7 +713,7 @@ export function generateInsightId(prefix: string): string {
  * Create dashboard widgets from analytics data
  */
 export function createDashboardWidgets(
-  analytics: SurveyAnalyticsData
+  analytics: SurveyAnalyticsData,
 ): DashboardWidget[] {
   const widgets: DashboardWidget[] = [];
   let priority = 0;
@@ -1047,7 +1060,7 @@ export function createDashboardWidgets(
 
       // Media with issues alert
       const mediaWithIssues = media.mediaEffectiveness.filter(
-        (m) => m.commonIssues.length > 0
+        (m) => m.commonIssues.length > 0,
       );
       if (mediaWithIssues.length > 0) {
         widgets.push({
@@ -1063,7 +1076,7 @@ export function createDashboardWidgets(
                 m.commonIssues.map((issue) => ({
                   text: `${m.mediaType.toUpperCase()} "${m.description.slice(0, 30)}...": ${issue}`,
                   significance: "high" as InsightSignificance,
-                }))
+                })),
               )
               .slice(0, 5),
           } as InsightListData,
@@ -1110,7 +1123,7 @@ export function parseAnalyticsResponse<T>(
   response: string,
   schema: z.ZodType<T>,
   fallback: T,
-  context: string
+  context: string,
 ): { data: T; parseSuccess: boolean } {
   try {
     // Try to extract JSON from the response
@@ -1139,12 +1152,12 @@ export function createFallbackConversationInsights(
     content: string;
     timestamp?: string;
   }>,
-  rawSummary: string
+  rawSummary: string,
 ): ConversationInsightData {
   const participantMessages = messages.filter((m) => m.role === "user");
   const totalWords = participantMessages.reduce(
     (sum, m) => sum + m.content.split(/\s+/).length,
-    0
+    0,
   );
   const averageResponseLength =
     participantMessages.length > 0
@@ -1155,7 +1168,7 @@ export function createFallbackConversationInsights(
   const engagementLevel = determineEngagementLevel(
     averageResponseLength,
     metrics.followUpDepth,
-    metrics.participantResponseCount
+    metrics.participantResponseCount,
   );
 
   return {
@@ -1169,14 +1182,16 @@ export function createFallbackConversationInsights(
     requiredQuestionsCovered: [],
     requiredQuestionsMissed: [],
     sentiment: {
-      overall: "neutral",
+      overall: "neutral" as const,
       score: 0,
       confidence: 0.5,
     },
     extractedMetrics: {},
+    respondentData: {},
     notableQuotes: [],
     hypothesisEvidence: [],
     averageResponseLength, // calculated above
+    activeDurationMinutes: 0,
     mediaInteractions: [],
   };
 }
@@ -1190,7 +1205,7 @@ export function aggregateMediaInteractions(
     id: string;
     type: "image" | "audio" | "video";
     description: string;
-  }>
+  }>,
 ): MediaAnalytics | undefined {
   if (!surveyMedia || surveyMedia.length === 0) {
     return undefined;
@@ -1233,22 +1248,22 @@ export function aggregateMediaInteractions(
   for (const [mediaId, { interactions, media }] of mediaMap) {
     const conversationsWhereAvailable = totalConversations;
     const conversationsWhereReferenced = interactions.filter(
-      (i) => i.wasReferenced
+      (i) => i.wasReferenced,
     ).length;
     const usageRate =
       conversationsWhereAvailable > 0
         ? Math.round(
-            (conversationsWhereReferenced / conversationsWhereAvailable) * 100
+            (conversationsWhereReferenced / conversationsWhereAvailable) * 100,
           )
         : 0;
 
     const engagedInteractions = interactions.filter(
-      (i) => i.participantEngaged
+      (i) => i.participantEngaged,
     );
     const participantEngagementRate =
       conversationsWhereReferenced > 0
         ? Math.round(
-            (engagedInteractions.length / conversationsWhereReferenced) * 100
+            (engagedInteractions.length / conversationsWhereReferenced) * 100,
           )
         : 0;
 
@@ -1259,7 +1274,7 @@ export function aggregateMediaInteractions(
       clarityScores.length > 0
         ? Math.round(
             (clarityScores.reduce((a, b) => a + b, 0) / clarityScores.length) *
-              10
+              10,
           ) / 10
         : 0;
 
@@ -1278,10 +1293,10 @@ export function aggregateMediaInteractions(
     // Value metrics
     const insightsGeneratedCount = interactions.reduce(
       (sum, i) => sum + i.insightsGenerated.length,
-      0
+      0,
     );
     const highValueInsightsCount = interactions.filter(
-      (i) => i.insightQuality === "high"
+      (i) => i.insightQuality === "high",
     ).length;
 
     // Issues
@@ -1292,7 +1307,7 @@ export function aggregateMediaInteractions(
         ? Math.round(
             (interactions.filter((i) => i.issuesIdentified.length > 0).length /
               interactions.length) *
-              100
+              100,
           )
         : 0;
 
@@ -1345,7 +1360,7 @@ export function aggregateMediaInteractions(
           text,
           conversationId: i.mediaId, // Use mediaId as placeholder
           context: `Response to ${media.type}`,
-        }))
+        })),
       )
       .slice(0, 5);
 
@@ -1447,7 +1462,7 @@ export function aggregateMediaInteractions(
  * Aggregate conversation insights into survey-level analytics
  */
 export function aggregateConversationInsights(
-  conversationInsights: ConversationInsightData[]
+  conversationInsights: ConversationInsightData[],
 ): Partial<CoreMetrics> {
   const total = conversationInsights.length;
   if (total === 0) {
@@ -1494,7 +1509,7 @@ export function aggregateConversationInsights(
   const activeDurations: number[] = conversationInsights
     .map((i) => i.activeDurationMinutes || i.durationMinutes) // Fallback to durationMinutes
     .sort((a, b) => a - b);
-    
+
   const medianActiveDuration =
     activeDurations.length > 0
       ? activeDurations.length % 2 === 0

@@ -6,72 +6,181 @@
     "Survey": {
         "Create": {
             "Title": {
-                "Create": "Create New Survey",
-                "View": "View Creation Conversation"
+                "Create": "Neue Umfrage erstellen",
+                "View": "Erstellungs-Konversation anzeigen",
+                "ChooseTopic": "Wählen Sie Ihr Umfragethema"
+            },
+            "Subtitle": "Wählen Sie ein Thema aus, um Ihre Umfrage zu starten. Unsere Experten-KI wird Sie durch den Prozess führen.",
+            "TextMode": "Textmodus",
+            "VoiceMode": "Sprachmodus",
+            "CreationMode": {
+                "Title": "KI-Designer-Modus",
+                "Description": "Wählen Sie, wie Sie Ihre Umfrage mit unserer Experten-KI erstellen möchten.",
+                "Text": "Text-Designer",
+                "Voice": "Sprach-Designer"
+            },
+            "RespondentFormat": {
+                "Title": "Teilnehmer-Erlebnis",
+                "Description": "Wie sollen die Teilnehmer an dieser Umfrage teilnehmen? Wählen Sie die Schnittstelle, die sie verwenden werden.",
+                "Text": "Text-Umfrage",
+                "Voice": "Sprach-Umfrage"
+            },
+            "PageTitle": "Neue Umfrage erstellen",
+            "PageSubtitle": "Wählen Sie die Fachkompetenz für Ihre Umfrage oder beschreiben Sie Ihre Bedürfnisse",
+            "AIExpertLabel": "KI-Experte",
+            "Domains": {
+                "1": {
+                    "Title": "Kundenerlebnis & Zufriedenheit",
+                    "Description": "Bewertung einer Transaktion oder einer Dienstleistung, die BEREITS STATTGEFUNDEN hat."
+                },
+                "2": {
+                    "Title": "Marktforschung & Konsumenten-Intelligenz",
+                    "Description": "Märkte, Präferenzen und Verhaltensweisen verstehen, um ZUKÜNFTIGE Entscheidungen zu treffen."
+                },
+                "3": {
+                    "Title": "Personal- & Organisationsentwicklung",
+                    "Description": "Bewertung der internen Gesundheit, Effektivität und Mitarbeiterzufriedenheit."
+                },
+                "4": {
+                    "Title": "Produktdesign & Nutzerforschung",
+                    "Description": "Optimierung der Benutzerfreundlichkeit, Barrierefreiheit und Interface-Effektivität."
+                },
+                "5": {
+                    "Title": "Bildung & Lernerfolgsmessung",
+                    "Description": "Messung von Wissen, Fähigkeiten, Lernergebnissen oder Bildungserfahrungen."
+                },
+                "6": {
+                    "Title": "Bürgerschaftliches Engagement & Öffentliche Meinung",
+                    "Description": "Erfassung der Bürgeransichten zu politischen Angelegenheiten, Richtlinien oder kommunaler Verwaltung."
+                },
+                "7": {
+                    "Title": "Wissenschaftliche & Akademische Forschung",
+                    "Description": "Durchführung strenger Forschung für verallgemeinerbares Wissen."
+                },
+                "8": {
+                    "Title": "Gesundheit & Patientenerlebnis",
+                    "Description": "Messung der Pflegequalität, der Patientenergebnisse und der klinischen Kommunikation."
+                },
+                "9": {
+                    "Title": "Demographische & Soziale Charakterisierung",
+                    "Description": "Zählen, Beschreiben und Verstehen von Bevölkerungsprofilen."
+                },
+                "10": {
+                    "Title": "Infrastruktur- & Systemleistung",
+                    "Description": "Bewertung des Funktionierens physischer Systeme oder technischer Plattformen."
+                }
             },
             "Badges": {
-                "AIDraft": "AI DRAFT",
-                "ReadOnly": "Read Only"
+                "AIDraft": "KI-ENTWURF",
+                "ReadOnly": "Nur Lesezugriff"
             },
             "Header": {
-                "Publish": "Publish",
-                "VoiceMode": "Voice Mode",
-                "StopVoice": "Stop Voice",
-                "TextMode": "Text",
-                "VoiceModeToggle": "Voice"
+                "Title": "Umfrage erstellen",
+                "Publish": "Veröffentlichen",
+                "VoiceMode": "Sprachmodus",
+                "StopVoice": "Sprache stoppen",
+                "Mode": {
+                    "Voice": "Stimme",
+                    "VoiceActive": "Stimme aktiv",
+                    "Text": "Text"
+                },
+                "Language": "Sprache"
             },
             "ReadOnlyBanner": {
-                "Message": "You are viewing a completed conversation.",
-                "Link": "Go to Survey Details →"
+                "Message": "Sie sehen eine abgeschlossene Konversation.",
+                "Link": "Zu den Umfragedetails →"
             },
             "Chat": {
-                "Started": "Voice Conversation Started",
-                "Instruction": "Speak naturally to create your survey",
-                "Listening": "Listening...",
-                "Speaking": "Speaking...",
-                "VoiceActive": "Voice Mode Active",
-                "VoiceInstruction": "Speak naturally. I'll respond when you stop.",
-                "VoiceListening": "Listening to response...",
-                "VoiceStart": "Click the microphone to start the conversation.",
-                "ExitVoice": "Exit Voice Mode"
+                "Started": "Sprachkonversation gestartet",
+                "Instruction": "Sprechen Sie natürlich, um Ihre Umfrage zu erstellen",
+                "Listening": "Zuhören...",
+                "Speaking": "Sprechen...",
+                "VoiceActive": "Sprachmodus aktiv",
+                "VoiceInstruction": "Sprechen Sie natürlich. Ich antworte, wenn Sie aufhören.",
+                "VoiceListening": "Antwort abwarten...",
+                "VoiceStart": "Klicken Sie auf das Mikrofon, um das Gespräch zu beginnen.",
+                "ExitVoice": "Sprachmodus verlassen",
+                "Welcome": "Hallo! Ich bin hier, um Ihnen bei der Erstellung der perfekten Umfrage zu helfen. Fangen wir mit den Grundlagen an - was ist das Hauptziel Ihrer Umfrage? Was möchten Sie von Ihren Befragten erfahren?"
             },
             "Status": {
-                "AISpeaking": "AI Speaking",
-                "Listening": "Listening",
+                "AISpeaking": "KI spricht",
+                "Listening": "Zuhören",
+                "Connecting": "Verbindung wird hergestellt...",
                 "Ready": "Bereit",
-                "Speaking": "Spricht",
+                "Speaking": "Sprechen",
+                "SpeakingUser": "Sie sprechen",
                 "TapToPause": "Zum Pausieren tippen",
-                "TapToSpeak": "Tap to Speak"
+                "TapToSpeak": "Zum Sprechen tippen",
+                "SelectTopicFirst": "Zuerst Thema wählen"
             },
             "Completion": {
-                "Title": "Excellent! We're Ready.",
-                "Message": "I have all the information I need. Let's switch back to view the summary and start testing.",
-                "Button": "View Summary & Test"
+                "Title": "Hervorragend! Wir sind bereit.",
+                "Message": "Ich habe alle Informationen, die ich benötige. Lassen Sie uns zurückwechseln, um die Zusammenfassung anzusehen und mit dem Testen zu beginnen.",
+                "Button": "Zusammenfassung ansehen & Testen"
             },
             "ReadyCard": {
-                "Title": "Ready to Test!",
-                "Description": "I have everything I need to draft your survey.",
-                "Button": "Start Testing",
-                "Finalizing": "Finalizing..."
+                "Title": "Bereit zum Testen!",
+                "Description": "Ich habe alles, was ich brauche, um Ihre Umfrage zu entwerfen.",
+                "Button": "Testen starten",
+                "Finalizing": "Finalisierung..."
+            },
+            "Menu": {
+                "UploadFile": "Datei hochladen",
+                "AddMedia": "Medien hinzufügen",
+                "MediaTypes": "Bilder, Video, Audio",
+                "VoiceMode": "Sprachmodus",
+                "TalkToAI": "Mit KI sprechen"
             },
             "Input": {
                 "Placeholder": "Beschreiben Sie Ihre Umfrageziele...",
                 "PlaceholderLocked": "Wählen Sie oben ein Thema, um zu beginnen...",
                 "AddMedia": "Kontext/Medien hinzufügen",
-                "Send": "Send"
+                "Send": "Senden",
+                "ActionsTitle": "Aktionen"
+            },
+            "DomainSelection": {
+                "Title": "Wählen Sie Ihren Umfragepfad",
+                "Description": "Wählen Sie einen Bereich aus, um spezialisierte KI-Anleitung und branchenübliche Vorlagen zu erhalten."
             },
             "SuggestedPrompts": {
-                "CustomerSat": "Create a customer satisfaction survey",
-                "ProductFeedback": "Gather feedback on a new product feature",
-                "EmployeeEngagement": "Measure employee engagement and culture",
-                "MarketResearch": "Conduct market research for a new idea"
+                "1": [
+                    "Kundenzufriedenheitsumfrage erstellen (CSAT)",
+                    "Touchpoint einer Customer Journey abbilden",
+                    "Net Promoter Score messen (NPS)",
+                    "Support-Interaktion bewerten"
+                ],
+                "2": [
+                    "Marktforschung für ein neues Produkt",
+                    "Markenwahrnehmungsanalyse",
+                    "Umfrage zu Konsumgewohnheiten",
+                    "Werbekonzept-Test"
+                ],
+                "3": [
+                    "Mitarbeiterengagement-Umfrage",
+                    "Unternehmenskulturbewertung",
+                    "Wohlbefinden am Arbeitsplatz",
+                    "Feedback zu internen Schulungen"
+                ]
             },
             "Authentication": {
-                "Required": "Authentication Required",
-                "VerifyEmail": "Verify Email",
-                "GoBack": "Go Back",
-                "SignIn": "Sign In",
-                "GoHome": "Go Home"
+                "Required": "Authentifizierung erforderlich",
+                "VerifyEmail": "E-Mail bestätigen",
+                "GoBack": "Zurück",
+                "SignIn": "Anmelden",
+                "GoHome": "Startseite"
+            },
+            "Toasts": {
+                "LanguageUpdateFailed": "Fehler beim Speichern der Spracheinstellung",
+                "ModeUpdateFailed": "Fehler beim Speichern des Umfragemodus",
+                "LoadFailed": "Fehler beim Laden der Umfragedaten",
+                "InitFailed": "Initialisierung der Umfrage fehlgeschlagen",
+                "SendFailed": "Fehler beim Senden der Nachricht. Bitte versuchen Sie es erneut.",
+                "MicDenied": "Mikrofonzugriff verweigert",
+                "VoiceSendFailed": "Fehler beim Senden der Sprachnachricht",
+                "FinalizeFailed": "Finalisierung der Umfrage fehlgeschlagen. Bitte versuchen Sie es erneut.",
+                "Finalized": "Umfrage abgeschlossen! Beispielkonversationen werden geladen...",
+                "SaveTopicFailed": "Fehler beim Speichern der Themenwahl",
+                "GenericError": "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut."
             }
         },
         "PublishModal": {
@@ -527,8 +636,7 @@
             "Workspace": "Arbeitsbereich",
             "Notifications": "Benachrichtigungen",
             "Preferences": "Einstellungen",
-            "Security": "Sicherheit",
-            "Billing": "Abrechnung"
+            "Security": "Sicherheit"
         },
         "Preferences": {
             "Title": "Einstellungen",
@@ -596,21 +704,10 @@
                 "Button": "Konto löschen"
             },
             "PasswordMismatch": "Passwörter stimmen nicht überein"
-        },
-        "Billing": {
-            "Plan": "Aktueller Plan",
-            "Active": "Aktiv",
-            "Description": "Die Abrechnung ist derzeit für Tests eingefroren. Sie haben vollen Zugriff auf alle Funktionen.",
-            "Disabled": "Abrechnung deaktiviert",
-            "Usage": "Nutzung diesen Monat",
-            "Surveys": "Umfragen",
-            "Responses": "Antworten",
-            "Unlimited": "Unbegrenzt"
         }
     },
     "Landing": {
         "Navbar": {
-            "Pricing": "Preise",
             "SignIn": "Anmelden",
             "GetStarted": "Loslegen"
         },
@@ -668,40 +765,6 @@
                 "Summaries": {
                     "Title": "Automatische Zusammenfassungen",
                     "Description": "Erhalten Sie sofort strukturierte Erkenntnisse und Zusammenfassungen aus jedem Gespräch."
-                }
-            }
-        },
-        "Pricing": {
-            "Badge": "Preise",
-            "Title": "Pläne für Ihre Bedürfnisse",
-            "Description": "Von Startups bis zu Unternehmen, QP Widget hat einen Plan, der Sie näher an Ihre Kunden bringt.",
-            "Mo": "/ Monat",
-            "GetStarted": "Loslegen",
-            "ComingSoon": "Demnächst",
-            "Free": {
-                "Title": "Kostenloser Plan",
-                "Description": "Probieren Sie Convys KI-Magie aus und sehen Sie, wie Chat-native Formulare Ihren Workflow verändern.",
-                "Features": {
-                    "Limited": "Begrenzte Gespräche",
-                    "Unlimited": "Unbegrenzte Antworten",
-                    "Builder": "KI-Formular-Builder",
-                    "ChatData": "Chat mit Daten",
-                    "Branding": "Convy-Branding",
-                    "NoIntegrations": "Keine Integrationen",
-                    "NoSupport": "Kein Community-Support"
-                }
-            },
-            "Pro": {
-                "Title": "Pro Plan",
-                "Description": "Werden Sie Pro, um Ihr Chat-Erlebnis zu besitzen — vollständig gebrandet, unbegrenzt und KI-gestützt.",
-                "Features": {
-                    "UnlimitedConversations": "Unbegrenzte Gespräche",
-                    "CustomDomain": "Eigene Domain & E-Mail",
-                    "UniqueBranding": "Einzigartiges Branding",
-                    "UnlimitedUploads": "Unbegrenzte Dateiuploads",
-                    "VoiceMode": "Sprachmodus",
-                    "Integrations": "Volle Integrationen (Zapier, Notion, Slack, etc.)",
-                    "PrioritySupport": "Priorisierter Support"
                 }
             }
         },

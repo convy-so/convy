@@ -1,4 +1,4 @@
-import { eq, count, and, desc } from "drizzle-orm";
+import { eq, count, and, desc, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { db } from "@/db";
@@ -73,43 +73,33 @@ export async function GET(
             ? Math.round((completedResponses / totalResponses) * 100) 
             : 0;
 
-        // Calculate average duration
-        // We need raw conversation data for this, so we fetch it for completed surveys
-        const completedWithRaw = await db
+        // Calculate average duration using the stored durationMs column
+        const [durationStats] = await db
             .select({
-                rawConversation: surveyConversations.rawConversation,
+                avgDuration: sql<number>`avg(${surveyConversations.durationMs})`,
             })
             .from(surveyConversations)
             .where(
                 and(
                     eq(surveyConversations.surveyId, surveyId),
-                    eq(surveyConversations.completed, true)
+                    eq(surveyConversations.completed, true),
+                    sql`${surveyConversations.durationMs} > 0`
                 )
             );
 
-        let totalDurationMs = 0;
-        let durationCount = 0;
-
-        completedWithRaw.forEach((c) => {
-           if (c.rawConversation && Array.isArray(c.rawConversation) && c.rawConversation.length > 1) {
-             const firstMsg = c.rawConversation[0];
-             const lastMsg = c.rawConversation[c.rawConversation.length - 1];
-             
-             if (firstMsg.timestamp && lastMsg.timestamp) {
-               const start = new Date(firstMsg.timestamp).getTime();
-               const end = new Date(lastMsg.timestamp).getTime();
-               const duration = end - start;
-               
-               if (duration > 0 && duration < 24 * 60 * 60 * 1000) { // Exclude outliers > 24h
-                 totalDurationMs += duration;
-                 durationCount++;
-               }
-             }
-           }
-        });
-
-        const avgDurationMs = durationCount > 0 ? totalDurationMs / durationCount : 0;
-        const avgDurationMinutes = Math.round(avgDurationMs / 1000 / 60);
+        const avgDurationMs = Math.round(Number(durationStats?.avgDuration) || 0);
+        
+        // Format duration display
+        let avgDurationDisplay = "0 min";
+        if (avgDurationMs > 0) {
+            if (avgDurationMs < 60000) {
+                const seconds = Math.round(avgDurationMs / 1000);
+                avgDurationDisplay = `${seconds}s`; // e.g. "45s"
+            } else {
+                const minutes = Math.round(avgDurationMs / 60000);
+                avgDurationDisplay = minutes === 0 ? "< 1 min" : `${minutes} min`;
+            }
+        }
 
         // Build shareable URL
         const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:3000";
@@ -143,7 +133,7 @@ export async function GET(
                 totalResponses,
                 completedResponses,
                 completionRate,
-                avgDuration: durationCount > 0 ? `${avgDurationMinutes} min` : "0 min",
+                avgDuration: avgDurationDisplay,
             },
             recentResponses: recentResponses.map(r => ({
                 id: r.id,

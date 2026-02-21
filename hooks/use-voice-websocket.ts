@@ -16,13 +16,14 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
     const [hasAudioPlayed, setHasAudioPlayed] = useState(false);
     const [transcription, setTranscription] = useState("");
     const [interimTranscription, setInterimTranscription] = useState("");
-    const [isMicMuted, setIsMicMutedState] = useState(false); // Exposed state
-    const isMicMutedRef = useRef(false); // Ref for audio loop access
+    const [isMicMuted, setIsMicMutedState] = useState(false); 
+    const isMicMutedRef = useRef(false); 
 
     const [error, setError] = useState<string | null>(null);
 
     const wsRef = useRef<WebSocket | null>(null);
-    const audioContextRef = useRef<AudioContext | null>(null);
+    const recordingContextRef = useRef<AudioContext | null>(null);
+    const playbackContextRef = useRef<AudioContext | null>(null);
     const workletNodeRef = useRef<AudioWorkletNode | null>(null);
     const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -207,7 +208,7 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
         // Convert Blob -> ArrayBuffer -> Int16Array -> Float32Array -> AudioBuffer
         try {
             const arrayBuffer = await blob.arrayBuffer();
-            const audioCtx = getAudioContext();
+            const audioCtx = getPlaybackContext();
             
             // Create audio buffer (1 channel, length, sampleRate)
             // Deepgram output is 16-bit linear PCM at 24000Hz (mono)
@@ -234,7 +235,7 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
     const nextStartTimeRef = useRef<number>(0);
 
     const queueAudioBuffer = (audioBuffer: AudioBuffer) => {
-        const audioCtx = getAudioContext();
+        const audioCtx = getPlaybackContext();
         const source = audioCtx.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(audioCtx.destination);
@@ -266,14 +267,14 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
         };
     };
 
-    const getAudioContext = () => {
-        if (!audioContextRef.current) {
-            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const getPlaybackContext = () => {
+        if (!playbackContextRef.current) {
+            playbackContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         }
-        if (audioContextRef.current.state === 'suspended') {
-            audioContextRef.current.resume();
+        if (playbackContextRef.current.state === 'suspended') {
+            playbackContextRef.current.resume();
         }
-        return audioContextRef.current;
+        return playbackContextRef.current;
     };
 
 
@@ -302,18 +303,19 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
             streamRef.current = stream;
 
             // Create audio context (browser may use 44100 or 48000)
-            const audioContext = new AudioContext();
-            audioContextRef.current = audioContext;
+            // Force 16kHz to use native browser resampling for recording input
+            const recordingContext = new AudioContext({ sampleRate: 16000 });
+            recordingContextRef.current = recordingContext;
 
             // Load the AudioWorklet processor
-            await audioContext.audioWorklet.addModule('/audio-worklet-processor.js');
+            await recordingContext.audioWorklet.addModule('/audio-worklet-processor.js');
 
             // Create source from microphone
-            const source = audioContext.createMediaStreamSource(stream);
+            const source = recordingContext.createMediaStreamSource(stream);
             sourceNodeRef.current = source;
 
             // Create worklet node
-            const workletNode = new AudioWorkletNode(audioContext, 'pcm-processor');
+            const workletNode = new AudioWorkletNode(recordingContext, 'pcm-processor');
             workletNodeRef.current = workletNode;
 
             // Send initial configuration immediately to ensure server is ready
@@ -334,8 +336,6 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
                 // Send audio buffer directly without muting check
                 if (event.data.type === 'audio' 
                     && wsRef.current?.readyState === WebSocket.OPEN) {
-                    
-                    // Send raw PCM buffer
                     wsRef.current.send(event.data.buffer);
                 }
             };
@@ -345,7 +345,7 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
             // Note: Don't connect to destination to avoid feedback
 
             setIsRecording(true);
-            console.log("[Voice] Started recording with AudioWorklet at", audioContext.sampleRate, "Hz");
+            console.log("[Voice] Started recording with AudioWorklet at", recordingContext.sampleRate, "Hz");
         } catch (e) {
             console.error("Failed to start recording", e);
             setError("Microphone access failed. Please check permissions.");
@@ -367,10 +367,16 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
             sourceNodeRef.current = null;
         }
 
-        // Close audio context
-        if (audioContextRef.current) {
-            audioContextRef.current.close();
-            audioContextRef.current = null;
+        // Close audio contexts
+        if (recordingContextRef.current) {
+            recordingContextRef.current.close().catch(console.error);
+            recordingContextRef.current = null;
+        }
+
+        if (playbackContextRef.current) {
+            playbackContextRef.current.close().catch(console.error);
+            playbackContextRef.current = null;
+            nextStartTimeRef.current = 0;
         }
 
         // Stop media stream tracks
@@ -406,8 +412,15 @@ export function useVoiceWebSocket({ url, onMessage, onReady, onError }: UseVoice
         };
     }, [stopRecording]);
 
+    // Keep latest status in ref to avoid stale closures during connection polling
+    const statusRef = useRef(status);
+    useEffect(() => {
+        statusRef.current = status;
+    }, [status]);
+
     return {
         status,
+        statusRef,
         connect,
         disconnect,
         isRecording,

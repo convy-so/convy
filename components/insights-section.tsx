@@ -6,17 +6,17 @@ export default function InsightsSection() {
 
   return (
     <section className="p-[12px]">
-      <div className="bg-[#292929] text-white rounded-[32px] py-20 sm:py-32 px-4 sm:px-6 lg:px-12 mx-auto max-w-[1920px]">
+      <div className="bg-[#292929] text-white rounded-[32px] py-12 sm:py-32 px-4 sm:px-6 lg:px-12 mx-auto max-w-[1920px]">
         <div className="max-w-6xl mx-auto">
           {/* Header */}
           <div className="text-center mb-12 md:mb-16">
-            <p className="text-[#8D8D8D] italic text-[24px] md:text-[32px] font-normal leading-[33px] md:leading-[44px] tracking-[-0.24px] md:tracking-[-0.32px] mb-4" style={{ fontFamily: 'var(--font-fasthand)' }}>
+            <p className="text-[#8D8D8D] italic text-[20px] md:text-[32px] font-normal leading-[33px] md:leading-[44px] tracking-[-0.24px] md:tracking-[-0.32px] mb-4" style={{ fontFamily: 'var(--font-fasthand)' }}>
               {t('Badge')}
             </p>
-            <h2 className="text-[32px] md:text-[40px] font-[500] text-[#FFFFFF] leading-[40px] md:leading-[50px] tracking-[-0.48px] md:tracking-[-0.64px] mb-4">
+            <h2 className="text-[28px] md:text-[40px] font-[500] text-[#FFFFFF] leading-[36px] md:leading-[50px] tracking-[-0.48px] md:tracking-[-0.64px] mb-4">
               {t('Title')}
             </h2>
-            <p className="text-[16px] md:text-[20px] font-[600] text-[#E5E5E5] leading-[22px] md:leading-[28px] tracking-normal max-w-3xl mx-auto">
+            <p className="text-[16px] md:text-[20px] font-[500] sm:font-[600] text-[#E5E5E5] leading-[22px] md:leading-[28px] tracking-normal max-w-3xl mx-auto">
               {t('Description')}
             </p>
           </div>

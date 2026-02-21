@@ -40,7 +40,7 @@ const jobDataSchema = z.object({
 function transformStoredInsights(
   conversationId: string,
   storedInsights: Record<string, unknown>,
-  keyFindings: string | null
+  keyFindings: string | null,
 ): Partial<ConversationInsightData> {
   return {
     conversationId,
@@ -52,7 +52,8 @@ function transformStoredInsights(
     averageResponseLength:
       (storedInsights.averageResponseLength as number) || 0,
     durationMinutes: (storedInsights.durationMinutes as number) || 0,
-    activeDurationMinutes: (storedInsights.activeDurationMinutes as number) || 0,
+    activeDurationMinutes:
+      (storedInsights.activeDurationMinutes as number) || 0,
     followUpDepth: (storedInsights.followUpDepth as number) || 0,
     engagementLevel:
       (storedInsights.engagementLevel as "high" | "medium" | "low") || "medium",
@@ -93,13 +94,13 @@ function parseSurveyAnalyticsResponse(
   surveyTitle: string,
   coreMetrics: Partial<CoreMetrics>,
   requiredQuestions: string[],
-  mediaAnalytics?: SurveyAnalyticsData["mediaAnalytics"]
+  mediaAnalytics?: SurveyAnalyticsData["mediaAnalytics"],
 ): SurveyAnalyticsData | null {
   try {
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       console.warn(
-        `[Survey Analytics Worker] No JSON found in response for ${surveyId}`
+        `[Survey Analytics Worker] No JSON found in response for ${surveyId}`,
       );
       return null;
     }
@@ -143,7 +144,8 @@ function parseSurveyAnalyticsResponse(
         averageResponseLength: coreMetrics.averageResponseLength || 0,
         averageFollowUpDepth: coreMetrics.averageFollowUpDepth || 0,
         medianDurationMinutes: coreMetrics.medianDurationMinutes || 0,
-        medianActiveDurationMinutes: coreMetrics.medianActiveDurationMinutes || 0,
+        medianActiveDurationMinutes:
+          coreMetrics.medianActiveDurationMinutes || 0,
         insightQualityScore: coreMetrics.insightQualityScore || 5,
         responseEngagementDistribution:
           coreMetrics.responseEngagementDistribution || {
@@ -151,9 +153,10 @@ function parseSurveyAnalyticsResponse(
             medium: 0,
             low: 0,
           },
+        topicCoverageRate: coreMetrics.topicCoverageRate || 0,
         requiredQuestionsCompletion: transformRequiredQuestionsCompletion(
           parsed.requiredQuestionsCompletion || [],
-          requiredQuestions
+          requiredQuestions,
         ),
       },
 
@@ -263,7 +266,7 @@ function parseSurveyAnalyticsResponse(
             priority: r.priority as "high" | "medium" | "low",
             basedOn: r.basedOn,
             expectedImpact: r.expectedImpact,
-          })
+          }),
         ),
         emergentTopics: (parsed.discoveredInsights?.emergentTopics || []).map(
           (e) => ({
@@ -281,7 +284,7 @@ function parseSurveyAnalyticsResponse(
               conversationId: q.conversationId,
             })),
             suggestion: e.suggestion,
-          })
+          }),
         ),
         surprisingFindings: parsed.discoveredInsights?.surprisingFindings || [],
         dataGaps: parsed.discoveredInsights?.dataGaps || [],
@@ -364,7 +367,7 @@ function parseSurveyAnalyticsResponse(
   } catch (error) {
     console.error(
       `[Survey Analytics Worker] Failed to parse AI response for ${surveyId}:`,
-      error
+      error,
     );
     return null;
   }
@@ -380,7 +383,7 @@ function transformRequiredQuestionsCompletion(
     qualityScore: number;
     sampleResponses: string[];
   }>,
-  requiredQuestions: string[]
+  requiredQuestions: string[],
 ): RequiredQuestionCoverage[] {
   // Create a map of AI-provided data
   const aiDataMap = new Map(aiData.map((d) => [d.question.toLowerCase(), d]));
@@ -412,7 +415,7 @@ function createFallbackAnalytics(
   surveyId: string,
   surveyTitle: string,
   coreMetrics: Partial<CoreMetrics>,
-  rawSummary: string
+  rawSummary: string,
 ): SurveyAnalyticsData {
   const fallback: SurveyAnalyticsData = {
     surveyId,
@@ -444,6 +447,7 @@ function createFallbackAnalytics(
           medium: 0,
           low: 0,
         },
+      topicCoverageRate: coreMetrics.topicCoverageRate || 0,
       requiredQuestionsCompletion: [],
     },
 
@@ -499,11 +503,12 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
     const { surveyId, userId } = validatedData;
 
     // Get creator's preferred language for analytics generation
-    const { getUserPreferredLanguage } = await import("@/lib/translation-service");
+    const { getUserPreferredLanguage } =
+      await import("@/lib/translation-service");
     const creatorLanguage = await getUserPreferredLanguage(userId);
 
     console.log(
-      `[Survey Analytics Worker] Processing job ${job.id} for survey ${surveyId}`
+      `[Survey Analytics Worker] Processing job ${job.id} for survey ${surveyId}`,
     );
 
     // Fetch survey
@@ -519,7 +524,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
     // Only generate analytics for active surveys
     if (survey.status !== "active") {
       console.log(
-        `[Survey Analytics Worker] Survey ${surveyId} is not active (${survey.status}). Skipping analytics generation.`
+        `[Survey Analytics Worker] Survey ${surveyId} is not active (${survey.status}). Skipping analytics generation.`,
       );
       return;
     }
@@ -539,7 +544,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
       .from(surveyConversations)
       .leftJoin(
         conversationInsights,
-        eq(conversationInsights.conversationId, surveyConversations.id)
+        eq(conversationInsights.conversationId, surveyConversations.id),
       )
       .where(eq(surveyConversations.surveyId, surveyId));
 
@@ -549,7 +554,9 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
     // if no conversations are completed yet. This prevents "Locked Dashboard"
     // and worker retry loops.
     if (completedConversations.length === 0 && conversations.length === 0) {
-      console.log(`[Survey Analytics Worker] No conversations found for survey ${surveyId}.`);
+      console.log(
+        `[Survey Analytics Worker] No conversations found for survey ${surveyId}.`,
+      );
       // Update with zero-state metrics
       // (Optional: handle empty-state specialized response here)
     }
@@ -565,7 +572,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
         return transformStoredInsights(
           conv.id,
           conv.insights as Record<string, unknown>,
-          conv.keyFindings
+          conv.keyFindings,
         );
       }
       // Fallback for conversations without structured insights
@@ -595,7 +602,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
 
     // Calculate core metrics from aggregated data
     const coreMetrics = aggregateConversationInsights(
-      conversationInsightsData as ConversationInsightData[]
+      conversationInsightsData as ConversationInsightData[],
     );
 
     // Add total conversations count (including incomplete)
@@ -604,7 +611,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
     coreMetrics.completionRate =
       conversations.length > 0
         ? Math.round(
-            (completedConversations.length / conversations.length) * 100
+            (completedConversations.length / conversations.length) * 100,
           )
         : 0;
 
@@ -620,7 +627,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
 
     const mediaAnalytics = aggregateMediaInteractions(
       conversationInsightsData as ConversationInsightData[],
-      surveyMedia
+      surveyMedia,
     );
 
     // Prepare data for AI aggregation
@@ -658,7 +665,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
     const analyticsPrompt = getSurveyAnalyticsPrompt(
       insightsForAI,
       surveyConfig,
-      completedConversations.length
+      completedConversations.length,
     );
 
     const analyticsResponse = await generateAIResponse(
@@ -668,7 +675,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
         model: analysisModel,
         temperature: 0.4,
         maxTokens: 6000,
-      }
+      },
     );
 
     await job.updateProgress(75);
@@ -680,19 +687,19 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
       survey.title,
       coreMetrics,
       surveyConfig.requiredQuestions,
-      mediaAnalytics
+      mediaAnalytics,
     );
 
     // Fallback if parsing failed
     if (!analyticsData) {
       console.warn(
-        `[Survey Analytics Worker] AI parsing failed, creating fallback analytics for ${surveyId}`
+        `[Survey Analytics Worker] AI parsing failed, creating fallback analytics for ${surveyId}`,
       );
       analyticsData = createFallbackAnalytics(
         surveyId,
         survey.title,
         coreMetrics,
-        analyticsResponse.slice(0, 1000)
+        analyticsResponse.slice(0, 1000),
       );
     }
 
@@ -746,7 +753,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
     await job.updateProgress(95);
 
     console.log(
-      `[Survey Analytics Worker] Completed job ${job.id} for survey ${surveyId}`
+      `[Survey Analytics Worker] Completed job ${job.id} for survey ${surveyId}`,
     );
     console.log(
       `[Survey Analytics Worker] Generated: ` +
@@ -754,7 +761,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
         `${analyticsData.hypothesisValidations.length} hypothesis validations, ` +
         `${analyticsData.discoveredInsights.trends.length} trends, ` +
         `${analyticsData.discoveredInsights.recommendations.length} recommendations, ` +
-        `${analyticsData.dashboardWidgets.length} dashboard widgets`
+        `${analyticsData.dashboardWidgets.length} dashboard widgets`,
     );
 
     // Reset analytics counter
@@ -765,52 +772,19 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
     } catch (error) {
       console.error(
         "[Survey Analytics Worker] Failed to reset analytics counter:",
-        error
+        error,
       );
     }
 
-    // Trigger Notion sync
+    // Trigger RAG ingestion
     try {
-      const { enqueueNotionSync } = await import("@/lib/queue");
-      await enqueueNotionSync({
-        userId: job.data.userId,
-        surveyId,
-        syncType: "analytics",
-      });
+      const { ingestAnalytics } = await import("@/lib/rag/ingest");
+      await ingestAnalytics(surveyId);
       console.log(
-        `[Survey Analytics Worker] Notion sync queued for survey ${surveyId}`
+        `[Survey Analytics Worker] Ingested analytics for survey ${surveyId} into RAG`,
       );
     } catch (error) {
-      console.error("Failed to enqueue Notion sync:", error);
-    }
-
-    // Trigger Slack auto-post (analytics updates are always immediate, not affected by digest mode)
-    try {
-      const { enqueueNotification } = await import("@/lib/queue");
-      await enqueueNotification({
-        type: "slack",
-        userId: job.data.userId,
-        message: "Analytics Updated",
-        metadata: {
-          event: "analytics_updated",
-          surveyId,
-        },
-      });
-    } catch (error) {
-      console.error("Failed to enqueue Slack notification:", error);
-    }
-
-    // Trigger Zapier webhook for analytics updated
-    try {
-      const { triggerAnalyticsUpdatedWebhook } = await import("@/lib/zapier/webhook-delivery");
-      triggerAnalyticsUpdatedWebhook(surveyId, job.data.userId).catch((error) => {
-        console.error(
-          `[Survey Analytics Worker] Failed to trigger Zapier analytics webhook:`,
-          error
-        );
-      });
-    } catch (error) {
-      console.error("Failed to import Zapier webhook function:", error);
+      console.error(`[Survey Analytics Worker] RAG ingestion failed:`, error);
     }
 
     // Publish completion event to Redis pub/sub
@@ -826,12 +800,12 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
 
       await redis.publish(channel, message);
       console.log(
-        `[Survey Analytics Worker] Published analytics completion event`
+        `[Survey Analytics Worker] Published analytics completion event`,
       );
     } catch (error) {
       console.error(
         "[Survey Analytics Worker] Failed to publish analytics event:",
-        error
+        error,
       );
     }
 
@@ -852,7 +826,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
       max: 5,
       duration: 60000,
     },
-  }
+  },
 );
 
 surveyAnalyticsWorker.on("completed", (job) => {
@@ -862,7 +836,7 @@ surveyAnalyticsWorker.on("completed", (job) => {
 surveyAnalyticsWorker.on("failed", (job, err) => {
   console.error(
     `[Survey Analytics Worker] Job ${job?.id} failed:`,
-    err.message
+    err.message,
   );
 });
 

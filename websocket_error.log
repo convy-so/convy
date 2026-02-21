@@ -1,4 +1,0 @@
-
-> convy@0.1.0 websocket:dev C:\Users\pc\convy
-> tsx watch --env-file=.env websocket/server.ts
-
