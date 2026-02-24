@@ -1,7 +1,7 @@
 import { getVerifiedSession } from "@/lib/auth/session";
 import { db } from "@/db";
-import { surveys, surveyConversations} from "@/db/schema";
-import { eq, desc, count, and } from "drizzle-orm";
+import { surveys, surveyConversations } from "@/db/schema";
+import { eq, desc, count, and, isNull } from "drizzle-orm";
 import { Link } from "@/i18n/routing";
 import {
   Search,
@@ -19,40 +19,44 @@ export const metadata = {
 
 export default async function AnalyticsPage() {
   const session = await getVerifiedSession();
+  const activeOrgId = session.session.activeOrganizationId;
   const t = await getTranslations('AnalyticsPage');
 
   const userSurveys = await db
     .select({
-       id: surveys.id,
-       title: surveys.title,
-       description: surveys.description,
-       status: surveys.status,
-       createdAt: surveys.createdAt,
-       _count: {
-           conversations: count(surveyConversations.id)
-       }
+      id: surveys.id,
+      title: surveys.title,
+      description: surveys.description,
+      status: surveys.status,
+      createdAt: surveys.createdAt,
+      _count: {
+        conversations: count(surveyConversations.id)
+      }
     })
     .from(surveys)
     .leftJoin(surveyConversations, eq(surveyConversations.surveyId, surveys.id))
     .where(
       and(
         eq(surveys.userId, session.user.id),
-        eq(surveys.status, 'active')
+        eq(surveys.status, 'active'),
+        activeOrgId
+          ? eq(surveys.organizationId, activeOrgId)
+          : isNull(surveys.organizationId)
       )
     )
     .groupBy(surveys.id, surveys.title, surveys.description, surveys.status, surveys.createdAt)
     .orderBy(desc(surveys.createdAt));
 
-    const totalSurveys = userSurveys.length;
-    const totalResponses = userSurveys.reduce((acc, curr) => acc + (curr._count?.conversations || 0), 0);
+  const totalSurveys = userSurveys.length;
+  const totalResponses = userSurveys.reduce((acc, curr) => acc + (curr._count?.conversations || 0), 0);
 
-    const statusConfig: Record<string, { color: string; bgColor: string; icon: React.ReactNode }> = {
-      active: { color: "text-emerald-600", bgColor: "bg-emerald-50", icon: <BarChart3 className="w-6 h-6" /> },
-      draft: { color: "text-amber-600", bgColor: "bg-amber-50", icon: <BarChart3 className="w-6 h-6" /> },
-      creating: { color: "text-blue-600", bgColor: "bg-blue-50", icon: <BarChart3 className="w-6 h-6" /> },
-      completed: { color: "text-gray-600", bgColor: "bg-gray-100", icon: <BarChart3 className="w-6 h-6" /> },
-      paused: { color: "text-orange-600", bgColor: "bg-orange-50", icon: <BarChart3 className="w-6 h-6" /> },
-    };
+  const statusConfig: Record<string, { color: string; bgColor: string; icon: React.ReactNode }> = {
+    active: { color: "text-emerald-600", bgColor: "bg-emerald-50", icon: <BarChart3 className="w-6 h-6" /> },
+    draft: { color: "text-amber-600", bgColor: "bg-amber-50", icon: <BarChart3 className="w-6 h-6" /> },
+    creating: { color: "text-blue-600", bgColor: "bg-blue-50", icon: <BarChart3 className="w-6 h-6" /> },
+    completed: { color: "text-gray-600", bgColor: "bg-gray-100", icon: <BarChart3 className="w-6 h-6" /> },
+    paused: { color: "text-orange-600", bgColor: "bg-orange-50", icon: <BarChart3 className="w-6 h-6" /> },
+  };
 
   return (
     <div className="min-h-screen bg-[#F8F9FB] p-6 sm:p-8 lg:p-10 font-sans text-slate-900">
@@ -82,7 +86,7 @@ export default async function AnalyticsPage() {
           {userSurveys.length > 0 ? (
             userSurveys.map((survey) => {
               const config = statusConfig[survey.status as string] || statusConfig.draft;
-              
+
               return (
                 <div
                   key={survey.id}
@@ -90,37 +94,37 @@ export default async function AnalyticsPage() {
                 >
                   <div className="p-5 flex items-center justify-between">
                     <div className="flex items-start gap-4 flex-1 min-w-0">
-                       {/* Icon Container */}
-                       <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform ${config.bgColor} ${config.color}`}>
-                          {config.icon}
-                       </div>
+                      {/* Icon Container */}
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform ${config.bgColor} ${config.color}`}>
+                        {config.icon}
+                      </div>
 
-                       <div className="flex-1 min-w-0">
-                          <Link 
-                            href={`/dashboard/surveys/${survey.id}/analytics`}
-                            className="font-semibold text-gray-900 text-lg hover:text-blue-600 transition-colors inline-block"
-                          >
-                              {survey.title}
-                          </Link>
-                          {survey.description && (
-                            <p className="text-sm text-gray-500 mt-0.5 truncate">
-                                {survey.description}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                             <span className="flex items-center gap-1.5">
-                                <MessageSquare className="w-4 h-4" />
-                                {survey._count?.conversations || 0} {t('Card.Responses')}
-                             </span>
-                             <span className="text-xs text-gray-400">
-                                {formatDistanceToNow(new Date(survey.createdAt), { addSuffix: true })}
-                             </span>
-                          </div>
-                       </div>
+                      <div className="flex-1 min-w-0">
+                        <Link
+                          href={`/dashboard/surveys/${survey.id}/analytics`}
+                          className="font-semibold text-gray-900 text-lg hover:text-blue-600 transition-colors inline-block"
+                        >
+                          {survey.title}
+                        </Link>
+                        {survey.description && (
+                          <p className="text-sm text-gray-500 mt-0.5 truncate">
+                            {survey.description}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
+                          <span className="flex items-center gap-1.5">
+                            <MessageSquare className="w-4 h-4" />
+                            {survey._count?.conversations || 0} {t('Card.Responses')}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {formatDistanceToNow(new Date(survey.createdAt), { addSuffix: true })}
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-4 ml-4">
-                      <Link 
+                      <Link
                         href={`/dashboard/surveys/${survey.id}/analytics`}
                         className="text-gray-400 hover:text-gray-600 transition-colors"
                       >
@@ -132,15 +136,15 @@ export default async function AnalyticsPage() {
               );
             })
           ) : (
-             <div className="py-24 text-center bg-white rounded-2xl border border-gray-100">
-                <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-300">
-                    <BarChart3 className="w-10 h-10" />
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{t('Empty.Title')}</h3>
-                <p className="text-gray-500 mb-8 max-w-sm mx-auto">{t('Empty.Description')}</p>
-                <Link href="/dashboard/create" className="bg-black text-white px-8 py-3 rounded-xl font-bold hover:scale-105 transition-transform duration-200 inline-block">
-                    {t('Empty.Button')}
-                </Link>
+            <div className="py-24 text-center bg-white rounded-2xl border border-gray-100">
+              <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-300">
+                <BarChart3 className="w-10 h-10" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">{t('Empty.Title')}</h3>
+              <p className="text-gray-500 mb-8 max-w-sm mx-auto">{t('Empty.Description')}</p>
+              <Link href="/dashboard/create" className="bg-black text-white px-8 py-3 rounded-xl font-bold hover:scale-105 transition-transform duration-200 inline-block">
+                {t('Empty.Button')}
+              </Link>
             </div>
           )}
         </div>

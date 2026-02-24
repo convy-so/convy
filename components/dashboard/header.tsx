@@ -29,7 +29,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
 
   // Fetch notifications using React Query
   const { data: notifications = [], isLoading, refetch: refetchNotifications } = useQuery({
-    queryKey: queryKeys.notifications.all,
+    queryKey: queryKeys.notifications.all(),
     queryFn: fetchNotificationsAPI,
   });
 
@@ -43,7 +43,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
   const handleMarkAsRead = async (id: string) => {
     const result = await markNotificationAsRead(id);
     if (result.success) {
-      queryClient.setQueryData(queryKeys.notifications.all, (prev: any[]) =>
+      queryClient.setQueryData(queryKeys.notifications.all(), (prev: any[]) =>
         prev ? prev.map(n => n.id === id ? { ...n, read: true } : n) : []
       );
     }

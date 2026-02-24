@@ -1,5 +1,6 @@
 import { generateText } from "ai";
 import { google } from "@ai-sdk/google";
+import { logUsage } from "./billing/logger";
 
 /**
  * Translation Service for Locale-Aware Survey System
@@ -27,7 +28,11 @@ export interface TranslationResult {
 export async function translateConversation(
   conversation: ConversationMessage[],
   sourceLanguage: SupportedLanguage,
-  targetLanguage: SupportedLanguage
+  targetLanguage: SupportedLanguage,
+  metadata?: {
+    userId?: string;
+    surveyId?: string;
+  },
 ): Promise<TranslationResult> {
   // If source and target are the same, return unchanged
   if (sourceLanguage === targetLanguage) {
@@ -40,7 +45,9 @@ export async function translateConversation(
 
   // Build translation prompt
   const conversationText = conversation
-    .map((msg) => `${msg.role === "user" ? "RESPONDENT" : "AI"}: ${msg.content}`)
+    .map(
+      (msg) => `${msg.role === "user" ? "RESPONDENT" : "AI"}: ${msg.content}`,
+    )
     .join("\n\n");
 
   const languageNames: Record<SupportedLanguage, string> = {
@@ -68,10 +75,22 @@ ${conversationText}
 Translated Conversation (${languageNames[targetLanguage]}):`;
 
   try {
-    const { text } = await generateText({
+    const { text, usage } = await generateText({
       model: google("gemini-2.0-flash-exp"),
       prompt,
       temperature: 0.3, // Lower temperature for more consistent translations
+    });
+
+    // Log usage for translation
+    logUsage({
+      userId: metadata?.userId,
+      surveyId: metadata?.surveyId,
+      type: "llm_text",
+      provider: "google",
+      modelName: "gemini-2.0-flash-exp",
+      promptTokens: usage.inputTokens,
+      completionTokens: usage.outputTokens,
+      totalTokens: usage.totalTokens,
     });
 
     // Parse the translated text back into conversation format
@@ -83,14 +102,16 @@ Translated Conversation (${languageNames[targetLanguage]}):`;
 
     for (const line of lines) {
       const trimmedLine = line.trim();
-      
+
       if (trimmedLine.startsWith("RESPONDENT:")) {
         // Save previous message if exists
         if (currentRole && currentContent) {
           translatedMessages.push({
             role: currentRole,
             content: currentContent.trim(),
-            timestamp: conversation[translatedMessages.length]?.timestamp || new Date().toISOString(),
+            timestamp:
+              conversation[translatedMessages.length]?.timestamp ||
+              new Date().toISOString(),
           });
         }
         currentRole = "user";
@@ -101,7 +122,9 @@ Translated Conversation (${languageNames[targetLanguage]}):`;
           translatedMessages.push({
             role: currentRole,
             content: currentContent.trim(),
-            timestamp: conversation[translatedMessages.length]?.timestamp || new Date().toISOString(),
+            timestamp:
+              conversation[translatedMessages.length]?.timestamp ||
+              new Date().toISOString(),
           });
         }
         currentRole = "assistant";
@@ -117,14 +140,16 @@ Translated Conversation (${languageNames[targetLanguage]}):`;
       translatedMessages.push({
         role: currentRole,
         content: currentContent.trim(),
-        timestamp: conversation[translatedMessages.length]?.timestamp || new Date().toISOString(),
+        timestamp:
+          conversation[translatedMessages.length]?.timestamp ||
+          new Date().toISOString(),
       });
     }
 
     // Validate we got the same number of messages
     if (translatedMessages.length !== conversation.length) {
       console.warn(
-        `Translation message count mismatch: expected ${conversation.length}, got ${translatedMessages.length}. Falling back to original.`
+        `Translation message count mismatch: expected ${conversation.length}, got ${translatedMessages.length}. Falling back to original.`,
       );
       return {
         translatedConversation: conversation,
@@ -158,7 +183,7 @@ export async function batchTranslateConversations(
     messages: ConversationMessage[];
     sourceLanguage: SupportedLanguage;
   }>,
-  targetLanguage: SupportedLanguage
+  targetLanguage: SupportedLanguage,
 ): Promise<Map<string, ConversationMessage[]>> {
   const results = new Map<string, ConversationMessage[]>();
 
@@ -166,16 +191,16 @@ export async function batchTranslateConversations(
   const BATCH_SIZE = 5;
   for (let i = 0; i < conversations.length; i += BATCH_SIZE) {
     const batch = conversations.slice(i, i + BATCH_SIZE);
-    
+
     const batchResults = await Promise.all(
       batch.map(async (conv) => {
         const result = await translateConversation(
           conv.messages,
           conv.sourceLanguage,
-          targetLanguage
+          targetLanguage,
         );
         return { id: conv.id, translated: result.translatedConversation };
-      })
+      }),
     );
 
     for (const { id, translated } of batchResults) {
@@ -190,7 +215,7 @@ export async function batchTranslateConversations(
  * Get user's preferred language from database
  */
 export async function getUserPreferredLanguage(
-  userId: string
+  userId: string,
 ): Promise<SupportedLanguage> {
   try {
     const { db } = await import("@/db");

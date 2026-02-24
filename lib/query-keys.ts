@@ -16,7 +16,7 @@ export const queryKeys = {
 
   // Survey-related queries
   surveys: {
-    all: ["surveys"] as const,
+    all: (orgId?: string | null) => ["surveys", orgId] as const,
     detail: (surveyId: string) => ["survey", surveyId] as const,
     responses: (surveyId: string, page: number, status: string) =>
       ["surveyResponses", surveyId, page, status] as const,
@@ -24,8 +24,14 @@ export const queryKeys = {
     extraction: (surveyId: string) => ["surveyExtraction", surveyId] as const,
   },
 
+  // Project-related queries
+  projects: {
+    all: (orgId?: string | null) => ["projects", orgId] as const,
+    detail: (projectId: string) => ["project", projectId] as const,
+  },
+
   // Notifications
   notifications: {
-    all: ["notifications"] as const,
+    all: (orgId?: string | null) => ["notifications", orgId] as const,
   },
 } as const;

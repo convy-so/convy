@@ -45,18 +45,18 @@ function parseConversationInsightsResponse(
   }>,
   fallbackSummary: string,
   dbDurationMs?: number,
-  dbActiveDurationMs?: number
+  dbActiveDurationMs?: number,
 ): ConversationInsightData {
   try {
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       console.warn(
-        `[Conversation Insights Worker] No JSON found in response for ${conversationId}`
+        `[Conversation Insights Worker] No JSON found in response for ${conversationId}`,
       );
       return createFallbackConversationInsights(
         conversationId,
         messages,
-        fallbackSummary
+        fallbackSummary,
       );
     }
 
@@ -65,10 +65,11 @@ function parseConversationInsightsResponse(
 
     // Prioritize precise DB duration metrics if available
     if (dbDurationMs && dbDurationMs > 0) {
-        metrics.durationMinutes = Math.round((dbDurationMs / 60000) * 10) / 10;
+      metrics.durationMinutes = Math.round((dbDurationMs / 60000) * 10) / 10;
     }
     if (dbActiveDurationMs && dbActiveDurationMs > 0) {
-        metrics.activeDurationMinutes = Math.round((dbActiveDurationMs / 60000) * 10) / 10;
+      metrics.activeDurationMinutes =
+        Math.round((dbActiveDurationMs / 60000) * 10) / 10;
     }
 
     // Transform AI response to our structured format
@@ -91,7 +92,7 @@ function parseConversationInsightsResponse(
         determineEngagementLevel(
           metrics.averageResponseLength,
           metrics.followUpDepth,
-          metrics.participantResponseCount
+          metrics.participantResponseCount,
         ),
       responseQuality: Math.min(10, Math.max(1, parsed.responseQuality || 5)),
 
@@ -106,7 +107,7 @@ function parseConversationInsightsResponse(
         score: Math.min(1, Math.max(-1, parsed.sentiment?.score || 0)),
         confidence: Math.min(
           1,
-          Math.max(0, parsed.sentiment?.confidence || 0.5)
+          Math.max(0, parsed.sentiment?.confidence || 0.5),
         ),
       },
 
@@ -141,12 +142,12 @@ function parseConversationInsightsResponse(
   } catch (error) {
     console.error(
       `[Conversation Insights Worker] Failed to parse AI response for ${conversationId}:`,
-      error
+      error,
     );
     return createFallbackConversationInsights(
       conversationId,
       messages,
-      fallbackSummary
+      fallbackSummary,
     );
   }
 }
@@ -163,10 +164,10 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
     const { conversationId, surveyId } = validatedData;
 
     console.log(
-      `[Conversation Insights Worker] Processing job ${job.id} for conversation ${conversationId}`
+      `[Conversation Insights Worker] Processing job ${job.id} for conversation ${conversationId}`,
     );
 
-     // Fetch conversation
+    // Fetch conversation
     const [conversation] = await db
       .select()
       .from(surveyConversations)
@@ -187,9 +188,13 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
     }
 
     // Get creator's preferred language for translation
-    const { getUserPreferredLanguage, translateConversation } = await import("@/lib/translation-service");
-    const creatorLanguage = await getUserPreferredLanguage(validatedData.userId);
-    const conversationLanguage = (conversation.originalLanguage as SupportedLanguage) || "en";
+    const { getUserPreferredLanguage, translateConversation } =
+      await import("@/lib/translation-service");
+    const creatorLanguage = await getUserPreferredLanguage(
+      validatedData.userId,
+    );
+    const conversationLanguage =
+      (conversation.originalLanguage as SupportedLanguage) || "en";
 
     const surveyConfig = buildCompleteSurveyConfig(survey);
 
@@ -198,13 +203,15 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
     // Step 1: Generate a quick summary first (for fallback and basic display)
     const summaryPrompt = getImprovedConversationSummaryPrompt(
       conversation.rawConversation,
-      surveyConfig
+      surveyConfig,
     );
 
     const summaryText = await generateAIResponse(summaryPrompt, undefined, {
       model: analysisModel,
       temperature: 0.3,
       maxTokens: 500,
+      userId: validatedData.userId,
+      surveyId: surveyId,
     });
 
     await job.updateProgress(35);
@@ -212,7 +219,7 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
     // Step 2: Generate detailed structured insights
     const insightsPrompt = getStructuredConversationInsightsPrompt(
       conversation.rawConversation,
-      surveyConfig
+      surveyConfig,
     );
 
     const insightsResponse = await generateAIResponse(
@@ -222,7 +229,9 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
         model: analysisModel,
         temperature: 0.3,
         maxTokens: 3000,
-      }
+        userId: validatedData.userId,
+        surveyId: surveyId,
+      },
     );
 
     await job.updateProgress(70);
@@ -234,12 +243,17 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
         const translation = await translateConversation(
           conversation.rawConversation,
           conversationLanguage,
-          creatorLanguage
+          creatorLanguage,
         );
         translatedConversation = translation.translatedConversation;
-        console.log(`[Conversation Insights Worker] Translated conversation from ${conversationLanguage} to ${creatorLanguage}`);
+        console.log(
+          `[Conversation Insights Worker] Translated conversation from ${conversationLanguage} to ${creatorLanguage}`,
+        );
       } catch (error) {
-        console.error(`[Conversation Insights Worker] Translation failed:`, error);
+        console.error(
+          `[Conversation Insights Worker] Translation failed:`,
+          error,
+        );
         // Continue without translation
       }
     }
@@ -253,7 +267,7 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
       conversation.rawConversation,
       summaryText,
       conversation.durationMs || undefined,
-      conversation.activeDurationMs || undefined
+      conversation.activeDurationMs || undefined,
     );
 
     await job.updateProgress(80);
@@ -262,7 +276,7 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
     // Update conversation with summary and translated conversation
     await db
       .update(surveyConversations)
-      .set({ 
+      .set({
         summary: structuredInsights.summary,
         translatedConversation: translatedConversation || undefined,
       })
@@ -330,22 +344,27 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
     await job.updateProgress(100);
 
     console.log(
-      `[Conversation Insights Worker] Completed job ${job.id} for conversation ${conversationId}`
+      `[Conversation Insights Worker] Completed job ${job.id} for conversation ${conversationId}`,
     );
     console.log(
       `[Conversation Insights Worker] Extracted ${structuredInsights.notableQuotes.length} quotes, ` +
         `${Object.keys(structuredInsights.extractedMetrics).length} metrics, ` +
         `${structuredInsights.mediaInteractions.length} media interactions, ` +
-        `engagement: ${structuredInsights.engagementLevel}`
+        `engagement: ${structuredInsights.engagementLevel}`,
     );
 
     // Trigger RAG ingestion
     try {
       const { ingestConversation } = await import("@/lib/rag/ingest");
       await ingestConversation(conversationId);
-      console.log(`[Conversation Insights Worker] Ingested conversation ${conversationId} into RAG`);
+      console.log(
+        `[Conversation Insights Worker] Ingested conversation ${conversationId} into RAG`,
+      );
     } catch (error) {
-      console.error(`[Conversation Insights Worker] RAG ingestion failed:`, error);
+      console.error(
+        `[Conversation Insights Worker] RAG ingestion failed:`,
+        error,
+      );
     }
 
     // Trigger pattern extraction for self-improvement
@@ -357,12 +376,17 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
         conversationType: "response",
         domainId: survey.domainId ?? null,
       });
-      console.log(`[Conversation Insights Worker] Enqueued pattern extraction for conversation ${conversationId}`);
+      console.log(
+        `[Conversation Insights Worker] Enqueued pattern extraction for conversation ${conversationId}`,
+      );
     } catch (error) {
-      console.error(`[Conversation Insights Worker] Pattern extraction enqueue failed:`, error);
+      console.error(
+        `[Conversation Insights Worker] Pattern extraction enqueue failed:`,
+        error,
+      );
       // Don't fail the insights job if pattern extraction fails
     }
-    
+
     // Schedule analytics generation via scheduler
     try {
       const { scheduleAnalyticsOnNewResponse } =
@@ -371,7 +395,7 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
     } catch (error) {
       console.error(
         `[Conversation Insights Worker] Failed to schedule analytics:`,
-        error
+        error,
       );
       // Don't fail the insights job if analytics scheduling fails
     }
@@ -392,7 +416,7 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
       max: 10,
       duration: 60000,
     },
-  }
+  },
 );
 
 conversationInsightsWorker.on("completed", (job) => {
@@ -402,7 +426,7 @@ conversationInsightsWorker.on("completed", (job) => {
 conversationInsightsWorker.on("failed", (job, err) => {
   console.error(
     `[Conversation Insights Worker] Job ${job?.id} failed:`,
-    err.message
+    err.message,
   );
 });
 

@@ -132,7 +132,8 @@
                 "TalkToAI": "Talk to AI"
             },
             "Input": {
-                "Placeholder": "Describe your survey goals...",
+                "Placeholder": "Describe your survey or ask a question...",
+                "VoiceMode": "Switch to Voice Mode",
                 "PlaceholderLocked": "Select a topic above to start...",
                 "AddMedia": "Add Context/Media",
                 "Send": "Send",
@@ -211,32 +212,9 @@
                 "Finalized": "Survey finalized! Loading sample conversations...",
                 "SaveTopicFailed": "Failed to save topic selection",
                 "GenericError": "An error occurred. Please try again."
-            }
-        },
-        "AddMedia": {
-            "Title": "Add Media Context",
-            "DropZone": {
-                "Instructions": "Click to upload or drag and drop"
             },
-            "DescriptionLabel": "Title / Short Description",
-            "DescriptionHelp": "Give this media a short, descriptive name.",
-            "ContextLabel": "Context for AI",
-            "ContextHelp": "Explain how the AI should use this media (e.g., 'Ask the user what they think of this design').",
-            "Placeholders": {
-                "Description": "e.g., promotional video, logo options",
-                "Context": "e.g., Show this to the user and ask for their first impression."
-            },
-            "Actions": {
-                "Cancel": "Cancel",
-                "AddMedia": "Add Media",
-                "Uploading": "Uploading..."
-            },
-            "Toasts": {
-                "FillAllFields": "Please fill in all fields",
-                "DescriptionLength": "Description must be at least 10 characters",
-                "ContextLength": "Context must be at least 10 characters",
-                "Success": "Media uploaded successfully",
-                "Failed": "Failed to upload media"
+            "Feedback": {
+                "Preparing": "Preparing your survey designer..."
             }
         },
         "PublishModal": {
@@ -270,33 +248,6 @@
                 "Failed": "Failed to publish survey",
                 "Copied": "Link copied to clipboard!",
                 "CopyFailed": "Failed to copy link"
-            }
-        },
-        "AddMediaModal": {
-            "Title": "Add Media",
-            "DropZone": {
-                "Default": "Click to upload image, audio or video",
-                "Drag": "Drop file here"
-            },
-            "Inputs": {
-                "DescriptionLabel": "Description",
-                "DescriptionPlaceholder": "e.g. A photo of our new logo",
-                "DescriptionHint": "What is this media showing?",
-                "ContextLabel": "Context for Use",
-                "ContextPlaceholder": "e.g. Show this when asking about brand perception",
-                "ContextHint": "When should the AI show this to the user?"
-            },
-            "Buttons": {
-                "Cancel": "Cancel",
-                "Add": "Add Media",
-                "Uploading": "Uploading..."
-            },
-            "Toasts": {
-                "FillAll": "Please fill in all fields",
-                "DescShort": "Description must be at least 10 characters",
-                "ContextShort": "Context must be at least 10 characters",
-                "Success": "Media added successfully",
-                "Failed": "Upload failed"
             }
         },
         "SampleReview": {
@@ -603,7 +554,9 @@
         "Analytics": "Analytics",
         "Team": "Team",
         "Profile": "Profile",
-        "Settings": "Settings"
+        "Settings": "Settings",
+        "SignIn": "Sign in",
+        "SignOut": "Sign out"
     },
     "Header": {
         "Search": "Search anything...",
@@ -754,7 +707,6 @@
             "Member": "Member",
             "MemberDesc": "Can create and manage surveys, view analytics, and collaborate with other members."
         },
-
         "Danger": {
             "Title": "Danger Zone",
             "DeleteWorkspace": "Delete Workspace",
@@ -965,11 +917,11 @@
                 }
             }
         },
-        "Waitlist": {
-            "Badge": "Waitlist",
-            "Title": "Sign up with Waitlist",
-            "Description": "Your users are talking — are you listening? <br />Sign up for Convy today, and let&apos;s create something extraordinary, together.",
-            "CTA": "Get started free"
+        "CTA": {
+            "Badge": "Get Started",
+            "Title": "Ready to transform your feedback?",
+            "Description": "Build your first conversational survey in minutes and start capturing richer insights today.",
+            "Button": "Start For Free"
         },
         "Footer": {
             "Message": "Start improving your product today with <br /> real-time data from Convy.",

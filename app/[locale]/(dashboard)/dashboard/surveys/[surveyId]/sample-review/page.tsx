@@ -24,16 +24,21 @@ import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
 import { MediaDisplay } from "@/components/surveys/media-display";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { MarkdownMessage } from "@/components/ui/markdown-message";
+import { useQuery } from "@tanstack/react-query";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { addSampleConversationCommentAction } from "@/app/actions/sample-conversation";
 
 const MAX_SAMPLE_CONVERSATIONS = 3;
 
 type Message = {
     id: string;
     role: "user" | "assistant";
-    content: string;
+    parts: Array<{ type: string; text?: string;[key: string]: any }>;
     timestamp: string;
     media?: any;
+    toolInvocations?: Array<any>;
 };
 
 export default function SampleReviewPage() {
@@ -43,16 +48,16 @@ export default function SampleReviewPage() {
     const { user } = useAuth();
     const surveyId = params.surveyId as string;
 
-    const [messages, setMessages] = useState<Message[]>([]);
     const [isConfirming, setIsConfirming] = useState(false);
     const [feedback, setFeedback] = useState("");
-    // showFeedbackModal is removed as we are moving it to sidebar
     const [isRetrying, setIsRetrying] = useState(false);
     const [inputMode, setInputMode] = useState<"voice" | "text">("text");
     const [textInput, setTextInput] = useState("");
-    const [isTextLoading, setIsTextLoading] = useState(false);
     const [hasAutoGreeted, setHasAutoGreeted] = useState(false);
     const [showTranscript, setShowTranscript] = useState(true);
+
+    const [commentText, setCommentText] = useState("");
+    const [isCommenting, setIsCommenting] = useState(false);
 
     const VisualizerRing = ({ isRecording, size = "normal" }: { isRecording: boolean; size?: "normal" | "large" }) => (
         <div className="relative flex items-center justify-center">
@@ -101,33 +106,56 @@ export default function SampleReviewPage() {
     const samplesRemaining = MAX_SAMPLE_CONVERSATIONS - (survey?.sampleConversationCount || 0);
     const canRetry = samplesRemaining > 0;
 
+    const isOwnerOrEditor = survey?.userId === user?.id || survey?.collaborators?.includes(user?.id || "");
+
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
+    const { messages, setMessages, sendMessage, status } = useChat({
+        id: `sample-${currentSampleNumber}`,
+        transport: new DefaultChatTransport({
+            api: `/api/surveys/${surveyId}/sample`,
+            body: { conversationNumber: currentSampleNumber },
+        }),
+        onFinish: ({ message }) => {
+            const messageText = message.parts
+                ?.filter(part => part.type === "text")
+                .map(part => part.text)
+                .join("") || "";
+            if (messageText.includes("[[SURVEY_COMPLETED]]")) {
+                toast.success(t("Toasts.Finished"));
+            }
+        }
+    });
+
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
 
-    // Check for completion token - cleaned up logic since we don't have a modal to open
-    useEffect(() => {
-        const lastMsg = messages[messages.length - 1];
-        if (lastMsg?.role === "assistant" && lastMsg.content.includes("[[SURVEY_COMPLETED]]")) {
-            const cleanedContent = lastMsg.content.replace("[[SURVEY_COMPLETED]]", "").trim();
-            setMessages(prev => {
-                const newMessages = [...prev];
-                newMessages[newMessages.length - 1] = {
-                    ...lastMsg,
-                    content: cleanedContent
-                };
-                return newMessages;
-            });
+    const isTextLoading = status === "streaming" || status === "submitted";
 
-            toast.success(t("Toasts.Finished"));
+    // Clean up SURVEY_COMPLETED tags from rendering
+    const visibleMessages = messages.map(msg => {
+        const textPart = msg.parts?.find(p => p.type === 'text');
+        const hasCompletionTag = msg.role === "assistant" && textPart && textPart.text.includes("[[SURVEY_COMPLETED]]");
+        const hasCompletionTool = msg.role === "assistant" && msg.parts?.some(p => (p.type === 'tool-invocation' || p.type === 'tool-call') && (p as any).toolName === 'finishSurvey');
+
+        if (hasCompletionTag || hasCompletionTool) {
+            return {
+                ...msg,
+                parts: msg.parts.map(p => {
+                    if (p.type === 'text') {
+                        return { ...p, text: p.text.replace("[[SURVEY_COMPLETED]]", "").trim() };
+                    }
+                    return p;
+                })
+            };
         }
-    }, [messages]);
+        return msg;
+    }).filter(m => m.id !== "init_ping_hidden");
 
     // WebSocket Hook for Voice Conversation
     const voiceWs = useVoiceWebSocket({
@@ -140,16 +168,16 @@ export default function SampleReviewPage() {
                 setMessages(prev => [...prev, {
                     id: Date.now().toString(),
                     role: "assistant",
-                    content: data.text,
+                    parts: [{ type: 'text', text: data.text }],
                     timestamp: new Date().toISOString()
-                }]);
+                } as any]);
             } else if (data.type === "transcription" && data.isFinal) {
                 setMessages(prev => [...prev, {
                     id: Date.now().toString(),
                     role: "user",
-                    content: data.text,
+                    parts: [{ type: 'text', text: data.text }],
                     timestamp: new Date().toISOString()
-                }]);
+                } as any]);
             } else if (data.type === 'display_media') {
                 if (survey?.media) {
                     const fullMedia = survey.media.find((m: any) => m.id === data.media.id);
@@ -157,63 +185,17 @@ export default function SampleReviewPage() {
                         setMessages(prev => [...prev, {
                             id: Date.now().toString(),
                             role: "assistant",
-                            content: "Shared media",
+                            parts: [{ type: 'text', text: "Shared media" }],
                             timestamp: new Date().toISOString(),
                             media: fullMedia
-                        }]);
+                        } as any]);
                     }
                 }
             }
         }
     });
 
-    // Auto-greeting mutation for text mode
-    const greetingMutation = useMutation({
-        mutationFn: async () => {
-            const response = await fetch(`/api/surveys/${surveyId}/sample`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    messages: [],
-                    conversationNumber: currentSampleNumber,
-                }),
-            });
-            if (!response.ok) throw new Error("Failed to get greeting");
-            return response.body;
-        },
-        onSuccess: async (stream) => {
-            if (!stream) return;
-            const reader = stream.getReader();
-            const decoder = new TextDecoder();
-            let greetingContent = "";
-            const greetingId = Date.now().toString();
-
-            // Add placeholder message
-            setMessages(prev => [...prev, {
-                id: greetingId,
-                role: "assistant",
-                content: "",
-                timestamp: new Date().toISOString()
-            }]);
-
-            // Stream the greeting
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                const chunk = decoder.decode(value, { stream: true });
-                greetingContent += chunk;
-
-                setMessages(prev => prev.map(m =>
-                    m.id === greetingId
-                        ? { ...m, content: greetingContent }
-                        : m
-                ));
-            }
-        },
-        onError: () => {
-            toast.error(t("Toasts.StartFailed"));
-        }
-    });
+    // Auto-greeting mutation is replaced by useChat use effect
 
     // Auto-connect voice or trigger text greeting when survey loads
     useEffect(() => {
@@ -224,7 +206,11 @@ export default function SampleReviewPage() {
             console.log("Connecting voice websocket...");
             voiceWs.connect();
         } else if (inputMode === "text" && messages.length === 0) {
-            greetingMutation.mutate();
+            sendMessage({
+                id: "init_ping_hidden",
+                role: "user",
+                parts: [{ type: 'text', text: "Start the conversation now. Greet the participant according to the system prompt instructions." }]
+            } as any);
         }
 
         setHasAutoGreeted(true);
@@ -238,73 +224,20 @@ export default function SampleReviewPage() {
         }
     }, [survey?.isVoice]);
 
-    // Handle text message submission
     const handleTextSubmit = async (e: FormEvent) => {
         e.preventDefault();
         if (!textInput.trim() || isTextLoading) return;
 
-        const userMessage: Message = {
-            id: Date.now().toString(),
-            role: "user",
-            content: textInput.trim(),
-            timestamp: new Date().toISOString(),
-        };
-
-        setMessages(prev => [...prev, userMessage]);
-        setTextInput("");
-        setIsTextLoading(true);
+        const currentInput = textInput.trim();
+        setTextInput('');
 
         try {
-            const response = await fetch(`/api/surveys/${surveyId}/sample`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    messages: [...messages, { role: "user", content: textInput.trim() }].map(m => ({
-                        role: m.role,
-                        content: m.content
-                    })),
-                    conversationNumber: currentSampleNumber,
-                }),
-            });
-
-            if (!response.ok) throw new Error("Failed to get response");
-
-            // Read the streamed response
-            const reader = response.body?.getReader();
-            if (!reader) throw new Error("No reader");
-
-            let assistantContent = "";
-            const decoder = new TextDecoder();
-
-            // Add placeholder message
-            const assistantId = (Date.now() + 1).toString();
-            setMessages(prev => [...prev, {
-                id: assistantId,
-                role: "assistant",
-                content: "",
-                timestamp: new Date().toISOString()
-            }]);
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                const chunk = decoder.decode(value, { stream: true });
-                assistantContent += chunk;
-
-                // Update the assistant message in place
-                setMessages(prev => prev.map(m =>
-                    m.id === assistantId
-                        ? { ...m, content: assistantContent }
-                        : m
-                ));
-            }
+            await sendMessage({
+                role: "user",
+                parts: [{ type: 'text', text: currentInput }],
+            } as any);
         } catch (error) {
             toast.error(t("Toasts.AIResponseFailed"));
-            // Remove the last user message on error
-            setMessages(prev => prev.slice(0, -1));
-        } finally {
-            setIsTextLoading(false);
         }
     };
 
@@ -340,7 +273,13 @@ export default function SampleReviewPage() {
                 // If in text mode, trigger greeting again
                 if (inputMode === "text") {
                     // small delay to allow state reset
-                    setTimeout(() => greetingMutation.mutate(), 500);
+                    setTimeout(() => {
+                        sendMessage({
+                            id: "init_ping_hidden",
+                            role: "user",
+                            parts: [{ type: 'text', text: "Start the conversation now. Greet the participant according to the system prompt instructions." }]
+                        } as any);
+                    }, 500);
                 }
             } else {
                 toast.error(t("Toasts.FeedbackFailed"));
@@ -373,6 +312,31 @@ export default function SampleReviewPage() {
             toast.error(t("Toasts.Error")); // Was "An error occurred" - generic
         } finally {
             setIsConfirming(false);
+        }
+    };
+
+    const handleAddComment = async () => {
+        if (!commentText.trim()) return;
+
+        setIsCommenting(true);
+        try {
+            const result = await addSampleConversationCommentAction(
+                surveyId,
+                currentSampleNumber,
+                commentText
+            );
+
+            if (result.success) {
+                toast.success(t("Feedback.CommentAdded") || "Comment added");
+                setCommentText("");
+                refetchSurvey();
+            } else {
+                toast.error(result.error);
+            }
+        } catch (error) {
+            toast.error("Failed to add comment");
+        } finally {
+            setIsCommenting(false);
         }
     };
 
@@ -472,7 +436,7 @@ export default function SampleReviewPage() {
                                 </div>
                             )}
 
-                            {messages.map((msg) => (
+                            {visibleMessages.map((msg: any) => (
                                 <div key={msg.id} className={cn("flex flex-col gap-2 max-w-[85%]", msg.role === "user" ? "self-end items-end" : "self-start items-start")}>
                                     <div className={cn(
                                         "px-5 py-3 rounded-2xl text-[15px] leading-relaxed shadow-sm",
@@ -480,7 +444,52 @@ export default function SampleReviewPage() {
                                             ? "bg-gray-50 text-gray-800 rounded-tl-sm border border-gray-100"
                                             : "bg-black text-white rounded-tr-sm"
                                     )}>
-                                        {msg.content}
+                                        {msg.toolInvocations?.map((inv: any, index: number) => {
+                                            if (inv.toolName === 'showMedia' && inv.state === 'result') {
+                                                const media = inv.result?.media || (typeof inv.result === 'string' ? JSON.parse(inv.result).media : null);
+                                                return media ? <MediaDisplay key={inv.toolCallId || index} media={media} /> : null;
+                                            }
+                                            if (inv.toolName === 'finishSurvey') {
+                                                return (
+                                                    <div key={inv.toolCallId || index} className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 mt-2">
+                                                        <CheckCircle className="w-3.5 h-3.5" />
+                                                        {t("Toasts.Finished")}
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        })}
+
+                                        {/* Legacy multipart/fallback support */}
+                                        {(!msg.toolInvocations || msg.toolInvocations.length === 0) && msg.parts?.map((part: any, index: number) => {
+                                            if (part.type === 'text') {
+                                                return <MarkdownMessage key={index} content={part.text} />;
+                                            }
+                                            if (part.type === 'tool-invocation' || part.type === 'tool-call') {
+                                                const inv = part as any;
+                                                if (inv.toolName === 'showMedia' && inv.state === 'result') {
+                                                    const media = inv.result?.media || (typeof inv.result === 'string' ? JSON.parse(inv.result).media : null);
+                                                    return media ? <MediaDisplay key={inv.toolCallId || index} media={media} /> : null;
+                                                }
+                                                if (inv.toolName === 'finishSurvey') {
+                                                    return (
+                                                        <div key={inv.toolCallId || index} className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 mt-2">
+                                                            <CheckCircle className="w-3.5 h-3.5" />
+                                                            {t("Toasts.Finished")}
+                                                        </div>
+                                                    );
+                                                }
+                                            }
+                                            return null;
+                                        })}
+
+                                        {/* Fallback for basic text messages with parts but no toolInvocations (common in SDK v6 Message type) */}
+                                        {msg.toolInvocations && msg.toolInvocations.length > 0 && msg.parts?.map((part: any, index: number) => {
+                                            if (part.type === 'text') {
+                                                return <MarkdownMessage key={index} content={part.text} />;
+                                            }
+                                            return null;
+                                        })}
                                         {msg.media && <MediaDisplay media={msg.media} />}
                                     </div>
                                 </div>
@@ -611,49 +620,96 @@ export default function SampleReviewPage() {
             {/* Right Sidebar - Feedback & Controls */}
             <div className="w-80 border-l border-gray-100 bg-gray-50/30 flex flex-col hidden lg:flex">
                 <div className="p-6 space-y-6 flex-1 overflow-y-auto">
-                    <div>
-                        <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-1 flex items-center gap-2">
-                            <MessageSquare className="w-3 h-3 text-gray-500" />
-                            {t("Feedback.Title")}
-                        </h3>
-                        <p className="text-xs text-gray-500 leading-relaxed">
-                            {t("Feedback.Description")}
-                        </p>
-                    </div>
+                    {isOwnerOrEditor && (
+                        <>
+                            <div>
+                                <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-1 flex items-center gap-2">
+                                    <MessageSquare className="w-3 h-3 text-gray-500" />
+                                    {t("Feedback.Title")}
+                                </h3>
+                                <p className="text-xs text-gray-500 leading-relaxed">
+                                    {t("Feedback.Description")}
+                                </p>
+                            </div>
 
-                    <div className="space-y-3">
-                        <textarea
-                            value={feedback}
-                            onChange={(e) => setFeedback(e.target.value)}
-                            placeholder={t("Feedback.Placeholder")}
-                            className="w-full h-40 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-gray-900/5 focus:border-gray-300 outline-none resize-none bg-white text-sm placeholder:text-gray-400"
-                        />
+                            <div className="space-y-3 pb-6 border-b border-gray-200">
+                                <textarea
+                                    value={feedback}
+                                    onChange={(e) => setFeedback(e.target.value)}
+                                    placeholder={t("Feedback.Placeholder")}
+                                    className="w-full h-32 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-gray-900/5 focus:border-gray-300 outline-none resize-none bg-white text-sm placeholder:text-gray-400"
+                                />
 
-                        <div className="flex items-center justify-between text-xs text-gray-400 px-1">
-                            <span>{t("Feedback.Chars", { count: feedback.length })}</span>
-                            <span>{t("Feedback.RetriesLeft", { count: samplesRemaining })}</span>
-                        </div>
+                                <div className="flex items-center justify-between text-xs text-gray-400 px-1">
+                                    <span>{t("Feedback.Chars", { count: feedback.length })}</span>
+                                    <span>{t("Feedback.RetriesLeft", { count: samplesRemaining })}</span>
+                                </div>
 
-                        <button
-                            onClick={handleRetry}
-                            disabled={!feedback.trim() || isRetrying || !canRetry}
-                            className={cn(
-                                "w-full py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 shadow-sm",
-                                feedback.trim() && canRetry
-                                    ? "bg-gray-900 text-white hover:bg-black"
-                                    : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                            )}
-                        >
-                            {isRetrying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
-                            {isRetrying ? t("Feedback.Applying") : t("Feedback.Button")}
-                        </button>
-                    </div>
+                                <button
+                                    onClick={handleRetry}
+                                    disabled={!feedback.trim() || isRetrying || !canRetry}
+                                    className={cn(
+                                        "w-full py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 shadow-sm",
+                                        feedback.trim() && canRetry
+                                            ? "bg-gray-900 text-white hover:bg-black"
+                                            : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                                    )}
+                                >
+                                    {isRetrying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
+                                    {isRetrying ? t("Feedback.Applying") : t("Feedback.Button")}
+                                </button>
 
-                    {!canRetry && (
-                        <div className="p-3 bg-amber-50 rounded-lg border border-amber-100 text-amber-800 text-xs">
-                            {t("Feedback.LimitReached")}
-                        </div>
+                                {!canRetry && (
+                                    <div className="p-3 bg-amber-50 rounded-lg border border-amber-100 text-amber-800 text-xs mt-2">
+                                        {t("Feedback.LimitReached")}
+                                    </div>
+                                )}
+                            </div>
+                        </>
                     )}
+
+                    {/* Team Comments Section */}
+                    <div className="pt-2 flex flex-col flex-1">
+                        <div className="mb-4">
+                            <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-1 flex items-center gap-2">
+                                <MessageSquare className="w-3 h-3 text-gray-500" />
+                                Team Comments
+                            </h3>
+                            <p className="text-xs text-gray-500 leading-relaxed">
+                                Discuss this sample with your team.
+                            </p>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto mb-4 space-y-4">
+                            {/* We don't have direct access to the conversation comments easily without fetching the specific conversation. For now, since comments are per-conversation, let's just show an input to post them. The best UX would fetch current comments via a hook. We'll leave the display simplified or query them if possible. */}
+                            <div className="text-sm text-gray-500 italic p-4 bg-white rounded-xl border border-gray-100 shadow-sm text-center">
+                                Comments are saved for your team to review.
+                            </div>
+                        </div>
+
+                        <div className="mt-auto space-y-3">
+                            <textarea
+                                value={commentText}
+                                onChange={(e) => setCommentText(e.target.value)}
+                                placeholder="Add a comment..."
+                                className="w-full h-24 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-gray-900/5 focus:border-gray-300 outline-none resize-none bg-white text-sm placeholder:text-gray-400"
+                            />
+                            <button
+                                onClick={handleAddComment}
+                                disabled={!commentText.trim() || isCommenting}
+                                className={cn(
+                                    "w-full py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 shadow-sm",
+                                    commentText.trim()
+                                        ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                                        : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                                )}
+                            >
+                                {isCommenting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                                Post Comment
+                            </button>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>

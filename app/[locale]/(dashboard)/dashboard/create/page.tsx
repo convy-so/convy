@@ -39,12 +39,12 @@ import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useAuth } from "@/components/providers/auth-provider";
 import { PublishSurveyModal } from "@/components/surveys/publish-survey-modal";
-import { AddMediaModal } from "@/components/surveys/add-media-modal";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
 import { clientEnv } from "@/lib/env.client";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { SURVEY_DOMAINS, type SurveyDomainId } from "@/lib/domains/domain-registry";
 import { uploadSurveyMediaAction } from "@/app/actions/survey-media";
+import { CollaborationSidebar } from "@/components/surveys/collaboration-sidebar";
 
 const DOMAIN_UI_METADATA: Record<number, { icon: any; color: string; bgColor: string }> = {
   1: { icon: Smile, color: "text-emerald-600", bgColor: "bg-emerald-100" },          // CX
@@ -60,14 +60,11 @@ const DOMAIN_UI_METADATA: Record<number, { icon: any; color: string; bgColor: st
 
 type CreationStep = "objective" | "audience" | "questions" | "tone" | "review";
 
-// Extended Message type to support custom UI properties if needed
-// but we mostly rely on the AI SDK Message type
 type UIMessage = SDKMessage & {
-  content?: string;
-  parts?: any[]; // Ensure parts is available for SDK compatibility
   displayedContent?: string;
   isTyping?: boolean;
   timestamp?: number;
+  toolInvocations?: Array<any>;
 };
 
 const MERGE_THRESHOLD_MS = 3000;
@@ -84,11 +81,12 @@ function CreateSurveyContent() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [wasStartedWithVoice, setWasStartedWithVoice] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false); // Track when user is actively speaking
 
   // Domain Selection
   const [selectedDomainId, setSelectedDomainId] = useState<SurveyDomainId | null>(null);
-
+  const [shouldStartAi, setShouldStartAi] = useState(false);
 
 
   const [showPublishModal, setShowPublishModal] = useState(false);
@@ -100,7 +98,10 @@ function CreateSurveyContent() {
   // Language state initialized from locale
   const [language, setLanguage] = useState<"en" | "fr" | "de" | "es" | "it">((locale as any) || "en");
   const [isVoiceSurvey, setIsVoiceSurvey] = useState(false);
-  const [isInputMenuOpen, setIsInputMenuOpen] = useState(false);
+
+  const [isOwner, setIsOwner] = useState(false);
+  const [collaborators, setCollaborators] = useState<string[]>([]);
+  const [orgId, setOrgId] = useState<string | null>(null);
 
   const handleDomainSelect = async (domainId: SurveyDomainId) => {
     // 1. Optimistic UI: Immediately show the chat view
@@ -109,11 +110,16 @@ function CreateSurveyContent() {
     // 2. Set the survey mode based on the respondent format choice
     updateSurveyMode(isVoiceSurvey);
 
+    // Track if started with voice for this survey
+    if (isVoiceMode) {
+      setWasStartedWithVoice(true);
+    }
+
     // 3. Ensure draft exists (Background Process)
     let currentSurveyId = surveyId;
     if (!currentSurveyId) {
       try {
-        currentSurveyId = await ensureDraftExists();
+        currentSurveyId = await ensureDraftExists(domainId);
       } catch (e) {
         console.error("Failed to create draft", e);
         toast.error(t("Toasts.InitFailed"));
@@ -136,13 +142,18 @@ function CreateSurveyContent() {
       });
       console.log(`[Client] Domain ${domainId} saved for survey ${currentSurveyId}`);
 
+      // Persist creation modality if voice was chosen
+      if (isVoiceMode) {
+        localStorage.setItem(`convy_creation_mode_${currentSurveyId}`, "voice");
+      }
+
       // 5. Trigger Interaction based on Mode
       if (messages.length === 0) {
         if (isVoiceMode) {
           // VOICE MODE: Start recording (or signal readyness)
         } else {
           // TEXT MODE: Trigger AI Text Greeting
-          triggerAIInitialResponse();
+          setShouldStartAi(true);
         }
       }
     } catch (error) {
@@ -151,8 +162,6 @@ function CreateSurveyContent() {
       setSelectedDomainId(null); // Revert on failure
     }
   };
-
-  const toggleInputMenu = () => setIsInputMenuOpen(!isInputMenuOpen);
 
   const updateSurveyMode = async (isVoice: boolean) => {
     setIsVoiceSurvey(isVoice);
@@ -208,12 +217,14 @@ function CreateSurveyContent() {
         // (handled by detecting the tool-result part in messages via useEffect)
       }
       if (toolCall.toolName === 'finishSurvey') {
-        console.log("[Client] Survey finished via tool call");
+        console.log("[Client] Survey finished via tool call, triggering instant refresh");
         addToolOutput({
           toolCallId: toolCall.toolCallId,
           tool: 'finishSurvey',
           output: "Survey marked as complete.",
         });
+        // Instant refresh to reveal the button without 3s latency
+        fetchUpdatedData();
       }
       if (toolCall.toolName === 'requestMediaUpload') {
         console.log("[Client] Media upload requested via tool call");
@@ -260,10 +271,9 @@ function CreateSurveyContent() {
             now - lastMessage.timestamp < MERGE_THRESHOLD_MS
           ) {
             const updated = [...prev];
-            const updatedContent = (lastMessage.content || "") + " " + content;
+            const updatedContent = (lastMessage.parts?.find(p => p.type === 'text')?.text || "") + " " + content;
             updated[updated.length - 1] = {
               ...lastMessage,
-              content: updatedContent,
               displayedContent: (lastMessage.displayedContent || "") + " " + content,
               timestamp: now,
               parts: [{ type: 'text', text: updatedContent }] // Keep parts in sync
@@ -274,7 +284,6 @@ function CreateSurveyContent() {
           const newMessage: UIMessage = {
             id: Date.now().toString(),
             role: role as "user" | "assistant",
-            content: content,
             displayedContent: content,
             isTyping: false,
             timestamp: now,
@@ -294,11 +303,12 @@ function CreateSurveyContent() {
             role: 'assistant',
             timestamp: Date.now(),
             parts: [{
-              type: 'tool-requestMediaUpload',
+              type: 'tool-invocation',
               toolCallId: toolId,
+              toolName: 'requestMediaUpload',
               state: 'input-available',
-              input: { allowedTypes }
-            }]
+              args: { allowedTypes }
+            } as any]
           }
         ]);
       } else if (data.type === "update_extracted_data") {
@@ -334,10 +344,12 @@ function CreateSurveyContent() {
 
   // Monitor playback to handle the "Mute until Greeting Ends" flow
   useEffect(() => {
+    if (!isVoiceMode) return;
+
     // New Logic: We trust 'voiceWs.hasAudioPlayed' to tell us if the greeting actually started
     console.log("[Voice UI] Effect Check -> isConnecting:", isConnecting, "isPlaying:", voiceWs.isPlaying, "hasRecordedAudio:", voiceWs.hasAudioPlayed, "hasGreetingPlayed:", hasGreetingPlayed, "MicMuted:", voiceWs.isMicMuted, "isRecording:", voiceWs.isRecording);
 
-    if (isConnecting && voiceWs.hasAudioPlayed) {
+    if (isVoiceMode && isConnecting && voiceWs.hasAudioPlayed) {
       // Audio started playing (The greeting arrived!)
       console.log("[Voice UI] 🟣 Audio started (Greeting detected) - Transitioning to Speaking State");
       setIsConnecting(false);
@@ -346,7 +358,8 @@ function CreateSurveyContent() {
   }, [
     voiceWs.hasAudioPlayed,
     isConnecting,
-    voiceWs.status
+    voiceWs.status,
+    isVoiceMode
   ]);
 
   // Effect to sync surveyId with WebSocket - ONLY when server is ready
@@ -389,25 +402,28 @@ function CreateSurveyContent() {
     // 1. Check for explicit completion signal in messages (Fallback)
     // If the assistant says "click the button" or "sample conversations", we should show it
     const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant');
-    const messageContent = (lastAssistantMessage as any)?.content ||
-      (lastAssistantMessage?.parts?.filter(p => p.type === 'text').map((p: any) => p.text).join('') || "");
+    const messageContent = lastAssistantMessage?.parts
+      ?.filter(p => p.type === 'text')
+      .map((p: any) => p.text)
+      .join('') || "";
 
     const aiMentionedSamples = messageContent.toLowerCase().includes('sample conversation') ||
       messageContent.toLowerCase().includes('click') &&
       messageContent.toLowerCase().includes('button');
 
-    // Check for tool invocations
+    // Check for tool invocations (Direct + Nested in parts)
     const finishToolCalled = messages.some(m =>
-      m.parts?.some(p => (p.type === 'tool-call' || p.type === 'tool-result') && (p as any).toolName === 'finishSurvey')
+      (m as any).toolInvocations?.some((ti: any) => ti.toolName === 'finishSurvey') ||
+      m.parts?.some(p => (p.type === 'tool-invocation' || p.type === 'tool-call') && (p as any).toolName === 'finishSurvey')
     );
 
     if (finishToolCalled) {
-      console.log('[isReadyForSample] ✅ finishSurvey tool called');
+      // console.log('[isReadyForSample] ✅ finishSurvey tool called');
       return true;
     }
 
     // 2. Main Logic: Check all truly required flags are collected
-    // These must now match our REQUIRED_INFORMATION priorities
+    // These must now match our REQUIRED_INFORMATION priorities and Agent keys
     const criticalFlagsCollected = (
       collectedInfo.objective &&
       collectedInfo.targetAudience &&
@@ -418,7 +434,7 @@ function CreateSurveyContent() {
     // If AI mentioned samples, we skip strict structural validation and trust the AI
     // We only enforce that we have the absolute minimums (objective, audience, domain)
     if (aiMentionedSamples && criticalFlagsCollected) {
-      console.log('[isReadyForSample] ✅ AI explicitly mentioned samples and critical info is collected');
+      // console.log('[isReadyForSample] ✅ AI explicitly mentioned samples and critical info is collected');
       return true;
     }
 
@@ -436,13 +452,6 @@ function CreateSurveyContent() {
     );
 
     if (!allRequiredFlagsCollected || !extractedData) {
-      console.log('[isReadyForSample] ⏳ Missing required flags or extractedData', {
-        criticalFlagsCollected,
-        allRequiredFlagsCollected,
-        aiMentionedSamples,
-        hasExtractedData: !!extractedData,
-        collectedInfo
-      });
       return false;
     }
 
@@ -452,15 +461,6 @@ function CreateSurveyContent() {
 
     // We trust allRequiredFlagsCollected for everything else (opt-outs are valid)
     const isReady = allRequiredFlagsCollected && hasObjective && hasAudience && hasDomain;
-
-    console.log('[isReadyForSample] Validation results:', {
-      isReady,
-      allRequiredFlagsCollected,
-      hasObjective,
-      hasAudience,
-      hasDomain,
-      extractedDataKeys: extractedData ? Object.keys(extractedData) : []
-    });
 
     return isReady;
   }, [surveyId, collectedInfo, extractedData, messages]);
@@ -519,10 +519,20 @@ function CreateSurveyContent() {
     fetchUserLanguage();
   }, [user, authLoading]);
 
+  // Restore voice creation preference
+  useEffect(() => {
+    if (surveyId) {
+      const storedMode = localStorage.getItem(`convy_creation_mode_${surveyId}`);
+      if (storedMode === "voice") {
+        setWasStartedWithVoice(true);
+      }
+    }
+  }, [surveyId]);
+
 
   useEffect(() => {
     if (idFromUrl && !authLoading && user) {
-      if (surveyId === idFromUrl && messages.length > 0) {
+      if (surveyId === idFromUrl) {
         return;
       }
 
@@ -543,8 +553,7 @@ function CreateSurveyContent() {
               setMessages(data.messages.map((m: any, idx: number) => ({
                 id: m.id || `msg-${idx}-${Date.now()}`,
                 role: m.role,
-                content: m.content,
-                displayedContent: m.content,
+                displayedContent: m.content || m.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join(''),
                 isTyping: false,
                 parts: m.parts || (m.content ? [{ type: 'text', text: m.content }] : [])
               })));
@@ -565,6 +574,21 @@ function CreateSurveyContent() {
             const surveyData = await surveyRes.json();
             const status = surveyData.survey?.status || null;
             setSurveyStatus(status);
+            const organizationId = surveyData.survey?.organizationId || null;
+            setOrgId(organizationId);
+
+
+            let isUserOwner = false;
+            let currentCollaborators: string[] = [];
+
+            if (surveyData.survey?.userId) {
+              isUserOwner = surveyData.survey.userId === user?.id;
+              setIsOwner(isUserOwner);
+            }
+            if (surveyData.survey?.collaborators) {
+              currentCollaborators = surveyData.survey.collaborators;
+              setCollaborators(currentCollaborators);
+            }
 
             // Set language if available
             if (surveyData.survey?.language) {
@@ -575,8 +599,11 @@ function CreateSurveyContent() {
               setIsVoiceSurvey(surveyData.survey.isVoice);
             }
 
-            // Read-only if survey is NOT in "creating" status
-            if (status && status !== "creating") {
+            // Read-only if survey is NOT in "creating" status OR if user has no edit access
+            const isFinished = status && status !== "creating";
+            const hasEditAccess = isUserOwner || currentCollaborators.includes(user?.id || "");
+
+            if (isFinished || !hasEditAccess) {
               setIsReadOnly(true);
             } else {
               setIsReadOnly(false);
@@ -596,10 +623,9 @@ function CreateSurveyContent() {
 
   // Lazy creation state
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
-  const [showMediaModal, setShowMediaModal] = useState(false);
 
   // Helper to ensure draft exists before sending message
-  const ensureDraftExists = async (): Promise<string | null> => {
+  const ensureDraftExists = async (domainId: SurveyDomainId): Promise<string | null> => {
     if (surveyId) return surveyId;
     if (isCreatingDraft) return null;
 
@@ -608,7 +634,7 @@ function CreateSurveyContent() {
       const response = await fetch("/api/surveys", {
         method: "POST",
         credentials: "include",
-        body: JSON.stringify({ language, isVoice: isVoiceSurvey }),
+        body: JSON.stringify({ language, isVoice: isVoiceSurvey, domainId }),
       });
 
       if (response.status === 401) {
@@ -629,7 +655,7 @@ function CreateSurveyContent() {
       setSurveyId(survey.id);
 
       // Update URL to include the survey ID to prevent reload issues
-      router.replace(`/dashboard/create?id=${survey.id}`, { scroll: false });
+      window.history.replaceState(null, '', `?id=${survey.id}`);
 
       return survey.id;
     } catch (error) {
@@ -651,13 +677,22 @@ function CreateSurveyContent() {
 
     try {
       await sendMessage({
-        text: "Start the conversation now. Greet the user.",
-      });
+        id: "init_ping_hidden",
+        role: "user",
+        parts: [{ type: 'text', text: "Start the conversation by introducing yourself as the expert on this domain and asking the first question." }],
+      } as any);
     } catch (error) {
       console.error("Failed to trigger AI response:", error);
       toast.error(t("Toasts.InitFailed"));
     }
   };
+
+  useEffect(() => {
+    if (shouldStartAi && surveyId) {
+      triggerAIInitialResponse();
+      setShouldStartAi(false);
+    }
+  }, [shouldStartAi, surveyId]);
 
   // Poll for extracted data to update preview
   const fetchUpdatedData = async () => {
@@ -669,6 +704,9 @@ function CreateSurveyContent() {
         // Only update if we get valid data
         if (data.extractedData && Object.keys(data.extractedData).length > 0) {
           setExtractedData(data.extractedData);
+          if (data.extractedData.domainId) {
+            setSelectedDomainId(prev => prev || data.extractedData.domainId);
+          }
         }
         if (data.collectedInfo) {
           setCollectedInfo(data.collectedInfo);
@@ -693,8 +731,10 @@ function CreateSurveyContent() {
 
     const currentInput = input;
     setInput(""); // Clear input locally
-
-    sendMessage({ text: currentInput });
+    sendMessage({
+      role: "user",
+      parts: [{ type: 'text', text: currentInput }],
+    } as any);
   };
 
   useEffect(() => {
@@ -730,6 +770,13 @@ function CreateSurveyContent() {
 
     return () => clearInterval(timer);
   }, [surveyId]);
+
+  // Instant refresh when AI finishes response
+  useEffect(() => {
+    if ((status as string) === 'idle' && surveyId) {
+      fetchUpdatedData();
+    }
+  }, [status, surveyId]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -799,39 +846,6 @@ function CreateSurveyContent() {
     }
   };
 
-  const handleMediaUploaded = (media: any, toolCallId?: string) => {
-    console.log("[Client] Media uploaded:", media);
-    const msg = `I have uploaded a ${media.type}: "${media.description}". Context for use: ${media.contextForUse}`;
-
-    if (toolCallId) {
-      addToolOutput({
-        toolCallId: toolCallId,
-        tool: 'requestMediaUpload',
-        output: JSON.stringify({
-          success: true,
-          media: {
-            id: media.id,
-            url: media.url,
-            type: media.type,
-            description: media.description,
-            contextForUse: media.contextForUse
-          }
-        })
-      });
-    } else {
-      sendMessage({ text: msg });
-    }
-  };
-
-  const handleOpenMediaModal = async () => {
-    let currentSurveyId = surveyId;
-    if (!currentSurveyId) {
-      currentSurveyId = await ensureDraftExists();
-      if (!currentSurveyId) return;
-    }
-    setShowMediaModal(true);
-  };
-
   const handleGoToSampleConversations = async () => {
     if (!surveyId) return;
 
@@ -865,13 +879,7 @@ function CreateSurveyContent() {
     }
   };
 
-  if (isInitializing) {
-    return (
-      <div className="h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-      </div>
-    );
-  }
+  // `isInitializing` no longer unmounts the whole page
 
   if (authError) {
     return (
@@ -923,11 +931,15 @@ function CreateSurveyContent() {
   return (
     <>
       <div className="h-[calc(100vh-2rem)] md:h-[calc(100vh-4rem)] flex flex-col md:flex-row gap-6 max-w-7xl w-full mx-auto p-4 overflow-hidden">
-        <div className="flex-1 bg-white rounded-3xl border border-gray-200 flex flex-col overflow-hidden relative shadow-sm">
+        <div className={cn(
+          "flex-1 flex flex-col overflow-hidden relative transition-all duration-500",
+          (selectedDomainId || surveyId) ? "bg-white rounded-3xl border border-gray-200 shadow-sm" : ""
+        )}>
 
           {/* Integrated Header */}
           <div className={cn(
-            "flex flex-col sm:flex-row items-center justify-between gap-4 p-6 border-b transition-all duration-500 bg-white border-gray-200"
+            "flex flex-col sm:flex-row items-center justify-between gap-4 p-6 transition-all duration-500",
+            (selectedDomainId || surveyId) ? "bg-white border-b border-gray-200" : "bg-transparent"
           )}>
             {!selectedDomainId && !surveyId ? (
               <div className="w-full text-center py-4">
@@ -977,8 +989,16 @@ function CreateSurveyContent() {
 
 
           {/* Chat Area / Domain Selection */}
-          <div className="flex-1 overflow-hidden relative flex flex-col bg-slate-50/30">
-            {!selectedDomainId && !surveyId ? (
+          <div className={cn(
+            "flex-1 overflow-hidden relative flex flex-col",
+            (selectedDomainId || surveyId) ? "bg-slate-50/30" : "bg-transparent"
+          )}>
+            {isInitializing && (
+              <div className="absolute inset-0 z-50 bg-white/50 backdrop-blur-sm flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+              </div>
+            )}
+            {!selectedDomainId ? (
 
               <div className="flex-1 overflow-y-auto p-4 md:p-8">
                 <div className="max-w-5xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500 py-10">
@@ -1117,6 +1137,13 @@ function CreateSurveyContent() {
             ) : (
               <>
                 <div className="contents">
+                  {isCreatingDraft && (
+                    <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center rounded-3xl animate-in fade-in duration-300">
+                      <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mb-4" />
+                      <p className="text-gray-500 font-medium">{t("Feedback.Preparing")}</p>
+                    </div>
+                  )}
+
                   {isVoiceMode && !isReadyForSample && (
                     <div className="absolute inset-0 z-30 bg-slate-50/95 backdrop-blur-md flex flex-col md:flex-row animate-in fade-in duration-500">
 
@@ -1130,7 +1157,7 @@ function CreateSurveyContent() {
                           </div>
 
                           {/* Message History */}
-                          {messages.map((msg, idx) => (
+                          {messages.filter(m => m.id !== "init_ping_hidden").map((msg, idx) => (
                             <div
                               key={msg.id || idx}
                               className={cn(
@@ -1366,7 +1393,7 @@ function CreateSurveyContent() {
 
                   {/* Messages Scroll Area */}
                   <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
-                    {messages.map((message) => (
+                    {messages.filter(m => m.id !== "init_ping_hidden").map((message) => (
                       <div
                         key={message.id}
                         className={cn(
@@ -1403,39 +1430,115 @@ function CreateSurveyContent() {
                                 content={(message as any).content || (message.parts?.filter(p => p.type === 'text').map((p: any) => p.text).join('') || "")}
                                 className="text-gray-800 prose-sm"
                               />
-                              {message.parts?.map((part: any, idx) => (
-                                part.type === 'tool-finishSurvey' && (
-                                  <div key={part.toolCallId || idx} className="text-xs text-emerald-600 italic mt-2 flex items-center gap-1">
-                                    <CheckCircle2 className="w-3 h-3" /> Survey finalized
-                                  </div>
-                                )
-                              ))}
-                              {message.parts?.map((part: any, idx) => (
-                                part.type === 'tool-requestMediaUpload' && (
-                                  <div key={part.toolCallId || idx} className="mt-4">
-                                    {(part.state === 'input-available' || part.state === 'input-streaming') ? (
-                                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 animate-in zoom-in-95 duration-300">
-                                        <div className="flex items-center gap-2 mb-4">
-                                          <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                                            <Paperclip className="w-4 h-4 text-indigo-600" />
+                              {(message as any).toolInvocations?.map((inv: any, idx: number) => {
+                                if (inv.toolName === 'finishSurvey') {
+                                  return (
+                                    <div key={inv.toolCallId || idx} className="text-xs text-emerald-600 italic mt-2 flex items-center gap-1">
+                                      <CheckCircle2 className="w-3 h-3" /> Survey finalized
+                                    </div>
+                                  );
+                                }
+
+                                if (inv.toolName === 'requestMediaUpload') {
+                                  return (
+                                    <div key={inv.toolCallId || idx} className="mt-4">
+                                      {(inv.state === 'call' || inv.state === 'partial-call') ? (
+                                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 animate-in zoom-in-95 duration-300">
+                                          <div className="flex items-center gap-2 mb-4">
+                                            <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                                              <Paperclip className="w-4 h-4 text-indigo-600" />
+                                            </div>
+                                            <h4 className="font-bold text-gray-900 text-sm">Media Upload Requested</h4>
                                           </div>
-                                          <h4 className="font-bold text-gray-900 text-sm">Media Upload Requested</h4>
+                                          <MediaUploadFlow
+                                            surveyId={surveyId || ""}
+                                            onUploaded={(media) => {
+                                              addToolOutput({
+                                                toolCallId: inv.toolCallId,
+                                                tool: 'requestMediaUpload',
+                                                output: JSON.stringify({
+                                                  success: true,
+                                                  media: {
+                                                    id: media.id,
+                                                    url: media.url,
+                                                    type: media.type,
+                                                    description: media.description,
+                                                    contextForUse: media.contextForUse
+                                                  }
+                                                })
+                                              });
+                                            }}
+                                            allowedTypes={inv.args?.allowedTypes || ['image', 'audio', 'video']}
+                                          />
                                         </div>
-                                        <MediaUploadFlow
-                                          surveyId={surveyId || ""}
-                                          onUploaded={(media) => handleMediaUploaded(media, part.toolCallId)}
-                                          allowedTypes={part.input?.allowedTypes || ['image', 'audio', 'video']}
-                                        />
-                                      </div>
-                                    ) : part.state === 'output-available' && (
-                                      <div className="flex items-center gap-2 text-xs text-indigo-600 bg-indigo-50/50 px-3 py-2 rounded-lg border border-indigo-100 mt-2">
-                                        <CheckCircle2 className="w-3 h-3" />
-                                        Media added: {typeof part.output === 'string' ? JSON.parse(part.output).media?.description : part.output?.media?.description || 'File uploaded'}
-                                      </div>
-                                    )}
-                                  </div>
-                                )
-                              ))}
+                                      ) : inv.state === 'result' && (
+                                        <div className="flex items-center gap-2 text-xs text-indigo-600 bg-indigo-50/50 px-3 py-2 rounded-lg border border-indigo-100 mt-2">
+                                          <CheckCircle2 className="w-3 h-3" />
+                                          Media added: {typeof inv.result === 'string' ? (JSON.parse(inv.result).media?.description || 'File uploaded') : (inv.result?.media?.description || 'File uploaded')}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })}
+
+                              {/* Legacy multipart support (if server sends parts instead of top-level toolInvocations) */}
+                              {!(message as any).toolInvocations && message.parts?.map((part: any, idx) => {
+                                if (part.type !== 'tool-invocation' && part.type !== 'tool-call') return null;
+                                const inv = part;
+
+                                if (inv.toolName === 'finishSurvey') {
+                                  return (
+                                    <div key={inv.toolCallId || idx} className="text-xs text-emerald-600 italic mt-2 flex items-center gap-1">
+                                      <CheckCircle2 className="w-3 h-3" /> Survey finalized
+                                    </div>
+                                  );
+                                }
+
+                                if (inv.toolName === 'requestMediaUpload') {
+                                  return (
+                                    <div key={inv.toolCallId || idx} className="mt-4">
+                                      {(inv.state === 'input-available' || inv.state === 'input-streaming' || inv.state === 'call') ? (
+                                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 animate-in zoom-in-95 duration-300">
+                                          <div className="flex items-center gap-2 mb-4">
+                                            <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                                              <Paperclip className="w-4 h-4 text-indigo-600" />
+                                            </div>
+                                            <h4 className="font-bold text-gray-900 text-sm">Media Upload Requested</h4>
+                                          </div>
+                                          <MediaUploadFlow
+                                            surveyId={surveyId || ""}
+                                            onUploaded={(media) => {
+                                              addToolOutput({
+                                                toolCallId: inv.toolCallId,
+                                                tool: 'requestMediaUpload',
+                                                output: JSON.stringify({
+                                                  success: true,
+                                                  media: {
+                                                    id: media.id,
+                                                    url: media.url,
+                                                    type: media.type,
+                                                    description: media.description,
+                                                    contextForUse: media.contextForUse
+                                                  }
+                                                })
+                                              });
+                                            }}
+                                            allowedTypes={inv.args?.allowedTypes || ['image', 'audio', 'video']}
+                                          />
+                                        </div>
+                                      ) : inv.state === 'result' && (
+                                        <div className="flex items-center gap-2 text-xs text-indigo-600 bg-indigo-50/50 px-3 py-2 rounded-lg border border-indigo-100 mt-2">
+                                          <CheckCircle2 className="w-3 h-3" />
+                                          Media added: {typeof inv.result === 'string' ? (JSON.parse(inv.result).media?.description || 'File uploaded') : (inv.result?.media?.description || 'File uploaded')}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })}
                             </div>
                           ) : (
                             <p className="text-[15px] leading-7 whitespace-pre-wrap">
@@ -1460,35 +1563,6 @@ function CreateSurveyContent() {
                     )}
 
                     <div ref={messagesEndRef} className="h-4" />
-
-                    {/* Suggested Prompts Grid - Minimalist & Integrated */}
-                    {/* Step 1: Domain Selection */}
-                    {!selectedDomainId && !isReadyForSample && !isReadOnly && (
-                      <div className="w-full max-w-6xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4">
-                        <div className="text-center mb-10">
-                          <h2 className="text-2xl font-bold text-gray-900 mb-3">{t("DomainSelection.Title")}</h2>
-                          <p className="text-base text-gray-500 max-w-2xl mx-auto leading-relaxed">{t("DomainSelection.Description")}</p>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-12">
-                          {Object.values(SURVEY_DOMAINS).map((domain) => (
-                            <button
-                              key={domain.id}
-                              onClick={() => handleDomainSelect(domain.id)}
-                              className="flex flex-col text-left p-5 bg-white border border-gray-200 hover:border-black rounded-xl transition-all hover:shadow-lg hover:-translate-y-1 group h-full duration-300"
-                            >
-                              <div className="mb-4 p-2.5 bg-gray-50 rounded-lg w-fit group-hover:bg-black group-hover:text-white transition-colors duration-300">
-                                <Sparkles className="w-5 h-5" />
-                              </div>
-                              <h3 className="text-base font-bold text-gray-900 mb-2 leading-tight">{t(`Domains.${domain.id}.Title`)}</h3>
-                              <p className="text-sm text-gray-500 leading-relaxed line-clamp-3 group-hover:text-gray-600 transition-colors">{t(`Domains.${domain.id}.Description`)}</p>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-
                   </div>
 
 
@@ -1530,47 +1604,6 @@ function CreateSurveyContent() {
                         {/* Simple Minimalist Input Bar */}
                         <div className="relative bg-white border border-gray-200 rounded-2xl group-focus-within:border-gray-400 transition-all flex items-end p-2">
 
-                          {/* Expandable Action Menu Button */}
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={toggleInputMenu}
-                              disabled={isLoading || isCreatingDraft}
-                              className={cn(
-                                "p-3 rounded-full transition-all duration-300 transform active:scale-95",
-                                isInputMenuOpen ? "bg-black text-white rotate-45" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                              )}
-                              title={t("Input.ActionsTitle")}
-                            >
-                              <Plus className="w-5 h-5" />
-                            </button>
-
-                            {/* Popup Menu */}
-                            {isInputMenuOpen && (
-                              <>
-                                <div className="fixed inset-0 z-40" onClick={() => setIsInputMenuOpen(false)} />
-                                <div className="absolute bottom-full left-0 mb-3 bg-white rounded-2xl shadow-xl border border-gray-100 p-2 min-w-[200px] z-50 flex flex-col gap-1 animate-in slide-in-from-bottom-2 fade-in zoom-in-95 origin-bottom-left">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      handleOpenMediaModal();
-                                      setIsInputMenuOpen(false);
-                                    }}
-                                    className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors w-full text-left group"
-                                  >
-                                    <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg group-hover:bg-indigo-100 transition-colors">
-                                      <Paperclip className="w-4 h-4" />
-                                    </div>
-                                    <div>
-                                      <div className="text-gray-900 font-semibold">{t("Menu.AddMedia")}</div>
-                                      <div className="text-gray-400 text-xs font-normal">{t("Menu.MediaTypes")}</div>
-                                    </div>
-                                  </button>
-                                </div>
-                              </>
-                            )}
-                          </div>
-
                           <textarea
                             value={input}
                             onChange={handleInputChange}
@@ -1582,7 +1615,17 @@ function CreateSurveyContent() {
                             style={{ minHeight: "96px" }}
                           />
 
-                          <div className="p-2 mb-1 mr-1">
+                          <div className="p-2 mb-1 mr-1 flex items-center gap-2">
+                            {wasStartedWithVoice && (
+                              <button
+                                type="button"
+                                onClick={toggleVoiceMode}
+                                className="p-2.5 rounded-xl text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                                title={t("Input.VoiceMode")}
+                              >
+                                <Mic className="w-5 h-5" />
+                              </button>
+                            )}
                             <button
                               type="submit"
                               disabled={!input?.trim() || isLoading || !!authError}
@@ -1629,12 +1672,14 @@ function CreateSurveyContent() {
           }}
         />
 
-        <AddMediaModal
-          isOpen={showMediaModal}
-          onClose={() => setShowMediaModal(false)}
-          surveyId={surveyId || ""}
-          onUploaded={handleMediaUploaded}
-        />
+        {/* Real-time Collaboration Sidebar - Only for Org surveys or if there are collaborators */}
+        {(surveyId && (orgId || collaborators.length > 0)) && (
+          <CollaborationSidebar
+            surveyId={surveyId}
+            isOwner={isOwner}
+            collaborators={collaborators}
+          />
+        )}
       </div>
     </>
   );

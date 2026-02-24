@@ -43,7 +43,7 @@ export default function ResponseDetailPage() {
     const params = useParams();
     const surveyId = params.surveyId as string;
     const responseId = params.responseId as string;
-    
+
     const [response, setResponse] = useState<ResponseData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -83,60 +83,6 @@ export default function ResponseDetailPage() {
         }
     };
 
-    const handleExport = async () => {
-        if (!response) return;
-
-        // Dynamically import xlsx to keep bundle size small
-        const XLSX = await import("xlsx");
-
-        // Prepare data for sheets
-        const overviewData = [
-            ["Participant ID", response.participantId],
-            ["Survey Title", response.surveyTitle],
-            ["Status", response.status],
-            ["Duration", response.duration],
-            ["Started At", format(new Date(response.startedAt), "yyyy-MM-dd HH:mm:ss")],
-            ["Completed At", response.completedAt ? format(new Date(response.completedAt), "yyyy-MM-dd HH:mm:ss") : "N/A"],
-            ["Sentiment", response.sentiment],
-            ["Sentiment Score", `${(response.sentimentScore * 100).toFixed(1)}%`],
-            ["Summary", response.summary],
-        ];
-
-        // Add Key Insights to Overview
-        overviewData.push(["", ""]);
-        overviewData.push(["Key Insights", ""]);
-        response.keyInsights.forEach((insight, index) => {
-            overviewData.push([`${index + 1}.`, insight]);
-        });
-
-        const transcriptData = response.conversation.map(msg => ({
-            Role: msg.role === 'assistant' ? 'AI' : 'Participant',
-            Content: msg.content,
-            Timestamp: msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : '',
-            Sentiment: msg.role === 'user' && msg.sentiment ? msg.sentiment : ''
-        }));
-
-        // Create workbook
-        const wb = XLSX.utils.book_new();
-
-        // Create sheets
-        const wsOverview = XLSX.utils.aoa_to_sheet(overviewData);
-        const wsTranscript = XLSX.utils.json_to_sheet(transcriptData);
-
-        // Adjust column widths for better readability
-        wsOverview['!cols'] = [{ wch: 20 }, { wch: 80 }];
-        wsTranscript['!cols'] = [{ wch: 10 }, { wch: 100 }, { wch: 15 }, { wch: 10 }];
-
-        // Add sheets to workbook
-        XLSX.utils.book_append_sheet(wb, wsOverview, "Overview");
-        XLSX.utils.book_append_sheet(wb, wsTranscript, "Transcript");
-
-        // Generate filename
-        const filename = `Response_${response.participantId}_${format(new Date(), "yyyyMMdd")}.xlsx`;
-
-        // Write file
-        XLSX.writeFile(wb, filename);
-    };
 
     if (isLoading) {
         return (
@@ -150,7 +96,7 @@ export default function ResponseDetailPage() {
         return (
             <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
                 <p className="text-gray-500">{error || "Response not found"}</p>
-                <Link 
+                <Link
                     href={`/dashboard/surveys/${surveyId}`}
                     className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
                 >
@@ -191,15 +137,6 @@ export default function ResponseDetailPage() {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <button 
-                            onClick={handleExport}
-                            className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-                        >
-                            <Download className="w-4 h-4" />
-                            <span className="hidden sm:inline">Export Excel</span>
-                        </button>
-                    </div>
                 </div>
             </div>
 
@@ -247,7 +184,7 @@ export default function ResponseDetailPage() {
                                                         {message.role === "assistant" ? "Convy AI" : "Participant"}
                                                     </span>
                                                     <span className="text-xs text-gray-400">
-                                                        {message.timestamp ? new Date(message.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                                                        {message.timestamp ? new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                                                     </span>
                                                     {message.role === "user" && message.sentiment && (
                                                         <span className="flex items-center gap-1 ml-auto">
@@ -366,7 +303,7 @@ export default function ResponseDetailPage() {
 
                     {/* Empty State for Incomplete */}
                     {response.status !== "completed" && (
-                         <div className="bg-amber-50 rounded-xl border border-amber-100 p-5">
+                        <div className="bg-amber-50 rounded-xl border border-amber-100 p-5">
                             <h3 className="font-semibold text-amber-900 mb-2">Analysis Pending</h3>
                             <p className="text-sm text-amber-800">
                                 This conversation is still in progress. Detailed analysis and insights will be generated once it is completed.

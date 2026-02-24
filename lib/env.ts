@@ -62,8 +62,12 @@ export const env = {
   NEXT_PUBLIC_WEBSOCKET_URL:
     optional("NEXT_PUBLIC_WEBSOCKET_URL") || "ws://localhost:3001",
 
-  // External Tools
   FFMPEG_PATH: optional("FFMPEG_PATH"),
+  ADMIN_EMAILS: optional("ADMIN_EMAILS")
+    ? optional("ADMIN_EMAILS")!
+        .split(",")
+        .map((e) => e.trim().toLowerCase())
+    : [],
 };
 
 export type Env = typeof env;

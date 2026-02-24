@@ -19,21 +19,6 @@ import {
 
 /**
  * GET /api/surveys/[surveyId]/analytics
- *
- * Returns comprehensive analytics data for a survey, optimized for dashboard display.
- *
- * Query Parameters:
- * - format: "full" | "summary" | "widgets" (default: "full")
- * - regenerateWidgets: "true" to regenerate dashboard widgets from stored data
- *
- * Response includes:
- * - Executive summary for quick overview
- * - Core metrics (completion rates, engagement, etc.)
- * - Creator-defined metrics with chart-ready data
- * - Hypothesis validations
- * - AI-discovered insights (trends, patterns, recommendations)
- * - Goal achievement assessment
- * - Dashboard widgets ready for rendering
  */
 export async function GET(
   request: Request,
@@ -46,18 +31,20 @@ export async function GET(
     const format = searchParams.get("format") || "full";
     const regenerateWidgets = searchParams.get("regenerateWidgets") === "true";
 
-    // Verify survey ownership
+    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
+    const access = await getSurveyAccessLevel(session.user.id, surveyId);
+
+    if (access === "none") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
     const [survey] = await db
-      .select()
+      .select({ title: surveys.title })
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
     if (!survey) {
       return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    }
-
-    if (survey.userId !== session.user.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     // Fetch analytics
@@ -67,7 +54,6 @@ export async function GET(
       .where(eq(surveyAnalytics.surveyId, surveyId));
 
     if (!analytics) {
-      // If no full analysis exists, return "zero-state" analytics so the dashboard still renders
       const conversations = await db
         .select({
           id: surveyConversations.id,
@@ -78,11 +64,9 @@ export async function GET(
 
       const totalCount = conversations.length;
       const completedCount = conversations.filter((c) => c.completed).length;
-
       const completionRate =
         totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-      // Construct a "live" partial analytics object
       const partialAnalytics: SurveyAnalyticsData = {
         surveyId,
         surveyTitle: survey.title,
@@ -152,10 +136,9 @@ export async function GET(
         },
         conversationCount: totalCount,
         lastUpdated: new Date().toISOString(),
-        dashboardWidgets: [], // Will be generated below
+        dashboardWidgets: [],
       };
 
-      // Generate widgets for this partial data
       partialAnalytics.dashboardWidgets =
         createDashboardWidgets(partialAnalytics);
 
@@ -168,16 +151,11 @@ export async function GET(
         });
       }
 
-      return NextResponse.json({
-        status: "ready",
-        ...partialAnalytics,
-      });
+      return NextResponse.json({ status: "ready", ...partialAnalytics });
     }
 
-    // Parse stored metrics (which contains the full analytics data)
     const storedMetrics = analytics.metrics as Partial<SurveyAnalyticsData>;
 
-    // If format is "summary", return only executive summary
     if (format === "summary") {
       return NextResponse.json({
         status: "ready",
@@ -202,14 +180,12 @@ export async function GET(
       });
     }
 
-    // Reconstruct full analytics data
     const analyticsData: SurveyAnalyticsData = {
       surveyId,
       surveyTitle: survey.title,
       generatedAt:
         storedMetrics.generatedAt || analytics.createdAt.toISOString(),
       dataVersion: storedMetrics.dataVersion || ANALYTICS_DATA_VERSION,
-
       executiveSummary: storedMetrics.executiveSummary || {
         headline:
           analytics.overallSummary?.split("\n")[0] ||
@@ -218,7 +194,6 @@ export async function GET(
         overallSentiment: { overall: "neutral", score: 0, confidence: 0.5 },
         recommendedActions: [],
       },
-
       coreMetrics: storedMetrics.coreMetrics || {
         totalConversations: analytics.totalConversations,
         completedConversations: analytics.totalConversations,
@@ -233,10 +208,8 @@ export async function GET(
         requiredQuestionsCompletion: [],
         topicCoverageRate: 0,
       },
-
       creatorMetrics: storedMetrics.creatorMetrics || [],
       hypothesisValidations: storedMetrics.hypothesisValidations || [],
-
       discoveredInsights: storedMetrics.discoveredInsights || {
         trends: [],
         outliers: [],
@@ -245,7 +218,6 @@ export async function GET(
         surprisingFindings: [],
         dataGaps: [],
       },
-
       goalAssessment: storedMetrics.goalAssessment || {
         surveyObjective: "",
         achievementScore: 5,
@@ -275,7 +247,6 @@ export async function GET(
         recommendedNextSteps: [],
         suggestedFollowUpQuestions: [],
       },
-
       dashboardWidgets: [],
       conversationCount: analytics.totalConversations,
       lastUpdated:
@@ -283,7 +254,6 @@ export async function GET(
         analytics.updatedAt.toISOString(),
     };
 
-    // Generate or regenerate widgets
     if (regenerateWidgets || !storedMetrics.dashboardWidgets) {
       analyticsData.dashboardWidgets = createDashboardWidgets(analyticsData);
     } else {
@@ -291,7 +261,6 @@ export async function GET(
         storedMetrics.dashboardWidgets as DashboardWidget[];
     }
 
-    // If format is "widgets", return only widgets
     if (format === "widgets") {
       return NextResponse.json({
         status: "ready",
@@ -301,20 +270,8 @@ export async function GET(
       });
     }
 
-    // Return full analytics data
-    return NextResponse.json({
-      status: "ready",
-      ...analyticsData,
-    });
+    return NextResponse.json({ status: "ready", ...analyticsData });
   } catch (error) {
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return NextResponse.json({ error: error.message }, { status: 401 });
-      }
-    }
     console.error("[Analytics API] Error:", error);
     return NextResponse.json(
       { error: "Failed to fetch analytics" },
@@ -325,13 +282,6 @@ export async function GET(
 
 /**
  * POST /api/surveys/[surveyId]/analytics
- *
- * Trigger analytics regeneration for a survey.
- *
- * Request Body:
- * - force: boolean - Force regeneration even if recent analytics exist
- *
- * Returns job ID for tracking generation progress.
  */
 export async function POST(
   request: Request,
@@ -343,21 +293,19 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
     const force = body.force === true;
 
-    // Verify survey ownership
-    const [survey] = await db
-      .select()
-      .from(surveys)
-      .where(eq(surveys.id, surveyId));
+    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
+    const access = await getSurveyAccessLevel(session.user.id, surveyId);
 
-    if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+    const canManage = access === "owner" || access === "editor";
+    if (!canManage) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized. Only owners and editors can trigger analytics.",
+        },
+        { status: 403 },
+      );
     }
 
-    if (survey.userId !== session.user.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
-
-    // Check for completed conversations
     const conversations = await db
       .select({
         id: surveyConversations.id,
@@ -370,16 +318,11 @@ export async function POST(
 
     if (completedWithInsights.length === 0) {
       return NextResponse.json(
-        {
-          error: "No completed conversations with insights found.",
-          message:
-            "Complete some survey conversations first, then insights will be generated automatically.",
-        },
+        { error: "No completed conversations with insights found." },
         { status: 400 },
       );
     }
 
-    // Check if recent analytics exist (within last 5 minutes) unless force is true
     if (!force) {
       const [existingAnalytics] = await db
         .select()
@@ -391,20 +334,16 @@ export async function POST(
         if (existingAnalytics.lastUpdated > fiveMinutesAgo) {
           return NextResponse.json({
             status: "recent_exists",
-            message:
-              "Recent analytics already exist. Use force=true to regenerate.",
             lastUpdated: existingAnalytics.lastUpdated,
           });
         }
       }
     }
 
-    // Import and enqueue analytics job
     const { enqueueSurveyAnalytics } = await import("@/lib/queue");
     const { resetAnalyticsCounterAfterGeneration } =
       await import("@/lib/analytics-scheduler");
 
-    // Reset counter before manual regeneration
     await resetAnalyticsCounterAfterGeneration(surveyId);
 
     const job = await enqueueSurveyAnalytics({
@@ -412,21 +351,8 @@ export async function POST(
       userId: session.user.id,
     });
 
-    return NextResponse.json({
-      status: "generating",
-      message: "Analytics generation started",
-      jobId: job.id,
-      conversationsToAnalyze: completedWithInsights.length,
-    });
+    return NextResponse.json({ status: "generating", jobId: job.id });
   } catch (error) {
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return NextResponse.json({ error: error.message }, { status: 401 });
-      }
-    }
     console.error("[Analytics API] Error:", error);
     return NextResponse.json(
       { error: "Failed to trigger analytics generation" },
@@ -437,25 +363,18 @@ export async function POST(
 
 /**
  * GET /api/surveys/[surveyId]/analytics/conversations
- *
- * Returns individual conversation insights for drill-down analysis.
- * Separate endpoint to avoid bloating the main analytics response.
  */
 export async function getConversationInsights(
   surveyId: string,
   userId: string,
 ): Promise<ConversationInsightData[]> {
-  // Verify survey ownership
-  const [survey] = await db
-    .select()
-    .from(surveys)
-    .where(eq(surveys.id, surveyId));
+  const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
+  const access = await getSurveyAccessLevel(userId, surveyId);
 
-  if (!survey || survey.userId !== userId) {
+  if (access === "none") {
     throw new Error("Unauthorized");
   }
 
-  // Fetch all conversations with insights
   const conversations = await db
     .select({
       id: surveyConversations.id,

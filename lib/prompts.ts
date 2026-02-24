@@ -1,5 +1,3 @@
-
-
 import {
   REQUIRED_INFORMATION,
   TONE_PROFILES,
@@ -21,8 +19,6 @@ import type {
   ParticipantStyle,
 } from "./conversation-memory";
 
-
-
 /**
  * Prompt templates for different AI tasks in the survey application
  *
@@ -40,12 +36,8 @@ export interface SurveyConfig {
   requiredQuestions: string[];
   metrics: string[];
   language?: "en" | "fr" | "de" | "es" | "it";
-  objective?: SurveyObjective;
-  targetAudience?: SurveyTargetAudience;
-  scope?: SurveyScope;
-  successCriteria?: SurveySuccessCriteria;
-  constraints?: SurveyConstraints;
-  hypotheses?: SurveyHypotheses;
+  expertState?: Record<string, any>;
+  coreObjective?: string;
   tone?: ToneProfile;
   media?: SurveyMedia[];
   personalInfo?: string[];
@@ -54,24 +46,7 @@ export interface SurveyConfig {
   subjectModelComplete?: boolean;
 }
 
-export interface CollectedInfo {
-  objective: boolean;
-  targetAudience: boolean;
-  scope: boolean;
-  successCriteria: boolean;
-  constraints: boolean;
-  hypotheses: boolean;
-  tone: boolean;
-  requiredQuestions: boolean;
-  metrics: boolean;
-  personalInfo: boolean;
-  subjectDefined: boolean;
-  domainIdentified: boolean;
-  media: boolean;
-  // NEW: Has the AI built a deep model of the subject through expert questioning?
-  // This must be true before standard collection (objective/scope/audience) begins.
-  subjectModelComplete: boolean;
-}
+export type CollectedInfo = Record<string, boolean>;
 
 /**
  * System prompt for survey creation conversation
@@ -84,7 +59,7 @@ export interface CollectedInfo {
  * Enhanced with explicit JSON structure and quality criteria
  */
 export function getSurveyDataExtractionPrompt(
-  conversationHistory: Array<{ role: "user" | "assistant"; content: string }>
+  conversationHistory: Array<{ role: "user" | "assistant"; content: string }>,
 ): string {
   const conversationText = conversationHistory
     .map((msg) => `${msg.role === "user" ? "User" : "AI"}: ${msg.content}`)
@@ -177,7 +152,7 @@ When in doubt, mark FALSE.
  * Designed to gather multiple fields from a single open response
  */
 export function getEfficientCreationOpeningPrompt(
-  language: "en" | "fr" | "de" | "es" | "it" = "en"
+  language: "en" | "fr" | "de" | "es" | "it" = "en",
 ): string {
   const openings: Record<string, string> = {
     en: `Perfect! Let's create your conversational survey together.
@@ -220,7 +195,7 @@ Ad esempio, potrebbe essere un'app mobile, una funzionalità del sito web, un pr
  */
 export function getMultiFieldExtractionPrompt(
   userResponse: string,
-  alreadyCollected: CollectedInfo
+  alreadyCollected: CollectedInfo,
 ): string {
   const fieldsToFind = [];
   if (!alreadyCollected.objective)
@@ -379,25 +354,25 @@ export const surveyDataExtractionSchema = {
  */
 export function getSampleConversationInsightsPrompt(
   conversation: Array<{ role: "user" | "assistant"; content: string }>,
-  config: SurveyConfig
+  config: SurveyConfig,
 ): string {
   const conversationText = conversation
     .map(
       (msg) =>
-        `${msg.role === "user" ? "Survey Maker (as participant)" : "AI Interviewer"}: ${msg.content}`
+        `${msg.role === "user" ? "Survey Maker (as participant)" : "AI Interviewer"}: ${msg.content}`,
     )
     .join("\n\n");
 
   return `Analyze this sample survey conversation and provide insights for the survey maker.
-
-SURVEY CONFIGURATION:
-- Goal: ${config.objective?.goal || "Gather feedback"}
-- Information to collect: ${config.information}
-- Required questions: ${config.requiredQuestions.length > 0 ? config.requiredQuestions.join(", ") : "None specified"}
-${config.metrics.length > 0 ? `- Metrics to track: ${config.metrics.join(", ")}` : ""}
-${config.tone ? `- Intended tone: ${config.tone}` : ""}
-
-SAMPLE CONVERSATION:
+ 
+ SURVEY CONFIGURATION:
+ - Goal: ${config.coreObjective || config.expertState?.objective?.goal || config.information}
+ - Information to collect: ${config.information}
+ - Required questions: ${config.requiredQuestions.length > 0 ? config.requiredQuestions.join(", ") : "None specified"}
+ ${config.metrics.length > 0 ? `- Metrics to track: ${config.metrics.join(", ")}` : ""}
+ ${config.tone ? `- Intended tone: ${config.tone}` : ""}
+ 
+ SAMPLE CONVERSATION:
 ${conversationText}
 
 Provide a detailed analysis including:
@@ -448,7 +423,7 @@ export const sampleConversationInsightsSchema = {
  */
 export function getSampleConversationFeedbackPrompt(
   conversationNumber: number,
-  remainingConversations: number
+  remainingConversations: number,
 ): string {
   const isLastSample = remainingConversations === 0;
 
@@ -490,10 +465,13 @@ Your feedback will be incorporated into the next sample conversation, or you can
 function buildDynamicContextSection(
   context: RollingContext,
   // Config reserved for future survey-specific context additions
-  config: SurveyConfig
+  config: SurveyConfig,
 ): string {
   // Use config to add survey-specific reminders
-  const surveyGoal = config.objective?.goal || "Gather feedback";
+  const surveyGoal =
+    config.coreObjective ||
+    config.expertState?.objective?.goal ||
+    config.information;
   const parts: string[] = [];
 
   parts.push(`\n\n===== CONVERSATION CONTEXT (Updated in real-time) =====`);
@@ -507,21 +485,21 @@ function buildDynamicContextSection(
   // Add key facts learned
   if (context.memory.keyFactsLearned.length > 0) {
     parts.push(
-      `\nKEY FACTS LEARNED FROM PARTICIPANT:\n${context.memory.keyFactsLearned.map((f) => `• ${f}`).join("\n")}`
+      `\nKEY FACTS LEARNED FROM PARTICIPANT:\n${context.memory.keyFactsLearned.map((f) => `• ${f}`).join("\n")}`,
     );
   }
 
   // Add topics covered (don't repeat these)
   if (context.memory.topicsCovered.length > 0) {
     parts.push(
-      `\nTOPICS ALREADY COVERED (don't repeat, but can reference):\n${context.memory.topicsCovered.map((t) => `✓ ${t}`).join("\n")}`
+      `\nTOPICS ALREADY COVERED (don't repeat, but can reference):\n${context.memory.topicsCovered.map((t) => `✓ ${t}`).join("\n")}`,
     );
   }
 
   // Add remaining topics (prioritize these)
   if (context.memory.remainingRequiredTopics.length > 0) {
     parts.push(
-      `\nTOPICS STILL TO COVER (prioritize these):\n${context.memory.remainingRequiredTopics.map((t) => `○ ${t}`).join("\n")}`
+      `\nTOPICS STILL TO COVER (prioritize these):\n${context.memory.remainingRequiredTopics.map((t) => `○ ${t}`).join("\n")}`,
     );
   }
 
@@ -533,28 +511,28 @@ function buildDynamicContextSection(
   // Add unanswered questions
   if (context.memory.unansweredQuestions.length > 0) {
     parts.push(
-      `\nQUESTIONS ASKED BUT NOT ANSWERED (try again gently):\n${context.memory.unansweredQuestions.map((q) => `? ${q}`).join("\n")}`
+      `\nQUESTIONS ASKED BUT NOT ANSWERED (try again gently):\n${context.memory.unansweredQuestions.map((q) => `? ${q}`).join("\n")}`,
     );
   }
 
   // Add progress info
   parts.push(
-    `\nPROGRESS: ${context.progress.completionPercentage}% complete | ${Math.round(context.progress.elapsedMinutes)} min elapsed | ${context.progress.messageCount} messages`
+    `\nPROGRESS: ${context.progress.completionPercentage}% complete | ${Math.round(context.progress.elapsedMinutes)} min elapsed | ${context.progress.messageCount} messages`,
   );
 
   // Add emotional signals if detected
   if (context.memory.emotionalSignals.length > 0) {
     parts.push(
-      `\nPARTICIPANT SIGNALS: ${context.memory.emotionalSignals.join(", ")}`
+      `\nPARTICIPANT SIGNALS: ${context.memory.emotionalSignals.join(", ")}`,
     );
   }
 
   // Add hypotheses evidence summary
   const hypothesesWithEvidence = Object.entries(
-    context.memory.hypothesesEvidence
+    context.memory.hypothesesEvidence,
   ).filter(
     ([, evidence]) =>
-      evidence.supporting.length > 0 || evidence.contradicting.length > 0
+      evidence.supporting.length > 0 || evidence.contradicting.length > 0,
   );
 
   if (hypothesesWithEvidence.length > 0) {
@@ -567,7 +545,7 @@ function buildDynamicContextSection(
               ? "CONTRADICTED"
               : "MIXED";
         return `• "${hypothesis.slice(0, 40)}..." → ${status} (${evidence.supporting.length}+ / ${evidence.contradicting.length}-)`;
-      }
+      },
     );
     parts.push(`\nHYPOTHESES STATUS:\n${evidenceLines.join("\n")}`);
   }
@@ -589,7 +567,7 @@ Thank the participant and provide a natural closing.`);
  */
 function getStateSpecificInstructions(
   state: ConversationState,
-  context: RollingContext
+  context: RollingContext,
 ): string {
   // Add context-specific additions to state guidance
   const remainingTopics = context.memory.remainingRequiredTopics.length;
@@ -668,12 +646,12 @@ function getStateSpecificInstructions(
  */
 function getAdaptiveQuestioningInstructions(
   style: ParticipantStyle,
-  qualitySignals: RollingContext["qualitySignals"]
+  qualitySignals: RollingContext["qualitySignals"],
 ): string {
   const parts: string[] = [];
 
   parts.push(
-    "\n\nADAPTIVE QUESTIONING (based on participant's communication style):"
+    "\n\nADAPTIVE QUESTIONING (based on participant's communication style):",
   );
 
   // Style-specific guidance
@@ -737,22 +715,22 @@ function getAdaptiveQuestioningInstructions(
  */
 export function getConversationSummaryPrompt(
   conversation: Array<{ role: "user" | "assistant"; content: string }>,
-  config: SurveyConfig
+  config: SurveyConfig,
 ): string {
   const conversationText = conversation
     .map(
       (msg) =>
-        `${msg.role === "user" ? "Participant" : "Interviewer"}: ${msg.content}`
+        `${msg.role === "user" ? "Participant" : "Interviewer"}: ${msg.content}`,
     )
     .join("\n\n");
 
   return `Analyze the following conversation from a conversational survey and provide a comprehensive summary.
-
-Survey Goal: ${config.objective?.goal || "Gather feedback"}
-Information to Collect: ${config.information}
-Required Questions: ${config.requiredQuestions.length > 0 ? config.requiredQuestions.join(", ") : "None specified"}
-
-Conversation:
+ 
+ Survey Goal: ${config.coreObjective || config.expertState?.objective?.goal || config.information}
+ Information to Collect: ${config.information}
+ Required Questions: ${config.requiredQuestions.length > 0 ? config.requiredQuestions.join(", ") : "None specified"}
+ 
+ Conversation:
 ${conversationText}
 
 Please provide:
@@ -770,21 +748,21 @@ Format your response as a structured summary.`;
  */
 export function getConversationInsightsPrompt(
   conversation: Array<{ role: "user" | "assistant"; content: string }>,
-  config: SurveyConfig
+  config: SurveyConfig,
 ): string {
   const conversationText = conversation
     .map(
       (msg) =>
-        `${msg.role === "user" ? "Participant" : "Interviewer"}: ${msg.content}`
+        `${msg.role === "user" ? "Participant" : "Interviewer"}: ${msg.content}`,
     )
     .join("\n\n");
 
   return `Analyze the following conversation and extract structured insights.
-
-Survey Goal: ${config.objective?.goal || "Gather feedback"}
-Metrics to Track: ${config.metrics.length > 0 ? config.metrics.join(", ") : "General insights"}
-
-Conversation:
+ 
+ Survey Goal: ${config.coreObjective || config.expertState?.objective?.goal || config.information}
+ Metrics to Track: ${config.metrics.length > 0 ? config.metrics.join(", ") : "General insights"}
+ 
+ Conversation:
 ${conversationText}
 
 Please provide:
@@ -806,32 +784,29 @@ export function getOverallAnalyticsPrompt(
     summary: string;
     insights: string;
   }>,
-  config: SurveyConfig
+  config: SurveyConfig,
 ): string {
   const conversationsData = conversations
     .map(
       (conv, i) =>
-        `Conversation ${i + 1}:\nSummary: ${conv.summary}\nInsights: ${conv.insights}`
+        `Conversation ${i + 1}:\nSummary: ${conv.summary}\nInsights: ${conv.insights}`,
     )
     .join("\n\n---\n\n");
-
   return `Analyze all the survey conversations and generate overall analytics and insights.
-
-Survey Goal: ${config.objective?.goal || "Gather feedback"}
-Information to Collect: ${config.information}
-Required Questions: ${config.requiredQuestions.length > 0 ? config.requiredQuestions.join(", ") : "None specified"}
-Metrics to Track: ${config.metrics.length > 0 ? config.metrics.join(", ") : "General patterns"}
-
-Conversations Data:
-${conversationsData}
-
-Please provide:
-1. Overall summary of all conversations (comprehensive overview)
-2. Common patterns and trends across all participants
-3. ${config.metrics.length > 0 ? `Aggregated metrics: ${config.metrics.map((m) => `- ${m}`).join("\n")}` : "Key insights and patterns"}
-4. Answers to required questions aggregated across all conversations
-5. Notable outliers or unique responses
-6. Recommendations or conclusions based on the data
-
-Format your response as a comprehensive analytics report.`;
+ 
+ Survey Goal: ${config.coreObjective || config.expertState?.objective?.goal || config.information}
+ Target Audience: ${config.expertState?.targetAudience?.description || "Participants"}
+ 
+ Conversations Data:
+ ${conversationsData}
+ 
+ Please provide:
+ 1. Overall summary of all conversations (comprehensive overview)
+ 2. Common patterns and trends across all participants
+ 3. ${config.metrics.length > 0 ? `Aggregated metrics: ${config.metrics.map((m) => `- ${m}`).join("\n")}` : "Key insights and patterns"}
+ 4. Answers to required questions aggregated across all conversations
+ 5. Notable outliers or unique responses
+ 6. Recommendations or conclusions based on the data
+ 
+ Format your response as a comprehensive analytics report.`;
 }
