@@ -250,8 +250,11 @@ export async function confirmSurveyAction(
     }
 
     const access = await getSurveyAccessLevel(session.user.id, survey.id);
-    if (access !== "owner" && access !== "editor") {
-      return { success: false, error: "Unauthorized: Editor access required" };
+    if (access !== "owner") {
+      return {
+        success: false,
+        error: "Unauthorized: Owner access required to publish survey",
+      };
     }
 
     // Allow confirmation from either draft or sample_review status
@@ -264,13 +267,7 @@ export async function confirmSurveyAction(
 
     // Check if survey has necessary structured configuration
     // Required fields: objective, targetAudience, scope, successCriteria, constraints
-    if (
-      !survey.objective ||
-      !survey.targetAudience ||
-      !survey.scope ||
-      !survey.successCriteria ||
-      !survey.constraints
-    ) {
+    if (!survey.expertState || Object.keys(survey.expertState).length === 0) {
       return {
         success: false,
         error:
@@ -588,6 +585,8 @@ export async function getSurveyEmbedCodeAction(surveyId: string): Promise<
   ActionResult<{
     iframeCode: string;
     inlineScriptSnippet: string;
+    popoverScriptSnippet: string;
+    sideTabScriptSnippet: string;
     url: string;
   }>
 > {
@@ -628,26 +627,28 @@ export async function getSurveyEmbedCodeAction(surveyId: string): Promise<
 
     const url = `${baseUrl}/s/${identifier}`;
 
+    // Standard Iframe
     const iframeCode = `<iframe src="${url}" width="100%" height="600" frameborder="0" style="border:0;" allow="microphone; camera; autoplay; encrypted-media"></iframe>`;
 
-    const inlineScriptSnippet = `<script>
-  (function() {
-    var iframe = document.createElement('iframe');
-    iframe.src = '${url}';
-    iframe.style.width = '100%';
-    iframe.style.height = '600px';
-    iframe.style.border = '0';
-    iframe.allow = 'microphone; camera; autoplay; encrypted-media';
-    var container = document.currentScript.parentElement;
-    container.appendChild(iframe);
-  })();
-</script>`;
+    // Modern Loader Script Inline
+    const inlineScriptSnippet = `<convy-widget survey-id="${identifier}" type="inline"></convy-widget>
+<script src="${baseUrl}/embed.js" async></script>`;
+
+    // Modern Loader Script Popover
+    const popoverScriptSnippet = `<convy-widget survey-id="${identifier}" type="popover" color="#4F46E5"></convy-widget>
+<script src="${baseUrl}/embed.js" async></script>`;
+
+    // Modern Loader Script Side Tab
+    const sideTabScriptSnippet = `<convy-widget survey-id="${identifier}" type="side-tab" color="#4F46E5" text="Feedback"></convy-widget>
+<script src="${baseUrl}/embed.js" async></script>`;
 
     return {
       success: true,
       data: {
         iframeCode,
         inlineScriptSnippet,
+        popoverScriptSnippet,
+        sideTabScriptSnippet,
         url,
       },
     };
@@ -791,11 +792,21 @@ export async function deleteSurveyAction(
       return { success: false, error: "Survey not found" };
     }
 
-    // Strict Rule: Only the Creator can delete
-    if (survey.userId !== session.user.id) {
+    // Strict Rule: Only the Creator or Workspace Owner can delete
+    let canDelete = survey.userId === session.user.id;
+    if (!canDelete && survey.organizationId) {
+      const { isWorkspaceOwner } = await import("@/lib/workspace-access");
+      canDelete = await isWorkspaceOwner(
+        session.user.id,
+        survey.organizationId,
+      );
+    }
+
+    if (!canDelete) {
       return {
         success: false,
-        error: "Unauthorized: Only the survey creator can delete this survey",
+        error:
+          "Unauthorized: Only the survey creator or workspace owner can delete this survey",
       };
     }
 
@@ -913,7 +924,7 @@ export async function duplicateSurveyAction(
       title: newSurvey.title || "Untitled Survey",
       description:
         newSurvey.description ||
-        (newSurvey.objective as any)?.description ||
+        (newSurvey.expertState as any)?.objective?.description ||
         "",
       status: newSurvey.status,
       shareableLink: newSurvey.shareableLink,

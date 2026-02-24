@@ -1,4 +1,4 @@
-import { tool, Output, type ModelMessage } from "ai";
+import { tool, Output, generateText, type ModelMessage } from "ai";
 import { z } from "zod";
 import {
   type RollingContext,
@@ -16,6 +16,7 @@ import {
 import { type SurveyConfig } from "@/lib/prompts";
 import { analysisModel } from "@/lib/ai";
 import { getRedisClient } from "@/lib/redis";
+import { logUsage } from "./billing/logger";
 
 /**
  * ConversationManager
@@ -199,6 +200,10 @@ export class ConversationManager {
       | any[],
     config: SurveyConfig,
     existingContext: RollingContext,
+    metadata?: {
+      userId?: string;
+      organizationId?: string;
+    },
   ): Promise<void> {
     try {
       // Normalize messages for analysis
@@ -236,16 +241,27 @@ export class ConversationManager {
           .optional(),
       });
 
-      const { output: update } = await import("ai").then((ai) =>
-        ai.generateText({
-          model: analysisModel,
-          output: Output.object({ schema }),
-          system:
-            "You are an expert conversation analyst. Update the memory based on the latest messages.",
-          prompt: memoryPrompt,
-          temperature: 0.3,
-        }),
-      );
+      const { output: update, usage } = await generateText({
+        model: analysisModel,
+        output: Output.object({ schema }),
+        system:
+          "You are an expert conversation analyst. Update the memory based on the latest messages.",
+        prompt: memoryPrompt,
+        temperature: 0.3,
+      });
+
+      // Log usage for memory update
+      logUsage({
+        userId: metadata?.userId,
+        organizationId: metadata?.organizationId,
+        surveyId: config.id,
+        type: "llm_text",
+        provider: "google",
+        modelName: (analysisModel as any).modelId,
+        promptTokens: (usage as any).inputTokens,
+        completionTokens: (usage as any).outputTokens,
+        totalTokens: (usage as any).totalTokens,
+      });
 
       const updatedMemory = applyMemoryUpdate(
         existingContext.memory,
@@ -302,7 +318,7 @@ export class ConversationManager {
     const finalLanguage = language || config.language || "en";
 
     if (isSample) {
-      return `You are conducting a sample survey conversation for testing purposes. Survey goal: ${config.objective?.goal ?? config.information}. Conversation ${conversationNumber ?? 1} of 3.
+      return `You are conducting a sample survey conversation for testing purposes. Survey goal: ${config.coreObjective || config.expertState?.objective?.goal || config.information}. Conversation ${conversationNumber ?? 1} of 3.
 
 <reflection_protocol>
 Before EVERY response you write, open a <scratchpad> block and silently reason through your checks (Acknowledgment, One Question, Natural Transition, Depth). 
@@ -311,7 +327,7 @@ Write your actual response AFTER the </scratchpad> tag.
 </reflection_protocol>`;
     }
 
-    return `You are a conversational AI interviewer conducting a survey. Survey goal: ${config.objective?.goal ?? config.information}.
+    return `You are a conversational AI interviewer conducting a survey. Survey goal: ${config.coreObjective || config.expertState?.objective?.goal || config.information}.
 
 <reflection_protocol>
 Before EVERY response you write, open a <scratchpad> block and silently reason through your checks (Acknowledgment, One Question, Natural Transition, Depth). 

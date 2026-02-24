@@ -4,6 +4,7 @@ import { BaseSpecialistAgent } from "./base-agent";
 import type { AgentContext, SpecialistChecklist } from "./types";
 import type { SurveyConfig } from "@/lib/prompts";
 import { defaultModel } from "@/lib/ai";
+import { logUsage } from "@/lib/billing/logger";
 import { TONE_PROFILES } from "@/lib/surveys";
 import { SkillRegistry } from "./skill-registry";
 import type { VoiceAgentFunction } from "@/lib/voice/deepgram-voice-agent";
@@ -28,20 +29,22 @@ export class ConductingSpecialist extends BaseSpecialistAgent {
     const aspirational: ReturnType<typeof this.makeChecklistItem>[] = [];
 
     // Required: cover all main topics from scope
-    if (config.scope?.mainTopics?.length) {
-      config.scope.mainTopics.forEach((topic, i) => {
-        required.push(
-          this.makeChecklistItem(
-            `topic_${i}`,
-            `Covered topic: "${topic}" with sufficient depth`,
-          ),
-        );
-      });
+    if (config.expertState?.scope?.mainTopics?.length) {
+      config.expertState.scope.mainTopics.forEach(
+        (topic: string, i: number) => {
+          required.push(
+            this.makeChecklistItem(
+              `topic_${i}`,
+              `Covered topic: "${topic}" with sufficient depth`,
+            ),
+          );
+        },
+      );
     } else {
       required.push(
         this.makeChecklistItem(
           "core_objective",
-          `Gathered information about: ${config.objective?.goal ?? "the survey objective"}`,
+          `Gathered information about: ${config.coreObjective || config.expertState?.objective?.goal || config.information || "the survey objective"}`,
         ),
       );
     }
@@ -79,19 +82,22 @@ export class ConductingSpecialist extends BaseSpecialistAgent {
     }
 
     // Aspirational: test hypotheses
-    if (config.hypotheses?.assumptions?.length) {
-      config.hypotheses.assumptions.forEach((assumption, i) => {
-        aspirational.push(
-          this.makeChecklistItem(
-            `hypothesis_${i}`,
-            `Tested assumption: "${assumption.slice(0, 80)}${assumption.length > 80 ? "..." : ""}"`,
-          ),
-        );
-      });
+    if (config.expertState?.hypotheses?.assumptions?.length) {
+      config.expertState.hypotheses.assumptions.forEach(
+        (assumption: string, i: number) => {
+          aspirational.push(
+            this.makeChecklistItem(
+              `hypothesis_${i}`,
+              `Tested assumption: "${assumption.slice(0, 80)}${assumption.length > 80 ? "..." : ""}"`,
+            ),
+          );
+        },
+      );
     }
 
     // Aspirational: insight type depth based on successCriteria
-    const insightTypes = config.successCriteria?.insightTypes ?? [];
+    const insightTypes =
+      config.expertState?.successCriteria?.insightTypes ?? [];
     if (insightTypes.includes("emotional")) {
       aspirational.push(
         this.makeChecklistItem(
@@ -124,6 +130,36 @@ export class ConductingSpecialist extends BaseSpecialistAgent {
   // System Prompt — Domain-Specialist Interviewer
   // --------------------------------------------------------------------------
 
+  private getReflectionProtocol(): string {
+    const isSample = this.context.isSample;
+    const feedback = this.context.sampleFeedback;
+
+    let creatorFeedbackSection = "";
+    let extraCheck = "";
+
+    if (isSample && feedback) {
+      creatorFeedbackSection = `\n<creator_feedback>\nThe survey creator provided the following coaching feedback from previous sample runs. You MUST adjust your style and approach to account for this feedback, while still attempting to meet your primary data collection goals:\n\n${feedback}\n</creator_feedback>\n\n`;
+      extraCheck = `\nCheck 6 — Creator Feedback: Does my response align with the guidance in <creator_feedback>?`;
+    }
+
+    return `${creatorFeedbackSection}<reflection_protocol>
+Before EVERY response you write, open a <scratchpad> block and silently reason through these checks. The scratchpad is NEVER shown to the participant — it is stripped before delivery.
+
+<scratchpad>
+Topics already covered: [list from conversation_context]
+Last participant message: [1-sentence summary of what they said]
+Check 1 — Acknowledge: Does my response acknowledge what they just said before asking anything?
+Check 2 — One question: Does my response contain exactly ONE question? (Count question marks.)
+Check 3 — No repeat: Is my question about a topic NOT already in topics_covered?
+Check 4 — Natural transition: Does my question connect logically to their last answer?
+Check 5 — Depth: If their last answer was vague, am I probing deeper instead of moving on?${extraCheck}
+Verdict: [PASS / REWRITE — and if REWRITE, state why in one short sentence]
+</scratchpad>
+
+If any check fails, write a corrected response AFTER the scratchpad. The scratchpad itself is always stripped — ONLY write what the participant should see after </scratchpad>.
+</reflection_protocol>`;
+  }
+
   buildSystemPrompt(): string {
     const config = this.context.surveyConfig;
     if (!config) {
@@ -141,14 +177,15 @@ export class ConductingSpecialist extends BaseSpecialistAgent {
       const subjectIntel = this.context.subjectIntelligence;
 
       // Build insight-type-specific questioning strategy
-      const insightTypes = config.successCriteria?.insightTypes ?? [];
+      const insightTypes =
+        config.expertState?.successCriteria?.insightTypes ?? [];
       const questioningStrategy = this.buildQuestioningStrategy(insightTypes);
 
       // Build Subject Intelligence Section
       let subjectIntelSection = "";
       if (subjectIntel) {
         subjectIntelSection = `
-<subject_intelligence subject="${config.objective?.subjectDescription ?? "the subject"}">
+<subject_intelligence subject="${config.expertState?.objective?.subjectDescription ?? "the subject"}">
 <vocabulary>
 Use these terms to sound like an insider:
 ${subjectIntel.userVocabulary.map((v) => `• ${v}`).join("\n")}
@@ -174,11 +211,11 @@ ${subjectIntel.intelligentProbes.map((p) => `• ${p}`).join("\n")}
 
       // Build other standard sections
       let hypothesesSection = "";
-      if (config.hypotheses?.assumptions?.length) {
+      if (config.expertState?.hypotheses?.assumptions?.length) {
         hypothesesSection = `
 <hypotheses_to_test>
 The survey creator has these assumptions. Actively test them through your questions:
-${config.hypotheses.assumptions.map((a, i) => `${i + 1}. "${a}"`).join("\n")}
+${config.expertState.hypotheses.assumptions.map((a: string, i: number) => `${i + 1}. "${a}"`).join("\n")}
 When you get evidence for or against these, probe deeper.
 </hypotheses_to_test>`;
       }
@@ -202,15 +239,15 @@ ${memory.keyFactsLearned.length > 0 ? `Key facts: ${memory.keyFactsLearned.slice
       if (config.media?.length) {
         mediaSection = `
 <available_media>
-You have media to show at appropriate moments. Use the 'showMedia' tool when contextually relevant:
-${config.media.map((m) => `• ID: ${m.id} | Type: ${m.type} | Description: "${m.description}"\n  When to show: ${m.contextForUse}`).join("\n")}
+You have media available. Autonomously determine the best moment in the conversation to show this media to achieve its feedback goal, and use the 'showMedia' tool:
+${config.media.map((m) => `• ID: ${m.id} | Type: ${m.type} | Description: "${m.description}"\n  Feedback goal: ${m.contextForUse}`).join("\n")}
 </available_media>`;
       }
 
       return `<role>
 You are the ${domainName} Conducting Specialist.
-You are conducting a survey conversation about: ${config.objective?.goal ?? config.information}
-Audience: ${config.targetAudience?.description ?? "survey participants"}
+You are conducting a survey conversation about: ${config.coreObjective || config.expertState?.objective?.goal || config.information}
+Audience: ${config.expertState?.targetAudience?.description || "survey participants"}
 ${this.getToneGuidelines()}
 Language: ${this.context.language ?? config.language ?? "en"}
 </role>
@@ -251,28 +288,13 @@ ${this.getKnowledgeSection()}
 
 ${this.getPatternLearningsSection()}
 
-<reflection_protocol>
-Before EVERY response you write, open a <scratchpad> block and silently reason through these checks. The scratchpad is NEVER shown to the participant — it is stripped before delivery.
-
-<scratchpad>
-Topics already covered: [list from conversation_context]
-Last participant message: [1-sentence summary of what they said]
-Check 1 — Acknowledge: Does my response acknowledge what they just said before asking anything?
-Check 2 — One question: Does my response contain exactly ONE question? (Count question marks.)
-Check 3 — No repeat: Is my question about a topic NOT already in topics_covered?
-Check 4 — Natural transition: Does my question connect logically to their last answer?
-Check 5 — Depth: If their last answer was vague, am I probing deeper instead of moving on?
-Verdict: [PASS / REWRITE — and if REWRITE, state why in one short sentence]
-</scratchpad>
-
-If any check fails, write a corrected response AFTER the scratchpad. The scratchpad itself is always stripped — ONLY write what the participant should see after </scratchpad>.
-</reflection_protocol>
+${this.getReflectionProtocol()}
 
 <scope>
-Focus areas: ${config.scope?.mainTopics?.join(", ") ?? "the survey objective"}
-Depth preference: ${config.scope?.breadthVsDepth ?? "balanced"}
-Time limit: ${config.constraints?.timeLimit ? `${config.constraints.timeLimit} minutes` : "no strict limit"}
-${config.constraints?.sensitiveTopics?.length ? `Avoid: ${config.constraints.sensitiveTopics.join(", ")}` : ""}
+Focus areas: ${config.expertState?.scope?.mainTopics?.join(", ") ?? "the survey objective"}
+Depth preference: ${config.expertState?.scope?.breadthVsDepth ?? "balanced"}
+Time limit: ${config.expertState?.constraints?.timeLimit ? `${config.expertState.constraints.timeLimit} minutes` : "no strict limit"}
+${config.expertState?.constraints?.sensitiveTopics?.length ? `Avoid: ${config.expertState.constraints.sensitiveTopics.join(", ")}` : ""}
 </scope>
 
 <completion>
@@ -292,16 +314,17 @@ Do NOT ask more questions after calling finishSurvey.
     // specialist that follows best practices without specific domain knowledge.
 
     // Build insight-type-specific questioning strategy
-    const insightTypes = config.successCriteria?.insightTypes ?? [];
+    const insightTypes =
+      config.expertState?.successCriteria?.insightTypes ?? [];
     const questioningStrategy = this.buildQuestioningStrategy(insightTypes);
 
     // Build hypotheses section
     let hypothesesSection = "";
-    if (config.hypotheses?.assumptions?.length) {
+    if (config.expertState?.hypotheses?.assumptions?.length) {
       hypothesesSection = `
 <hypotheses_to_test>
 The survey creator has these assumptions. Actively test them through your questions:
-${config.hypotheses.assumptions.map((a, i) => `${i + 1}. "${a}"`).join("\n")}
+${config.expertState!.hypotheses.assumptions.map((a: string, i: number) => `${i + 1}. "${a}"`).join("\n")}
 
 When you get evidence for or against these, probe deeper. Don't just accept surface answers.
 </hypotheses_to_test>`;
@@ -328,12 +351,12 @@ ${memory.keyFactsLearned.length > 0 ? `Key facts: ${memory.keyFactsLearned.slice
     if (config.media?.length) {
       mediaSection = `
 <available_media>
-You have media to show at appropriate moments. Use the 'showMedia' tool when contextually relevant:
+You have media available. Autonomously determine the best moment in the conversation to show this media to achieve its feedback goal, and use the 'showMedia' tool:
 ${config.media
   .map(
     (m) => `
 • ID: ${m.id} | Type: ${m.type} | Description: "${m.description}"
-  When to show: ${m.contextForUse}`,
+  Feedback goal: ${m.contextForUse}`,
   )
   .join("\n")}
 </available_media>`;
@@ -341,8 +364,8 @@ ${config.media
 
     return `<role>
 You are a professional Survey Conducting Specialist.
-You are conducting a survey conversation about: ${config.objective?.goal ?? config.information}
-Audience: ${config.targetAudience?.description ?? "survey participants"}
+You are conducting a survey conversation about: ${config.coreObjective || config.expertState?.objective?.goal || config.information}
+Audience: ${config.expertState?.targetAudience?.description || "survey participants"}
 ${this.getToneGuidelines()}
 Language: ${this.context.language ?? config.language ?? "en"}
 </role>
@@ -369,28 +392,13 @@ ${this.getKnowledgeSection()}
 
 ${this.getPatternLearningsSection()}
 
-<reflection_protocol>
-Before EVERY response you write, open a <scratchpad> block and silently reason through these checks. The scratchpad is NEVER shown to the participant — it is stripped before delivery.
-
-<scratchpad>
-Topics already covered: [list from conversation_context]
-Last participant message: [1-sentence summary of what they said]
-Check 1 — Acknowledge: Does my response acknowledge what they just said before asking anything?
-Check 2 — One question: Does my response contain exactly ONE question? (Count question marks.)
-Check 3 — No repeat: Is my question about a topic NOT already in topics_covered?
-Check 4 — Natural transition: Does my question connect logically to their last answer?
-Check 5 — Depth: If their last answer was vague, am I probing deeper instead of moving on?
-Verdict: [PASS / REWRITE — and if REWRITE, state why in one short sentence]
-</scratchpad>
-
-If any check fails, write a corrected response AFTER the scratchpad. The scratchpad itself is always stripped — ONLY write what the participant should see after </scratchpad>.
-</reflection_protocol>
+${this.getReflectionProtocol()}
 
 <scope>
-Focus areas: ${config.scope?.mainTopics?.join(", ") ?? "the survey objective"}
-Depth preference: ${config.scope?.breadthVsDepth ?? "balanced"}
-Time limit: ${config.constraints?.timeLimit ? `${config.constraints.timeLimit} minutes` : "no strict limit"}
-${config.constraints?.sensitiveTopics?.length ? `Avoid: ${config.constraints.sensitiveTopics.join(", ")}` : ""}
+Focus areas: ${config.expertState?.scope?.mainTopics?.join(", ") ?? "the survey objective"}
+Depth preference: ${config.expertState?.scope?.breadthVsDepth ?? "balanced"}
+Time limit: ${config.expertState?.constraints?.timeLimit ? `${config.expertState.constraints.timeLimit} minutes` : "no strict limit"}
+${config.expertState?.constraints?.sensitiveTopics?.length ? `Avoid: ${config.expertState.constraints.sensitiveTopics.join(", ")}` : ""}
 </scope>
 
 <completion>
@@ -514,13 +522,71 @@ ${strategies.join("\n")}
   }
 
   // --------------------------------------------------------------------------
+  // Agent Tools
+  // --------------------------------------------------------------------------
+
+  getTools(onMediaDisplay?: (media: any) => void): Record<string, any> {
+    const config = this.context.surveyConfig;
+    return {
+      loadSkill: tool({
+        description:
+          "Load detailed instructions for a specific specialized skill.",
+        inputSchema: z.object({
+          skillId: z
+            .string()
+            .describe("The ID of the skill to load (e.g., 'STARProber')"),
+        }),
+        execute: async ({ skillId }) => {
+          const skill = await SkillRegistry.getSkill(skillId);
+          if (!skill) return { error: "Skill not found" };
+          return { instructions: skill.content };
+        },
+      }),
+      showMedia: tool({
+        description:
+          "Display a media item (image, audio, or video) to the participant",
+        inputSchema: z.object({
+          mediaId: z
+            .string()
+            .describe("The unique ID of the media item to display"),
+        }),
+        execute: async ({ mediaId }) => {
+          const media = config?.media?.find((m: any) => m.id === mediaId);
+          if (!media) return { error: "Media not found" };
+          if (onMediaDisplay) onMediaDisplay(media);
+          return { success: true, media };
+        },
+      }),
+      finishSurvey: tool({
+        description:
+          "Signal that the survey conversation is complete. Call when all required topics are covered.",
+        inputSchema: z.object({
+          reason: z
+            .string()
+            .optional()
+            .describe("Brief reason for ending the conversation"),
+        }),
+        execute: async ({ reason }) => ({
+          success: true,
+          message: "Survey complete",
+          reason: reason ?? "all topics covered",
+        }),
+      }),
+    };
+  }
+
+  // --------------------------------------------------------------------------
   // Stream — returns a streamText result for the API route
   // --------------------------------------------------------------------------
 
   stream(
     messages: ModelMessage[],
     onMediaDisplay?: (media: any) => void,
-    onFinish?: (params: { text: string; response: any }) => Promise<void>,
+    onFinish?: (params: {
+      text: string;
+      response: any;
+      usage: any;
+    }) => Promise<void>,
   ) {
     const config = this.context.surveyConfig;
     if (!config) {
@@ -531,55 +597,23 @@ ${strategies.join("\n")}
       model: defaultModel,
       system: this.buildSystemPrompt(),
       messages,
-      tools: {
-        loadSkill: tool({
-          description:
-            "Load detailed instructions for a specific specialized skill.",
-          inputSchema: z.object({
-            skillId: z
-              .string()
-              .describe("The ID of the skill to load (e.g., 'STARProber')"),
-          }),
-          execute: async ({ skillId }) => {
-            const skill = await SkillRegistry.getSkill(skillId);
-            if (!skill) return { error: "Skill not found" };
-            return { instructions: skill.content };
-          },
-        }),
-        showMedia: tool({
-          description:
-            "Display a media item (image, audio, or video) to the participant",
-          inputSchema: z.object({
-            mediaId: z
-              .string()
-              .describe("The unique ID of the media item to display"),
-          }),
-          execute: async ({ mediaId }) => {
-            const media = config.media?.find((m) => m.id === mediaId);
-            if (!media) return { error: "Media not found" };
-            if (onMediaDisplay) onMediaDisplay(media);
-            return { success: true, media };
-          },
-        }),
-        finishSurvey: tool({
-          description:
-            "Signal that the survey conversation is complete. Call when all required topics are covered.",
-          inputSchema: z.object({
-            reason: z
-              .string()
-              .optional()
-              .describe("Brief reason for ending the conversation"),
-          }),
-          execute: async ({ reason }) => ({
-            success: true,
-            message: "Survey complete",
-            reason: reason ?? "all topics covered",
-          }),
-        }),
-      },
+      tools: this.getTools(onMediaDisplay),
       maxOutputTokens: 2000,
       stopWhen: stepCountIs(5),
       onFinish: async (params) => {
+        // Log usage for conducting agent
+        logUsage({
+          userId: this.context.userId,
+          organizationId: this.context.organizationId,
+          surveyId: config.id,
+          type: "llm_text",
+          provider: "google",
+          modelName: (defaultModel as any).modelId,
+          promptTokens: params.usage.inputTokens,
+          completionTokens: params.usage.outputTokens,
+          totalTokens: params.usage.totalTokens,
+        });
+
         // Safe-strip scratchpad from final text for database/memory
         const cleanText = stripScratchpadFromText(params.text);
         if (onFinish) await onFinish({ ...params, text: cleanText });

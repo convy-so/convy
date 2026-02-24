@@ -32,7 +32,6 @@ export default function HeroSection() {
                             {t('CTA')}
                             <ArrowUpRight size={18} />
                         </Link>
-                        <p className="text-sm text-[#696969] mt-2">{t('NoCreditCard')}</p>
                     </div>
 
                     {/* Mac Window Demo */}

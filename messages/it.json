@@ -181,6 +181,9 @@
                 "Finalized": "Sondaggio completato! Caricamento delle conversazioni di esempio...",
                 "SaveTopicFailed": "Errore nel salvataggio della selezione dell'argomento",
                 "GenericError": "Si è verificato un errore. Riprova."
+            },
+            "Feedback": {
+                "Preparing": "Preparazione del designer del sondaggio..."
             }
         },
         "PublishModal": {
@@ -214,33 +217,6 @@
                 "Failed": "Failed to publish survey",
                 "Copied": "Link copied to clipboard!",
                 "CopyFailed": "Failed to copy link"
-            }
-        },
-        "AddMediaModal": {
-            "Title": "Add Media",
-            "DropZone": {
-                "Default": "Click to upload image, audio or video",
-                "Drag": "Drop file here"
-            },
-            "Inputs": {
-                "DescriptionLabel": "Description",
-                "DescriptionPlaceholder": "e.g. A photo of our new logo",
-                "DescriptionHint": "What is this media showing?",
-                "ContextLabel": "Context for Use",
-                "ContextPlaceholder": "e.g. Show this when asking about brand perception",
-                "ContextHint": "When should the AI show this to the user?"
-            },
-            "Buttons": {
-                "Cancel": "Cancel",
-                "Add": "Add Media",
-                "Uploading": "Uploading..."
-            },
-            "Toasts": {
-                "FillAll": "Please fill in all fields",
-                "DescShort": "Description must be at least 10 characters",
-                "ContextShort": "Context must be at least 10 characters",
-                "Success": "Media added successfully",
-                "Failed": "Upload failed"
             }
         },
         "SampleReview": {
@@ -322,12 +298,10 @@
         "Projects": "Progetti",
         "Analytics": "Analitica",
         "Team": "Team",
-        "Integrations": "Integrazioni",
         "Profile": "Profilo",
         "Settings": "Impostazioni",
         "SignIn": "Accedi",
-        "SignOut": "Esci",
-        "ComingSoon": "Presto"
+        "SignOut": "Esci"
     },
     "Header": {
         "Search": "Cerca...",
@@ -749,10 +723,6 @@
                     "Title": "Costruttore di moduli IA",
                     "Description": "Genera automaticamente flussi conversazionali da semplici richieste di testo."
                 },
-                "Integrations": {
-                    "Title": "Integrazioni",
-                    "Description": "Connettiti a strumenti come Notion, Slack e Zapier con un clic."
-                },
                 "ChatData": {
                     "Title": "Chat con i dati",
                     "Description": "Parla direttamente con le tue risposte raccolte e le tue analisi."
@@ -767,41 +737,11 @@
                 }
             }
         },
-        "Waitlist": {,
-            "GetStarted": "Inizia",
-            "ComingSoon": "Prossimamente",
-            "Free": {
-                "Title": "Piano Gratuito",
-                "Description": "Prova la magia dell'IA di Convy e guarda come i moduli nativi della chat cambiano il tuo flusso.",
-                "Features": {
-                    "Limited": "Conversazioni limitate",
-                    "Unlimited": "Risposte illimitate",
-                    "Builder": "Costruttore di moduli IA",
-                    "ChatData": "Chat con i dati",
-                    "Branding": "Branding Convy",
-                    "NoIntegrations": "Nessuna integrazione",
-                    "NoSupport": "Nessun supporto comunitario"
-                }
-            },
-            "Pro": {
-                "Title": "Piano Pro",
-                "Description": "Passa a pro per possedere la tua esperienza di chat — completamente brandizzata, illimitata e basata sull'IA.",
-                "Features": {
-                    "UnlimitedConversations": "Conversazioni illimitate",
-                    "CustomDomain": "Dominio ed email personalizzati",
-                    "UniqueBranding": "Branding unico",
-                    "UnlimitedUploads": "Caricamenti file illimitati",
-                    "VoiceMode": "Modalità vocale",
-                    "Integrations": "Integrazioni complete (Zapier, Notion, Slack, ecc.)",
-                    "PrioritySupport": "Supporto prioritario"
-                }
-            }
-        },
-        "Waitlist": {
-            "Badge": "Lista d'attesa",
-            "Title": "Iscriviti alla lista d'attesa",
-            "Description": "I tuoi utenti stanno parlando — stai ascoltando? <br />Iscriviti a Convy oggi e creiamo qualcosa di straordinario insieme.",
-            "CTA": "Inizia gratis"
+        "CTA": {
+            "Badge": "Inizia ora",
+            "Title": "Pronto a trasformare i tuoi feedback?",
+            "Description": "Crea il tuo primo sondaggio conversazionale in pochi minuti e inizia a catturare insight più ricchi oggi stesso.",
+            "Button": "Inizia gratis"
         },
         "Footer": {
             "Message": "Inizia a migliorare il tuo prodotto oggi con <br /> dati in tempo reale da Convy.",

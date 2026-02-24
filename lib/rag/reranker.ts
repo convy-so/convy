@@ -1,7 +1,8 @@
-import { google } from "@ai-sdk/google";
 import { generateText, Output } from "ai";
+import { google } from "@ai-sdk/google";
 import { z } from "zod";
 import { SearchResult } from "./search";
+import { logUsage } from "../billing/logger";
 
 const rerankModel = google("gemini-1.5-flash-8b");
 
@@ -9,11 +10,16 @@ export async function rerank(
   query: string,
   candidates: SearchResult[],
   topK: number = 5,
+  metadata?: {
+    userId?: string;
+    organizationId?: string;
+    surveyId?: string;
+  },
 ): Promise<SearchResult[]> {
   if (candidates.length === 0) return [];
 
   try {
-    const { output } = await generateText({
+    const { output, usage } = await generateText({
       model: rerankModel,
       output: Output.object({
         schema: z.object({
@@ -33,6 +39,19 @@ Results:
 ${candidates.map((c, i) => `[${i}] ${c.content.substring(0, 300)}...`).join("\n")}
 
 Rank the top ${topK} results.`,
+    });
+
+    // Log usage for reranking
+    logUsage({
+      userId: metadata?.userId,
+      organizationId: metadata?.organizationId,
+      surveyId: metadata?.surveyId,
+      type: "llm_text",
+      provider: "google",
+      modelName: (rerankModel as any).modelId,
+      promptTokens: (usage as any).inputTokens,
+      completionTokens: (usage as any).outputTokens,
+      totalTokens: (usage as any).totalTokens,
     });
 
     const rankedResults: SearchResult[] = [];

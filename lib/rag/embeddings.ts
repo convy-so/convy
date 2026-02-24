@@ -1,6 +1,7 @@
 import { openai } from "@ai-sdk/openai";
 import { embed, embedMany } from "ai";
 import { getEncoding } from "js-tiktoken";
+import { logUsage } from "../billing/logger";
 
 /**
  * OpenAI text-embedding-3-small
@@ -13,19 +14,51 @@ const embeddingModel = openai.embedding("text-embedding-3-small");
 
 const enc = getEncoding("cl100k_base");
 
-export async function generateEmbedding(text: string): Promise<number[]> {
-  const { embedding } = await embed({
+export async function generateEmbedding(
+  text: string,
+  metadata?: {
+    userId?: string;
+    organizationId?: string;
+    surveyId?: string;
+  },
+): Promise<number[]> {
+  const { embedding, usage } = await embed({
     model: embeddingModel,
     value: text,
   });
+
+  logUsage({
+    ...metadata,
+    type: "llm_embedding",
+    provider: "openai",
+    modelName: "text-embedding-3-small",
+    totalTokens: usage.tokens,
+  });
+
   return embedding;
 }
 
-export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
-  const { embeddings } = await embedMany({
+export async function generateEmbeddings(
+  texts: string[],
+  metadata?: {
+    userId?: string;
+    organizationId?: string;
+    surveyId?: string;
+  },
+): Promise<number[][]> {
+  const { embeddings, usage } = await embedMany({
     model: embeddingModel,
     values: texts,
   });
+
+  logUsage({
+    ...metadata,
+    type: "llm_embedding",
+    provider: "openai",
+    modelName: "text-embedding-3-small",
+    totalTokens: usage.tokens,
+  });
+
   return embeddings;
 }
 

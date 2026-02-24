@@ -181,6 +181,9 @@
                 "Finalized": "¡Encuesta finalizada! Cargando conversaciones de ejemplo...",
                 "SaveTopicFailed": "Error al guardar la selección del tema",
                 "GenericError": "Ocurrió un error. Por favor, inténtalo de nuevo."
+            },
+            "Feedback": {
+                "Preparing": "Preparando su diseñador de encuesta..."
             }
         },
         "PublishModal": {
@@ -214,33 +217,6 @@
                 "Failed": "Failed to publish survey",
                 "Copied": "Link copied to clipboard!",
                 "CopyFailed": "Failed to copy link"
-            }
-        },
-        "AddMediaModal": {
-            "Title": "Add Media",
-            "DropZone": {
-                "Default": "Click to upload image, audio or video",
-                "Drag": "Drop file here"
-            },
-            "Inputs": {
-                "DescriptionLabel": "Description",
-                "DescriptionPlaceholder": "e.g. A photo of our new logo",
-                "DescriptionHint": "What is this media showing?",
-                "ContextLabel": "Context for Use",
-                "ContextPlaceholder": "e.g. Show this when asking about brand perception",
-                "ContextHint": "When should the AI show this to the user?"
-            },
-            "Buttons": {
-                "Cancel": "Cancel",
-                "Add": "Add Media",
-                "Uploading": "Uploading..."
-            },
-            "Toasts": {
-                "FillAll": "Please fill in all fields",
-                "DescShort": "Description must be at least 10 characters",
-                "ContextShort": "Context must be at least 10 characters",
-                "Success": "Media added successfully",
-                "Failed": "Upload failed"
             }
         },
         "SampleReview": {
@@ -764,11 +740,11 @@
                 }
             }
         },
-        "Waitlist": {
-            "Badge": "Lista de espera",
-            "Title": "Regístrate en la lista de espera",
-            "Description": "Tus usuarios están hablando — ¿estás escuchando? <br />Regístrate en Convy hoy y creemos algo extraordinario juntos.",
-            "CTA": "Empezar gratis"
+        "CTA": {
+            "Badge": "Empieza ya",
+            "Title": "¿Listo para transformar tu feedback?",
+            "Description": "Crea tu primera encuesta conversacional en minutos y empieza a capturar insights más valiosos hoy mismo.",
+            "Button": "Empieza gratis"
         },
         "Footer": {
             "Message": "Empieza a mejorar tu producto hoy con <br /> datos en tiempo real de Convy.",

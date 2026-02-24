@@ -1,0 +1,33 @@
+services:
+  # Background Worker (BullMQ)
+  - type: worker
+    name: convy-worker
+    env: node
+    buildCommand: pnpm install && pnpm run workers:build
+    startCommand: pnpm run workers:start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # These will be set manually in the Render dashboard
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+
+  # WebSocket Server
+  - type: web
+    name: convy-websocket
+    env: node
+    buildCommand: pnpm install && pnpm run websocket:build
+    startCommand: pnpm run websocket:start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # These will be set manually in the Render dashboard
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      # The port Render uses internally
+      - key: PORT
+        value: 10000

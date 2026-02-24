@@ -222,6 +222,20 @@ export async function inviteToWorkspace(data: {
   try {
     const session = await getVerifiedSession();
 
+    if (data.organizationId) {
+      const { isWorkspaceOwner } = await import("@/lib/workspace-access");
+      const isOwner = await isWorkspaceOwner(
+        session.user.id,
+        data.organizationId,
+      );
+      if (!isOwner) {
+        return {
+          success: false,
+          error: "Unauthorized: Only workspace owners can invite members",
+        };
+      }
+    }
+
     // Use Better Auth API to invite member
     const result = await auth.api.createInvitation({
       body: {
@@ -263,7 +277,21 @@ export async function removeWorkspaceMember(data: {
   organizationId?: string;
 }): Promise<ActionResult<void>> {
   try {
-    await getVerifiedSession();
+    const session = await getVerifiedSession();
+
+    if (data.organizationId) {
+      const { isWorkspaceOwner } = await import("@/lib/workspace-access");
+      const isOwner = await isWorkspaceOwner(
+        session.user.id,
+        data.organizationId,
+      );
+      if (!isOwner) {
+        return {
+          success: false,
+          error: "Unauthorized: Only workspace owners can remove members",
+        };
+      }
+    }
 
     // Use Better Auth API to remove member
     await auth.api.removeMember({

@@ -4,6 +4,7 @@ import {
   voiceSessions,
   surveys,
 } from "@/db/schema";
+import { logUsage } from "./../../lib/billing/logger";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
@@ -135,16 +136,15 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       requiredQuestions: this.state.extractedData?.requiredQuestions || [],
       metrics: this.state.extractedData?.metrics || [],
       language: this.state.language,
-      objective: this.state.extractedData?.objective,
-      targetAudience: this.state.extractedData?.targetAudience,
-      scope: this.state.extractedData?.scope,
-      successCriteria: this.state.extractedData?.successCriteria,
-      constraints: this.state.extractedData?.constraints,
-      hypotheses: this.state.extractedData?.hypotheses,
-      tone: this.state.extractedData?.tone || "casual",
-      media: this.state.extractedData?.media,
-      personalInfo: this.state.extractedData?.personalInfo || [],
       domainId: this.state.extractedData?.domainId,
+      expertState: {
+        objective: this.state.extractedData?.objective,
+        targetAudience: this.state.extractedData?.targetAudience,
+        scope: this.state.extractedData?.scope,
+        successCriteria: this.state.extractedData?.successCriteria,
+        constraints: this.state.extractedData?.constraints,
+        hypotheses: this.state.extractedData?.hypotheses,
+      },
     };
 
     // --- AGENT INTEGRATION: Use CreationSpecialist for agentic behavior ---
@@ -159,6 +159,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
     };
 
     const creationAgent = new CreationSpecialist(agentContext);
+    await creationAgent.initialize();
 
     // Preload pattern learnings for self-improvement
     await creationAgent.preloadPatternLearnings(["creation", "general"], 2);
@@ -385,14 +386,22 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       .from(surveyCreationConversations)
       .where(eq(surveyCreationConversations.surveyId, this.state.surveyId));
 
-    // Also fetch the survey to get the language
+    // Also fetch the survey to get the language and organizationId
     const [survey] = await db
-      .select({ language: surveys.language })
+      .select({
+        language: surveys.language,
+        organizationId: surveys.organizationId,
+        id: surveys.id,
+      })
       .from(surveys)
       .where(eq(surveys.id, this.state.surveyId));
 
-    if (survey && ["en", "fr", "de", "es", "it"].includes(survey.language)) {
-      this.state.language = survey.language as SupportedLanguage;
+    if (survey) {
+      this.organizationId = survey.organizationId;
+      this.surveyId = survey.id;
+      if (["en", "fr", "de", "es", "it"].includes(survey.language)) {
+        this.state.language = survey.language as SupportedLanguage;
+      }
     }
 
     if (conv) {
@@ -431,7 +440,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
         this.state.messages,
       );
 
-      const { output: parsed } = await generateText({
+      const { output: parsed, usage } = await generateText({
         model: analysisModel,
         output: Output.object({
           schema: z.object({
@@ -463,6 +472,19 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
           }) as any,
         }),
         prompt: extractionPrompt,
+      });
+
+      // Log usage for background extraction in voice session
+      logUsage({
+        userId: this.userId,
+        organizationId: this.organizationId || undefined,
+        surveyId: this.state.surveyId || undefined,
+        type: "llm_text",
+        provider: "google",
+        modelName: (analysisModel as any).modelId,
+        promptTokens: usage.inputTokens,
+        completionTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
       });
 
       console.log(

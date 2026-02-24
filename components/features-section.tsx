@@ -1,6 +1,5 @@
 import {
   FaMagic,
-  FaPuzzlePiece,
   FaDatabase,
   FaBrain,
   FaFileAlt,
@@ -33,7 +32,7 @@ export default function FeaturesSection() {
           {/* Feature cards - bento-style grid */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6">
             {/* Card 1 */}
-            <div className="bg-[#FAFAFA] border border-gray-200 rounded-[24px] p-6 flex flex-col gap-4 md:col-span-4">
+            <div className="bg-[#FAFAFA] border border-gray-200 rounded-[24px] p-6 flex flex-col gap-4 md:col-span-6">
               <div className="w-[44px] h-[44px] rounded-full bg-[#0BA5EC] flex items-center justify-center">
                 <FaMagic className="w-5 h-5 text-white" />
               </div>
@@ -47,23 +46,8 @@ export default function FeaturesSection() {
               </div>
             </div>
 
-            {/* Card 2 */}
-            <div className="bg-[#FAFAFA] border border-gray-200 rounded-[24px] p-6 flex flex-col gap-4 md:col-span-4">
-              <div className="w-[44px] h-[44px] rounded-full bg-[#F97316] flex items-center justify-center">
-                <FaPuzzlePiece className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h3 className="text-[20px] font-[500] text-[#080808] leading-[26px] tracking-[-0.24px] mb-1">
-                  {t('Cards.Integrations.Title')}
-                </h3>
-                <p className="text-[16px] font-normal text-[#696969] leading-[22px]">
-                  {t('Cards.Integrations.Description')}
-                </p>
-              </div>
-            </div>
-
-            {/* Card 3 */}
-            <div className="bg-[#FAFAFA] border border-gray-200 rounded-[24px] p-6 flex flex-col gap-4 md:col-span-4">
+            {/* Card 2 (was 3) */}
+            <div className="bg-[#FAFAFA] border border-gray-200 rounded-[24px] p-6 flex flex-col gap-4 md:col-span-6">
               <div className="w-[44px] h-[44px] rounded-full bg-[#22C55E] flex items-center justify-center">
                 <FaDatabase className="w-5 h-5 text-white" />
               </div>
@@ -77,7 +61,7 @@ export default function FeaturesSection() {
               </div>
             </div>
 
-            {/* Card 4 */}
+            {/* Card 3 (was 4) */}
             <div className="bg-[#FAFAFA] border border-gray-200 rounded-[24px] p-6 flex flex-col gap-4 md:col-span-6">
               <div className="w-[44px] h-[44px] rounded-full bg-[#6366F1] flex items-center justify-center">
                 <FaBrain className="w-5 h-5 text-white" />
@@ -92,7 +76,7 @@ export default function FeaturesSection() {
               </div>
             </div>
 
-            {/* Card 5 */}
+            {/* Card 4 (was 5) */}
             <div className="bg-[#FAFAFA] border border-gray-200 rounded-[24px] p-6 flex flex-col gap-4 md:col-span-6">
               <div className="w-[44px] h-[44px] rounded-full bg-[#0EA5E9] flex items-center justify-center">
                 <FaFileAlt className="w-5 h-5 text-white" />

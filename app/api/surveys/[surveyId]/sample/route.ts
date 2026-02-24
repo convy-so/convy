@@ -1,14 +1,12 @@
 import {
-  streamText,
-  stepCountIs,
   createUIMessageStream,
   createUIMessageStreamResponse,
+  type ModelMessage,
 } from "ai";
 import { and, eq, lt } from "drizzle-orm";
 
 import { db } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
-import { defaultModel } from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { createUIMessageFilter } from "@/lib/agents/scratchpad-filter";
 import {
@@ -16,7 +14,10 @@ import {
   buildCompleteSurveyConfig,
 } from "@/lib/surveys";
 import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
+import { normalizeMessages } from "@/lib/ai";
 import { ConversationManager } from "@/lib/conversation-manager";
+import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
+import type { AgentContext } from "@/lib/agents/types";
 
 export const maxDuration = 300;
 
@@ -57,7 +58,7 @@ export async function POST(
     const { surveyId } = await params;
     const body = await request.json();
     const { messages, feedback, conversationNumber } = body as {
-      messages: Array<{ role: "user" | "assistant"; content: string }>;
+      messages: any[];
       feedback?: string;
       conversationNumber?: number;
     };
@@ -86,7 +87,9 @@ export async function POST(
       return new Response("Survey not found", { status: 404 });
     }
 
-    if (survey.userId !== session.user.id) {
+    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access === "none") {
       return new Response("Unauthorized", { status: 403 });
     }
 
@@ -134,32 +137,57 @@ export async function POST(
     // Deterministic ID for context persistence during this sample session
     const conversationId = `sample:${surveyId}:${conversationNumber}:${session.user.id}`;
 
+    const normalizedMessages = normalizeMessages(messages);
+
     // Load or create rolling context using Manager
     // If it's the first message, force new context to reset previous runs of this sample number
-    const isStart = messages.length <= 1;
+    const isStart = normalizedMessages.length <= 1;
     const context = await ConversationManager.loadOrCreateContext(
       conversationId,
-      messages,
+      normalizedMessages,
       surveyConfig,
       isStart, // forceNew
     );
 
-    const systemPrompt = ConversationManager.getSystemPrompt(
+    // Use the compressed messages for the AI call
+    const messagesForAI =
+      context.recentMessages.length > 0
+        ? context.recentMessages
+        : normalizedMessages;
+
+    // --- AGENT INTEGRATION: Use ConductingSpecialist for agentic behavior ---
+    const agentContext: AgentContext = {
+      conversationId,
+      messages: messagesForAI as any,
       surveyConfig,
-      context,
-      {
-        isSample: true,
-        sampleFeedback: combinedFeedback,
-        conversationNumber,
-        language: survey.language,
-      },
+      rollingContext: context,
+      language: survey.language as "en" | "fr" | "de" | "es" | "it" | undefined,
+      isSample: true,
+      sampleFeedback: combinedFeedback,
+      conversationNumber,
+      userId: session.user.id,
+      organizationId: survey.organizationId || undefined,
+    };
+
+    const conductingAgent = new ConductingSpecialist(agentContext);
+    await conductingAgent.initialize();
+
+    // Preload pattern learnings and skills for the agent
+    await Promise.all([
+      conductingAgent.preloadSkills(),
+      conductingAgent.preloadPatternLearnings(
+        ["questioning", "probing", "engagement"],
+        2,
+      ),
+    ]).catch((error) =>
+      console.warn(
+        "[Sample Route] Failed to preload agent capabilities:",
+        error,
+      ),
     );
 
-    // Define tools for the AI to call using Manager
-    const tools = ConversationManager.getTools(surveyConfig);
-
     // Inject a transient user message to trigger the greeting if history is empty
-    const messagesToLLM = [...messages];
+    const messagesToLLM = [...messagesForAI];
     if (messagesToLLM.length === 0) {
       messagesToLLM.push({
         role: "user",
@@ -169,20 +197,13 @@ export async function POST(
       });
     }
 
-    const result = streamText({
-      model: defaultModel,
-      messages: messagesToLLM,
-      system: systemPrompt,
-      temperature: 0.8,
-      maxOutputTokens: 2000,
-      tools,
-      stopWhen: stepCountIs(5),
-    });
+    // Use the agent's stream method which includes domain expertise, checklist, and tools
+    // No onFinish callback needed for DB persistence as sample routes are ephemeral
+    const result = conductingAgent.stream(messagesToLLM as any);
 
-    // Trigger async memory update (non-blocking) using Manager
     ConversationManager.updateMemoryAsync(
       conversationId,
-      messages,
+      normalizedMessages,
       surveyConfig,
       context,
     ).catch(console.error);

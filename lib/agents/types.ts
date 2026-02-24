@@ -12,8 +12,8 @@ export interface SubjectIntelligence {
 }
 
 export interface DomainPivot {
-  condition: string; // e.g., "if they mention wait times"
-  skill: string; // e.g., "STARProber"
+  condition: string; 
+  skill: string;
   reason: string;
 }
 
@@ -39,6 +39,14 @@ export interface AgentContext {
   ragContext?: string; // Retrieved context from RAG
   knowledgeContext?: string; // Additional context passed from orchestrator
   language?: "en" | "fr" | "de" | "es" | "it"; // Language for the conversation
+  userId?: string;
+  organizationId?: string;
+
+  // Sample survey feedback properties
+  isSample?: boolean;
+  sampleFeedback?: string;
+  conversationNumber?: number;
+
   // Loaded domain skills (set during agent initialization)
   loadedDomainSkills?: {
     coreContent: string;

@@ -7,18 +7,19 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import { AgentOrchestrator } from "@/lib/agents/orchestrator";
 import type { AgentContext } from "@/lib/agents/types";
+import { createUIMessageFilter } from "@/lib/agents/scratchpad-filter";
 
 export const maxDuration = 300;
 
 /**
  * POST /api/surveys/[surveyId]/analytics/chat
- * 
+ *
  * Secure chat endpoint for creators to "Chat with their data".
  * Pulls context from RAG and uses AnalyticsSpecialist.
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ surveyId: string }> }
+  { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
     const session = await getVerifiedSession();
@@ -39,7 +40,9 @@ export async function POST(
       return NextResponse.json({ error: "Survey not found" }, { status: 404 });
     }
 
-    if (survey.userId !== session.user.id) {
+    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access === "none") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -59,17 +62,23 @@ export async function POST(
     // 4. Stream response
     const result = analyticsSpecialist.stream(messages as any);
 
-    return result.toUIMessageStreamResponse();
+    const streamOptions: any = {
+      pipe: createUIMessageFilter(),
+    };
+    return result.toUIMessageStreamResponse(streamOptions);
   } catch (error) {
     if (error instanceof Error) {
-       if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
-         return NextResponse.json({ error: error.message }, { status: 401 });
-       }
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return NextResponse.json({ error: error.message }, { status: 401 });
+      }
     }
     console.error("[Analytics Chat API] Error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -32,6 +32,7 @@ import { ConductingSpecialist } from "./conducting-specialist";
 import { AnalyticsSpecialist } from "./analytics-specialist";
 import type { AgentContext } from "./types";
 import { defaultModel, analysisModel } from "@/lib/ai";
+import { logUsage } from "@/lib/billing/logger";
 
 // ============================================================================
 // Orchestrator — Multi-Agent Coordinator
@@ -80,12 +81,26 @@ export class AgentOrchestrator {
             knowledgeContext: additionalContext,
           };
           const specialist = new CreationSpecialist(specialistContext);
+          await specialist.initialize();
           const systemPrompt = specialist.buildSystemPrompt();
 
-          const { text } = await generateText({
+          const { text, usage } = await generateText({
             model: defaultModel,
             system: systemPrompt,
             prompt: userMessage,
+          });
+
+          // Log usage for creation delegation
+          logUsage({
+            userId: context.userId,
+            organizationId: context.organizationId,
+            surveyId: context.surveyConfig?.id,
+            type: "llm_text",
+            provider: "google",
+            modelName: (defaultModel as any).modelId,
+            promptTokens: usage.inputTokens,
+            completionTokens: usage.outputTokens,
+            totalTokens: usage.totalTokens,
           });
 
           return { response: text, specialist: "creation" };
@@ -116,13 +131,27 @@ export class AgentOrchestrator {
             knowledgeContext: conversationSummary,
           };
           const specialist = new ConductingSpecialist(specialistContext);
+          await specialist.initialize();
           await specialist.preloadSkills();
           const systemPrompt = specialist.buildSystemPrompt();
 
-          const { text } = await generateText({
+          const { text, usage } = await generateText({
             model: defaultModel,
             system: systemPrompt,
             prompt: userMessage,
+          });
+
+          // Log usage for conducting delegation
+          logUsage({
+            userId: context.userId,
+            organizationId: context.organizationId,
+            surveyId: context.surveyConfig?.id,
+            type: "llm_text",
+            provider: "google",
+            modelName: (defaultModel as any).modelId,
+            promptTokens: usage.inputTokens,
+            completionTokens: usage.outputTokens,
+            totalTokens: usage.totalTokens,
           });
 
           return { response: text, specialist: "conducting" };
@@ -153,6 +182,7 @@ export class AgentOrchestrator {
             knowledgeContext: dataContext,
           };
           const specialist = new AnalyticsSpecialist(specialistContext);
+          await specialist.initialize();
           const response = await specialist.generate(query);
           return { response, specialist: "analytics" };
         },
@@ -177,8 +207,8 @@ Your job is to understand what the user needs and delegate to the right speciali
 
 Survey context:
 - Domain: ${domainName}
-- Objective: ${config?.objective?.goal ?? config?.information ?? "not yet defined"}
-- Audience: ${config?.targetAudience?.description ?? "survey participants"}
+- Objective: ${config?.coreObjective || config?.expertState?.objective?.goal || config?.information || "not yet defined"}
+- Audience: ${config?.expertState?.targetAudience?.description || "survey participants"}
 
 Available specialists:
 1. Creation Specialist — survey design, configuration, question design

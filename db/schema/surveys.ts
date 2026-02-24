@@ -91,12 +91,8 @@ const surveys = pgTable(
     }),
     title: text("title").notNull(),
     description: text("description"),
-    objective: jsonb("objective").$type<SurveyObjective>(),
-    targetAudience: jsonb("target_audience").$type<SurveyTargetAudience>(),
-    scope: jsonb("scope").$type<SurveyScope>(),
-    successCriteria: jsonb("success_criteria").$type<SurveySuccessCriteria>(),
-    constraints: jsonb("constraints").$type<SurveyConstraints>(),
-    hypotheses: jsonb("hypotheses").$type<SurveyHypotheses>(),
+    coreObjective: text("core_objective"),
+    expertState: jsonb("expert_state").$type<Record<string, any>>().default({}),
     tone: toneEnum("tone").default("casual"),
     requiredQuestions: text("required_questions").array().default([]),
     metrics: text("metrics").array().default([]),
@@ -115,6 +111,7 @@ const surveys = pgTable(
     domainId: integer("domain_id"), // 1-10 based on the framework
     isVoice: boolean("is_voice").default(false).notNull(),
     improvementFeedback: text("improvement_feedback"),
+    collaborators: text("collaborators").array().default([]), // Array of user IDs with edit access
   },
   (table) => [
     index("surveys_user_id_idx").on(table.userId),
@@ -152,53 +149,10 @@ const surveyCreationConversations = pgTable(
       .default("in_progress")
       .notNull(),
     collectedInfo: jsonb("collected_info")
-      .$type<{
-        objective: boolean;
-        targetAudience: boolean;
-        scope: boolean;
-        successCriteria: boolean;
-        constraints: boolean;
-        hypotheses: boolean;
-        tone: boolean;
-        requiredQuestions: boolean;
-        metrics: boolean;
-        personalInfo: boolean;
-        subjectDefined: boolean;
-        domainIdentified: boolean;
-        media: boolean;
-        subjectModelComplete: boolean;
-      }>()
-      .default({
-        objective: false,
-        targetAudience: false,
-        scope: false,
-        successCriteria: false,
-        constraints: false,
-        hypotheses: false,
-        tone: false,
-        requiredQuestions: false,
-        metrics: false,
-        personalInfo: false,
-        subjectDefined: false,
-        domainIdentified: false,
-        media: false,
-        subjectModelComplete: false,
-      }),
+      .$type<Record<string, boolean>>()
+      .default({}),
     extractedData: jsonb("extracted_data")
-      .$type<{
-        objective?: SurveyObjective;
-        targetAudience?: SurveyTargetAudience;
-        scope?: SurveyScope;
-        successCriteria?: SurveySuccessCriteria;
-        constraints?: SurveyConstraints;
-        hypotheses?: SurveyHypotheses;
-        tone?: "formal" | "casual" | "playful" | "empathetic";
-        metrics?: string[];
-        personalInfo?: string[];
-        title?: string;
-        domainId?: number;
-        media?: SurveyMedia[];
-      }>()
+      .$type<Record<string, any>>()
       .default({}),
   },
   (table) => [
@@ -239,6 +193,17 @@ const sampleConversations = pgTable(
       missedTopics: string[];
     }>(),
     finalComments: text("final_comments"),
+    comments: jsonb("comments")
+      .$type<
+        Array<{
+          id: string;
+          userId: string;
+          userName: string;
+          text: string;
+          createdAt: string;
+        }>
+      >()
+      .default([]),
   },
   (table) => [
     index("sample_conversations_survey_id_idx").on(table.surveyId),

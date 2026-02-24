@@ -182,22 +182,7 @@ export async function startSurveyCreationAction(
       surveyId,
       messages: [],
       status: "in_progress",
-      collectedInfo: {
-        objective: false,
-        targetAudience: false,
-        scope: false,
-        successCriteria: false,
-        constraints: false,
-        hypotheses: false,
-        tone: false,
-        requiredQuestions: false,
-        metrics: false,
-        personalInfo: false,
-        subjectDefined: false,
-        domainIdentified: false,
-        media: false,
-        subjectModelComplete: false,
-      },
+      collectedInfo: {},
       extractedData: {},
     });
 
@@ -283,22 +268,7 @@ export async function getSurveyCreationStateAction(surveyId: string): Promise<
               id: conversation.id,
               messages: conversation.messages,
               status: conversation.status,
-              collectedInfo: conversation.collectedInfo ?? {
-                objective: false,
-                targetAudience: false,
-                scope: false,
-                successCriteria: false,
-                constraints: false,
-                hypotheses: false,
-                tone: false,
-                requiredQuestions: false,
-                metrics: false,
-                personalInfo: false,
-                subjectDefined: false,
-                domainIdentified: false,
-                media: false,
-                subjectModelComplete: false,
-              },
+              collectedInfo: conversation.collectedInfo ?? {},
               extractedData: conversation.extractedData ?? {},
             }
           : null,
@@ -510,23 +480,33 @@ export async function finalizeSurveyCreationAction(
 
     const shareableLink = `survey-${nanoid(12)}`;
 
+    const currentExpertState = (survey.expertState || {}) as Record<
+      string,
+      any
+    >;
+    const mergedExpertState = {
+      ...currentExpertState,
+      ...data,
+    };
+
     await db
       .update(surveys)
       .set({
-        title: data.title || "Untitled Survey",
-        objective: data.objective,
-        targetAudience: data.targetAudience,
-        scope: data.scope,
-        successCriteria: data.successCriteria,
-        constraints: data.constraints,
-        hypotheses: data.hypotheses,
-        tone: data.tone || "casual",
-        requiredQuestions: data.requiredQuestions || [],
-        metrics: data.metrics || [],
-        personalInfo: data.personalInfo || [],
+        title: data.title || survey.title || "Untitled Survey",
+        coreObjective:
+          data.objective?.goal || survey.coreObjective || undefined,
+        expertState: mergedExpertState,
+        tone: data.tone || survey.tone || "casual",
+        requiredQuestions:
+          data.requiredQuestions ||
+          (survey.requiredQuestions as string[]) ||
+          [],
+        metrics: data.metrics || (survey.metrics as string[]) || [],
+        personalInfo:
+          data.personalInfo || (survey.personalInfo as string[]) || [],
         status: "draft",
         shareableLink,
-        domainId: data.domainId,
+        domainId: data.domainId || survey.domainId,
       })
       .where(eq(surveys.id, surveyId));
 
@@ -692,23 +672,7 @@ export async function resumeSurveyCreationAction(surveyId: string): Promise<
         surveyId,
         conversationId: conversation.id,
         messages: conversation.messages,
-        collectedInfo: {
-          objective: false,
-          targetAudience: false,
-          scope: false,
-          successCriteria: false,
-          constraints: false,
-          hypotheses: false,
-          tone: false,
-          requiredQuestions: false,
-          metrics: false,
-          personalInfo: false,
-          subjectDefined: false,
-          domainIdentified: false,
-          media: false,
-          subjectModelComplete: false,
-          ...((conversation.collectedInfo as any) || {}),
-        },
+        collectedInfo: conversation.collectedInfo || {},
       },
     };
   } catch (error) {

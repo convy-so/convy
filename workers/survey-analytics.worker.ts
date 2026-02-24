@@ -94,6 +94,8 @@ function parseSurveyAnalyticsResponse(
   surveyTitle: string,
   coreMetrics: Partial<CoreMetrics>,
   requiredQuestions: string[],
+  coreObjective?: string,
+  expertState?: Record<string, any>,
   mediaAnalytics?: SurveyAnalyticsData["mediaAnalytics"],
 ): SurveyAnalyticsData | null {
   try {
@@ -292,7 +294,11 @@ function parseSurveyAnalyticsResponse(
 
       // Goal assessment
       goalAssessment: {
-        surveyObjective: parsed.goalAssessment?.surveyObjective || "",
+        surveyObjective:
+          parsed.goalAssessment?.surveyObjective ||
+          coreObjective ||
+          expertState?.objective?.goal ||
+          "",
         achievementScore: parsed.goalAssessment?.achievementScore || 5,
         achievementLevel:
           (parsed.goalAssessment?.achievementLevel as
@@ -675,6 +681,8 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
         model: analysisModel,
         temperature: 0.4,
         maxTokens: 6000,
+        userId: userId,
+        surveyId: surveyId,
       },
     );
 
@@ -687,6 +695,8 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
       survey.title,
       coreMetrics,
       surveyConfig.requiredQuestions,
+      surveyConfig.coreObjective,
+      surveyConfig.expertState,
       mediaAnalytics,
     );
 
