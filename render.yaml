@@ -12,7 +12,10 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL
-        sync: false
+        fromService:
+          type: redis
+          name: convy-redis
+          property: connectionString
 
   # WebSocket Server
   - type: web
@@ -27,7 +30,16 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL
-        sync: false
+        fromService:
+          type: redis
+          name: convy-redis
+          property: connectionString
       # The port Render uses internally
       - key: PORT
         value: 10000
+
+  # Redis instance for Background Jobs
+  - type: redis
+    name: convy-redis
+    ipAllowList: [] # internal connections only
+    plan: free
