@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/voice/:path*",
-        destination: "http://localhost:3001/voice/:path*",
+        destination: `${process.env.NEXT_PUBLIC_WEBSOCKET_URL?.replace("ws://", "http://").replace("wss://", "https://") || "http://localhost:3001"}/voice/:path*`,
       },
     ];
   },

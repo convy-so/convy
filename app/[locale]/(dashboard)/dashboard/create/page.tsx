@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo, Suspense } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, Suspense, useId } from "react";
 import { useSearchParams, useParams } from "next/navigation";
 import { useRouter, Link } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
@@ -216,20 +216,8 @@ function CreateSurveyContent() {
         // Tool resolves on its own via server-side execution; hide banner when done
         // (handled by detecting the tool-result part in messages via useEffect)
       }
-      if (toolCall.toolName === 'finishSurvey') {
-        console.log("[Client] Survey finished via tool call, triggering instant refresh");
-        addToolOutput({
-          toolCallId: toolCall.toolCallId,
-          tool: 'finishSurvey',
-          output: "Survey marked as complete.",
-        });
-        // Instant refresh to reveal the button without 3s latency
-        fetchUpdatedData();
-      }
-      if (toolCall.toolName === 'requestMediaUpload') {
-        console.log("[Client] Media upload requested via tool call");
-        // We don't resolve automatically; the MediaUploadTool component handles this.
-      }
+      // NOTE: finishSurvey is server-executed — no client resolution needed here.
+      // NOTE: requestMediaUpload is client-side — the MediaUploadFlow component resolves it.
     },
   });
 
@@ -411,10 +399,9 @@ function CreateSurveyContent() {
       messageContent.toLowerCase().includes('click') &&
       messageContent.toLowerCase().includes('button');
 
-    // Check for tool invocations (Direct + Nested in parts)
+    // Check for finishSurvey tool call - AI SDK uses type 'tool-{toolName}'
     const finishToolCalled = messages.some(m =>
-      (m as any).toolInvocations?.some((ti: any) => ti.toolName === 'finishSurvey') ||
-      m.parts?.some(p => (p.type === 'tool-invocation' || p.type === 'tool-call') && (p as any).toolName === 'finishSurvey')
+      m.parts?.some(p => p.type === 'tool-finishSurvey')
     );
 
     if (finishToolCalled) {
@@ -1430,113 +1417,101 @@ function CreateSurveyContent() {
                                 content={(message as any).content || (message.parts?.filter(p => p.type === 'text').map((p: any) => p.text).join('') || "")}
                                 className="text-gray-800 prose-sm"
                               />
-                              {(message as any).toolInvocations?.map((inv: any, idx: number) => {
-                                if (inv.toolName === 'finishSurvey') {
+                              {/* Single unified path — AI SDK uses type 'tool-{toolName}' for tool parts */}
+
+                              {message.parts?.map((part: any, idx) => {
+
+                                // AI SDK v6 emits parts with type 'tool-{toolName}', e.g. 'tool-requestMediaUpload'
+                                // The toolName is embedded in the type string
+                                if (!part.type?.startsWith('tool-')) return null;
+
+                                const toolName = part.type.replace(/^tool-/, '');
+
+                                const toolCallId = part.toolCallId;
+
+                                const toolState = part.state; // 'input-available' | 'output-available'
+
+                                const args = part.input ?? part.args ?? {};  // SDK uses 'input' not 'args'
+
+                                const result = part.output ?? part.result;   // SDK uses 'output' not 'result'
+
+
+
+                                const isPending = ['input-available', 'input-streaming', 'call', 'partial-call'].includes(toolState);
+
+                                const isDone = ['output-available', 'result'].includes(toolState);
+
+                                if (toolName === 'finishSurvey') {
                                   return (
-                                    <div key={inv.toolCallId || idx} className="text-xs text-emerald-600 italic mt-2 flex items-center gap-1">
+                                    <div key={toolCallId || idx} className="text-xs text-emerald-600 italic mt-2 flex items-center gap-1">
                                       <CheckCircle2 className="w-3 h-3" /> Survey finalized
                                     </div>
                                   );
                                 }
 
-                                if (inv.toolName === 'requestMediaUpload') {
+                                if (toolName === 'requestMediaUpload') {
+                                  const aiDescription = args?.description as string | undefined;
+                                  const aiLearningGoal = args?.learningGoal as string | undefined;
                                   return (
-                                    <div key={inv.toolCallId || idx} className="mt-4">
-                                      {(inv.state === 'call' || inv.state === 'partial-call') ? (
-                                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 animate-in zoom-in-95 duration-300">
-                                          <div className="flex items-center gap-2 mb-4">
-                                            <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                                              <Paperclip className="w-4 h-4 text-indigo-600" />
+                                    <div key={toolCallId || idx} className="mt-4">
+                                      {isPending ? (
+                                        <>
+                                          {/* Compact trigger chip shown in the chat */}
+                                          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm animate-in zoom-in-95 duration-300">
+                                            <div className="w-7 h-7 rounded-lg bg-black flex items-center justify-center">
+                                              <Paperclip className="w-3.5 h-3.5 text-white" />
                                             </div>
-                                            <h4 className="font-bold text-gray-900 text-sm">Media Upload Requested</h4>
+                                            <p className="text-sm font-medium text-gray-800 flex-1">Ready to upload media</p>
                                           </div>
+                                          {/* Full-screen modal */}
                                           <MediaUploadFlow
                                             surveyId={surveyId || ""}
-                                            onUploaded={(media) => {
+                                            aiDescription={aiDescription}
+                                            aiLearningGoal={aiLearningGoal}
+                                            onAllUploaded={(mediaItems) => {
                                               addToolOutput({
-                                                toolCallId: inv.toolCallId,
+                                                toolCallId: toolCallId,
                                                 tool: 'requestMediaUpload',
                                                 output: JSON.stringify({
                                                   success: true,
-                                                  media: {
-                                                    id: media.id,
-                                                    url: media.url,
-                                                    type: media.type,
-                                                    description: media.description,
-                                                    contextForUse: media.contextForUse
-                                                  }
+                                                  count: mediaItems.length,
+                                                  media: mediaItems.map(m => ({
+                                                    id: m.id,
+                                                    url: m.url,
+                                                    type: m.type,
+                                                    description: m.description,
+                                                    contextForUse: m.contextForUse
+                                                  }))
                                                 })
                                               });
                                             }}
-                                            allowedTypes={inv.args?.allowedTypes || ['image', 'audio', 'video']}
+                                            onSkip={() => {
+                                              addToolOutput({
+                                                toolCallId: toolCallId,
+                                                tool: 'requestMediaUpload',
+                                                output: JSON.stringify({ success: false, skipped: true })
+                                              });
+                                            }}
+                                            allowedTypes={args?.allowedTypes || ['image', 'audio', 'video']}
                                           />
-                                        </div>
-                                      ) : inv.state === 'result' && (
-                                        <div className="flex items-center gap-2 text-xs text-indigo-600 bg-indigo-50/50 px-3 py-2 rounded-lg border border-indigo-100 mt-2">
-                                          <CheckCircle2 className="w-3 h-3" />
-                                          Media added: {typeof inv.result === 'string' ? (JSON.parse(inv.result).media?.description || 'File uploaded') : (inv.result?.media?.description || 'File uploaded')}
+                                        </>
+                                      ) : isDone && (
+                                        <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 mt-2">
+                                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                          {(() => {
+                                            try {
+                                              const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+                                              if (parsed?.skipped) return 'Media skipped';
+                                              const count = parsed?.count ?? 1;
+                                              return `${count} file${count > 1 ? 's' : ''} added to survey`;
+                                            } catch { return 'Media added'; }
+                                          })()}
                                         </div>
                                       )}
                                     </div>
                                   );
                                 }
-                                return null;
-                              })}
 
-                              {/* Legacy multipart support (if server sends parts instead of top-level toolInvocations) */}
-                              {!(message as any).toolInvocations && message.parts?.map((part: any, idx) => {
-                                if (part.type !== 'tool-invocation' && part.type !== 'tool-call') return null;
-                                const inv = part;
-
-                                if (inv.toolName === 'finishSurvey') {
-                                  return (
-                                    <div key={inv.toolCallId || idx} className="text-xs text-emerald-600 italic mt-2 flex items-center gap-1">
-                                      <CheckCircle2 className="w-3 h-3" /> Survey finalized
-                                    </div>
-                                  );
-                                }
-
-                                if (inv.toolName === 'requestMediaUpload') {
-                                  return (
-                                    <div key={inv.toolCallId || idx} className="mt-4">
-                                      {(inv.state === 'input-available' || inv.state === 'input-streaming' || inv.state === 'call') ? (
-                                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 animate-in zoom-in-95 duration-300">
-                                          <div className="flex items-center gap-2 mb-4">
-                                            <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                                              <Paperclip className="w-4 h-4 text-indigo-600" />
-                                            </div>
-                                            <h4 className="font-bold text-gray-900 text-sm">Media Upload Requested</h4>
-                                          </div>
-                                          <MediaUploadFlow
-                                            surveyId={surveyId || ""}
-                                            onUploaded={(media) => {
-                                              addToolOutput({
-                                                toolCallId: inv.toolCallId,
-                                                tool: 'requestMediaUpload',
-                                                output: JSON.stringify({
-                                                  success: true,
-                                                  media: {
-                                                    id: media.id,
-                                                    url: media.url,
-                                                    type: media.type,
-                                                    description: media.description,
-                                                    contextForUse: media.contextForUse
-                                                  }
-                                                })
-                                              });
-                                            }}
-                                            allowedTypes={inv.args?.allowedTypes || ['image', 'audio', 'video']}
-                                          />
-                                        </div>
-                                      ) : inv.state === 'result' && (
-                                        <div className="flex items-center gap-2 text-xs text-indigo-600 bg-indigo-50/50 px-3 py-2 rounded-lg border border-indigo-100 mt-2">
-                                          <CheckCircle2 className="w-3 h-3" />
-                                          Media added: {typeof inv.result === 'string' ? (JSON.parse(inv.result).media?.description || 'File uploaded') : (inv.result?.media?.description || 'File uploaded')}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                }
                                 return null;
                               })}
                             </div>
@@ -1685,121 +1660,293 @@ function CreateSurveyContent() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Types for the multi-file upload queue
+// ---------------------------------------------------------------------------
+type QueuedFile = {
+  id: string;
+  file: File;
+  description: string;
+  learningGoal: string;
+  status: 'pending' | 'uploading' | 'done' | 'error';
+  errorMsg?: string;
+};
+
 /**
- * Inline Media Upload Flow Component
- * Handles file selection, description, and context collection
+ * Full-screen minimalist media upload modal
+ * Black & white / Framer-template aesthetic
+ * Supports multiple files, each with its own description and learning goal
  */
 function MediaUploadFlow({
   surveyId,
-  onUploaded,
-  allowedTypes
+  onAllUploaded,
+  onSkip,
+  allowedTypes,
+  aiDescription,
+  aiLearningGoal,
 }: {
   surveyId: string;
-  onUploaded: (media: any) => void;
+  onAllUploaded: (media: any[]) => void;
+  onSkip: () => void;
   allowedTypes: string[];
+  aiDescription?: string;
+  aiLearningGoal?: string;
 }) {
-  const t = useTranslations("Survey.AddMedia");
-  const [file, setFile] = useState<File | null>(null);
-  const [description, setDescription] = useState("");
-  const [context, setContext] = useState("");
-  const [isUploading, setIsUploading] = useState(false);
+  const [queue, setQueue] = useState<QueuedFile[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploadingAll, setIsUploadingAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uid = useId();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) {
-      setFile(e.target.files[0]);
-    }
+  const makeId = () => `${uid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const acceptAttr = allowedTypes.map((t) => `${t}/*`).join(',');
+
+  const addFiles = (incoming: FileList | null) => {
+    if (!incoming) return;
+    const newItems: QueuedFile[] = Array.from(incoming).map((f) => ({
+      id: makeId(),
+      file: f,
+      description: aiDescription ?? '',
+      learningGoal: aiLearningGoal ?? '',
+      status: 'pending',
+    }));
+    setQueue((prev) => [...prev, ...newItems]);
+    // reset so same file can be added again if needed
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleUpload = async () => {
-    if (!file || !description || !context) {
-      toast.error(t("Toasts.FillAllFields"));
+  const removeFile = (id: string) => setQueue((prev) => prev.filter((q) => q.id !== id));
+
+  const updateField = (id: string, field: 'description' | 'learningGoal', value: string) =>
+    setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, [field]: value } : q)));
+
+  const getFileTypeIcon = (file: File) => {
+    if (file.type.startsWith('image')) return <ImageIcon className="w-4 h-4 text-gray-500" />;
+    if (file.type.startsWith('audio')) return <FileAudio className="w-4 h-4 text-gray-500" />;
+    if (file.type.startsWith('video')) return <FileVideo className="w-4 h-4 text-gray-500" />;
+    return <Upload className="w-4 h-4 text-gray-500" />;
+  };
+
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const canUpload = queue.length > 0 && queue.every((q) => q.description.trim().length >= 10 && q.learningGoal.trim().length >= 10);
+
+  const handleUploadAll = async () => {
+    if (!canUpload) {
+      toast.error('Each file needs a description and learning goal (min 10 characters each).');
       return;
     }
-
-    setIsUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("surveyId", surveyId);
-      formData.append("file", file);
-      formData.append("description", description);
-      formData.append("contextForUse", context);
-
-      let type: "image" | "audio" | "video" = "image";
-      if (file.type.startsWith("audio")) type = "audio";
-      else if (file.type.startsWith("video")) type = "video";
-
-      formData.append("type", type);
-
-      const result = await uploadSurveyMediaAction(formData);
-
-      if (result.success) {
-        toast.success(t("Toasts.Success"));
-        onUploaded(result.data.media);
-      } else {
-        toast.error(result.error);
+    setIsUploadingAll(true);
+    const uploadedMedia: any[] = [];
+    for (const item of queue) {
+      setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'uploading' } : q));
+      try {
+        const formData = new FormData();
+        formData.append('surveyId', surveyId);
+        formData.append('file', item.file);
+        formData.append('description', item.description);
+        formData.append('contextForUse', item.learningGoal);
+        let type: 'image' | 'audio' | 'video' = 'image';
+        if (item.file.type.startsWith('audio')) type = 'audio';
+        else if (item.file.type.startsWith('video')) type = 'video';
+        formData.append('type', type);
+        const result = await uploadSurveyMediaAction(formData);
+        if (result.success) {
+          setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'done' } : q));
+          uploadedMedia.push(result.data.media);
+        } else {
+          setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'error', errorMsg: result.error } : q));
+          toast.error(`Failed: ${result.error}`);
+        }
+      } catch (err) {
+        setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'error', errorMsg: 'Unexpected error' } : q));
+        toast.error('Upload failed. Please try again.');
       }
-    } catch (error) {
-      console.error(error);
-      toast.error(t("Toasts.Failed"));
-    } finally {
-      setIsUploading(false);
+    }
+    setIsUploadingAll(false);
+    if (uploadedMedia.length > 0) {
+      toast.success(`${uploadedMedia.length} file${uploadedMedia.length > 1 ? 's' : ''} uploaded!`);
+      onAllUploaded(uploadedMedia);
     }
   };
 
-  const getFileIcon = () => {
-    if (!file) return <Upload className="w-6 h-6 text-gray-400" />;
-    if (file.type.startsWith("image")) return <ImageIcon className="w-6 h-6 text-purple-600" />;
-    if (file.type.startsWith("audio")) return <FileAudio className="w-6 h-6 text-blue-600" />;
-    if (file.type.startsWith("video")) return <FileVideo className="w-6 h-6 text-red-600" />;
-    return <Upload className="w-6 h-6 text-gray-600" />;
+  // Drag-and-drop handlers
+  const onDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
+  const onDragLeave = () => setIsDragging(false);
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    addFiles(e.dataTransfer.files);
   };
 
   return (
-    <div className="space-y-4">
+    // Fixed full-viewport overlay
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}>
+      {/* Modal card */}
       <div
-        onClick={() => fileInputRef.current?.click()}
-        className={cn(
-          "border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition-all",
-          file ? "border-indigo-200 bg-indigo-50/30" : "border-gray-200 hover:border-indigo-300 hover:bg-gray-50"
-        )}
+        className="relative w-full max-w-2xl max-h-[90vh] bg-white flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-300"
+        style={{ borderRadius: '2px', boxShadow: '0 32px 80px rgba(0,0,0,0.35)' }}
       >
-        <input
-          type="file"
-          ref={fileInputRef}
-          className="hidden"
-          onChange={handleFileChange}
-          accept={allowedTypes.map(t => `${t}/*`).join(',')}
-        />
-        <div className="mb-2">{getFileIcon()}</div>
-        <p className="text-xs font-medium text-gray-700 text-center">
-          {file ? file.name : "Click or drag media here"}
-        </p>
-      </div>
+        {/* Header */}
+        <div className="flex items-center justify-between px-8 py-6 border-b border-gray-100">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-medium mb-1">Survey Media</p>
+            <h2 className="text-xl font-semibold text-gray-900 tracking-tight">Upload Files</h2>
+          </div>
+          <button
+            onClick={onSkip}
+            disabled={isUploadingAll}
+            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-900 disabled:opacity-40"
+          >
+            <span className="text-lg leading-none select-none">✕</span>
+          </button>
+        </div>
 
-      <div className="space-y-3">
-        <input
-          type="text"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="e.g. 'This is our company logo'"
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none text-sm"
-        />
-        <textarea
-          value={context}
-          onChange={(e) => setContext(e.target.value)}
-          placeholder="e.g. 'Ask users what defects they see in the logo'"
-          rows={2}
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none text-sm resize-none"
-        />
-        <button
-          onClick={handleUpload}
-          disabled={isUploading || !file || !description || !context}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          {isUploading ? "Uploading..." : "Add to Survey"}
-        </button>
+        {/* AI context hint – only show if AI provided suggestion */}
+        {(aiDescription || aiLearningGoal) && (
+          <div className="mx-8 mt-5 px-4 py-3 bg-gray-50 border border-gray-200" style={{ borderRadius: '2px' }}>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-medium mb-1.5">From our conversation</p>
+            {aiDescription && <p className="text-sm text-gray-600"><span className="font-medium text-gray-800">What it is:</span> {aiDescription}</p>}
+            {aiLearningGoal && <p className="text-sm text-gray-600 mt-0.5"><span className="font-medium text-gray-800">Goal:</span> {aiLearningGoal}</p>}
+          </div>
+        )}
+
+        {/* Drop Zone */}
+        <div className="px-8 pt-5">
+          <div
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            onClick={() => !isUploadingAll && fileInputRef.current?.click()}
+            className={cn(
+              'border-2 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center py-8 gap-3 select-none',
+              isDragging
+                ? 'border-black bg-gray-50'
+                : 'border-gray-200 hover:border-gray-400 hover:bg-gray-50',
+              isUploadingAll && 'opacity-40 cursor-not-allowed'
+            )}
+            style={{ borderRadius: '2px' }}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={acceptAttr}
+              className="hidden"
+              onChange={(e) => addFiles(e.target.files)}
+              disabled={isUploadingAll}
+            />
+            <Upload className="w-7 h-7 text-gray-300" />
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-800">{isDragging ? 'Drop files here' : 'Click or drag files here'}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{allowedTypes.join(', ')} — up to 100 MB each</p>
+            </div>
+          </div>
+        </div>
+
+        {/* File Queue */}
+        {queue.length > 0 && (
+          <div className="flex-1 overflow-y-auto px-8 mt-5 space-y-4 pb-4">
+            {queue.map((item, idx) => (
+              <div key={item.id} className="border border-gray-100 bg-white" style={{ borderRadius: '2px' }}>
+                {/* File row */}
+                <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                  <div className="w-8 h-8 bg-gray-100 flex items-center justify-center flex-shrink-0" style={{ borderRadius: '2px' }}>
+                    {item.status === 'uploading' ? <Loader2 className="w-4 h-4 animate-spin text-gray-600" /> :
+                      item.status === 'done' ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> :
+                        item.status === 'error' ? <span className="text-red-500 text-xs font-bold">!</span> :
+                          getFileTypeIcon(item.file)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{item.file.name}</p>
+                    <p className="text-xs text-gray-400">{formatBytes(item.file.size)}</p>
+                    {item.errorMsg && <p className="text-xs text-red-500 mt-0.5">{item.errorMsg}</p>}
+                  </div>
+                  {item.status === 'pending' && (
+                    <button
+                      onClick={() => removeFile(item.id)}
+                      className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-300 hover:text-gray-600 transition-colors flex-shrink-0"
+                    >
+                      <span className="text-sm leading-none">✕</span>
+                    </button>
+                  )}
+                </div>
+                {/* Per-file fields */}
+                {item.status === 'pending' && (
+                  <div className="px-4 py-3 space-y-2">
+                    <div>
+                      <label className="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-medium block mb-1">Description</label>
+                      <input
+                        type="text"
+                        value={item.description}
+                        onChange={(e) => updateField(item.id, 'description', e.target.value)}
+                        placeholder={aiDescription || 'What is this file? (min 10 chars)'}
+                        className="w-full px-3 py-2 border border-gray-200 text-sm text-gray-800 outline-none focus:border-gray-900 transition-colors bg-transparent placeholder-gray-300"
+                        style={{ borderRadius: '2px' }}
+                        disabled={isUploadingAll}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-medium block mb-1">Learning Goal</label>
+                      <input
+                        type="text"
+                        value={item.learningGoal}
+                        onChange={(e) => updateField(item.id, 'learningGoal', e.target.value)}
+                        placeholder={aiLearningGoal || 'What should respondents reflect on? (min 10 chars)'}
+                        className="w-full px-3 py-2 border border-gray-200 text-sm text-gray-800 outline-none focus:border-gray-900 transition-colors bg-transparent placeholder-gray-300"
+                        style={{ borderRadius: '2px' }}
+                        disabled={isUploadingAll}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Footer actions */}
+        <div className="flex items-center justify-between px-8 py-5 border-t border-gray-100 mt-auto">
+          <button
+            onClick={onSkip}
+            disabled={isUploadingAll}
+            className="text-sm text-gray-400 hover:text-gray-700 transition-colors disabled:opacity-40"
+          >
+            Skip
+          </button>
+          <div className="flex items-center gap-3">
+            {queue.length > 0 && !isUploadingAll && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
+              >
+                + Add more
+              </button>
+            )}
+            <button
+              onClick={handleUploadAll}
+              disabled={!canUpload || isUploadingAll}
+              className={cn(
+                'px-6 py-2.5 text-sm font-medium transition-all',
+                canUpload && !isUploadingAll
+                  ? 'bg-black text-white hover:bg-gray-800'
+                  : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+              )}
+              style={{ borderRadius: '2px' }}
+            >
+              {isUploadingAll ? (
+                <span className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…</span>
+              ) : (
+                `Upload ${queue.length > 0 ? queue.length + ` file${queue.length > 1 ? 's' : ''}` : ''}`
+              )}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

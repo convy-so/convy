@@ -74,10 +74,10 @@ export abstract class BaseSpecialistAgent {
 To succeed, you must complete this checklist:
 
 REQUIRED:
-${checklist.required.map((i) => `[ ] ${i.description}`).join("\n")}
+${checklist.required.map((i) => `[${i.status === "met" ? "x" : " "}] ${i.description}`).join("\n")}
 
 ASPIRATIONAL (Try to achieve):
-${checklist.aspirational.map((i) => `[ ] ${i.description}`).join("\n")}
+${checklist.aspirational.map((i) => `[${i.status === "met" ? "x" : " "}] ${i.description}`).join("\n")}
 </success_criteria>
     `.trim();
   }

@@ -483,15 +483,51 @@ You are strictly forbidden from calling 'finishSurvey' until you have addressed 
             .string()
             .describe("Brief summary of the survey that was designed"),
         }),
-        execute: async ({ summary }) => ({
-          success: true,
-          message: "Survey design complete",
-          summary,
-        }),
+        execute: async ({ summary }) => {
+          // Mark all collectedInfo flags as complete so the frontend can show the button
+          if (ctx.surveyConfig?.id) {
+            try {
+              const { db } = await import("@/db");
+              const { eq } = await import("drizzle-orm");
+              const { surveyCreationConversations } =
+                await import("@/db/schema");
+              await db
+                .update(surveyCreationConversations)
+                .set({
+                  collectedInfo: {
+                    objective: true,
+                    targetAudience: true,
+                    scope: true,
+                    successCriteria: true,
+                    constraints: true,
+                    hypotheses: true,
+                    tone: true,
+                    requiredQuestions: true,
+                    metrics: true,
+                    personalInfo: true,
+                    subjectDefined: true,
+                    domainIdentified: true,
+                    media: true,
+                    subjectModelComplete: true,
+                  },
+                  status: "completed",
+                })
+                .where(
+                  eq(surveyCreationConversations.surveyId, ctx.surveyConfig.id),
+                );
+            } catch (e) {
+              console.error(
+                "[finishSurvey] Failed to update collectedInfo:",
+                e,
+              );
+            }
+          }
+          return { success: true, message: "Survey design complete", summary };
+        },
       }),
       requestMediaUpload: tool({
         description:
-          "Request the user to upload media (image, audio, or video) to include in the survey.",
+          "Request the user to upload media (image, audio, or video) to include in the survey. This is a CLIENT-SIDE tool — do NOT expect a server result. The user will be shown an upload widget in the chat.",
         inputSchema: z.object({
           reason: z
             .string()
@@ -511,18 +547,8 @@ You are strictly forbidden from calling 'finishSurvey' until you have addressed 
             .optional()
             .describe("What the user wants to learn from this media."),
         }),
-        execute: async ({
-          reason,
-          allowedTypes,
-          description,
-          learningGoal,
-        }) => ({
-          success: true,
-          message: "Media upload requested",
-          reason,
-          allowedTypes: allowedTypes || ["image", "audio", "video"],
-          context: { description, learningGoal },
-        }),
+        // No execute: intentionally client-side. The frontend MediaUploadFlow component
+        // handles this tool call and provides the result via addToolOutput.
       }),
     };
   }

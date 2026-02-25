@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { surveys, surveyCreationConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
+import { env } from "@/lib/env";
 
 /**
  * Publish a survey - sets status to active, copies extracted data, and generates shareable link
@@ -111,8 +112,7 @@ export async function POST(
       .returning();
 
     // Construct the full shareable URL
-    const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:3000";
-    const shareUrl = `${baseUrl}/s/${shareableLink}`;
+    const shareUrl = `${env.APP_BASE_URL}/s/${shareableLink}`;
 
     console.log(`[Publish] Survey ${surveyId} publishing...`);
     console.log(
