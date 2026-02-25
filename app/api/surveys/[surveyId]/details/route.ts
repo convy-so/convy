@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
+import { env } from "@/lib/env";
 
 /**
  * GET - Get detailed survey info for the owner
@@ -105,9 +106,8 @@ export async function GET(
     }
 
     // Build shareable URL
-    const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:3000";
     const shareableUrl = survey.shareableLink
-      ? `${baseUrl}/s/${survey.shareableLink}`
+      ? `${env.APP_BASE_URL}/s/${survey.shareableLink}`
       : null;
 
     return NextResponse.json({

@@ -7,13 +7,9 @@ const redis = new Redis({
   token: env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-export const CacheKeys = {
-  featureFlags: (userId: string) => `flags:${userId}`,
-} as const;
+export const CacheKeys = {} as const;
 
-export const TTL = {
-  featureFlags: 60, // 1 minute
-} as const;
+export const TTL = {} as const;
 
 export class CacheService {
   static async get<T>(key: string): Promise<T | null> {

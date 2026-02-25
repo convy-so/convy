@@ -6,34 +6,106 @@ import { logUsage } from "./billing/logger";
 /**
  * Normalizes messages from the client (which may use UI-centric 'parts')
  * into the ModelMessage format expected by the Vercel AI SDK.
+ *
+ * IMPORTANT: Must preserve tool call and tool result parts so the AI
+ * receives the complete conversation history including resolved tool calls.
+ * Without this, the AI will re-invoke tools it has already called.
  */
 export function normalizeMessages(messages: any[]): ModelMessage[] {
-  return messages.map((msg) => {
+  const result: ModelMessage[] = [];
+
+  for (const msg of messages) {
     const { role, content, parts } = msg;
 
-    // If content is already a string and present, use it
-    if (typeof content === "string" && content.length > 0) {
-      return { role, content } as ModelMessage;
+    // --- Assistant messages ---
+    if (role === "assistant") {
+      // If content is already a proper array (multi-part: text + tool-call), use as-is
+      if (Array.isArray(content)) {
+        result.push({ role, content } as ModelMessage);
+        continue;
+      }
+
+      // Build assistant content from parts (AI SDK v6 format)
+      if (Array.isArray(parts) && parts.length > 0) {
+        const contentParts: any[] = [];
+
+        for (const p of parts) {
+          if (p.type === "text" && p.text) {
+            contentParts.push({ type: "text", text: p.text });
+          } else if (p.type?.startsWith("tool-") && p.toolCallId) {
+            // This is a tool-call part: type = 'tool-{toolName}'
+            const toolName = p.type.replace(/^tool-/, "");
+            if (p.state === "output-available" || p.output !== undefined) {
+              // Skip — tool results are represented as separate 'tool' role messages below
+            } else {
+              // Tool call (pending/input-available)
+              contentParts.push({
+                type: "tool-call",
+                toolCallId: p.toolCallId,
+                toolName,
+                args: p.input ?? p.args ?? {},
+              });
+            }
+          }
+        }
+
+        if (contentParts.length > 0) {
+          result.push({ role, content: contentParts } as ModelMessage);
+
+          // After the assistant message, emit tool-result messages for resolved tools
+          for (const p of parts) {
+            if (
+              p.type?.startsWith("tool-") &&
+              p.toolCallId &&
+              (p.state === "output-available" || p.output !== undefined)
+            ) {
+              const toolName = p.type.replace(/^tool-/, "");
+              result.push({
+                role: "tool",
+                content: [
+                  {
+                    type: "tool-result",
+                    toolCallId: p.toolCallId,
+                    toolName,
+                    result: p.output ?? p.result ?? {},
+                  },
+                ],
+              } as ModelMessage);
+            }
+          }
+          continue;
+        }
+      }
+
+      // Plain string content
+      const text = typeof content === "string" ? content : "";
+      result.push({ role, content: text } as ModelMessage);
+      continue;
     }
 
-    // If content is missing or empty, but parts are present, extract text content
-    if (Array.isArray(parts)) {
-      const textContent = parts
-        .filter((p: any) => p.type === "text")
-        .map((p: any) => p.text)
-        .join("\n");
-
-      return { role, content: textContent } as ModelMessage;
+    // --- User messages ---
+    if (role === "user") {
+      if (typeof content === "string" && content.length > 0) {
+        result.push({ role, content } as ModelMessage);
+        continue;
+      }
+      if (Array.isArray(parts)) {
+        const textContent = parts
+          .filter((p: any) => p.type === "text")
+          .map((p: any) => p.text)
+          .join("\n");
+        result.push({ role, content: textContent || "" } as ModelMessage);
+        continue;
+      }
+      result.push({ role, content: content || "" } as ModelMessage);
+      continue;
     }
 
-    // Fallback for assistant messages with tool calls but no text
-    if (role === "assistant" && Array.isArray(content)) {
-      return { role, content } as ModelMessage;
-    }
+    // Fallback for any other role
+    result.push({ role, content: content || "" } as ModelMessage);
+  }
 
-    // Absolute fallback
-    return { role, content: content || "" } as ModelMessage;
-  });
+  return result;
 }
 
 export const flashLiteModel = google("gemini-2.5-flash-lite");
