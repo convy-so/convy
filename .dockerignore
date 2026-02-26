@@ -53,3 +53,4 @@ __tests__
 # Misc
 README.md
 *.md
+!.agent/skills/**/*.md

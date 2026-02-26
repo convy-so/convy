@@ -6,6 +6,18 @@ import { loadEnvConfig } from "@next/env";
 const projectDir = process.cwd();
 loadEnvConfig(projectDir);
 
+import * as Sentry from "@sentry/node";
+
+/*
+// Initialize Sentry for the standalone Node.js Project
+Sentry.init({
+  dsn: process.env.SENTRY_NODE_DSN || process.env.SENTRY_DSN,
+  tracesSampleRate: 1.0,
+  environment: process.env.NODE_ENV || "development",
+  serverName: "websocket-server",
+});
+*/
+
 import { env } from "@/lib/env";
 import {
   authenticateWebSocket,
@@ -736,6 +748,7 @@ process.on("SIGINT", async () => {
 // Handle uncaught errors
 process.on("uncaughtException", (error) => {
   console.error("[WebSocket] Uncaught exception:", error);
+  Sentry.captureException(error, { tags: { type: "uncaughtException" } });
   process.exit(1);
 });
 
@@ -746,4 +759,5 @@ process.on("unhandledRejection", (reason, promise) => {
     "reason:",
     reason,
   );
+  Sentry.captureException(reason, { tags: { type: "unhandledRejection" } });
 });
