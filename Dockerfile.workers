@@ -51,6 +51,8 @@ RUN adduser --system --uid 1001 worker
 COPY --from=builder --chown=worker:nodejs /app/dist ./dist
 COPY --from=builder --chown=worker:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=worker:nodejs /app/package.json ./
+# Agent instructions (skills)
+COPY --from=builder --chown=worker:nodejs /app/.agent/skills ./.agent/skills
 
 USER worker
 

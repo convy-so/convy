@@ -50,6 +50,8 @@ RUN adduser --system --uid 1001 wsuser
 COPY --from=builder --chown=wsuser:nodejs /app/dist ./dist
 COPY --from=builder --chown=wsuser:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=wsuser:nodejs /app/package.json ./
+# Agent instructions (skills)
+COPY --from=builder --chown=wsuser:nodejs /app/.agent/skills ./.agent/skills
 
 USER wsuser
 

@@ -584,7 +584,7 @@ You are strictly forbidden from calling 'finishSurvey' until you have addressed 
           surveyId: ctx.surveyConfig?.id,
           type: "llm_text",
           provider: "google",
-          modelName: (defaultModel as any).modelId,
+          modelName: (defaultModel as any).modelId ?? "gemini-2.5-flash",
           promptTokens: result.usage.inputTokens,
           completionTokens: result.usage.outputTokens,
           totalTokens: result.usage.totalTokens,

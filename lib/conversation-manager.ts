@@ -64,7 +64,7 @@ export class ConversationManager {
           .map((inv: any) => {
             const toolName = inv.toolName;
             if (toolName === "showMedia") {
-              const mediaId = inv.args?.mediaId;
+              const mediaId = inv.input?.mediaId || inv.args?.mediaId;
               const media = config?.media?.find((item) => item.id === mediaId);
               const label = media
                 ? `${media.type} "${media.description}"`

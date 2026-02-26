@@ -43,7 +43,7 @@ export function normalizeMessages(messages: any[]): ModelMessage[] {
                 type: "tool-call",
                 toolCallId: p.toolCallId,
                 toolName,
-                args: p.input ?? p.args ?? {},
+                input: p.input ?? p.args ?? {},
               });
             }
           }
@@ -67,7 +67,7 @@ export function normalizeMessages(messages: any[]): ModelMessage[] {
                     type: "tool-result",
                     toolCallId: p.toolCallId,
                     toolName,
-                    result: p.output ?? p.result ?? {},
+                    output: p.output ?? p.result ?? {},
                   },
                 ],
               } as ModelMessage);
@@ -108,8 +108,11 @@ export function normalizeMessages(messages: any[]): ModelMessage[] {
   return result;
 }
 
-export const flashLiteModel = google("gemini-2.5-flash-lite");
-export const flashModel = google("gemini-2.5-flash");
+export const GEMINI_FLASH_LITE_ID = "gemini-2.5-flash-lite";
+export const GEMINI_FLASH_ID = "gemini-2.5-flash";
+
+export const flashLiteModel = google(GEMINI_FLASH_LITE_ID);
+export const flashModel = google(GEMINI_FLASH_ID);
 
 // Use flash for analysis to ensure tool calling reliability
 export const analysisModel = flashModel;
@@ -173,7 +176,7 @@ export async function generateAIResponse(
     surveyId: options?.surveyId,
     type: "llm_text",
     provider: "google",
-    modelName: model.modelId,
+    modelName: (model as any).modelId ?? GEMINI_FLASH_ID,
     promptTokens: result.usage.inputTokens,
     completionTokens: result.usage.outputTokens,
     totalTokens: result.usage.totalTokens,
@@ -212,7 +215,7 @@ export function streamAIResponse(
         surveyId: options?.surveyId,
         type: "llm_text",
         provider: "google",
-        modelName: model.modelId,
+        modelName: (model as any).modelId ?? GEMINI_FLASH_ID,
         promptTokens: result.usage.inputTokens,
         completionTokens: result.usage.outputTokens,
         totalTokens: result.usage.totalTokens,

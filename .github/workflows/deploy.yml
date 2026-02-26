@@ -91,8 +91,8 @@ jobs:
           push: true
           # Tag with BOTH the SHA (immutable) and latest (ECS rolling deploy pulls this)
           tags: |
-            ${{ env.ECR_REGISTRY }}/convy-nextjs:${{ steps.vars.outputs.IMAGE_TAG }}
-            ${{ env.ECR_REGISTRY }}/convy-nextjs:latest
+            ${{ env.ECR_REGISTRY }}/convy/nextjs:${{ steps.vars.outputs.IMAGE_TAG }}
+            ${{ env.ECR_REGISTRY }}/convy/nextjs:latest
           # Pass NEXT_PUBLIC_* at build time (Next.js inlines them into the JS bundle)
           build-args: |
             NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
@@ -110,8 +110,8 @@ jobs:
           file: ./Dockerfile.websocket
           push: true
           tags: |
-            ${{ env.ECR_REGISTRY }}/convy-websocket:${{ steps.vars.outputs.IMAGE_TAG }}
-            ${{ env.ECR_REGISTRY }}/convy-websocket:latest
+            ${{ env.ECR_REGISTRY }}/convy/websocket:${{ steps.vars.outputs.IMAGE_TAG }}
+            ${{ env.ECR_REGISTRY }}/convy/websocket:latest
           cache-from: type=gha,scope=websocket
           cache-to: type=gha,mode=max,scope=websocket
 
@@ -123,8 +123,8 @@ jobs:
           file: ./Dockerfile.workers
           push: true
           tags: |
-            ${{ env.ECR_REGISTRY }}/convy-workers:${{ steps.vars.outputs.IMAGE_TAG }}
-            ${{ env.ECR_REGISTRY }}/convy-workers:latest
+            ${{ env.ECR_REGISTRY }}/convy/workers:${{ steps.vars.outputs.IMAGE_TAG }}
+            ${{ env.ECR_REGISTRY }}/convy/workers:latest
           cache-from: type=gha,scope=workers
           cache-to: type=gha,mode=max,scope=workers
 

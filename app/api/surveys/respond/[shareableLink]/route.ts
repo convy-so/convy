@@ -2,9 +2,6 @@ import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
 import {
-  streamText,
-  type ModelMessage,
-  stepCountIs,
   createUIMessageStream,
   createUIMessageStreamResponse,
 } from "ai";
@@ -15,8 +12,6 @@ import { ConversationManager } from "@/lib/conversation-manager";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import {
   selectModelForConversation,
-  flashModel,
-  flashLiteModel,
   normalizeMessages,
 } from "@/lib/ai";
 import { getTimeBasedGreeting } from "@/lib/greetings";
@@ -296,7 +291,7 @@ export async function POST(
               surveyId: survey.id,
               type: "llm_text",
               provider: "google",
-              modelName: (selectedModel as any).modelId,
+              modelName: (selectedModel as any).modelId ?? "gemini-2.5-flash",
               promptTokens: usage.inputTokens,
               completionTokens: usage.outputTokens,
               totalTokens: usage.totalTokens,

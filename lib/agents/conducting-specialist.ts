@@ -608,7 +608,7 @@ ${strategies.join("\n")}
           surveyId: config.id,
           type: "llm_text",
           provider: "google",
-          modelName: (defaultModel as any).modelId,
+          modelName: (defaultModel as any).modelId ?? "gemini-2.5-flash",
           promptTokens: params.usage.inputTokens,
           completionTokens: params.usage.outputTokens,
           totalTokens: params.usage.totalTokens,

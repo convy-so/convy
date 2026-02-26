@@ -46,6 +46,21 @@ ENV NEXT_PUBLIC_WEBSOCKET_URL=$NEXT_PUBLIC_WEBSOCKET_URL
 # Disable Next.js telemetry in CI.
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Build-time placeholders to satisfy 'lib/env.ts' validation.
+# These will be OVERRIDDEN at runtime by AWS SSM Parameter Store.
+ENV DATABASE_URL="postgresql://placeholder:5432/db"
+ENV BETTER_AUTH_SECRET="placeholder_secret"
+ENV GOOGLE_CLIENT_ID="placeholder_id"
+ENV GOOGLE_CLIENT_SECRET="placeholder_secret"
+ENV RESEND_API_KEY="re_placeholder"
+ENV RESEND_FROM_EMAIL="onboarding@resend.dev"
+ENV GOOGLE_GENERATIVE_AI_API_KEY="placeholder_key"
+ENV UPSTASH_REDIS_REST_URL="https://placeholder.upstash.io"
+ENV UPSTASH_REDIS_REST_TOKEN="placeholder_token"
+ENV NEXT_PUBLIC_SUPABASE_URL="https://placeholder.supabase.co"
+ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="pk_placeholder"
+ENV convy_supabase_secret_key="placeholder_key"
+
 RUN pnpm build
 
 
@@ -73,6 +88,8 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 # Pre-compiled static files (CSS, JS chunks, images).
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Agent instructions (skills)
+COPY --from=builder --chown=nextjs:nodejs /app/.agent/skills ./.agent/skills
 
 USER nextjs
 
