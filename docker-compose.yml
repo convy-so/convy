@@ -1,0 +1,110 @@
+# ============================================================
+# docker-compose.yml  —  Local end-to-end development & testing
+#
+# This mirrors your production setup but runs everything locally.
+# Use: docker compose up --build
+#
+# Prerequisites:
+#   - Docker Desktop running
+#   - A local .env.docker file (copy from .env, adjust as needed)
+# ============================================================
+
+version: "3.9"
+
+services:
+
+  # ── Redis (local BullMQ queue & pub/sub) ─────────────────────
+  # In production this is AWS ElastiCache. Locally we run our own.
+  redis:
+    image: redis:7-alpine
+    container_name: convy-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── BullMQ Workers ────────────────────────────────────────────
+  workers:
+    build:
+      context: .
+      dockerfile: Dockerfile.workers
+    container_name: convy-workers
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      REDIS_URL: "redis://redis:6379"
+      NODE_ENV: production
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── WebSocket Server ──────────────────────────────────────────
+  websocket:
+    build:
+      context: .
+      dockerfile: Dockerfile.websocket
+    container_name: convy-websocket
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env.docker
+    environment:
+      REDIS_URL: "redis://redis:6379"
+      WEBSOCKET_PORT: "3001"
+      NODE_ENV: production
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  # ── Next.js Application ───────────────────────────────────────
+  nextjs:
+    build:
+      context: .
+      dockerfile: Dockerfile.nextjs
+      args:
+        # NEXT_PUBLIC_* vars must be passed at BUILD TIME.
+        # These values come from your .env.docker file.
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+        NEXT_PUBLIC_WEBSOCKET_URL: ${NEXT_PUBLIC_WEBSOCKET_URL:-ws://localhost:3001}
+    container_name: convy-nextjs
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.docker
+    environment:
+      REDIS_URL: "redis://redis:6379"
+      NODE_ENV: production
+      BETTER_AUTH_URL: "http://localhost:3000"
+      APP_BASE_URL: "http://localhost:3000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      websocket:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+volumes:
+  redis-data:
+    driver: local
