@@ -52,9 +52,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    environment:
-      name: ${{ github.ref_name == 'production' && 'Production' || 'Staging' }}
-
     outputs:
       image_tag: ${{ steps.vars.outputs.IMAGE_TAG }}
       env_name: ${{ steps.vars.outputs.ENV_NAME }}
@@ -151,6 +148,8 @@ jobs:
     timeout-minutes: 10
     needs: build-and-push
 
+    # Needs environment secrets (DATABASE_URL) — but no deployment URL
+    # so this won't create a noisy "Deployed" entry in the GitHub UI.
     environment:
       name: ${{ github.ref_name == 'production' && 'Production' || 'Staging' }}
 
