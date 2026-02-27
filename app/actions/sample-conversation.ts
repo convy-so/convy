@@ -7,6 +7,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
+import { getSurveyAccessLevel } from "@/lib/workspace-access";
 import { getSampleConversationFeedbackPrompt } from "@/lib/prompts";
 import { MAX_SAMPLE_CONVERSATIONS } from "@/lib/surveys";
 
@@ -59,7 +60,7 @@ export interface SampleConversationInsights {
  * Now generates AI insights for the sample conversation.
  */
 export async function generateSampleConversationAction(
-  input: z.infer<typeof saveSampleConversationSchema>
+  input: z.infer<typeof saveSampleConversationSchema>,
 ): Promise<
   ActionResult<{
     id: string;
@@ -97,8 +98,8 @@ export async function generateSampleConversationAction(
       .where(
         and(
           eq(sampleConversations.surveyId, body.surveyId),
-          eq(sampleConversations.conversationNumber, conversationNumber)
-        )
+          eq(sampleConversations.conversationNumber, conversationNumber),
+        ),
       );
 
     const conversationId = existingConversation?.id ?? nanoid();
@@ -107,9 +108,8 @@ export async function generateSampleConversationAction(
 
     if (body.generateInsights !== false) {
       try {
-        const { enqueueSampleConversationInsights } = await import(
-          "@/lib/queue"
-        );
+        const { enqueueSampleConversationInsights } =
+          await import("@/lib/queue");
         const job = await enqueueSampleConversationInsights({
           surveyId: body.surveyId,
           conversationNumber,
@@ -156,7 +156,7 @@ export async function generateSampleConversationAction(
 
     const feedbackPrompt = getSampleConversationFeedbackPrompt(
       conversationNumber,
-      remainingSamples
+      remainingSamples,
     );
 
     return {
@@ -197,7 +197,7 @@ export async function generateSampleConversationAction(
 export async function provideSampleConversationFeedbackAction(
   surveyId: string,
   conversationNumber: number,
-  feedback: string
+  feedback: string,
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const session = await getVerifiedSession();
@@ -211,7 +211,8 @@ export async function provideSampleConversationFeedbackAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const access = await getSurveyAccessLevel(session.user.id, surveyId);
+    if (access !== "owner" && access !== "editor") {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -221,8 +222,8 @@ export async function provideSampleConversationFeedbackAction(
       .where(
         and(
           eq(sampleConversations.surveyId, surveyId),
-          eq(sampleConversations.conversationNumber, conversationNumber)
-        )
+          eq(sampleConversations.conversationNumber, conversationNumber),
+        ),
       );
 
     if (!conversation) {
@@ -235,8 +236,8 @@ export async function provideSampleConversationFeedbackAction(
       .where(
         and(
           eq(sampleConversations.surveyId, surveyId),
-          eq(sampleConversations.conversationNumber, conversationNumber)
-        )
+          eq(sampleConversations.conversationNumber, conversationNumber),
+        ),
       );
 
     return { success: true, data: { id: surveyId } };
@@ -257,9 +258,8 @@ export async function provideSampleConversationFeedbackAction(
 /**
  * Confirm a sample conversation (mark it as approved)
  */
-export async function confirmSampleConversationAction
-(
-  input: z.infer<typeof confirmSampleConversationSchema>
+export async function confirmSampleConversationAction(
+  input: z.infer<typeof confirmSampleConversationSchema>,
 ): Promise<ActionResult<{ id: string; canConfirmSurvey: boolean }>> {
   try {
     const session = await getVerifiedSession();
@@ -283,8 +283,8 @@ export async function confirmSampleConversationAction
       .where(
         and(
           eq(sampleConversations.surveyId, body.surveyId),
-          eq(sampleConversations.conversationNumber, body.conversationNumber)
-        )
+          eq(sampleConversations.conversationNumber, body.conversationNumber),
+        ),
       );
 
     const [allConversations, confirmedConversations] = await Promise.all([
@@ -298,8 +298,8 @@ export async function confirmSampleConversationAction
         .where(
           and(
             eq(sampleConversations.surveyId, body.surveyId),
-            eq(sampleConversations.confirmed, true)
-          )
+            eq(sampleConversations.confirmed, true),
+          ),
         ),
     ]);
 
@@ -344,7 +344,7 @@ export async function confirmSampleConversationAction
  * These are the survey maker's thoughts on what to add, emphasize, or change
  */
 export async function addSampleConversationFinalCommentsAction(
-  input: z.infer<typeof finalCommentsSchema>
+  input: z.infer<typeof finalCommentsSchema>,
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const session = await getVerifiedSession();
@@ -369,8 +369,8 @@ export async function addSampleConversationFinalCommentsAction(
       .where(
         and(
           eq(sampleConversations.surveyId, body.surveyId),
-          eq(sampleConversations.conversationNumber, body.conversationNumber)
-        )
+          eq(sampleConversations.conversationNumber, body.conversationNumber),
+        ),
       );
 
     if (!conversation) {
@@ -432,7 +432,8 @@ export async function getSampleConversationsAction(surveyId: string): Promise<
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const access = await getSurveyAccessLevel(session.user.id, surveyId);
+    if (access === "none") {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -472,7 +473,7 @@ export async function getSampleConversationsAction(surveyId: string): Promise<
  * Returns information about sample conversation progress
  */
 export async function getSampleConversationStatusAction(
-  surveyId: string
+  surveyId: string,
 ): Promise<
   ActionResult<{
     totalSamples: number;
@@ -495,7 +496,8 @@ export async function getSampleConversationStatusAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const access = await getSurveyAccessLevel(session.user.id, surveyId);
+    if (access === "none") {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -507,14 +509,13 @@ export async function getSampleConversationStatusAction(
     const totalSamples = conversations.length;
     const confirmedSamples = conversations.filter((c) => c.confirmed).length;
     const remainingSamples = MAX_SAMPLE_CONVERSATIONS - totalSamples;
-    const canConfirmSurvey =
-      totalSamples > 0 && confirmedSamples >= 1;
+    const canConfirmSurvey = totalSamples > 0 && confirmedSamples >= 1;
 
     let feedbackPrompt: string | null = null;
     if (remainingSamples > 0 && totalSamples > 0) {
       feedbackPrompt = getSampleConversationFeedbackPrompt(
         totalSamples,
-        remainingSamples
+        remainingSamples,
       );
     }
 
@@ -543,5 +544,75 @@ export async function getSampleConversationStatusAction(
       success: false,
       error: "Failed to get sample conversation status",
     };
+  }
+}
+
+/**
+ * Add a comment to a sample conversation
+ * This is meant for workspace members to give feedback on a sample interaction
+ */
+export async function addSampleConversationCommentAction(
+  surveyId: string,
+  conversationNumber: number,
+  text: string,
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const session = await getVerifiedSession();
+
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    const access = await getSurveyAccessLevel(session.user.id, surveyId);
+    if (access === "none") {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const [conversation] = await db
+      .select()
+      .from(sampleConversations)
+      .where(
+        and(
+          eq(sampleConversations.surveyId, surveyId),
+          eq(sampleConversations.conversationNumber, conversationNumber),
+        ),
+      );
+
+    if (!conversation) {
+      return { success: false, error: "Conversation not found" };
+    }
+
+    const newComment = {
+      id: nanoid(),
+      userId: session.user.id,
+      userName: session.user.name,
+      text,
+      createdAt: new Date().toISOString(),
+    };
+
+    const currentComments = conversation.comments || [];
+
+    await db
+      .update(sampleConversations)
+      .set({ comments: [...currentComments, newComment] })
+      .where(eq(sampleConversations.id, conversation.id));
+
+    return { success: true, data: { id: conversation.id } };
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return { success: false, error: error.message };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: "Failed to add comment" };
   }
 }

@@ -10,13 +10,16 @@ import { getVerifiedSession } from "@/lib/auth/session";
  */
 export async function isWorkspaceMember(
   userId: string,
-  organizationId: string
+  organizationId: string,
 ): Promise<boolean> {
   const [member] = await db
     .select()
     .from(members)
     .where(
-      and(eq(members.userId, userId), eq(members.organizationId, organizationId))
+      and(
+        eq(members.userId, userId),
+        eq(members.organizationId, organizationId),
+      ),
     );
   return !!member;
 }
@@ -26,7 +29,7 @@ export async function isWorkspaceMember(
  */
 export async function isWorkspaceOwner(
   userId: string,
-  organizationId: string
+  organizationId: string,
 ): Promise<boolean> {
   const [member] = await db
     .select()
@@ -35,8 +38,8 @@ export async function isWorkspaceOwner(
       and(
         eq(members.userId, userId),
         eq(members.organizationId, organizationId),
-        eq(members.role, "owner")
-      )
+        eq(members.role, "owner"),
+      ),
     );
   return !!member;
 }
@@ -46,13 +49,18 @@ export async function isWorkspaceOwner(
  * Useful for billing lookups since subscriptions are tied to the owner
  */
 export async function getWorkspaceOwnerId(
-  organizationId: string
+  organizationId: string,
 ): Promise<string | null> {
   const [owner] = await db
     .select({ userId: members.userId })
     .from(members)
-    .where(and(eq(members.organizationId, organizationId), eq(members.role, "owner")));
-  
+    .where(
+      and(
+        eq(members.organizationId, organizationId),
+        eq(members.role, "owner"),
+      ),
+    );
+
   return owner?.userId ?? null;
 }
 
@@ -64,12 +72,13 @@ export async function getWorkspaceOwnerId(
  */
 export async function getSurveyAccessLevel(
   userId: string,
-  surveyId: string
+  surveyId: string,
 ): Promise<"owner" | "editor" | "viewer" | "none"> {
   const [survey] = await db
     .select({
       userId: surveys.userId,
       organizationId: surveys.organizationId,
+      collaborators: surveys.collaborators,
     })
     .from(surveys)
     .where(eq(surveys.id, surveyId));
@@ -87,7 +96,7 @@ export async function getSurveyAccessLevel(
     // 1. Creator = Owner
     // 2. Workspace Owner = Owner (Can manage/close)
     // 3. Workspace Member = Viewer (Can view, create new)
-    
+
     if (survey.userId === userId) {
       return "owner";
     }
@@ -95,6 +104,10 @@ export async function getSurveyAccessLevel(
     const isOwner = await isWorkspaceOwner(userId, survey.organizationId);
     if (isOwner) {
       return "owner";
+    }
+
+    if (survey.collaborators && survey.collaborators.includes(userId)) {
+      return "editor";
     }
 
     // Default for all other workspace members

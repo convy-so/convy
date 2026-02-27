@@ -4,9 +4,11 @@ import { authClient } from "@/lib/auth-client";
 import { Session, User } from "better-auth/types";
 import { createContext, useContext, useEffect, useState } from "react";
 
+type SessionData = typeof authClient.$Infer.Session;
+
 type AuthContextType = {
-    session: Session | null;
-    user: User | null;
+    session: SessionData["session"] | null;
+    user: SessionData["user"] | null;
     isLoading: boolean;
 };
 
@@ -26,10 +28,10 @@ export function AuthProvider({
         user: User | null;
     } | null;
 }) {
-    const [session, setSession] = useState<Session | null>(
+    const [session, setSession] = useState<SessionData["session"] | null>(
         initialSession?.session ?? null
     );
-    const [user, setUser] = useState<User | null>(
+    const [user, setUser] = useState<SessionData["user"] | null>(
         initialSession?.user ?? null
     );
     const [isLoading, setIsLoading] = useState(!initialSession);

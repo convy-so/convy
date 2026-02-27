@@ -17,7 +17,7 @@ import { analysisModel, generateAIResponse } from "@/lib/ai";
 import type { SurveyConfig } from "@/lib/prompts";
 
 export interface ConversationSignals {
-  completionRate: number;        // 0-1
+  completionRate: number; // 0-1
   dropoffTurnIndex: number | null;
   totalTurns: number;
   avgWordsPerResponse: number;
@@ -43,16 +43,22 @@ interface RawMessage {
 export async function collectConversationSignals(
   conversationId: string,
   surveyId: string,
-  surveyConfig: SurveyConfig
+  surveyConfig: SurveyConfig,
 ): Promise<ConversationSignals> {
   // 1. Load raw conversation
   const [conv] = await db
-    .select({ rawConversation: surveyConversations.rawConversation, completed: surveyConversations.completed })
+    .select({
+      rawConversation: surveyConversations.rawConversation,
+      completed: surveyConversations.completed,
+    })
     .from(surveyConversations)
     .where(eq(surveyConversations.id, conversationId))
     .limit(1);
 
-  if (!conv) throw new Error(`[SignalCollection] Conversation ${conversationId} not found`);
+  if (!conv)
+    throw new Error(
+      `[SignalCollection] Conversation ${conversationId} not found`,
+    );
 
   const messages = (conv.rawConversation as RawMessage[]) || [];
 
@@ -61,7 +67,9 @@ export async function collectConversationSignals(
   const participantTurns = messages.filter((m) => m.role === "user");
   const totalTurns = aiTurns.length;
 
-  const wordCounts = participantTurns.map((m) => m.content.trim().split(/\s+/).length);
+  const wordCounts = participantTurns.map(
+    (m) => m.content.trim().split(/\s+/).length,
+  );
   const avgWordsPerResponse =
     wordCounts.length > 0
       ? wordCounts.reduce((a, b) => a + b, 0) / wordCounts.length
@@ -75,18 +83,26 @@ export async function collectConversationSignals(
   const dropoffTurnIndex = conv.completed ? null : totalTurns;
 
   // Basic offtopic heuristic: very short responses after turn 3 (participant gave up)
-  const offtopicResponseCount = participantTurns.filter((m, i) => i > 2 && m.content.trim().split(/\s+/).length <= 2).length;
+  const offtopicResponseCount = participantTurns.filter(
+    (m, i) => i > 2 && m.content.trim().split(/\s+/).length <= 2,
+  ).length;
 
   // Average richness: word count diversity + sentence count proxy
-  const richnessScores = participantTurns.map((m) => computeRichnessScore(m.content));
+  const richnessScores = participantTurns.map((m) =>
+    computeRichnessScore(m.content),
+  );
   const avgResponseRichnessScore =
     richnessScores.length > 0
       ? richnessScores.reduce((a, b) => a + b, 0) / richnessScores.length
       : 0;
 
   // 3. LLM-based signals with FIXED RUBRIC (deterministic, not free-form)
-  const { objectiveCoverageScore, missedObjectives, detectedStyle, styleDetectionConfidence } =
-    await runObjectiveCoverageRubric(messages, surveyConfig);
+  const {
+    objectiveCoverageScore,
+    missedObjectives,
+    detectedStyle,
+    styleDetectionConfidence,
+  } = await runObjectiveCoverageRubric(messages, surveyConfig);
 
   // 4. Persist to DB
   const signals: ConversationSignals = {
@@ -123,7 +139,7 @@ export async function collectConversationSignals(
   console.log(
     `[SignalCollection] conversation=${conversationId} ` +
       `completion=${completionRate.toFixed(2)} objectiveCoverage=${objectiveCoverageScore.toFixed(2)} ` +
-      `style=${detectedStyle} avgWords=${avgWordsPerResponse.toFixed(1)}`
+      `style=${detectedStyle} avgWords=${avgWordsPerResponse.toFixed(1)}`,
   );
 
   return signals;
@@ -142,13 +158,13 @@ function computeRichnessScore(text: string): number {
   // Unique word ratio
   const uniqueWords = new Set(words.map((w) => w.toLowerCase())).size;
   const uniqueRatio = words.length > 0 ? uniqueWords / words.length : 0;
-  return (wordCountNorm * 0.5 + sentenceVariety * 0.25 + uniqueRatio * 0.25);
+  return wordCountNorm * 0.5 + sentenceVariety * 0.25 + uniqueRatio * 0.25;
 }
 
 /** Fixed-rubric LLM call — always returns JSON, never free-form essay */
 async function runObjectiveCoverageRubric(
   messages: RawMessage[],
-  config: SurveyConfig
+  config: SurveyConfig,
 ): Promise<{
   objectiveCoverageScore: number;
   missedObjectives: string[];
@@ -156,8 +172,9 @@ async function runObjectiveCoverageRubric(
   styleDetectionConfidence: number | null;
 }> {
   const objectives = [
-    config.objective?.goal,
-    ...(config.scope?.mainTopics ?? []),
+    config.coreObjective,
+    config.expertState?.objective?.goal,
+    ...(config.expertState?.scope?.mainTopics ?? []),
   ].filter(Boolean);
 
   if (objectives.length === 0) {
@@ -202,9 +219,16 @@ TASK: Return ONLY a JSON object with exactly these fields — no commentary:
     const parsed = JSON.parse(jsonMatch[0]);
 
     return {
-      objectiveCoverageScore: Math.min(1, Math.max(0, Number(parsed.objectiveCoverageScore) || 0)),
-      missedObjectives: Array.isArray(parsed.missedObjectives) ? parsed.missedObjectives : [],
-      detectedStyle: ["verbose", "concise", "hesitant", "neutral"].includes(parsed.detectedStyle)
+      objectiveCoverageScore: Math.min(
+        1,
+        Math.max(0, Number(parsed.objectiveCoverageScore) || 0),
+      ),
+      missedObjectives: Array.isArray(parsed.missedObjectives)
+        ? parsed.missedObjectives
+        : [],
+      detectedStyle: ["verbose", "concise", "hesitant", "neutral"].includes(
+        parsed.detectedStyle,
+      )
         ? parsed.detectedStyle
         : null,
       styleDetectionConfidence: parsed.styleDetectionConfidence
@@ -212,7 +236,10 @@ TASK: Return ONLY a JSON object with exactly these fields — no commentary:
         : null,
     };
   } catch (err) {
-    console.warn("[SignalCollection] Rubric LLM call failed, using defaults:", err);
+    console.warn(
+      "[SignalCollection] Rubric LLM call failed, using defaults:",
+      err,
+    );
     return {
       objectiveCoverageScore: 0.5,
       missedObjectives: [],

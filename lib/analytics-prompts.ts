@@ -31,9 +31,11 @@ export function getStructuredConversationInsightsPrompt(
     config.metrics.length > 0 ? config.metrics.join(", ") : "None specified";
 
   const hypotheses =
-    (config.hypotheses?.assumptions?.length ?? 0) > 0
+    (config.expertState?.hypotheses?.assumptions?.length ?? 0) > 0
       ? config
-          .hypotheses!.assumptions.map((h, i) => `${i + 1}. "${h}"`)
+          .expertState!.hypotheses.assumptions.map(
+            (h: string, i: number) => `${i + 1}. "${h}"`,
+          )
           .join("\n")
       : "";
 
@@ -50,12 +52,12 @@ Return ONLY valid JSON matching the schema below.
 </task>
 
 <survey_context>
-Goal: ${config.objective?.goal || "Gather participant feedback"}
-Audience: ${config.targetAudience?.description || "General participants"}
-Insight types needed: ${config.successCriteria?.insightTypes?.join(", ") || "Any"}
+Goal: ${config.coreObjective || config.expertState?.objective?.goal || config.information}
+Audience: ${config.expertState?.targetAudience?.description || "General participants"}
+Insight types needed: ${config.expertState?.successCriteria?.insightTypes?.join(", ") || "Any"}
 Required questions: ${requiredQuestions}
 Metrics to extract: ${metrics}
-${hypotheses ? `Hypotheses to evaluate:\n${hypotheses}` : ""}
+${(config.expertState?.hypotheses?.assumptions?.length ?? 0) > 0 ? `Hypotheses to evaluate:\n${config.expertState!.hypotheses.assumptions.map((h: string, i: number) => `${i + 1}. "${h}"`).join("\n")}` : ""}
 ${mediaAssets ? `Media assets:\n${mediaAssets}` : ""}
 </survey_context>
 
@@ -182,9 +184,9 @@ ${config.metrics.map((m, i) => `${i + 1}. "${m}"`).join("\n")}`
       : "";
 
   const hypothesesToValidate =
-    config.hypotheses && config.hypotheses.assumptions.length > 0
+    (config.expertState?.hypotheses?.assumptions?.length ?? 0) > 0
       ? `Hypotheses to Validate:
-${config.hypotheses.assumptions.map((h, i) => `${i + 1}. "${h}"`).join("\n")}`
+${config.expertState!.hypotheses.assumptions.map((h: string, i: number) => `${i + 1}. "${h}"`).join("\n")}`
       : "";
 
   const mediaToAnalyze =
@@ -201,10 +203,10 @@ ${config.media
 
 SURVEY CONTEXT:
 - Title: ${config.information || "Untitled Survey"}
-- Goal: ${config.objective?.goal || "Gather participant feedback"}
-- Target Audience: ${config.targetAudience?.description || "General participants"}
-- Success Criteria: ${config.successCriteria?.description || "Quality insights"}
-- Expected Insight Types: ${config.successCriteria?.insightTypes?.join(", ") || "All types"}
+- Goal: ${config.coreObjective || config.expertState?.objective?.goal || config.information}
+- Target Audience: ${config.expertState?.targetAudience?.description || "General participants"}
+- Success Criteria: ${config.expertState?.successCriteria?.description || "Quality insights"}
+- Expected Insight Types: ${config.expertState?.successCriteria?.insightTypes?.join(", ") || "All types"}
 
 Required Questions: ${config.requiredQuestions.length > 0 ? config.requiredQuestions.join("; ") : "None specified"}
 
@@ -351,7 +353,7 @@ Generate comprehensive analytics in this exact JSON structure:
   },
   
   "goalAssessment": {
-    "surveyObjective": "${config.objective?.goal || "Gather feedback"}",
+    "surveyObjective": "${config.coreObjective || config.expertState?.objective?.goal || "Gather feedback"}",
     "achievementScore": 1-10,
     "achievementLevel": "exceeded" | "met" | "partially_met" | "not_met",
     "insightTypesCollected": {
@@ -484,7 +486,7 @@ export function getAIDiscoveryPrompt(
   return `You are a pattern-recognition AI analyst. Your job is to find insights that the survey creator DIDN'T think to ask about.
 
 SURVEY CONTEXT:
-- Goal: ${config.objective?.goal || "Gather feedback"}
+- Goal: ${config.coreObjective || config.expertState?.objective?.goal || config.information}
 - Topics asked about: ${allTopics.slice(0, 20).join(", ")}
 - Metrics tracked: ${config.metrics.join(", ") || "None specified"}
 
@@ -533,10 +535,10 @@ export function getImprovedConversationSummaryPrompt(
 
   return `Summarize this survey conversation for analytics purposes.
 
-Survey Goal: ${config.objective?.goal || "Gather feedback"}
-Target Audience: ${config.targetAudience?.description || "Participants"}
-
-Conversation:
+Survey Goal: ${config.coreObjective || config.expertState?.objective?.goal || config.information}
+Target Audience: ${config.expertState?.targetAudience?.description || "Participants"}
+ 
+ Conversation:
 ${conversationText}
 
 Write a 2-3 sentence summary that:

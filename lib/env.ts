@@ -17,7 +17,8 @@ const optional = (key: string): string | undefined => {
   return process.env[key];
 };
 
-const betterAuthUrl = optional("BETTER_AUTH_URL") || "http://localhost:3000";
+const appBaseUrl = optional("APP_BASE_URL") || "http://localhost:3000";
+const betterAuthUrl = optional("BETTER_AUTH_URL") || appBaseUrl;
 
 export const env = {
   NODE_ENV: process.env.NODE_ENV ?? "development",
@@ -46,14 +47,9 @@ export const env = {
   WEBSOCKET_PORT: optional("WEBSOCKET_PORT") || "3001",
   DEEPGRAM_API_KEY: optional("DEEPGRAM_API_KEY"),
 
-  // Voice Feature Toggles
-  ENABLE_VOICE_FEATURES: optional("ENABLE_VOICE_FEATURES") === "true",
-  VAD_SENSITIVITY: optional("VAD_SENSITIVITY") || "0.5",
-  MAX_AUDIO_DURATION_MS: optional("MAX_AUDIO_DURATION_MS") || "300000", // 5 minutes
-
   // Application base URL (for public links & embeds), e.g. https://app.convy.com
-  APP_BASE_URL: optional("APP_BASE_URL") || "http://localhost:3000",
-  betterAuthUrl: optional("BETTER_AUTH_URL") || "http://localhost:3000",
+  APP_BASE_URL: appBaseUrl,
+  betterAuthUrl,
 
   // Better Auth Client URL (for frontend)
   NEXT_PUBLIC_BETTER_AUTH_URL:
@@ -62,8 +58,11 @@ export const env = {
   NEXT_PUBLIC_WEBSOCKET_URL:
     optional("NEXT_PUBLIC_WEBSOCKET_URL") || "ws://localhost:3001",
 
-  // External Tools
-  FFMPEG_PATH: optional("FFMPEG_PATH"),
+  ADMIN_EMAILS: optional("ADMIN_EMAILS")
+    ? optional("ADMIN_EMAILS")!
+        .split(",")
+        .map((e) => e.trim().toLowerCase())
+    : [],
 };
 
 export type Env = typeof env;

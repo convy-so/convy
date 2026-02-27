@@ -1,4 +1,3 @@
-
 /**
  * Conversation Memory and Context Management System
  *
@@ -203,7 +202,7 @@ function getWordCount(text: string): number {
  * Detect participant style from response patterns
  */
 export function detectParticipantStyle(
-  messages: Array<{ role: "user" | "assistant"; content: string }>
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
 ): ParticipantStyle {
   const userMessages = messages.filter((m) => m.role === "user");
 
@@ -227,7 +226,9 @@ export function detectParticipantStyle(
   ];
 
   const hasHesitation = userMessages.some((m) =>
-    hesitationPhrases.some((phrase) => m.content.toLowerCase().includes(phrase))
+    hesitationPhrases.some((phrase) =>
+      m.content.toLowerCase().includes(phrase),
+    ),
   );
 
   if (hasHesitation && avgWordCount < 20) return "hesitant";
@@ -240,7 +241,7 @@ export function detectParticipantStyle(
  * Calculate quality signals from conversation
  */
 export function calculateQualitySignals(
-  messages: Array<{ role: "user" | "assistant"; content: string }>
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
 ): ConversationQualitySignals {
   const userMessages = messages.filter((m) => m.role === "user");
 
@@ -286,7 +287,7 @@ export function calculateQualitySignals(
   ];
 
   const topicAvoidanceCount = userMessages.filter((m) =>
-    avoidancePhrases.some((phrase) => m.content.toLowerCase().includes(phrase))
+    avoidancePhrases.some((phrase) => m.content.toLowerCase().includes(phrase)),
   ).length;
 
   // Detect hesitation patterns
@@ -299,7 +300,7 @@ export function calculateQualitySignals(
   ];
 
   const hesitationPatterns = hesitationPhrases.filter((phrase) =>
-    userMessages.some((m) => m.content.toLowerCase().includes(phrase))
+    userMessages.some((m) => m.content.toLowerCase().includes(phrase)),
   );
 
   // Calculate engagement level
@@ -329,7 +330,7 @@ export function calculateQualitySignals(
 export function determineConversationState(
   progress: ConversationProgress,
   messageCount: number,
-  config: SurveyConfig
+  config: SurveyConfig,
 ): ConversationState {
   // First message - greeting
   if (messageCount <= 1) return "GREETING";
@@ -362,7 +363,7 @@ export function calculateProgress(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
   config: SurveyConfig,
   startTime: Date,
-  coveredTopics: string[]
+  coveredTopics: string[],
 ): ConversationProgress {
   const now = new Date();
   const elapsedMinutes = (now.getTime() - startTime.getTime()) / 1000 / 60;
@@ -372,20 +373,22 @@ export function calculateProgress(
     coveredTopics.some(
       (t) =>
         t.toLowerCase().includes(q.toLowerCase().slice(0, 20)) ||
-        q.toLowerCase().includes(t.toLowerCase().slice(0, 20))
-    )
+        q.toLowerCase().includes(t.toLowerCase().slice(0, 20)),
+    ),
   );
 
   const completionPercentage = Math.min(
     100,
-    Math.round((coveredRequiredQuestions.length / totalRequiredQuestions) * 100)
+    Math.round(
+      (coveredRequiredQuestions.length / totalRequiredQuestions) * 100,
+    ),
   );
 
   const remainingTopicsCount =
     totalRequiredQuestions - coveredRequiredQuestions.length;
 
   // Determine if we should wrap up
-  const timeLimit = config.constraints?.timeLimit || 30;
+  const timeLimit = config.expertState?.constraints?.timeLimit || 30;
   const shouldWrapUpTime = elapsedMinutes >= timeLimit * 0.85; // 85% of time
   const shouldWrapUpCoverage = completionPercentage >= 85;
   const shouldWrapUpLength = messages.length >= 40; // Too many messages
@@ -426,8 +429,8 @@ export function createEmptyMemory(config: SurveyConfig): ConversationMemory {
 
   const unexploredHypotheses: string[] = [];
 
-  if (config.hypotheses?.assumptions) {
-    for (const hypothesis of config.hypotheses.assumptions) {
+  if (config.expertState?.hypotheses?.assumptions) {
+    for (const hypothesis of config.expertState.hypotheses.assumptions) {
       hypothesesEvidence[hypothesis] = { supporting: [], contradicting: [] };
       unexploredHypotheses.push(hypothesis);
     }
@@ -459,7 +462,7 @@ export function createEmptyMemory(config: SurveyConfig): ConversationMemory {
 export function createRollingContext(
   surveyId: string,
   config: SurveyConfig,
-  startTime: Date
+  startTime: Date,
 ): RollingContext {
   return {
     surveyId,
@@ -507,7 +510,7 @@ const SUMMARY_TRIGGER_THRESHOLD = 12; // Start summarizing after 12 messages
  */
 export function buildCompressedContext(
   fullMessages: Array<{ role: "user" | "assistant"; content: string }>,
-  existingContext: RollingContext
+  existingContext: RollingContext,
 ): RollingContext {
   const messageCount = fullMessages.length;
 
@@ -543,7 +546,7 @@ export function buildCompressedContext(
  * Build a quick structural summary (non-AI, for initial context)
  */
 function buildQuickSummary(
-  messages: Array<{ role: "user" | "assistant"; content: string }>
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
 ): string {
   if (messages.length === 0) return "";
 
@@ -578,14 +581,14 @@ export function formatContextForPrompt(context: RollingContext): string {
   // Add key facts
   if (context.memory.keyFactsLearned.length > 0) {
     parts.push(
-      `KEY FACTS LEARNED:\n${context.memory.keyFactsLearned.map((f) => `• ${f}`).join("\n")}`
+      `KEY FACTS LEARNED:\n${context.memory.keyFactsLearned.map((f) => `• ${f}`).join("\n")}`,
     );
   }
 
   // Add specific examples collected (for quality tracking)
   if (context.memory.specificExamples.length > 0) {
     parts.push(
-      `SPECIFIC EXAMPLES/QUOTES COLLECTED:\n${context.memory.specificExamples.map((e) => `"${e}"`).join("\n")}`
+      `SPECIFIC EXAMPLES/QUOTES COLLECTED:\n${context.memory.specificExamples.map((e) => `"${e}"`).join("\n")}`,
     );
   }
 
@@ -597,14 +600,14 @@ export function formatContextForPrompt(context: RollingContext): string {
       return `${depthIndicator} ${t} (${depth} follow-ups)`;
     });
     parts.push(
-      `TOPICS COVERED (with follow-up depth):\n${topicsWithDepth.join("\n")}`
+      `TOPICS COVERED (with follow-up depth):\n${topicsWithDepth.join("\n")}`,
     );
   }
 
   // Add remaining topics
   if (context.memory.remainingRequiredTopics.length > 0) {
     parts.push(
-      `TOPICS STILL TO COVER:\n${context.memory.remainingRequiredTopics.map((t) => `○ ${t}`).join("\n")}`
+      `TOPICS STILL TO COVER:\n${context.memory.remainingRequiredTopics.map((t) => `○ ${t}`).join("\n")}`,
     );
   }
 
@@ -612,28 +615,28 @@ export function formatContextForPrompt(context: RollingContext): string {
   if (context.memory.unexploredHypotheses.length > 0) {
     parts.push(
       `⚠️ UNEXPLORED HYPOTHESES (need to investigate):\n${context.memory.unexploredHypotheses.map((h) => `? ${h}`).join("\n")}\n` +
-        `TIP: Ask questions that would reveal evidence for or against these hypotheses.`
+        `TIP: Ask questions that would reveal evidence for or against these hypotheses.`,
     );
   }
 
   // Add timeline events discovered
   if (context.memory.timelineEvents.length > 0) {
     parts.push(
-      `TIMELINE DISCOVERED:\n${context.memory.timelineEvents.map((e) => `📅 ${e}`).join("\n")}`
+      `TIMELINE DISCOVERED:\n${context.memory.timelineEvents.map((e) => `📅 ${e}`).join("\n")}`,
     );
   }
 
   // Add peer context
   if (context.memory.peerContext.length > 0) {
     parts.push(
-      `PEER/SOCIAL CONTEXT:\n${context.memory.peerContext.map((p) => `👥 ${p}`).join("\n")}`
+      `PEER/SOCIAL CONTEXT:\n${context.memory.peerContext.map((p) => `👥 ${p}`).join("\n")}`,
     );
   }
 
   // Add participant suggested solutions
   if (context.memory.participantSuggestedSolutions.length > 0) {
     parts.push(
-      `SOLUTIONS SUGGESTED BY PARTICIPANT:\n${context.memory.participantSuggestedSolutions.map((s) => `💡 ${s}`).join("\n")}`
+      `SOLUTIONS SUGGESTED BY PARTICIPANT:\n${context.memory.participantSuggestedSolutions.map((s) => `💡 ${s}`).join("\n")}`,
     );
   }
 
@@ -641,7 +644,7 @@ export function formatContextForPrompt(context: RollingContext): string {
   parts.push(
     `CONVERSATION STATE: ${context.stateContext.currentState}` +
       `\nPROGRESS: ${context.progress.completionPercentage}% complete, ` +
-      `${Math.round(context.progress.elapsedMinutes)} minutes elapsed`
+      `${Math.round(context.progress.elapsedMinutes)} minutes elapsed`,
   );
 
   // Add participant style adaptation
@@ -656,17 +659,17 @@ export function formatContextForPrompt(context: RollingContext): string {
       neutral: "",
     };
     parts.push(
-      `PARTICIPANT STYLE: ${styleGuidance[context.memory.participantStyle]}`
+      `PARTICIPANT STYLE: ${styleGuidance[context.memory.participantStyle]}`,
     );
   }
 
   // Add depth prompting if needed
   const shallowTopics = context.memory.topicsCovered.filter(
-    (t) => (context.memory.followUpDepthByTopic[t] || 0) < 2
+    (t) => (context.memory.followUpDepthByTopic[t] || 0) < 2,
   );
   if (shallowTopics.length > 0 && !context.progress.shouldWrapUp) {
     parts.push(
-      `💬 NEED MORE DEPTH ON:\n${shallowTopics.map((t) => `- ${t} (consider follow-up questions)`).join("\n")}`
+      `💬 NEED MORE DEPTH ON:\n${shallowTopics.map((t) => `- ${t} (consider follow-up questions)`).join("\n")}`,
     );
   }
 
@@ -674,16 +677,16 @@ export function formatContextForPrompt(context: RollingContext): string {
   if (context.progress.shouldWrapUp) {
     parts.push(
       `⚠️ WRAP-UP NEEDED: ${context.progress.wrapUpReason}\n` +
-        `Begin transitioning to conclusion. Cover any critical remaining points briefly.`
+        `Begin transitioning to conclusion. Cover any critical remaining points briefly.`,
     );
   }
 
   // Add hypotheses evidence if relevant
   const hypothesesWithEvidence = Object.entries(
-    context.memory.hypothesesEvidence
+    context.memory.hypothesesEvidence,
   ).filter(
     ([, evidence]) =>
-      evidence.supporting.length > 0 || evidence.contradicting.length > 0
+      evidence.supporting.length > 0 || evidence.contradicting.length > 0,
   );
 
   if (hypothesesWithEvidence.length > 0) {
@@ -698,7 +701,7 @@ export function formatContextForPrompt(context: RollingContext): string {
               ? "CONTRADICTED"
               : "MIXED";
         return `• "${hypothesis.slice(0, 50)}..." → ${status} (${supportCount}+ / ${contradictCount}-)`;
-      }
+      },
     );
     parts.push(`HYPOTHESES STATUS:\n${evidenceLines.join("\n")}`);
   }
@@ -717,7 +720,7 @@ export function formatContextForPrompt(context: RollingContext): string {
  * These prompt the AI to use specific techniques for better insights
  */
 function getConversationImprovementPrompts(
-  context: RollingContext
+  context: RollingContext,
 ): string | null {
   const prompts: string[] = [];
 
@@ -727,7 +730,7 @@ function getConversationImprovementPrompts(
     context.progress.messageCount > 4
   ) {
     prompts.push(
-      "• Ask about WHEN things started or changed: 'Has this always been the case, or did something change?'"
+      "• Ask about WHEN things started or changed: 'Has this always been the case, or did something change?'",
     );
   }
 
@@ -737,7 +740,7 @@ function getConversationImprovementPrompts(
     context.progress.messageCount > 6
   ) {
     prompts.push(
-      "• Explore if OTHERS share this experience: 'Do you think others feel the same way?'"
+      "• Explore if OTHERS share this experience: 'Do you think others feel the same way?'",
     );
   }
 
@@ -747,7 +750,7 @@ function getConversationImprovementPrompts(
     context.progress.messageCount > 4
   ) {
     prompts.push(
-      "• Get SPECIFIC EXAMPLES: 'Can you walk me through a specific time when that happened?'"
+      "• Get SPECIFIC EXAMPLES: 'Can you walk me through a specific time when that happened?'",
     );
   }
 
@@ -757,7 +760,7 @@ function getConversationImprovementPrompts(
     context.progress.completionPercentage > 50
   ) {
     prompts.push(
-      "• Ask for their IDEAS: 'If you could change one thing about this, what would it be?'"
+      "• Ask for their IDEAS: 'If you could change one thing about this, what would it be?'",
     );
   }
 
@@ -767,7 +770,7 @@ function getConversationImprovementPrompts(
     depths.length > 0 ? depths.reduce((a, b) => a + b, 0) / depths.length : 0;
   if (avgDepth < 2 && context.progress.messageCount > 6) {
     prompts.push(
-      "• Go DEEPER: Ask 'why' or 'what made you feel that way' to get beyond surface answers"
+      "• Go DEEPER: Ask 'why' or 'what made you feel that way' to get beyond surface answers",
     );
   }
 
@@ -780,7 +783,7 @@ function getConversationImprovementPrompts(
  * Get messages formatted for AI (with context injection)
  */
 export function getMessagesForAI(
-  context: RollingContext
+  context: RollingContext,
 ): Array<{ role: "user" | "assistant"; content: string }> {
   // If there's a history summary, inject it as the first system-like message
   if (context.historySummary && context.recentMessages.length > 0) {
@@ -805,25 +808,25 @@ export function getMessagesForAI(
 export function getMemoryUpdatePrompt(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
   config: SurveyConfig,
-  existingMemory: ConversationMemory
+  existingMemory: ConversationMemory,
 ): string {
   const recentExchanges = messages.slice(-6); // Last 3 exchanges
   const conversationText = recentExchanges
     .map(
       (m) =>
-        `${m.role === "user" ? "Participant" : "Interviewer"}: ${m.content}`
+        `${m.role === "user" ? "Participant" : "Interviewer"}: ${m.content}`,
     )
     .join("\n");
 
   const hypothesesList =
-    config.hypotheses?.assumptions?.join("; ") || "None specified";
+    config.expertState?.hypotheses?.assumptions?.join("; ") || "None specified";
   const unexploredHypotheses =
     existingMemory.unexploredHypotheses.join("; ") || "All explored";
 
   return `Analyze the recent conversation and update the conversation memory.
 
 SURVEY CONTEXT:
-- Goal: ${config.objective?.goal || "Gather feedback"}
+- Goal: ${config.coreObjective || config.expertState?.objective?.goal || config.information || "Gather feedback"}
 - Required Topics: ${config.requiredQuestions?.join(", ") || "General feedback"}
 - Hypotheses to Test: ${hypothesesList}
 - Unexplored Hypotheses: ${unexploredHypotheses}
@@ -916,7 +919,7 @@ export function applyMemoryUpdate(
     participantSuggestedSolutions?: string[];
     followUpDepthByTopic?: Record<string, number>;
   },
-  config: SurveyConfig
+  config: SurveyConfig,
 ): ConversationMemory {
   // Merge key facts (deduplicate)
   const keyFactsLearned = [
@@ -940,8 +943,8 @@ export function applyMemoryUpdate(
       !topicsCovered.some(
         (t) =>
           t.toLowerCase().includes(q.toLowerCase().slice(0, 20)) ||
-          q.toLowerCase().includes(t.toLowerCase().slice(0, 20))
-      )
+          q.toLowerCase().includes(t.toLowerCase().slice(0, 20)),
+      ),
   );
 
   // Merge hypotheses evidence and update unexplored
@@ -950,7 +953,7 @@ export function applyMemoryUpdate(
 
   if (update.hypothesesEvidence) {
     for (const [hypothesis, evidence] of Object.entries(
-      update.hypothesesEvidence
+      update.hypothesesEvidence,
     )) {
       if (hypothesesEvidence[hypothesis]) {
         hypothesesEvidence[hypothesis] = {
@@ -976,7 +979,7 @@ export function applyMemoryUpdate(
 
   // Update unexplored hypotheses
   const unexploredHypotheses = existingMemory.unexploredHypotheses.filter(
-    (h) => !exploredHypotheses.has(h)
+    (h) => !exploredHypotheses.has(h),
   );
 
   // Merge follow-up depth tracking
@@ -985,7 +988,7 @@ export function applyMemoryUpdate(
     for (const [topic, depth] of Object.entries(update.followUpDepthByTopic)) {
       followUpDepthByTopic[topic] = Math.max(
         followUpDepthByTopic[topic] || 0,
-        depth
+        depth,
       );
     }
   }

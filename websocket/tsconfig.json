@@ -7,12 +7,11 @@
     "moduleResolution": "bundler"
   },
   "include": [
-    "./**/*",
-    "../lib/**/*",
-    "../app/**/*"
+    "./**/*.ts"
   ],
   "exclude": [
-    "node_modules",
-    "../dist"
+    "../node_modules",
+    "../dist",
+    "../.next"
   ]
 }

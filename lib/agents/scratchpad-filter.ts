@@ -1,107 +1,113 @@
 /**
- * Scratchpad Filter — Stream Transform Utility
- *
- * Strips <scratchpad>...</scratchpad> blocks from a streaming text response
- * before it reaches the client. The model thinks aloud in the scratchpad,
- * then writes its actual response after — zero extra latency cost.
- *
- * Handles chunk boundaries safely: partial tag text is buffered until
- * enough content arrives to determine whether it is a tag or plain text.
- *
- * Usage:
- *   const { readable, writable } = createScratchpadFilter();
- *   // pipe your textStream through it
- *
- * OR use the higher-level helper:
- *   const filtered = filterScratchpad(asyncIterableTextStream);
+ * Utility class to manage UI message filtering state (scratchpad, output, etc).
  */
+class UIMessageFilterMachine {
+  private activeTag: { open: string; close: string } | null = null;
+  private buffer = "";
 
-const OPEN_TAG = "<scratchpad>";
-const CLOSE_TAG = "</scratchpad>";
+  private readonly SUPPORTED_TAGS = [
+    { open: "<scratchpad>", close: "</scratchpad>" },
+    { open: "<output>", close: "</output>" },
+  ];
 
-/**
- * Creates a TransformStream that strips <scratchpad>…</scratchpad> blocks.
- */
-export function createScratchpadFilter(): TransformStream<string, string> {
-  let inScratchpad = false;
-  let buffer = "";
+  process(chunk: string): string[] {
+    this.buffer += chunk;
+    const outputs: string[] = [];
 
-  return new TransformStream<string, string>({
-    transform(chunk, controller) {
-      buffer += chunk;
-      processBuffer(controller);
-    },
-    flush(controller) {
-      // Emit any remaining non-scratchpad content
-      if (!inScratchpad && buffer.length > 0) {
-        controller.enqueue(buffer);
-        buffer = "";
-      }
-    },
-  });
+    while (this.buffer.length > 0) {
+      if (!this.activeTag) {
+        // Looking for any opening tag
+        let earliestMatch = -1;
+        let bestTag = null;
 
-  function processBuffer(controller: TransformStreamDefaultController<string>) {
-    while (buffer.length > 0) {
-      if (inScratchpad) {
-        // We're inside a scratchpad: look for the closing tag
-        const closeIdx = buffer.indexOf(CLOSE_TAG);
-        if (closeIdx !== -1) {
-          // Found the end — discard everything up to and including </scratchpad>
-          buffer = buffer.slice(closeIdx + CLOSE_TAG.length);
-          inScratchpad = false;
-          // Continue processing — there may be real content after
+        for (const tag of this.SUPPORTED_TAGS) {
+          const idx = this.buffer.indexOf(tag.open);
+          if (idx !== -1 && (earliestMatch === -1 || idx < earliestMatch)) {
+            earliestMatch = idx;
+            bestTag = tag;
+          }
+        }
+
+        if (bestTag) {
+          // Send text before the tag
+          if (earliestMatch > 0) {
+            outputs.push(this.buffer.slice(0, earliestMatch));
+          }
+          this.activeTag = bestTag;
+          this.buffer = this.buffer.slice(earliestMatch);
         } else {
-          // Closing tag not yet received. Check for a partial close tag at the
-          // end of buffer so we don't accidentally discard it across chunks.
-          const partialEnd = longestSuffixPrefixOf(buffer, CLOSE_TAG);
-          if (partialEnd > 0) {
-            // Drop everything up to the partial tag (still in scratchpad),
-            // keep the potential partial close tag in the buffer.
-            buffer = buffer.slice(buffer.length - partialEnd);
-          } else {
-            buffer = ""; // Everything discarded (all scratchpad content)
+          // No full tag found. Check for partial tags at the end.
+          let maxSafeLength = this.buffer.length;
+          for (const tag of this.SUPPORTED_TAGS) {
+            const partial = longestSuffixPrefixOf(this.buffer, tag.open);
+            if (partial > 0) {
+              maxSafeLength = Math.min(
+                maxSafeLength,
+                this.buffer.length - partial,
+              );
+            }
+          }
+
+          if (maxSafeLength > 0) {
+            outputs.push(this.buffer.slice(0, maxSafeLength));
+            this.buffer = this.buffer.slice(maxSafeLength);
           }
           break;
         }
       } else {
-        // We're in normal output: look for an opening tag
-        const openIdx = buffer.indexOf(OPEN_TAG);
-        if (openIdx !== -1) {
-          // Emit everything before the scratchpad starts
-          if (openIdx > 0) {
-            controller.enqueue(buffer.slice(0, openIdx));
-          }
-          buffer = buffer.slice(openIdx + OPEN_TAG.length);
-          inScratchpad = true;
-          // Continue processing what's after the open tag
+        // Inside a tag, looking for the close tag
+        const closeIdx = this.buffer.indexOf(this.activeTag.close);
+
+        if (closeIdx !== -1) {
+          this.buffer = this.buffer.slice(
+            closeIdx + this.activeTag.close.length,
+          );
+          this.activeTag = null;
         } else {
-          // No open tag found — but protect against a partial open tag split
-          // across two chunks (e.g. "<scratch" at end of chunk, "pad>" at start of next).
-          const partialStart = longestSuffixPrefixOf(buffer, OPEN_TAG);
-          if (partialStart > 0) {
-            // Emit everything up to the start of the potential partial tag
-            const safeLength = buffer.length - partialStart;
-            if (safeLength > 0) {
-              controller.enqueue(buffer.slice(0, safeLength));
-            }
-            buffer = buffer.slice(safeLength); // hold the partial tag
-          } else {
-            // No partial match — safe to emit all
-            controller.enqueue(buffer);
-            buffer = "";
-          }
+          // Tag is still open. But we must be careful not to hold text that can't be part of the close tag.
+          // However, since we don't know the closing tag's full content yet, we buffer until we find it or the stream ends.
           break;
         }
       }
     }
+    return outputs;
+  }
+
+  flush(): string {
+    if (this.activeTag) {
+      console.warn(
+        `[UIMessageFilter] Stream ended while inside ${this.activeTag.open}. Dropping buffer.`,
+      );
+      this.buffer = "";
+      return "";
+    }
+    const final = this.buffer;
+    this.buffer = "";
+    return final;
   }
 }
 
 /**
+ * Creates a TransformStream that strips <scratchpad>…</scratchpad> and <output>…</output> blocks.
+ */
+export function createScratchpadFilter(): TransformStream<string, string> {
+  const machine = new UIMessageFilterMachine();
+
+  return new TransformStream<string, string>({
+    transform(chunk, controller) {
+      for (const output of machine.process(chunk)) {
+        controller.enqueue(output);
+      }
+    },
+    flush(controller) {
+      const final = machine.flush();
+      if (final) controller.enqueue(final);
+    },
+  });
+}
+
+/**
  * Returns the length of the longest suffix of `str` that is also a prefix of `tag`.
- * Used to detect partial tags split across streaming chunks.
- *
- * e.g. longestSuffixPrefixOf("hello <scr", "<scratchpad>") === 4
  */
 function longestSuffixPrefixOf(str: string, tag: string): number {
   const maxCheck = Math.min(str.length, tag.length - 1);
@@ -115,114 +121,77 @@ function longestSuffixPrefixOf(str: string, tag: string): number {
 }
 
 /**
- * Filters scratchpad blocks from an async iterable of text chunks.
- * Works directly with the AI SDK's `textStream` (AsyncIterable<string>).
- *
- * @example
- * const result = streamText({ ... });
- * for await (const chunk of filterScratchpad(result.textStream)) {
- *   process.stdout.write(chunk);
- * }
+ * Filters internal tags from an async iterable of text chunks.
  */
 export async function* filterScratchpad(
   source: AsyncIterable<string>,
 ): AsyncGenerator<string> {
-  let inScratchpad = false;
-  let buffer = "";
+  const machine = new UIMessageFilterMachine();
 
   for await (const chunk of source) {
-    buffer += chunk;
-    let keepGoing = true;
-
-    while (keepGoing && buffer.length > 0) {
-      if (inScratchpad) {
-        const closeIdx = buffer.indexOf(CLOSE_TAG);
-        if (closeIdx !== -1) {
-          buffer = buffer.slice(closeIdx + CLOSE_TAG.length);
-          inScratchpad = false;
-        } else {
-          const partial = longestSuffixPrefixOf(buffer, CLOSE_TAG);
-          buffer = partial > 0 ? buffer.slice(buffer.length - partial) : "";
-          keepGoing = false;
-        }
-      } else {
-        const openIdx = buffer.indexOf(OPEN_TAG);
-        if (openIdx !== -1) {
-          if (openIdx > 0) yield buffer.slice(0, openIdx);
-          buffer = buffer.slice(openIdx + OPEN_TAG.length);
-          inScratchpad = true;
-        } else {
-          const partial = longestSuffixPrefixOf(buffer, OPEN_TAG);
-          if (partial > 0) {
-            const safeLen = buffer.length - partial;
-            if (safeLen > 0) yield buffer.slice(0, safeLen);
-            buffer = buffer.slice(safeLen);
-          } else {
-            yield buffer;
-            buffer = "";
-          }
-          keepGoing = false;
-        }
-      }
+    for (const output of machine.process(chunk)) {
+      yield output;
     }
   }
 
-  // Flush remainder
-  if (!inScratchpad && buffer.length > 0) {
-    yield buffer;
-  }
+  const final = machine.flush();
+  if (final) yield final;
 }
 
 /**
- * Creates a TransformStream that filters scratchpads from AI SDK UI message stream parts.
- * Handles 'text-delta' parts specifically.
+ * Creates a TransformStream that filters internal tags from AI SDK UI message stream parts.
  */
 export function createUIMessageFilter(): TransformStream<any, any> {
-  const filter = createScratchpadFilter();
-  const reader = filter.readable.getReader();
-  const writer = filter.writable.getWriter();
+  const machine = new UIMessageFilterMachine();
 
   return new TransformStream({
-    async transform(chunk, controller) {
-      if (chunk.type === "text-delta" && typeof chunk.content === "string") {
-        // Feed the text-delta content into the text filter
-        writer.write(chunk.content);
+    transform(chunk, controller) {
+      const text = chunk.textDelta ?? chunk.content;
 
-        // Read any available filtered chunks
-        let result = await reader.read();
-        while (!result.done) {
-          controller.enqueue({ ...chunk, content: result.value });
-          // If we have more but we can't be sure without blocking,
-          // we might need a more sophisticated approach.
-          // However, for most chunks this is fine.
-
-          // Try a non-blocking read if possible, or just continue
-          // For now, let's assume one input chunk might yield multiple or zero output text deltas
-          result = await Promise.race([
-            reader.read(),
-            Promise.resolve({ done: true, value: undefined } as const),
-          ]);
+      if (chunk.type === "text-delta" && typeof text === "string") {
+        const outputs = machine.process(text);
+        for (const out of outputs) {
+          controller.enqueue({ ...chunk, textDelta: out, content: out });
         }
+      } else if (chunk.type === "message" && chunk.message?.content) {
+        if (Array.isArray(chunk.message.content)) {
+          chunk.message.content = chunk.message.content.map((part: any) => {
+            if (part.type === "text" && typeof part.text === "string") {
+              return { ...part, text: stripInternalTags(part.text) };
+            }
+            return part;
+          });
+        } else if (typeof chunk.message.content === "string") {
+          chunk.message.content = stripInternalTags(chunk.message.content);
+        }
+        controller.enqueue(chunk);
       } else {
         controller.enqueue(chunk);
       }
     },
-    async flush(controller) {
-      await writer.close();
-      let result = await reader.read();
-      while (!result.done) {
-        controller.enqueue({ type: "text-delta", content: result.value });
-        result = await reader.read();
+    flush(controller) {
+      const final = machine.flush();
+      if (final) {
+        controller.enqueue({
+          type: "text-delta",
+          textDelta: final,
+          content: final,
+        });
       }
     },
   });
 }
 
 /**
- * Strips all scratchpad blocks from a complete (non-streaming) string.
- * Used in `onFinish` callbacks when you need to clean the final text.
+ * Strips all internal tags (<scratchpad>, <output>) from a complete string.
  */
-export function stripScratchpadFromText(text: string): string {
-  // Use a regex that handles multiline content
-  return text.replace(/<scratchpad>[\s\S]*?<\/scratchpad>/g, "").trim();
+export function stripInternalTags(text: string): string {
+  return text
+    .replace(/<scratchpad>[\s\S]*?<\/scratchpad>/g, "")
+    .replace(/<output>[\s\S]*?<\/output>/g, "");
 }
+
+/**
+ * Compatibility export for original name
+ */
+export const stripScratchpadFromText = stripInternalTags;

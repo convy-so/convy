@@ -1,10 +1,16 @@
 import { nanoid } from "nanoid";
 import { eq } from "drizzle-orm";
-import { stepCountIs } from "ai";
+import {
+  stepCountIs,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  type ModelMessage,
+} from "ai";
 
 import { db } from "@/db";
 import { surveyConversations, surveys } from "@/db/schema";
 import { chatRateLimiter, getClientIP } from "@/lib/ratelimit";
+import { normalizeMessages } from "@/lib/ai";
 import {
   logPromptInjectionAttempt,
   sanitizeUserInput,
@@ -12,6 +18,7 @@ import {
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import { ConversationManager } from "@/lib/conversation-manager";
 import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
+import { createUIMessageFilter } from "@/lib/agents/scratchpad-filter";
 import type { AgentContext } from "@/lib/agents/types";
 
 export const maxDuration = 300;
@@ -54,15 +61,18 @@ export async function POST(
       return new Response("Invalid messages", { status: 400 });
     }
 
-    const sanitizedMessages = messages.map((msg) => {
+    const normalizedMessages = normalizeMessages(messages);
+
+    const sanitizedMessages = normalizedMessages.map((msg) => {
       if (msg.role === "user") {
-        logPromptInjectionAttempt(msg.content, {
+        const textContent = typeof msg.content === "string" ? msg.content : "";
+        logPromptInjectionAttempt(textContent, {
           surveyId,
           conversationId,
         });
         return {
           ...msg,
-          content: sanitizeUserInput(msg.content),
+          content: sanitizeUserInput(textContent),
         };
       }
       return msg;
@@ -98,6 +108,14 @@ export async function POST(
         surveyId: survey.id,
         rawConversation: sanitizedMessages.map((msg) => ({
           ...msg,
+          content:
+            typeof msg.content === "string"
+              ? msg.content
+              : JSON.stringify(msg.content),
+          role:
+            msg.role === "system"
+              ? "assistant"
+              : (msg.role as "user" | "assistant"),
           timestamp: new Date().toISOString(),
         })),
         completed: false,
@@ -131,9 +149,12 @@ export async function POST(
       surveyConfig,
       rollingContext: context,
       language: survey.language as "en" | "fr" | "de" | "es" | "it" | undefined,
+      userId: survey.userId,
+      organizationId: survey.organizationId || undefined,
     };
 
     const conductingAgent = new ConductingSpecialist(agentContext);
+    await conductingAgent.initialize();
 
     // Preload pattern learnings and skills for the agent
     await Promise.all([
@@ -201,12 +222,24 @@ export async function POST(
       sanitizedMessages,
       surveyConfig,
       context,
+      {
+        userId: survey.userId,
+        organizationId: survey.organizationId || undefined,
+      },
     ).catch(console.error);
 
     // Save updated context to Redis using Manager
     await ConversationManager.saveContext(convId, context);
 
-    const response = result.toUIMessageStreamResponse();
+    const filterStream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        writer.merge(
+          result.toUIMessageStream().pipeThrough(createUIMessageFilter()),
+        );
+      },
+    });
+
+    const response = createUIMessageStreamResponse({ stream: filterStream });
     response.headers.set("X-Conversation-Id", convId);
     response.headers.set(
       "X-Conversation-Progress",

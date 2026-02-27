@@ -2,12 +2,14 @@ export * from "./common";
 export * from "./enums";
 export * from "./auth";
 export * from "./organization";
-export * from "./surveys";
-export * from "./voice";
-export * from "./notifications";
 export * from "./vectors";
+export * from "./voice";
+export * from "./collaboration";
+export * from "./notifications";
+export * from "./surveys";
 export * from "./learning";
 export * from "./relations";
+export * from "./billing";
 
 // Re-export specific authSchema if needed by better-auth or others
 import { users, accounts, sessions, verificationTokens } from "./auth";

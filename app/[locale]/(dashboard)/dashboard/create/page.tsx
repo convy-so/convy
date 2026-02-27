@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo, Suspense } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, Suspense, useId } from "react";
 import { useSearchParams, useParams } from "next/navigation";
 import { useRouter, Link } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
@@ -39,12 +39,12 @@ import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useAuth } from "@/components/providers/auth-provider";
 import { PublishSurveyModal } from "@/components/surveys/publish-survey-modal";
-import { AddMediaModal } from "@/components/surveys/add-media-modal";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
 import { clientEnv } from "@/lib/env.client";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { SURVEY_DOMAINS, type SurveyDomainId } from "@/lib/domains/domain-registry";
 import { uploadSurveyMediaAction } from "@/app/actions/survey-media";
+import { CollaborationSidebar } from "@/components/surveys/collaboration-sidebar";
 
 const DOMAIN_UI_METADATA: Record<number, { icon: any; color: string; bgColor: string }> = {
   1: { icon: Smile, color: "text-emerald-600", bgColor: "bg-emerald-100" },          // CX
@@ -60,14 +60,11 @@ const DOMAIN_UI_METADATA: Record<number, { icon: any; color: string; bgColor: st
 
 type CreationStep = "objective" | "audience" | "questions" | "tone" | "review";
 
-// Extended Message type to support custom UI properties if needed
-// but we mostly rely on the AI SDK Message type
 type UIMessage = SDKMessage & {
-  content?: string;
-  parts?: any[]; // Ensure parts is available for SDK compatibility
   displayedContent?: string;
   isTyping?: boolean;
   timestamp?: number;
+  toolInvocations?: Array<any>;
 };
 
 const MERGE_THRESHOLD_MS = 3000;
@@ -84,11 +81,12 @@ function CreateSurveyContent() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [wasStartedWithVoice, setWasStartedWithVoice] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false); // Track when user is actively speaking
 
   // Domain Selection
   const [selectedDomainId, setSelectedDomainId] = useState<SurveyDomainId | null>(null);
-
+  const [shouldStartAi, setShouldStartAi] = useState(false);
 
 
   const [showPublishModal, setShowPublishModal] = useState(false);
@@ -100,7 +98,10 @@ function CreateSurveyContent() {
   // Language state initialized from locale
   const [language, setLanguage] = useState<"en" | "fr" | "de" | "es" | "it">((locale as any) || "en");
   const [isVoiceSurvey, setIsVoiceSurvey] = useState(false);
-  const [isInputMenuOpen, setIsInputMenuOpen] = useState(false);
+
+  const [isOwner, setIsOwner] = useState(false);
+  const [collaborators, setCollaborators] = useState<string[]>([]);
+  const [orgId, setOrgId] = useState<string | null>(null);
 
   const handleDomainSelect = async (domainId: SurveyDomainId) => {
     // 1. Optimistic UI: Immediately show the chat view
@@ -109,11 +110,16 @@ function CreateSurveyContent() {
     // 2. Set the survey mode based on the respondent format choice
     updateSurveyMode(isVoiceSurvey);
 
+    // Track if started with voice for this survey
+    if (isVoiceMode) {
+      setWasStartedWithVoice(true);
+    }
+
     // 3. Ensure draft exists (Background Process)
     let currentSurveyId = surveyId;
     if (!currentSurveyId) {
       try {
-        currentSurveyId = await ensureDraftExists();
+        currentSurveyId = await ensureDraftExists(domainId);
       } catch (e) {
         console.error("Failed to create draft", e);
         toast.error(t("Toasts.InitFailed"));
@@ -136,13 +142,18 @@ function CreateSurveyContent() {
       });
       console.log(`[Client] Domain ${domainId} saved for survey ${currentSurveyId}`);
 
+      // Persist creation modality if voice was chosen
+      if (isVoiceMode) {
+        localStorage.setItem(`convy_creation_mode_${currentSurveyId}`, "voice");
+      }
+
       // 5. Trigger Interaction based on Mode
       if (messages.length === 0) {
         if (isVoiceMode) {
           // VOICE MODE: Start recording (or signal readyness)
         } else {
           // TEXT MODE: Trigger AI Text Greeting
-          triggerAIInitialResponse();
+          setShouldStartAi(true);
         }
       }
     } catch (error) {
@@ -151,8 +162,6 @@ function CreateSurveyContent() {
       setSelectedDomainId(null); // Revert on failure
     }
   };
-
-  const toggleInputMenu = () => setIsInputMenuOpen(!isInputMenuOpen);
 
   const updateSurveyMode = async (isVoice: boolean) => {
     setIsVoiceSurvey(isVoice);
@@ -207,18 +216,8 @@ function CreateSurveyContent() {
         // Tool resolves on its own via server-side execution; hide banner when done
         // (handled by detecting the tool-result part in messages via useEffect)
       }
-      if (toolCall.toolName === 'finishSurvey') {
-        console.log("[Client] Survey finished via tool call");
-        addToolOutput({
-          toolCallId: toolCall.toolCallId,
-          tool: 'finishSurvey',
-          output: "Survey marked as complete.",
-        });
-      }
-      if (toolCall.toolName === 'requestMediaUpload') {
-        console.log("[Client] Media upload requested via tool call");
-        // We don't resolve automatically; the MediaUploadTool component handles this.
-      }
+      // NOTE: finishSurvey is server-executed — no client resolution needed here.
+      // NOTE: requestMediaUpload is client-side — the MediaUploadFlow component resolves it.
     },
   });
 
@@ -260,10 +259,9 @@ function CreateSurveyContent() {
             now - lastMessage.timestamp < MERGE_THRESHOLD_MS
           ) {
             const updated = [...prev];
-            const updatedContent = (lastMessage.content || "") + " " + content;
+            const updatedContent = (lastMessage.parts?.find(p => p.type === 'text')?.text || "") + " " + content;
             updated[updated.length - 1] = {
               ...lastMessage,
-              content: updatedContent,
               displayedContent: (lastMessage.displayedContent || "") + " " + content,
               timestamp: now,
               parts: [{ type: 'text', text: updatedContent }] // Keep parts in sync
@@ -274,7 +272,6 @@ function CreateSurveyContent() {
           const newMessage: UIMessage = {
             id: Date.now().toString(),
             role: role as "user" | "assistant",
-            content: content,
             displayedContent: content,
             isTyping: false,
             timestamp: now,
@@ -294,11 +291,12 @@ function CreateSurveyContent() {
             role: 'assistant',
             timestamp: Date.now(),
             parts: [{
-              type: 'tool-requestMediaUpload',
+              type: 'tool-invocation',
               toolCallId: toolId,
+              toolName: 'requestMediaUpload',
               state: 'input-available',
-              input: { allowedTypes }
-            }]
+              args: { allowedTypes }
+            } as any]
           }
         ]);
       } else if (data.type === "update_extracted_data") {
@@ -334,10 +332,12 @@ function CreateSurveyContent() {
 
   // Monitor playback to handle the "Mute until Greeting Ends" flow
   useEffect(() => {
+    if (!isVoiceMode) return;
+
     // New Logic: We trust 'voiceWs.hasAudioPlayed' to tell us if the greeting actually started
     console.log("[Voice UI] Effect Check -> isConnecting:", isConnecting, "isPlaying:", voiceWs.isPlaying, "hasRecordedAudio:", voiceWs.hasAudioPlayed, "hasGreetingPlayed:", hasGreetingPlayed, "MicMuted:", voiceWs.isMicMuted, "isRecording:", voiceWs.isRecording);
 
-    if (isConnecting && voiceWs.hasAudioPlayed) {
+    if (isVoiceMode && isConnecting && voiceWs.hasAudioPlayed) {
       // Audio started playing (The greeting arrived!)
       console.log("[Voice UI] 🟣 Audio started (Greeting detected) - Transitioning to Speaking State");
       setIsConnecting(false);
@@ -346,7 +346,8 @@ function CreateSurveyContent() {
   }, [
     voiceWs.hasAudioPlayed,
     isConnecting,
-    voiceWs.status
+    voiceWs.status,
+    isVoiceMode
   ]);
 
   // Effect to sync surveyId with WebSocket - ONLY when server is ready
@@ -389,25 +390,27 @@ function CreateSurveyContent() {
     // 1. Check for explicit completion signal in messages (Fallback)
     // If the assistant says "click the button" or "sample conversations", we should show it
     const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant');
-    const messageContent = (lastAssistantMessage as any)?.content ||
-      (lastAssistantMessage?.parts?.filter(p => p.type === 'text').map((p: any) => p.text).join('') || "");
+    const messageContent = lastAssistantMessage?.parts
+      ?.filter(p => p.type === 'text')
+      .map((p: any) => p.text)
+      .join('') || "";
 
     const aiMentionedSamples = messageContent.toLowerCase().includes('sample conversation') ||
       messageContent.toLowerCase().includes('click') &&
       messageContent.toLowerCase().includes('button');
 
-    // Check for tool invocations
+    // Check for finishSurvey tool call - AI SDK uses type 'tool-{toolName}'
     const finishToolCalled = messages.some(m =>
-      m.parts?.some(p => (p.type === 'tool-call' || p.type === 'tool-result') && (p as any).toolName === 'finishSurvey')
+      m.parts?.some(p => p.type === 'tool-finishSurvey')
     );
 
     if (finishToolCalled) {
-      console.log('[isReadyForSample] ✅ finishSurvey tool called');
+      // console.log('[isReadyForSample] ✅ finishSurvey tool called');
       return true;
     }
 
     // 2. Main Logic: Check all truly required flags are collected
-    // These must now match our REQUIRED_INFORMATION priorities
+    // These must now match our REQUIRED_INFORMATION priorities and Agent keys
     const criticalFlagsCollected = (
       collectedInfo.objective &&
       collectedInfo.targetAudience &&
@@ -418,7 +421,7 @@ function CreateSurveyContent() {
     // If AI mentioned samples, we skip strict structural validation and trust the AI
     // We only enforce that we have the absolute minimums (objective, audience, domain)
     if (aiMentionedSamples && criticalFlagsCollected) {
-      console.log('[isReadyForSample] ✅ AI explicitly mentioned samples and critical info is collected');
+      // console.log('[isReadyForSample] ✅ AI explicitly mentioned samples and critical info is collected');
       return true;
     }
 
@@ -436,13 +439,6 @@ function CreateSurveyContent() {
     );
 
     if (!allRequiredFlagsCollected || !extractedData) {
-      console.log('[isReadyForSample] ⏳ Missing required flags or extractedData', {
-        criticalFlagsCollected,
-        allRequiredFlagsCollected,
-        aiMentionedSamples,
-        hasExtractedData: !!extractedData,
-        collectedInfo
-      });
       return false;
     }
 
@@ -452,15 +448,6 @@ function CreateSurveyContent() {
 
     // We trust allRequiredFlagsCollected for everything else (opt-outs are valid)
     const isReady = allRequiredFlagsCollected && hasObjective && hasAudience && hasDomain;
-
-    console.log('[isReadyForSample] Validation results:', {
-      isReady,
-      allRequiredFlagsCollected,
-      hasObjective,
-      hasAudience,
-      hasDomain,
-      extractedDataKeys: extractedData ? Object.keys(extractedData) : []
-    });
 
     return isReady;
   }, [surveyId, collectedInfo, extractedData, messages]);
@@ -519,10 +506,20 @@ function CreateSurveyContent() {
     fetchUserLanguage();
   }, [user, authLoading]);
 
+  // Restore voice creation preference
+  useEffect(() => {
+    if (surveyId) {
+      const storedMode = localStorage.getItem(`convy_creation_mode_${surveyId}`);
+      if (storedMode === "voice") {
+        setWasStartedWithVoice(true);
+      }
+    }
+  }, [surveyId]);
+
 
   useEffect(() => {
     if (idFromUrl && !authLoading && user) {
-      if (surveyId === idFromUrl && messages.length > 0) {
+      if (surveyId === idFromUrl) {
         return;
       }
 
@@ -543,8 +540,7 @@ function CreateSurveyContent() {
               setMessages(data.messages.map((m: any, idx: number) => ({
                 id: m.id || `msg-${idx}-${Date.now()}`,
                 role: m.role,
-                content: m.content,
-                displayedContent: m.content,
+                displayedContent: m.content || m.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join(''),
                 isTyping: false,
                 parts: m.parts || (m.content ? [{ type: 'text', text: m.content }] : [])
               })));
@@ -565,6 +561,21 @@ function CreateSurveyContent() {
             const surveyData = await surveyRes.json();
             const status = surveyData.survey?.status || null;
             setSurveyStatus(status);
+            const organizationId = surveyData.survey?.organizationId || null;
+            setOrgId(organizationId);
+
+
+            let isUserOwner = false;
+            let currentCollaborators: string[] = [];
+
+            if (surveyData.survey?.userId) {
+              isUserOwner = surveyData.survey.userId === user?.id;
+              setIsOwner(isUserOwner);
+            }
+            if (surveyData.survey?.collaborators) {
+              currentCollaborators = surveyData.survey.collaborators;
+              setCollaborators(currentCollaborators);
+            }
 
             // Set language if available
             if (surveyData.survey?.language) {
@@ -575,8 +586,11 @@ function CreateSurveyContent() {
               setIsVoiceSurvey(surveyData.survey.isVoice);
             }
 
-            // Read-only if survey is NOT in "creating" status
-            if (status && status !== "creating") {
+            // Read-only if survey is NOT in "creating" status OR if user has no edit access
+            const isFinished = status && status !== "creating";
+            const hasEditAccess = isUserOwner || currentCollaborators.includes(user?.id || "");
+
+            if (isFinished || !hasEditAccess) {
               setIsReadOnly(true);
             } else {
               setIsReadOnly(false);
@@ -596,10 +610,9 @@ function CreateSurveyContent() {
 
   // Lazy creation state
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
-  const [showMediaModal, setShowMediaModal] = useState(false);
 
   // Helper to ensure draft exists before sending message
-  const ensureDraftExists = async (): Promise<string | null> => {
+  const ensureDraftExists = async (domainId: SurveyDomainId): Promise<string | null> => {
     if (surveyId) return surveyId;
     if (isCreatingDraft) return null;
 
@@ -608,7 +621,7 @@ function CreateSurveyContent() {
       const response = await fetch("/api/surveys", {
         method: "POST",
         credentials: "include",
-        body: JSON.stringify({ language, isVoice: isVoiceSurvey }),
+        body: JSON.stringify({ language, isVoice: isVoiceSurvey, domainId }),
       });
 
       if (response.status === 401) {
@@ -629,7 +642,7 @@ function CreateSurveyContent() {
       setSurveyId(survey.id);
 
       // Update URL to include the survey ID to prevent reload issues
-      router.replace(`/dashboard/create?id=${survey.id}`, { scroll: false });
+      window.history.replaceState(null, '', `?id=${survey.id}`);
 
       return survey.id;
     } catch (error) {
@@ -651,13 +664,22 @@ function CreateSurveyContent() {
 
     try {
       await sendMessage({
-        text: "Start the conversation now. Greet the user.",
-      });
+        id: "init_ping_hidden",
+        role: "user",
+        parts: [{ type: 'text', text: "Start the conversation by introducing yourself as the expert on this domain and asking the first question." }],
+      } as any);
     } catch (error) {
       console.error("Failed to trigger AI response:", error);
       toast.error(t("Toasts.InitFailed"));
     }
   };
+
+  useEffect(() => {
+    if (shouldStartAi && surveyId) {
+      triggerAIInitialResponse();
+      setShouldStartAi(false);
+    }
+  }, [shouldStartAi, surveyId]);
 
   // Poll for extracted data to update preview
   const fetchUpdatedData = async () => {
@@ -669,6 +691,9 @@ function CreateSurveyContent() {
         // Only update if we get valid data
         if (data.extractedData && Object.keys(data.extractedData).length > 0) {
           setExtractedData(data.extractedData);
+          if (data.extractedData.domainId) {
+            setSelectedDomainId(prev => prev || data.extractedData.domainId);
+          }
         }
         if (data.collectedInfo) {
           setCollectedInfo(data.collectedInfo);
@@ -693,8 +718,10 @@ function CreateSurveyContent() {
 
     const currentInput = input;
     setInput(""); // Clear input locally
-
-    sendMessage({ text: currentInput });
+    sendMessage({
+      role: "user",
+      parts: [{ type: 'text', text: currentInput }],
+    } as any);
   };
 
   useEffect(() => {
@@ -730,6 +757,13 @@ function CreateSurveyContent() {
 
     return () => clearInterval(timer);
   }, [surveyId]);
+
+  // Instant refresh when AI finishes response
+  useEffect(() => {
+    if ((status as string) === 'idle' && surveyId) {
+      fetchUpdatedData();
+    }
+  }, [status, surveyId]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -799,39 +833,6 @@ function CreateSurveyContent() {
     }
   };
 
-  const handleMediaUploaded = (media: any, toolCallId?: string) => {
-    console.log("[Client] Media uploaded:", media);
-    const msg = `I have uploaded a ${media.type}: "${media.description}". Context for use: ${media.contextForUse}`;
-
-    if (toolCallId) {
-      addToolOutput({
-        toolCallId: toolCallId,
-        tool: 'requestMediaUpload',
-        output: JSON.stringify({
-          success: true,
-          media: {
-            id: media.id,
-            url: media.url,
-            type: media.type,
-            description: media.description,
-            contextForUse: media.contextForUse
-          }
-        })
-      });
-    } else {
-      sendMessage({ text: msg });
-    }
-  };
-
-  const handleOpenMediaModal = async () => {
-    let currentSurveyId = surveyId;
-    if (!currentSurveyId) {
-      currentSurveyId = await ensureDraftExists();
-      if (!currentSurveyId) return;
-    }
-    setShowMediaModal(true);
-  };
-
   const handleGoToSampleConversations = async () => {
     if (!surveyId) return;
 
@@ -865,13 +866,7 @@ function CreateSurveyContent() {
     }
   };
 
-  if (isInitializing) {
-    return (
-      <div className="h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-      </div>
-    );
-  }
+  // `isInitializing` no longer unmounts the whole page
 
   if (authError) {
     return (
@@ -923,11 +918,15 @@ function CreateSurveyContent() {
   return (
     <>
       <div className="h-[calc(100vh-2rem)] md:h-[calc(100vh-4rem)] flex flex-col md:flex-row gap-6 max-w-7xl w-full mx-auto p-4 overflow-hidden">
-        <div className="flex-1 bg-white rounded-3xl border border-gray-200 flex flex-col overflow-hidden relative shadow-sm">
+        <div className={cn(
+          "flex-1 flex flex-col overflow-hidden relative transition-all duration-500",
+          (selectedDomainId || surveyId) ? "bg-white rounded-3xl border border-gray-200 shadow-sm" : ""
+        )}>
 
           {/* Integrated Header */}
           <div className={cn(
-            "flex flex-col sm:flex-row items-center justify-between gap-4 p-6 border-b transition-all duration-500 bg-white border-gray-200"
+            "flex flex-col sm:flex-row items-center justify-between gap-4 p-6 transition-all duration-500",
+            (selectedDomainId || surveyId) ? "bg-white border-b border-gray-200" : "bg-transparent"
           )}>
             {!selectedDomainId && !surveyId ? (
               <div className="w-full text-center py-4">
@@ -977,8 +976,16 @@ function CreateSurveyContent() {
 
 
           {/* Chat Area / Domain Selection */}
-          <div className="flex-1 overflow-hidden relative flex flex-col bg-slate-50/30">
-            {!selectedDomainId && !surveyId ? (
+          <div className={cn(
+            "flex-1 overflow-hidden relative flex flex-col",
+            (selectedDomainId || surveyId) ? "bg-slate-50/30" : "bg-transparent"
+          )}>
+            {isInitializing && (
+              <div className="absolute inset-0 z-50 bg-white/50 backdrop-blur-sm flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+              </div>
+            )}
+            {!selectedDomainId ? (
 
               <div className="flex-1 overflow-y-auto p-4 md:p-8">
                 <div className="max-w-5xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500 py-10">
@@ -1117,6 +1124,13 @@ function CreateSurveyContent() {
             ) : (
               <>
                 <div className="contents">
+                  {isCreatingDraft && (
+                    <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center rounded-3xl animate-in fade-in duration-300">
+                      <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mb-4" />
+                      <p className="text-gray-500 font-medium">{t("Feedback.Preparing")}</p>
+                    </div>
+                  )}
+
                   {isVoiceMode && !isReadyForSample && (
                     <div className="absolute inset-0 z-30 bg-slate-50/95 backdrop-blur-md flex flex-col md:flex-row animate-in fade-in duration-500">
 
@@ -1130,7 +1144,7 @@ function CreateSurveyContent() {
                           </div>
 
                           {/* Message History */}
-                          {messages.map((msg, idx) => (
+                          {messages.filter(m => m.id !== "init_ping_hidden").map((msg, idx) => (
                             <div
                               key={msg.id || idx}
                               className={cn(
@@ -1366,7 +1380,7 @@ function CreateSurveyContent() {
 
                   {/* Messages Scroll Area */}
                   <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
-                    {messages.map((message) => (
+                    {messages.filter(m => m.id !== "init_ping_hidden").map((message) => (
                       <div
                         key={message.id}
                         className={cn(
@@ -1403,39 +1417,103 @@ function CreateSurveyContent() {
                                 content={(message as any).content || (message.parts?.filter(p => p.type === 'text').map((p: any) => p.text).join('') || "")}
                                 className="text-gray-800 prose-sm"
                               />
-                              {message.parts?.map((part: any, idx) => (
-                                part.type === 'tool-finishSurvey' && (
-                                  <div key={part.toolCallId || idx} className="text-xs text-emerald-600 italic mt-2 flex items-center gap-1">
-                                    <CheckCircle2 className="w-3 h-3" /> Survey finalized
-                                  </div>
-                                )
-                              ))}
-                              {message.parts?.map((part: any, idx) => (
-                                part.type === 'tool-requestMediaUpload' && (
-                                  <div key={part.toolCallId || idx} className="mt-4">
-                                    {(part.state === 'input-available' || part.state === 'input-streaming') ? (
-                                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 animate-in zoom-in-95 duration-300">
-                                        <div className="flex items-center gap-2 mb-4">
-                                          <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                                            <Paperclip className="w-4 h-4 text-indigo-600" />
+                              {/* Single unified path — AI SDK uses type 'tool-{toolName}' for tool parts */}
+
+                              {message.parts?.map((part: any, idx) => {
+
+                                // AI SDK v6 emits parts with type 'tool-{toolName}', e.g. 'tool-requestMediaUpload'
+                                // The toolName is embedded in the type string
+                                if (!part.type?.startsWith('tool-')) return null;
+
+                                const toolName = part.type.replace(/^tool-/, '');
+
+                                const toolCallId = part.toolCallId;
+
+                                const toolState = part.state; // 'input-available' | 'output-available'
+
+                                const args = part.input ?? part.args ?? {};  // SDK uses 'input' not 'args'
+
+                                const result = part.output ?? part.result;   // SDK uses 'output' not 'result'
+
+
+
+                                const isPending = ['input-available', 'input-streaming', 'call', 'partial-call'].includes(toolState);
+
+                                const isDone = ['output-available', 'result'].includes(toolState);
+
+                                if (toolName === 'finishSurvey') {
+                                  return (
+                                    <div key={toolCallId || idx} className="text-xs text-emerald-600 italic mt-2 flex items-center gap-1">
+                                      <CheckCircle2 className="w-3 h-3" /> Survey finalized
+                                    </div>
+                                  );
+                                }
+
+                                if (toolName === 'requestMediaUpload') {
+                                  const aiDescription = args?.description as string | undefined;
+                                  const aiLearningGoal = args?.learningGoal as string | undefined;
+                                  return (
+                                    <div key={toolCallId || idx} className="mt-4">
+                                      {isPending ? (
+                                        <>
+                                          {/* Compact trigger chip shown in the chat */}
+                                          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm animate-in zoom-in-95 duration-300">
+                                            <div className="w-7 h-7 rounded-lg bg-black flex items-center justify-center">
+                                              <Paperclip className="w-3.5 h-3.5 text-white" />
+                                            </div>
+                                            <p className="text-sm font-medium text-gray-800 flex-1">Ready to upload media</p>
                                           </div>
-                                          <h4 className="font-bold text-gray-900 text-sm">Media Upload Requested</h4>
+                                          {/* Full-screen modal */}
+                                          <MediaUploadFlow
+                                            surveyId={surveyId || ""}
+                                            aiDescription={aiDescription}
+                                            aiLearningGoal={aiLearningGoal}
+                                            onAllUploaded={(mediaItems) => {
+                                              addToolOutput({
+                                                toolCallId: toolCallId,
+                                                tool: 'requestMediaUpload',
+                                                output: JSON.stringify({
+                                                  success: true,
+                                                  count: mediaItems.length,
+                                                  media: mediaItems.map(m => ({
+                                                    id: m.id,
+                                                    url: m.url,
+                                                    type: m.type,
+                                                    description: m.description,
+                                                    contextForUse: m.contextForUse
+                                                  }))
+                                                })
+                                              });
+                                            }}
+                                            onSkip={() => {
+                                              addToolOutput({
+                                                toolCallId: toolCallId,
+                                                tool: 'requestMediaUpload',
+                                                output: JSON.stringify({ success: false, skipped: true })
+                                              });
+                                            }}
+                                            allowedTypes={args?.allowedTypes || ['image', 'audio', 'video']}
+                                          />
+                                        </>
+                                      ) : isDone && (
+                                        <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 mt-2">
+                                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                          {(() => {
+                                            try {
+                                              const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+                                              if (parsed?.skipped) return 'Media skipped';
+                                              const count = parsed?.count ?? 1;
+                                              return `${count} file${count > 1 ? 's' : ''} added to survey`;
+                                            } catch { return 'Media added'; }
+                                          })()}
                                         </div>
-                                        <MediaUploadFlow
-                                          surveyId={surveyId || ""}
-                                          onUploaded={(media) => handleMediaUploaded(media, part.toolCallId)}
-                                          allowedTypes={part.input?.allowedTypes || ['image', 'audio', 'video']}
-                                        />
-                                      </div>
-                                    ) : part.state === 'output-available' && (
-                                      <div className="flex items-center gap-2 text-xs text-indigo-600 bg-indigo-50/50 px-3 py-2 rounded-lg border border-indigo-100 mt-2">
-                                        <CheckCircle2 className="w-3 h-3" />
-                                        Media added: {typeof part.output === 'string' ? JSON.parse(part.output).media?.description : part.output?.media?.description || 'File uploaded'}
-                                      </div>
-                                    )}
-                                  </div>
-                                )
-                              ))}
+                                      )}
+                                    </div>
+                                  );
+                                }
+
+                                return null;
+                              })}
                             </div>
                           ) : (
                             <p className="text-[15px] leading-7 whitespace-pre-wrap">
@@ -1460,35 +1538,6 @@ function CreateSurveyContent() {
                     )}
 
                     <div ref={messagesEndRef} className="h-4" />
-
-                    {/* Suggested Prompts Grid - Minimalist & Integrated */}
-                    {/* Step 1: Domain Selection */}
-                    {!selectedDomainId && !isReadyForSample && !isReadOnly && (
-                      <div className="w-full max-w-6xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4">
-                        <div className="text-center mb-10">
-                          <h2 className="text-2xl font-bold text-gray-900 mb-3">{t("DomainSelection.Title")}</h2>
-                          <p className="text-base text-gray-500 max-w-2xl mx-auto leading-relaxed">{t("DomainSelection.Description")}</p>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-12">
-                          {Object.values(SURVEY_DOMAINS).map((domain) => (
-                            <button
-                              key={domain.id}
-                              onClick={() => handleDomainSelect(domain.id)}
-                              className="flex flex-col text-left p-5 bg-white border border-gray-200 hover:border-black rounded-xl transition-all hover:shadow-lg hover:-translate-y-1 group h-full duration-300"
-                            >
-                              <div className="mb-4 p-2.5 bg-gray-50 rounded-lg w-fit group-hover:bg-black group-hover:text-white transition-colors duration-300">
-                                <Sparkles className="w-5 h-5" />
-                              </div>
-                              <h3 className="text-base font-bold text-gray-900 mb-2 leading-tight">{t(`Domains.${domain.id}.Title`)}</h3>
-                              <p className="text-sm text-gray-500 leading-relaxed line-clamp-3 group-hover:text-gray-600 transition-colors">{t(`Domains.${domain.id}.Description`)}</p>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-
                   </div>
 
 
@@ -1530,47 +1579,6 @@ function CreateSurveyContent() {
                         {/* Simple Minimalist Input Bar */}
                         <div className="relative bg-white border border-gray-200 rounded-2xl group-focus-within:border-gray-400 transition-all flex items-end p-2">
 
-                          {/* Expandable Action Menu Button */}
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={toggleInputMenu}
-                              disabled={isLoading || isCreatingDraft}
-                              className={cn(
-                                "p-3 rounded-full transition-all duration-300 transform active:scale-95",
-                                isInputMenuOpen ? "bg-black text-white rotate-45" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                              )}
-                              title={t("Input.ActionsTitle")}
-                            >
-                              <Plus className="w-5 h-5" />
-                            </button>
-
-                            {/* Popup Menu */}
-                            {isInputMenuOpen && (
-                              <>
-                                <div className="fixed inset-0 z-40" onClick={() => setIsInputMenuOpen(false)} />
-                                <div className="absolute bottom-full left-0 mb-3 bg-white rounded-2xl shadow-xl border border-gray-100 p-2 min-w-[200px] z-50 flex flex-col gap-1 animate-in slide-in-from-bottom-2 fade-in zoom-in-95 origin-bottom-left">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      handleOpenMediaModal();
-                                      setIsInputMenuOpen(false);
-                                    }}
-                                    className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors w-full text-left group"
-                                  >
-                                    <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg group-hover:bg-indigo-100 transition-colors">
-                                      <Paperclip className="w-4 h-4" />
-                                    </div>
-                                    <div>
-                                      <div className="text-gray-900 font-semibold">{t("Menu.AddMedia")}</div>
-                                      <div className="text-gray-400 text-xs font-normal">{t("Menu.MediaTypes")}</div>
-                                    </div>
-                                  </button>
-                                </div>
-                              </>
-                            )}
-                          </div>
-
                           <textarea
                             value={input}
                             onChange={handleInputChange}
@@ -1582,7 +1590,17 @@ function CreateSurveyContent() {
                             style={{ minHeight: "96px" }}
                           />
 
-                          <div className="p-2 mb-1 mr-1">
+                          <div className="p-2 mb-1 mr-1 flex items-center gap-2">
+                            {wasStartedWithVoice && (
+                              <button
+                                type="button"
+                                onClick={toggleVoiceMode}
+                                className="p-2.5 rounded-xl text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                                title={t("Input.VoiceMode")}
+                              >
+                                <Mic className="w-5 h-5" />
+                              </button>
+                            )}
                             <button
                               type="submit"
                               disabled={!input?.trim() || isLoading || !!authError}
@@ -1629,132 +1647,306 @@ function CreateSurveyContent() {
           }}
         />
 
-        <AddMediaModal
-          isOpen={showMediaModal}
-          onClose={() => setShowMediaModal(false)}
-          surveyId={surveyId || ""}
-          onUploaded={handleMediaUploaded}
-        />
+        {/* Real-time Collaboration Sidebar - Only for Org surveys or if there are collaborators */}
+        {(surveyId && (orgId || collaborators.length > 0)) && (
+          <CollaborationSidebar
+            surveyId={surveyId}
+            isOwner={isOwner}
+            collaborators={collaborators}
+          />
+        )}
       </div>
     </>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Types for the multi-file upload queue
+// ---------------------------------------------------------------------------
+type QueuedFile = {
+  id: string;
+  file: File;
+  description: string;
+  learningGoal: string;
+  status: 'pending' | 'uploading' | 'done' | 'error';
+  errorMsg?: string;
+};
+
 /**
- * Inline Media Upload Flow Component
- * Handles file selection, description, and context collection
+ * Full-screen minimalist media upload modal
+ * Black & white / Framer-template aesthetic
+ * Supports multiple files, each with its own description and learning goal
  */
 function MediaUploadFlow({
   surveyId,
-  onUploaded,
-  allowedTypes
+  onAllUploaded,
+  onSkip,
+  allowedTypes,
+  aiDescription,
+  aiLearningGoal,
 }: {
   surveyId: string;
-  onUploaded: (media: any) => void;
+  onAllUploaded: (media: any[]) => void;
+  onSkip: () => void;
   allowedTypes: string[];
+  aiDescription?: string;
+  aiLearningGoal?: string;
 }) {
-  const t = useTranslations("Survey.AddMedia");
-  const [file, setFile] = useState<File | null>(null);
-  const [description, setDescription] = useState("");
-  const [context, setContext] = useState("");
-  const [isUploading, setIsUploading] = useState(false);
+  const [queue, setQueue] = useState<QueuedFile[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploadingAll, setIsUploadingAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uid = useId();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) {
-      setFile(e.target.files[0]);
-    }
+  const makeId = () => `${uid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const acceptAttr = allowedTypes.map((t) => `${t}/*`).join(',');
+
+  const addFiles = (incoming: FileList | null) => {
+    if (!incoming) return;
+    const newItems: QueuedFile[] = Array.from(incoming).map((f) => ({
+      id: makeId(),
+      file: f,
+      description: aiDescription ?? '',
+      learningGoal: aiLearningGoal ?? '',
+      status: 'pending',
+    }));
+    setQueue((prev) => [...prev, ...newItems]);
+    // reset so same file can be added again if needed
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleUpload = async () => {
-    if (!file || !description || !context) {
-      toast.error(t("Toasts.FillAllFields"));
+  const removeFile = (id: string) => setQueue((prev) => prev.filter((q) => q.id !== id));
+
+  const updateField = (id: string, field: 'description' | 'learningGoal', value: string) =>
+    setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, [field]: value } : q)));
+
+  const getFileTypeIcon = (file: File) => {
+    if (file.type.startsWith('image')) return <ImageIcon className="w-4 h-4 text-gray-500" />;
+    if (file.type.startsWith('audio')) return <FileAudio className="w-4 h-4 text-gray-500" />;
+    if (file.type.startsWith('video')) return <FileVideo className="w-4 h-4 text-gray-500" />;
+    return <Upload className="w-4 h-4 text-gray-500" />;
+  };
+
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const canUpload = queue.length > 0 && queue.every((q) => q.description.trim().length >= 10 && q.learningGoal.trim().length >= 10);
+
+  const handleUploadAll = async () => {
+    if (!canUpload) {
+      toast.error('Each file needs a description and learning goal (min 10 characters each).');
       return;
     }
-
-    setIsUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("surveyId", surveyId);
-      formData.append("file", file);
-      formData.append("description", description);
-      formData.append("contextForUse", context);
-
-      let type: "image" | "audio" | "video" = "image";
-      if (file.type.startsWith("audio")) type = "audio";
-      else if (file.type.startsWith("video")) type = "video";
-
-      formData.append("type", type);
-
-      const result = await uploadSurveyMediaAction(formData);
-
-      if (result.success) {
-        toast.success(t("Toasts.Success"));
-        onUploaded(result.data.media);
-      } else {
-        toast.error(result.error);
+    setIsUploadingAll(true);
+    const uploadedMedia: any[] = [];
+    for (const item of queue) {
+      setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'uploading' } : q));
+      try {
+        const formData = new FormData();
+        formData.append('surveyId', surveyId);
+        formData.append('file', item.file);
+        formData.append('description', item.description);
+        formData.append('contextForUse', item.learningGoal);
+        let type: 'image' | 'audio' | 'video' = 'image';
+        if (item.file.type.startsWith('audio')) type = 'audio';
+        else if (item.file.type.startsWith('video')) type = 'video';
+        formData.append('type', type);
+        const result = await uploadSurveyMediaAction(formData);
+        if (result.success) {
+          setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'done' } : q));
+          uploadedMedia.push(result.data.media);
+        } else {
+          setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'error', errorMsg: result.error } : q));
+          toast.error(`Failed: ${result.error}`);
+        }
+      } catch (err) {
+        setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'error', errorMsg: 'Unexpected error' } : q));
+        toast.error('Upload failed. Please try again.');
       }
-    } catch (error) {
-      console.error(error);
-      toast.error(t("Toasts.Failed"));
-    } finally {
-      setIsUploading(false);
+    }
+    setIsUploadingAll(false);
+    if (uploadedMedia.length > 0) {
+      toast.success(`${uploadedMedia.length} file${uploadedMedia.length > 1 ? 's' : ''} uploaded!`);
+      onAllUploaded(uploadedMedia);
     }
   };
 
-  const getFileIcon = () => {
-    if (!file) return <Upload className="w-6 h-6 text-gray-400" />;
-    if (file.type.startsWith("image")) return <ImageIcon className="w-6 h-6 text-purple-600" />;
-    if (file.type.startsWith("audio")) return <FileAudio className="w-6 h-6 text-blue-600" />;
-    if (file.type.startsWith("video")) return <FileVideo className="w-6 h-6 text-red-600" />;
-    return <Upload className="w-6 h-6 text-gray-600" />;
+  // Drag-and-drop handlers
+  const onDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
+  const onDragLeave = () => setIsDragging(false);
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    addFiles(e.dataTransfer.files);
   };
 
   return (
-    <div className="space-y-4">
+    // Fixed full-viewport overlay
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}>
+      {/* Modal card */}
       <div
-        onClick={() => fileInputRef.current?.click()}
-        className={cn(
-          "border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition-all",
-          file ? "border-indigo-200 bg-indigo-50/30" : "border-gray-200 hover:border-indigo-300 hover:bg-gray-50"
-        )}
+        className="relative w-full max-w-2xl max-h-[90vh] bg-white flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-300"
+        style={{ borderRadius: '2px', boxShadow: '0 32px 80px rgba(0,0,0,0.35)' }}
       >
-        <input
-          type="file"
-          ref={fileInputRef}
-          className="hidden"
-          onChange={handleFileChange}
-          accept={allowedTypes.map(t => `${t}/*`).join(',')}
-        />
-        <div className="mb-2">{getFileIcon()}</div>
-        <p className="text-xs font-medium text-gray-700 text-center">
-          {file ? file.name : "Click or drag media here"}
-        </p>
-      </div>
+        {/* Header */}
+        <div className="flex items-center justify-between px-8 py-6 border-b border-gray-100">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-medium mb-1">Survey Media</p>
+            <h2 className="text-xl font-semibold text-gray-900 tracking-tight">Upload Files</h2>
+          </div>
+          <button
+            onClick={onSkip}
+            disabled={isUploadingAll}
+            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-900 disabled:opacity-40"
+          >
+            <span className="text-lg leading-none select-none">✕</span>
+          </button>
+        </div>
 
-      <div className="space-y-3">
-        <input
-          type="text"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="e.g. 'This is our company logo'"
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none text-sm"
-        />
-        <textarea
-          value={context}
-          onChange={(e) => setContext(e.target.value)}
-          placeholder="e.g. 'Ask users what defects they see in the logo'"
-          rows={2}
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none text-sm resize-none"
-        />
-        <button
-          onClick={handleUpload}
-          disabled={isUploading || !file || !description || !context}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          {isUploading ? "Uploading..." : "Add to Survey"}
-        </button>
+        {/* AI context hint – only show if AI provided suggestion */}
+        {(aiDescription || aiLearningGoal) && (
+          <div className="mx-8 mt-5 px-4 py-3 bg-gray-50 border border-gray-200" style={{ borderRadius: '2px' }}>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-medium mb-1.5">From our conversation</p>
+            {aiDescription && <p className="text-sm text-gray-600"><span className="font-medium text-gray-800">What it is:</span> {aiDescription}</p>}
+            {aiLearningGoal && <p className="text-sm text-gray-600 mt-0.5"><span className="font-medium text-gray-800">Goal:</span> {aiLearningGoal}</p>}
+          </div>
+        )}
+
+        {/* Drop Zone */}
+        <div className="px-8 pt-5">
+          <div
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            onClick={() => !isUploadingAll && fileInputRef.current?.click()}
+            className={cn(
+              'border-2 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center py-8 gap-3 select-none',
+              isDragging
+                ? 'border-black bg-gray-50'
+                : 'border-gray-200 hover:border-gray-400 hover:bg-gray-50',
+              isUploadingAll && 'opacity-40 cursor-not-allowed'
+            )}
+            style={{ borderRadius: '2px' }}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={acceptAttr}
+              className="hidden"
+              onChange={(e) => addFiles(e.target.files)}
+              disabled={isUploadingAll}
+            />
+            <Upload className="w-7 h-7 text-gray-300" />
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-800">{isDragging ? 'Drop files here' : 'Click or drag files here'}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{allowedTypes.join(', ')} — up to 100 MB each</p>
+            </div>
+          </div>
+        </div>
+
+        {/* File Queue */}
+        {queue.length > 0 && (
+          <div className="flex-1 overflow-y-auto px-8 mt-5 space-y-4 pb-4">
+            {queue.map((item, idx) => (
+              <div key={item.id} className="border border-gray-100 bg-white" style={{ borderRadius: '2px' }}>
+                {/* File row */}
+                <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                  <div className="w-8 h-8 bg-gray-100 flex items-center justify-center flex-shrink-0" style={{ borderRadius: '2px' }}>
+                    {item.status === 'uploading' ? <Loader2 className="w-4 h-4 animate-spin text-gray-600" /> :
+                      item.status === 'done' ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> :
+                        item.status === 'error' ? <span className="text-red-500 text-xs font-bold">!</span> :
+                          getFileTypeIcon(item.file)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{item.file.name}</p>
+                    <p className="text-xs text-gray-400">{formatBytes(item.file.size)}</p>
+                    {item.errorMsg && <p className="text-xs text-red-500 mt-0.5">{item.errorMsg}</p>}
+                  </div>
+                  {item.status === 'pending' && (
+                    <button
+                      onClick={() => removeFile(item.id)}
+                      className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-300 hover:text-gray-600 transition-colors flex-shrink-0"
+                    >
+                      <span className="text-sm leading-none">✕</span>
+                    </button>
+                  )}
+                </div>
+                {/* Per-file fields */}
+                {item.status === 'pending' && (
+                  <div className="px-4 py-3 space-y-2">
+                    <div>
+                      <label className="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-medium block mb-1">Description</label>
+                      <input
+                        type="text"
+                        value={item.description}
+                        onChange={(e) => updateField(item.id, 'description', e.target.value)}
+                        placeholder={aiDescription || 'What is this file? (min 10 chars)'}
+                        className="w-full px-3 py-2 border border-gray-200 text-sm text-gray-800 outline-none focus:border-gray-900 transition-colors bg-transparent placeholder-gray-300"
+                        style={{ borderRadius: '2px' }}
+                        disabled={isUploadingAll}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-medium block mb-1">Learning Goal</label>
+                      <input
+                        type="text"
+                        value={item.learningGoal}
+                        onChange={(e) => updateField(item.id, 'learningGoal', e.target.value)}
+                        placeholder={aiLearningGoal || 'What should respondents reflect on? (min 10 chars)'}
+                        className="w-full px-3 py-2 border border-gray-200 text-sm text-gray-800 outline-none focus:border-gray-900 transition-colors bg-transparent placeholder-gray-300"
+                        style={{ borderRadius: '2px' }}
+                        disabled={isUploadingAll}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Footer actions */}
+        <div className="flex items-center justify-between px-8 py-5 border-t border-gray-100 mt-auto">
+          <button
+            onClick={onSkip}
+            disabled={isUploadingAll}
+            className="text-sm text-gray-400 hover:text-gray-700 transition-colors disabled:opacity-40"
+          >
+            Skip
+          </button>
+          <div className="flex items-center gap-3">
+            {queue.length > 0 && !isUploadingAll && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
+              >
+                + Add more
+              </button>
+            )}
+            <button
+              onClick={handleUploadAll}
+              disabled={!canUpload || isUploadingAll}
+              className={cn(
+                'px-6 py-2.5 text-sm font-medium transition-all',
+                canUpload && !isUploadingAll
+                  ? 'bg-black text-white hover:bg-gray-800'
+                  : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+              )}
+              style={{ borderRadius: '2px' }}
+            >
+              {isUploadingAll ? (
+                <span className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…</span>
+              ) : (
+                `Upload ${queue.length > 0 ? queue.length + ` file${queue.length > 1 ? 's' : ''}` : ''}`
+              )}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

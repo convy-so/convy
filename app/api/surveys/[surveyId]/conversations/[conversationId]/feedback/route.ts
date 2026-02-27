@@ -17,7 +17,7 @@ import { nanoid } from "nanoid";
 import { eq, and, sql } from "drizzle-orm";
 
 import { db } from "@/db";
-import { surveyConversations, surveys } from "@/db/schema";
+import { surveyConversations} from "@/db/schema";
 import { participantFeedback } from "@/db/schema/learning";
 import { knowledgeBase } from "@/db/schema/vectors";
 

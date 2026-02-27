@@ -4,9 +4,8 @@ import { useChat } from "@ai-sdk/react";
 import { UIMessage as SDKMessage, DefaultChatTransport } from "ai";
 import { useState, useRef, useEffect } from "react";
 import { X, Send, Bot, User, Loader2, Sparkles, Search } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
+import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { GenerativeAnalyticsRenderer } from "./GenerativeAnalytics";
 
 // Define local UIMessage type to match SDK v6 usage in the project
@@ -111,9 +110,7 @@ export function ChatWithData({ surveyId }: ChatWithDataProps) {
                                             : "bg-gray-50 text-gray-800 rounded-tl-none border border-gray-100"
                                     )}>
                                         <div className="prose prose-sm prose-gray max-w-none break-words">
-                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                                {m.content || ""}
-                                            </ReactMarkdown>
+                                            <MarkdownMessage content={m.content || ""} />
                                         </div>
 
                                         {/* Tool Invocations Display */}

@@ -20,7 +20,7 @@ const jobDataSchema = z.object({
     z.object({
       role: z.enum(["user", "assistant"]),
       content: z.string().min(1),
-    })
+    }),
   ),
   userId: z.string().min(1),
 });
@@ -46,7 +46,7 @@ const sampleConversationInsightsWorker =
       const { surveyId, conversationNumber, messages } = validatedData;
 
       console.log(
-        `[Sample Conversation Insights Worker] Processing job ${job.id} for survey ${surveyId}, conversation ${conversationNumber}`
+        `[Sample Conversation Insights Worker] Processing job ${job.id} for survey ${surveyId}, conversation ${conversationNumber}`,
       );
 
       const [survey] = await db
@@ -64,13 +64,15 @@ const sampleConversationInsightsWorker =
 
       const insightsPrompt = getSampleConversationInsightsPrompt(
         messages,
-        surveyConfig
+        surveyConfig,
       );
 
       const insightsText = await generateAIResponse(insightsPrompt, undefined, {
         model: analysisModel,
         temperature: 0.5,
         maxTokens: 1500,
+        userId: validatedData.userId,
+        surveyId: surveyId,
       });
 
       await job.updateProgress(70);
@@ -116,8 +118,8 @@ const sampleConversationInsightsWorker =
         .where(
           and(
             eq(sampleConversations.surveyId, surveyId),
-            eq(sampleConversations.conversationNumber, conversationNumber)
-          )
+            eq(sampleConversations.conversationNumber, conversationNumber),
+          ),
         );
 
       await job.updateProgress(100);
@@ -131,8 +133,8 @@ const sampleConversationInsightsWorker =
           .where(
             and(
               eq(sampleConversations.surveyId, surveyId),
-              eq(sampleConversations.conversationNumber, conversationNumber)
-            )
+              eq(sampleConversations.conversationNumber, conversationNumber),
+            ),
           )
           .limit(1);
 
@@ -143,15 +145,20 @@ const sampleConversationInsightsWorker =
             conversationType: "sample",
             domainId: survey.domainId ?? null,
           });
-          console.log(`[Sample Conversation Insights Worker] Enqueued pattern extraction for sample conversation ${sampleConv.id}`);
+          console.log(
+            `[Sample Conversation Insights Worker] Enqueued pattern extraction for sample conversation ${sampleConv.id}`,
+          );
         }
       } catch (error) {
-        console.error(`[Sample Conversation Insights Worker] Pattern extraction enqueue failed:`, error);
+        console.error(
+          `[Sample Conversation Insights Worker] Pattern extraction enqueue failed:`,
+          error,
+        );
         // Don't fail the insights job if pattern extraction fails
       }
 
       console.log(
-        `[Sample Conversation Insights Worker] Completed job ${job.id} for survey ${surveyId}, conversation ${conversationNumber}`
+        `[Sample Conversation Insights Worker] Completed job ${job.id} for survey ${surveyId}, conversation ${conversationNumber}`,
       );
 
       return {
@@ -167,7 +174,7 @@ const sampleConversationInsightsWorker =
         max: 10,
         duration: 60000,
       },
-    }
+    },
   );
 
 sampleConversationInsightsWorker.on("completed", (job) => {
@@ -177,7 +184,7 @@ sampleConversationInsightsWorker.on("completed", (job) => {
 sampleConversationInsightsWorker.on("failed", (job, err) => {
   console.error(
     `[Sample Conversation Insights Worker] Job ${job?.id} failed:`,
-    err.message
+    err.message,
   );
 });
 

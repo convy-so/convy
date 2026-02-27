@@ -1,0 +1,103 @@
+# ============================================================
+# Dockerfile.nextjs  —  Next.js 16 Application
+# Multi-stage build: deps → builder → runner (standalone)
+# ============================================================
+
+# ── Stage 1: base ────────────────────────────────────────────
+# Shared Alpine base with pnpm installed once.
+FROM node:22-alpine AS base
+
+RUN apk add --no-cache libc6-compat
+RUN npm install -g pnpm@10.10.0
+
+# ── Stage 2: deps ─────────────────────────────────────────────
+# Install ALL dependencies (dev included) so the builder can compile.
+FROM base AS deps
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml ./
+
+# Frozen lockfile ensures reproducible installs.
+RUN pnpm install --frozen-lockfile
+
+
+# ── Stage 3: builder ──────────────────────────────────────────
+# Run `next build`. Requires NEXT_PUBLIC_* vars at build time
+# because Next.js inlines them at compile time, not runtime.
+FROM base AS builder
+
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Build-time public env vars.
+# These are INLINED into the JS bundle — they are NOT secrets.
+# Pass them via `--build-arg` in the CI pipeline.
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+ARG NEXT_PUBLIC_WEBSOCKET_URL
+
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+ENV NEXT_PUBLIC_WEBSOCKET_URL=$NEXT_PUBLIC_WEBSOCKET_URL
+
+# Disable Next.js telemetry in CI.
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Build-time placeholders to satisfy 'lib/env.ts' validation.
+# These will be OVERRIDDEN at runtime by AWS SSM Parameter Store.
+ENV DATABASE_URL="postgresql://placeholder:5432/db"
+ENV BETTER_AUTH_SECRET="placeholder_secret"
+ENV GOOGLE_CLIENT_ID="placeholder_id"
+ENV GOOGLE_CLIENT_SECRET="placeholder_secret"
+ENV RESEND_API_KEY="re_placeholder"
+ENV RESEND_FROM_EMAIL="onboarding@resend.dev"
+ENV GOOGLE_GENERATIVE_AI_API_KEY="placeholder_key"
+ENV UPSTASH_REDIS_REST_URL="https://placeholder.upstash.io"
+ENV UPSTASH_REDIS_REST_TOKEN="placeholder_token"
+ENV NEXT_PUBLIC_SUPABASE_URL="https://placeholder.supabase.co"
+ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="pk_placeholder"
+ENV convy_supabase_secret_key="placeholder_key"
+
+RUN pnpm build
+
+
+# ── Stage 4: runner ───────────────────────────────────────────
+# Minimal production image using Next.js standalone output.
+# Only the standalone server + static assets are copied — 
+# no node_modules, drastically smaller image.
+FROM node:22-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# Security: run as non-root user.
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Public assets served by Next.js.
+COPY --from=builder /app/public ./public
+
+# Standalone server bundle (self-contained Node.js server).
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+# Pre-compiled static files (CSS, JS chunks, images).
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Agent instructions (skills)
+COPY --from=builder --chown=nextjs:nodejs /app/.agent/skills ./.agent/skills
+
+USER nextjs
+
+EXPOSE 3000
+
+# Health check — ALB will poll this endpoint.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget -qO- http://localhost:3000/api/health || exit 1
+
+# Standalone output produces a server.js at the root of standalone/.
+CMD ["node", "server.js"]

@@ -1,3 +1,4 @@
+import { tool } from "ai";
 import { AgentContext, ChecklistItem, SpecialistChecklist } from "./types";
 import { searchKnowledgeBase } from "@/lib/rag/search";
 import { rerankResults } from "@/lib/rag/reranker";
@@ -19,37 +20,50 @@ export abstract class BaseSpecialistAgent {
   async initialize(): Promise<void> {
     if (this.context.surveyConfig?.domainId) {
       const surveyDescription = [
-        this.context.surveyConfig.objective?.goal,
-        this.context.surveyConfig.objective?.subjectDescription,
-        this.context.surveyConfig.scope?.mainTopics?.join(" "),
-      ].filter(Boolean).join(" ");
-  
-      const phaseMap: Record<string, "creation" | "conducting" | "analytics"> = {
-        "creation": "creation",
-        "conducting": "conducting",
-        "analytics": "analytics"
-      };
-      
+        this.context.surveyConfig.coreObjective,
+        this.context.surveyConfig.expertState?.objective?.goal,
+        this.context.surveyConfig.expertState?.objective?.subjectDescription,
+        this.context.surveyConfig.expertState?.scope?.mainTopics?.join(" "),
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      const phaseMap: Record<string, "creation" | "conducting" | "analytics"> =
+        {
+          creation: "creation",
+          conducting: "conducting",
+          analytics: "analytics",
+        };
+
       const phase = phaseMap[this.role] || "creation";
-  
-      this.context.loadedDomainSkills = await loadDomainSkills(
-        this.context.surveyConfig.domainId,
-        phase,
-        surveyDescription
-      ) || undefined;
+
+      this.context.loadedDomainSkills =
+        (await loadDomainSkills(
+          this.context.surveyConfig.domainId,
+          phase,
+          surveyDescription,
+        )) || undefined;
     }
   }
 
   abstract buildSystemPrompt(): string;
-  
+
+  abstract getTools(): Record<string, any>;
+
   protected abstract buildChecklist(config: SurveyConfig): SpecialistChecklist;
 
   protected getSpecialistIdentity(): string {
-    return `${this.role} Specialist`; 
+    return `${this.role} Specialist`;
   }
 
-  protected makeChecklistItem(id: string, description: string): ChecklistItem {
-    return { id, description, status: "pending" };
+  protected makeChecklistItem(
+    id: string,
+    description: string,
+    status: ChecklistItem["status"] | boolean = "pending",
+  ): ChecklistItem {
+    const finalStatus =
+      typeof status === "boolean" ? (status ? "met" : "pending") : status;
+    return { id, description, status: finalStatus };
   }
 
   protected getChecklistSection(): string {
@@ -60,10 +74,10 @@ export abstract class BaseSpecialistAgent {
 To succeed, you must complete this checklist:
 
 REQUIRED:
-${checklist.required.map(i => `[ ] ${i.description}`).join("\n")}
+${checklist.required.map((i) => `[${i.status === "met" ? "x" : " "}] ${i.description}`).join("\n")}
 
 ASPIRATIONAL (Try to achieve):
-${checklist.aspirational.map(i => `[ ] ${i.description}`).join("\n")}
+${checklist.aspirational.map((i) => `[${i.status === "met" ? "x" : " "}] ${i.description}`).join("\n")}
 </success_criteria>
     `.trim();
   }
@@ -83,13 +97,22 @@ ${checklist.aspirational.map(i => `[ ] ${i.description}`).join("\n")}
     return section;
   }
 
-  protected async enrichWithKnowledge(query: string, limit: number = 3): Promise<void> {
+  protected async enrichWithKnowledge(
+    query: string,
+    limit: number = 3,
+  ): Promise<void> {
     try {
       const kbResults = await searchKnowledgeBase(query, limit);
       if (kbResults.length === 0) return;
-      const reranked = await rerankResults(query, kbResults.map(r => r.content));
-      const knowledge = reranked.map((r, i) => `[Fact ${i+1}]: ${r.item}`).join("\n\n");
-      this.context.ragContext = (this.context.ragContext || "") + "\n" + knowledge;
+      const reranked = await rerankResults(
+        query,
+        kbResults.map((r) => r.content),
+      );
+      const knowledge = reranked
+        .map((r, i) => `[Fact ${i + 1}]: ${r.item}`)
+        .join("\n\n");
+      this.context.ragContext =
+        (this.context.ragContext || "") + "\n" + knowledge;
     } catch (error) {
       console.warn(`[BaseSpecialistAgent] RAG enrichment failed:`, error);
     }
@@ -107,16 +130,26 @@ ${checklist.aspirational.map(i => `[ ] ${i.description}`).join("\n")}
 
     // Extract the core instruction from the stored content (first 3 lines after DESCRIPTION:)
     const lines = p.content.split("\n");
-    const descStart = lines.findIndex(l => l.startsWith("DESCRIPTION:"));
-    const contextStart = lines.findIndex(l => l.startsWith("CONTEXT:"));
-    const exampleStart = lines.findIndex(l => l.startsWith("EXAMPLE FROM CONVERSATION:"));
+    const descStart = lines.findIndex((l) => l.startsWith("DESCRIPTION:"));
+    const contextStart = lines.findIndex((l) => l.startsWith("CONTEXT:"));
+    const exampleStart = lines.findIndex((l) =>
+      l.startsWith("EXAMPLE FROM CONVERSATION:"),
+    );
 
-    const description = descStart >= 0
-      ? lines.slice(descStart + 1, contextStart > 0 ? contextStart : descStart + 4).join(" ").trim()
-      : "";
-    const example = exampleStart >= 0
-      ? lines[exampleStart + 1]?.trim().replace(/^"|"$/g, "") || ""
-      : "";
+    const description =
+      descStart >= 0
+        ? lines
+            .slice(
+              descStart + 1,
+              contextStart > 0 ? contextStart : descStart + 4,
+            )
+            .join(" ")
+            .trim()
+        : "";
+    const example =
+      exampleStart >= 0
+        ? lines[exampleStart + 1]?.trim().replace(/^"|"$/g, "") || ""
+        : "";
 
     return `
 <target_technique source="${p.source}"${p.experimentId ? ` experiment_id="${p.experimentId}" variant="${p.experimentVariant}"` : ""}>
@@ -134,24 +167,39 @@ ${example ? `Example: "${example}"` : ""}
    * ~15 tokens/pattern vs ~120 tokens with the verbose format.
    */
   protected async loadPatternLearnings(
-    category: "questioning" | "probing" | "transition" | "engagement" | "creation" | "general",
-    limit: number = 3
+    category:
+      | "questioning"
+      | "probing"
+      | "transition"
+      | "engagement"
+      | "creation"
+      | "general",
+    limit: number = 3,
   ): Promise<string> {
     try {
       const domainId = this.context.surveyConfig?.domainId ?? null;
-      const patterns = await retrieveRelevantPatterns(domainId, category, limit);
+      const patterns = await retrieveRelevantPatterns(
+        domainId,
+        category,
+        limit,
+      );
       if (patterns.length === 0) return "";
 
-      const bullets = patterns.map(pattern => {
+      const bullets = patterns.map((pattern) => {
         const lines = pattern.content.split("\n");
 
         // Extract trigger from CONTEXT line (first sentence only)
-        const contextIdx = lines.findIndex(l => l.startsWith("CONTEXT:"));
-        const contextFull = contextIdx >= 0 ? lines[contextIdx + 1]?.trim() || "" : "";
-        const trigger = contextFull.split(/\.|,/)[0].trim().toLowerCase().slice(0, 70);
+        const contextIdx = lines.findIndex((l) => l.startsWith("CONTEXT:"));
+        const contextFull =
+          contextIdx >= 0 ? lines[contextIdx + 1]?.trim() || "" : "";
+        const trigger = contextFull
+          .split(/\.|,/)[0]
+          .trim()
+          .toLowerCase()
+          .slice(0, 70);
 
         // Extract action from DESCRIPTION (first sentence only)
-        const descIdx = lines.findIndex(l => l.startsWith("DESCRIPTION:"));
+        const descIdx = lines.findIndex((l) => l.startsWith("DESCRIPTION:"));
         const descFull = descIdx >= 0 ? lines[descIdx + 1]?.trim() || "" : "";
         const action = descFull.split(".")[0].trim().slice(0, 90);
 
@@ -160,7 +208,10 @@ ${example ? `Example: "${example}"` : ""}
 
       return bullets.join("\n");
     } catch (error) {
-      console.warn(`[BaseSpecialistAgent] Failed to load pattern learnings:`, error);
+      console.warn(
+        `[BaseSpecialistAgent] Failed to load pattern learnings:`,
+        error,
+      );
       return "";
     }
   }
@@ -178,7 +229,8 @@ ${example ? `Example: "${example}"` : ""}
 
     const parts: string[] = [];
     if (situational) parts.push(situational);
-    if (broad) parts.push(`<learned_techniques>\n${broad}\n</learned_techniques>`);
+    if (broad)
+      parts.push(`<learned_techniques>\n${broad}\n</learned_techniques>`);
 
     return parts.join("\n\n");
   }
@@ -194,24 +246,34 @@ ${example ? `Example: "${example}"` : ""}
    *   → Returns compressed 1-line bullets for ambient technique awareness.
    */
   public async preloadPatternLearnings(
-    categories: Array<"questioning" | "probing" | "transition" | "engagement" | "creation" | "general"> = ["general"],
+    categories: Array<
+      | "questioning"
+      | "probing"
+      | "transition"
+      | "engagement"
+      | "creation"
+      | "general"
+    > = ["general"],
     limitPerCategory: number = 2,
-    query?: string
+    query?: string,
   ): Promise<void> {
     try {
       // ── Step 1: Situational (conducting only, requires rolling context) ──────
       if (this.role === "conducting" && this.context.rollingContext) {
         const { stateContext, memory } = this.context.rollingContext;
 
-        const phaseMap: Record<string, "opening" | "exploration" | "deepdive" | "closing"> = {
-          "GREETING":           "opening",
-          "EXPLORING_INITIAL":  "exploration",
-          "DRILLING_DEEPER":    "deepdive",
-          "COVERING_TOPIC":     "exploration",
-          "TRANSITIONING":      "exploration",
-          "CHECKING_COVERAGE":  "deepdive",
-          "WRAPPING_UP":        "closing",
-          "CONCLUDING":         "closing",
+        const phaseMap: Record<
+          string,
+          "opening" | "exploration" | "deepdive" | "closing"
+        > = {
+          GREETING: "opening",
+          EXPLORING_INITIAL: "exploration",
+          DRILLING_DEEPER: "deepdive",
+          COVERING_TOPIC: "exploration",
+          TRANSITIONING: "exploration",
+          CHECKING_COVERAGE: "deepdive",
+          WRAPPING_UP: "closing",
+          CONCLUDING: "closing",
         };
 
         const situation = {
@@ -223,7 +285,7 @@ ${example ? `Example: "${example}"` : ""}
           situation,
           query || "effective engagement technique",
           this.context.conversationId ?? "unknown",
-          this.context.surveyConfig?.domainId
+          this.context.surveyConfig?.domainId,
         );
 
         if (retrieved) {
@@ -234,7 +296,10 @@ ${example ? `Example: "${example}"` : ""}
       // ── Step 2: Broad semantic search ────────────────────────────────────────
       const bullets: string[] = [];
       for (const category of categories) {
-        const categoryBullets = await this.loadPatternLearnings(category, limitPerCategory);
+        const categoryBullets = await this.loadPatternLearnings(
+          category,
+          limitPerCategory,
+        );
         if (categoryBullets) bullets.push(categoryBullets);
       }
 
@@ -242,7 +307,10 @@ ${example ? `Example: "${example}"` : ""}
         this.context.patternLearnings = bullets.join("\n");
       }
     } catch (error) {
-      console.warn(`[BaseSpecialistAgent] Failed to preload pattern learnings:`, error);
+      console.warn(
+        `[BaseSpecialistAgent] Failed to preload pattern learnings:`,
+        error,
+      );
     }
   }
 
@@ -257,8 +325,17 @@ ${example ? `Example: "${example}"` : ""}
       const skills = await SkillRegistry.listSkills();
       if (skills.length === 0) return;
 
-      const formatted = skills
-        .map(s => `• ID: ${s.id} | Name: ${s.name} | Description: ${s.description}`)
+      // Filter out foundational domain core skills. They are loaded once at init.
+      // We only want to expose dynamic/modifier skills to the 'loadSkill' tool.
+      const callableSkills = skills.filter((s) => !s.id.endsWith("-core"));
+
+      if (callableSkills.length === 0) return;
+
+      const formatted = callableSkills
+        .map(
+          (s) =>
+            `• ID: ${s.id} | Name: ${s.name} | Description: ${s.description}`,
+        )
         .join("\n");
 
       this.context.skillsMetadata = `
@@ -271,6 +348,7 @@ ${formatted}
 Rules for Skills:
 1. ONLY load a skill if the specific trigger condition in its description is met.
 2. Once loaded, strictly follow the skill's instructions until the situation is resolved.
+3. IMPORTANT: You MUST use the standard native JSON format to call tools. DO NOT use python-style 'tool_code' blocks or write raw code.
 </available_skills>`.trim();
     } catch (error) {
       console.warn(`[BaseSpecialistAgent] Failed to preload skills:`, error);

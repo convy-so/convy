@@ -13,6 +13,7 @@
  * - Generates actionable recommendations, not just observations
  */
 
+import { z } from "zod";
 import {
   generateText,
   streamText,
@@ -20,11 +21,11 @@ import {
   stepCountIs,
   type ModelMessage,
 } from "ai";
-import { z } from "zod";
 import { BaseSpecialistAgent } from "./base-agent";
 import type { AgentContext, SpecialistChecklist } from "./types";
 import type { SurveyConfig } from "@/lib/prompts";
 import { analysisModel, defaultModel } from "@/lib/ai";
+import { logUsage } from "@/lib/billing/logger";
 
 export class AnalyticsSpecialist extends BaseSpecialistAgent {
   constructor(context: AgentContext) {
@@ -37,13 +38,14 @@ export class AnalyticsSpecialist extends BaseSpecialistAgent {
 
   protected buildChecklist(config: SurveyConfig): SpecialistChecklist {
     const metrics = config.metrics ?? [];
-    const insightTypes = config.successCriteria?.insightTypes ?? [];
+    const insightTypes =
+      config.expertState?.successCriteria?.insightTypes ?? [];
 
     return {
       required: [
         this.makeChecklistItem(
           "objective_answer",
-          `Directly answered the survey objective: "${config.objective?.goal ?? "the survey goal"}"`,
+          `Directly answered the survey objective: "${config.coreObjective || config.expertState?.objective?.goal || config.information}"`,
         ),
         this.makeChecklistItem(
           "pattern_identification",
@@ -63,11 +65,11 @@ export class AnalyticsSpecialist extends BaseSpecialistAgent {
         ),
       ],
       aspirational: [
-        ...(config.hypotheses?.assumptions?.length
+        ...(config.expertState?.hypotheses?.assumptions?.length
           ? [
               this.makeChecklistItem(
                 "hypotheses_verdict",
-                `Rendered a verdict on each hypothesis: ${config.hypotheses.assumptions.slice(0, 2).join("; ")}`,
+                `Rendered a verdict on each hypothesis: ${config.expertState.hypotheses.assumptions.slice(0, 2).join("; ")}`,
               ),
             ]
           : []),
@@ -99,6 +101,29 @@ export class AnalyticsSpecialist extends BaseSpecialistAgent {
   // System Prompt — Domain-Specialist Analyst
   // --------------------------------------------------------------------------
 
+  // --------------------------------------------------------------------------
+  // Reflection Protocol
+  // --------------------------------------------------------------------------
+
+  private getReflectionProtocol(): string {
+    return `<reflection_protocol>
+Before EVERY response you write, open a <scratchpad> block and silently reason through these checks. The scratchpad is NEVER shown to the participant — it is stripped before delivery.
+
+<scratchpad>
+Analysis Goal: [1-sentence summary of what the user is asking or what you need to find]
+Data Sources: [Which survey data, insights, or patterns are most relevant?]
+Check 1 — Objective: Does my analysis directly address the survey goal?
+Check 2 — Domain Lens: Am I interpreted this through the professional domain lens (not generic AI)?
+Check 3 — Evidence: Can I point to specific response patterns as evidence?
+Check 4 — Visualization: Would a chart make this clearer? (If yes, use renderChart)
+Check 5 — Recommendation: Did I include a specific, actionable next step for the creator?
+Verdict: [PASS / REWRITE — and if REWRITE, state why in one short sentence]
+</scratchpad>
+
+If any check fails, write a corrected response AFTER the scratchpad. The scratchpad itself is always stripped — ONLY write what the creator should see after </scratchpad>.
+</reflection_protocol>`;
+  }
+
   buildSystemPrompt(): string {
     const config = this.context.surveyConfig;
     if (!config) {
@@ -109,8 +134,8 @@ export class AnalyticsSpecialist extends BaseSpecialistAgent {
 
     return `<role>
 You are ${identity}.
-You are analyzing survey data for: ${config.objective?.goal ?? config.information}
-Target audience surveyed: ${config.targetAudience?.description ?? "survey participants"}
+You are analyzing survey data for: ${config.coreObjective || config.expertState?.objective?.goal || config.information}
+Target audience surveyed: ${config.expertState?.targetAudience?.description || "survey participants"}
 </role>
 
 <specialist_mindset>
@@ -141,7 +166,9 @@ ${this.getKnowledgeSection()}
 5. ACTIONABLE RECOMMENDATIONS: Every insight must connect to a specific action the creator can take
 6. HONEST UNCERTAINTY: If the data is insufficient to conclude, say so clearly
 7. VISUALIZE WHEN POSSIBLE: If a pattern or trend is best explained visually, use the 'renderChart' tool.
-</analysis_principles>`;
+</analysis_principles>
+
+${this.getReflectionProtocol()}`;
   }
 
   // --------------------------------------------------------------------------
@@ -149,93 +176,148 @@ ${this.getKnowledgeSection()}
   // --------------------------------------------------------------------------
 
   async generate(prompt: string): Promise<string> {
-    const { text } = await generateText({
+    const { text, usage } = await generateText({
       model: analysisModel,
       system: this.buildSystemPrompt(),
       prompt,
       temperature: 0.3,
     });
+
     return text;
+  }
+
+  // --------------------------------------------------------------------------
+  // Agent Tools
+  // --------------------------------------------------------------------------
+
+  getTools(): Record<string, any> {
+    const config = this.context.surveyConfig;
+    const surveyId = config?.id;
+
+    return {
+      loadSkill: tool({
+        description:
+          "Load detailed instructions for a specific specialized skill.",
+        inputSchema: z.object({
+          skillId: z
+            .string()
+            .describe("The ID of the skill to load (e.g., 'BiasDetector')"),
+        }),
+        execute: async ({ skillId }) => {
+          const { SkillRegistry } = await import("./skill-registry");
+          const skill = await SkillRegistry.getSkill(skillId);
+          if (!skill) return { error: "Skill not found" };
+          return { instructions: skill.content };
+        },
+      }),
+      searchSurveyData: tool({
+        description:
+          "Search across all survey responses, insights, and analytics for specific information.",
+        inputSchema: z.object({
+          query: z
+            .string()
+            .describe("The search query to find relevant survey data"),
+        }),
+        execute: async ({ query }) => {
+          if (!surveyId) return { error: "No survey ID available" };
+          const { hybridSearch } = await import("@/lib/rag/search");
+          const results = await hybridSearch(query, {
+            surveyId,
+            limit: 5,
+          });
+
+          if (results.length === 0) {
+            return {
+              results: [],
+              message: "No relevant data found for this query.",
+            };
+          }
+
+          return {
+            results: results.map((r) => ({
+              content: r.content,
+              source: r.sourceType,
+              relevance: r.score,
+            })),
+          };
+        },
+      }),
+      renderChart: tool({
+        description:
+          "Render a visualization (Bar, Line, Pie) to represent survey data patterns.",
+        inputSchema: z.object({
+          type: z
+            .enum(["bar", "line", "pie"])
+            .describe("The type of chart to render"),
+          title: z.string().describe("The title of the chart"),
+          description: z
+            .string()
+            .optional()
+            .describe("A brief description of what the chart shows"),
+          data: z
+            .array(z.any())
+            .describe(
+              "The data points for the chart. For Bar/Pie: [{ label: string, value: number, color?: string }]. For Line: [{ x: string|number, y: number }]",
+            ),
+          config: z
+            .object({
+              xAxisLabel: z.string().optional(),
+              yAxisLabel: z.string().optional(),
+              dataKey: z.string().optional(),
+            })
+            .optional(),
+        }),
+        execute: async (args) => {
+          // Generative UI tool: return args to be handled by the client
+          return args;
+        },
+      }),
+    };
   }
 
   // --------------------------------------------------------------------------
   // Stream — for "chat with your data" interactive queries
   // --------------------------------------------------------------------------
 
-  stream(messages: ModelMessage[]) {
+  stream(
+    messages: ModelMessage[],
+    onFinish?: (params: {
+      text: string;
+      response: any;
+      usage: any;
+    }) => Promise<void>,
+  ) {
     const config = this.context.surveyConfig;
     if (!config) {
       throw new Error("Cannot stream without survey configuration");
     }
-    const { id: surveyId } = config;
 
     return streamText({
       model: defaultModel,
       system: this.buildSystemPrompt(),
       messages,
       temperature: 0.4,
-      tools: {
-        searchSurveyData: tool({
-          description:
-            "Search across all survey responses, insights, and analytics for specific information.",
-          inputSchema: z.object({
-            query: z
-              .string()
-              .describe("The search query to find relevant survey data"),
-          }),
-          execute: async ({ query }) => {
-            const { hybridSearch } = await import("@/lib/rag/search");
-            const results = await hybridSearch(query, {
-              surveyId,
-              limit: 5,
-            });
+      tools: this.getTools(),
+      onFinish: async (result) => {
+        logUsage({
+          userId: this.context.userId,
+          organizationId: this.context.organizationId,
+          surveyId: config.id,
+          type: "llm_text",
+          provider: "google",
+          modelName: (defaultModel as any).modelId ?? "gemini-2.5-flash",
+          promptTokens: result.usage.inputTokens,
+          completionTokens: result.usage.outputTokens,
+          totalTokens: result.usage.totalTokens,
+        });
 
-            if (results.length === 0) {
-              return {
-                results: [],
-                message: "No relevant data found for this query.",
-              };
-            }
-
-            return {
-              results: results.map((r) => ({
-                content: r.content,
-                source: r.sourceType,
-                relevance: r.score,
-              })),
-            };
-          },
-        }),
-        renderChart: tool({
-          description:
-            "Render a visualization (Bar, Line, Pie) to represent survey data patterns.",
-          inputSchema: z.object({
-            type: z
-              .enum(["bar", "line", "pie"])
-              .describe("The type of chart to render"),
-            title: z.string().describe("The title of the chart"),
-            description: z
-              .string()
-              .optional()
-              .describe("A brief description of what the chart shows"),
-            data: z
-              .array(z.any())
-              .describe(
-                "The data points for the chart. For Bar/Pie: [{ label: string, value: number, color?: string }]. For Line: [{ x: string|number, y: number }]",
-              ),
-            config: z
-              .object({
-                xAxisLabel: z.string().optional(),
-                yAxisLabel: z.string().optional(),
-                dataKey: z.string().optional(),
-              })
-              .optional(),
-          }),
-          execute: async (args) => {
-            // Generative UI tool: return args to be handled by the client
-            return args;
-          },
-        }),
+        if (onFinish) {
+          await onFinish({
+            text: result.text,
+            response: result.response,
+            usage: result.usage,
+          });
+        }
       },
       stopWhen: stepCountIs(3),
     });
