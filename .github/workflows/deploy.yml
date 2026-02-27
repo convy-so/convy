@@ -3,7 +3,6 @@ name: 🚀 Deploy App
 on:
   push:
     branches:
-      - main
       - staging
       - production
 
@@ -20,10 +19,11 @@ jobs:
     name: 🐳 Build & Push Images
     runs-on: ubuntu-latest
     environment:
-      name: ${{ github.ref_name == 'production' && 'Production' || github.ref_name == 'staging' && 'Staging' || 'Development' }}
+      name: ${{ github.ref_name == 'production' && 'Production' || 'Staging' }}
     
     outputs:
       image_tag: ${{ steps.vars.outputs.IMAGE_TAG }}
+
 
     steps:
       - name: Checkout source code
@@ -95,7 +95,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-push
     environment:
-      name: ${{ github.ref_name == 'production' && 'Production' || github.ref_name == 'staging' && 'Staging' || 'Development' }}
+      name: ${{ github.ref_name == 'production' && 'Production' || 'Staging' }}
 
     steps:
       - name: Checkout source code
@@ -124,7 +124,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-and-push, migrate]
     environment:
-      name: ${{ github.ref_name == 'production' && 'Production' || github.ref_name == 'staging' && 'Staging' || 'Development' }}
+      name: ${{ github.ref_name == 'production' && 'Production' || 'Staging' }}
 
     steps:
       - name: Configure AWS credentials
