@@ -1,3 +1,28 @@
+##############################################################
+# deploy.yml — Unified CI/CD Pipeline for Staging & Production
+#
+# Triggers:
+#   - Push to `staging`    → deploys to Staging environment
+#   - Push to `production` → deploys to Production environment
+#   - Manual trigger       → deploys whichever branch you select
+#
+# Architecture:
+#   build-and-push → migrate → deploy
+#
+# Each job uses GitHub Environments so that secrets (like
+# DATABASE_URL, ECS_CLUSTER, etc.) are automatically scoped
+# to the correct environment. This means one workflow file
+# handles both environments with zero duplication.
+#
+# Required Environment Secrets (set per environment):
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION,
+#   AWS_ACCOUNT_ID, DATABASE_URL,
+#   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+#   NEXT_PUBLIC_WEBSOCKET_URL,
+#   ECS_CLUSTER, ECS_SERVICE_NEXTJS, ECS_SERVICE_WEBSOCKET,
+#   ECS_SERVICE_WORKERS
+##############################################################
+
 name: 🚀 Deploy App
 
 on:
@@ -6,24 +31,33 @@ on:
       - staging
       - production
 
-  # Allow manual trigger from GitHub Actions UI
   workflow_dispatch:
 
-# Cancel any in-progress deployment for the same branch
+# Prevent overlapping deployments on the same branch
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: deploy-${{ github.ref_name }}
   cancel-in-progress: false
 
+# ─── Permissions ──────────────────────────────────────────────
+permissions:
+  contents: read         # checkout code
+  id-token: write        # OIDC (if you switch to role-based auth later)
+
 jobs:
+  # ════════════════════════════════════════════════════════════
+  # JOB 1 — Build Docker images & push to ECR
+  # ════════════════════════════════════════════════════════════
   build-and-push:
     name: 🐳 Build & Push Images
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     environment:
       name: ${{ github.ref_name == 'production' && 'Production' || 'Staging' }}
-    
+
     outputs:
       image_tag: ${{ steps.vars.outputs.IMAGE_TAG }}
-
+      env_name: ${{ steps.vars.outputs.ENV_NAME }}
 
     steps:
       - name: Checkout source code
@@ -40,9 +74,27 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set image tag
+      - name: Set variables
         id: vars
-        run: echo "IMAGE_TAG=$(echo $GITHUB_SHA | head -c7)" >> $GITHUB_OUTPUT
+        run: |
+          SHORT_SHA=$(echo "$GITHUB_SHA" | head -c7)
+          BRANCH="${{ github.ref_name }}"
+
+          # Tag images with commit SHA + environment-specific "latest" tag
+          if [ "$BRANCH" = "production" ]; then
+            ENV_TAG="latest"
+            ENV_NAME="Production"
+          else
+            ENV_TAG="staging"
+            ENV_NAME="Staging"
+          fi
+
+          echo "IMAGE_TAG=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "ENV_TAG=${ENV_TAG}" >> $GITHUB_OUTPUT
+          echo "ENV_NAME=${ENV_NAME}" >> $GITHUB_OUTPUT
+
+          ECR="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com"
+          echo "ECR_REGISTRY=${ECR}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -55,8 +107,8 @@ jobs:
           file: ./Dockerfile.nextjs
           push: true
           tags: |
-            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/convy/nextjs:${{ steps.vars.outputs.IMAGE_TAG }}
-            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/convy/nextjs:latest
+            ${{ steps.vars.outputs.ECR_REGISTRY }}/convy/nextjs:${{ steps.vars.outputs.IMAGE_TAG }}
+            ${{ steps.vars.outputs.ECR_REGISTRY }}/convy/nextjs:${{ steps.vars.outputs.ENV_TAG }}
           build-args: |
             NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
             NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
@@ -72,8 +124,8 @@ jobs:
           file: ./Dockerfile.websocket
           push: true
           tags: |
-            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/convy/websocket:${{ steps.vars.outputs.IMAGE_TAG }}
-            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/convy/websocket:latest
+            ${{ steps.vars.outputs.ECR_REGISTRY }}/convy/websocket:${{ steps.vars.outputs.IMAGE_TAG }}
+            ${{ steps.vars.outputs.ECR_REGISTRY }}/convy/websocket:${{ steps.vars.outputs.ENV_TAG }}
           cache-from: type=gha,scope=websocket-${{ github.ref_name }}
           cache-to: type=gha,mode=max,scope=websocket-${{ github.ref_name }}
 
@@ -85,15 +137,20 @@ jobs:
           file: ./Dockerfile.workers
           push: true
           tags: |
-            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/convy/workers:${{ steps.vars.outputs.IMAGE_TAG }}
-            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/convy/workers:latest
+            ${{ steps.vars.outputs.ECR_REGISTRY }}/convy/workers:${{ steps.vars.outputs.IMAGE_TAG }}
+            ${{ steps.vars.outputs.ECR_REGISTRY }}/convy/workers:${{ steps.vars.outputs.ENV_TAG }}
           cache-from: type=gha,scope=workers-${{ github.ref_name }}
           cache-to: type=gha,mode=max,scope=workers-${{ github.ref_name }}
 
+  # ════════════════════════════════════════════════════════════
+  # JOB 2 — Run database migrations
+  # ════════════════════════════════════════════════════════════
   migrate:
     name: 🗄️ Run DB Migrations
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: build-and-push
+
     environment:
       name: ${{ github.ref_name == 'production' && 'Production' || 'Staging' }}
 
@@ -111,6 +168,17 @@ jobs:
         with:
           version: "10.10.0"
 
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm modules
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -119,12 +187,18 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: pnpm drizzle-kit migrate
 
+  # ════════════════════════════════════════════════════════════
+  # JOB 3 — Deploy to ECS
+  # ════════════════════════════════════════════════════════════
   deploy:
-    name: 🚢 Deploy to ECS
+    name: 🚢 Deploy to ${{ needs.build-and-push.outputs.env_name }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [build-and-push, migrate]
+
     environment:
       name: ${{ github.ref_name == 'production' && 'Production' || 'Staging' }}
+      url: ${{ github.ref_name == 'production' && 'https://getconvy.pro' || 'https://staging.getconvy.pro' }}
 
     steps:
       - name: Configure AWS credentials
@@ -141,6 +215,7 @@ jobs:
             --service ${{ secrets.ECS_SERVICE_NEXTJS }} \
             --force-new-deployment \
             --region ${{ secrets.AWS_REGION }}
+          echo "✅ Next.js deployment triggered"
 
       - name: Deploy WebSocket service
         run: |
@@ -149,6 +224,7 @@ jobs:
             --service ${{ secrets.ECS_SERVICE_WEBSOCKET }} \
             --force-new-deployment \
             --region ${{ secrets.AWS_REGION }}
+          echo "✅ WebSocket deployment triggered"
 
       - name: Deploy Workers service
         run: |
@@ -157,11 +233,22 @@ jobs:
             --service ${{ secrets.ECS_SERVICE_WORKERS }} \
             --force-new-deployment \
             --region ${{ secrets.AWS_REGION }}
+          echo "✅ Workers deployment triggered"
 
       - name: Wait for services to stabilize
         run: |
+          echo "⏳ Waiting for all services to stabilize..."
           aws ecs wait services-stable \
             --cluster ${{ secrets.ECS_CLUSTER }} \
             --services ${{ secrets.ECS_SERVICE_NEXTJS }} ${{ secrets.ECS_SERVICE_WEBSOCKET }} ${{ secrets.ECS_SERVICE_WORKERS }} \
             --region ${{ secrets.AWS_REGION }}
+          echo "✅ All services are stable!"
 
+      - name: 🎉 Deployment summary
+        run: |
+          echo "══════════════════════════════════════════════"
+          echo "  ✅ ${{ needs.build-and-push.outputs.env_name }} deployment complete!"
+          echo "  📦 Image tag: ${{ needs.build-and-push.outputs.image_tag }}"
+          echo "  🏗️  Cluster:  ${{ secrets.ECS_CLUSTER }}"
+          echo "  🌐 Branch:   ${{ github.ref_name }}"
+          echo "══════════════════════════════════════════════"
