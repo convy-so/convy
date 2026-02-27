@@ -1,0 +1,64 @@
+# ============================================================
+# Dockerfile.websocket  —  Voice Survey WebSocket Server
+# Multi-stage build: deps → builder → runner
+# ============================================================
+
+# ── Stage 1: base ────────────────────────────────────────────
+FROM node:22-alpine AS base
+
+RUN apk add --no-cache libc6-compat
+RUN npm install -g pnpm@10.10.0
+
+
+# ── Stage 2: deps ─────────────────────────────────────────────
+FROM base AS deps
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+
+# ── Stage 3: builder ──────────────────────────────────────────
+# Compile the TypeScript websocket server.
+# The websocket/tsconfig.json outputs to dist/websocket/
+# with rootDir set to the project root, so @/* path aliases resolve.
+FROM base AS builder
+
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+RUN pnpm websocket:build
+
+
+# ── Stage 4: runner ───────────────────────────────────────────
+FROM node:22-alpine AS runner
+
+RUN apk add --no-cache libc6-compat
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Security: run as non-root.
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 wsuser
+
+# Only copy what the compiled server needs at runtime.
+COPY --from=builder --chown=wsuser:nodejs /app/dist ./dist
+COPY --from=builder --chown=wsuser:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=wsuser:nodejs /app/package.json ./
+# Agent instructions (skills)
+COPY --from=builder --chown=wsuser:nodejs /app/.agent/skills ./.agent/skills
+
+USER wsuser
+
+EXPOSE 3001
+
+# Health check — polls the /health HTTP endpoint built into the WS server.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD wget -qO- http://localhost:3001/health || exit 1
+
+CMD ["node", "dist/websocket/server.js"]

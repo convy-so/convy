@@ -1,10 +1,9 @@
-
 import { createClient } from "@supabase/supabase-js";
 import { env } from "@/lib/env";
 
 /**
  * Supabase Storage client for uploading and managing survey images
- * 
+ *
  * Bucket structure:
  * - survey-images/{surveyId}/{imageId}.{ext}
  */
@@ -16,7 +15,7 @@ const supabase = createClient(
     auth: {
       persistSession: false,
     },
-  }
+  },
 );
 
 export const SURVEY_IMAGES_BUCKET = "survey-images";
@@ -35,7 +34,7 @@ export async function uploadSurveyImage(
   file: Buffer | Blob,
   surveyId: string,
   imageId: string,
-  contentType: string
+  contentType: string,
 ): Promise<{ url: string; path: string }> {
   return uploadSurveyMedia(file, surveyId, imageId, contentType, "image");
 }
@@ -53,22 +52,34 @@ export async function uploadSurveyMedia(
   surveyId: string,
   assetId: string,
   contentType: string,
-  kind: "image" | "audio" | "video"
+  kind: "image" | "audio" | "video",
 ): Promise<{ url: string; path: string }> {
-  // Use distinct extensions if needed, but keeping original logic for now
-  const ext = contentType.split("/")[1] || "bin";
-  
-  // Naming convention: surveyId/assetId.ext (simpler structure within buckets)
-  // Original was: surveyId/kind/assetId.ext - but with separate buckets we can just do surveyId/assetId.ext
-  // However, keeping surveyId as a folder is good organization.
+  // Map common MIME types to standard extensions to ensure clean filenames
+  const mimeMap: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/gif": "gif",
+    "image/webp": "webp",
+    "audio/mpeg": "mp3",
+    "audio/wav": "wav",
+    "audio/ogg": "ogg",
+    "audio/webm": "webm",
+    "video/mp4": "mp4",
+    "video/quicktime": "mov",
+    "video/webm": "webm",
+  };
+
+  const ext = mimeMap[contentType] || contentType.split("/")[1] || "bin";
+
   const filePath = `${surveyId}/${assetId}.${ext}`;
 
   const bucket =
     kind === "audio"
       ? SURVEY_AUDIO_BUCKET
       : kind === "video"
-      ? SURVEY_VIDEO_BUCKET
-      : SURVEY_IMAGES_BUCKET;
+        ? SURVEY_VIDEO_BUCKET
+        : SURVEY_IMAGES_BUCKET;
 
   const { data, error } = await supabase.storage
     .from(bucket)
@@ -111,14 +122,14 @@ export async function deleteSurveyImage(path: string): Promise<void> {
  */
 export async function deleteSurveyMedia(
   path: string,
-  kind: "image" | "audio" | "video"
+  kind: "image" | "audio" | "video",
 ): Promise<void> {
   const bucket =
     kind === "audio"
       ? SURVEY_AUDIO_BUCKET
       : kind === "video"
-      ? SURVEY_VIDEO_BUCKET
-      : SURVEY_IMAGES_BUCKET;
+        ? SURVEY_VIDEO_BUCKET
+        : SURVEY_IMAGES_BUCKET;
 
   const { error } = await supabase.storage.from(bucket).remove([path]);
 
@@ -132,8 +143,12 @@ export async function deleteSurveyMedia(
  * @param surveyId - The survey ID
  */
 export async function clearSurveyMedia(surveyId: string): Promise<void> {
-  const buckets = [SURVEY_IMAGES_BUCKET, SURVEY_AUDIO_BUCKET, SURVEY_VIDEO_BUCKET];
-  
+  const buckets = [
+    SURVEY_IMAGES_BUCKET,
+    SURVEY_AUDIO_BUCKET,
+    SURVEY_VIDEO_BUCKET,
+  ];
+
   await Promise.all(
     buckets.map(async (bucket) => {
       const { data: files, error: listError } = await supabase.storage
@@ -141,8 +156,11 @@ export async function clearSurveyMedia(surveyId: string): Promise<void> {
         .list(surveyId);
 
       if (listError) {
-        console.error(`Failed to list files in bucket ${bucket} for survey ${surveyId}:`, listError);
-        return; 
+        console.error(
+          `Failed to list files in bucket ${bucket} for survey ${surveyId}:`,
+          listError,
+        );
+        return;
       }
 
       if (!files || files.length === 0) {
@@ -155,15 +173,18 @@ export async function clearSurveyMedia(surveyId: string): Promise<void> {
         .remove(filePaths);
 
       if (deleteError) {
-        console.error(`Failed to delete files in bucket ${bucket}:`, deleteError);
+        console.error(
+          `Failed to delete files in bucket ${bucket}:`,
+          deleteError,
+        );
       }
-    })
+    }),
   );
 }
 
-// Deprecated: Alias for clearSurveyMedia for backward compatibility if needed, 
+// Deprecated: Alias for clearSurveyMedia for backward compatibility if needed,
 // otherwise can be removed if strictly following "no backward compatibility".
-// Keeping it as a wrapper to avoid breaking if mistakenly called, 
+// Keeping it as a wrapper to avoid breaking if mistakenly called,
 // but clearSurveyMedia is preferred.
 export async function deleteSurveyImages(surveyId: string): Promise<void> {
   await clearSurveyMedia(surveyId);
@@ -176,9 +197,15 @@ export async function deleteSurveyImages(surveyId: string): Promise<void> {
  */
 export function validateImageFile(
   file: File,
-  maxSizeMB: number = 5
+  maxSizeMB: number = 5,
 ): { valid: boolean; error?: string } {
-  const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
+  const validTypes = [
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+  ];
   if (!validTypes.includes(file.type)) {
     return {
       valid: false,
@@ -196,4 +223,3 @@ export function validateImageFile(
 
   return { valid: true };
 }
-

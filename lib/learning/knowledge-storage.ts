@@ -27,7 +27,7 @@ const SIMILARITY_THRESHOLD = 0.85;
  * until the lifecycle evaluator promotes them.
  */
 export async function storePatterns(
-  patterns: ExtractedPattern[]
+  patterns: ExtractedPattern[],
 ): Promise<{ stored: number; skipped: number; updated: number }> {
   let stored = 0;
   let skipped = 0;
@@ -84,7 +84,7 @@ export async function countPatternsByStatus(): Promise<Record<string, number>> {
 export async function retrieveRelevantPatterns(
   domainId: number | null,
   category: ExtractedPattern["category"],
-  limit: number = 5
+  limit: number = 5,
 ): Promise<Array<{ title: string; content: string; qualityScore: number }>> {
   const kbCategory = mapPatternCategoryToKnowledgeCategory(category);
 
@@ -104,13 +104,13 @@ export async function retrieveRelevantPatterns(
           ? eq(knowledgeBase.domainId, domainId)
           : sql`${knowledgeBase.domainId} IS NULL`,
         sql`${knowledgeBase.status} IN ('ACTIVE', 'SHADOW')`,
-        sql`${knowledgeBase.qualityScore} >= ${MIN_QUALITY_SCORE}`
-      )
+        sql`${knowledgeBase.qualityScore} >= ${MIN_QUALITY_SCORE}`,
+      ),
     )
     .orderBy(
       // Prefer signal-backed performanceScore, fall back to qualityScore
       sql`COALESCE(${knowledgeBase.performanceScore}, ${knowledgeBase.qualityScore}::real / 100) DESC`,
-      desc(knowledgeBase.usageCount)
+      desc(knowledgeBase.usageCount),
     )
     .limit(limit);
 
@@ -125,13 +125,15 @@ export async function retrieveRelevantPatterns(
 // ---------------------------------------------------------------------------
 
 async function findSimilarPattern(
-  pattern: ExtractedPattern
+  pattern: ExtractedPattern,
 ): Promise<{ id: string; qualityScore: number } | null> {
   const kbCategory = mapPatternCategoryToKnowledgeCategory(pattern.category);
 
   try {
     const searchContent = `${pattern.title}\n${pattern.description}`;
-    const embedding = await generateEmbedding(searchContent);
+    const embedding = await generateEmbedding(searchContent, {
+      surveyId: pattern.metadata.surveyId,
+    });
     const embeddingString = JSON.stringify(embedding);
 
     const [existing] = await db
@@ -148,16 +150,23 @@ async function findSimilarPattern(
             ? eq(knowledgeBase.domainId, pattern.domainId)
             : sql`${knowledgeBase.domainId} IS NULL`,
           sql`${knowledgeBase.embedding} IS NOT NULL`,
-          sql`1 - (${knowledgeBase.embedding} <=> ${embeddingString}) > ${SIMILARITY_THRESHOLD}`
-        )
+          sql`1 - (${knowledgeBase.embedding} <=> ${embeddingString}) > ${SIMILARITY_THRESHOLD}`,
+        ),
       )
-      .orderBy(desc(sql`1 - (${knowledgeBase.embedding} <=> ${embeddingString})`))
+      .orderBy(
+        desc(sql`1 - (${knowledgeBase.embedding} <=> ${embeddingString})`),
+      )
       .limit(1);
 
-    return existing ? { ...existing, qualityScore: existing.qualityScore ?? 0 } : null;
+    return existing
+      ? { ...existing, qualityScore: existing.qualityScore ?? 0 }
+      : null;
   } catch {
     const [fallback] = await db
-      .select({ id: knowledgeBase.id, qualityScore: knowledgeBase.qualityScore })
+      .select({
+        id: knowledgeBase.id,
+        qualityScore: knowledgeBase.qualityScore,
+      })
       .from(knowledgeBase)
       .where(
         and(
@@ -165,12 +174,14 @@ async function findSimilarPattern(
           pattern.domainId
             ? eq(knowledgeBase.domainId, pattern.domainId)
             : sql`${knowledgeBase.domainId} IS NULL`,
-          sql`LOWER(${knowledgeBase.title}) = LOWER(${pattern.title})`
-        )
+          sql`LOWER(${knowledgeBase.title}) = LOWER(${pattern.title})`,
+        ),
       )
       .limit(1);
 
-    return fallback ? { ...fallback, qualityScore: fallback.qualityScore ?? 0 } : null;
+    return fallback
+      ? { ...fallback, qualityScore: fallback.qualityScore ?? 0 }
+      : null;
   }
 }
 
@@ -221,14 +232,14 @@ async function storeNewPattern(pattern: ExtractedPattern): Promise<void> {
         sql`LOWER(${knowledgeBase.title}) = LOWER(${pattern.title})`,
         eq(knowledgeBase.source, "feedback"),
         // Only update if status is still the default (avoid overwriting a promoted pattern)
-        eq(knowledgeBase.status, "CANDIDATE")
-      )
+        eq(knowledgeBase.status, "CANDIDATE"),
+      ),
     );
 }
 
 async function updatePattern(
   patternId: string,
-  newPattern: ExtractedPattern
+  newPattern: ExtractedPattern,
 ): Promise<void> {
   const content = formatPatternContent(newPattern);
   const newPerformanceScore = newPattern.qualityScore / 100;
@@ -270,7 +281,7 @@ async function incrementPatternUsage(patternId: string): Promise<void> {
 }
 
 function mapPatternCategoryToKnowledgeCategory(
-  patternCategory: ExtractedPattern["category"]
+  patternCategory: ExtractedPattern["category"],
 ): "technique" | "pattern" | "insight" | "feedback" | "general" {
   switch (patternCategory) {
     case "questioning":
@@ -306,7 +317,7 @@ QUALITY SCORE: ${pattern.qualityScore}/100
 CONVERSATION TYPE: ${pattern.metadata.conversationType}
 COMPLETION RATE: ${(pattern.metadata.completionRate * 100).toFixed(0)}%
 OBJECTIVE COVERAGE: ${(pattern.metadata.objectiveCoverageScore * 100).toFixed(0)}%
-AVG RICHNESS: ${(pattern.metadata.avgResponseRichnessScore as number * 100).toFixed(0)}%
+AVG RICHNESS: ${((pattern.metadata.avgResponseRichnessScore as number) * 100).toFixed(0)}%
 ${pattern.effectivePhase ? `EFFECTIVE PHASE: ${pattern.effectivePhase}` : ""}
 ${pattern.effectiveStyle ? `EFFECTIVE STYLE: ${pattern.effectiveStyle}` : ""}`.trim();
 }

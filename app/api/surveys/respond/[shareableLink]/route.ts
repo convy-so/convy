@@ -2,10 +2,6 @@ import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
 import {
-  streamText,
-  convertToModelMessages,
-  type UIMessage,
-  stepCountIs,
   createUIMessageStream,
   createUIMessageStreamResponse,
 } from "ai";
@@ -16,13 +12,13 @@ import { ConversationManager } from "@/lib/conversation-manager";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import {
   selectModelForConversation,
-  flashModel,
-  flashLiteModel,
+  normalizeMessages,
 } from "@/lib/ai";
 import { getTimeBasedGreeting } from "@/lib/greetings";
 import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
 import type { AgentContext } from "@/lib/agents/types";
 import { getRedisClient } from "@/lib/redis";
+import { logUsage } from "@/lib/billing/logger";
 
 /**
  * GET - Initialize a survey response conversation and generate AI greeting
@@ -83,8 +79,8 @@ export async function GET(
           survey: {
             id: survey.id,
             title: survey.title,
-            objective: survey.objective,
-            targetAudience: survey.targetAudience,
+            objective: (survey.expertState as any)?.objective,
+            targetAudience: (survey.expertState as any)?.targetAudience,
             tone: survey.tone,
             requiredQuestions: survey.requiredQuestions || [],
             isVoice: survey.isVoice,
@@ -134,8 +130,8 @@ export async function GET(
       survey: {
         id: survey.id,
         title: survey.title,
-        objective: survey.objective,
-        targetAudience: survey.targetAudience,
+        objective: (survey.expertState as any)?.objective,
+        targetAudience: (survey.expertState as any)?.targetAudience,
         tone: survey.tone,
         requiredQuestions: survey.requiredQuestions || [],
         isVoice: survey.isVoice,
@@ -168,7 +164,11 @@ export async function POST(
 ) {
   try {
     const body = await req.json();
-    const { messages, context, language } = body;
+    const { messages, context, language } = body as {
+      messages: any[];
+      context?: any;
+      language?: string;
+    };
     const { shareableLink } = await params;
 
     // Fetch survey by shareable link
@@ -202,8 +202,8 @@ export async function POST(
     // Prepare survey config
     const surveyConfig = buildCompleteSurveyConfig(survey);
 
-    // AI SDK v6: Convert UIMessages to ModelMessages for proper handling
-    const modelMessages = await convertToModelMessages(messages as UIMessage[]);
+    // AI SDK v6: Normalize UI messages to ModelMessages for proper handling
+    const modelMessages = normalizeMessages(messages);
 
     // Load conversation context (handling hydration, compression, signals)
     const rollingContext = await ConversationManager.loadOrCreateContext(
@@ -216,10 +216,11 @@ export async function POST(
     const agentContext: AgentContext = {
       conversationId,
       surveyConfig,
-      language,
+      language: survey.language as "en" | "fr" | "de" | "es" | "it" | undefined,
       rollingContext,
     };
     const agent = new ConductingSpecialist(agentContext);
+    await agent.initialize();
     await Promise.all([
       agent.preloadSkills(),
       agent.preloadPatternLearnings(
@@ -255,9 +256,6 @@ export async function POST(
       }
     }
 
-    // Define tools
-    const tools = ConversationManager.getTools(surveyConfig);
-
     // Intelligent model selection
     const userMessages = modelMessages.filter((m: any) => m.role === "user");
     const minQuestions = Math.max(
@@ -274,24 +272,38 @@ export async function POST(
 
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
-        // Stream the AI response with scratchpad filtering
-        const result = streamText({
-          model: selectedModel,
-          system: systemPrompt,
-          messages: modelMessages,
-          tools,
-          toolChoice: "auto",
-          stopWhen: stepCountIs(5),
-          temperature: 0.7,
-          maxOutputTokens: 2000, // Increased to accommodate scratchpad + response
-          onFinish: async ({ text, toolCalls, toolResults, steps }) => {
+        const onMediaDisplay = (media: any) => {
+          writer.write({
+            type: "data",
+            data: { media },
+          } as any);
+        };
+
+        // Stream the AI response with scratchpad filtering via agent.stream()
+        const result = agent.stream(
+          modelMessages,
+          onMediaDisplay,
+          async (params) => {
+            const { text, usage, response } = params;
+
+            // Log usage for survey response
+            logUsage({
+              surveyId: survey.id,
+              type: "llm_text",
+              provider: "google",
+              modelName: (selectedModel as any).modelId ?? "gemini-2.5-flash",
+              promptTokens: usage.inputTokens,
+              completionTokens: usage.outputTokens,
+              totalTokens: usage.totalTokens,
+            });
+
             // Clean the final text for storage
             const cleanText = stripScratchpadFromText(text);
 
             // Save conversation to database
-            const assistantMessage = steps[
-              steps.length - 1
-            ]?.response?.messages?.find((m) => m.role === "assistant");
+            const assistantMessage = response.messages?.find(
+              (m: any) => m.role === "assistant",
+            );
 
             const updatedMessages = [
               ...modelMessages,
@@ -318,11 +330,10 @@ export async function POST(
             );
 
             // Check for survey completion
-            const finishSurveyCall =
-              steps
-                .flatMap((step) => step.toolCalls)
-                .find((call) => call.toolName === "finishSurvey") ||
-              toolCalls?.find((call: any) => call.toolName === "finishSurvey");
+            const toolInvocations = assistantMessage?.toolInvocations || [];
+            const finishSurveyCall = toolInvocations.find(
+              (call: any) => call.toolName === "finishSurvey",
+            );
 
             const isCompletionPhrase =
               cleanText.toLowerCase().includes("thank you for completing") ||
@@ -377,7 +388,7 @@ export async function POST(
               } as any);
             }
           },
-        });
+        );
 
         // Apply the UI Message Filter to strip <scratchpad> blocks from the stream
         writer.merge(

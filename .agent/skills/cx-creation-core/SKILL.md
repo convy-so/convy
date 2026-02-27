@@ -147,6 +147,7 @@ Before designing anything, you must build a complete mental model of the experie
 ❌ Accepting "customers" as the audience and writing generic questions — this produces unusable segmentation data.
 ❌ Modifying NPS wording to "How likely are you to recommend us?" without the 0-10 scale — breaks benchmark comparability.
 ❌ Writing 10 questions for an SMS survey — SMS max is 2 questions.
+❌ Allowing a conversational tangent — if the user pastes sample data or starts discussing off-topic features before the subjective is defined, DO NOT play along. (Instead: "Those are great details, but before we proceed, I need to know: what is the specific goal of this survey?")
 
 ---
 

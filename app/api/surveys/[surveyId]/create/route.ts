@@ -1,10 +1,23 @@
 import { eq } from "drizzle-orm";
-import { streamText, generateText, Output, tool, stepCountIs } from "ai";
+import {
+  streamText,
+  generateText,
+  Output,
+  tool,
+  stepCountIs,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  type ModelMessage,
+} from "ai";
 import { z } from "zod";
 
 import { db } from "@/db";
 import { surveys, surveyCreationConversations } from "@/db/schema";
-import { defaultModel, analysisModel } from "@/lib/ai";
+import { defaultModel, analysisModel, normalizeMessages } from "@/lib/ai";
+import {
+  stripScratchpadFromText,
+  createUIMessageFilter,
+} from "@/lib/agents/scratchpad-filter";
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
   getSurveyDataExtractionPrompt,
@@ -12,178 +25,11 @@ import {
 } from "@/lib/prompts";
 import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
 import { CreationSpecialist } from "@/lib/agents/creation-specialist";
+import { type AgentContext } from "@/lib/agents/types";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
-import type { AgentContext } from "@/lib/agents/types";
+import { logUsage } from "@/lib/billing/logger";
 
 export const maxDuration = 300;
-
-/**
- * Perform incremental extraction of survey data from conversation
- * This runs async after each exchange to keep extracted data current
- */
-async function performIncrementalExtraction(
-  surveyId: string,
-  messages: Array<{ role: "user" | "assistant"; content: string }>,
-): Promise<void> {
-  try {
-    // Extract after at least 2 messages (1 user message + AI welcome)
-    if (messages.length < 2) return;
-
-    console.log(
-      `[Create Route] Starting extraction for survey ${surveyId} with ${messages.length} messages`,
-    );
-
-    const extractionPrompt = getSurveyDataExtractionPrompt(messages);
-
-    const extractionSchema = z.object({
-      objective: z
-        .object({
-          goal: z.string().min(5, "Goal must be descriptive").nullable(),
-          context: z.string().min(5, "Context must be descriptive").nullable(),
-          decision: z
-            .string()
-            .min(5, "Decision must be descriptive")
-            .nullable(),
-          subjectDomain: z.string().min(2).nullable(),
-          subjectDescription: z.string().min(5).nullable(),
-        })
-        .nullable(),
-      targetAudience: z
-        .object({
-          description: z.string().min(5).nullable(),
-          relationship: z.string().min(2).nullable(),
-          knowledgeLevel: z.string().nullable(),
-        })
-        .nullable(),
-      scope: z
-        .object({
-          breadthVsDepth: z.enum(["broad", "deep", "balanced"]).nullable(),
-          mainTopics: z.array(z.string().min(2)).nullable(),
-          boundaries: z.string().min(5).nullable(),
-        })
-        .nullable(),
-      successCriteria: z
-        .object({
-          insightTypes: z
-            .array(z.enum(["emotional", "behavioral", "rational"]))
-            .nullable(),
-          detailLevel: z.enum(["high", "medium", "low"]).nullable(),
-          description: z.string().min(5).nullable(),
-        })
-        .nullable(),
-      constraints: z
-        .object({
-          timeLimit: z.number().positive().max(60).nullable(),
-          sensitiveTopics: z.array(z.string()).nullable(),
-          otherConstraints: z.string().nullable(),
-        })
-        .nullable(),
-      hypotheses: z
-        .object({
-          assumptions: z.array(z.string().min(5)).nullable(),
-        })
-        .nullable(),
-      tone: z.enum(["formal", "casual", "playful", "empathetic"]).nullable(),
-      requiredQuestions: z.array(z.string().min(5)).nullable(),
-      metrics: z.array(z.string().min(2)).nullable(),
-      personalInfo: z.array(z.string()).nullable(),
-      domainId: z.number().int().min(1).max(10).nullable(),
-      media: z
-        .array(
-          z.object({
-            type: z.enum(["image", "audio", "video"]),
-            description: z.string().min(5),
-            contextForUse: z.string().min(5),
-            priority: z.enum(["high", "medium", "low"]).nullable(),
-          }),
-        )
-        .nullable(),
-      collectedInfo: z.object({
-        objective: z.boolean(),
-        targetAudience: z.boolean(),
-        scope: z.boolean(),
-        successCriteria: z.boolean(),
-        constraints: z.boolean(),
-        hypotheses: z.boolean(),
-        tone: z.boolean(),
-        requiredQuestions: z.boolean(),
-        metrics: z.boolean(),
-        personalInfo: z.boolean(),
-        subjectDefined: z.boolean(),
-        domainIdentified: z.boolean(),
-        media: z.boolean(),
-      }),
-      isVoice: z.boolean().nullable(),
-    });
-
-    const { output: parsed } = await generateText({
-      model: analysisModel,
-      output: Output.object({ schema: extractionSchema }),
-      prompt: extractionPrompt,
-      system:
-        "You are an expert survey designer. Extract structured data from the conversation.",
-      temperature: 0.3,
-    });
-
-    // Extract collectedInfo and data
-    const { collectedInfo, ...dataWithoutCollectedInfo } = parsed;
-
-    // Get current conversation to merge data
-    const [currentConv] = await db
-      .select()
-      .from(surveyCreationConversations)
-      .where(eq(surveyCreationConversations.surveyId, surveyId));
-
-    if (!currentConv) return;
-
-    // Merge new data with existing (don't overwrite with nulls)
-    const existingData = currentConv.extractedData || {};
-    const mergedData: Record<string, unknown> = { ...existingData };
-
-    for (const [key, value] of Object.entries(dataWithoutCollectedInfo)) {
-      if (value !== null && value !== undefined) {
-        mergedData[key] = value;
-      }
-    }
-
-    // Update conversation with incremental extraction
-    const defaultCollectedInfo: CollectedInfo = {
-      objective: false,
-      targetAudience: false,
-      scope: false,
-      successCriteria: false,
-      constraints: false,
-      hypotheses: false,
-      tone: false,
-      requiredQuestions: false,
-      metrics: false,
-      personalInfo: false,
-      subjectDefined: false,
-      domainIdentified: false,
-      media: false,
-      subjectModelComplete: false,
-    };
-
-    await db
-      .update(surveyCreationConversations)
-      .set({
-        extractedData: mergedData,
-        collectedInfo: {
-          ...defaultCollectedInfo,
-          ...(currentConv.collectedInfo || {}),
-          ...(collectedInfo || {}),
-        },
-      })
-      .where(eq(surveyCreationConversations.surveyId, surveyId));
-
-    console.log(
-      `[Create Route] Incremental extraction completed for survey ${surveyId}`,
-    );
-  } catch (error) {
-    console.error("[Create Route] Incremental extraction error:", error);
-    // Non-critical - continue without extraction update
-  }
-}
 
 /**
  * Stream a survey creation conversation
@@ -237,8 +83,12 @@ export async function POST(
       return new Response("Survey not found", { status: 404 });
     }
 
-    if (survey.userId !== session.user.id) {
-      return new Response("Unauthorized", { status: 403 });
+    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access !== "owner" && access !== "editor") {
+      return new Response("Unauthorized: Editor access required", {
+        status: 403,
+      });
     }
 
     if (survey.status !== "creating") {
@@ -272,11 +122,21 @@ export async function POST(
       };
 
     // SAVE CONVERSATION STATE (Important for extraction to work)
-    const messagesWithTimestamp = messages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-      timestamp: new Date().toISOString(),
-    }));
+    const messagesWithTimestamp = messages.map((msg) => {
+      let textContent = msg.content;
+      if (!textContent && Array.isArray(msg.parts)) {
+        textContent = msg.parts
+          .filter((p: any) => p.type === "text")
+          .map((p: any) => p.text)
+          .join("");
+      }
+      return {
+        role: msg.role,
+        content: textContent || "",
+        parts: msg.parts,
+        timestamp: new Date().toISOString(),
+      };
+    });
 
     if (creationConversation) {
       await db
@@ -306,18 +166,26 @@ export async function POST(
     // Overlay extracted data onto config so agent sees what has been collected
     if (extractedData?.domainId)
       currentConfig.domainId = extractedData.domainId;
-    if (extractedData?.objective)
-      currentConfig.objective = extractedData.objective;
-    if (extractedData?.targetAudience)
-      currentConfig.targetAudience = extractedData.targetAudience;
+    if (extractedData?.objective || extractedData?.targetAudience) {
+      currentConfig.expertState = {
+        ...currentConfig.expertState,
+        objective:
+          extractedData?.objective || currentConfig.expertState?.objective,
+        targetAudience:
+          extractedData?.targetAudience ||
+          currentConfig.expertState?.targetAudience,
+      };
+    }
     // ... other fields are less critical for immediate context, or are handled by extractedData updates
 
+    const normalizedMessages = normalizeMessages(messages);
+
     const outputMessages =
-      messages.length > 0
-        ? messages
+      normalizedMessages.length > 0
+        ? normalizedMessages
         : [
             {
-              role: "user",
+              role: "user" as const,
               content:
                 "Start the conversation by introducing yourself as the expert on this domain and asking the first question.",
             },
@@ -331,6 +199,7 @@ export async function POST(
 
     // 2. Instantiate Creation Specialist
     const agent = new CreationSpecialist(agentContext);
+    await agent.initialize();
 
     // Preload capabilities
     await Promise.all([
@@ -347,143 +216,68 @@ export async function POST(
     const systemPrompt = agent.buildSystemPrompt();
 
     // 4. Stream response using Agent's prompt and tool logic
-    // We recreate the tools here to ensure we can hook into onFinish correctly
-    // mirroring the logic from CreationSpecialist.stream() but adding the route-specific side effects.
+    const streamResult = agent.stream(outputMessages, async (result) => {
+      const { text, response } = result;
 
-    const streamResult = streamText({
-      model: defaultModel,
-      messages: outputMessages as any,
-      system: systemPrompt,
-      temperature: 0.7,
-      maxOutputTokens: 1500, // Agentic responses can be longer
-      stopWhen: stepCountIs(10), // Use stepCountIs as requested by user
-      tools: {
-        loadSkill: tool({
-          description:
-            "Load detailed instructions for a specific specialized skill.",
-          inputSchema: z.object({
-            skillId: z
-              .string()
-              .describe("The ID of the skill to load (e.g., 'BiasDetector')"),
-          }),
-          execute: async ({ skillId }) => {
-            const { SkillRegistry } =
-              await import("@/lib/agents/skill-registry");
-            const skill = await SkillRegistry.getSkill(skillId);
-            if (!skill) return { error: "Skill not found" };
-            return { instructions: skill.content };
-          },
-        }),
-        finishSurvey: tool({
-          description:
-            "Signal that all required survey information has been collected and the survey design is complete.",
-          inputSchema: z.object({
-            summary: z
-              .string()
-              .describe("Brief summary of the survey that was designed"),
-          }),
-          execute: async ({ summary }) => ({
-            success: true,
-            message: "Survey design complete",
-            summary,
-          }),
-        }),
-        requestMediaUpload: tool({
-          description:
-            "Request the user to upload media (image, audio, or video) to include in the survey.",
-          inputSchema: z.object({
-            reason: z
-              .string()
-              .describe(
-                "Why you are requesting media and how it will be used in the survey",
-              ),
-          }),
-          execute: async ({ reason }) => ({
-            success: true,
-            message: "Media upload requested",
-            reason,
-          }),
-        }),
-      },
-      onFinish: async ({ text, response }) => {
-        // Save the assistant's response when done
-        try {
-          const assistantMessage = response.messages.find(
-            (m) => m.role === "assistant",
-          );
+      // Save the assistant's response when done
+      try {
+        const assistantMessage = response.messages.find(
+          (m: any) => m.role === "assistant",
+        );
 
-          // Re-fetch to get latest state in case extraction updated it
-          const [latestConv] = await db
-            .select()
-            .from(surveyCreationConversations)
+        // Re-fetch to get latest state in case extraction updated it
+        const [latestConv] = await db
+          .select()
+          .from(surveyCreationConversations)
+          .where(eq(surveyCreationConversations.surveyId, surveyId));
+
+        if (latestConv) {
+          const currentMessages = latestConv.messages as Array<{
+            role: "user" | "assistant";
+            content: string;
+            timestamp: string;
+          }>;
+
+          const cleanText = stripScratchpadFromText(text);
+
+          const updatedMessages = [
+            ...currentMessages,
+            {
+              role: "assistant" as const,
+              content: cleanText,
+              parts:
+                (assistantMessage as any)?.content &&
+                Array.isArray((assistantMessage as any).content)
+                  ? (assistantMessage as any).content
+                  : undefined,
+              timestamp: new Date().toISOString(),
+            },
+          ];
+
+          await db
+            .update(surveyCreationConversations)
+            .set({
+              messages: updatedMessages,
+            })
             .where(eq(surveyCreationConversations.surveyId, surveyId));
-
-          if (latestConv) {
-            const currentMessages = latestConv.messages as Array<{
-              role: "user" | "assistant";
-              content: string;
-              timestamp: string;
-            }>;
-
-            const updatedMessages = [
-              ...currentMessages,
-              {
-                role: "assistant" as const,
-                content: text,
-                parts:
-                  (assistantMessage as any)?.content &&
-                  Array.isArray((assistantMessage as any).content)
-                    ? (assistantMessage as any).content
-                    : undefined,
-                timestamp: new Date().toISOString(),
-              },
-            ];
-
-            await db
-              .update(surveyCreationConversations)
-              .set({
-                messages: updatedMessages,
-              })
-              .where(eq(surveyCreationConversations.surveyId, surveyId));
-
-            // Logic for triggering extraction and completion checks
-            const completionPhrases = [
-              "ready to publish",
-              "all set",
-              "created your survey",
-              "survey is ready",
-              "looks good",
-              "finalized",
-              "try sample",
-              "go to sample conversations",
-              "survey design complete",
-            ];
-            const isCompletionVariable = completionPhrases.some((phrase) =>
-              text.toLowerCase().includes(phrase),
-            );
-
-            const shouldExtract =
-              updatedMessages.length <= 2 ||
-              isCompletionVariable ||
-              updatedMessages.length % 2 === 0;
-
-            if (shouldExtract) {
-              console.log(
-                `[Create Route] Triggering extraction (Reason: ${isCompletionVariable ? "Completion" : "Interval"})`,
-              );
-              await performIncrementalExtraction(surveyId, updatedMessages);
-            }
-          }
-        } catch (error) {
-          console.error(
-            "Error saving conversation or performing extraction:",
-            error,
-          );
         }
+      } catch (error) {
+        console.error(
+          "Error saving conversation or performing extraction:",
+          error,
+        );
+      }
+    });
+
+    const filterStream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        writer.merge(
+          streamResult.toUIMessageStream().pipeThrough(createUIMessageFilter()),
+        );
       },
     });
 
-    return streamResult.toUIMessageStreamResponse();
+    return createUIMessageStreamResponse({ stream: filterStream });
   } catch (error) {
     if (error instanceof Error) {
       if (
@@ -529,8 +323,12 @@ export async function PUT(
       return new Response("Survey not found", { status: 404 });
     }
 
-    if (survey.userId !== session.user.id) {
-      return new Response("Unauthorized", { status: 403 });
+    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access !== "owner" && access !== "editor") {
+      return new Response("Unauthorized: Editor access required", {
+        status: 403,
+      });
     }
 
     const [existingConversation] = await db
@@ -538,61 +336,96 @@ export async function PUT(
       .from(surveyCreationConversations)
       .where(eq(surveyCreationConversations.surveyId, surveyId));
 
-    if (existingConversation) {
-      await db
-        .update(surveyCreationConversations)
-        .set({
-          ...(messages && {
-            messages: messages.map((msg) => ({
-              id: msg.id,
-              role: msg.role,
-              content: msg.content,
-              parts: msg.parts,
-              timestamp: msg.timestamp || new Date().toISOString(),
-            })),
-          }),
-          ...(collectedInfo && { collectedInfo }),
-          ...(extractedData && {
-            extractedData: {
-              ...existingConversation.extractedData,
+    await db.transaction(async (tx) => {
+      if (existingConversation) {
+        await tx
+          .update(surveyCreationConversations)
+          .set({
+            ...(messages && {
+              messages: messages.map((msg) => {
+                let textContent = msg.content;
+                if (!textContent && Array.isArray(msg.parts)) {
+                  textContent = msg.parts
+                    .filter((p: any) => p.type === "text")
+                    .map((p: any) => p.text)
+                    .join("");
+                }
+                return {
+                  id: msg.id,
+                  role: msg.role,
+                  content: textContent || "",
+                  parts: msg.parts,
+                  timestamp: msg.timestamp || new Date().toISOString(),
+                };
+              }),
+            }),
+            ...(collectedInfo && { collectedInfo }),
+            ...(extractedData && {
+              extractedData: {
+                ...existingConversation.extractedData,
+                ...extractedData,
+              },
+            }),
+          })
+          .where(eq(surveyCreationConversations.surveyId, surveyId));
+      } else {
+        await tx.insert(surveyCreationConversations).values({
+          id: crypto.randomUUID(),
+          surveyId,
+          messages: messages
+            ? messages.map((msg) => ({
+                id: msg.id,
+                role: msg.role,
+                content:
+                  msg.content ||
+                  (Array.isArray(msg.parts)
+                    ? msg.parts
+                        .filter((p: any) => p.type === "text")
+                        .map((p: any) => p.text)
+                        .join("")
+                    : ""),
+                parts: msg.parts,
+                timestamp: msg.timestamp || new Date().toISOString(),
+              }))
+            : [],
+          status: "in_progress",
+          extractedData: extractedData || {},
+          collectedInfo: collectedInfo || {
+            objective: false,
+            targetAudience: false,
+            scope: false,
+            successCriteria: false,
+            constraints: false,
+            hypotheses: false,
+            tone: false,
+            requiredQuestions: false,
+            metrics: false,
+            personalInfo: false,
+            subjectDefined: false,
+            domainIdentified: false,
+            media: false,
+            subjectModelComplete: false,
+          },
+        });
+      }
+
+      // Bidirectional sync: Push extractedData to the surveys table
+      if (extractedData) {
+        const currentExpertState = (survey.expertState || {}) as Record<
+          string,
+          any
+        >;
+        await tx
+          .update(surveys)
+          .set({
+            expertState: {
+              ...currentExpertState,
               ...extractedData,
             },
-          }),
-        })
-        .where(eq(surveyCreationConversations.surveyId, surveyId));
-    } else {
-      await db.insert(surveyCreationConversations).values({
-        id: crypto.randomUUID(),
-        surveyId,
-        messages: messages
-          ? messages.map((msg) => ({
-              id: msg.id,
-              role: msg.role,
-              content: msg.content,
-              parts: msg.parts,
-              timestamp: msg.timestamp || new Date().toISOString(),
-            }))
-          : [],
-        status: "in_progress",
-        collectedInfo: collectedInfo || {
-          objective: false,
-          targetAudience: false,
-          scope: false,
-          successCriteria: false,
-          constraints: false,
-          hypotheses: false,
-          tone: false,
-          requiredQuestions: false,
-          metrics: false,
-          personalInfo: false,
-          subjectDefined: false,
-          domainIdentified: false,
-          media: false,
-          subjectModelComplete: false,
-        },
-        extractedData: extractedData || {},
-      });
-    }
+          })
+          .where(eq(surveys.id, surveyId));
+      }
+    });
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
@@ -632,7 +465,9 @@ export async function GET(
       return new Response("Survey not found", { status: 404 });
     }
 
-    if (survey.userId !== session.user.id) {
+    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access === "none") {
       return new Response("Unauthorized", { status: 403 });
     }
 

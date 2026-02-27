@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/routing";
-import * as XLSX from "xlsx";
 import {
   ArrowLeft,
   MessageSquare,
@@ -48,14 +47,13 @@ interface Survey {
   status: "active" | "draft" | "completed" | "paused" | "creating" | "sample_review";
   createdAt: string;
   updatedAt: string;
-  objective?: { description?: string };
-  targetAudience?: { description?: string };
+  expertState?: any;
+  coreObjective?: string;
   tone?: string;
   shareableLink?: string;
   shareableUrl?: string;
   participantLimit: number;
   currentParticipants: number;
-  scope?: { mainTopics?: string[] };
   requiredQuestions?: string[];
   metrics?: string[];
   isVoice?: boolean;
@@ -132,11 +130,19 @@ export default function SurveyDetailPage() {
   const [embedCodes, setEmbedCodes] = useState<{
     iframeCode: string;
     inlineScriptSnippet: string;
+    popoverScriptSnippet: string;
+    sideTabScriptSnippet: string;
     url: string;
   } | null>(null);
   const [embedError, setEmbedError] = useState<string | null>(null);
   const [isLoadingEmbed, setIsLoadingEmbed] = useState(false);
-  const [copiedEmbed, setCopiedEmbed] = useState<'iframe' | 'script' | null>(null);
+  const [copiedEmbed, setCopiedEmbed] = useState<'iframe' | 'inline' | 'popover' | 'sidetab' | null>(null);
+  const [selectedEmbedType, setSelectedEmbedType] = useState<'inline' | 'popover' | 'sidetab' | 'iframe'>('inline');
+  const [embedOptions, setEmbedOptions] = useState({
+    color: '#4F46E5',
+    text: 'Feedback',
+    position: 'right' as 'left' | 'right'
+  });
 
   // Fetch survey details using React Query
   const { data: surveyData, isLoading } = useQuery({
@@ -170,53 +176,6 @@ export default function SurveyDetailPage() {
   const responses = responsesData?.responses || [];
   const totalPages = responsesData?.pagination?.totalPages || 1;
 
-  const handleExport = async () => {
-    const loadingToast = toast.loading(t("Toasts.ExportStarted"));
-    try {
-      // Fetch all data for export (high limit)
-      const response = await fetch(`/api/surveys/${surveyId}/responses?limit=10000&status=${statusFilter}`, {
-        credentials: "include",
-      });
-
-      if (!response.ok) throw new Error("Failed to fetch data");
-
-      const data = await response.json();
-      const responsesToExport = data.responses || [];
-
-      if (responsesToExport.length === 0) {
-        toast.dismiss(loadingToast);
-        toast.error(t("Toasts.NoData"));
-        return;
-      }
-
-      // Format for Excel
-      const exportData = responsesToExport.map((r: any) => ({
-        "Participant ID": r.participantId,
-        "Status": r.status,
-        "Date": new Date(r.createdAt).toLocaleDateString(),
-        "Time": new Date(r.createdAt).toLocaleTimeString(),
-        "Duration": r.duration,
-        "Message Count": r.messageCount,
-        "Sentiment": r.sentiment || "N/A",
-        "Key Insights": r.keyInsights.join("; ")
-      }));
-
-      // Create workbook
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(exportData);
-      XLSX.utils.book_append_sheet(wb, ws, "Responses");
-
-      // Download
-      XLSX.writeFile(wb, `Survey_Responses_${surveyId}_${new Date().toISOString().split('T')[0]}.xlsx`);
-
-      toast.dismiss(loadingToast);
-      toast.success(t("Toasts.ExportStarted"));
-    } catch (error) {
-      console.error("Export failed:", error);
-      toast.dismiss(loadingToast);
-      toast.error(t("Toasts.ExportFailed"));
-    }
-  };
 
 
 
@@ -309,20 +268,41 @@ export default function SurveyDetailPage() {
     const result = await getSurveyEmbedCodeAction(surveyId);
 
     if (result.success) {
-      setEmbedCodes(result.data);
-      toast.success(t("Toasts.EmbedGenerated"));
+      setEmbedCodes(result.data as any);
+      // toast.success(t("Toasts.EmbedGenerated")); // Remove toast for auto-generation
     } else {
       setEmbedError(result.error || t("Toasts.EmbedFailed"));
-      toast.error(result.error || t("Toasts.EmbedFailed"));
+      // toast.error(result.error || t("Toasts.EmbedFailed"));
     }
 
     setIsLoadingEmbed(false);
   };
 
-  const copyEmbedCode = (type: 'iframe' | 'script') => {
+  // Auto-generate embed code on mount or when status becomes active
+  useEffect(() => {
+    if (survey?.status === 'active' && !embedCodes && activeTab === 'settings') {
+      generateEmbedCode();
+    }
+  }, [survey?.status, activeTab]);
+
+  const copyEmbedCode = (type: 'iframe' | 'inline' | 'popover' | 'sidetab') => {
     if (!embedCodes) return;
 
-    const code = type === 'iframe' ? embedCodes.iframeCode : embedCodes.inlineScriptSnippet;
+    let code = '';
+    switch (type) {
+      case 'iframe': code = embedCodes.iframeCode; break;
+      case 'inline': code = embedCodes.inlineScriptSnippet; break;
+      case 'popover':
+        code = embedCodes.popoverScriptSnippet.replace('#4F46E5', embedOptions.color);
+        break;
+      case 'sidetab':
+        code = embedCodes.sideTabScriptSnippet
+          .replace('#4F46E5', embedOptions.color)
+          .replace('Feedback', embedOptions.text)
+          .replace('side-tab"', `side-tab" data-convy-position="${embedOptions.position}"`);
+        break;
+    }
+
     navigator.clipboard.writeText(code);
     setCopiedEmbed(type);
     toast.success(t("Toasts.CodeCopied"));
@@ -427,7 +407,7 @@ export default function SurveyDetailPage() {
 
           </div>
         </div>
-        <p className="text-gray-500 mt-4 sm:ml-12 text-sm max-w-2xl leading-relaxed">{survey.objective?.description || t("Header.NoDescription")}</p>
+        <p className="text-gray-500 mt-4 sm:ml-12 text-sm max-w-2xl leading-relaxed">{survey.coreObjective || survey.expertState?.objective?.goal || t("Header.NoDescription")}</p>
       </div>
 
       {/* Sample Review Banner */}
@@ -533,15 +513,15 @@ export default function SurveyDetailPage() {
             <div className="space-y-4">
               <div>
                 <p className="text-sm text-gray-500 mb-1">{t("Overview.Configuration.Objective")}</p>
-                <p className="text-gray-900">{survey.objective?.description || t("Overview.Configuration.NotSpecified")}</p>
+                <p className="text-gray-900">{survey.coreObjective || survey.expertState?.objective?.goal || t("Overview.Configuration.NotSpecified")}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500 mb-1">{t("Overview.Configuration.TargetAudience")}</p>
-                <p className="text-gray-900">{survey.targetAudience?.description || t("Overview.Configuration.NotSpecified")}</p>
+                <p className="text-gray-900">{survey.expertState?.targetAudience?.description || t("Overview.Configuration.NotSpecified")}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500 mb-1">{t("Overview.Configuration.Tone")}</p>
-                <p className="text-gray-900 capitalize">{survey.tone || 'casual'}</p>
+                <p className="text-gray-900 capitalize">{survey.tone || survey.expertState?.tone || 'casual'}</p>
               </div>
             </div>
           </div>
@@ -652,13 +632,6 @@ export default function SurveyDetailPage() {
               )}
             </div>
 
-            <button
-              onClick={handleExport}
-              className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              <Download className="w-4 h-4" />
-              {t("Responses.Export")}
-            </button>
           </div>
 
           <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
@@ -844,42 +817,93 @@ export default function SurveyDetailPage() {
                 </button>
               </div>
             ) : (
-              <div className="space-y-5">
-                {/* iframe Code */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium text-gray-700">{t("Embed.Options.Iframe")}</label>
+              <div className="space-y-6">
+                {/* Embed Type Selector */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { id: 'inline', label: 'Inline', icon: <Code className="w-4 h-4" /> },
+                    { id: 'popover', label: 'Popover', icon: <MessageSquare className="w-4 h-4" /> },
+                    { id: 'sidetab', label: 'Side Tab', icon: <ChevronRight className="w-4 h-4" /> },
+                    { id: 'iframe', label: 'Iframe', icon: <Copy className="w-4 h-4" /> },
+                  ].map((type) => (
                     <button
-                      onClick={() => copyEmbedCode('iframe')}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                      {copiedEmbed === 'iframe' ? (
-                        <>
-                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                          <span className="text-emerald-600">{t("Embed.Options.Copied")}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5" />
-                          {t("Embed.Options.Copy")}
-                        </>
+                      key={type.id}
+                      onClick={() => setSelectedEmbedType(type.id as any)}
+                      className={cn(
+                        "flex flex-col items-center gap-2 p-3 rounded-xl border text-sm font-medium transition-all",
+                        selectedEmbedType === type.id
+                          ? "bg-gray-900 text-white border-gray-900 shadow-md"
+                          : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
                       )}
+                    >
+                      {type.icon}
+                      {type.label}
                     </button>
-                  </div>
-                  <div className="bg-gray-900 rounded-xl p-4 overflow-x-auto">
-                    <pre className="text-xs text-emerald-400 font-mono">{embedCodes.iframeCode}</pre>
-                  </div>
+                  ))}
                 </div>
 
-                {/* Inline Script Code */}
+                {/* Customization Options */}
+                {(selectedEmbedType === 'popover' || selectedEmbedType === 'sidetab') && (
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Theme Color</label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={embedOptions.color}
+                          onChange={(e) => setEmbedOptions({ ...embedOptions, color: e.target.value })}
+                          className="w-10 h-10 rounded-lg cursor-pointer border-0 p-0"
+                        />
+                        <input
+                          type="text"
+                          value={embedOptions.color}
+                          onChange={(e) => setEmbedOptions({ ...embedOptions, color: e.target.value })}
+                          className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
+                        />
+                      </div>
+                    </div>
+                    {selectedEmbedType === 'sidetab' && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Tab Text</label>
+                        <input
+                          type="text"
+                          value={embedOptions.text}
+                          onChange={(e) => setEmbedOptions({ ...embedOptions, text: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Position</label>
+                      <div className="flex bg-white p-1 rounded-lg border border-gray-200">
+                        <button
+                          onClick={() => setEmbedOptions({ ...embedOptions, position: 'left' })}
+                          className={cn("flex-1 py-1 px-3 rounded-md text-xs transition-colors", embedOptions.position === 'left' ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50")}
+                        >
+                          Left
+                        </button>
+                        <button
+                          onClick={() => setEmbedOptions({ ...embedOptions, position: 'right' })}
+                          className={cn("flex-1 py-1 px-3 rounded-md text-xs transition-colors", embedOptions.position === 'right' ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50")}
+                        >
+                          Right
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Code Display */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium text-gray-700">{t("Embed.Options.Script")}</label>
+                    <label className="text-sm font-medium text-gray-700 capitalize">
+                      {selectedEmbedType} Script
+                    </label>
                     <button
-                      onClick={() => copyEmbedCode('script')}
+                      onClick={() => copyEmbedCode(selectedEmbedType)}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
                     >
-                      {copiedEmbed === 'script' ? (
+                      {copiedEmbed === selectedEmbedType ? (
                         <>
                           <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
                           <span className="text-emerald-600">{t("Embed.Options.Copied")}</span>
@@ -892,8 +916,17 @@ export default function SurveyDetailPage() {
                       )}
                     </button>
                   </div>
-                  <div className="bg-gray-900 rounded-xl p-4 overflow-x-auto">
-                    <pre className="text-xs text-emerald-400 font-mono whitespace-pre-wrap break-all">{embedCodes.inlineScriptSnippet}</pre>
+                  <div className="bg-gray-900 rounded-xl p-4 overflow-x-auto border border-gray-800 shadow-inner">
+                    <pre className="text-xs text-emerald-400 font-mono whitespace-pre-wrap break-all">
+                      {selectedEmbedType === 'inline' && embedCodes.inlineScriptSnippet}
+                      {selectedEmbedType === 'popover' && embedCodes.popoverScriptSnippet.replace('#4F46E5', embedOptions.color)}
+                      {selectedEmbedType === 'sidetab' && embedCodes.sideTabScriptSnippet
+                        .replace('#4F46E5', embedOptions.color)
+                        .replace('Feedback', embedOptions.text)
+                        .replace('side-tab"', `side-tab" data-convy-position="${embedOptions.position}"`)
+                      }
+                      {selectedEmbedType === 'iframe' && embedCodes.iframeCode}
+                    </pre>
                   </div>
                 </div>
 
@@ -901,13 +934,24 @@ export default function SurveyDetailPage() {
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                   <h4 className="font-medium text-blue-900 mb-2 flex items-center gap-2">
                     <Sparkles className="w-4 h-4" />
-                    {t("Embed.Instructions.Title")}
+                    {selectedEmbedType === 'iframe' ? t("Embed.Instructions.Title") : "Installation Guide"}
                   </h4>
                   <ul className="text-sm text-blue-800 space-y-1.5 list-disc list-inside">
-                    <li>{t("Embed.Instructions.Step1")}</li>
-                    <li>{t("Embed.Instructions.Step2")}</li>
-                    <li>{t("Embed.Instructions.Step3")}</li>
-                    <li>{t("Embed.Instructions.Step4")}</li>
+                    {selectedEmbedType === 'iframe' ? (
+                      <>
+                        <li>{t("Embed.Instructions.Step1")}</li>
+                        <li>{t("Embed.Instructions.Step2")}</li>
+                        <li>{t("Embed.Instructions.Step3")}</li>
+                        <li>{t("Embed.Instructions.Step4")}</li>
+                      </>
+                    ) : (
+                      <>
+                        <li>Copy the script above and paste it into your website's HTML.</li>
+                        <li>{selectedEmbedType === 'inline' ? "The survey will load inside the <div> container wherever you place it." : `A ${selectedEmbedType} button will appear automatically on your page.`}</li>
+                        <li>The widget uses Shadow DOM to ensure no style conflicts with your site.</li>
+                        <li>Microphone and camera permissions are automatically requested when needed.</li>
+                      </>
+                    )}
                   </ul>
                 </div>
 
@@ -927,6 +971,7 @@ export default function SurveyDetailPage() {
           </div>
         </div>
       )}
+
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center">
@@ -977,7 +1022,8 @@ export default function SurveyDetailPage() {
             </div>
           </div>
         </div>
-      )}
-    </div>
+      )
+      }
+    </div >
   );
 }

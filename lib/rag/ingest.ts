@@ -37,7 +37,10 @@ export async function ingestConversation(
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
-    const embedding = await generateEmbedding(chunk);
+    const embedding = await generateEmbedding(chunk, {
+      surveyId: conversation.surveyId,
+      organizationId: conversation.survey.organizationId || undefined,
+    });
 
     await db.insert(documentEmbeddings).values({
       id: nanoid(),
@@ -60,7 +63,10 @@ export async function ingestConversation(
 
   for (let i = 0; i < insightChunks.length; i++) {
     const chunk = insightChunks[i];
-    const embedding = await generateEmbedding(chunk);
+    const embedding = await generateEmbedding(chunk, {
+      surveyId: conversation.surveyId,
+      organizationId: conversation.survey.organizationId || undefined,
+    });
 
     await db.insert(documentEmbeddings).values({
       id: nanoid(),
@@ -96,7 +102,10 @@ export async function ingestAnalytics(surveyId: string): Promise<void> {
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
-    const embedding = await generateEmbedding(chunk);
+    const embedding = await generateEmbedding(chunk, {
+      surveyId: surveyId,
+      // organizationId should ideally be passed in or fetched
+    });
 
     await db.insert(documentEmbeddings).values({
       id: nanoid(),
@@ -114,7 +123,9 @@ export async function ingestAnalytics(surveyId: string): Promise<void> {
 }
 
 export async function ingestKnowledge(entry: KnowledgeEntry): Promise<void> {
-  const embedding = await generateEmbedding(entry.content);
+  const embedding = await generateEmbedding(entry.content, {
+    // knowledge is usually global or domain-bound
+  });
 
   await db.insert(knowledgeBase).values({
     id: nanoid(),
@@ -136,7 +147,9 @@ export async function ingestDocument(
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
-    const embedding = await generateEmbedding(chunk);
+    const embedding = await generateEmbedding(chunk, {
+      surveyId: surveyId,
+    });
 
     await db.insert(documentEmbeddings).values({
       id: nanoid(),

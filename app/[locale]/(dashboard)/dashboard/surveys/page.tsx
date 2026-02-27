@@ -30,11 +30,12 @@ import { deleteSurveyAction, duplicateSurveyAction } from "@/app/actions/survey"
 import { fetchSurveys } from "@/lib/api/surveys";
 import { queryKeys } from "@/lib/query-keys";
 import { useTranslations } from "next-intl";
+import { useAuth } from "@/components/providers/auth-provider";
 
 interface Survey {
   id: string;
   title: string;
-  description: string;
+  expertState?: any;
   status: string;
   shareableLink?: string;
   responses: number;
@@ -68,9 +69,12 @@ export default function SurveysPage() {
     paused: { label: t('Status.Paused'), color: "text-orange-700", bgColor: "bg-orange-50 border-orange-200", icon: <Clock className="w-3 h-3" /> },
   };
 
+  const { session } = useAuth();
+  const activeOrgId = session?.activeOrganizationId || null;
+
   // Fetch surveys using React Query
   const { data: surveys = [], isLoading } = useQuery<Survey[]>({
-    queryKey: queryKeys.surveys.all,
+    queryKey: queryKeys.surveys.all(activeOrgId),
     queryFn: fetchSurveys,
   });
 
@@ -91,7 +95,7 @@ export default function SurveysPage() {
 
       if (result.success) {
         // Invalidate queries to refetch surveys list
-        queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all(activeOrgId) });
         toast.success(t('Card.Toasts.Deleted'));
         setSurveyToDelete(null);
       } else {
@@ -121,7 +125,7 @@ export default function SurveysPage() {
       if (result.success) {
         toast.success(t('Card.Toasts.Duplicated'), { id: loadingToast });
         // Invalidate queries to refetch surveys list
-        queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all(activeOrgId) });
       } else {
         toast.error(result.error || t('Card.Toasts.DuplicateFailed'), { id: loadingToast });
       }
@@ -166,7 +170,7 @@ export default function SurveysPage() {
     if (searchQuery) {
       result = result.filter(s =>
         s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.description?.toLowerCase().includes(searchQuery.toLowerCase())
+        s.expertState?.objective?.goal?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -268,150 +272,150 @@ export default function SurveysPage() {
                       "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105",
                       config.bgColor
                     )}>
-                       <div className={cn(config.color)}>
-                          {survey.status === 'active' ? <Globe className="w-6 h-6" /> :
-                           survey.status === 'draft' ? <FileEdit className="w-6 h-6" /> :
-                           survey.status === 'creating' ? <Sparkles className="w-6 h-6" /> :
-                           survey.status === 'completed' ? <Check className="w-6 h-6" /> :
-                           <Clock className="w-6 h-6" />}
-                       </div>
+                      <div className={cn(config.color)}>
+                        {survey.status === 'active' ? <Globe className="w-6 h-6" /> :
+                          survey.status === 'draft' ? <FileEdit className="w-6 h-6" /> :
+                            survey.status === 'creating' ? <Sparkles className="w-6 h-6" /> :
+                              survey.status === 'completed' ? <Check className="w-6 h-6" /> :
+                                <Clock className="w-6 h-6" />}
+                      </div>
                     </div>
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
-                         <Link href={`/dashboard/surveys/${survey.id}`} className="block">
-                            <h3 className="text-base font-semibold text-gray-900 truncate group-hover:text-blue-600 transition-colors">
-                              {survey.title}
-                            </h3>
-                         </Link>
-                         {survey.isVoice && (
-                            <div className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-50 text-indigo-600" title="Voice Survey">
-                               <Mic className="w-3 h-3" />
-                            </div>
-                         )}
+                        <Link href={`/dashboard/surveys/${survey.id}`} className="block">
+                          <h3 className="text-base font-semibold text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+                            {survey.title}
+                          </h3>
+                        </Link>
+                        {survey.isVoice && (
+                          <div className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-50 text-indigo-600" title="Voice Survey">
+                            <Mic className="w-3 h-3" />
+                          </div>
+                        )}
                       </div>
                       <p className="text-sm text-gray-500 truncate max-w-md">
-                        {survey.description || "No description provided"}
+                        {survey.expertState?.objective?.goal || "No description provided"}
                       </p>
                     </div>
                   </div>
 
                   {/* Metrics & Meta */}
                   <div className="flex items-center gap-6 mt-4 sm:mt-0 sm:ml-6 flex-shrink-0">
-                     <div className="flex flex-col items-end min-w-[80px]">
-                        <span className="text-sm font-medium text-gray-900">{survey.responses}</span>
-                        <span className="text-xs text-gray-400">{t('Card.Responses')}</span>
-                     </div>
-                     
-                     <div className="hidden md:flex flex-col items-end min-w-[100px]">
-                        <span className="text-sm font-medium text-gray-900">{survey.createdAt}</span>
-                        <span className="text-xs text-gray-400">{t('Card.Created')}</span>
-                     </div>
+                    <div className="flex flex-col items-end min-w-[80px]">
+                      <span className="text-sm font-medium text-gray-900">{survey.responses}</span>
+                      <span className="text-xs text-gray-400">{t('Card.Responses')}</span>
+                    </div>
 
-                     <div className={cn(
-                        "px-2.5 py-1 rounded-full text-xs font-medium border hidden md:flex items-center gap-1.5",
-                        config.bgColor,
-                        config.color
-                      )}>
-                        {config.label}
-                      </div>
+                    <div className="hidden md:flex flex-col items-end min-w-[100px]">
+                      <span className="text-sm font-medium text-gray-900">{survey.createdAt}</span>
+                      <span className="text-xs text-gray-400">{t('Card.Created')}</span>
+                    </div>
 
-                     {/* Actions */}
-                     <div className="relative ml-2">
-                        <button
-                          onClick={() => setShowMenuFor(showMenuFor === survey.id ? null : survey.id)}
-                          className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-                        >
-                          <MoreVertical className="w-5 h-5" />
-                        </button>
+                    <div className={cn(
+                      "px-2.5 py-1 rounded-full text-xs font-medium border hidden md:flex items-center gap-1.5",
+                      config.bgColor,
+                      config.color
+                    )}>
+                      {config.label}
+                    </div>
 
-                        {showMenuFor === survey.id && (
-                          <>
-                            <div className="fixed inset-0 z-[60]" onClick={() => setShowMenuFor(null)} />
-                            <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl border border-gray-100 shadow-xl z-[70] py-1.5 animate-in fade-in zoom-in-95 duration-200">
-                               {/* Continue button for creating surveys */}
-                               {survey.status === "creating" && (
-                                <>
-                                  <button
-                                    onClick={() => handleContinue(survey.id)}
-                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-emerald-600 hover:bg-emerald-50 font-medium"
-                                  >
-                                    <Play className="w-4 h-4" />
-                                    {t('Card.Menu.Continue')}
-                                  </button>
-                                  <div className="border-t border-gray-100 my-1" />
-                                </>
-                              )}
-                              
-                              <Link
-                                href={`/dashboard/surveys/${survey.id}`}
-                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                onClick={() => setShowMenuFor(null)}
-                              >
-                                <Eye className="w-4 h-4 text-gray-400" />
-                                {t('Card.Menu.ViewDetails')}
-                              </Link>
-                              
-                              {survey.status === "active" && (
-                                <Link
-                                  href={`/dashboard/surveys/${survey.id}?tab=analytics`}
-                                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                  onClick={() => setShowMenuFor(null)}
+                    {/* Actions */}
+                    <div className="relative ml-2">
+                      <button
+                        onClick={() => setShowMenuFor(showMenuFor === survey.id ? null : survey.id)}
+                        className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                      >
+                        <MoreVertical className="w-5 h-5" />
+                      </button>
+
+                      {showMenuFor === survey.id && (
+                        <>
+                          <div className="fixed inset-0 z-[60]" onClick={() => setShowMenuFor(null)} />
+                          <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl border border-gray-100 shadow-xl z-[70] py-1.5 animate-in fade-in zoom-in-95 duration-200">
+                            {/* Continue button for creating surveys */}
+                            {survey.status === "creating" && (
+                              <>
+                                <button
+                                  onClick={() => handleContinue(survey.id)}
+                                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-emerald-600 hover:bg-emerald-50 font-medium"
                                 >
-                                  <BarChart3 className="w-4 h-4 text-gray-400" />
-                                  {t('Card.Menu.Analytics')}
-                                </Link>
-                              )}
-                              
+                                  <Play className="w-4 h-4" />
+                                  {t('Card.Menu.Continue')}
+                                </button>
+                                <div className="border-t border-gray-100 my-1" />
+                              </>
+                            )}
+
+                            <Link
+                              href={`/dashboard/surveys/${survey.id}`}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              onClick={() => setShowMenuFor(null)}
+                            >
+                              <Eye className="w-4 h-4 text-gray-400" />
+                              {t('Card.Menu.ViewDetails')}
+                            </Link>
+
+                            {survey.status === "active" && (
                               <Link
-                                href={`/dashboard/surveys/${survey.id}?tab=settings`}
+                                href={`/dashboard/surveys/${survey.id}?tab=analytics`}
                                 className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                 onClick={() => setShowMenuFor(null)}
                               >
-                                <Edit className="w-4 h-4 text-gray-400" />
-                                {t('Card.Menu.Edit')}
+                                <BarChart3 className="w-4 h-4 text-gray-400" />
+                                {t('Card.Menu.Analytics')}
                               </Link>
-                              
-                              <div className="border-t border-gray-100 my-1" />
-                              
-                               {survey.shareableLink && survey.status === "active" && (
-                                  <button
-                                    onClick={() => {
-                                        handleCopyLink(survey.shareableLink!);
-                                        setShowMenuFor(null);
-                                    }}
-                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                  >
-                                    <LinkIcon className="w-4 h-4 text-gray-400" />
-                                    {t('Card.Menu.CopyLink')}
-                                  </button>
-                               )}
+                            )}
 
+                            <Link
+                              href={`/dashboard/surveys/${survey.id}?tab=settings`}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              onClick={() => setShowMenuFor(null)}
+                            >
+                              <Edit className="w-4 h-4 text-gray-400" />
+                              {t('Card.Menu.Edit')}
+                            </Link>
+
+                            <div className="border-t border-gray-100 my-1" />
+
+                            {survey.shareableLink && survey.status === "active" && (
                               <button
-                                onClick={() => handleDuplicate(survey)}
+                                onClick={() => {
+                                  handleCopyLink(survey.shareableLink!);
+                                  setShowMenuFor(null);
+                                }}
                                 className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                               >
-                                <Copy className="w-4 h-4 text-gray-400" />
-                                {t('Card.Menu.Duplicate')}
+                                <LinkIcon className="w-4 h-4 text-gray-400" />
+                                {t('Card.Menu.CopyLink')}
                               </button>
-                              
-                              <div className="border-t border-gray-100 my-1" />
-                              
-                              <button
-                                onClick={() => handleDelete({ id: survey.id, title: survey.title })}
-                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                              >
-                                {isDeleting === survey.id ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <Trash2 className="w-4 h-4" />
-                                )}
-                                {t('Card.Menu.Delete')}
-                              </button>
-                            </div>
-                          </>
-                        )}
-                     </div>
+                            )}
+
+                            <button
+                              onClick={() => handleDuplicate(survey)}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            >
+                              <Copy className="w-4 h-4 text-gray-400" />
+                              {t('Card.Menu.Duplicate')}
+                            </button>
+
+                            <div className="border-t border-gray-100 my-1" />
+
+                            <button
+                              onClick={() => handleDelete({ id: survey.id, title: survey.title })}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                            >
+                              {isDeleting === survey.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-4 h-4" />
+                              )}
+                              {t('Card.Menu.Delete')}
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

@@ -1,9 +1,5 @@
-import type {
-  SurveyConfig,
-} from "./prompts";
-import type {
-  surveys,
-} from "@/db/schema";
+import type { SurveyConfig } from "./prompts";
+import type { surveys } from "@/db/schema";
 
 export const MAX_SAMPLE_CONVERSATIONS = 3;
 
@@ -11,32 +7,23 @@ export const MAX_SAMPLE_CONVERSATIONS = 3;
  * Build complete survey configuration from structured data in the database schema
  */
 export function buildCompleteSurveyConfig(
-  survey: typeof surveys.$inferSelect
+  survey: typeof surveys.$inferSelect,
 ): SurveyConfig {
-  const informationParts: string[] = [];
-  if (survey.objective?.context)
-    informationParts.push(survey.objective.context);
-  if (survey.objective?.decision)
-    informationParts.push(survey.objective.decision);
-  if (survey.successCriteria?.description)
-    informationParts.push(survey.successCriteria.description);
-  const information =
-    informationParts.length > 0
-      ? informationParts.join(". ")
-      : "Collect participant feedback";
+  const expertState = (survey.expertState || {}) as Record<string, any>;
 
   return {
     id: survey.id,
-    information,
+    information:
+      survey.coreObjective ||
+      expertState.objective?.goal ||
+      "Collect participant feedback",
+    coreObjective:
+      survey.coreObjective || expertState.objective?.goal || undefined,
+    expertState,
     requiredQuestions: survey.requiredQuestions || [],
     metrics: survey.metrics || [],
     language: survey.language,
-    objective: survey.objective ?? undefined,
-    targetAudience: survey.targetAudience ?? undefined,
-    scope: survey.scope ?? undefined,
-    successCriteria: survey.successCriteria ?? undefined,
-    constraints: survey.constraints ?? undefined,
-    hypotheses: survey.hypotheses ?? undefined,
+
     tone: (survey.tone as ToneProfile) ?? "casual",
     media: survey.media ?? undefined,
     personalInfo: survey.personalInfo ?? undefined,
@@ -66,7 +53,6 @@ export const REQUIRED_INFORMATION = {
     ],
   },
 
-
   scope: {
     required: true,
     priority: 3,
@@ -79,7 +65,7 @@ export const REQUIRED_INFORMATION = {
   },
 
   successCriteria: {
-    required: true, 
+    required: true,
     priority: 4,
     description: "What makes a response valuable",
     qualityChecks: [
@@ -106,7 +92,7 @@ export const REQUIRED_INFORMATION = {
   },
 
   tone: {
-    required: true, 
+    required: true,
     priority: 7,
     description: "Conversation style preferences",
     qualityChecks: ["Formality level is specified"],
@@ -123,12 +109,13 @@ export const REQUIRED_INFORMATION = {
   },
 
   media: {
-    required: false,
+    required: true,
     priority: 9,
-    description: "Media (images/videos/audio) to show during conversation",
+    description:
+      "Whether media should be added and the specific feedback desired for it",
     qualityChecks: [
-      "Media purpose is clear",
-      "Context for when to show is defined",
+      "Asked the user if they want to include media",
+      "If media is added, captured the exact feedback the user wants to get about it",
     ],
   },
   metrics: {
@@ -141,7 +128,8 @@ export const REQUIRED_INFORMATION = {
   personalInfo: {
     required: true,
     priority: 11,
-    description: "Whether to collect respondent personal data (name, email, age, job title, etc.)",
+    description:
+      "Whether to collect respondent personal data (name, email, age, job title, etc.)",
     qualityChecks: ["Need for personal info is justified"],
   },
 } as const;

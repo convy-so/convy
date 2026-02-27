@@ -10,10 +10,21 @@
 import { loadEnvConfig } from "@next/env";
 loadEnvConfig(process.cwd());
 
+import * as Sentry from "@sentry/node";
+
+/*
+// Initialize Sentry for the standalone Node.js Project (Workers)
+Sentry.init({
+  dsn: process.env.SENTRY_NODE_DSN || process.env.SENTRY_DSN,
+  tracesSampleRate: 1.0,
+  environment: process.env.NODE_ENV || "development",
+  serverName: "worker-process",
+});
+*/
+
 import { env } from "@/lib/env";
 
 import { testRedisConnection } from "@/lib/redis";
-
 
 import conversationInsightsWorker from "./conversation-insights.worker";
 import surveyAnalyticsWorker from "./survey-analytics.worker";
@@ -118,9 +129,11 @@ process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 // Handle uncaught errors
 process.on("uncaughtException", (error) => {
   console.error("❌ Uncaught exception:", error);
+  Sentry.captureException(error, { tags: { type: "uncaughtException" } });
   gracefulShutdown("uncaughtException").catch(() => process.exit(1));
 });
 
 process.on("unhandledRejection", (reason, promise) => {
   console.error("❌ Unhandled rejection at:", promise, "reason:", reason);
+  Sentry.captureException(reason, { tags: { type: "unhandledRejection" } });
 });

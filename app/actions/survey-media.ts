@@ -7,10 +7,9 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { surveys, type SurveyMedia } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import {
-  uploadSurveyMedia,
-  deleteSurveyMedia,
-} from "@/lib/storage";
+import { fileTypeFromBuffer } from "file-type";
+import sharp from "sharp";
+import { uploadSurveyMedia, deleteSurveyMedia } from "@/lib/storage";
 
 type ActionResult<T> =
   | { success: true; data: T }
@@ -20,9 +19,14 @@ const addSurveyMediaSchema = z.object({
   surveyId: z.string().min(1),
   url: z.string().url("Invalid media URL"),
   description: z.string().min(10, "Description must be at least 10 characters"),
-  contextForUse: z.string().min(10, "Context for use must be at least 10 characters"),
+  contextForUse: z
+    .string()
+    .min(10, "Context for use must be at least 10 characters"),
 
-  durationMs: z.number().max(5 * 60 * 1000, "Duration exceeds 5 minutes").optional(),
+  durationMs: z
+    .number()
+    .max(5 * 60 * 1000, "Duration exceeds 5 minutes")
+    .optional(),
   type: z.enum(["image", "audio", "video"]).default("image"),
 });
 
@@ -33,7 +37,10 @@ const updateSurveyMediaSchema = z.object({
   description: z.string().min(10).optional(),
   contextForUse: z.string().min(10).optional(),
 
-  durationMs: z.number().max(5 * 60 * 1000, "Duration exceeds 5 minutes").optional(),
+  durationMs: z
+    .number()
+    .max(5 * 60 * 1000, "Duration exceeds 5 minutes")
+    .optional(),
   mimeType: z.string().optional(),
 });
 
@@ -45,7 +52,9 @@ const removeSurveyMediaSchema = z.object({
 const uploadSurveyMediaSchema = z.object({
   surveyId: z.string().min(1),
   description: z.string().min(10, "Description must be at least 10 characters"),
-  contextForUse: z.string().min(10, "Context for use must be at least 10 characters"),
+  contextForUse: z
+    .string()
+    .min(10, "Context for use must be at least 10 characters"),
 
   durationMs: z.number().optional(),
   type: z.enum(["image", "audio", "video"]),
@@ -56,7 +65,7 @@ const uploadSurveyMediaSchema = z.object({
  * @param formData - FormData containing the file and metadata
  */
 export async function uploadSurveyMediaAction(
-  formData: FormData
+  formData: FormData,
 ): Promise<ActionResult<{ mediaId: string; media: SurveyMedia }>> {
   try {
     const session = await getVerifiedSession();
@@ -65,7 +74,8 @@ export async function uploadSurveyMediaAction(
     const description = formData.get("description") as string;
     const contextForUse = formData.get("contextForUse") as string;
 
-    const type = (formData.get("type") as "image" | "audio" | "video") || "image"; // Default to image if not specified
+    const type =
+      (formData.get("type") as "image" | "audio" | "video") || "image"; // Default to image if not specified
     const durationMs = Number(formData.get("durationMs"));
     const file = formData.get("file") as File;
 
@@ -75,17 +85,35 @@ export async function uploadSurveyMediaAction(
       contextForUse,
 
       type,
-      durationMs: isNaN(durationMs) || durationMs === 0 ? undefined : durationMs,
+      durationMs:
+        isNaN(durationMs) || durationMs === 0 ? undefined : durationMs,
     });
 
     if (!file || !(file instanceof File)) {
       return { success: false, error: "No file provided" };
     }
 
-    const imageTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
-    const audioTypes = ["audio/mpeg", "audio/wav", "audio/ogg", "audio/webm", "audio/mp4"];
-    const videoTypes = ["video/mp4", "video/webm", "video/quicktime", "video/ogg"];
-    
+    const imageTypes = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+    ];
+    const audioTypes = [
+      "audio/mpeg",
+      "audio/wav",
+      "audio/ogg",
+      "audio/webm",
+      "audio/mp4",
+    ];
+    const videoTypes = [
+      "video/mp4",
+      "video/webm",
+      "video/quicktime",
+      "video/ogg",
+    ];
+
     let validTypes = imageTypes;
     if (type === "audio") validTypes = audioTypes;
     if (type === "video") validTypes = videoTypes;
@@ -133,15 +161,54 @@ export async function uploadSurveyMediaAction(
     const mediaId = nanoid();
 
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    let buffer = Buffer.from(arrayBuffer);
+
+    // SERVER-SIDE VERIFICATION: Verify file type using magic bytes
+    const fileType = await fileTypeFromBuffer(buffer as any);
+    if (!fileType) {
+      return { success: false, error: "Could not determine file type" };
+    }
+
+    // Ensure the detected type matches the expected category
+    const isImage = fileType.mime.startsWith("image/");
+    const isAudio = fileType.mime.startsWith("audio/");
+    const isVideo = fileType.mime.startsWith("video/");
+
+    if (
+      (type === "image" && !isImage) ||
+      (type === "audio" && !isAudio) ||
+      (type === "video" && !isVideo)
+    ) {
+      return {
+        success: false,
+        error: `File content does not match expected ${type} type`,
+      };
+    }
+
+    // Double check specific allowed mimetypes (from byte verification)
+    if (!validTypes.includes(fileType.mime)) {
+      return { success: false, error: "Unsupported file content" };
+    }
+
+    // IMAGE HARDENING: Strip metadata/EXIF and normalize
+    if (type === "image") {
+      try {
+        buffer = (await sharp(buffer as any)
+          .rotate() // Auto-rotate based on EXIF before stripping
+          .toBuffer()) as any; // metadata is stripped by default in toBuffer unless specifically kept
+      } catch (sharpError) {
+        console.error("[Media Upload] Sharp processing failed:", sharpError);
+        return { success: false, error: "Failed to process image safely" };
+      }
+    }
 
     // Determines bucket internally in storage.ts based on 'type'
     const { url } = await uploadSurveyMedia(
       buffer,
       validation.surveyId,
       mediaId,
-      file.type,
-      type
+      fileType.mime, // Use verified mime type
+      type,
     );
 
     const newMedia: SurveyMedia = {
@@ -152,7 +219,7 @@ export async function uploadSurveyMediaAction(
       contextForUse: validation.contextForUse,
 
       durationMs: validation.durationMs || null,
-      mimeType: file.type,
+      mimeType: fileType.mime, // Use verified mime type
     };
 
     const updatedMedia = [...(survey.media || []), newMedia];
@@ -190,13 +257,16 @@ export async function uploadSurveyMediaAction(
  * Update media metadata (audio/video/image)
  */
 export async function updateSurveyMediaAction(
-  input: z.infer<typeof updateSurveyMediaSchema>
+  input: z.infer<typeof updateSurveyMediaSchema>,
 ): Promise<ActionResult<{ media: SurveyMedia }>> {
   try {
     const session = await getVerifiedSession();
     const body = updateSurveyMediaSchema.parse(input);
 
-    const [survey] = await db.select().from(surveys).where(eq(surveys.id, body.surveyId));
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, body.surveyId));
     if (!survey) {
       return { success: false, error: "Survey not found" };
     }
@@ -221,7 +291,9 @@ export async function updateSurveyMediaAction(
     }
 
     const durationMsUpdate =
-      body.durationMs !== undefined ? Math.min(body.durationMs, 5 * 60 * 1000) : undefined;
+      body.durationMs !== undefined
+        ? Math.min(body.durationMs, 5 * 60 * 1000)
+        : undefined;
 
     const updatedMedia: SurveyMedia = {
       ...currentMedia[mediaIndex],
@@ -265,13 +337,16 @@ export async function updateSurveyMediaAction(
  * Remove media from a survey
  */
 export async function removeSurveyMediaAction(
-  input: z.infer<typeof removeSurveyMediaSchema>
+  input: z.infer<typeof removeSurveyMediaSchema>,
 ): Promise<ActionResult<{ success: boolean }>> {
   try {
     const session = await getVerifiedSession();
     const body = removeSurveyMediaSchema.parse(input);
 
-    const [survey] = await db.select().from(surveys).where(eq(surveys.id, body.surveyId));
+    const [survey] = await db
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, body.surveyId));
     if (!survey) {
       return { success: false, error: "Survey not found" };
     }
@@ -297,7 +372,9 @@ export async function removeSurveyMediaAction(
 
     // Delete from storage
     try {
-      const pathSegment = mediaToRemove.url.split("/storage/v1/object/public/")[1];
+      const pathSegment = mediaToRemove.url.split(
+        "/storage/v1/object/public/",
+      )[1];
       if (pathSegment) {
         // Auto-detect bucket from path or use type if path structure is standard
         // deleteSurveyAsset handles it if we pass kind.
@@ -305,10 +382,17 @@ export async function removeSurveyMediaAction(
         // Or if we need to parse bucket from path:
         let bucketPrefix = "";
         let kind: "image" | "audio" | "video" = "image";
-        
-        if (mediaToRemove.type === "audio") { bucketPrefix = "survey-audio/"; kind="audio"; }
-        else if (mediaToRemove.type === "video") { bucketPrefix = "survey-video/"; kind="video"; }
-        else { bucketPrefix = "survey-images/"; kind="image"; }
+
+        if (mediaToRemove.type === "audio") {
+          bucketPrefix = "survey-audio/";
+          kind = "audio";
+        } else if (mediaToRemove.type === "video") {
+          bucketPrefix = "survey-video/";
+          kind = "video";
+        } else {
+          bucketPrefix = "survey-images/";
+          kind = "image";
+        }
 
         if (pathSegment.startsWith(bucketPrefix)) {
           const storagePath = pathSegment.replace(bucketPrefix, "");
@@ -352,7 +436,7 @@ export async function removeSurveyMediaAction(
  * @deprecated Use uploadSurveyMediaAction for uploading files
  */
 export async function addSurveyMediaAction(
-  input: z.infer<typeof addSurveyMediaSchema>
+  input: z.infer<typeof addSurveyMediaSchema>,
 ): Promise<ActionResult<{ mediaId: string; media: SurveyMedia }>> {
   try {
     const session = await getVerifiedSession();
@@ -371,7 +455,11 @@ export async function addSurveyMediaAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    if (survey.status !== "draft" && survey.status !== "creating" && survey.status !== "sample_review") {
+    if (
+      survey.status !== "draft" &&
+      survey.status !== "creating" &&
+      survey.status !== "sample_review"
+    ) {
       return {
         success: false,
         error: "Cannot add media to survey in current status",
@@ -424,7 +512,7 @@ export async function addSurveyMediaAction(
  * Get all media for a survey
  */
 export async function getSurveyMediaAction(
-  surveyId: string
+  surveyId: string,
 ): Promise<ActionResult<{ media: SurveyMedia[] }>> {
   try {
     const session = await getVerifiedSession();
@@ -467,7 +555,7 @@ export async function getSurveyMediaAction(
  */
 export async function reorderSurveyMediaAction(
   surveyId: string,
-  mediaIds: string[]
+  mediaIds: string[],
 ): Promise<ActionResult<{ media: SurveyMedia[] }>> {
   try {
     const session = await getVerifiedSession();
@@ -485,7 +573,11 @@ export async function reorderSurveyMediaAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    if (survey.status !== "draft" && survey.status !== "creating" && survey.status !== "sample_review") {
+    if (
+      survey.status !== "draft" &&
+      survey.status !== "creating" &&
+      survey.status !== "sample_review"
+    ) {
       return {
         success: false,
         error: "Cannot reorder media in survey with current status",

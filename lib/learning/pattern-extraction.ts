@@ -17,7 +17,13 @@ import type { ConversationMove } from "./move-tagger";
 export interface ExtractedPattern {
   type: "technique" | "pattern" | "insight" | "anti-pattern";
   domainId: number | null; // null for general patterns
-  category: "questioning" | "probing" | "transition" | "engagement" | "creation" | "general";
+  category:
+    | "questioning"
+    | "probing"
+    | "transition"
+    | "engagement"
+    | "creation"
+    | "general";
   title: string;
   description: string;
   example: string; // Actual example from conversation
@@ -56,45 +62,64 @@ export async function extractPatternsFromConversation(
   metadata: {
     conversationId: string;
     surveyId: string;
+    userId?: string;
     conversationType: "creation" | "response" | "sample";
-  }
+  },
 ): Promise<PatternExtractionResult> {
   // ── Discomfort veto ──────────────────────────────────────────────────────
   // This veto is checked before calling this function in the worker,
   // but we double-check here as a safety net.
-  if (signals.completionRate < 0.1 && signals.oneWordResponseCount > signals.totalTurns * 0.5) {
-    console.log(`[PatternExtraction] Skipping — extremely low engagement (likely spam/bot): ${metadata.conversationId}`);
+  if (
+    signals.completionRate < 0.1 &&
+    signals.oneWordResponseCount > signals.totalTurns * 0.5
+  ) {
+    console.log(
+      `[PatternExtraction] Skipping — extremely low engagement (likely spam/bot): ${metadata.conversationId}`,
+    );
     return emptyResult();
   }
 
   const conversationText = conversation
-    .map((msg, i) => `[${i + 1}] ${msg.role === "user" ? "PARTICIPANT" : "AI"}: ${msg.content}`)
+    .map(
+      (msg, i) =>
+        `[${i + 1}] ${msg.role === "user" ? "PARTICIPANT" : "AI"}: ${msg.content}`,
+    )
     .join("\n\n");
 
   const domainName = config.domainId ? `Domain ${config.domainId}` : "General";
 
   // Surface the best and worst moves to give the LLM concrete evidence
-  const sortedMoves = [...moves].sort((a, b) => b.responseRichnessScore - a.responseRichnessScore);
+  const sortedMoves = [...moves].sort(
+    (a, b) => b.responseRichnessScore - a.responseRichnessScore,
+  );
   const topMoves = sortedMoves.slice(0, 3);
   const bottomMoves = sortedMoves.slice(-2);
 
-  const moveEvidence = topMoves.length > 0
-    ? `\nHIGHEST-RICHNESS MOVES:\n${topMoves
-      .map((m) => `  Turn ${m.turnIndex}: AI="${m.aiQuestion.slice(0, 120)}" → Richness=${m.responseRichnessScore.toFixed(2)} Words=${m.responseWordCount}`)
-      .join("\n")}`
-    : "";
+  const moveEvidence =
+    topMoves.length > 0
+      ? `\nHIGHEST-RICHNESS MOVES:\n${topMoves
+          .map(
+            (m) =>
+              `  Turn ${m.turnIndex}: AI="${m.aiQuestion.slice(0, 120)}" → Richness=${m.responseRichnessScore.toFixed(2)} Words=${m.responseWordCount}`,
+          )
+          .join("\n")}`
+      : "";
 
-  const failEvidence = bottomMoves.length > 0
-    ? `\nLOWEST-RICHNESS / PROBLEM MOVES:\n${bottomMoves
-      .map((m) => `  Turn ${m.turnIndex} ${m.ledToAbandonment ? "(ABANDONMENT)" : ""}: AI="${m.aiQuestion.slice(0, 120)}" → Richness=${m.responseRichnessScore.toFixed(2)} Words=${m.responseWordCount}`)
-      .join("\n")}`
-    : "";
+  const failEvidence =
+    bottomMoves.length > 0
+      ? `\nLOWEST-RICHNESS / PROBLEM MOVES:\n${bottomMoves
+          .map(
+            (m) =>
+              `  Turn ${m.turnIndex} ${m.ledToAbandonment ? "(ABANDONMENT)" : ""}: AI="${m.aiQuestion.slice(0, 120)}" → Richness=${m.responseRichnessScore.toFixed(2)} Words=${m.responseWordCount}`,
+          )
+          .join("\n")}`
+      : "";
 
   const extractionPrompt = `You are analyzing a completed survey conversation to extract reusable techniques.
 
 CONVERSATION CONTEXT:
 - Domain: ${domainName}
-- Survey Goal: ${config.objective?.goal ?? "N/A"}
+- Survey Goal: ${config.coreObjective || config.expertState?.objective?.goal || "N/A"}
 - Completion Rate: ${(signals.completionRate * 100).toFixed(0)}%
 - Objective Coverage: ${(signals.objectiveCoverageScore * 100).toFixed(0)}%
 - Participant Style: ${signals.detectedStyle ?? "unknown"}
@@ -144,6 +169,8 @@ Return ONLY valid JSON:
       model: analysisModel,
       temperature: 0.2,
       maxTokens: 2000,
+      userId: metadata.userId,
+      surveyId: metadata.surveyId,
     });
 
     const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -153,11 +180,17 @@ Return ONLY valid JSON:
     }
 
     const parsed = JSON.parse(jsonMatch[0]) as {
-      successfulPatterns?: Array<Omit<ExtractedPattern, "domainId" | "qualityScore" | "metadata">>;
-      failedPatterns?: Array<Omit<ExtractedPattern, "domainId" | "qualityScore" | "metadata">>;
+      successfulPatterns?: Array<
+        Omit<ExtractedPattern, "domainId" | "qualityScore" | "metadata">
+      >;
+      failedPatterns?: Array<
+        Omit<ExtractedPattern, "domainId" | "qualityScore" | "metadata">
+      >;
     };
 
-    const successfulPatterns: ExtractedPattern[] = (parsed.successfulPatterns || []).map((p) => ({
+    const successfulPatterns: ExtractedPattern[] = (
+      parsed.successfulPatterns || []
+    ).map((p) => ({
       ...p,
       domainId: config.domainId ?? null,
       qualityScore: computeSignalBackedScore(signals),
@@ -172,7 +205,9 @@ Return ONLY valid JSON:
       },
     }));
 
-    const failedPatterns: ExtractedPattern[] = (parsed.failedPatterns || []).map((p) => ({
+    const failedPatterns: ExtractedPattern[] = (
+      parsed.failedPatterns || []
+    ).map((p) => ({
       ...p,
       type: "anti-pattern" as const,
       domainId: config.domainId ?? null,
@@ -191,7 +226,9 @@ Return ONLY valid JSON:
     return {
       successfulPatterns,
       failedPatterns,
-      domainSpecificLearnings: successfulPatterns.filter((p) => p.domainId !== null),
+      domainSpecificLearnings: successfulPatterns.filter(
+        (p) => p.domainId !== null,
+      ),
       generalLearnings: successfulPatterns.filter((p) => p.domainId === null),
     };
   } catch (error) {
@@ -209,15 +246,19 @@ export async function extractCreationPatterns(
   metadata: {
     conversationId: string;
     surveyId: string;
+    userId?: string;
     domainId?: number;
-  }
+  },
 ): Promise<PatternExtractionResult> {
   const conversationText = conversation
-    .map((msg, i) => `[${i + 1}] ${msg.role === "user" ? "CREATOR" : "AI"}: ${msg.content}`)
+    .map(
+      (msg, i) =>
+        `[${i + 1}] ${msg.role === "user" ? "CREATOR" : "AI"}: ${msg.content}`,
+    )
     .join("\n\n");
 
   const fieldsCollected = Object.keys(extractedData).filter(
-    (key) => extractedData[key] !== null && extractedData[key] !== undefined
+    (key) => extractedData[key] !== null && extractedData[key] !== undefined,
   );
   const completenessRatio = fieldsCollected.length / 12;
 
@@ -257,16 +298,22 @@ Return ONLY valid JSON:
       model: analysisModel,
       temperature: 0.2,
       maxTokens: 1500,
+      userId: metadata.userId,
+      surveyId: metadata.surveyId,
     });
 
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return emptyResult();
 
     const parsed = JSON.parse(jsonMatch[0]) as {
-      successfulPatterns?: Array<Omit<ExtractedPattern, "domainId" | "qualityScore" | "metadata">>;
+      successfulPatterns?: Array<
+        Omit<ExtractedPattern, "domainId" | "qualityScore" | "metadata">
+      >;
     };
 
-    const successfulPatterns: ExtractedPattern[] = (parsed.successfulPatterns || []).map((p) => ({
+    const successfulPatterns: ExtractedPattern[] = (
+      parsed.successfulPatterns || []
+    ).map((p) => ({
       ...p,
       domainId: metadata.domainId ?? null,
       qualityScore: Math.round(completenessRatio * 100),
@@ -283,11 +330,16 @@ Return ONLY valid JSON:
     return {
       successfulPatterns,
       failedPatterns: [],
-      domainSpecificLearnings: successfulPatterns.filter((p) => p.domainId !== null),
+      domainSpecificLearnings: successfulPatterns.filter(
+        (p) => p.domainId !== null,
+      ),
       generalLearnings: successfulPatterns.filter((p) => p.domainId === null),
     };
   } catch (error) {
-    console.error("[PatternExtraction] Failed to extract creation patterns:", error);
+    console.error(
+      "[PatternExtraction] Failed to extract creation patterns:",
+      error,
+    );
     return emptyResult();
   }
 }
@@ -304,13 +356,27 @@ export function computeSignalBackedScore(signals: ConversationSignals): number {
   const completionScore = signals.completionRate * 30;
   const richnessScore = signals.avgResponseRichnessScore * 20;
   // Dropoff bonus: full 10 if no dropoff, scaled down by where they dropped
-  const dropoffScore = signals.dropoffTurnIndex === null
-    ? 10
-    : Math.max(0, 10 - (10 * (1 - signals.completionRate)));
+  const dropoffScore =
+    signals.dropoffTurnIndex === null
+      ? 10
+      : Math.max(0, 10 - 10 * (1 - signals.completionRate));
 
-  return Math.round(Math.min(100, Math.max(0, coverageScore + completionScore + richnessScore + dropoffScore)));
+  return Math.round(
+    Math.min(
+      100,
+      Math.max(
+        0,
+        coverageScore + completionScore + richnessScore + dropoffScore,
+      ),
+    ),
+  );
 }
 
 function emptyResult(): PatternExtractionResult {
-  return { successfulPatterns: [], failedPatterns: [], domainSpecificLearnings: [], generalLearnings: [] };
+  return {
+    successfulPatterns: [],
+    failedPatterns: [],
+    domainSpecificLearnings: [],
+    generalLearnings: [],
+  };
 }

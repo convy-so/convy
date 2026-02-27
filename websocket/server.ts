@@ -1,4 +1,3 @@
-
 import { createServer, IncomingMessage } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { parse } from "url";
@@ -6,6 +5,18 @@ import { loadEnvConfig } from "@next/env";
 
 const projectDir = process.cwd();
 loadEnvConfig(projectDir);
+
+import * as Sentry from "@sentry/node";
+
+/*
+// Initialize Sentry for the standalone Node.js Project
+Sentry.init({
+  dsn: process.env.SENTRY_NODE_DSN || process.env.SENTRY_DSN,
+  tracesSampleRate: 1.0,
+  environment: process.env.NODE_ENV || "development",
+  serverName: "websocket-server",
+});
+*/
 
 import { env } from "@/lib/env";
 import {
@@ -25,7 +36,6 @@ import { SurveyResponseVoiceHandler } from "./handlers/survey-response-voice";
 import { SampleSurveyVoiceHandler } from "./handlers/sample-survey-voice";
 import { AnalyticsHandler } from "./handlers/analytics";
 import { getRedisSubscriber } from "@/lib/redis";
-
 
 /**
  * WebSocket Server for Voice-Enabled Surveys
@@ -86,7 +96,10 @@ function cleanupStaleConnections(): void {
         cleanedCount++;
 
         // Also clean up from analyticsConnections if applicable
-        if (connection.userId && connection.handler instanceof AnalyticsHandler) {
+        if (
+          connection.userId &&
+          connection.handler instanceof AnalyticsHandler
+        ) {
           const key = `${connection.userId}:${connection.handler.surveyId}`;
           if (analyticsConnections.get(key) === connection.handler) {
             analyticsConnections.delete(key);
@@ -102,7 +115,7 @@ function cleanupStaleConnections(): void {
 
   if (cleanedCount > 0) {
     console.log(
-      `[WebSocket] Cleaned up ${cleanedCount} stale connections. Active: ${activeConnections.size}`
+      `[WebSocket] Cleaned up ${cleanedCount} stale connections. Active: ${activeConnections.size}`,
     );
   }
 }
@@ -110,7 +123,7 @@ function cleanupStaleConnections(): void {
 // Start periodic cleanup
 const cleanupInterval = setInterval(
   cleanupStaleConnections,
-  CLEANUP_INTERVAL_MS
+  CLEANUP_INTERVAL_MS,
 );
 
 /**
@@ -125,11 +138,10 @@ const server = createServer((req, res) => {
         status: "ok",
         activeConnections: activeConnections.size,
         timestamp: new Date().toISOString(),
-      })
+      }),
     );
     return;
   }
-
 
   res.writeHead(404);
   res.end("Not Found");
@@ -182,7 +194,7 @@ wss.on("connection", async (ws: WebSocket, req) => {
         JSON.stringify({
           type: "error",
           error: "Invalid endpoint",
-        })
+        }),
       );
       ws.close();
     }
@@ -192,7 +204,7 @@ wss.on("connection", async (ws: WebSocket, req) => {
       JSON.stringify({
         type: "error",
         error: `Internal server error: ${error instanceof Error ? error.message : String(error)}`,
-      })
+      }),
     );
     ws.close();
   }
@@ -203,7 +215,7 @@ wss.on("connection", async (ws: WebSocket, req) => {
  */
 async function handleSurveyCreation(
   ws: WebSocket,
-  req: IncomingMessage
+  req: IncomingMessage,
 ): Promise<void> {
   const authResult = await authenticateWebSocket(ws, req);
 
@@ -226,7 +238,7 @@ async function handleSurveyCreation(
         type: "error",
         error: rateLimitCheck.reason,
         retryAfter: rateLimitCheck.retryAfter,
-      })
+      }),
     );
     ws.close();
     return;
@@ -250,12 +262,12 @@ async function handleSurveyCreation(
       activeConnections.delete(connectionId);
       await releaseConnection(identifier);
       console.log(
-        `[WebSocket] Survey creation connection closed for user ${connection.userId}`
+        `[WebSocket] Survey creation connection closed for user ${connection.userId}`,
       );
     });
 
     console.log(
-      `[WebSocket] Survey creation handler initialized for user ${connection.userId}`
+      `[WebSocket] Survey creation handler initialized for user ${connection.userId}`,
     );
   } catch (error) {
     console.error("[WebSocket] Survey creation handler error:", error);
@@ -264,7 +276,7 @@ async function handleSurveyCreation(
       JSON.stringify({
         type: "error",
         error: `Failed to initialize voice session: ${error instanceof Error ? error.message : String(error)}`,
-      })
+      }),
     );
     ws.close();
   }
@@ -275,7 +287,7 @@ async function handleSurveyCreation(
  */
 async function handleSurveyResponse(
   ws: WebSocket,
-  req: IncomingMessage
+  req: IncomingMessage,
 ): Promise<void> {
   const accessResult = await verifyPublicAccess(req);
 
@@ -298,7 +310,7 @@ async function handleSurveyResponse(
         type: "error",
         error: rateLimitCheck.reason,
         retryAfter: rateLimitCheck.retryAfter,
-      })
+      }),
     );
     ws.close();
     return;
@@ -308,9 +320,14 @@ async function handleSurveyResponse(
     // Extract language from URL
     const url = parse(req.url || "", true);
     const language = (url.query?.language as string) || "en";
-    
+
     // Create handler with language
-    const handler = new SurveyResponseVoiceHandler(ws, surveyId, identifier, language);
+    const handler = new SurveyResponseVoiceHandler(
+      ws,
+      surveyId,
+      identifier,
+      language,
+    );
     await handler.initialize();
 
     // Track connection with timestamp for cleanup
@@ -322,12 +339,12 @@ async function handleSurveyResponse(
       activeConnections.delete(connectionId);
       await releaseConnection(identifier);
       console.log(
-        `[WebSocket] Survey response connection closed for survey ${surveyId}`
+        `[WebSocket] Survey response connection closed for survey ${surveyId}`,
       );
     });
 
     console.log(
-      `[WebSocket] Survey response handler initialized for survey ${surveyId}`
+      `[WebSocket] Survey response handler initialized for survey ${surveyId}`,
     );
   } catch (error) {
     console.error("[WebSocket] Survey response handler error:", error);
@@ -336,7 +353,7 @@ async function handleSurveyResponse(
       JSON.stringify({
         type: "error",
         error: `Failed to initialize voice session: ${error instanceof Error ? error.message : String(error)}`,
-      })
+      }),
     );
     ws.close();
   }
@@ -347,7 +364,7 @@ async function handleSurveyResponse(
  */
 async function handleSampleConversation(
   ws: WebSocket,
-  req: IncomingMessage
+  req: IncomingMessage,
 ): Promise<void> {
   // Authenticate as owner
   const authResult = await authenticateWebSocket(ws, req);
@@ -363,7 +380,7 @@ async function handleSampleConversation(
   const url = parse(req.url || "", true);
   const surveyId = url.query?.surveyId as string;
   const conversationNumber = parseInt(
-    (url.query?.conversationNumber as string) || "1"
+    (url.query?.conversationNumber as string) || "1",
   );
 
   if (!surveyId) {
@@ -371,7 +388,7 @@ async function handleSampleConversation(
       JSON.stringify({
         type: "error",
         error: "Survey ID required",
-      })
+      }),
     );
     ws.close();
     return;
@@ -386,7 +403,7 @@ async function handleSampleConversation(
         type: "error",
         error: rateLimitCheck.reason,
         retryAfter: rateLimitCheck.retryAfter,
-      })
+      }),
     );
     ws.close();
     return;
@@ -396,7 +413,7 @@ async function handleSampleConversation(
     const handler = new SampleSurveyVoiceHandler(
       connection,
       surveyId,
-      conversationNumber
+      conversationNumber,
     );
     await handler.initialize();
 
@@ -413,7 +430,7 @@ async function handleSampleConversation(
     });
 
     console.log(
-      `[WebSocket] Sample voice handler initialized for user ${connection.userId}, survey ${surveyId}`
+      `[WebSocket] Sample voice handler initialized for user ${connection.userId}, survey ${surveyId}`,
     );
   } catch (error) {
     console.error("[WebSocket] Sample voice handler error:", error);
@@ -422,7 +439,7 @@ async function handleSampleConversation(
       JSON.stringify({
         type: "error",
         error: `Failed to initialize sample voice session: ${error instanceof Error ? error.message : String(error)}`,
-      })
+      }),
     );
     ws.close();
   }
@@ -433,7 +450,7 @@ async function handleSampleConversation(
  */
 async function handleAnalytics(
   ws: WebSocket,
-  req: IncomingMessage
+  req: IncomingMessage,
 ): Promise<void> {
   // Authenticate connection
   const authResult = await authenticateWebSocket(ws, req);
@@ -454,7 +471,7 @@ async function handleAnalytics(
       JSON.stringify({
         type: "error",
         error: "Survey ID is required",
-      })
+      }),
     );
     ws.close(1008, "Survey ID required");
     return;
@@ -472,7 +489,7 @@ async function handleAnalytics(
         type: "error",
         error: rateLimitCheck.reason,
         retryAfter: rateLimitCheck.retryAfter,
-      })
+      }),
     );
     ws.close();
     return;
@@ -501,12 +518,12 @@ async function handleAnalytics(
       analyticsConnections.delete(analyticsKey);
       await releaseConnection(identifier);
       console.log(
-        `[WebSocket] Analytics connection closed for user ${connection.userId}, survey ${surveyId}`
+        `[WebSocket] Analytics connection closed for user ${connection.userId}, survey ${surveyId}`,
       );
     });
 
     console.log(
-      `[WebSocket] Analytics handler initialized for user ${connection.userId}, survey ${surveyId}`
+      `[WebSocket] Analytics handler initialized for user ${connection.userId}, survey ${surveyId}`,
     );
   } catch (error) {
     console.error("[WebSocket] Analytics handler error:", error);
@@ -515,7 +532,7 @@ async function handleAnalytics(
       JSON.stringify({
         type: "error",
         error: `Failed to initialize analytics connection: ${error instanceof Error ? error.message : String(error)}`,
-      })
+      }),
     );
     ws.close();
   }
@@ -564,7 +581,7 @@ function initializeRedisSubscriber(): void {
           if (handler) {
             handler.handleAnalyticsUpdate(data);
             console.log(
-              `[Redis Pub/Sub] Delivered analytics update to user ${userId}, survey ${surveyId}`
+              `[Redis Pub/Sub] Delivered analytics update to user ${userId}, survey ${surveyId}`,
             );
           }
         }
@@ -584,7 +601,7 @@ function initializeRedisSubscriber(): void {
         redisSubscriberReconnectAttempts++;
 
         console.log(
-          `[Redis Pub/Sub] Attempting reconnection in ${delay}ms (attempt ${redisSubscriberReconnectAttempts}/${MAX_REDIS_RECONNECT_ATTEMPTS})`
+          `[Redis Pub/Sub] Attempting reconnection in ${delay}ms (attempt ${redisSubscriberReconnectAttempts}/${MAX_REDIS_RECONNECT_ATTEMPTS})`,
         );
 
         setTimeout(() => {
@@ -592,7 +609,7 @@ function initializeRedisSubscriber(): void {
         }, delay);
       } else {
         console.error(
-          "[Redis Pub/Sub] Max reconnection attempts reached. Analytics updates will not be delivered in real-time."
+          "[Redis Pub/Sub] Max reconnection attempts reached. Analytics updates will not be delivered in real-time.",
         );
       }
     });
@@ -610,7 +627,7 @@ function initializeRedisSubscriber(): void {
       if (redisSubscriberReconnectAttempts < MAX_REDIS_RECONNECT_ATTEMPTS) {
         redisSubscriberReconnectAttempts++;
         console.log(
-          "[Redis Pub/Sub] Connection ended, attempting reconnection..."
+          "[Redis Pub/Sub] Connection ended, attempting reconnection...",
         );
         setTimeout(initializeRedisSubscriber, REDIS_RECONNECT_DELAY_MS);
       }
@@ -643,8 +660,6 @@ server.listen(PORT, () => {
   // Initialize Redis pub/sub subscriber
   initializeRedisSubscriber();
 
-
-
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║
@@ -652,7 +667,6 @@ server.listen(PORT, () => {
 ║                                                              ║
 ║   Port: ${PORT}                                              ║
 ║   Environment: ${env.NODE_ENV}                               ║
-║   Voice Features: ${env.ENABLE_VOICE_FEATURES ? "✓ Enabled" : "✗ Disabled"}   ║
 ║                                                              ║
 ║   Endpoints:                                                 ║
 ║   • ws://localhost:${PORT}/voice/survey-creation             ║
@@ -703,7 +717,7 @@ process.on("SIGTERM", async () => {
     } catch (error) {
       console.error(
         `[WebSocket] Error cleaning up connection ${connectionId}:`,
-        error
+        error,
       );
     }
   }
@@ -734,6 +748,7 @@ process.on("SIGINT", async () => {
 // Handle uncaught errors
 process.on("uncaughtException", (error) => {
   console.error("[WebSocket] Uncaught exception:", error);
+  Sentry.captureException(error, { tags: { type: "uncaughtException" } });
   process.exit(1);
 });
 
@@ -742,6 +757,7 @@ process.on("unhandledRejection", (reason, promise) => {
     "[WebSocket] Unhandled rejection at:",
     promise,
     "reason:",
-    reason
+    reason,
   );
+  Sentry.captureException(reason, { tags: { type: "unhandledRejection" } });
 });

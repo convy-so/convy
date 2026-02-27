@@ -17,12 +17,13 @@ import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { db } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema/surveys";
-import { eq, desc, count, and, sql } from "drizzle-orm";
+import { eq, desc, count, and, sql, isNull } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 
 export default async function DashboardPage() {
   const session = await getVerifiedSession();
   const userId = session.user.id;
+  const activeOrgId = session.session.activeOrganizationId;
   const t = await getTranslations('Dashboard');
 
   const quickActions = [
@@ -54,7 +55,14 @@ export default async function DashboardPage() {
   const [surveysCountRes] = await db
     .select({ count: count() })
     .from(surveys)
-    .where(eq(surveys.userId, userId));
+    .where(
+      and(
+        eq(surveys.userId, userId),
+        activeOrgId
+          ? eq(surveys.organizationId, activeOrgId)
+          : isNull(surveys.organizationId)
+      )
+    );
   const totalSurveys = surveysCountRes?.count || 0;
 
 
@@ -69,7 +77,10 @@ export default async function DashboardPage() {
     .where(
       and(
         eq(surveys.userId, userId),
-        eq(surveyConversations.completed, true)
+        eq(surveyConversations.completed, true),
+        activeOrgId
+          ? eq(surveys.organizationId, activeOrgId)
+          : isNull(surveys.organizationId)
       )
     );
 
@@ -82,7 +93,12 @@ export default async function DashboardPage() {
 
   // 3. Fetch Recent Surveys
   const recentSurveysData = await db.query.surveys.findMany({
-    where: eq(surveys.userId, userId),
+    where: and(
+      eq(surveys.userId, userId),
+      activeOrgId
+        ? eq(surveys.organizationId, activeOrgId)
+        : isNull(surveys.organizationId)
+    ),
     orderBy: [desc(surveys.updatedAt)],
     limit: 3,
   });
@@ -109,7 +125,14 @@ export default async function DashboardPage() {
     })
     .from(surveyConversations)
     .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
-    .where(eq(surveys.userId, userId))
+    .where(
+      and(
+        eq(surveys.userId, userId),
+        activeOrgId
+          ? eq(surveys.organizationId, activeOrgId)
+          : isNull(surveys.organizationId)
+      )
+    )
     .orderBy(desc(surveyConversations.createdAt))
     .limit(5);
 

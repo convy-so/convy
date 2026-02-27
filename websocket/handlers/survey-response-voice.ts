@@ -54,7 +54,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
   // Billing & State context
   private ownerId: string | null = null;
-  private organizationId: string | null = null;
 
   constructor(
     ws: WebSocket,
@@ -106,6 +105,9 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       }
 
       this.state.survey = survey;
+      this.surveyId = survey.id;
+      this.organizationId = survey.organizationId;
+      this.ownerId = survey.userId;
 
       // CRITICAL: Respect respondent's language choice (from WebSocket URL parameter)
       // Only use survey.language as fallback if no language was provided by respondent
@@ -214,6 +216,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
     };
 
     const conductingAgent = new ConductingSpecialist(agentContext);
+    await conductingAgent.initialize();
 
     // Preload capabilities
     await Promise.all([

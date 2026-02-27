@@ -14,7 +14,6 @@ import {
   FolderOpen,
   Menu,
   X,
-  Plug,
   LogOut,
   User as UserIcon,
 } from "lucide-react";
@@ -33,18 +32,20 @@ interface DashboardSidebarProps {
 }
 
 export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const t = useTranslations('Sidebar');
+
+  const activeOrgId = session?.activeOrganizationId || null;
 
   const navigation = [
     { name: t('Dashboard'), href: "/dashboard", icon: LayoutDashboard },
     { name: t('Surveys'), href: "/dashboard/surveys", icon: MessageSquare },
     { name: t('Projects'), href: "/dashboard/projects", icon: FolderOpen },
     { name: t('Analytics'), href: "/dashboard/analytics", icon: BarChart3 },
-    { name: t('Team'), href: "/dashboard/team", icon: Users },
+    ...(activeOrgId ? [{ name: t('Team'), href: "/dashboard/team", icon: Users }] : []),
   ];
 
   const bottomNavigation = [

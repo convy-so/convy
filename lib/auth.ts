@@ -1,4 +1,3 @@
-
 import { betterAuth, InferSession, InferUser } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
@@ -21,6 +20,10 @@ export const auth = betterAuth({
     schema: authSchema,
     provider: "pg",
   }),
+  session: {
+    expiresIn: 60 * 60 * 24 * 7, // 7 days
+    updateAge: 60 * 60 * 24, // 24 hours (sliding session)
+  },
   plugins: [
     nextCookies(),
     organization({
