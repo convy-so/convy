@@ -715,7 +715,8 @@
             "Badge": "Moduli 2.0",
             "Title": "Il livello di chat <br />di cui i tuoi moduli avevano sempre bisogno.",
             "Description": "Convy sostituisce i moduli rigidi con flussi di chat dinamici che si muovono come una vera conversazione.",
-            "CTA": "Inizia gratis"
+            "CTA": "Inizia gratis",
+            "NoCreditCard": "nessuna carta di credito richiesta"
         },
         "Insights": {
             "Badge": "Ascolta",
@@ -767,7 +768,7 @@
                 }
             }
         },
-        "Waitlist": {,
+        "Waitlist": {
             "GetStarted": "Inizia",
             "ComingSoon": "Prossimamente",
             "Free": {

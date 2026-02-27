@@ -603,7 +603,8 @@
         "Analytics": "Analytics",
         "Team": "Team",
         "Profile": "Profile",
-        "Settings": "Settings"
+        "Settings": "Settings",
+        "SignOut": "Sign Out"
     },
     "Header": {
         "Search": "Search anything...",
@@ -917,7 +918,8 @@
             "Badge": "Forms 2.0",
             "Title": "The chat layer <br />your forms always needed.",
             "Description": "Convy replaces rigid forms with dynamic chat flows that move like a real convo and feel built just for you.",
-            "CTA": "Get started free"
+            "CTA": "Get started free",
+            "NoCreditCard": "No credit card required"
         },
         "Insights": {
             "Badge": "Hear it out",
@@ -962,6 +964,10 @@
                 "Summaries": {
                     "Title": "Auto Summaries",
                     "Description": "Get instant structured insights and summaries from every conversation."
+                },
+                "Integrations": {
+                    "Title": "Seamless Integrations",
+                    "Description": "Connect with your favorite tools to automatically sync data and trigger workflows."
                 }
             }
         },

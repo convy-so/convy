@@ -761,6 +761,10 @@
                 "Summaries": {
                     "Title": "Resúmenes automáticos",
                     "Description": "Obtén ideas estructuradas instantáneas y resúmenes de cada conversación."
+                },
+                "Integrations": {
+                    "Title": "Integraciones",
+                    "Description": "Conecta tus herramientas favoritas para sincronizar datos automáticamente y activar flujos de trabajo."
                 }
             }
         },
