@@ -165,8 +165,8 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: "10.10.0"
+        # No `version:` here — pnpm/action-setup@v4 automatically reads
+        # the `packageManager` field from package.json (the single source of truth).
 
       - name: Get pnpm store directory
         id: pnpm-cache
