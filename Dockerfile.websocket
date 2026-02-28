@@ -68,12 +68,9 @@ ENV ADMIN_EMAILS=""
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 wsuser
 
-# Only copy what the compiled server needs at runtime.
-COPY --from=builder --chown=wsuser:nodejs /app/dist ./dist
-COPY --from=builder --chown=wsuser:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=wsuser:nodejs /app/package.json ./
-# Agent instructions (skills)
-COPY --from=builder --chown=wsuser:nodejs /app/.agent/skills ./.agent/skills
+# Only copy what the server needs at runtime.
+# We copy the entire app so `tsx` can run the source files directly.
+COPY --from=builder --chown=wsuser:nodejs /app ./
 
 USER wsuser
 
@@ -83,4 +80,4 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD wget -qO- http://localhost:3001/health || exit 1
 
-CMD ["node", "dist/websocket/server.js"]
+CMD ["./node_modules/.bin/tsx", "websocket/server.ts"]
