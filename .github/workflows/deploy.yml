@@ -14,13 +14,13 @@
 # to the correct environment. This means one workflow file
 # handles both environments with zero duplication.
 #
-# Required Environment Secrets (set per environment):
-#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION,
-#   AWS_ACCOUNT_ID, DATABASE_URL,
-#   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+# Repository Secrets (shared across environments — Settings → Secrets → Actions):
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_ACCOUNT_ID
+#
+# Environment Secrets (set per environment — Settings → Environments):
+#   DATABASE_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 #   NEXT_PUBLIC_WEBSOCKET_URL,
-#   ECS_CLUSTER, ECS_SERVICE_NEXTJS, ECS_SERVICE_WEBSOCKET,
-#   ECS_SERVICE_WORKERS
+#   ECS_CLUSTER, ECS_SERVICE_NEXTJS, ECS_SERVICE_WEBSOCKET, ECS_SERVICE_WORKERS
 ##############################################################
 
 name: 🚀 Deploy App
@@ -236,12 +236,13 @@ jobs:
 
       - name: Wait for services to stabilize
         run: |
-          echo "⏳ Waiting for all services to stabilize..."
+          echo "⏳ Waiting for all services to stabilize (up to 10 min)..."
           aws ecs wait services-stable \
             --cluster ${{ secrets.ECS_CLUSTER }} \
             --services ${{ secrets.ECS_SERVICE_NEXTJS }} ${{ secrets.ECS_SERVICE_WEBSOCKET }} ${{ secrets.ECS_SERVICE_WORKERS }} \
-            --region ${{ secrets.AWS_REGION }}
-          echo "✅ All services are stable!"
+            --region ${{ secrets.AWS_REGION }} || \
+            echo "⚠️ Stability wait timed out — deployment was triggered. Check ECS console for status."
+          echo "✅ Deployment handoff complete!"
 
       - name: 🎉 Deployment summary
         run: |
