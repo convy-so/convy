@@ -1,0 +1,30 @@
+[
+    {
+        "IpProtocol": "tcp",
+        "FromPort": 3001,
+        "ToPort": 3001,
+        "UserIdGroupPairs": [
+            {
+                "UserId": "290368114395",
+                "GroupId": "sg-075637e4245f80968"
+            }
+        ],
+        "IpRanges": [],
+        "Ipv6Ranges": [],
+        "PrefixListIds": []
+    },
+    {
+        "IpProtocol": "tcp",
+        "FromPort": 3000,
+        "ToPort": 3000,
+        "UserIdGroupPairs": [
+            {
+                "UserId": "290368114395",
+                "GroupId": "sg-075637e4245f80968"
+            }
+        ],
+        "IpRanges": [],
+        "Ipv6Ranges": [],
+        "PrefixListIds": []
+    }
+]

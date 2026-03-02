@@ -42,20 +42,10 @@ import { PublishSurveyModal } from "@/components/surveys/publish-survey-modal";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
 import { clientEnv } from "@/lib/env.client";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
-import { SURVEY_DOMAINS, type SurveyDomainId } from "@/lib/domains/domain-registry";
 import { uploadSurveyMediaAction } from "@/app/actions/survey-media";
 import { CollaborationSidebar } from "@/components/surveys/collaboration-sidebar";
 
-const DOMAIN_UI_METADATA: Record<number, { icon: any; color: string; bgColor: string }> = {
-  1: { icon: Smile, color: "text-emerald-600", bgColor: "bg-emerald-100" },          // CX
-  2: { icon: Target, color: "text-blue-600", bgColor: "bg-blue-100" },              // Market Research
-  3: { icon: Users, color: "text-purple-600", bgColor: "bg-purple-100" },           // Workforce
-  5: { icon: GraduationCap, color: "text-orange-600", bgColor: "bg-orange-100" },   // Education
-  6: { icon: Flag, color: "text-red-600", bgColor: "bg-red-100" },                  // Civic
-  7: { icon: Beaker, color: "text-cyan-600", bgColor: "bg-cyan-100" },              // Scientific
-  9: { icon: Fingerprint, color: "text-pink-600", bgColor: "bg-pink-100" },         // Demographic
-  10: { icon: Server, color: "text-slate-600", bgColor: "bg-slate-100" },          // Infrastructure
-};
+
 
 
 type CreationStep = "objective" | "audience" | "questions" | "tone" | "review";
@@ -84,8 +74,6 @@ function CreateSurveyContent() {
   const [wasStartedWithVoice, setWasStartedWithVoice] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false); // Track when user is actively speaking
 
-  // Domain Selection
-  const [selectedDomainId, setSelectedDomainId] = useState<SurveyDomainId | null>(null);
   const [shouldStartAi, setShouldStartAi] = useState(false);
 
 
@@ -103,44 +91,46 @@ function CreateSurveyContent() {
   const [collaborators, setCollaborators] = useState<string[]>([]);
   const [orgId, setOrgId] = useState<string | null>(null);
 
-  const handleDomainSelect = async (domainId: SurveyDomainId) => {
-    // 1. Optimistic UI: Immediately show the chat view
-    setSelectedDomainId(domainId);
+  const handleStart = async () => {
+    // 1. Optimistic UI: Immediately show loading state
+    setIsConnecting(true);
 
-    // 2. Set the survey mode based on the respondent format choice
-    updateSurveyMode(isVoiceSurvey);
-
-    // Track if started with voice for this survey
+    // Track if started with voice for this builder session
     if (isVoiceMode) {
       setWasStartedWithVoice(true);
     }
 
-    // 3. Ensure draft exists (Background Process)
+    // 2. Ensure draft exists
     let currentSurveyId = surveyId;
     if (!currentSurveyId) {
       try {
-        currentSurveyId = await ensureDraftExists(domainId);
+        currentSurveyId = await ensureDraftExists();
       } catch (e) {
         console.error("Failed to create draft", e);
         toast.error(t("Toasts.InitFailed"));
-        setSelectedDomainId(null);
+        setIsConnecting(false);
         return;
       }
     }
 
-    if (!currentSurveyId) return;
+    if (!currentSurveyId) {
+      setIsConnecting(false);
+      return;
+    }
+
+    // 3. Set the survey respondent mode once ID is known
+    await updateSurveyMode(isVoiceSurvey);
 
     try {
-      // 4. Update Domain in Backend
+      // 4. Update Backend
       await fetch(`/api/surveys/${currentSurveyId}/create`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...(messages.length === 0 ? { messages: [] } : {}),
-          extractedData: { domainId }
+          ...(messages.length === 0 ? { messages: [] } : {})
         })
       });
-      console.log(`[Client] Domain ${domainId} saved for survey ${currentSurveyId}`);
+      console.log(`[Client] Started discovery conversation for survey ${currentSurveyId}`);
 
       // Persist creation modality if voice was chosen
       if (isVoiceMode) {
@@ -150,16 +140,21 @@ function CreateSurveyContent() {
       // 5. Trigger Interaction based on Mode
       if (messages.length === 0) {
         if (isVoiceMode) {
-          // VOICE MODE: Start recording (or signal readyness)
+          // VOICE MODE: Start recording sequence
+          await toggleRecording();
         } else {
           // TEXT MODE: Trigger AI Text Greeting
           setShouldStartAi(true);
         }
       }
+
+      // Reset loading state on success
+      setIsConnecting(false);
+
     } catch (error) {
-      console.error("Failed to save domain selection:", error);
+      console.error("Failed to start discovery:", error);
       toast.error(t("Toasts.SaveTopicFailed"));
-      setSelectedDomainId(null); // Revert on failure
+      setIsConnecting(false);
     }
   };
 
@@ -550,9 +545,6 @@ function CreateSurveyContent() {
 
             if (data.extractedData) {
               setExtractedData(data.extractedData);
-              if (data.extractedData.domainId) {
-                setSelectedDomainId(data.extractedData.domainId as SurveyDomainId);
-              }
             }
           }
 
@@ -612,7 +604,7 @@ function CreateSurveyContent() {
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
 
   // Helper to ensure draft exists before sending message
-  const ensureDraftExists = async (domainId: SurveyDomainId): Promise<string | null> => {
+  const ensureDraftExists = async (): Promise<string | null> => {
     if (surveyId) return surveyId;
     if (isCreatingDraft) return null;
 
@@ -621,7 +613,7 @@ function CreateSurveyContent() {
       const response = await fetch("/api/surveys", {
         method: "POST",
         credentials: "include",
-        body: JSON.stringify({ language, isVoice: isVoiceSurvey, domainId }),
+        body: JSON.stringify({ language, isVoice: isVoiceSurvey, domainId: null }),
       });
 
       if (response.status === 401) {
@@ -666,7 +658,7 @@ function CreateSurveyContent() {
       await sendMessage({
         id: "init_ping_hidden",
         role: "user",
-        parts: [{ type: 'text', text: "Start the conversation by introducing yourself as the expert on this domain and asking the first question." }],
+        parts: [{ type: 'text', text: "INITIAL_GREETING_SIGNAL" }],
       } as any);
     } catch (error) {
       console.error("Failed to trigger AI response:", error);
@@ -691,12 +683,9 @@ function CreateSurveyContent() {
         // Only update if we get valid data
         if (data.extractedData && Object.keys(data.extractedData).length > 0) {
           setExtractedData(data.extractedData);
-          if (data.extractedData.domainId) {
-            setSelectedDomainId(prev => prev || data.extractedData.domainId);
+          if (data.collectedInfo) {
+            setCollectedInfo(data.collectedInfo);
           }
-        }
-        if (data.collectedInfo) {
-          setCollectedInfo(data.collectedInfo);
         }
       }
     } catch (err) {
@@ -773,8 +762,6 @@ function CreateSurveyContent() {
     }
   };
 
-
-
   const toggleVoiceMode = () => {
     const newMode = !isVoiceMode;
     setIsVoiceMode(newMode);
@@ -823,6 +810,7 @@ function CreateSurveyContent() {
         }
 
         console.log("[Client] 🟢 WebSocket connected. Sending start signal...");
+        setIsConnecting(false);
 
       } catch (err) {
         console.error("[Client] ❌ Failed to start voice session:", err);
@@ -865,8 +853,6 @@ function CreateSurveyContent() {
       setIsFinalizing(false);
     }
   };
-
-  // `isInitializing` no longer unmounts the whole page
 
   if (authError) {
     return (
@@ -920,15 +906,15 @@ function CreateSurveyContent() {
       <div className="h-[calc(100vh-2rem)] md:h-[calc(100vh-4rem)] flex flex-col md:flex-row gap-6 max-w-7xl w-full mx-auto p-4 overflow-hidden">
         <div className={cn(
           "flex-1 flex flex-col overflow-hidden relative transition-all duration-500",
-          (selectedDomainId || surveyId) ? "bg-white rounded-3xl border border-gray-200 shadow-sm" : ""
+          surveyId ? "bg-white rounded-3xl border border-gray-200 shadow-sm" : ""
         )}>
 
           {/* Integrated Header */}
           <div className={cn(
             "flex flex-col sm:flex-row items-center justify-between gap-4 p-6 transition-all duration-500",
-            (selectedDomainId || surveyId) ? "bg-white border-b border-gray-200" : "bg-transparent"
+            surveyId ? "bg-white border-b border-gray-200" : "bg-transparent"
           )}>
-            {!selectedDomainId && !surveyId ? (
+            {!surveyId ? (
               <div className="w-full text-center py-4">
                 <h1 className="text-2xl font-bold text-gray-900 flex items-center justify-center gap-2">
                   <Sparkles className="w-6 h-6 text-indigo-600" />
@@ -978,14 +964,14 @@ function CreateSurveyContent() {
           {/* Chat Area / Domain Selection */}
           <div className={cn(
             "flex-1 overflow-hidden relative flex flex-col",
-            (selectedDomainId || surveyId) ? "bg-slate-50/30" : "bg-transparent"
+            surveyId ? "bg-slate-50/30" : "bg-transparent"
           )}>
             {isInitializing && (
               <div className="absolute inset-0 z-50 bg-white/50 backdrop-blur-sm flex items-center justify-center">
                 <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
               </div>
             )}
-            {!selectedDomainId ? (
+            {!surveyId ? (
 
               <div className="flex-1 overflow-y-auto p-4 md:p-8">
                 <div className="max-w-5xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500 py-10">
@@ -1000,124 +986,138 @@ function CreateSurveyContent() {
                     </p>
 
                     {/* Section: Configuration */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
-                      {/* Creation Mode Choice */}
-                      <div className="bg-white/50 backdrop-blur-sm p-6 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 -rotate-45 translate-x-12 -translate-y-12 group-hover:bg-indigo-500/10 transition-colors" />
-                        <div className="flex items-start gap-4 mb-6">
-                          <div className="p-3 bg-indigo-100 rounded-2xl shrink-0">
-                            <Sparkles className="w-6 h-6 text-indigo-600" />
+                    <div className="mt-8">
+                      {/* Configuration Container - Framer Style */}
+                      <div className="max-w-4xl mx-auto w-full bg-white rounded-2xl p-8 lg:p-12 border border-gray-200">
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 lg:gap-16">
+
+                          {/* 1. AI Designer Experience */}
+                          <div className="space-y-6">
+                            <div className="flex items-start gap-4">
+                              <div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center shrink-0 border border-gray-100">
+                                <Sparkles className="w-6 h-6 text-black" />
+                              </div>
+                              <div>
+                                <h3 className="text-xl font-medium text-black">{t("CreationMode.Title")}</h3>
+                                <p className="text-sm text-gray-500 mt-1">{t("CreationMode.Description")}</p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4">
+                              <button
+                                onClick={() => setIsVoiceMode(false)}
+                                className={cn(
+                                  "flex items-center gap-4 p-5 rounded-xl text-left transition-all duration-200 border",
+                                  !isVoiceMode
+                                    ? "bg-gray-50 text-black border-black shadow-none ring-1 ring-black"
+                                    : "bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-900 shadow-sm"
+                                )}
+                              >
+                                <div className="shrink-0 w-10 h-10 rounded-full bg-white/80 border border-gray-100 flex items-center justify-center text-current">
+                                  <Send className="w-5 h-5" />
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="block font-bold text-sm lg:text-base">{t("CreationMode.Text")}</span>
+                                  <span className="text-[11px] lg:text-xs opacity-70 leading-tight block">{t("CreationMode.TextDescription")}</span>
+                                </div>
+                              </button>
+
+                              <button
+                                onClick={() => setIsVoiceMode(true)}
+                                className={cn(
+                                  "flex items-center gap-4 p-5 rounded-xl text-left transition-all duration-200 border",
+                                  isVoiceMode
+                                    ? "bg-gray-50 text-black border-black shadow-none ring-1 ring-black"
+                                    : "bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-900 shadow-sm"
+                                )}
+                              >
+                                <div className="shrink-0 w-10 h-10 rounded-full bg-white/80 border border-gray-100 flex items-center justify-center text-current">
+                                  <Mic className="w-5 h-5" />
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="block font-bold text-sm lg:text-base">{t("CreationMode.Voice")}</span>
+                                  <span className="text-[11px] lg:text-xs opacity-70 leading-tight block">{t("CreationMode.VoiceDescription")}</span>
+                                </div>
+                              </button>
+                            </div>
                           </div>
-                          <div>
-                            <h3 className="text-lg font-bold text-gray-900">{t("CreationMode.Title")}</h3>
-                            <p className="text-sm text-gray-500 mt-1">{t("CreationMode.Description")}</p>
+
+                          {/* 2. Participant Experience */}
+                          <div className="space-y-6">
+                            <div className="flex items-start gap-4">
+                              <div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center shrink-0 border border-gray-100">
+                                <Users className="w-6 h-6 text-black" />
+                              </div>
+                              <div>
+                                <h3 className="text-xl font-medium text-black">{t("RespondentFormat.Title")}</h3>
+                                <p className="text-sm text-gray-500 mt-1">{t("RespondentFormat.Description")}</p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4">
+                              <button
+                                onClick={() => setIsVoiceSurvey(false)}
+                                className={cn(
+                                  "flex items-center gap-4 p-5 rounded-xl text-left transition-all duration-200 border",
+                                  !isVoiceSurvey
+                                    ? "bg-gray-50 text-black border-black shadow-none ring-1 ring-black"
+                                    : "bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-900 shadow-sm"
+                                )}
+                              >
+                                <div className="shrink-0 w-10 h-10 rounded-full bg-white/80 border border-gray-100 flex items-center justify-center text-current">
+                                  <Keyboard className="w-5 h-5" />
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="block font-bold text-sm lg:text-base">{t("RespondentFormat.Text")}</span>
+                                  <span className="text-[11px] lg:text-xs opacity-70 leading-tight block">{t("RespondentFormat.TextDescription")}</span>
+                                </div>
+                              </button>
+
+                              <button
+                                onClick={() => setIsVoiceSurvey(true)}
+                                className={cn(
+                                  "flex items-center gap-4 p-5 rounded-xl text-left transition-all duration-200 border",
+                                  isVoiceSurvey
+                                    ? "bg-gray-50 text-black border-black shadow-none ring-1 ring-black"
+                                    : "bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-900 shadow-sm"
+                                )}
+                              >
+                                <div className="shrink-0 w-10 h-10 rounded-full bg-white/80 border border-gray-100 flex items-center justify-center text-current">
+                                  <Mic className="w-5 h-5" />
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="block font-bold text-sm lg:text-base">{t("RespondentFormat.Voice")}</span>
+                                  <span className="text-[11px] lg:text-xs opacity-70 leading-tight block">{t("RespondentFormat.VoiceDescription")}</span>
+                                </div>
+                              </button>
+                            </div>
                           </div>
+
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3 p-1.5 bg-gray-100/80 rounded-2xl relative z-10">
+                        <div className="mt-12 pt-12 border-t border-gray-100 max-w-md mx-auto">
                           <button
-                            onClick={() => setIsVoiceMode(false)}
-                            className={cn(
-                              "flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all duration-300",
-                              !isVoiceMode
-                                ? "bg-white text-indigo-600 shadow-xl scale-100 ring-1 ring-black/[0.05]"
-                                : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
-                            )}
+                            onClick={handleStart}
+                            disabled={isConnecting}
+                            className="w-full py-4 px-6 rounded-xl flex items-center justify-center gap-2 text-white bg-black hover:bg-gray-800 transition-colors font-bold border border-black shadow-lg disabled:opacity-50 text-lg"
                           >
-                            <Keyboard className="w-4 h-4" />
-                            {t("CreationMode.Text")}
-                          </button>
-                          <button
-                            onClick={() => setIsVoiceMode(true)}
-                            className={cn(
-                              "flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all duration-300",
-                              isVoiceMode
-                                ? "bg-white text-indigo-600 shadow-xl scale-100 ring-1 ring-black/[0.05]"
-                                : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
+                            {isConnecting ? (
+                              <>
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                Starting...
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="w-5 h-5" />
+                                Start Building
+                              </>
                             )}
-                          >
-                            <Mic className="w-4 h-4" />
-                            {t("CreationMode.Voice")}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Respondent Format Choice */}
-                      <div className="bg-white/50 backdrop-blur-sm p-6 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 -rotate-45 translate-x-12 -translate-y-12 group-hover:bg-purple-500/10 transition-colors" />
-                        <div className="flex items-start gap-4 mb-6">
-                          <div className="p-3 bg-purple-100 rounded-2xl shrink-0">
-                            <Users className="w-6 h-6 text-purple-600" />
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-bold text-gray-900">{t("RespondentFormat.Title")}</h3>
-                            <p className="text-sm text-gray-500 mt-1">{t("RespondentFormat.Description")}</p>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 p-1.5 bg-gray-100/80 rounded-2xl relative z-10">
-                          <button
-                            onClick={() => setIsVoiceSurvey(false)}
-                            className={cn(
-                              "flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all duration-300",
-                              !isVoiceSurvey
-                                ? "bg-white text-purple-600 shadow-xl scale-100 ring-1 ring-black/[0.05]"
-                                : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
-                            )}
-                          >
-                            <Send className="w-4 h-4" />
-                            {t("RespondentFormat.Text")}
-                          </button>
-                          <button
-                            onClick={() => setIsVoiceSurvey(true)}
-                            className={cn(
-                              "flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all duration-300",
-                              isVoiceSurvey
-                                ? "bg-white text-purple-600 shadow-xl scale-100 ring-1 ring-black/[0.05]"
-                                : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
-                            )}
-                          >
-                            <Mic className="w-4 h-4" />
-                            {t("RespondentFormat.Voice")}
                           </button>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Domain Cards (Masonry/Grid) */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {Object.values(SURVEY_DOMAINS).map((domain) => {
-                      const ui = DOMAIN_UI_METADATA[domain.id];
-                      const Icon = ui?.icon || Sparkles;
-                      const color = ui?.color || "text-gray-600";
-                      const bgColor = ui?.bgColor || "bg-gray-100";
-
-                      return (
-                        <button
-                          key={domain.id}
-                          onClick={() => handleDomainSelect(domain.id)}
-                          className="group relative flex flex-col text-left p-8 rounded-3xl border border-gray-200 bg-white hover:border-indigo-500/30 hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-300 hover:-translate-y-1 overflow-hidden"
-                        >
-                          <div className={cn(
-                            "w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-transform duration-300 group-hover:scale-110",
-                            bgColor
-                          )}>
-                            <Icon className={cn("w-7 h-7", color)} />
-                          </div>
-
-                          <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-indigo-600 transition-colors">
-                            {t(`Domains.${domain.id}.Title`)}
-                          </h3>
-                          <p className="text-base text-gray-500 leading-relaxed group-hover:text-gray-600">
-                            {t(`Domains.${domain.id}.Description`)}
-                          </p>
-
-                          {/* Hover Decoration */}
-                          <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-500" />
-                        </button>
-                      );
-                    })}
                   </div>
                 </div>
               </div>
@@ -1279,7 +1279,7 @@ function CreateSurveyContent() {
 
                             <button
                               onClick={toggleRecording}
-                              disabled={voiceWs.isRecording || isConnecting || !selectedDomainId} // Disable if recording, connecting, or no domain selected
+                              disabled={voiceWs.isRecording || isConnecting} // Disable if recording or connecting
                               className={cn(
                                 "relative w-32 h-32 rounded-full flex flex-col items-center justify-center transition-all duration-300 border-4 shadow-2xl z-20",
                                 isSpeaking
@@ -1311,10 +1311,6 @@ function CreateSurveyContent() {
                                 ) : isConnecting ? (
                                   <>
                                     <Loader2 className="h-10 w-10 animate-spin text-amber-500" />
-                                  </>
-                                ) : !selectedDomainId ? (
-                                  <>
-                                    <span className="text-xs font-medium text-gray-400 text-center px-2">{t("Status.SelectTopicFirst")}</span>
                                   </>
                                 ) : voiceWs.isPlaying ? (
                                   <>
@@ -1380,7 +1376,7 @@ function CreateSurveyContent() {
 
                   {/* Messages Scroll Area */}
                   <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
-                    {messages.filter(m => m.id !== "init_ping_hidden").map((message) => (
+                    {messages.filter(m => m.id !== "init_ping_hidden" && (m as any).content !== "INITIAL_GREETING_SIGNAL").map((message) => (
                       <div
                         key={message.id}
                         className={cn(
@@ -1570,8 +1566,8 @@ function CreateSurveyContent() {
                   )}
 
                   {/* Main Input */}
-                  {/* Main Input - Only shown when domain is selected */}
-                  {(selectedDomainId && !isReadyForSample && !isReadOnly && !isVoiceMode) && (
+                  {/* Main Input - Shown when survey is active and not finished */}
+                  {(!isReadyForSample && !isReadOnly && !isVoiceMode && surveyId) && (
                     <div className="max-w-3xl mx-auto space-y-4">
 
 

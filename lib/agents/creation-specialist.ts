@@ -18,6 +18,7 @@ import { defaultModel } from "@/lib/ai";
 import { logUsage } from "@/lib/billing/logger";
 import { stripScratchpadFromText } from "./scratchpad-filter";
 import { SkillRegistry } from "./skill-registry";
+import { loadDomainSkills } from "./domain-skill-loader";
 import { stepCountIs } from "ai";
 import { z } from "zod";
 import { BaseSpecialistAgent } from "./base-agent";
@@ -25,6 +26,9 @@ import type { AgentContext, ChecklistItem, SpecialistChecklist } from "./types";
 import type { SurveyConfig } from "@/lib/prompts";
 import { REQUIRED_INFORMATION } from "@/lib/surveys";
 import type { VoiceAgentFunction } from "@/lib/voice/deepgram-voice-agent";
+import { db } from "@/db";
+import { eq } from "drizzle-orm";
+import { surveys, surveyCreationConversations } from "@/db/schema";
 // Research imports removed
 
 export class CreationSpecialist extends BaseSpecialistAgent {
@@ -98,6 +102,11 @@ export class CreationSpecialist extends BaseSpecialistAgent {
           "Presented a specific, contextual recommendation for adding media. If yes, captured the description and learning goal.",
           !!(collected.media || config.media?.length),
         ),
+        this.makeChecklistItem(
+          "domain_onboarding",
+          `Applied domain-specific onboarding questions for ${domainName}`,
+          !!collected.domain_onboarding,
+        ),
       ],
       aspirational: [
         this.makeChecklistItem(
@@ -111,11 +120,6 @@ export class CreationSpecialist extends BaseSpecialistAgent {
           "required_questions",
           "Collected any specific questions the creator wants to ensure are asked",
           !!(collected.required_questions || config.requiredQuestions?.length),
-        ),
-        this.makeChecklistItem(
-          "domain_onboarding",
-          `Applied domain-specific onboarding questions for ${domainName}`,
-          !!collected.domain_onboarding,
         ),
       ],
     };
@@ -162,8 +166,8 @@ If the user goes off-topic, write a response AFTER the scratchpad that acknowled
         this.context.loadedDomainSkills;
       // Calculate progress and phase
       const checklist = this.buildChecklist(config);
-      const pendingSubjectIntel = checklist.required.find(
-        (i) => i.id === "subject_intelligence" && i.status === "pending",
+      const pendingDomainOnboarding = checklist.required.find(
+        (i) => i.id === "domain_onboarding" && i.status === "pending",
       );
       const progress = checklist.required
         .map((i) => `${i.id}: ${i.status === "met" ? "✓" : "○"}`)
@@ -171,18 +175,18 @@ If the user goes off-topic, write a response AFTER the scratchpad that acknowled
 
       // Phase-specific instructions
       let phaseInstruction = "";
-      if (pendingSubjectIntel && config.domainId) {
+      if (pendingDomainOnboarding && config.domainId) {
         phaseInstruction = `
 <phase_instruction priority="CRITICAL">
-PHASE: SUBJECT INTELLIGENCE
+PHASE: DOMAIN ONBOARDING
 The domain is identified as ${domainName}.
-Now you must build a deep model of the subject using the "Subject Intelligence Protocol" defined in the domain skills below.
+Now you must onboard the user using the "Dynamic Domain Onboarding" protocol defined in the domain skills below.
 
 INSTRUCTIONS:
-1. Ignore standard questions about objective/scope/audience for now.
-2. Follow the protocol in the loaded skills exactly.
-3. Ask ONE question at a time.
-4. When you have built a complete model, mark the item as done.
+1. Ignore standard questions about metric bundles or survey structures for now.
+2. Follow Step 1 in the Subject Intelligence Protocol exactly.
+3. Ask ONE question at a time to get the missing context.
+4. When you have collected the context, mark 'domain_onboarding' as done.
 </phase_instruction>
 `;
       }
@@ -238,88 +242,63 @@ When ALL items (including media decision) are MET:
 
 <media_protocol>
 You are strictly forbidden from calling 'finishSurvey' until you have addressed the media requirement.
-1. EVALUATE: Based on the current survey subject, determine if an image, audio, or video would improve response quality.
-2. RECOMMEND: Provide a specific, reasoned recommendation (e.g., "Since you're surveying about a product defect, an image would help respondents visualize the issue").
-3. DECIDE: Ask the user if they want to add media. 
-4. COLLECT: If YES, ask for a description and what they want to learn from it BEFORE calling the tool.
-5. TRIGGER: Once context is captured, call 'requestMediaUpload'.
+1. DELIBERATE: Based on the current survey subject, objective, and audience, decide if adding media (image, audio, or video) would significantly improve response quality or clarity.
+2. RECOMMEND & REASON: 
+   - If media is NOT needed: Explain why (e.g., "Since this is a quick internal pulse survey, I recommend keeping it text-only for speed").
+   - If media IS recommended: Suggest a specific type (Image/Audio/Video) and explicitly explain why it fits the objective (e.g., "Given your goal of testing the new UI, a video of the checkout flow would be essential for context").
+3. DECIDE: Ask the user if they agree with your recommendation or want to do something different.
+4. COLLECT: If they want to proceed, ask for a description and learning goal (or propose them yourself if obvious from the context).
+5. TRIGGER: Once context is captured, call 'requestMediaUpload' with the appropriate 'allowedTypes'.
+6. ACKNOWLEDGE: After receiving the tool result (success or skip), acknowledge the user's choice and immediately transition to the <completion_behavior> to finalize the survey.
 </media_protocol>
 
 <media_guidance>
-- NPS/CSAT: Usually no media needed, but a 'Thank You' image can boost engagement.
-- Product Testing: Image/Video is HIGHLY RECOMMENDED.
-- Support/Ticketing: Screenshot/Image is HIGHLY RECOMMENDED.
-- Demographic: No media needed.
+- NPS/CSAT (General): Usually no media needed. Text-only is faster for respondents.
+- Product/UI Testing: Video or High-res Image is HIGHLY RECOMMENDED to anchor specific feedback points.
+- Support/Ticketing: Screenshots are essential to confirm the issue being discussed.
+- Employee Sentiment: A 'Personal Connection' image or a short video from leadership can boost empathy and response rates.
+- Scientific/Academic: Diagram/Image is often needed for stimulus presentation.
+- Market Research: Image (e.g., Logo/Concept) is essential for brand recognition tests.
 </media_guidance>`;
     }
 
     // ------------------------------------------------------------------------
+    // GENERIC FALLBACK (No domain skills loaded) -> DISCOVERY MODE
     // ------------------------------------------------------------------------
-    // GENERIC FALLBACK (No domain skills loaded)
-    // ------------------------------------------------------------------------
-    const collectedInfo = config as any;
-    const progress = Object.entries(REQUIRED_INFORMATION)
-      .map(([key]) => {
-        const collected = collectedInfo[key] != null;
-        return `${key}: ${collected ? "✓" : "○"}`;
-      })
-      .join(" | ");
-
     return `<role>
-You are a professional Survey Creation Specialist.
-You help survey creators design effective conversational surveys.
-You collect information through natural conversation — not a form or checklist.
+You are an expert survey designer and consultant.
+Your goal is to help the user design a high-quality survey by first understanding what they want to achieve.
 Language: ${config?.language ?? "en"}
 </role>
 
 <specialist_mindset>
-You are NOT a generic AI assistant. You are a consultant.
-Your goal is to guide the user to a high-quality survey design.
-Reject vague answers. Demand specificity.
+You are a warm, professional, and helpful consultant. 
+You are NOT a generic AI assistant. You speak as a human expert who is here to guide the user.
 </specialist_mindset>
 
-${this.getChecklistSection()}
+<discovery_mission>
+Your ONLY goal right now is to identify the broad **domain** of the survey.
+Listen to the user's initial request. As soon as you have a general *gist* of the subject and audience, choose ONE of these exact domain IDs (Numbers):
+1: Customer Experience & Satisfaction (products, software, user journeys, NPS)
+2: Market Research & Consumer Intelligence (new concepts, brand awareness)
+3: Workforce & Organizational Development (employee engagement, HR, internal)
+5: Education & Learning Assessment (students, courses, training)
+6: Civic Engagement & Public Opinion (governments, communities, non-profits)
+7: Scientific & Academic Research (academic studies)
+9: Demographic & Social Characterization (population studies)
+10: Infrastructure & Systems Performance (IT, systems, usability)
 
-<current_progress>
-${progress}
-</current_progress>
-
-${this.getSkillsSection()}
-
-${this.getKnowledgeSection()}
-
-${this.getPatternLearningsSection()}
+DO NOT interrogate the user for specific details. As soon as you guess the domain, call the tool silently. The Domain Specialist will handle the detailed onboarding.
+</discovery_mission>
 
 ${this.getReflectionProtocol()}
 
 <rules priority="1">
-1. SUBJECT FIRST: Always identify the specific product/service/experience before anything else
-2. NEVER INFER: Ask explicitly, never assume from context
-3. REQUIRE SPECIFICITY: Reject vague answers
-4. ONE QUESTION AT A TIME: Single focused question, wait for response
-5. ACKNOWLEDGE FIRST: Always acknowledge the user's response before asking the next question
-6. MAINTAIN CONTROL: If the user provides info that is off-topic (e.g. pasting sample data), politely redirect them back to the current design question. Do NOT follow tangents.
-</rules>
-
-<completion_behavior>
-When all required information EXCEPT potentially 'media' is collected:
-1. You MUST execute the <media_protocol> before finalizing.
-
-When ALL information (including media decision) is collected:
-1. Give a brief, confident summary: "Here's what we've designed..."
-2. Say exactly: "Please click the 'Go to Sample Conversations' button below to test your survey."
-3. Then call the 'finishSurvey' tool.
-4. Do NOT ask more questions after this point.
-</completion_behavior>
-
-<media_protocol>
-You are strictly forbidden from calling 'finishSurvey' until you have addressed the media requirement.
-1. EVALUATE: Based on the current survey subject, determine if an image, audio, or video would improve response quality.
-2. RECOMMEND: Provide a specific, reasoned recommendation (e.g., "Since you're surveying about a product defect, an image would help respondents visualize the issue").
-3. DECIDE: Ask the user if they want to add media. 
-4. COLLECT: If YES, ask for a description and what they want to learn from it BEFORE calling the tool.
-5. TRIGGER: Once context is captured, call 'requestMediaUpload'.
-</media_protocol>`;
+1. INITIAL GREETING: If the very first message you receive is 'GREET_USER_START' or 'INITIAL_GREETING_SIGNAL', respond with a warm greeting like: "Hi! I'm looking forward to helping you build a great survey. What are we looking to measure today?"
+2. FAST DISCOVERY: Do not interrogate the user for every detail. You only need the *gist* of their request. If they mention "customers" or "clients", it is Customer Experience. If they mention "employees", it is Workforce.
+3. TRIGGER: As soon as you can guess the matching DOMAIN, immediately call the 'setSurveyDomain' tool with a brief 'summaryOfWhatWeKnow'. 
+4. SILENT TRANSITION: Give NO warnings or explanations that you are calling a tool, switching roles, or picking a domain. Just call the tool silently.
+</rules>`;
   }
 
   // --------------------------------------------------------------------------
@@ -329,6 +308,26 @@ You are strictly forbidden from calling 'finishSurvey' until you have addressed 
 
   getDeepgramFunctions(): VoiceAgentFunction[] {
     return [
+      {
+        name: "setSurveyDomain",
+        description:
+          "Call this tool to lock in the survey domain once you have discovered the subject, audience, and objective.",
+        parameters: {
+          type: "object",
+          properties: {
+            domainId: {
+              type: "number",
+              description: "The exact numeric ID of the chosen domain",
+            },
+            summaryOfWhatWeKnow: {
+              type: "string",
+              description:
+                "A detailed briefing note for the next agent summarizing the Subject, Audience, and Objective.",
+            },
+          },
+          required: ["domainId", "summaryOfWhatWeKnow"],
+        },
+      },
       {
         name: "finishSurvey",
         description:
@@ -379,6 +378,89 @@ You are strictly forbidden from calling 'finishSurvey' until you have addressed 
   getTools(): Record<string, any> {
     const ctx = this.context;
     return {
+      setSurveyDomain: tool({
+        description:
+          "Call this tool to lock in the survey domain once you have a general gist of the subject and audience. This happens silently and does not need to be announced to the user.",
+        inputSchema: z.object({
+          domainId: z
+            .number()
+            .describe(
+              "The exact numeric ID of the chosen domain (e.g., 1, 3, 7)",
+            ),
+          summaryOfWhatWeKnow: z
+            .string()
+            .describe(
+              "A detailed briefing note. Explain the Subject, Audience, and Objective so the next agent doesn't have to ask the user to repeat themselves.",
+            ),
+        }),
+        execute: async ({ domainId, summaryOfWhatWeKnow }) => {
+          if (!ctx.surveyConfig?.id) {
+            return { error: "No active survey available." };
+          }
+
+          await db.transaction(async (tx) => {
+            // 1. Update domain on survey table
+            await tx
+              .update(surveys)
+              .set({ domainId })
+              .where(eq(surveys.id, ctx.surveyConfig!.id));
+
+            // 2. Put 'summaryOfWhatWeKnow' into expertState
+            const currentSurvey = (
+              await tx
+                .select()
+                .from(surveys)
+                .where(eq(surveys.id, ctx.surveyConfig!.id))
+            )[0];
+            if (currentSurvey) {
+              const expertState = (currentSurvey.expertState || {}) as any;
+              await tx
+                .update(surveys)
+                .set({
+                  expertState: {
+                    ...expertState,
+                    established_context: summaryOfWhatWeKnow,
+                  },
+                })
+                .where(eq(surveys.id, ctx.surveyConfig!.id));
+            }
+
+            // 3. Update extractedData
+            const [currentConv] = await tx
+              .select()
+              .from(surveyCreationConversations)
+              .where(
+                eq(surveyCreationConversations.surveyId, ctx.surveyConfig!.id),
+              );
+            if (currentConv) {
+              const currentExtracted = (currentConv.extractedData || {}) as any;
+              await tx
+                .update(surveyCreationConversations)
+                .set({
+                  extractedData: { ...currentExtracted, domainId },
+                })
+                .where(
+                  eq(
+                    surveyCreationConversations.surveyId,
+                    ctx.surveyConfig!.id,
+                  ),
+                );
+            }
+          });
+
+          const loadedSkills = await loadDomainSkills(
+            domainId,
+            "creation",
+            summaryOfWhatWeKnow,
+          );
+
+          return {
+            status: "Domain successfully established.",
+            domainName: loadedSkills?.domainName || "Specialist",
+            action_required: `PHASE: DOMAIN ONBOARDING. You are now the specialist for ${loadedSkills?.domainName || "this domain"}. Immediately ask the user for: 1. The name of the product/service, 2. What it does, and 3. Who the target users are. DO NOT suggest metrics or bundles yet.`,
+          };
+        },
+      }),
       loadSkill: tool({
         description:
           "Load detailed instructions for a specific specialized skill.",
@@ -527,7 +609,7 @@ You are strictly forbidden from calling 'finishSurvey' until you have addressed 
       }),
       requestMediaUpload: tool({
         description:
-          "Request the user to upload media (image, audio, or video) to include in the survey. This is a CLIENT-SIDE tool — do NOT expect a server result. The user will be shown an upload widget in the chat.",
+          "Request the user to upload media (image, audio, or video) to include in the survey. This tool triggers a UI widget. After calling it, you will receive a result indicating if the upload was successful or skipped. You MUST acknowledge this result and then proceed to finalize the survey.",
         inputSchema: z.object({
           reason: z
             .string()
@@ -574,8 +656,8 @@ You are strictly forbidden from calling 'finishSurvey' until you have addressed 
       model: defaultModel,
       system: this.buildSystemPrompt(),
       messages,
+      stopWhen: stepCountIs(5),
       tools: this.getTools(),
-      stopWhen: stepCountIs(10),
       onFinish: async (result) => {
         // Log usage for creation agent
         logUsage({

@@ -1,19 +1,13 @@
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
-import {
-  createUIMessageStream,
-  createUIMessageStreamResponse,
-} from "ai";
+import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 
 import { db } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema";
 import { ConversationManager } from "@/lib/conversation-manager";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
-import {
-  selectModelForConversation,
-  normalizeMessages,
-} from "@/lib/ai";
+import { selectModelForConversation, normalizeMessages } from "@/lib/ai";
 import { getTimeBasedGreeting } from "@/lib/greetings";
 import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
 import type { AgentContext } from "@/lib/agents/types";
@@ -203,7 +197,7 @@ export async function POST(
     const surveyConfig = buildCompleteSurveyConfig(survey);
 
     // AI SDK v6: Normalize UI messages to ModelMessages for proper handling
-    const modelMessages = normalizeMessages(messages);
+    const modelMessages = await normalizeMessages(messages);
 
     // Load conversation context (handling hydration, compression, signals)
     const rollingContext = await ConversationManager.loadOrCreateContext(

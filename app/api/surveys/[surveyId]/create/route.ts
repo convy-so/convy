@@ -131,10 +131,11 @@ export async function POST(
           .join("");
       }
       return {
+        id: msg.id, // Preserve the ID (crucial for filtering)
         role: msg.role,
         content: textContent || "",
         parts: msg.parts,
-        timestamp: new Date().toISOString(),
+        timestamp: msg.timestamp || new Date().toISOString(),
       };
     });
 
@@ -178,7 +179,7 @@ export async function POST(
     }
     // ... other fields are less critical for immediate context, or are handled by extractedData updates
 
-    const normalizedMessages = normalizeMessages(messages);
+    const normalizedMessages = await normalizeMessages(messages);
 
     const outputMessages =
       normalizedMessages.length > 0
@@ -186,8 +187,7 @@ export async function POST(
         : [
             {
               role: "user" as const,
-              content:
-                "Start the conversation by introducing yourself as the expert on this domain and asking the first question.",
+              content: "INITIAL_GREETING_SIGNAL",
             },
           ];
 
