@@ -137,7 +137,7 @@ export async function POST(
     // Deterministic ID for context persistence during this sample session
     const conversationId = `sample:${surveyId}:${conversationNumber}:${session.user.id}`;
 
-    const normalizedMessages = normalizeMessages(messages);
+    const normalizedMessages = await normalizeMessages(messages);
 
     // Load or create rolling context using Manager
     // If it's the first message, force new context to reset previous runs of this sample number

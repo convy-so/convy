@@ -14,62 +14,24 @@
             "TextMode": "Text Mode",
             "VoiceMode": "Voice Mode",
             "CreationMode": {
-                "Title": "AI Designer Mode",
-                "Description": "Choose how you want to build your survey with our expert AI.",
-                "Text": "Text Designer",
-                "Voice": "Voice Designer"
+                "Title": "AI Designer Experience",
+                "Description": "How do you want to collaborate with the AI to build your survey?",
+                "Text": "Text Chat",
+                "TextDescription": "Type messages and iterate on your design step-by-step in a familiar chat interface.",
+                "Voice": "Voice Assistant",
+                "VoiceDescription": "Design your survey hands-free using real-time, natural speech with the AI."
             },
             "RespondentFormat": {
                 "Title": "Participant Experience",
-                "Description": "How should people take this survey? Choose the interface they will use.",
-                "Text": "Text Survey",
-                "Voice": "Voice Survey"
+                "Description": "Choose the final format for people who will take your survey.",
+                "Text": "Text Conversation",
+                "TextDescription": "Respondents answer questions through a standard text-based chat interface.",
+                "Voice": "Immersive Voice",
+                "VoiceDescription": "Respondents talk to a lifelike AI agent that guides them through the survey."
             },
             "PageTitle": "Create a new survey",
             "PageSubtitle": "Select the domain expertise for your survey or describe your needs",
             "AIExpertLabel": "AI Expert",
-            "Domains": {
-                "1": {
-                    "Title": "Customer Experience & Satisfaction",
-                    "Description": "Evaluating a transaction or service that has ALREADY OCCURRED."
-                },
-                "2": {
-                    "Title": "Market Research & Consumer Intelligence",
-                    "Description": "Understanding markets, preferences, and behaviors to inform FUTURE decisions."
-                },
-                "3": {
-                    "Title": "Workforce & Organizational Development",
-                    "Description": "Assessing internal health, effectiveness, and employee sentiment."
-                },
-                "4": {
-                    "Title": "Product Design & User Research",
-                    "Description": "Optimizing usability, accessibility, and interface effectiveness."
-                },
-                "5": {
-                    "Title": "Education & Learning Assessment",
-                    "Description": "Measuring knowledge, skills, learning outcomes, or educational experiences."
-                },
-                "6": {
-                    "Title": "Civic Engagement & Public Opinion",
-                    "Description": "Capturing citizen views on political matters, policy, or community governance."
-                },
-                "7": {
-                    "Title": "Scientific & Academic Research",
-                    "Description": "Conducting rigorous research for generalizable knowledge."
-                },
-                "8": {
-                    "Title": "Health & Patient Experience",
-                    "Description": "Measuring care quality, patient outcomes, and clinical communication."
-                },
-                "9": {
-                    "Title": "Demographic & Social Characterization",
-                    "Description": "Counting, describing, and understanding population profiles."
-                },
-                "10": {
-                    "Title": "Infrastructure & Systems Performance",
-                    "Description": "Evaluating how physical systems or technical platforms are functioning."
-                }
-            },
             "Badges": {
                 "AIDraft": "AI DRAFT",
                 "ReadOnly": "Read Only"
@@ -110,8 +72,7 @@
                 "Speaking": "Speaking",
                 "SpeakingUser": "You're Speaking",
                 "TapToPause": "Tap to Pause",
-                "TapToSpeak": "Tap to Speak",
-                "SelectTopicFirst": "Select Topic First"
+                "TapToSpeak": "Tap to Speak"
             },
             "Completion": {
                 "Title": "Excellent! We're Ready.",
@@ -134,64 +95,10 @@
             "Input": {
                 "Placeholder": "Describe your survey or ask a question...",
                 "VoiceMode": "Switch to Voice Mode",
-                "PlaceholderLocked": "Select a topic above to start...",
+                "PlaceholderLocked": "Type a message to start...",
                 "AddMedia": "Add Context/Media",
                 "Send": "Send",
                 "ActionsTitle": "Actions"
-            },
-            "DomainSelection": {
-                "Title": "Choose your survey path",
-                "Description": "Select a domain to get specialized AI guidance and industry-standard templates."
-            },
-            "SuggestedPrompts": {
-                "1": [
-                    "Create a customer satisfaction survey (CSAT)",
-                    "Map a customer journey touchpoint",
-                    "Measure Net Promoter Score (NPS)",
-                    "Evaluate a support interaction"
-                ],
-                "2": [
-                    "Test a new product concept",
-                    "Analyze market trends",
-                    "Understand pricing sensitivity",
-                    "Conduct a competitor analysis"
-                ],
-                "3": [
-                    "Measure employee engagement",
-                    "Assess organizational culture",
-                    "Gather 360-degree feedback",
-                    "Evaluate manager effectiveness"
-                ],
-                "5": [
-                    "Evaluate a course or training",
-                    "Assess learning outcomes",
-                    "Gather student feedback",
-                    "Review curriculum effectiveness"
-                ],
-                "6": [
-                    "Survey public opinion on a local issue",
-                    "Measure civic engagement",
-                    "Gather community feedback",
-                    "Assess policy support"
-                ],
-                "7": [
-                    "Design a longitudinal study",
-                    "Test a social psychology hypothesis",
-                    "Validate a psychometric scale",
-                    "Conduct an experimental survey"
-                ],
-                "9": [
-                    "Collect demographic data",
-                    "Profile a household",
-                    "Analyze population trends",
-                    "Conduct a census-style survey"
-                ],
-                "10": [
-                    "Report a system outage",
-                    "Evaluate IT infrastructure",
-                    "Log a bug report",
-                    "Assess service reliability"
-                ]
             },
             "Authentication": {
                 "Required": "Authentication Required",
@@ -210,7 +117,6 @@
                 "VoiceSendFailed": "Failed to send voice message",
                 "FinalizeFailed": "Failed to finalize survey. Please try again.",
                 "Finalized": "Survey finalized! Loading sample conversations...",
-                "SaveTopicFailed": "Failed to save topic selection",
                 "GenericError": "An error occurred. Please try again."
             },
             "Feedback": {

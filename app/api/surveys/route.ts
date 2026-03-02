@@ -110,16 +110,14 @@ export async function POST(request: Request) {
 
       survey = insertedSurvey;
 
-      if (domainId) {
-        await tx.insert(surveyCreationConversations).values({
-          id: crypto.randomUUID(),
-          surveyId: surveyId,
-          messages: [],
-          status: "in_progress",
-          extractedData: { domainId },
-          collectedInfo: {},
-        });
-      }
+      await tx.insert(surveyCreationConversations).values({
+        id: crypto.randomUUID(),
+        surveyId: surveyId,
+        messages: [],
+        status: "in_progress",
+        extractedData: domainId ? { domainId } : {},
+        collectedInfo: {},
+      });
     });
 
     return NextResponse.json(survey);

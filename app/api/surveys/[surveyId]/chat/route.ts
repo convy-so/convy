@@ -61,7 +61,7 @@ export async function POST(
       return new Response("Invalid messages", { status: 400 });
     }
 
-    const normalizedMessages = normalizeMessages(messages);
+    const normalizedMessages = await normalizeMessages(messages);
 
     const sanitizedMessages = normalizedMessages.map((msg) => {
       if (msg.role === "user") {
