@@ -506,50 +506,56 @@
     },
     "TeamPage": {
         "Header": {
-            "Title": "Team Management",
-            "Description": "Manage members, roles, and permissions for"
+            "Title": "Gestione Team",
+            "Description": "Gestisci membri, ruoli e permessi per {name}"
         },
         "Stats": {
-            "TotalMembers": "Total Members",
-            "YourRole": "Your Role",
-            "WorkspacePlan": "Workspace Plan",
+            "TotalMembers": "Membri Totali",
+            "YourRole": "Il Tuo Ruolo",
+            "WorkspacePlan": "Piano Workspace",
             "Upgrade": "Upgrade",
-            "Free": "Free"
+            "Free": "Gratis"
         },
         "Permissions": {
-            "Title": "Role Permissions",
-            "Owner": "Owner",
-            "OwnerDesc": "Full access to workspace settings, billing, and team management. Can delete workspace.",
-            "Member": "Member",
-            "MemberDesc": "Can create and manage surveys, view analytics, and collaborate with other members."
+            "Title": "Permessi Ruolo",
+            "Owner": {
+                "Title": "Proprietario",
+                "Description": "Accesso completo a impostazioni, fatturazione e gestione team. Può eliminare il workspace."
+            },
+            "Member": {
+                "Title": "Membro",
+                "Description": "Può creare e gestire sondaggi, visualizzare analisi e collaborare con altri membri."
+            }
         },
         "Upgrade": {
-            "Title": "Need more seats?",
-            "Description": "Upgrade to Pro to add unlimited team members and access advanced collaboration features.",
-            "Button": "Upgrade Plan"
+            "Title": "Hai bisogno di più posti?",
+            "Description": "Passa a Pro per aggiungere membri illimitati e accedere a funzioni di collaborazione avanzate.",
+            "Button": "Aggiorna Piano"
         },
-        "Danger": {
-            "Title": "Danger Zone",
-            "DeleteWorkspace": "Delete Workspace",
-            "DeleteDesc": "Deleting a workspace is permanent and cannot be undone. All surveys and data will be lost.",
-            "LeaveWorkspace": "Leave Workspace",
-            "LeaveDesc": "Leaving this workspace will revoke your access to all surveys and data."
-        },
-        "Modals": {
+        "DangerZone": {
+            "Title": "Zona di Pericolo",
             "Delete": {
-                "Title": "Delete Workspace",
-                "Description": "Are you sure you want to delete \"{name}\"? This action is permanent and will delete all surveys, responses, and members.",
-                "Cancel": "Cancel",
-                "Confirm": "Delete Workspace",
-                "Deleting": "Deleting..."
+                "Description": "L'eliminazione di un workspace è permanente e irreversibile. Tutti i dati andranno persi.",
+                "Button": "Elimina Workspace"
             },
             "Leave": {
-                "Title": "Leave Workspace",
-                "Description": "Are you sure you want to leave \"{name}\"? You will lose access to all surveys and data in this workspace.",
-                "Cancel": "Cancel",
-                "Confirm": "Leave Workspace",
-                "Leaving": "Leaving..."
+                "Description": "Lasciare questo workspace revocherà l'accesso a tutti i sondaggi e dati.",
+                "Button": "Lascia Workspace"
             }
+        },
+        "DeleteModal": {
+            "Title": "Elimina Workspace",
+            "Description": "Sei sicuro di voler eliminare \"{name}\"? Questa azione è permanente e cancellerà tutto.",
+            "Cancel": "Annulla",
+            "Confirm": "Elimina Workspace",
+            "Deleting": "Eliminazione..."
+        },
+        "LeaveModal": {
+            "Title": "Lascia Workspace",
+            "Description": "Sei sicuro di voler lasciare \"{name}\"? Perderai l'accesso a tutti i dati.",
+            "Cancel": "Annulla",
+            "Confirm": "Lascia Workspace",
+            "Leaving": "Uscita..."
         },
         "PersonalSpace": {
             "Title": "Personal Space",
