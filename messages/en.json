@@ -545,6 +545,12 @@
             "Delete": "Delete",
             "Deleting": "Deleting...",
             "Confirm": "Delete Survey"
+        },
+        "Pagination": {
+            "Previous": "Previous",
+            "Next": "Next",
+            "PerPage": "per page",
+            "Showing": "Showing {start} to {end} of {total} surveys"
         }
     },
     "Sidebar": {

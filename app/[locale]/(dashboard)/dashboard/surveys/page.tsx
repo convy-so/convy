@@ -23,6 +23,9 @@ import {
   Play,
   AlertTriangle,
   Mic,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -31,6 +34,7 @@ import { fetchSurveys } from "@/lib/api/surveys";
 import { queryKeys } from "@/lib/query-keys";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/providers/auth-provider";
+import { Button } from "@/components/ui/button";
 
 interface Survey {
   id: string;
@@ -60,6 +64,11 @@ export default function SurveysPage() {
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [surveyToDelete, setSurveyToDelete] = useState<{ id: string; title: string } | null>(null);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [isPageSizeOpen, setIsPageSizeOpen] = useState(false);
 
   const statusConfig: Record<string, { label: string; color: string; bgColor: string; icon: React.ReactNode }> = {
     active: { label: t('Status.Published'), color: "text-emerald-700", bgColor: "bg-emerald-50 border-emerald-200", icon: <Globe className="w-3 h-3" /> },
@@ -177,6 +186,32 @@ export default function SurveysPage() {
     return result;
   }, [surveys, filterTab, searchQuery]);
 
+  // Paginated surveys
+  const paginatedSurveys = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredSurveys.slice(startIndex, startIndex + pageSize);
+  }, [filteredSurveys, currentPage, pageSize]);
+
+  const totalPages = Math.ceil(filteredSurveys.length / pageSize);
+
+  // Change page size and reset to page 1
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setCurrentPage(1);
+    setIsPageSizeOpen(false);
+  };
+
+  // Reset pagination when filters change
+  const handleFilterChange = (tab: FilterTab) => {
+    setFilterTab(tab);
+    setCurrentPage(1);
+  };
+
+  const handleSearchChange = (query: string) => {
+    setSearchQuery(query);
+    setCurrentPage(1);
+  };
+
   const filterTabs: { id: FilterTab; label: string; count: number }[] = [
     { id: "all", label: t('Tabs.All'), count: counts.all },
     { id: "published", label: t('Tabs.Published'), count: counts.published },
@@ -206,7 +241,7 @@ export default function SurveysPage() {
           {filterTabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setFilterTab(tab.id)}
+              onClick={() => handleFilterChange(tab.id)}
               className={cn(
                 "py-3 px-1 border-b-2 font-medium text-sm transition-colors flex items-center gap-2",
                 filterTab === tab.id
@@ -229,17 +264,57 @@ export default function SurveysPage() {
         </nav>
       </div>
 
-      {/* Search Bar */}
-      <div className="flex items-center gap-4">
-        <div className="flex-1 max-w-md relative">
+      {/* Search Bar and Page Size */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex-1 w-full max-w-md relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
             placeholder={t('Search.Placeholder')}
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none transition-all text-sm"
           />
+        </div>
+
+        <div className="flex items-center gap-4">
+          <p className="hidden md:block text-sm text-gray-500 whitespace-nowrap">
+            {t('Pagination.Showing', { 
+              start: (currentPage - 1) * pageSize + 1, 
+              end: Math.min(currentPage * pageSize, filteredSurveys.length), 
+              total: filteredSurveys.length 
+            })}
+          </p>
+
+          <div className="relative">
+            <button
+              onClick={() => setIsPageSizeOpen(!isPageSizeOpen)}
+              className="flex items-center gap-2 px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all "
+            >
+              <span>{pageSize} {t('Pagination.PerPage')}</span>
+              <ChevronDown className={cn("w-4 h-4 transition-transform", isPageSizeOpen && "rotate-180")} />
+            </button>
+            
+            {isPageSizeOpen && (
+              <>
+                <div className="fixed inset-0 z-[60]" onClick={() => setIsPageSizeOpen(false)} />
+                <div className="absolute top-full right-0 mt-2 w-40 bg-white rounded-xl border border-gray-100 shadow-xl z-[70] py-1.5 animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden">
+                  {[10, 20, 50, 100].map((size) => (
+                    <button
+                      key={size}
+                      onClick={() => handlePageSizeChange(size)}
+                      className={cn(
+                        "w-full text-left px-4 py-2 text-sm transition-colors hover:bg-gray-50",
+                        pageSize === size ? "text-gray-900 font-semibold bg-gray-50" : "text-gray-600"
+                      )}
+                    >
+                      {size} {t('Pagination.PerPage')}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -254,8 +329,8 @@ export default function SurveysPage() {
       ) : (
         <>
           {/* Surveys List */}
-          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-            {filteredSurveys.map((survey, index) => {
+          <div className="bg-white rounded-2xl border border-gray-100">
+            {paginatedSurveys.map((survey, index) => {
               const config = statusConfig[survey.status] || statusConfig.draft;
 
               return (
@@ -263,7 +338,9 @@ export default function SurveysPage() {
                   key={survey.id}
                   className={cn(
                     "group flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-gray-50/50 transition-colors",
-                    index !== filteredSurveys.length - 1 ? "border-b border-gray-100" : ""
+                    index !== filteredSurveys.length - 1 ? "border-b border-gray-100" : "",
+                    index === 0 ? "rounded-t-2xl" : "",
+                    index === filteredSurveys.length - 1 ? "rounded-b-2xl" : ""
                   )}
                 >
                   <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">
@@ -421,6 +498,72 @@ export default function SurveysPage() {
               );
             })}
           </div>
+
+          {/* Pagination Controls */}
+          {filteredSurveys.length > 0 && (
+            <div className="flex flex-col items-center justify-between gap-6 mt-8 px-2">
+              {/* Top part: Navigation */}
+              <div className="flex items-center gap-2 w-full justify-center sm:justify-end order-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="rounded-xl h-10 px-4"
+                >
+                  <ChevronLeft className="w-4 h-4 mr-1" />
+                  {t('Pagination.Previous')}
+                </Button>
+                
+                <div className="hidden sm:flex items-center gap-1">
+                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                    let pageNum = i + 1;
+                    if (totalPages > 5 && currentPage > 3) {
+                      pageNum = Math.min(currentPage - 2 + i, totalPages - 4 + i);
+                    }
+                    if (pageNum <= 0) return null;
+                    
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? "default" : "ghost"}
+                        size="sm"
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={cn(
+                          "w-10 h-10 rounded-xl",
+                          currentPage === pageNum ? "bg-gray-900 text-white" : "text-gray-600"
+                        )}
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="rounded-xl h-10 px-4"
+                >
+                  {t('Pagination.Next')}
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              </div>
+
+              {/* Bottom part: Mobile Info */}
+              <div className="flex items-center justify-center w-full order-2 border-t border-gray-100 pt-6 md:hidden">
+                <p className="text-sm text-gray-500">
+                  {t('Pagination.Showing', { 
+                    start: (currentPage - 1) * pageSize + 1, 
+                    end: Math.min(currentPage * pageSize, filteredSurveys.length), 
+                    total: filteredSurveys.length 
+                  })}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Empty State */}
           {filteredSurveys.length === 0 && (

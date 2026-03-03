@@ -44,6 +44,6 @@ export default async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Matcher excluding API, Next.js internals, and static files
-  matcher: ["/((?!api|_next|.*\\..*).*)"],
+  // Matcher excluding API, Next.js internals, Sentry monitoring, and static files
+  matcher: ["/((?!api|monitoring|_next|.*\\..*).*)"],
 };
