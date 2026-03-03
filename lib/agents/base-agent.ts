@@ -71,13 +71,16 @@ export abstract class BaseSpecialistAgent {
     const checklist = this.buildChecklist(this.context.surveyConfig);
     return `
 <success_criteria>
-To succeed, you must complete this checklist:
+To succeed, you must complete this checklist. 
+CRITICAL RULE: You MUST use the 'think_and_respond' tool on EVERY turn. 
+When you satisfy one of these items, include it in the 'state_updates' object of that tool.
+DO NOT WRITE CHECKLISTS OR INTERNAL THOUGHTS IN THE MESSAGE TO THE USER.
 
 REQUIRED:
-${checklist.required.map((i) => `[${i.status === "met" ? "x" : " "}] ${i.description}`).join("\n")}
+${checklist.required.map((i) => `• ID: ${i.id} | Description: ${i.description} | Status: ${i.status.toUpperCase()}`).join("\n")}
 
 ASPIRATIONAL (Try to achieve):
-${checklist.aspirational.map((i) => `[${i.status === "met" ? "x" : " "}] ${i.description}`).join("\n")}
+${checklist.aspirational.map((i) => `• ID: ${i.id} | Description: ${i.description} | Status: ${i.status.toUpperCase()}`).join("\n")}
 </success_criteria>
     `.trim();
   }
@@ -128,7 +131,7 @@ ${checklist.aspirational.map((i) => `[${i.status === "met" ? "x" : " "}] ${i.des
     const p = this.context.situationalPattern;
     if (!p) return "";
 
-    // Extract the core instruction from the stored content (first 3 lines after DESCRIPTION:)
+
     const lines = p.content.split("\n");
     const descStart = lines.findIndex((l) => l.startsWith("DESCRIPTION:"));
     const contextStart = lines.findIndex((l) => l.startsWith("CONTEXT:"));

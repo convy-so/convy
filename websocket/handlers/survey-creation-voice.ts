@@ -173,10 +173,36 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
     // Use the agent's function definitions (converted to Deepgram format)
     const functions = creationAgent.getDeepgramFunctions();
 
+    // Determine greeting based on session state
+    // - New session: warm hello from the agent
+    // - Resume with user spoke last: brief catch-up
+    // - Resume with assistant spoke last: no greeting (user's turn)
+    let greeting: string | undefined;
+    if (this.state.messages.length === 0) {
+      // Brand-new session — start with a warm opening
+      const greetingsByLanguage: Record<string, string> = {
+        en: "Hi! I'm excited to help you build a great survey. What are we looking to measure today?",
+        fr: "Bonjour ! Je suis ravie de vous aider à créer un excellent sondage. Que cherchez-vous à mesurer aujourd'hui ?",
+        de: "Hallo! Ich freue mich Ihnen dabei zu helfen, eine tolle Umfrage zu erstellen. Was möchten Sie heute messen?",
+        es: "¡Hola! Me entusiasma ayudarle a crear una excelente encuesta. ¿Qué queremos medir hoy?",
+        it: "Ciao! Sono entusiasta di aiutarti a creare un ottimo sondaggio. Cosa vogliamo misurare oggi?",
+      };
+      greeting =
+        greetingsByLanguage[this.state.language] ?? greetingsByLanguage.en;
+    } else {
+      const lastMessage = this.state.messages[this.state.messages.length - 1];
+      if (lastMessage.role === "user") {
+        // User spoke last — briefly acknowledge return and continue
+        greeting = "Welcome back! Let me pick up right where we left off.";
+      }
+      // If assistant spoke last, no greeting — it's the user's turn
+    }
+
     return buildVoiceAgentSettings({
       language: this.state.language,
       systemPrompt,
       functions,
+      greeting,
       conversationHistory:
         this.state.messages.length > 0
           ? this.state.messages.map((m) => ({
@@ -198,10 +224,51 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
     );
 
     try {
-      if (event.function_name === "finishSurvey") {
-        const { reason } = event.input;
+      if (event.function_name === "think_and_respond") {
+        // 1. Extract the state updates for background processing/saving
+        const stateUpdates = event.input.state_updates;
+        if (stateUpdates && Object.keys(stateUpdates).length > 0) {
+          console.log(
+            `[SurveyCreationVoiceHandler][think_and_respond] State extracted:`,
+            stateUpdates,
+          );
+          // In creation, extraction is normally run periodically via performExtraction.
+          // This gives us immediate structural data if we want to update state faster.
+        }
+
+        // 2. Extract the text we actually want the TTS to speak
+        const messageToUser =
+          event.input.message_to_user ||
+          "I'm sorry, I'm processing your request.";
+
+        // 3. Complete the function call by giving Deepgram the text to say
+        this.voiceAgent?.sendFunctionCallResponse(
+          event.function_call_id,
+          event.function_name,
+          JSON.stringify(messageToUser),
+        );
+
+        // 4. Also store the assistant's final response in our internal history
+        this.state.messages.push({
+          role: "assistant",
+          content: messageToUser,
+          timestamp: new Date().toISOString(),
+        });
+
+        this.send({
+          type: "conversation_text",
+          role: "assistant",
+          content: messageToUser,
+        });
+
+        // Asynchronously fire extraction logic since state changed
+        this.performExtraction().catch((err) =>
+          console.error("Extraction error during tool call:", err),
+        );
+      } else if (event.function_name === "finishSurvey") {
+        const { summary } = event.input;
         console.log(
-          `[SurveyCreationVoiceHandler] finishSurvey called. Reason: ${reason}`,
+          `[SurveyCreationVoiceHandler] finishSurvey called. Summary: ${summary}`,
         );
 
         // Perform final extraction
@@ -235,6 +302,44 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
             message: "Upload UI presented to user.",
           }),
         );
+      } else if (event.function_name === "setSurveyDomain") {
+        const { domainId, summaryOfWhatWeKnow } = event.input;
+        console.log(
+          `[SurveyCreationVoiceHandler] setSurveyDomain called. Domain: ${domainId}`,
+        );
+
+        // Store domain in state's extractedData (persisted via next performExtraction call
+        // or immediately via extractedData update below)
+        this.state.extractedData = {
+          ...(this.state.extractedData || {}),
+          domainId,
+          summaryOfWhatWeKnow,
+        };
+
+        // Persist domain to surveys table (has domainId column) and extractedData to conversation
+        if (this.state.surveyId) {
+          await Promise.all([
+            db
+              .update(surveys)
+              .set({ domainId: Number(domainId) })
+              .where(eq(surveys.id, this.state.surveyId)),
+            db
+              .update(surveyCreationConversations)
+              .set({ extractedData: this.state.extractedData })
+              .where(
+                eq(surveyCreationConversations.surveyId, this.state.surveyId),
+              ),
+          ]);
+        }
+
+        this.voiceAgent?.sendFunctionCallResponse(
+          event.function_call_id,
+          event.function_name,
+          JSON.stringify({
+            success: true,
+            message: `Domain ${domainId} locked in. Continue with targeted questions.`,
+          }),
+        );
       } else {
         // Unknown function
         this.voiceAgent?.sendFunctionCallResponse(
@@ -251,15 +356,6 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
         JSON.stringify({ error: "Internal error executing function" }),
       );
     }
-  }
-
-  protected getInitialUserInput(): string | null {
-    // Only trigger the AI to start if we don't have history yet
-    if (this.state.messages.length > 0) {
-      return null;
-    }
-    // Trigger the AI to start the survey creation process dynamically
-    return "Start the survey creation conversation. Greet the user warmly and ask about their survey objective.";
   }
 
   protected async onConversationText(

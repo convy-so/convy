@@ -4,6 +4,7 @@ import { surveys, surveyCreationConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
+import { getTimeBasedGreeting } from "@/lib/greetings";
 
 /**
  * Get all surveys for the authenticated user
@@ -110,13 +111,37 @@ export async function POST(request: Request) {
 
       survey = insertedSurvey;
 
+      const initialGreeting = getTimeBasedGreeting("creation", language as any);
+
       await tx.insert(surveyCreationConversations).values({
         id: crypto.randomUUID(),
         surveyId: surveyId,
-        messages: [],
+        messages: [
+          {
+            id: nanoid(),
+            role: "assistant",
+            content: initialGreeting,
+            timestamp: new Date().toISOString(),
+          },
+        ],
         status: "in_progress",
         extractedData: domainId ? { domainId } : {},
-        collectedInfo: {},
+        collectedInfo: {
+          objective: false,
+          targetAudience: false,
+          scope: false,
+          successCriteria: false,
+          constraints: false,
+          hypotheses: false,
+          tone: false,
+          requiredQuestions: false,
+          metrics: false,
+          personalInfo: false,
+          subjectDefined: false,
+          domainIdentified: false,
+          media: false,
+          subjectModelComplete: false,
+        },
       });
     });
 

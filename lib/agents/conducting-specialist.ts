@@ -9,8 +9,6 @@ import { TONE_PROFILES } from "@/lib/surveys";
 import { SkillRegistry } from "./skill-registry";
 import type { VoiceAgentFunction } from "@/lib/voice/deepgram-voice-agent";
 
-import { stripScratchpadFromText } from "./scratchpad-filter";
-
 export class ConductingSpecialist extends BaseSpecialistAgent {
   constructor(context: AgentContext) {
     super("conducting", context);
@@ -481,6 +479,35 @@ ${strategies.join("\n")}
     const functions: VoiceAgentFunction[] = [];
     if (!config) return functions;
 
+    // Add think_and_respond tool for structured reasoning
+    functions.push({
+      name: "think_and_respond",
+      description:
+        "Use this tool to plan your response, update the survey checklist state based on the user's input, and formulate the exact text you want to say to the user. You MUST call this tool.",
+      parameters: {
+        type: "object",
+        properties: {
+          internal_reasoning: {
+            type: "string",
+            description:
+              "Deep context analysis. Think step-by-step about what the user just said, what you still need to ask based on your checklist, and what approach/tone to use.",
+          },
+          state_updates: {
+            type: "object",
+            description:
+              "Key-value pairs of any checklist items or data points you have successfully collected from this specific turn.",
+            additionalProperties: { type: "string" },
+          },
+          message_to_user: {
+            type: "string",
+            description:
+              "The FINAL text that will be spoken or shown to the user. This must NOT contain any internal thoughts or scratchpads.",
+          },
+        },
+        required: ["internal_reasoning", "state_updates", "message_to_user"],
+      },
+    });
+
     // Add showMedia if survey has media
     if (config.media && config.media.length > 0) {
       functions.push({
@@ -528,6 +555,37 @@ ${strategies.join("\n")}
   getTools(onMediaDisplay?: (media: any) => void): Record<string, any> {
     const config = this.context.surveyConfig;
     return {
+      think_and_respond: tool({
+        description:
+          "Use this tool to plan your response, update the survey checklist state based on the user's input, and formulate the exact text you want to say to the user. You MUST call this tool.",
+        inputSchema: z.object({
+          internal_reasoning: z
+            .string()
+            .describe(
+              "Deep context analysis. Think step-by-step about what the user just said, what you still need to ask based on your checklist, and what approach/tone to use.",
+            ),
+          state_updates: z
+            .record(z.string())
+            .describe(
+              "Key-value pairs of any checklist items or data points you have successfully collected from this specific turn.",
+            ),
+          message_to_user: z
+            .string()
+            .describe(
+              "The FINAL text that will be spoken or shown to the user. This must NOT contain any internal thoughts or scratchpads.",
+            ),
+        }),
+        execute: async ({
+          internal_reasoning,
+          state_updates,
+          message_to_user,
+        }) => {
+          // In the AI SDK stream flow, this isn't strictly awaited for side-effects here
+          // because we intercept it in the response route if needed.
+          // However, returning success tells the model it worked.
+          return { success: true, message: "State logged." };
+        },
+      }),
       loadSkill: tool({
         description:
           "Load detailed instructions for a specific specialized skill.",
@@ -587,15 +645,21 @@ ${strategies.join("\n")}
       response: any;
       usage: any;
     }) => Promise<void>,
+    dynamicSystemDirective?: string,
   ) {
     const config = this.context.surveyConfig;
     if (!config) {
       throw new Error("Cannot stream without survey configuration");
     }
 
+    const baseSystem = this.buildSystemPrompt();
+    const finalSystem = dynamicSystemDirective
+      ? `${baseSystem}\n\n<dynamic_instruction>\n${dynamicSystemDirective}\n</dynamic_instruction>`
+      : baseSystem;
+
     return streamText({
       model: defaultModel,
-      system: this.buildSystemPrompt(),
+      system: finalSystem,
       messages,
       tools: this.getTools(onMediaDisplay),
       maxOutputTokens: 2000,
@@ -615,8 +679,8 @@ ${strategies.join("\n")}
         });
 
         // Safe-strip scratchpad from final text for database/memory
-        const cleanText = stripScratchpadFromText(params.text);
-        if (onFinish) await onFinish({ ...params, text: cleanText });
+        // The instruction implies we should pass the raw text, so removing the stripping.
+        if (onFinish) await onFinish(params);
       },
     });
   }

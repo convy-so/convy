@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo, Suspense, useId } from "react";
+import { useState, useRef, useEffect, useMemo, Suspense, useId } from "react";
 import { useSearchParams, useParams } from "next/navigation";
 import { useRouter, Link } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
 import { useChat } from "@ai-sdk/react";
-import { UIMessage as SDKMessage, DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
+import { UIMessage as SDKMessage, DefaultChatTransport } from "ai";
 import {
   Sparkles,
   Send,
@@ -17,18 +17,8 @@ import {
   Paperclip,
   Play,
   CheckCircle2,
-  Globe,
-  ChevronDown,
   Keyboard,
-  Plus,
-  Smile,
-  Target,
   Users,
-  GraduationCap,
-  Flag,
-  Beaker,
-  Fingerprint,
-  Server,
   Upload,
   FileAudio,
   FileVideo,
@@ -74,8 +64,6 @@ function CreateSurveyContent() {
   const [wasStartedWithVoice, setWasStartedWithVoice] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false); // Track when user is actively speaking
 
-  const [shouldStartAi, setShouldStartAi] = useState(false);
-
 
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
@@ -98,6 +86,10 @@ function CreateSurveyContent() {
     // Track if started with voice for this builder session
     if (isVoiceMode) {
       setWasStartedWithVoice(true);
+      console.log("[Client] 🎤 Pre-emptive mic request for voice mode...");
+      voiceWs.startRecording().catch(err => {
+        console.error("[Client] Failed to get early mic access:", err);
+      });
     }
 
     // 2. Ensure draft exists
@@ -109,12 +101,14 @@ function CreateSurveyContent() {
         console.error("Failed to create draft", e);
         toast.error(t("Toasts.InitFailed"));
         setIsConnecting(false);
+        voiceWs.stopRecording(); // Cleanup if failed
         return;
       }
     }
 
     if (!currentSurveyId) {
       setIsConnecting(false);
+      voiceWs.stopRecording();
       return;
     }
 
@@ -122,15 +116,13 @@ function CreateSurveyContent() {
     await updateSurveyMode(isVoiceSurvey);
 
     try {
-      // 4. Update Backend
+      // 4. Update Backend - NOTE: We do NOT send messages here to avoid clobbering the pre-cached greeting
       await fetch(`/api/surveys/${currentSurveyId}/create`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...(messages.length === 0 ? { messages: [] } : {})
-        })
+        body: JSON.stringify({}) // Intentionally empty — greeting is stored server-side at draft creation
       });
-      console.log(`[Client] Started discovery conversation for survey ${currentSurveyId}`);
+      console.log(`[Client] Prepared discovery for survey ${currentSurveyId}`);
 
       // Persist creation modality if voice was chosen
       if (isVoiceMode) {
@@ -138,25 +130,52 @@ function CreateSurveyContent() {
       }
 
       // 5. Trigger Interaction based on Mode
-      if (messages.length === 0) {
-        if (isVoiceMode) {
-          // VOICE MODE: Start recording sequence
-          await toggleRecording();
-        } else {
-          // TEXT MODE: Trigger AI Text Greeting
-          setShouldStartAi(true);
+      if (isVoiceMode) {
+        // VOICE MODE: Connection is triggered via useEffect monitoring (isVoiceMode && surveyId)
+        // or we can call connect() explicitly here now that we have surveyId
+        console.log("[Client] Voice mode active, initiating connection...");
+        await voiceWs.connect();
+      } else {
+        // TEXT MODE: Load the cached greeting from server into the messages state
+        console.log("[Client] Text mode active, loading cached greeting from server...");
+        try {
+          const greetingRes = await fetch(`/api/surveys/${currentSurveyId}/create`);
+          if (greetingRes.ok) {
+            const greetingData = await greetingRes.json();
+            if (greetingData.messages && greetingData.messages.length > 0) {
+              setMessages(greetingData.messages.map((m: any, idx: number) => ({
+                id: m.id || `msg-${idx}-${Date.now()}`,
+                role: m.role,
+                displayedContent: m.content || m.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join(''),
+                isTyping: false,
+                parts: m.parts || (m.content ? [{ type: 'text', text: m.content }] : [])
+              })));
+              console.log(`[Client] Loaded ${greetingData.messages.length} message(s) incl. greeting.`);
+            }
+            if (greetingData.collectedInfo) setCollectedInfo(greetingData.collectedInfo);
+            if (greetingData.extractedData) setExtractedData(greetingData.extractedData);
+          }
+        } catch (greetingErr) {
+          console.error("[Client] Failed to load cached greeting:", greetingErr);
+          // Non-fatal — user can still start the conversation by typing
         }
       }
 
       // Reset loading state on success
-      setIsConnecting(false);
+      // NOTE: For voice mode, isConnecting stays true until greeting audio plays.
+      // The playback useEffect (watches hasAudioPlayed) will clear it.
+      if (!isVoiceMode) {
+        setIsConnecting(false);
+      }
 
     } catch (error) {
       console.error("Failed to start discovery:", error);
       toast.error(t("Toasts.SaveTopicFailed"));
       setIsConnecting(false);
+      voiceWs.stopRecording();
     }
   };
+
 
   const updateSurveyMode = async (isVoice: boolean) => {
     setIsVoiceSurvey(isVoice);
@@ -186,7 +205,13 @@ function CreateSurveyContent() {
   // Local input state for the chat (AI SDK v6 migration)
   const [input, setInput] = useState("");
 
-  // Chat state managed by useChat
+  // Refs to track the latest surveyId and extractedData without causing useChat to reinitialize
+  const surveyIdRef = useRef<string | null>(surveyId);
+  const extractedDataRef = useRef<any>(extractedData);
+
+  useEffect(() => { surveyIdRef.current = surveyId; }, [surveyId]);
+  useEffect(() => { extractedDataRef.current = extractedData; }, [extractedData]);
+
   const {
     messages,
     setMessages,
@@ -194,15 +219,27 @@ function CreateSurveyContent() {
     sendMessage,
     addToolOutput,
   } = useChat({
-    id: surveyId || "new-survey",
+    id: "survey-creation-session",
     transport: new DefaultChatTransport({
-      api: surveyId ? `/api/surveys/${surveyId}/create` : "/api/surveys/create-draft",
-      body: {
-        extractedData: extractedData
-      }
+      api: "/api/surveys/create-draft", // base default — overridden per-request via prepareSendMessagesRequest
+      prepareSendMessagesRequest: async ({ api, body, id, messages: msgs, trigger, messageId }) => {
+        const sid = surveyIdRef.current;
+
+        return {
+          api: sid ? `/api/surveys/${sid}/create` : api,
+          body: {
+            id,
+            messages: msgs,
+            trigger,
+            messageId,
+            ...(body || {}),
+            extractedData: extractedDataRef.current,
+          },
+        };
+      },
+
     }),
     messages: [],
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onToolCall: async ({ toolCall }) => {
       console.log("[Client] Tool call received:", toolCall);
       if (toolCall.toolName === 'researchBestPractices') {
@@ -300,8 +337,7 @@ function CreateSurveyContent() {
       } else if (data.type === "transcription_interim") {
         console.log("[Client] 💬 Interim transcription:", data.text);
       } else if (data.type === "survey_state_loaded") {
-        console.log("[Client] Survey state loaded on server — safe to start conversation");
-        setSurveyStateLoaded(true);
+        // handled below — deduplicated
       } else if (data.type === "survey_completed") {
         console.log("[Client] ✅ Survey completed signal received from Voice Agent");
         // Refresh survey data to ensure we have the latest status/extracted info
@@ -362,13 +398,10 @@ function CreateSurveyContent() {
 
 
 
-  // Auto-connect for Voice Mode when Survey ID becomes available
-  useEffect(() => {
-    if (isVoiceMode && surveyId && voiceWs.status === "disconnected" && messages.length === 0) {
-      console.log("[Client] Auto-connecting voice for new survey...");
-      voiceWs.connect();
-    }
-  }, [isVoiceMode, surveyId, voiceWs.status, messages.length, voiceWs]);
+  // NOTE: Auto-connect for voice runs via handleStart → voiceWs.connect().
+  // The useEffect below is intentionally removed to prevent a double-connect race
+  // when handleStart is the entry point. Reconnection on page reload (surveyId from URL)
+  // is handled by the useEffect at the bottom of the component.
 
   // Trigger conversation start once server state is loaded
   useEffect(() => {
@@ -651,27 +684,7 @@ function CreateSurveyContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const triggerAIInitialResponse = async () => {
-    if (authError || messages.length > 0) return;
 
-    try {
-      await sendMessage({
-        id: "init_ping_hidden",
-        role: "user",
-        parts: [{ type: 'text', text: "INITIAL_GREETING_SIGNAL" }],
-      } as any);
-    } catch (error) {
-      console.error("Failed to trigger AI response:", error);
-      toast.error(t("Toasts.InitFailed"));
-    }
-  };
-
-  useEffect(() => {
-    if (shouldStartAi && surveyId) {
-      triggerAIInitialResponse();
-      setShouldStartAi(false);
-    }
-  }, [shouldStartAi, surveyId]);
 
   // Poll for extracted data to update preview
   const fetchUpdatedData = async () => {
@@ -680,12 +693,13 @@ function CreateSurveyContent() {
       const res = await fetch(`/api/surveys/${encodeURIComponent(surveyId)}/create`);
       if (res.ok) {
         const data = await res.json();
-        // Only update if we get valid data
+        // Always update collectedInfo if present — do NOT gate it on extractedData being non-empty
+        if (data.collectedInfo) {
+          setCollectedInfo(data.collectedInfo);
+        }
+        // Only update extractedData if there's meaningful data to avoid unnecessary re-renders
         if (data.extractedData && Object.keys(data.extractedData).length > 0) {
           setExtractedData(data.extractedData);
-          if (data.collectedInfo) {
-            setCollectedInfo(data.collectedInfo);
-          }
         }
       }
     } catch (err) {
@@ -696,6 +710,7 @@ function CreateSurveyContent() {
       console.error("Failed to fetch extraction data", err);
     }
   };
+
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
@@ -767,59 +782,16 @@ function CreateSurveyContent() {
     setIsVoiceMode(newMode);
     if (newMode) {
       setSurveyStateLoaded(false);
+      // 🔥 Also initiate recording here as this is triggered by a user click
+      voiceWs.startRecording().catch(err => {
+        console.error("[Client] Failed to start recording on mode toggle:", err);
+      });
       voiceWs.connect();
     } else {
       voiceWs.disconnect();
     }
   };
 
-  const [hasSentStartSignal, setHasSentStartSignal] = useState(false);
-
-  const toggleRecording = async () => {
-    // Voice-activated mode with AI-First flow
-    // 1. Start recording (get permissions) - NO MUTING
-    // 2. Connect critical WebSocket
-    // 3. Wait for WS connected
-    // 4. Send start signal
-    if (!voiceWs.isRecording) {
-      console.log("[Client] 🎤 Starting recording sequence...");
-      setIsConnecting(true);
-      setHasGreetingPlayed(false);
-      setHasSentStartSignal(false);
-
-      try {
-        // 1. Start Microphone
-        await voiceWs.startRecording();
-        console.log("[Client] ✅ Recording started");
-
-        // 2. Connect WebSocket explicitly
-        console.log("[Client] 🔌 Establishing WebSocket connection...");
-        await voiceWs.connect();
-
-        // 3. Wait for connection to be ready (Polling with timeout)
-        let attempts = 0;
-        const maxAttempts = 50;
-
-        while (voiceWs.statusRef.current !== "connected" && attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-          attempts++;
-        }
-
-        if (voiceWs.statusRef.current !== "connected") {
-          throw new Error("WebSocket connection timed out based on statusRef");
-        }
-
-        console.log("[Client] 🟢 WebSocket connected. Sending start signal...");
-        setIsConnecting(false);
-
-      } catch (err) {
-        console.error("[Client] ❌ Failed to start voice session:", err);
-        setIsConnecting(false);
-        voiceWs.stopRecording(); // Cleanup
-        toast.error("Failed to connect. Please try again.");
-      }
-    }
-  };
 
   const handleGoToSampleConversations = async () => {
     if (!surveyId) return;
@@ -1277,9 +1249,7 @@ function CreateSurveyContent() {
                               </>
                             )}
 
-                            <button
-                              onClick={toggleRecording}
-                              disabled={voiceWs.isRecording || isConnecting} // Disable if recording or connecting
+                            <div
                               className={cn(
                                 "relative w-32 h-32 rounded-full flex flex-col items-center justify-center transition-all duration-300 border-4 shadow-2xl z-20",
                                 isSpeaking
@@ -1290,7 +1260,7 @@ function CreateSurveyContent() {
                                       ? "bg-indigo-50 border-indigo-300 text-indigo-600 scale-105"
                                       : voiceWs.isRecording
                                         ? "bg-emerald-50 border-emerald-400 text-emerald-600 scale-105"
-                                        : "bg-white border-gray-200 text-slate-600 hover:scale-105 hover:bg-slate-50 hover:border-slate-300 cursor-pointer"
+                                        : "bg-white border-gray-200 text-slate-600"
                               )}
                             >
                               <div className="flex flex-col items-center gap-2">
@@ -1315,16 +1285,25 @@ function CreateSurveyContent() {
                                 ) : voiceWs.isPlaying ? (
                                   <>
                                     <Sparkles className="w-10 h-10 animate-spin-slow" />
-                                    <span className="text-xs font-medium">{t("Status.Listening")}...</span>
+                                    <span className="text-xs font-medium text-indigo-600">{t("Chat.Speaking")}</span>
+                                  </>
+                                ) : voiceWs.isRecording ? (
+                                  <>
+                                    <div className="flex gap-1.5 items-center h-6">
+                                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
+                                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+                                    </div>
+                                    <span className="text-xs font-medium text-emerald-600">{t("Status.Listening")}</span>
                                   </>
                                 ) : (
                                   <>
-                                    <Mic className="w-10 h-10 opacity-80" />
-                                    <span className="text-xs font-medium text-gray-400">{t("Status.TapToSpeak")}</span>
+                                    <MicOff className="w-10 h-10 opacity-30" />
+                                    <span className="text-xs font-medium text-gray-400">{t("Status.Ready")}</span>
                                   </>
                                 )}
                               </div>
-                            </button>
+                            </div>
                           </div>
 
                           {/* Text Hint */}
@@ -1376,7 +1355,7 @@ function CreateSurveyContent() {
 
                   {/* Messages Scroll Area */}
                   <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
-                    {messages.filter(m => m.id !== "init_ping_hidden" && (m as any).content !== "INITIAL_GREETING_SIGNAL").map((message) => (
+                    {messages.map((message) => (
                       <div
                         key={message.id}
                         className={cn(
@@ -1410,7 +1389,18 @@ function CreateSurveyContent() {
                           {message.role === "assistant" ? (
                             <div className="text-[15px] leading-7">
                               <MarkdownMessage
-                                content={(message as any).content || (message.parts?.filter(p => p.type === 'text').map((p: any) => p.text).join('') || "")}
+                                content={
+                                  // Priority 1: standard content field (set after streaming completes)
+                                  (message as any).content ||
+                                  // Priority 2: text parts (when model writes text-deltas directly)
+                                  (message.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('')) ||
+                                  // Priority 3: think_and_respond.message_to_user (when model routes all speech through the tool)
+                                  (message.parts?.find((p: any) =>
+                                    p.type === 'tool-think_and_respond' &&
+                                    (p.state === 'input-available' || p.state === 'output-available')
+                                  ) as any)?.input?.message_to_user ||
+                                  ""
+                                }
                                 className="text-gray-800 prose-sm"
                               />
                               {/* Single unified path — AI SDK uses type 'tool-{toolName}' for tool parts */}
@@ -1422,6 +1412,10 @@ function CreateSurveyContent() {
                                 if (!part.type?.startsWith('tool-')) return null;
 
                                 const toolName = part.type.replace(/^tool-/, '');
+
+                                // think_and_respond is an internal AI tool — its message_to_user is already
+                                // shown via MarkdownMessage above. Never render it as a visible block.
+                                if (toolName === 'think_and_respond') return null;
 
                                 const toolCallId = part.toolCallId;
 

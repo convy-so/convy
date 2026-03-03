@@ -1,14 +1,13 @@
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
-  type ModelMessage,
 } from "ai";
 import { and, eq, lt } from "drizzle-orm";
 
 import { db } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { createUIMessageFilter } from "@/lib/agents/scratchpad-filter";
+
 import {
   MAX_SAMPLE_CONVERSATIONS,
   buildCompleteSurveyConfig,
@@ -213,9 +212,7 @@ export async function POST(
 
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
-        writer.merge(
-          result.toUIMessageStream().pipeThrough(createUIMessageFilter()),
-        );
+        writer.merge(result.toUIMessageStream());
       },
     });
 

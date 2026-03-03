@@ -18,6 +18,8 @@ import {
     Keyboard,
     Volume2,
 } from "lucide-react";
+import { queryKeys } from "@/lib/query-keys";
+import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useTranslations } from "next-intl";
@@ -45,7 +47,8 @@ export default function SampleReviewPage() {
     const t = useTranslations("Survey.SampleReview");
     const params = useParams();
     const router = useRouter();
-    const { user } = useAuth();
+    const queryClient = useQueryClient();
+    const { user, session } = useAuth();
     const surveyId = params.surveyId as string;
 
     const [isConfirming, setIsConfirming] = useState(false);
@@ -58,6 +61,12 @@ export default function SampleReviewPage() {
 
     const [commentText, setCommentText] = useState("");
     const [isCommenting, setIsCommenting] = useState(false);
+
+    // Publish Modal State
+    const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+    const [publishTitle, setPublishTitle] = useState("");
+    const [publishDescription, setPublishDescription] = useState("");
+
 
     const VisualizerRing = ({ isRecording, size = "normal" }: { isRecording: boolean; size?: "normal" | "large" }) => (
         <div className="relative flex items-center justify-center">
@@ -107,6 +116,13 @@ export default function SampleReviewPage() {
     const canRetry = samplesRemaining > 0;
 
     const isOwnerOrEditor = survey?.userId === user?.id || survey?.collaborators?.includes(user?.id || "");
+
+    // A workspace context exists if the current session is in a workspace
+    // OR the survey itself belongs to an organization.
+    const isWorkspaceContext = !!(
+        (session as any)?.activeOrganizationId ||
+        survey?.organizationId
+    );
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -205,16 +221,28 @@ export default function SampleReviewPage() {
             setShowTranscript(false);
             console.log("Connecting voice websocket...");
             voiceWs.connect();
-        } else if (inputMode === "text" && messages.length === 0) {
-            sendMessage({
-                id: "init_ping_hidden",
-                role: "user",
-                parts: [{ type: 'text', text: "Start the conversation now. Greet the participant according to the system prompt instructions." }]
-            } as any);
+        } else if (inputMode === "text") {
+            const lastMessage = messages[messages.length - 1];
+            const isNew = messages.length === 0;
+            const userSpokeLast = lastMessage?.role === "user";
+
+            if (isNew || userSpokeLast) {
+                console.log("[Sample Review] Triggering AI catch-up/start (Text Mode)...");
+                sendMessage({
+                    id: isNew ? "init_ping_hidden" : `resume_ping_${Date.now()}`,
+                    role: "user",
+                    parts: [{
+                        type: 'text',
+                        text: isNew
+                            ? "Start the conversation now. Greet the participant according to the system prompt instructions."
+                            : "The user has returned to this sample survey review. Respond to their last input and continue the interview naturally."
+                    }]
+                } as any);
+            }
         }
 
         setHasAutoGreeted(true);
-    }, [survey, inputMode, hasAutoGreeted]);
+    }, [survey, inputMode, hasAutoGreeted, messages, sendMessage]);
 
     // Initialize inputMode based on survey type
     useEffect(() => {
@@ -291,25 +319,57 @@ export default function SampleReviewPage() {
         }
     };
 
-    const handleConfirm = async () => {
-        if (!confirm(t("ConfirmDialog.Message"))) return;
+    // Opens the new publish modal and populates current title/desc
+    const handleConfirm = () => {
+        setPublishTitle(survey?.title || "");
+        setPublishDescription(survey?.description || survey?.expertState?.objective?.context || "");
+        setIsPublishModalOpen(true);
+    };
+
+    // Actually perform the network request from the modal
+    const submitPublish = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
 
         setIsConfirming(true);
         try {
+            const finalTitle = publishTitle.trim() || survey?.title;
+            const finalDesc = publishDescription.trim();
             const response = await fetch(`/api/surveys/${surveyId}/publish`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({}),
+                body: JSON.stringify({
+                    title: finalTitle,
+                    description: finalDesc
+                }),
             });
 
             if (response.ok) {
                 toast.success(t("Toasts.Confirmed"));
+                setIsPublishModalOpen(false);
+
+                // Optimistically update the query cache so the destination page doesn't flash the old State & "sample_review" button
+                queryClient.setQueryData(queryKeys.surveys.detail(surveyId), (oldData: any) => {
+                    if (!oldData || !oldData.survey) return oldData;
+                    return {
+                        ...oldData,
+                        survey: {
+                            ...oldData.survey,
+                            status: "active",
+                            title: finalTitle,
+                            description: finalDesc
+                        }
+                    };
+                });
+
+                // Invalidate the query entirely so an actual fresh background fetch begins as well
+                queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
+
                 router.push(`/dashboard/surveys/${surveyId}`);
             } else {
                 toast.error(t("Toasts.ConfirmFailed"));
             }
         } catch (error) {
-            toast.error(t("Toasts.Error")); // Was "An error occurred" - generic
+            toast.error(t("Toasts.Error"));
         } finally {
             setIsConfirming(false);
         }
@@ -668,50 +728,115 @@ export default function SampleReviewPage() {
                         </>
                     )}
 
-                    {/* Team Comments Section */}
-                    <div className="pt-2 flex flex-col flex-1">
-                        <div className="mb-4">
-                            <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-1 flex items-center gap-2">
-                                <MessageSquare className="w-3 h-3 text-gray-500" />
-                                Team Comments
-                            </h3>
-                            <p className="text-xs text-gray-500 leading-relaxed">
-                                Discuss this sample with your team.
-                            </p>
-                        </div>
+                    {/* Team Comments Section — only visible when in a workspace context */}
+                    {isWorkspaceContext && (
+                        <div className="pt-2 flex flex-col flex-1">
+                            <div className="mb-4">
+                                <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-1 flex items-center gap-2">
+                                    <MessageSquare className="w-3 h-3 text-gray-500" />
+                                    Team Comments
+                                </h3>
+                                <p className="text-xs text-gray-500 leading-relaxed">
+                                    Discuss this sample with your team.
+                                </p>
+                            </div>
 
-                        <div className="flex-1 overflow-y-auto mb-4 space-y-4">
-                            {/* We don't have direct access to the conversation comments easily without fetching the specific conversation. For now, since comments are per-conversation, let's just show an input to post them. The best UX would fetch current comments via a hook. We'll leave the display simplified or query them if possible. */}
-                            <div className="text-sm text-gray-500 italic p-4 bg-white rounded-xl border border-gray-100 shadow-sm text-center">
-                                Comments are saved for your team to review.
+                            <div className="flex-1 overflow-y-auto mb-4 space-y-4">
+                                <div className="text-sm text-gray-500 italic p-4 bg-white rounded-xl border border-gray-100 shadow-sm text-center">
+                                    Comments are saved for your team to review.
+                                </div>
+                            </div>
+
+                            <div className="mt-auto space-y-3">
+                                <textarea
+                                    value={commentText}
+                                    onChange={(e) => setCommentText(e.target.value)}
+                                    placeholder="Add a comment..."
+                                    className="w-full h-24 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-gray-900/5 focus:border-gray-300 outline-none resize-none bg-white text-sm placeholder:text-gray-400"
+                                />
+                                <button
+                                    onClick={handleAddComment}
+                                    disabled={!commentText.trim() || isCommenting}
+                                    className={cn(
+                                        "w-full py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 shadow-sm",
+                                        commentText.trim()
+                                            ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                                            : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                                    )}
+                                >
+                                    {isCommenting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                                    Post Comment
+                                </button>
                             </div>
                         </div>
-
-                        <div className="mt-auto space-y-3">
-                            <textarea
-                                value={commentText}
-                                onChange={(e) => setCommentText(e.target.value)}
-                                placeholder="Add a comment..."
-                                className="w-full h-24 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-gray-900/5 focus:border-gray-300 outline-none resize-none bg-white text-sm placeholder:text-gray-400"
-                            />
-                            <button
-                                onClick={handleAddComment}
-                                disabled={!commentText.trim() || isCommenting}
-                                className={cn(
-                                    "w-full py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 shadow-sm",
-                                    commentText.trim()
-                                        ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                                        : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                                )}
-                            >
-                                {isCommenting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                                Post Comment
-                            </button>
-                        </div>
-                    </div>
+                    )}
 
                 </div>
             </div>
+            {/* Publish Modal Overlay */}
+            {isPublishModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md border border-gray-100 overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/50">
+                            <h2 className="text-xl font-semibold text-gray-900">Publish Survey</h2>
+                            <p className="text-sm text-gray-500 mt-1">
+                                Review your survey's details before making it live and shareable.
+                            </p>
+                        </div>
+
+                        <form onSubmit={submitPublish} className="p-6 space-y-5">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">
+                                    Survey Title
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={publishTitle}
+                                    onChange={(e) => setPublishTitle(e.target.value)}
+                                    placeholder="e.g. Q3 Customer Satisfaction"
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 focus:border-gray-900 focus:ring-1 focus:ring-gray-900 rounded-xl transition-all outline-none text-sm text-gray-900 placeholder:text-gray-400"
+                                    disabled={isConfirming}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">
+                                    Description <span className="text-gray-400 font-normal">(Optional)</span>
+                                </label>
+                                <textarea
+                                    value={publishDescription}
+                                    onChange={(e) => setPublishDescription(e.target.value)}
+                                    placeholder="Briefly describe the purpose of this survey..."
+                                    rows={3}
+                                    className="w-full px-4 py-3 bg-white border border-gray-200 focus:border-gray-900 focus:ring-1 focus:ring-gray-900 rounded-xl transition-all outline-none resize-none text-sm text-gray-900 placeholder:text-gray-400"
+                                    disabled={isConfirming}
+                                />
+                            </div>
+
+                            <div className="pt-2 flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsPublishModalOpen(false)}
+                                    disabled={isConfirming}
+                                    className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 font-medium text-sm rounded-xl hover:bg-gray-50 hover:text-gray-900 transition-colors disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={!publishTitle.trim() || isConfirming}
+                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-900 text-white font-medium text-sm rounded-xl hover:bg-black transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isConfirming ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                                    Confirm Publish
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
+

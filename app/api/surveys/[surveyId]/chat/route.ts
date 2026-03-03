@@ -18,7 +18,7 @@ import {
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import { ConversationManager } from "@/lib/conversation-manager";
 import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
-import { createUIMessageFilter } from "@/lib/agents/scratchpad-filter";
+
 import type { AgentContext } from "@/lib/agents/types";
 
 export const maxDuration = 300;
@@ -233,9 +233,7 @@ export async function POST(
 
     const filterStream = createUIMessageStream({
       execute: async ({ writer }) => {
-        writer.merge(
-          result.toUIMessageStream().pipeThrough(createUIMessageFilter()),
-        );
+        writer.merge(result.toUIMessageStream());
       },
     });
 
