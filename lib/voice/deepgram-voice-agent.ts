@@ -20,6 +20,10 @@ export interface VoiceAgentFunction {
   name: string;
   description: string;
   parameters: Record<string, any>;
+  // client_side MUST be true for the server to route FunctionCallRequests to our client.
+  // If omitted/false, Deepgram tries to handle the function server-side (which fails for
+  // our custom tools) and the FunctionCallRequest never reaches our onFunctionCall handler.
+  client_side?: boolean;
   endpoint?: {
     url: string;
     method: string;
@@ -97,6 +101,9 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
   private ws: WebSocket | null = null;
   private keepAliveInterval: NodeJS.Timeout | null = null;
   private isConnected: boolean = false;
+  // v1 sequencing gates (per Deepgram message flow docs)
+  private isWelcomeReceived: boolean = false; // Set on Welcome → enables Settings to be sent
+  private isSettingsApplied: boolean = false; // Set on SettingsApplied → enables audio streaming
   private settings: VoiceAgentSettings;
 
   constructor(settings: VoiceAgentSettings) {
@@ -125,13 +132,11 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
 
       this.ws.on("open", () => {
         console.log(
-          "[VoiceAgent] WebSocket connected to Deepgram. Sending settings...",
+          "[VoiceAgent] WebSocket connected to Deepgram. Waiting for Welcome...",
         );
         this.isConnected = true;
-
-        // Send Settings message immediately on connection
-        this.sendSettings();
-        this.startKeepAlive();
+        // v1 doc: "Do not send any messages until you receive the Welcome message."
+        // Settings and KeepAlive are sent inside the Welcome handler below.
         resolve();
       });
 
@@ -152,6 +157,8 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
           `[VoiceAgent] WebSocket closed: Code=${code} Reason=${reason.toString()}`,
         );
         this.isConnected = false;
+        this.isWelcomeReceived = false;
+        this.isSettingsApplied = false;
         this.stopKeepAlive();
         this.emit("close", code, reason.toString());
       });
@@ -188,13 +195,29 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
    * Send raw audio data to the Voice Agent
    */
   sendAudio(audioData: Buffer): void {
+    // v1 doc: "Do not send audio until you receive SettingsApplied."
+    if (!this.isSettingsApplied) {
+      return; // Drop audio silently — settings not yet confirmed
+    }
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(audioData);
     }
   }
 
+  sendInjectAgentMessage(text: string): void {
+    console.log(`[VoiceAgent] Injecting agent message: "${text}"`);
+    // Spec: { type: "InjectAgentMessage", message: "..." }
+    // Note: InjectUserMessage (old) used { type: "InjectUserMessage", content: "..." }
+    // InjectAgentMessage triggers the AGENT to say something.
+    this.sendJson({
+      type: "InjectAgentMessage",
+      message: text,
+    });
+  }
+
+  /** @deprecated Use InjectAgentMessage instead (agent speaks proactively) */
   sendInjectUserMessage(text: string): void {
-    console.log(`[VoiceAgent] Injecting user message: "${text}"`);
+    console.log(`[VoiceAgent] Injecting user message (legacy): "${text}"`);
     this.sendJson({
       type: "InjectUserMessage",
       content: text,
@@ -251,6 +274,11 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
     return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
   }
 
+  /** True once SettingsApplied has been received — audio streaming is safe after this. */
+  get settingsApplied(): boolean {
+    return this.isSettingsApplied;
+  }
+
   // ── Private Helpers ──────────────────────────────────────────────────────
 
   private handleMessage(data: Buffer | string, isBinary: boolean): void {
@@ -280,11 +308,17 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
     switch (message.type) {
       case "Welcome":
         console.log("[VoiceAgent] Welcome received:", message.request_id);
+        this.isWelcomeReceived = true;
+        // v1 doc: send Settings only after Welcome, then start KeepAlive
+        this.sendSettings();
+        this.startKeepAlive();
         this.emit("welcome", message);
         break;
 
       case "SettingsApplied":
         console.log("[VoiceAgent] Settings applied successfully");
+        this.isSettingsApplied = true;
+        // v1 doc: audio streaming is now safe
         this.emit("settingsApplied", message);
         break;
 
@@ -399,7 +433,7 @@ export function buildVoiceAgentSettings(options: {
   language: SupportedLanguage;
   tone?: "casual" | "formal" | "playful" | "empathetic";
   systemPrompt: string;
-  // greeting removed from settings builder
+  greeting?: string; // Native Deepgram greeting — spoken before waiting for user
   functions?: VoiceAgentFunction[];
   conversationHistory?: Array<{ role: string; content: string }>;
 }): VoiceAgentSettings {
@@ -407,6 +441,7 @@ export function buildVoiceAgentSettings(options: {
     language,
     tone = "casual",
     systemPrompt,
+    greeting,
     functions,
     conversationHistory,
   } = options;
@@ -416,18 +451,29 @@ export function buildVoiceAgentSettings(options: {
 
   return {
     audio: {
+      // Input: 16000 Hz linear16 — matches our AudioWorklet which forces 16kHz context
       input: { encoding: "linear16", sample_rate: 16000 },
+      // Output: 24000 Hz linear16 — Deepgram's native TTS sample rate
       output: { encoding: "linear16", sample_rate: 24000, container: "none" },
     },
     agent: {
       language,
       listen: {
-        provider: { type: "deepgram", model: "nova-3" },
+        provider: {
+          type: "deepgram",
+          model: "nova-3",
+        },
       },
       think: {
-        provider: { type: "google" },
+        provider: {
+          type: "google",
+        },
+        // BYO Google endpoint: API key in x-goog-api-key header
         endpoint: {
-          url: `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:streamGenerateContent?key=${googleApiKey}&alt=sse`,
+          url: `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:streamGenerateContent?alt=sse`,
+          headers: {
+            "x-goog-api-key": googleApiKey || "",
+          },
         },
         prompt: systemPrompt,
         ...(functions && functions.length > 0 ? { functions } : {}),
@@ -435,7 +481,8 @@ export function buildVoiceAgentSettings(options: {
       speak: {
         provider: { type: "deepgram", model: voiceModel },
       },
-      // greeting removed
+      // Set greeting so Deepgram speaks first — no InjectAgentMessage needed
+      ...(greeting ? { greeting } : {}),
       ...(conversationHistory && conversationHistory.length > 0
         ? {
             context: {

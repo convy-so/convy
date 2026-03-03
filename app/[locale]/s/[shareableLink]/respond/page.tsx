@@ -2,7 +2,7 @@
 
 import { clientEnv } from "@/lib/env.client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
 import {
   Mic,
@@ -178,6 +178,11 @@ export default function SurveyRespondPage() {
       : [];
 
   // useChat hook - only meaningful after initialization (AI SDK v6)
+  const transport = useMemo(() => new DefaultChatTransport({
+    api: apiEndpoint,
+    body: { conversationId, language: locale },
+  }), [apiEndpoint, conversationId, locale]);
+
   const {
     messages,
     setMessages: originalSetMessages,
@@ -185,10 +190,7 @@ export default function SurveyRespondPage() {
     sendMessage,
   } = useChat({
     id: conversationId ?? "pending",
-    transport: new DefaultChatTransport({
-      api: apiEndpoint,
-      body: { conversationId, language: locale },
-    }),
+    transport,
     messages: initialChatMessages as any, // Cast to avoid strict type issues with mapped messages
     onFinish: ({ message }: { message: UIMessage }) => {
       // Check for explicit tool calls (robust detection)
@@ -249,23 +251,21 @@ export default function SurveyRespondPage() {
   const setMessages = originalSetMessages;
   const isChatLoading = status === "streaming" || status === "submitted";
 
-  // Auto-start for text mode
+  // Auto-start or Resume for text mode is now handled SERVER-SIDE
+  // The frontend no longer injects fake "user" messages like "Start the conversation..."
+  // This prevents LLM confusion and corrupting the database chat history.
+  // The backend's GET endpoint already initializes the conversation with a greeting.
   useEffect(() => {
     if (
       !isInitializing &&
       !initError &&
       survey &&
       !isVoiceMode &&
-      messages.length === 0 &&
+      !isCompleted &&
       !hasStarted &&
       conversationId
     ) {
-      sendMessage({
-        id: "init_ping_hidden",
-        role: "user",
-        content:
-          "Start the conversation by introducing yourself as the expert on this domain and asking the first question.",
-      } as any);
+      // Just mark it as started, the backend already provided the initial messages
       setHasStarted(true);
     }
   }, [
@@ -273,10 +273,9 @@ export default function SurveyRespondPage() {
     initError,
     survey,
     isVoiceMode,
-    messages.length,
+    isCompleted,
     hasStarted,
     conversationId,
-    sendMessage,
   ]);
 
   // Voice WebSocket Integration
@@ -408,7 +407,10 @@ export default function SurveyRespondPage() {
     setInput("");
 
     try {
-      await sendMessage({ role: "user", content: currentInput } as any);
+      await sendMessage({
+        role: "user",
+        parts: [{ type: 'text', text: currentInput }]
+      } as any);
     } catch (error) {
       console.error("Failed to send message:", error);
     }

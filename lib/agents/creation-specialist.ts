@@ -16,7 +16,6 @@
 import { tool, streamText, type ModelMessage } from "ai";
 import { defaultModel } from "@/lib/ai";
 import { logUsage } from "@/lib/billing/logger";
-import { stripScratchpadFromText } from "./scratchpad-filter";
 import { SkillRegistry } from "./skill-registry";
 import { loadDomainSkills } from "./domain-skill-loader";
 import { stepCountIs } from "ai";
@@ -137,21 +136,6 @@ export class CreationSpecialist extends BaseSpecialistAgent {
   // System Prompt — Domain-Specialist Creation Guide
   // --------------------------------------------------------------------------
 
-  private getReflectionProtocol(): string {
-    return `<reflection_protocol>
-Before EVERY response you write, open a <scratchpad> block and silently reason through these checks. The scratchpad is NEVER shown to the survey creator — it is stripped before delivery.
-
-<scratchpad>
-Check 1 — On-Topic: Did the user answer the question I just asked, or did they go off on a tangent or paste irrelevant info?
-Check 2 — Clarification Needed: Is their answer vague or specific enough to check off a requirement?
-Check 3 — Next Step: Which pending checklist item am I addressing next?
-Verdict: [PASS / REDIRECT — and if REDIRECT, explicitly state how you will politely steer them back]
-</scratchpad>
-
-If the user goes off-topic, write a response AFTER the scratchpad that acknowledges their input but firmly redirects them to the current survey design question. The scratchpad itself is always stripped — ONLY write what the creator should see after </scratchpad>.
-</reflection_protocol>`;
-  }
-
   buildSystemPrompt(): string {
     const config = this.context.surveyConfig;
     if (!config) {
@@ -221,7 +205,6 @@ ${this.getSkillsSection()}
 
 ${this.getKnowledgeSection()}
 
-${this.getReflectionProtocol()}
 
 <rules priority="1">
 1. SUBJECT FIRST: Always identify the specific product/service/experience before anything else
@@ -291,7 +274,6 @@ Listen to the user's initial request. As soon as you have a general *gist* of th
 DO NOT interrogate the user for specific details. As soon as you guess the domain, call the tool silently. The Domain Specialist will handle the detailed onboarding.
 </discovery_mission>
 
-${this.getReflectionProtocol()}
 
 <rules priority="1">
 1. INITIAL GREETING: If the very first message you receive is 'GREET_USER_START' or 'INITIAL_GREETING_SIGNAL', respond with a warm greeting like: "Hi! I'm looking forward to helping you build a great survey. What are we looking to measure today?"
@@ -309,7 +291,35 @@ ${this.getReflectionProtocol()}
   getDeepgramFunctions(): VoiceAgentFunction[] {
     return [
       {
+        name: "think_and_respond",
+        client_side: true, // Routes to our onFunctionCall handler
+        description:
+          "REQUIRED: You MUST call this tool to produce every single response. Use internal_reasoning to think step-by-step. The message_to_user field is what will be spoken aloud to the user. The state_updates field records information collected from this turn.",
+        parameters: {
+          type: "object",
+          properties: {
+            internal_reasoning: {
+              type: "string",
+              description:
+                "Your step-by-step reasoning: what the user said, what you've already collected, what's next to ask.",
+            },
+            state_updates: {
+              type: "object",
+              description:
+                "Key-value pairs of checklist items collected this turn (e.g. { objective: true }).",
+            },
+            message_to_user: {
+              type: "string",
+              description:
+                "The FINAL message to speak aloud. Must be conversational and natural. No internal thoughts.",
+            },
+          },
+          required: ["internal_reasoning", "message_to_user"],
+        },
+      },
+      {
         name: "setSurveyDomain",
+        client_side: true, // Route to client handler
         description:
           "Call this tool to lock in the survey domain once you have discovered the subject, audience, and objective.",
         parameters: {
@@ -330,6 +340,7 @@ ${this.getReflectionProtocol()}
       },
       {
         name: "finishSurvey",
+        client_side: true, // Route to client handler
         description:
           "Signal that all required survey information has been collected and the survey design is complete.",
         parameters: {
@@ -345,6 +356,7 @@ ${this.getReflectionProtocol()}
       },
       {
         name: "requestMediaUpload",
+        client_side: true, // Route to client handler
         description:
           "Trigger the media upload UI for the user. Call this when the user wants to add images, audio, or video to the survey.",
         parameters: {
@@ -378,6 +390,34 @@ ${this.getReflectionProtocol()}
   getTools(): Record<string, any> {
     const ctx = this.context;
     return {
+      think_and_respond: tool({
+        description:
+          "Use this tool to plan your response, update the survey checklist state based on the user's input, and formulate the exact text you want to say to the user. You MUST call this tool.",
+        inputSchema: z.object({
+          internal_reasoning: z
+            .string()
+            .describe(
+              "Deep context analysis. Think step-by-step about what the user just said, what you still need to ask based on your checklist, and what approach to take.",
+            ),
+          state_updates: z
+            .record(z.string())
+            .describe(
+              "Key-value pairs of any checklist items or data points you have successfully collected from this specific turn.",
+            ),
+          message_to_user: z
+            .string()
+            .describe(
+              "The FINAL text that will be spoken or shown to the user. This must NOT contain any internal thoughts or scratchpads.",
+            ),
+        }),
+        execute: async ({
+          internal_reasoning,
+          state_updates,
+          message_to_user,
+        }) => {
+          return { success: true, message: "State logged." };
+        },
+      }),
       setSurveyDomain: tool({
         description:
           "Call this tool to lock in the survey domain once you have a general gist of the subject and audience. This happens silently and does not need to be announced to the user.",
@@ -641,20 +681,26 @@ ${this.getReflectionProtocol()}
 
   stream(
     messages: ModelMessage[],
-    onFinish?: (params: {
+    onFinish?: (result: {
       text: string;
-      response: any;
       usage: any;
+      response: any;
     }) => Promise<void>,
+    dynamicSystemDirective?: string,
   ) {
     const ctx = this.context;
     if (!ctx.surveyConfig) {
       throw new Error("Cannot stream without survey configuration");
     }
 
+    const baseSystem = this.buildSystemPrompt();
+    const finalSystem = dynamicSystemDirective
+      ? `${baseSystem}\n\n<dynamic_instruction>\n${dynamicSystemDirective}\n</dynamic_instruction>`
+      : baseSystem;
+
     return streamText({
       model: defaultModel,
-      system: this.buildSystemPrompt(),
+      system: finalSystem,
       messages,
       stopWhen: stepCountIs(5),
       tools: this.getTools(),

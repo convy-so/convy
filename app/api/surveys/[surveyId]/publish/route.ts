@@ -63,6 +63,12 @@ export async function POST(
       updateData.title = extractedData.title;
     }
 
+    if (description !== undefined) {
+      updateData.description = description;
+    } else if (extractedData.description) {
+      updateData.description = extractedData.description;
+    }
+
     if (extractedData.objective?.goal) {
       updateData.coreObjective = extractedData.objective.goal;
     }

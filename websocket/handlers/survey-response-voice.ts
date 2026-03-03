@@ -194,8 +194,21 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
   }
 
   protected getInitialUserInput(): string | null {
-    // Trigger the AI to start the survey response dynamically
-    return "Start the survey interaction. Greet the participant and ask the first question according to the system prompt.";
+    // If no history, trigger the AI to start the survey response
+    if (this.state.messages.length === 0) {
+      return "Start the survey interaction. Greet the participant and ask the first question according to the system prompt.";
+    }
+
+    // RESUME CASE: Check who spoke last
+    const lastMessage = this.state.messages[this.state.messages.length - 1];
+
+    // If the user was the last to speak, the AI must catch up/continue
+    if (lastMessage.role === "user") {
+      return "The participant is resuming their survey response and their last answer was not acknowledged. Briefly welcome them back and continue the interview from where it left off, responding to their last input and asking the next question.";
+    }
+
+    // If the assistant spoke last, do nothing (ball is in user's court)
+    return null;
   }
 
   protected async getVoiceAgentSettings(): Promise<VoiceAgentSettings> {
@@ -365,6 +378,60 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
     event: FunctionCallRequestEvent,
   ): Promise<void> {
     switch (event.function_name) {
+      case "think_and_respond": {
+        try {
+          // 1. Extract the state updates for background learning
+          const stateUpdates = event.input.state_updates;
+          if (stateUpdates && Object.keys(stateUpdates).length > 0) {
+            console.log(
+              `[Voice][think_and_respond] State updates logged:`,
+              stateUpdates,
+            );
+            // Optionally, we could immediately append these to the rolling context
+            // or let the standard conversation memory loop catch the whole turn.
+          }
+
+          // 2. Extract the text we actually want the TTS to speak
+          const messageToUser =
+            event.input.message_to_user ||
+            "I'm sorry, I encountered an internal error.";
+
+          // 3. Complete the function call by giving Deepgram the text to say
+          this.voiceAgent?.sendFunctionCallResponse(
+            event.function_call_id,
+            event.function_name,
+            JSON.stringify(messageToUser),
+          );
+
+          // 4. Also store the assistant's final response in our internal history
+          // so it's persisted in the DB correctly without the raw JSON
+          this.state.messages.push({
+            role: "assistant",
+            content: messageToUser,
+            timestamp: new Date().toISOString(),
+          });
+
+          this.send({
+            type: "conversation_text",
+            role: "assistant",
+            content: messageToUser,
+          });
+        } catch (e) {
+          console.error(
+            "Failed to parse think_and_respond payload in voice handler:",
+            e,
+          );
+          this.voiceAgent?.sendFunctionCallResponse(
+            event.function_call_id,
+            event.function_name,
+            JSON.stringify({
+              error: "Internal error processing state updates.",
+            }),
+          );
+        }
+        break;
+      }
+
       case "showMedia": {
         const mediaId = event.input?.mediaId;
         const media = this.state.surveyConfig?.media?.find(

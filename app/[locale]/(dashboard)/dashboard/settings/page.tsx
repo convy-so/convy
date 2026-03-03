@@ -25,7 +25,10 @@ import { getActiveWorkspace, updateWorkspace } from "@/app/actions/workspace";
 import toast from "react-hot-toast";
 
 export default function SettingsPage() {
-    const { user } = useAuth();
+    const { user, session } = useAuth();
+
+    // True when the user is actively in a workspace context
+    const isWorkspaceContext = !!(session as any)?.activeOrganizationId;
     const router = useRouter();
     const pathname = usePathname();
     const currentLocale = useLocale();
@@ -37,7 +40,8 @@ export default function SettingsPage() {
 
     const tabs = [
         { id: "profile", name: t('Tabs.Profile'), icon: User },
-        { id: "workspace", name: t('Tabs.Workspace'), icon: Key },
+        // Workspace tab only shown when in a workspace context
+        ...(isWorkspaceContext ? [{ id: "workspace", name: t('Tabs.Workspace'), icon: Key }] : []),
         { id: "notifications", name: t('Tabs.Notifications'), icon: Bell },
         { id: "preferences", name: t('Tabs.Preferences'), icon: Globe },
         { id: "security", name: t('Tabs.Security'), icon: Shield },
@@ -489,11 +493,12 @@ export default function SettingsPage() {
                                             description: t('Notifications.Types.WeeklySummaryDesc'),
                                             key: "WeeklySummary"
                                         },
-                                        {
+                                        // Team Updates notification only shown in workspace context
+                                        ...(isWorkspaceContext ? [{
                                             title: t('Notifications.Types.TeamUpdates'),
                                             description: t('Notifications.Types.TeamUpdatesDesc'),
                                             key: "TeamUpdates"
-                                        }
+                                        }] : []),
                                     ].map((item, index) => (
                                         <div key={index} className="flex items-start justify-between pb-6 border-b border-gray-100 last:border-0 last:pb-0">
                                             <div>
@@ -528,6 +533,7 @@ export default function SettingsPage() {
                                             </div>
                                         </div>
                                     ))}
+
                                 </div>
                             </div>
                             <div className="px-6 py-4 border-t border-gray-100 flex justify-end">

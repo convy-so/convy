@@ -169,8 +169,21 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
   }
 
   protected getInitialUserInput(): string | null {
-    // Triggers the AI to generate the greeting based on the system prompt (Expert Persona)
-    return "Start the conversation now. Greet the participant according to the system prompt instructions.";
+    // If no history, trigger the AI to generate the initial greeting
+    if (this.state.messages.length === 0) {
+      return "Start the conversation now. Greet the participant according to the system prompt instructions.";
+    }
+
+    // RESUME CASE: Check who spoke last
+    const lastMessage = this.state.messages[this.state.messages.length - 1];
+
+    // If the user was the last to speak, the AI must catch up/continue
+    if (lastMessage.role === "user") {
+      return "The user is returning to this sample survey session and their last response was not addressed. Briefly acknowledge their return and continue the interview naturally, picking up where you left off.";
+    }
+
+    // If the assistant spoke last, do nothing (ball is in user's court)
+    return null;
   }
 
   protected async getVoiceAgentSettings(): Promise<VoiceAgentSettings> {

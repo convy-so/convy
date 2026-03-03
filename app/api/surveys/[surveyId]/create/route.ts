@@ -1,33 +1,20 @@
 import { eq } from "drizzle-orm";
 import {
-  streamText,
-  generateText,
-  Output,
-  tool,
-  stepCountIs,
   createUIMessageStream,
   createUIMessageStreamResponse,
-  type ModelMessage,
 } from "ai";
-import { z } from "zod";
 
 import { db } from "@/db";
 import { surveys, surveyCreationConversations } from "@/db/schema";
-import { defaultModel, analysisModel, normalizeMessages } from "@/lib/ai";
-import {
-  stripScratchpadFromText,
-  createUIMessageFilter,
-} from "@/lib/agents/scratchpad-filter";
+import {  normalizeMessages } from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
-  getSurveyDataExtractionPrompt,
   type CollectedInfo,
 } from "@/lib/prompts";
 import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
 import { CreationSpecialist } from "@/lib/agents/creation-specialist";
 import { type AgentContext } from "@/lib/agents/types";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
-import { logUsage } from "@/lib/billing/logger";
 
 export const maxDuration = 300;
 
@@ -131,7 +118,7 @@ export async function POST(
           .join("");
       }
       return {
-        id: msg.id, // Preserve the ID (crucial for filtering)
+        id: msg.id,
         role: msg.role,
         content: textContent || "",
         parts: msg.parts,
@@ -179,17 +166,7 @@ export async function POST(
     }
     // ... other fields are less critical for immediate context, or are handled by extractedData updates
 
-    const normalizedMessages = await normalizeMessages(messages);
-
-    const outputMessages =
-      normalizedMessages.length > 0
-        ? normalizedMessages
-        : [
-            {
-              role: "user" as const,
-              content: "INITIAL_GREETING_SIGNAL",
-            },
-          ];
+    const outputMessages = await normalizeMessages(messages);
 
     const agentContext: AgentContext = {
       surveyConfig: currentConfig,
@@ -215,65 +192,130 @@ export async function POST(
     // 3. Get System Prompt from Agent
     const systemPrompt = agent.buildSystemPrompt();
 
-    // 4. Stream response using Agent's prompt and tool logic
-    const streamResult = agent.stream(outputMessages, async (result) => {
-      const { text, response } = result;
+    // 4. Dynamic Resume Logic — only fire for genuine resumes (existing conversation beyond greeting + first reply)
+    // The last message is ALWAYS a user message (that's what triggered the POST), so we can't use
+    // lastMessage.role === 'user' as the condition — it would always fire.
+    // A session is a resume when there are > 3 messages (greeting + at least one full exchange = 3+).
+    let dynamicDirective = undefined;
+    if (outputMessages.length > 3) {
+      dynamicDirective =
+        "You are resuming this survey design session. The creator has returned after a pause. Acknowledge naturally and continue where you left off without re-introducing yourself or repeating questions already answered.";
+    }
 
-      // Save the assistant's response when done
-      try {
-        const assistantMessage = response.messages.find(
-          (m: any) => m.role === "assistant",
-        );
+    // 5. Stream response using Agent's prompt and tool logic
+    const streamResult = agent.stream(
+      outputMessages,
+      async (result) => {
+        const { text, response } = result;
 
-        // Re-fetch to get latest state in case extraction updated it
-        const [latestConv] = await db
-          .select()
-          .from(surveyCreationConversations)
-          .where(eq(surveyCreationConversations.surveyId, surveyId));
+        // Save the assistant's response when done
+        try {
+          const assistantMessage = response.messages.find(
+            (m: any) => m.role === "assistant",
+          );
 
-        if (latestConv) {
-          const currentMessages = latestConv.messages as Array<{
-            role: "user" | "assistant";
-            content: string;
-            timestamp: string;
-          }>;
-
-          const cleanText = stripScratchpadFromText(text);
-
-          const updatedMessages = [
-            ...currentMessages,
-            {
-              role: "assistant" as const,
-              content: cleanText,
-              parts:
-                (assistantMessage as any)?.content &&
-                Array.isArray((assistantMessage as any).content)
-                  ? (assistantMessage as any).content
-                  : undefined,
-              timestamp: new Date().toISOString(),
-            },
-          ];
-
-          await db
-            .update(surveyCreationConversations)
-            .set({
-              messages: updatedMessages,
-            })
+          // Re-fetch to get latest state in case extraction updated it
+          const [latestConv] = await db
+            .select()
+            .from(surveyCreationConversations)
             .where(eq(surveyCreationConversations.surveyId, surveyId));
-        }
-      } catch (error) {
-        console.error(
-          "Error saving conversation or performing extraction:",
-          error,
-        );
-      }
-    });
 
+          if (latestConv) {
+            const currentMessages = latestConv.messages as Array<{
+              role: "user" | "assistant";
+              content: string;
+              timestamp: string;
+            }>;
+
+            const updatedMessages = [
+              ...currentMessages,
+              {
+                role: "assistant" as const,
+                content: text,
+                parts:
+                  (assistantMessage as any)?.content &&
+                  Array.isArray((assistantMessage as any).content)
+                    ? (assistantMessage as any).content
+                    : undefined,
+                timestamp: new Date().toISOString(),
+              },
+            ];
+
+            // Extract state_updates from think_and_respond tool calls in the response messages
+            // response.messages contains all tool calls with their full args after streaming completes
+            const stateUpdates: Record<string, string> = {};
+            for (const msg of response.messages) {
+              if ((msg as any).role !== "assistant") continue;
+              const contentParts = Array.isArray((msg as any).content)
+                ? (msg as any).content
+                : [];
+              for (const part of contentParts) {
+                if (
+                  part.type === "tool-call" &&
+                  part.toolName === "think_and_respond" &&
+                  part.args?.state_updates &&
+                  Object.keys(part.args.state_updates).length > 0
+                ) {
+                  Object.assign(stateUpdates, part.args.state_updates);
+                }
+              }
+            }
+
+            const dbUpdate: Record<string, any> = { messages: updatedMessages };
+
+            if (Object.keys(stateUpdates).length > 0) {
+              const newCollectedFlags = Object.entries(stateUpdates).reduce(
+                (acc, [k, v]) => {
+                  if (v && v !== "false" && v !== "null" && v !== "no") {
+                    acc[k] = true;
+                  }
+                  return acc;
+                },
+                {} as Record<string, boolean>,
+              );
+
+              if (Object.keys(newCollectedFlags).length > 0) {
+                const existingCollected = (latestConv.collectedInfo ||
+                  {}) as Record<string, boolean>;
+                const existingExtracted = (latestConv.extractedData ||
+                  {}) as Record<string, any>;
+                dbUpdate.collectedInfo = {
+                  ...existingCollected,
+                  ...newCollectedFlags,
+                };
+                dbUpdate.extractedData = {
+                  ...existingExtracted,
+                  ...stateUpdates,
+                };
+                console.log(
+                  "[Create Route] Persisting state_updates:",
+                  newCollectedFlags,
+                );
+              }
+            }
+
+            await db
+              .update(surveyCreationConversations)
+              .set(dbUpdate)
+              .where(eq(surveyCreationConversations.surveyId, surveyId));
+          }
+        } catch (error) {
+          console.error(
+            "Error saving conversation or performing extraction:",
+            error,
+          );
+        }
+      },
+      dynamicDirective,
+    );
+
+    // Use the SDK's own UIMessage stream — it emits the full correct protocol that @ai-sdk/react expects:
+    // step-start, text-start, text-delta, text-end, tool invocation parts, step-finish, finish.
+    // Writing bare text-delta chunks manually (our old approach) is IGNORED by the client stream processor
+    // because it requires the full protocol sequence.
     const filterStream = createUIMessageStream({
       execute: async ({ writer }) => {
-        writer.merge(
-          streamResult.toUIMessageStream().pipeThrough(createUIMessageFilter()),
-        );
+        writer.merge(streamResult.toUIMessageStream());
       },
     });
 
@@ -338,35 +380,46 @@ export async function PUT(
 
     await db.transaction(async (tx) => {
       if (existingConversation) {
+        // Build the update payload dynamically — if nothing was provided, skip the DB call entirely
+        // (Drizzle throws "No values to set" if .set({}) receives an empty object)
+        const updatePayload: Record<string, any> = {};
+
+        if (messages) {
+          updatePayload.messages = messages.map((msg) => {
+            let textContent = msg.content;
+            if (!textContent && Array.isArray(msg.parts)) {
+              textContent = msg.parts
+                .filter((p: any) => p.type === "text")
+                .map((p: any) => p.text)
+                .join("");
+            }
+            return {
+              id: msg.id,
+              role: msg.role,
+              content: textContent || "",
+              parts: msg.parts,
+              timestamp: msg.timestamp || new Date().toISOString(),
+            };
+          });
+        }
+
+        if (collectedInfo) updatePayload.collectedInfo = collectedInfo;
+
+        if (extractedData) {
+          updatePayload.extractedData = {
+            ...existingConversation.extractedData,
+            ...extractedData,
+          };
+        }
+
+        // Nothing to update — body was empty (e.g. handleStart signal call)
+        if (Object.keys(updatePayload).length === 0) {
+          return; // exit transaction cleanly, no DB write needed
+        }
+
         await tx
           .update(surveyCreationConversations)
-          .set({
-            ...(messages && {
-              messages: messages.map((msg) => {
-                let textContent = msg.content;
-                if (!textContent && Array.isArray(msg.parts)) {
-                  textContent = msg.parts
-                    .filter((p: any) => p.type === "text")
-                    .map((p: any) => p.text)
-                    .join("");
-                }
-                return {
-                  id: msg.id,
-                  role: msg.role,
-                  content: textContent || "",
-                  parts: msg.parts,
-                  timestamp: msg.timestamp || new Date().toISOString(),
-                };
-              }),
-            }),
-            ...(collectedInfo && { collectedInfo }),
-            ...(extractedData && {
-              extractedData: {
-                ...existingConversation.extractedData,
-                ...extractedData,
-              },
-            }),
-          })
+          .set(updatePayload)
           .where(eq(surveyCreationConversations.surveyId, surveyId));
       } else {
         await tx.insert(surveyCreationConversations).values({

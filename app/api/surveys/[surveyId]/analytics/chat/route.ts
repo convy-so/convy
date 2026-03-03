@@ -7,7 +7,6 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import { AgentOrchestrator } from "@/lib/agents/orchestrator";
 import type { AgentContext } from "@/lib/agents/types";
-import { createUIMessageFilter } from "@/lib/agents/scratchpad-filter";
 
 export const maxDuration = 300;
 
@@ -62,10 +61,7 @@ export async function POST(
     // 4. Stream response
     const result = analyticsSpecialist.stream(messages as any);
 
-    const streamOptions: any = {
-      pipe: createUIMessageFilter(),
-    };
-    return result.toUIMessageStreamResponse(streamOptions);
+    return result.toUIMessageStreamResponse();
   } catch (error) {
     if (error instanceof Error) {
       if (

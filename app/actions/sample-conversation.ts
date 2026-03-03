@@ -573,6 +573,15 @@ export async function addSampleConversationCommentAction(
       return { success: false, error: "Unauthorized" };
     }
 
+    // Team comments are a workspace-only feature.
+    // Reject if the survey does not belong to an organization.
+    if (!survey.organizationId) {
+      return {
+        success: false,
+        error: "Team comments are only available in workspace surveys.",
+      };
+    }
+
     const [conversation] = await db
       .select()
       .from(sampleConversations)

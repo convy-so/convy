@@ -144,11 +144,6 @@ export async function GET(
   }
 }
 
-import {
-  createUIMessageFilter,
-  stripScratchpadFromText,
-} from "@/lib/agents/scratchpad-filter";
-
 /**
  * POST - Handle survey conversation messages
  */
@@ -264,6 +259,16 @@ export async function POST(
       hasMedia,
     );
 
+    // Dynamic Resume Logic
+    let dynamicDirective = undefined;
+    if (modelMessages.length > 0) {
+      const lastMessage = modelMessages[modelMessages.length - 1];
+      if (lastMessage.role === "user") {
+        dynamicDirective =
+          "The participant has returned to this survey after a pause. The last message in the history is exactly what they said before they left or just now upon returning. Respond directly to their last input and continue the interview naturally.";
+      }
+    }
+
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
         const onMediaDisplay = (media: any) => {
@@ -291,8 +296,8 @@ export async function POST(
               totalTokens: usage.totalTokens,
             });
 
-            // Clean the final text for storage
-            const cleanText = stripScratchpadFromText(text);
+            // Under Unified Tools, text is just text now
+            const cleanText = text;
 
             // Save conversation to database
             const assistantMessage = response.messages?.find(
@@ -382,12 +387,165 @@ export async function POST(
               } as any);
             }
           },
+          dynamicDirective,
         );
 
-        // Apply the UI Message Filter to strip <scratchpad> blocks from the stream
-        writer.merge(
-          result.toUIMessageStream().pipeThrough(createUIMessageFilter()),
-        );
+        // Iterate over fullStream to intercept tool calls
+        let capturedMessageId = null;
+        let streamedTextLength = 0;
+
+        // State for streaming tool arguments
+        let fullArgsBuffer = "";
+        let isStreamingMessageToUser = false;
+        let lastStreamedIndex = 0;
+
+        for await (const chunk of result.fullStream) {
+          switch (chunk.type) {
+            case "text-delta":
+              // If the model bypasses the tool and speaks text directly, stream it just in case
+              writer.write({
+                type: "text-delta",
+                delta: chunk.text,
+              } as any);
+              break;
+
+            case "tool-call-streaming-start" as any: {
+              const part = chunk as { toolName?: string; toolCallId?: string };
+              if (part.toolName === "think_and_respond" && part.toolCallId) {
+                capturedMessageId = part.toolCallId;
+                writer.write({
+                  type: "message-annotations",
+                  annotations: [{ type: "tool_start", id: part.toolCallId }],
+                } as any);
+              }
+              break;
+            }
+
+            case "tool-call-delta" as any: {
+              const part = chunk as { argsTextDelta?: string };
+              if (part.argsTextDelta) {
+                fullArgsBuffer += part.argsTextDelta;
+
+                // Look for the start of message_to_user if we haven't found it yet
+                if (!isStreamingMessageToUser) {
+                  const marker = '"message_to_user": "';
+                  const markerIndex = fullArgsBuffer.indexOf(marker);
+                  if (markerIndex !== -1) {
+                    isStreamingMessageToUser = true;
+                    lastStreamedIndex = markerIndex + marker.length;
+                  }
+                }
+
+                // If we are in streaming mode, extract and unescape new content
+                if (isStreamingMessageToUser) {
+                  // We look for the closing quote, but be careful of escaped quotes \"
+                  let contentToProcess =
+                    fullArgsBuffer.substring(lastStreamedIndex);
+
+                  // Finding the true end of the string (unescaped quote)
+                  let closingQuoteIndex = -1;
+                  for (let i = 0; i < contentToProcess.length; i++) {
+                    if (contentToProcess[i] === '"') {
+                      // Check if it's escaped
+                      let backslashes = 0;
+                      for (
+                        let j = i - 1;
+                        j >= 0 && contentToProcess[j] === "\\";
+                        j--
+                      ) {
+                        backslashes++;
+                      }
+                      if (backslashes % 2 === 0) {
+                        closingQuoteIndex = i;
+                        break;
+                      }
+                    }
+                  }
+
+                  let delta =
+                    closingQuoteIndex !== -1
+                      ? contentToProcess.substring(0, closingQuoteIndex)
+                      : contentToProcess;
+
+                  // If delta ends with a trailing backslash, hold it back to see if it's the start of an escape sequence
+                  if (closingQuoteIndex === -1 && delta.endsWith("\\")) {
+                    delta = delta.slice(0, -1);
+                  }
+
+                  if (delta.length > 0) {
+                    try {
+                      // Use JSON.parse to handle unescaping correctly
+                      const unescapedDelta = JSON.parse(`"${delta}"`);
+                      writer.write({
+                        type: "text-delta",
+                        delta: unescapedDelta,
+                      } as any);
+                      lastStreamedIndex += delta.length;
+                    } catch (e) {
+                      // If parsing fails (e.g. partial escape sequence), wait for more data
+                    }
+                  }
+
+                  if (closingQuoteIndex !== -1) {
+                    isStreamingMessageToUser = false; // Stop streaming once we hit the closing quote
+                  }
+                }
+              }
+              break;
+            }
+
+            case "tool-call": {
+              if (
+                "toolName" in chunk &&
+                chunk.toolName === "think_and_respond"
+              ) {
+                // If we didn't stream it (e.g. key was at the very end), send it now
+                if (!isStreamingMessageToUser && lastStreamedIndex === 0) {
+                  try {
+                    const payload = (chunk as any).args as any;
+                    if (payload.message_to_user) {
+                      writer.write({
+                        type: "text-delta",
+                        delta: payload.message_to_user,
+                      } as any);
+                    }
+                  } catch (e) {
+                    console.error("Failed to parse tool call args", e);
+                  }
+                }
+
+                // Process state updates
+                try {
+                  const payload = (chunk as any).args as any;
+                  if (
+                    payload.state_updates &&
+                    Object.keys(payload.state_updates).length > 0
+                  ) {
+                    console.log("[State Extracted]", payload.state_updates);
+                  }
+                } catch (e) {
+                  // silent
+                }
+              }
+              break;
+            }
+
+            case "tool-result":
+              // We DO NOT write the tool-result to the UI stream
+              break;
+
+            case "finish":
+              // Stream finished
+              break;
+
+            case "error":
+              writer.write({
+                type: "error",
+                errorText: String(chunk.error),
+              } as any);
+              break;
+          }
+        }
       },
     });
 
