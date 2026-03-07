@@ -1,7 +1,6 @@
 import createMiddleware from "next-intl/middleware";
 import { routing } from "./i18n/routing";
 import { betterFetch } from "@better-fetch/fetch";
-import type { Session } from "better-auth/types";
 import { NextResponse, type NextRequest } from "next/server";
 
 const intlMiddleware = createMiddleware(routing);
@@ -19,22 +18,50 @@ export default async function middleware(request: NextRequest) {
 
   if (isDashboardRoute) {
     try {
-      const { data: session } = await betterFetch<Session>(
-        "/api/auth/get-session",
-        {
-          baseURL: process.env.BETTER_AUTH_URL || request.nextUrl.origin,
-          headers: {
-            // get the cookie from the request
-            cookie: request.headers.get("cookie") || "",
-          },
+      const { data } = await betterFetch<{
+        session: any;
+        user: { preferredLanguage?: string };
+      }>("/api/auth/get-session", {
+        baseURL: process.env.BETTER_AUTH_URL || request.nextUrl.origin,
+        headers: {
+          // get the cookie from the request
+          cookie: request.headers.get("cookie") || "",
         },
-      );
+      });
 
-      if (!session) {
+      if (!data) {
+        // Detect Server Action
+        const isServerAction = request.headers.has("Next-Action");
+
+        if (isServerAction) {
+          return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         return NextResponse.redirect(new URL("/sign-in", request.url));
+      }
+
+      // Sync preferredLanguage with NEXT_LOCALE cookie
+      const preferredLanguage = data.user.preferredLanguage;
+      const currentLocale = request.cookies.get("NEXT_LOCALE")?.value;
+
+      if (preferredLanguage && preferredLanguage !== currentLocale) {
+        const response = intlMiddleware(request);
+        response.cookies.set("NEXT_LOCALE", preferredLanguage, {
+          path: "/",
+          maxAge: 60 * 60 * 24 * 365, // 1 year
+        });
+        return response;
       }
     } catch (error) {
       console.error("Auth middleware error:", error);
+
+      // Detect Server Action
+      const isServerAction = request.headers.has("Next-Action");
+
+      if (isServerAction) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
       return NextResponse.redirect(new URL("/sign-in", request.url));
     }
   }

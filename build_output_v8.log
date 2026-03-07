@@ -1,0 +1,23 @@
+
+> convy@0.1.0 build
+> next build
+
+▲ Next.js 16.1.5 (Turbopack, Cache Components)
+- Environments: .env
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 2.3min
+  Running TypeScript ...
+Failed to compile.
+
+./components/analytics/ChatWithData.tsx:26:44
+Type error: Cannot find name 'ChatWithDataProps'.
+
+[0m [90m 24 |[39m }
+ [90m 25 |[39m
+[31m[1m>[22m[39m[90m 26 |[39m [36mexport[39m [36mfunction[39m [33mChatWithData[39m({ surveyId }[33m:[39m [33mChatWithDataProps[39m) {
+ [90m    |[39m                                            [31m[1m^[22m[39m
+ [90m 27 |[39m     [36mconst[39m [currentSessionId[33m,[39m setCurrentSessionId] [33m=[39m useState[33m<[39m[33mstring[39m [33m|[39m [36mnull[39m[33m>[39m([36mnull[39m)[33m;[39m
+ [90m 28 |[39m     [36mconst[39m [isSessionsOpen[33m,[39m setIsSessionsOpen] [33m=[39m useState([36mfalse[39m)[33m;[39m
+ [90m 29 |[39m     [36mconst[39m scrollRef [33m=[39m useRef[33m<[39m[33mHTMLDivElement[39m[33m>[39m([36mnull[39m)[33m;[39m[0m
+Next.js build worker exited with code: 1 and signal: null

@@ -1,0 +1,301 @@
+
+> convy@0.1.0 build
+> next build
+
+▲ Next.js 16.1.5 (Turbopack, Cache Components)
+- Environments: .env
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 91s
+  Running TypeScript ...
+  Collecting page data using 11 workers ...
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Ready
+  Generating static pages using 11 workers (0/185) ...
+[Redis Client] Ready
+⨯ Error: Route /[locale]/dashboard used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '1588349212@E833'
+}
+⨯ Error: Route /[locale]/verify-email used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '477977884@E833'
+}
+⨯ Error: Route /[locale]/dashboard/surveys/[surveyId]/analytics/chat used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '3811165852@E833'
+}
+⨯ Error: Route /[locale]/dashboard/profile used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '937474780@E833'
+}
+⨯ Error: Route /[locale]/verify-email used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '477977884@E833'
+}
+⨯ Error: Route /[locale]/dashboard/surveys/[surveyId]/sample-review used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '1440892252@E833'
+}
+⨯ Error: Route /[locale]/dashboard/profile used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '937474780@E833'
+}
+⨯ Error: Route /[locale]/dashboard/surveys/[surveyId]/analytics/chat used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '3811165852@E833'
+}
+⨯ Error: Route /[locale]/admin/surveys used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '1676699676@E833'
+}
+⨯ Error: Route /[locale]/verify-email used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '477977884@E833'
+}
+⨯ Error: Route /[locale]/dashboard/surveys/[surveyId]/sample-review used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '1440892252@E833'
+}
+⨯ Error: Route /[locale]/dashboard/profile used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '937474780@E833'
+}
+⨯ Error: Route /[locale]/forgot-password used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '2143464639@E833'
+}
+⨯ Error: Route /[locale]/dashboard/surveys/[surveyId]/analytics/chat used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '3811165852@E833'
+}
+⨯ Error: Route /[locale]/admin/surveys used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '1676699676@E833'
+}
+⨯ Error: Route /[locale]/verify-email used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '477977884@E833'
+}
+⨯ Error: Route /[locale]/dashboard/surveys/[surveyId]/analytics/conversations used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '1256498588@E833'
+}
+Error: Route /[locale]/dashboard/surveys/[surveyId]/sample-review used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '1440892252@E833'
+}
+To get a more detailed stack trace and pinpoint the issue, try one of the following:
+  - Start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/sample-review" in your browser to investigate the error.
+  - Rerun the production build with `next build --debug-prerender` to generate better stack traces.
+⨯ Error: Route /[locale]/forgot-password used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '2143464639@E833'
+}
+Error occurred prerendering page "/en/dashboard/surveys/[surveyId]/sample-review". Read more: https://nextjs.org/docs/messages/prerender-error
+Export encountered an error on /[locale]/(dashboard)/dashboard/surveys/[surveyId]/sample-review/page: /en/dashboard/surveys/[surveyId]/sample-review, exiting the build.
+⨯ Error: Route /[locale]/workspace/accept-invitation/[id] used `headers()` inside "use cache". Accessing Dynamic data sources inside a cache scope is not supported. If you need this data inside a cached function use `headers()` outside of the cached function and pass the required dynamic data in as an argument. See more info here: https://nextjs.org/docs/messages/next-request-in-use-cache
+    at <unknown> (i18n\request.ts:4:42)
+    at C (app\[locale]\layout.tsx:106:26)
+  2 | import { routing } from "./routing";
+  3 |
+> 4 | export default getRequestConfig(async ({ requestLocale }) => {
+    |                                          ^
+  5 |   let locale = await requestLocale;
+  6 |
+  7 |   if (!locale || !routing.locales.includes(locale as any)) { {
+  digest: '3638750108@E833'
+}
+⨯ Next.js build worker exited with code: 1 and signal: null

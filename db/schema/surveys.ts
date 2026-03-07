@@ -373,6 +373,51 @@ const surveyAnalyticsRelations = relations(surveyAnalytics, ({ one }) => ({
   }),
 }));
 
+export type ChatSessionMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  parts: Array<
+    | { type: "text"; text: string }
+    | { type: "tool-call"; toolCallId: string; toolName: string; args: unknown }
+    | {
+        type: "tool-result";
+        toolCallId: string;
+        toolName: string;
+        result: unknown;
+      }
+  >;
+  createdAt?: string;
+};
+
+const analyticsChatSessions = pgTable(
+  "analytics_chat_sessions",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    surveyId: text("survey_id")
+      .notNull()
+      .references(() => surveys.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default("New Chat"),
+    messages: jsonb("messages")
+      .$type<ChatSessionMessage[]>()
+      .notNull()
+      .default([]),
+    // Tracks how many responses were processed when the last AI summary was generated.
+    // Used by the debounced worker to detect if new data exists before burning tokens.
+    lastProcessedResponseCount: integer("last_processed_response_count")
+      .notNull()
+      .default(0),
+  },
+  (table) => [
+    index("analytics_chat_sessions_survey_id_idx").on(table.surveyId),
+    index("analytics_chat_sessions_user_id_idx").on(table.userId),
+  ],
+);
+
 export {
   surveys,
   surveyCreationConversations,
@@ -380,6 +425,7 @@ export {
   surveyConversations,
   conversationInsights,
   surveyAnalytics,
+  analyticsChatSessions,
   surveysRelations,
   surveyCreationConversationsRelations,
   sampleConversationsRelations,

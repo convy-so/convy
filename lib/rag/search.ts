@@ -1,7 +1,8 @@
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { documentEmbeddings, knowledgeBase } from "@/db/schema/vectors";
 import { generateEmbedding } from "./embeddings";
 import { and, desc, eq, gt, sql, inArray } from "drizzle-orm";
+import { SupportedLanguage } from "../translation-service";
 
 export interface SearchFilters {
   surveyId?: string;
@@ -16,6 +17,7 @@ export interface SearchFilters {
   domainId?: number;
   minQualityScore?: number;
   limit?: number;
+  language?: SupportedLanguage;
 }
 
 export interface SearchResult {
@@ -36,7 +38,7 @@ export async function vectorSearch(
   const limit = filters.limit || 20;
 
   // Search document embeddings
-  const docResults = await db
+  const docResults = await getDb()
     .select({
       id: documentEmbeddings.id,
       content: documentEmbeddings.content,
@@ -63,6 +65,9 @@ export async function vectorSearch(
           : undefined,
         // Only valid embeddings
         sql`${documentEmbeddings.embedding} IS NOT NULL`,
+        filters.language
+          ? sql`${documentEmbeddings.metadata}->>'language' = ${filters.language}`
+          : undefined,
       ),
     )
     .orderBy(
@@ -73,7 +78,7 @@ export async function vectorSearch(
   // Search knowledge base if relevant (no surveyId usually, or globally relevant)
   let kbResults: any[] = [];
   if (!filters.surveyId || filters.sourceType?.includes("knowledge")) {
-    kbResults = await db
+    kbResults = await getDb()
       .select({
         id: knowledgeBase.id,
         content: knowledgeBase.content,
@@ -92,9 +97,11 @@ export async function vectorSearch(
           filters.minQualityScore
             ? gt(knowledgeBase.qualityScore, filters.minQualityScore)
             : undefined,
-          sql`${knowledgeBase.embedding} IS NOT NULL`,
           // Only surface validated patterns at inference time
           sql`${knowledgeBase.status} IN ('ACTIVE', 'SHADOW')`,
+          filters.language
+            ? sql`${knowledgeBase.metadata}->>'language' = ${filters.language}`
+            : undefined,
         ),
       )
       .orderBy(
@@ -122,14 +129,25 @@ export async function vectorSearch(
 export async function fullTextSearch(
   query: string,
   filters: SearchFilters = {},
+  language: SupportedLanguage = "en",
 ): Promise<SearchResult[]> {
   const limit = filters.limit || 20;
-  // Using websearch_to_tsquery for natural language queries
-  const tsQuery = sql`websearch_to_tsquery('english', ${query})`;
 
-  const docRank = sql<number>`ts_rank(to_tsvector('english', ${documentEmbeddings.content}), ${tsQuery})`;
+  // Map supported languages to Postgres tsconfig
+  const langConfigMap: Record<SupportedLanguage, string> = {
+    en: "english",
+    fr: "french",
+    de: "german",
+    es: "spanish",
+    it: "italian",
+  };
 
-  const docResults = await db
+  const tsConfig = langConfigMap[language] || "english";
+  const tsQuery = sql`websearch_to_tsquery(${tsConfig}, ${query})`;
+
+  const docRank = sql<number>`ts_rank(to_tsvector(${tsConfig}, ${documentEmbeddings.content}), ${tsQuery})`;
+
+  const docResults = await getDb()
     .select({
       id: documentEmbeddings.id,
       content: documentEmbeddings.content,
@@ -151,7 +169,10 @@ export async function fullTextSearch(
         filters.minDate
           ? gt(documentEmbeddings.createdAt, filters.minDate)
           : undefined,
-        sql`to_tsvector('english', ${documentEmbeddings.content}) @@ ${tsQuery}`,
+        sql`to_tsvector(${tsConfig}, ${documentEmbeddings.content}) @@ ${tsQuery}`,
+        filters.language || language
+          ? sql`${documentEmbeddings.metadata}->>'language' = ${filters.language || language}`
+          : undefined,
       ),
     )
     .orderBy(desc(docRank))
@@ -160,9 +181,9 @@ export async function fullTextSearch(
   // Knowledge base FTS
   let kbResults: any[] = [];
   if (!filters.surveyId || filters.sourceType?.includes("knowledge")) {
-    const kbRank = sql<number>`ts_rank(to_tsvector('english', ${knowledgeBase.content}), ${tsQuery})`;
+    const kbRank = sql<number>`ts_rank(to_tsvector(${tsConfig}, ${knowledgeBase.content}), ${tsQuery})`;
 
-    kbResults = await db
+    kbResults = await getDb()
       .select({
         id: knowledgeBase.id,
         content: knowledgeBase.content,
@@ -181,9 +202,11 @@ export async function fullTextSearch(
           filters.minQualityScore
             ? gt(knowledgeBase.qualityScore, filters.minQualityScore)
             : undefined,
-          sql`to_tsvector('english', ${knowledgeBase.content}) @@ ${tsQuery}`,
           // Only surface validated patterns at inference time
           sql`${knowledgeBase.status} IN ('ACTIVE', 'SHADOW')`,
+          filters.language || language
+            ? sql`${knowledgeBase.metadata}->>'language' = ${filters.language || language}`
+            : undefined,
         ),
       )
       .orderBy(desc(kbRank))
@@ -208,13 +231,21 @@ export async function fullTextSearch(
 export async function hybridSearch(
   query: string,
   filters: SearchFilters = {},
+  language: SupportedLanguage = "en",
 ): Promise<SearchResult[]> {
   const limit = filters.limit || 20;
 
-  // Run both searches in parallel
   const [vectorResults, textResults] = await Promise.all([
-    vectorSearch(query, { ...filters, limit: limit * 2 }), // Fetch more for better fusion
-    fullTextSearch(query, { ...filters, limit: limit * 2 }),
+    vectorSearch(query, {
+      ...filters,
+      limit: limit * 2,
+      language: filters.language || language,
+    }), // Fetch more for better fusion
+    fullTextSearch(
+      query,
+      { ...filters, limit: limit * 2 },
+      filters.language || language,
+    ),
   ]);
 
   // Reciprocal Rank Fusion (RRF)
@@ -259,10 +290,15 @@ export async function searchKnowledgeBase(
   query: string,
   limit: number = 3,
   domainId?: number,
+  language: SupportedLanguage = "en",
 ): Promise<SearchResult[]> {
-  return hybridSearch(query, {
-    limit,
-    domainId,
-    sourceType: ["knowledge"],
-  });
+  return hybridSearch(
+    query,
+    {
+      limit,
+      domainId,
+      sourceType: ["knowledge"],
+    },
+    language,
+  );
 }

@@ -40,8 +40,10 @@ export function useVoiceWebSocket({
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioQueueRef = useRef<Blob[]>([]);
-  const isPlayingRef = useRef(false);
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const isPlayingRef = useRef(false);
+  const isPlayingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isAgentSpeakingRef = useRef(false); // Gate for local mic gating
 
   // Keep latest callback in ref to avoid stale closures in ws.onmessage
   const onMessageRef = useRef(onMessage);
@@ -131,18 +133,28 @@ export function useVoiceWebSocket({
 
     ws.onmessage = async (event) => {
       if (event.data instanceof Blob) {
-        console.log(
-          `[Voice WS] 📥 Audio Blob received: ${event.data.size} bytes`,
-        );
-        // AI Voice Audio
+        // Chain of Trust: Audio Ingress
+        if (Math.random() < 0.1) {
+          // Reduced noise
+          console.log(
+            `[ChainOfTrust] [Hook] 📥 Received audio chunk: ${event.data.size} bytes`,
+          );
+        }
         handleIncomingAudio(event.data);
       } else {
         try {
           const data = JSON.parse(event.data);
-          console.log("[Voice WS] 📥 JSON Message received:", data.type);
+          console.log(
+            `[ChainOfTrust] [Hook] 📥 Received JSON (${data.type})`,
+            data,
+          );
           handleJsonMessage(data);
         } catch (e) {
-          console.error("Failed to parse WS message", e);
+          console.error(
+            "[ChainOfTrust] [Hook] Failed to parse JSON message",
+            e,
+            event.data,
+          );
         }
       }
     };
@@ -207,17 +219,28 @@ export function useVoiceWebSocket({
         break;
       case "agent_started_speaking":
         // AI started speaking (Voice Agent API)
+        isAgentSpeakingRef.current = true;
         break;
-      case "agent_audio_done":
-        // AI finished speaking — enable mic so user can respond
-        // This is the key gate: mic stays silent during greeting/AI speech
+      case "agent_ready":
+        // Deepgram settings applied: agent is ready to listen
+        // We open the gate NOW so user can barge-in and interrupt greetings!
         if (!micEnabledRef.current) {
           console.log(
-            "[Voice WS] 🎤 First AgentAudioDone: enabling mic for user input",
+            "[Voice WS] 🤖 Agent Ready: un-gating mic for user input",
           );
           micEnabledRef.current = true;
           setIsMicEnabled(true);
+
+          // Proactively start recording for high-premium hands-free experience
+          // Users who clicked "Start" have already given gesture-based permission
+          startRecording().catch((err) => {
+            console.error("[Voice WS] Failed to auto-start recording:", err);
+          });
         }
+        break;
+      case "agent_audio_done":
+        // AI finished speaking
+        isAgentSpeakingRef.current = false;
         break;
       case "speech_start":
         // User started speaking
@@ -233,22 +256,38 @@ export function useVoiceWebSocket({
         }
         setIsPlaying(false);
         isPlayingRef.current = false;
+        isAgentSpeakingRef.current = false;
         break;
       case "error":
-        console.error("Server error (full data):", data);
-        // Server sends { type: 'error', description: '...', code: '...' }
-        // Note: data.error is NOT used; the field is 'description'
-        const errorMessage =
-          data.description ||
-          (typeof data.error === "string" ? data.error : null) ||
-          data.error?.message ||
-          JSON.stringify(data.error) ||
-          "Unknown server error";
+        console.error(
+          "[ChainOfTrust] [Hook] ❌ Server-reported error:",
+          JSON.stringify(data, null, 2),
+        );
+        // Extract a string representation of the error to show in UI
+        let errorMessage = "Unknown error";
+        if (data.error) {
+          errorMessage =
+            typeof data.error === "string"
+              ? data.error
+              : JSON.stringify(data.error);
+        } else if (data.description) {
+          errorMessage = data.description;
+        } else {
+          errorMessage = JSON.stringify(data);
+        }
 
-        console.error("Server error message:", errorMessage);
+        console.error(
+          "[ChainOfTrust] [Hook] Calculated error message:",
+          errorMessage,
+        );
         setStatus("error");
         setError(errorMessage);
         if (onError) onError(errorMessage);
+        break;
+      default:
+        console.log(
+          `[ChainOfTrust] [Hook] Unhandled message type: ${data.type}`,
+        );
         break;
     }
     onMessageRef.current?.(data);
@@ -272,6 +311,13 @@ export function useVoiceWebSocket({
       // Convert Int16 to Float32 [-1.0, 1.0]
       for (let i = 0; i < int16Data.length; i++) {
         float32Data[i] = int16Data[i] / 32768.0;
+      }
+
+      const totalDuration = float32Data.length / sampleRate;
+      if (Math.random() < 0.05) {
+        console.log(
+          `[ChainOfTrust] [Hook] 📥 Received audio chunk: ${arrayBuffer.byteLength} bytes (${(totalDuration * 1000).toFixed(1)}ms)`,
+        );
       }
 
       const audioBuffer = audioCtx.createBuffer(
@@ -298,11 +344,16 @@ export function useVoiceWebSocket({
     source.connect(audioCtx.destination);
 
     // Schedule playback
-    // Ensure we don't schedule in the past
     const currentTime = audioCtx.currentTime;
-    // Add a small buffering delay if we fell behind (re-sync)
     if (nextStartTimeRef.current < currentTime) {
-      nextStartTimeRef.current = currentTime + 0.05; // 50ms buffer
+      // INCREASED JITTER BUFFER: 150ms (0.15) to prevent interruptions/chunks
+      nextStartTimeRef.current = currentTime + 0.15;
+    }
+
+    if (Math.random() < 0.05) {
+      console.log(
+        `[ChainOfTrust] [Hook] 🔈 Scheduling audio chunk at ${nextStartTimeRef.current.toFixed(3)}s (Context time: ${currentTime.toFixed(3)}s)`,
+      );
     }
 
     source.start(nextStartTimeRef.current);
@@ -312,15 +363,17 @@ export function useVoiceWebSocket({
     isPlayingRef.current = true;
     setHasAudioPlayed(true);
 
-    // Reset playing state when this chunk ends (approximate, for UI)
-    // In a real stream, we might stay "playing" until silence.
-    // For now, we rely on the stream continuing or checking if startTime > currentTime
     source.onended = () => {
-      // Check if we have more audio pending or if this was the last one
-      if (audioCtx.currentTime >= nextStartTimeRef.current - 0.1) {
-        setIsPlaying(false);
-        isPlayingRef.current = false;
-      }
+      // HYSTERESIS: Wait 250ms before saying "not playing" to bridge tiny gaps
+      if (isPlayingTimeoutRef.current)
+        clearTimeout(isPlayingTimeoutRef.current);
+
+      isPlayingTimeoutRef.current = setTimeout(() => {
+        if (audioCtx.currentTime >= nextStartTimeRef.current - 0.1) {
+          setIsPlaying(false);
+          isPlayingRef.current = false;
+        }
+      }, 250);
     };
   };
 
@@ -336,10 +389,6 @@ export function useVoiceWebSocket({
     return playbackContextRef.current;
   };
 
-  const playNextInQueue = async () => {
-    // Legacy method - no longer used for PCM streaming
-  };
-
   /**
    * Start recording using AudioWorklet for raw PCM capture
    * The worklet handles downsampling from the native sample rate (typically 48kHz) to 16kHz
@@ -347,10 +396,12 @@ export function useVoiceWebSocket({
    */
   const startRecording = async () => {
     if (isRecording) return;
-    setError(null); // Clear errors on restart attempt
+    console.log(
+      "[ChainOfTrust] [Hook] 🎤 startRecording requested. Checking permissions...",
+    );
+    setError(null);
 
     try {
-      // Get microphone access
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -358,67 +409,55 @@ export function useVoiceWebSocket({
           autoGainControl: true,
         },
       });
+      console.log("[ChainOfTrust] [Hook] ✅ Microphone stream acquired.");
       streamRef.current = stream;
 
-      // Create audio context (browser may use 44100 or 48000)
-      // Force 16kHz to use native browser resampling for recording input
       const recordingContext = new AudioContext({ sampleRate: 16000 });
+      console.log(
+        `[ChainOfTrust] [Hook] Created AudioContext at ${recordingContext.sampleRate}Hz`,
+      );
       recordingContextRef.current = recordingContext;
 
-      // Load the AudioWorklet processor
       await recordingContext.audioWorklet.addModule(
         "/audio-worklet-processor.js",
       );
+      console.log("[ChainOfTrust] [Hook] AudioWorklet module loaded.");
 
-      // Create source from microphone
       const source = recordingContext.createMediaStreamSource(stream);
       sourceNodeRef.current = source;
 
-      // Create worklet node
       const workletNode = new AudioWorkletNode(
         recordingContext,
         "pcm-processor",
       );
       workletNodeRef.current = workletNode;
 
-      // Send initial configuration immediately to ensure server is ready
-      // The worklet outputs 16kHz audio after decimation
-      const initialConfig = {
-        type: "audio_config",
-        sampleRate: 16000, // Fixed: worklet outputs 16kHz
-        encoding: "linear16",
-      };
-
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        console.log("[Voice] Sending initial audio config:", initialConfig);
-        wsRef.current.send(JSON.stringify(initialConfig));
-      }
-
-      // Handle PCM audio chunks from worklet
-      // Gate: only forward audio when micEnabledRef.current === true
-      // (enabled after the first AgentAudioDone, i.e., greeting is done)
       workletNode.port.onmessage = (event) => {
         if (
           event.data.type === "audio" &&
           micEnabledRef.current &&
           wsRef.current?.readyState === WebSocket.OPEN
         ) {
+          // Chain of Trust: Audio Egress
+          // Echo Protection: Gate mic audio if AI is actively speaking
+          if (isAgentSpeakingRef.current) {
+            return;
+          }
+
+          if (Math.random() < 0.01) {
+            // Very throttled
+            console.log(
+              `[ChainOfTrust] [Hook] 📤 Forwarding PCM chunk to server (${event.data.buffer.byteLength} bytes)`,
+            );
+          }
           wsRef.current.send(event.data.buffer);
         }
       };
 
-      // Connect: microphone -> worklet
       source.connect(workletNode);
-      // Note: Don't connect to destination to avoid feedback
-
       setIsRecording(true);
-      console.log(
-        "[Voice] Started recording with AudioWorklet at",
-        recordingContext.sampleRate,
-        "Hz",
-      );
     } catch (e) {
-      console.error("Failed to start recording", e);
+      console.error("[ChainOfTrust] [Hook] ❌ startRecording failed:", e);
       setError("Microphone access failed. Please check permissions.");
       onError?.(e);
     }

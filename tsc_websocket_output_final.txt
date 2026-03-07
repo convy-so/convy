@@ -1,0 +1,4 @@
+
+> convy@0.1.0 websocket:build C:\Users\pc\convy
+> tsc -p websocket/tsconfig.json
+

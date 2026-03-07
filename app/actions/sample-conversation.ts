@@ -4,7 +4,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getSurveyAccessLevel } from "@/lib/workspace-access";
@@ -76,7 +76,7 @@ export async function generateSampleConversationAction(
     const session = await getVerifiedSession();
     const body = saveSampleConversationSchema.parse(input);
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, body.surveyId));
@@ -92,7 +92,7 @@ export async function generateSampleConversationAction(
     // Always use conversationNumber 1 - we only have one sample that gets improved
     const conversationNumber = 1;
 
-    const [existingConversation] = await db
+    const [existingConversation] = await getDb()
       .select()
       .from(sampleConversations)
       .where(
@@ -123,7 +123,7 @@ export async function generateSampleConversationAction(
     }
 
     if (existingConversation) {
-      await db
+      await getDb()
         .update(sampleConversations)
         .set({
           messages: body.messages,
@@ -132,7 +132,7 @@ export async function generateSampleConversationAction(
         })
         .where(eq(sampleConversations.id, existingConversation.id));
     } else {
-      await db.insert(sampleConversations).values({
+      await getDb().insert(sampleConversations).values({
         id: conversationId,
         surveyId: body.surveyId,
         conversationNumber,
@@ -144,7 +144,7 @@ export async function generateSampleConversationAction(
       });
     }
 
-    await db
+    await getDb()
       .update(surveys)
       .set({
         status: "sample_review",
@@ -202,7 +202,7 @@ export async function provideSampleConversationFeedbackAction(
   try {
     const session = await getVerifiedSession();
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -216,7 +216,7 @@ export async function provideSampleConversationFeedbackAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    const [conversation] = await db
+    const [conversation] = await getDb()
       .select()
       .from(sampleConversations)
       .where(
@@ -230,7 +230,7 @@ export async function provideSampleConversationFeedbackAction(
       return { success: false, error: "Conversation not found" };
     }
 
-    await db
+    await getDb()
       .update(sampleConversations)
       .set({ feedback })
       .where(
@@ -265,7 +265,7 @@ export async function confirmSampleConversationAction(
     const session = await getVerifiedSession();
     const body = confirmSampleConversationSchema.parse(input);
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, body.surveyId));
@@ -277,7 +277,7 @@ export async function confirmSampleConversationAction(
     if (survey.userId !== session.user.id) {
       return { success: false, error: "Unauthorized" };
     }
-    await db
+    await getDb()
       .update(sampleConversations)
       .set({ confirmed: true })
       .where(
@@ -288,11 +288,11 @@ export async function confirmSampleConversationAction(
       );
 
     const [allConversations, confirmedConversations] = await Promise.all([
-      db
+      getDb()
         .select({ id: sampleConversations.id })
         .from(sampleConversations)
         .where(eq(sampleConversations.surveyId, body.surveyId)),
-      db
+      getDb()
         .select({ id: sampleConversations.id })
         .from(sampleConversations)
         .where(
@@ -309,7 +309,7 @@ export async function confirmSampleConversationAction(
       allConversations.length <= MAX_SAMPLE_CONVERSATIONS;
 
     if (canConfirmSurvey) {
-      await db
+      await getDb()
         .update(surveys)
         .set({ confirmed: true })
         .where(eq(surveys.id, body.surveyId));
@@ -350,7 +350,7 @@ export async function addSampleConversationFinalCommentsAction(
     const session = await getVerifiedSession();
     const body = finalCommentsSchema.parse(input);
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, body.surveyId));
@@ -363,7 +363,7 @@ export async function addSampleConversationFinalCommentsAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    const [conversation] = await db
+    const [conversation] = await getDb()
       .select()
       .from(sampleConversations)
       .where(
@@ -377,7 +377,7 @@ export async function addSampleConversationFinalCommentsAction(
       return { success: false, error: "Conversation not found" };
     }
 
-    await db
+    await getDb()
       .update(sampleConversations)
       .set({ finalComments: body.comments })
       .where(eq(sampleConversations.id, conversation.id));
@@ -423,7 +423,7 @@ export async function getSampleConversationsAction(surveyId: string): Promise<
   try {
     const session = await getVerifiedSession();
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -437,7 +437,7 @@ export async function getSampleConversationsAction(surveyId: string): Promise<
       return { success: false, error: "Unauthorized" };
     }
 
-    const conversations = await db
+    const conversations = await getDb()
       .select()
       .from(sampleConversations)
       .where(eq(sampleConversations.surveyId, surveyId))
@@ -487,7 +487,7 @@ export async function getSampleConversationStatusAction(
   try {
     const session = await getVerifiedSession();
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -501,7 +501,7 @@ export async function getSampleConversationStatusAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    const conversations = await db
+    const conversations = await getDb()
       .select()
       .from(sampleConversations)
       .where(eq(sampleConversations.surveyId, surveyId));
@@ -559,7 +559,7 @@ export async function addSampleConversationCommentAction(
   try {
     const session = await getVerifiedSession();
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -582,7 +582,7 @@ export async function addSampleConversationCommentAction(
       };
     }
 
-    const [conversation] = await db
+    const [conversation] = await getDb()
       .select()
       .from(sampleConversations)
       .where(
@@ -606,7 +606,7 @@ export async function addSampleConversationCommentAction(
 
     const currentComments = conversation.comments || [];
 
-    await db
+    await getDb()
       .update(sampleConversations)
       .set({ comments: [...currentComments, newComment] })
       .where(eq(sampleConversations.id, conversation.id));

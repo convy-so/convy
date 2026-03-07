@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { X, Loader2, Plus, Building2 } from "lucide-react";
 import { createWorkspace, setActiveWorkspace } from "@/app/actions/workspace";
 import { useRouter } from "@/i18n/routing";
+import { useTranslations } from "next-intl";
 
 type CreateWorkspaceModalProps = {
     isOpen: boolean;
@@ -20,6 +21,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
     const [isCreating, setIsCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [mounted, setMounted] = useState(false);
+    const t = useTranslations("Workspace.Create");
 
     useEffect(() => {
         setMounted(true);
@@ -43,7 +45,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
             if (result.success) {
                 // Set as active instantly
                 await setActiveWorkspace(result.data.id);
-                
+
                 setName("");
                 setSlug("");
                 setDescription("");
@@ -56,9 +58,9 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
                 setError(result.error);
             }
         } catch (err) {
-             setError("An unexpected error occurred");
+            setError(t("Error"));
         } finally {
-             setIsCreating(false);
+            setIsCreating(false);
         }
     };
 
@@ -77,7 +79,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
                         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
                             <Building2 className="w-5 h-5 text-white" />
                         </div>
-                        <h3 className="text-lg font-semibold text-gray-900">Create Workspace</h3>
+                        <h3 className="text-lg font-semibold text-gray-900">{t("Title")}</h3>
                     </div>
                     <button
                         onClick={onClose}
@@ -96,25 +98,25 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Workspace Name *
+                            {t("NameLabel")}
                         </label>
                         <input
                             type="text"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            placeholder="e.g., Marketing Team"
+                            placeholder={t("NamePlaceholder")}
                             className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
                         />
                     </div>
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Description (optional)
+                            {t("DescLabel")}
                         </label>
                         <textarea
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
-                            placeholder="What is this workspace for?"
+                            placeholder={t("DescPlaceholder")}
                             rows={3}
                             className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all resize-none"
                         />
@@ -122,7 +124,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
 
                     <div className="bg-blue-50 rounded-xl p-4">
                         <p className="text-sm text-blue-700">
-                            <span className="font-medium">Tip:</span> Workspaces help you organize surveys and collaborate with your team. You can invite members after creation.
+                            <span className="font-medium">{t("TipTitle")}</span> {t("TipDesc")}
                         </p>
                     </div>
                 </div>
@@ -132,7 +134,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
                         onClick={onClose}
                         className="px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                     >
-                        Cancel
+                        {t("Cancel")}
                     </button>
                     <button
                         onClick={handleCreate}
@@ -142,12 +144,12 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
                         {isCreating ? (
                             <>
                                 <Loader2 className="w-4 h-4 animate-spin" />
-                                Creating...
+                                {t("Creating")}
                             </>
                         ) : (
                             <>
                                 <Plus className="w-4 h-4" />
-                                Create Workspace
+                                {t("CreateButton")}
                             </>
                         )}
                     </button>

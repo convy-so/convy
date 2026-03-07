@@ -2,12 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { SurveyAnalyticsData } from "@/lib/analytics";
-import { SentimentGauge } from "./SentimentGauge";
-import { DashboardGrid } from "./DashboardGrid";
-import { Loader2, AlertCircle } from "lucide-react";
+import { NarrativeReport } from "./NarrativeReport";
+import { Loader2, AlertCircle, MessageSquare, RefreshCw, LayoutDashboard } from "lucide-react";
 import { Link } from "@/i18n/routing";
-import { RespondentLimitTracker } from "./RespondentLimitTracker";
-import { ChatWithData } from "./ChatWithData";
+import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 interface AnalyticsDashboardProps {
     surveyId: string;
@@ -23,21 +22,35 @@ async function fetchAnalytics(surveyId: string) {
 }
 
 export function AnalyticsDashboard({ surveyId }: AnalyticsDashboardProps) {
+    const [isRegenerating, setIsRegenerating] = useState(false);
+
     const { data, isLoading, error, refetch } = useQuery({
         queryKey: ["survey-analytics", surveyId],
         queryFn: () => fetchAnalytics(surveyId),
         refetchInterval: (query) => {
-            // Poll every 10s if status is 'not_generated' or in progress, otherwise 5m
             const status = query.state.data?.status;
-            return status === 'not_generated' ? 10000 : 300000;
-        }
+            return status === "not_generated" ? 10000 : 300000;
+        },
     });
+
+    const handleRegenerate = async () => {
+        setIsRegenerating(true);
+        try {
+            await fetch(`/api/surveys/${surveyId}/analytics`, {
+                method: "POST",
+                body: JSON.stringify({ force: true }),
+            });
+            refetch();
+        } finally {
+            setIsRegenerating(false);
+        }
+    };
 
     if (isLoading) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[400px] text-gray-500">
                 <Loader2 className="w-8 h-8 animate-spin mb-4 text-black" />
-                <p>Loading analytics...</p>
+                <p className="text-sm font-medium">Loading research intelligence...</p>
             </div>
         );
     }
@@ -46,35 +59,37 @@ export function AnalyticsDashboard({ surveyId }: AnalyticsDashboardProps) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[400px] text-red-500">
                 <AlertCircle className="w-10 h-10 mb-4" />
-                <p className="font-medium">Error loading analytics</p>
+                <p className="font-bold text-lg">Analysis Interrupted</p>
                 <p className="text-sm mt-1 text-gray-500">{(error as Error).message}</p>
-                <button onClick={() => refetch()} className="mt-4 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
-                    Retry
+                <button
+                    onClick={() => refetch()}
+                    className="mt-6 px-6 py-2.5 bg-white border border-gray-200 rounded-full text-sm font-bold text-gray-900 hover:bg-gray-50 transition-all shadow-sm"
+                >
+                    Retry Analysis
                 </button>
             </div>
         );
     }
 
-    // Handle "Not Generated" state (worker hasn't run or no data yet)
-    if (data?.status === 'not_generated') {
+    if (data?.status === "not_generated") {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[400px] bg-white rounded-2xl border border-dashed border-gray-200 p-8 text-center max-w-2xl mx-auto mt-8">
-                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-                    <Loader2 className="w-8 h-8 text-black animate-spin" />
+            <div className="flex flex-col items-center justify-center min-h-[400px] bg-white rounded-[2.5rem] border border-dashed border-gray-200 p-12 text-center max-w-2xl mx-auto mt-8">
+                <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-6">
+                    <RefreshCw className="w-8 h-8 text-black animate-spin" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Analyzing Responses</h3>
-                <p className="text-gray-500 max-w-md mx-auto mb-6">
-                    {data.message}
+                <h3 className="text-2xl font-bold text-gray-900 mb-3 tracking-tight">Synthesizing Results</h3>
+                <p className="text-gray-500 max-w-md mx-auto mb-8 leading-relaxed italic">
+                    "{data.message}"
                 </p>
-                <div className="flex gap-4 text-sm text-gray-600 bg-gray-50 px-6 py-3 rounded-xl">
-                    <div className="flex flex-col">
-                        <span className="font-bold text-lg text-gray-900">{data.conversationStats?.total || 0}</span>
-                        <span className="text-xs">Total</span>
+                <div className="flex gap-8 text-sm bg-gray-50 px-8 py-5 rounded-[2rem]">
+                    <div className="flex flex-col items-center">
+                        <span className="font-black text-2xl text-gray-900">{data.conversationStats?.total || 0}</span>
+                        <span className="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Responses</span>
                     </div>
                     <div className="w-px bg-gray-200" />
-                    <div className="flex flex-col">
-                        <span className="font-bold text-lg text-gray-900">{data.conversationStats?.completed || 0}</span>
-                        <span className="text-xs">Completed</span>
+                    <div className="flex flex-col items-center">
+                        <span className="font-black text-2xl text-gray-900">{data.conversationStats?.completed || 0}</span>
+                        <span className="text-[10px] uppercase font-bold text-gray-400 tracking-widest">Completed</span>
                     </div>
                 </div>
             </div>
@@ -82,104 +97,47 @@ export function AnalyticsDashboard({ surveyId }: AnalyticsDashboardProps) {
     }
 
     const analytics = data as SurveyAnalyticsData;
-    const { coreMetrics, executiveSummary, goalAssessment, discoveredInsights } = analytics;
-    // Fallback for maxLimit since it might not be in the partial type yet
-    const maxLimit = 50;
-
-    // Combine widgets (backend provided + any frontend-injected ones like Data Gaps)
-    const allWidgets = [...analytics.dashboardWidgets];
-
-    // Inject Data Gaps if present (as it's not currently in backend widget generation)
-    if (discoveredInsights.dataGaps && discoveredInsights.dataGaps.length > 0) {
-        allWidgets.push({
-            id: "data_gaps",
-            type: "insight_list",
-            title: "Missing Information",
-            description: "Topics that could not be determined",
-            priority: 99,
-            size: "medium",
-            data: {
-                insights: discoveredInsights.dataGaps.map(g => ({ text: g, significance: 'medium' }))
-            }
-        });
-    }
 
     return (
-        <div className="space-y-8 pb-12 animate-in fade-in duration-500">
-            {/* Header Actions Row */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/50 p-4 rounded-3xl border border-gray-100">
-                <div className="flex items-center gap-4 text-xs font-medium text-gray-500">
-                    <span>
-                        Last updated: {new Date(analytics.lastUpdated).toLocaleString()}
-                    </span>
-                    {/* Respondent Limit Tracker */}
-                    <div className="h-4 w-px bg-gray-200 hidden md:block" />
-                    <div className="md:block w-64 hidden">
-                        <RespondentLimitTracker currentCount={coreMetrics.totalConversations} maxLimit={maxLimit} />
+        <div className="space-y-12 pb-20 animate-in fade-in duration-700">
+            {/* Utility Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-gray-100 rounded-2xl">
+                        <LayoutDashboard className="w-5 h-5 text-gray-900" />
+                    </div>
+                    <div>
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">
+                            Refreshed {new Date(analytics.lastUpdated).toLocaleDateString()}
+                        </div>
+                        <h2 className="text-lg font-bold text-gray-900 tracking-tight leading-none">
+                            Research Narrative
+                        </h2>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <button
-                        onClick={() => fetch(`/api/surveys/${surveyId}/analytics`, { method: 'POST', body: JSON.stringify({ force: true }) })}
-                        className="px-5 py-2.5 bg-black text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition-all"
+
+                <div className="flex items-center gap-3">
+                    <Link
+                        href={`/dashboard/surveys/${surveyId}/analytics/chat`}
+                        className="flex items-center gap-2.5 px-6 py-2.5 bg-gray-900 text-white rounded-full text-sm font-bold hover:bg-black transition-all shadow-xl shadow-gray-200"
                     >
-                        Regenerate
+                        <MessageSquare className="w-4 h-4" />
+                        Chat with Data
+                    </Link>
+                    <button
+                        onClick={handleRegenerate}
+                        disabled={isRegenerating}
+                        className="p-2.5 hover:bg-gray-100 rounded-full transition-colors disabled:opacity-50"
+                        title="Regenerate Report"
+                    >
+                        <RefreshCw
+                            className={cn("w-5 h-5 text-gray-400", isRegenerating && "animate-spin")}
+                        />
                     </button>
                 </div>
             </div>
 
-            {/* Mobile-only Respondent Tracker */}
-            <div className="md:hidden">
-                <RespondentLimitTracker currentCount={coreMetrics.totalConversations} maxLimit={maxLimit} />
-            </div>
-
-            {/* 1. Executive Summary Hero Section - Kept distinct for impact */}
-            <div className="bg-white rounded-[2.5rem] p-8 md:p-10 border border-gray-100/50">
-                <div className="flex flex-col lg:flex-row gap-10">
-                    <div className="flex-1 space-y-8">
-                        <div className="inline-flex items-center gap-2">
-                            <div className="bg-black text-white text-[10px] uppercase font-bold px-3 py-1 rounded-full tracking-widest">
-                                Executive Summary
-                            </div>
-                            <span className="text-xs font-medium text-gray-400">
-                                Based on {coreMetrics.totalConversations} conversations
-                            </span>
-                        </div>
-
-                        <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 leading-tight tracking-tight">
-                            {executiveSummary.headline}
-                        </h2>
-
-                        <div className="space-y-4">
-                            {executiveSummary.keyInsights.slice(0, 3).map((insight, i) => (
-                                <div key={i} className="flex gap-4 items-start group">
-                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-xs font-bold mt-0.5 group-hover:bg-black group-hover:text-white transition-colors">
-                                        {i + 1}
-                                    </span>
-                                    <p className="text-lg text-gray-600 leading-relaxed font-medium">
-                                        {insight}
-                                    </p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Sentiment Gauge integrated into Hero */}
-                    <div className="lg:w-80 flex-shrink-0 flex items-center justify-center bg-gray-50/50 rounded-[2rem] p-6">
-                        <SentimentGauge
-                            score={executiveSummary.overallSentiment.score}
-                            confidence={executiveSummary.overallSentiment.confidence}
-                            overall={executiveSummary.overallSentiment.overall}
-                        />
-                    </div>
-                </div>
-            </div>
-
-            {/* 2. Main Dashboard Bento Grid */}
-            <DashboardGrid widgets={allWidgets} />
-
-            {/* 3. Interactive Data Assistant */}
-            <ChatWithData surveyId={surveyId} />
+            <NarrativeReport data={analytics} surveyId={surveyId} />
         </div>
     );
 }

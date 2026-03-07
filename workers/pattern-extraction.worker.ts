@@ -13,7 +13,7 @@ import { Worker, Job } from "bullmq";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import {
   surveyConversations,
   surveyCreationConversations,
@@ -52,7 +52,7 @@ const patternExtractionWorker = new Worker<PatternExtractionJobData>(
     await job.updateProgress(5);
 
     // ── Load survey ──────────────────────────────────────────────────────────
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -64,7 +64,7 @@ const patternExtractionWorker = new Worker<PatternExtractionJobData>(
 
     // ── Creation conversations bypass signal/move collection ─────────────────
     if (conversationType === "creation") {
-      const [creationConv] = await db
+      const [creationConv] = await getDb()
         .select()
         .from(surveyCreationConversations)
         .where(eq(surveyCreationConversations.surveyId, surveyId));
@@ -125,7 +125,7 @@ const patternExtractionWorker = new Worker<PatternExtractionJobData>(
     await job.updateProgress(50);
 
     // ── PHASE 3: Discomfort veto ─────────────────────────────────────────────
-    const [discomfortRecord] = await db
+    const [discomfortRecord] = await getDb()
       .select({ id: participantFeedback.id })
       .from(participantFeedback)
       .where(
@@ -149,7 +149,7 @@ const patternExtractionWorker = new Worker<PatternExtractionJobData>(
     let extractionResult: PatternExtractionResult;
 
     if (conversationType === "sample") {
-      const [sampleConv] = await db
+      const [sampleConv] = await getDb()
         .select()
         .from(sampleConversations)
         .where(eq(sampleConversations.id, conversationId));
@@ -170,7 +170,7 @@ const patternExtractionWorker = new Worker<PatternExtractionJobData>(
       );
     } else {
       // response conversation
-      const [conversation] = await db
+      const [conversation] = await getDb()
         .select()
         .from(surveyConversations)
         .where(eq(surveyConversations.id, conversationId));

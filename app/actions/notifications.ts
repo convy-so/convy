@@ -1,6 +1,6 @@
 "use server";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { notifications } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
@@ -13,7 +13,7 @@ export async function getNotifications(): Promise<ActionResult<any[]>> {
         const session = await auth.api.getSession({ headers: await headers() });
         if (!session) return { success: false, error: "Unauthorized" };
 
-        let userNotifications = await db.query.notifications.findMany({
+        let userNotifications = await getDb().query.notifications.findMany({
             where: eq(notifications.userId, session.user.id),
             orderBy: [desc(notifications.createdAt)],
             limit: 20,
@@ -26,7 +26,7 @@ export async function getNotifications(): Promise<ActionResult<any[]>> {
                 "We're glad to have you here. Explore your dashboard to get started.",
                 "success"
             );
-            userNotifications = await db.query.notifications.findMany({
+            userNotifications = await getDb().query.notifications.findMany({
                 where: eq(notifications.userId, session.user.id),
                 orderBy: [desc(notifications.createdAt)],
                 limit: 20,
@@ -51,7 +51,7 @@ export async function markNotificationAsRead(id: string): Promise<ActionResult<v
         const session = await auth.api.getSession({ headers: await headers() });
         if (!session) return { success: false, error: "Unauthorized" };
 
-        await db
+        await getDb()
             .update(notifications)
             .set({ read: true })
             .where(and(eq(notifications.id, id), eq(notifications.userId, session.user.id)));
@@ -63,7 +63,7 @@ export async function markNotificationAsRead(id: string): Promise<ActionResult<v
 }
 
 export async function createNotification(userId: string, title: string, message: string, type: "info" | "success" | "warning" | "error" = "info", link?: string) {
-    await db.insert(notifications).values({
+    await getDb().insert(notifications).values({
         id: nanoid(),
         userId,
         title,

@@ -1,0 +1,87 @@
+
+> convy@0.1.0 build
+> next build
+
+▲ Next.js 16.1.5 (Turbopack, Cache Components)
+- Environments: .env
+
+  Creating an optimized production build ...
+
+> Build error occurred
+Error: Turbopack build failed with 5 errors:
+./next.config.ts
+Failed to resolve package babel-plugin-react-compiler while attempting to resolve React Compiler
+React compiler is enabled in next.config.ts. We attempted to resolve React Compiler relative to the next package. Is babel-plugin-react-compiler installed in your node_modules directory?
+
+
+./app/[locale]/page.tsx:8:25
+Ecmascript file had an error
+[0m [90m  6 |[39m [36mimport[39m [33mFooterSection[39m [36mfrom[39m [32m"@/components/footer-section"[39m[33m;[39m
+ [90m  7 |[39m
+[31m[1m>[22m[39m[90m  8 |[39m [36mexport[39m [36mdefault[39m [36mfunction[39m [33mHome[39m() {
+ [90m    |[39m                         [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m  9 |[39m   [32m"use cache"[39m[33m;[39m
+ [90m 10 |[39m   [36mreturn[39m (
+ [90m 11 |[39m     [33m<[39m[33m>[39m[0m
+
+"use cache" functions must be async functions.
+
+
+
+./app/api/surveys/[surveyId]/media/remove/route.ts:4:14
+Ecmascript file had an error
+[0m [90m 2 |[39m [36mimport[39m { removeSurveyMediaAction } [36mfrom[39m [32m"@/app/actions/survey-media"[39m[33m;[39m
+ [90m 3 |[39m
+[31m[1m>[22m[39m[90m 4 |[39m [36mexport[39m [36mconst[39m runtime [33m=[39m [32m"nodejs"[39m[33m;[39m
+ [90m   |[39m              [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 5 |[39m
+ [90m 6 |[39m [36mexport[39m [36masync[39m [36mfunction[39m [33mPOST[39m(
+ [90m 7 |[39m   request[33m:[39m [33mNextRequest[39m[33m,[39m[0m
+
+Route segment config "runtime" is not compatible with `nextConfig.cacheComponents`. Please remove it.
+
+
+./app/api/surveys/[surveyId]/media/upload/route.ts:4:14
+Ecmascript file had an error
+[0m [90m 2 |[39m [36mimport[39m { uploadSurveyMediaAction } [36mfrom[39m [32m"@/app/actions/survey-media"[39m[33m;[39m
+ [90m 3 |[39m
+[31m[1m>[22m[39m[90m 4 |[39m [36mexport[39m [36mconst[39m runtime [33m=[39m [32m"nodejs"[39m[33m;[39m
+ [90m   |[39m              [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 5 |[39m
+ [90m 6 |[39m [36mexport[39m [36masync[39m [36mfunction[39m [33mPOST[39m(
+ [90m 7 |[39m   request[33m:[39m [33mNextRequest[39m[33m,[39m[0m
+
+Route segment config "runtime" is not compatible with `nextConfig.cacheComponents`. Please remove it.
+
+
+./components/ui/robot-illustration.tsx:3:1
+Module not found: Can't resolve 'framer-motion'
+[0m [90m 1 |[39m [32m"use client"[39m[33m;[39m
+ [90m 2 |[39m
+[31m[1m>[22m[39m[90m 3 |[39m [36mimport[39m { motion } [36mfrom[39m [32m"framer-motion"[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 4 |[39m
+ [90m 5 |[39m [36mexport[39m [36mfunction[39m [33mRobotIllustration[39m() {
+ [90m 6 |[39m     [36mreturn[39m ([0m
+
+
+
+Import traces:
+  Client Component Browser:
+    ./components/ui/robot-illustration.tsx [Client Component Browser]
+    ./app/[locale]/not-found.tsx [Client Component Browser]
+    ./app/[locale]/not-found.tsx [Server Component]
+
+  Client Component SSR:
+    ./components/ui/robot-illustration.tsx [Client Component SSR]
+    ./app/[locale]/not-found.tsx [Client Component SSR]
+    ./app/[locale]/not-found.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+    at <unknown> (./app/[locale]/page.tsx:8:25)
+    at <unknown> (./app/api/surveys/[surveyId]/media/remove/route.ts:4:14)
+    at <unknown> (./app/api/surveys/[surveyId]/media/upload/route.ts:4:14)
+    at <unknown> (./components/ui/robot-illustration.tsx:3:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)

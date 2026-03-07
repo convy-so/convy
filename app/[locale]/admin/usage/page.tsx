@@ -1,11 +1,15 @@
 import { getUsageCostData, getUsageTypeBreakdown } from "@/app/actions/admin";
 import { UsageTypeChart } from "@/components/admin/usage-type-chart";
 import { GrowthChart } from "@/components/admin/growth-chart";
+import { Suspense } from "react";
+import { headers } from "next/headers";
 
-export default async function AdminUsagePage() {
+
+
+async function UsageDashboard({ cookieHeader }: { cookieHeader: string | null }) {
     const [usageCosts, breakdown] = await Promise.all([
-        getUsageCostData(),
-        getUsageTypeBreakdown()
+        getUsageCostData(cookieHeader),
+        getUsageTypeBreakdown(cookieHeader)
     ]);
 
     const chartData = usageCosts.map(c => ({
@@ -60,4 +64,22 @@ export default async function AdminUsagePage() {
             </div>
         </div>
     );
+}
+
+export default async function AdminUsagePage({ params }: { params: Promise<{ locale: string }> }) {
+    await params;
+    return (
+        <Suspense fallback={
+            <div className="flex items-center justify-center p-12">
+                <div className="w-8 h-8 border-4 border-gray-200 border-t-gray-900 rounded-full animate-spin" />
+            </div>
+        }>
+            <UsageDashboardWrapper />
+        </Suspense>
+    );
+}
+
+async function UsageDashboardWrapper() {
+    const cookieHeader = (await headers()).get("cookie");
+    return <UsageDashboard cookieHeader={cookieHeader} />;
 }

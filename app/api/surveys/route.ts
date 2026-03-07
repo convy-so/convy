@@ -1,5 +1,5 @@
 import { eq, desc, and, isNull } from "drizzle-orm";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys, surveyCreationConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { nanoid } from "nanoid";
@@ -15,7 +15,7 @@ export async function GET() {
 
     const activeOrgId = session.session.activeOrganizationId;
 
-    const userSurveys = await db
+    const userSurveys = await getDb()
       .select({
         id: surveys.id,
         title: surveys.title,
@@ -87,12 +87,12 @@ export async function POST(request: Request) {
       body.language === "es" ||
       body.language === "it"
         ? body.language
-        : "en";
+        : (session.user as any).preferredLanguage || "en";
 
     const domainId = typeof body.domainId === "number" ? body.domainId : null;
 
     let survey;
-    await db.transaction(async (tx) => {
+    await getDb().transaction(async (tx) => {
       const [insertedSurvey] = await tx
         .insert(surveys)
         .values({

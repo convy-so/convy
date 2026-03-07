@@ -9,7 +9,7 @@
  */
 
 import { nanoid } from "nanoid";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { conversationMoves } from "@/db/schema/learning";
 import { surveyConversations } from "@/db/schema/surveys";
 import { eq } from "drizzle-orm";
@@ -42,15 +42,16 @@ interface RawMessage {
 export async function tagConversationMoves(
   conversationId: string,
   surveyId: string,
-  signals: ConversationSignals
+  signals: ConversationSignals,
 ): Promise<ConversationMove[]> {
-  const [conv] = await db
+  const [conv] = await getDb()
     .select({ rawConversation: surveyConversations.rawConversation })
     .from(surveyConversations)
     .where(eq(surveyConversations.id, conversationId))
     .limit(1);
 
-  if (!conv) throw new Error(`[MoveTagger] Conversation ${conversationId} not found`);
+  if (!conv)
+    throw new Error(`[MoveTagger] Conversation ${conversationId} not found`);
 
   const messages = (conv.rawConversation as RawMessage[]) || [];
 
@@ -73,7 +74,9 @@ export async function tagConversationMoves(
 
     // A move led to abandonment only if it was the last AI message and
     // the conversation was not completed
-    const isLastAiMessage = !messages.slice(i + 2).some((m) => m.role === "assistant");
+    const isLastAiMessage = !messages
+      .slice(i + 2)
+      .some((m) => m.role === "assistant");
     const ledToAbandonment = isLastAiMessage && signals.completionRate < 1;
 
     // Infer phase from turn position
@@ -81,8 +84,13 @@ export async function tagConversationMoves(
     const phase = inferPhase(aiTurnIndex, totalAiTurns);
 
     // Accumulate rough topic tracking from participant responses (first 5 words as signal)
-    const topicHint = participantResponse.trim().split(/\s+/).slice(0, 5).join(" ");
-    if (responseWordCount > 3) topicsAccumulated = [...topicsAccumulated, topicHint].slice(-10);
+    const topicHint = participantResponse
+      .trim()
+      .split(/\s+/)
+      .slice(0, 5)
+      .join(" ");
+    if (responseWordCount > 3)
+      topicsAccumulated = [...topicsAccumulated, topicHint].slice(-10);
 
     const move: ConversationMove = {
       id: nanoid(),
@@ -105,27 +113,29 @@ export async function tagConversationMoves(
 
   // Bulk insert
   if (moves.length > 0) {
-    await db.insert(conversationMoves).values(
-      moves.map((m) => ({
-        id: m.id,
-        conversationId: m.conversationId,
-        surveyId: m.surveyId,
-        turnIndex: m.turnIndex,
-        aiQuestion: m.aiQuestion,
-        participantResponse: m.participantResponse,
-        phase: m.phase,
-        responseWordCount: m.responseWordCount,
-        responseRichnessScore: m.responseRichnessScore,
-        ledToAbandonment: m.ledToAbandonment,
-        participantStyleAtTurn: m.participantStyleAtTurn,
-        topicsDiscussedSoFar: m.topicsDiscussedSoFar,
-      }))
-    );
+    await getDb()
+      .insert(conversationMoves)
+      .values(
+        moves.map((m) => ({
+          id: m.id,
+          conversationId: m.conversationId,
+          surveyId: m.surveyId,
+          turnIndex: m.turnIndex,
+          aiQuestion: m.aiQuestion,
+          participantResponse: m.participantResponse,
+          phase: m.phase,
+          responseWordCount: m.responseWordCount,
+          responseRichnessScore: m.responseRichnessScore,
+          ledToAbandonment: m.ledToAbandonment,
+          participantStyleAtTurn: m.participantStyleAtTurn,
+          topicsDiscussedSoFar: m.topicsDiscussedSoFar,
+        })),
+      );
   }
 
   console.log(
     `[MoveTagger] conversation=${conversationId} tagged ${moves.length} moves ` +
-      `(${moves.filter((m) => m.ledToAbandonment).length} abandonment leads)`
+      `(${moves.filter((m) => m.ledToAbandonment).length} abandonment leads)`,
   );
 
   return moves;
@@ -153,7 +163,7 @@ function computeMoveRichness(text: string): number {
  */
 function inferPhase(
   turnIndex: number,
-  totalTurns: number
+  totalTurns: number,
 ): "opening" | "exploration" | "deepdive" | "closing" {
   if (totalTurns === 0) return "opening";
   const pct = turnIndex / totalTurns;

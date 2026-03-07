@@ -289,7 +289,13 @@
             "initializing": "Inicializando...",
             "liveTranscription": "Transcripción en vivo",
             "typeAnswer": "Escriba su respuesta...",
-            "sharedMedia": "Medios compartidos"
+            "sharedMedia": "Medios compartidos",
+            "voiceSurveyIntro": "Participe en nuestra entrevista por voz. Elija su idioma preferido y comience a hablar con naturalidad.",
+            "selectLanguage": "Seleccionar idioma",
+            "startInterview": "Iniciar entrevista",
+            "micPermissionDenied": "Se requiere acceso al micrófono para esta encuesta. Actívelo en la configuración de su navegador para continuar.",
+            "micConsentTitle": "Acceso al Micrófono",
+            "micConsentDescription": "Entiendo que esta encuesta utiliza grabación de voz. Concedo permiso para usar mi micrófono durante la entrevista."
         }
     },
     "Sidebar": {

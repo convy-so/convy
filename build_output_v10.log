@@ -1,0 +1,23 @@
+
+> convy@0.1.0 build
+> next build
+
+▲ Next.js 16.1.5 (Turbopack, Cache Components)
+- Environments: .env
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 88s
+  Running TypeScript ...
+Failed to compile.
+
+./components/dashboard/header.tsx:40:7
+Type error: Block-scoped variable 'unreadCount' used before its declaration.
+
+[0m [90m 38 |[39m       getClientTranslation([32m`${unreadCount} new notifications`[39m)[33m.[39mthen(setUnreadCountText)[33m;[39m
+ [90m 39 |[39m     }
+[31m[1m>[22m[39m[90m 40 |[39m   }[33m,[39m [unreadCount])[33m;[39m
+ [90m    |[39m       [31m[1m^[22m[39m
+ [90m 41 |[39m
+ [90m 42 |[39m   [90m// Fetch notifications using React Query[39m
+ [90m 43 |[39m   [36mconst[39m { data[33m:[39m notifications [33m=[39m [][33m,[39m isLoading[33m,[39m refetch[33m:[39m refetchNotifications } [33m=[39m useQuery({[0m
+Next.js build worker exited with code: 1 and signal: null

@@ -1,0 +1,23 @@
+
+> convy@0.1.0 build
+> next build
+
+▲ Next.js 16.1.5 (Turbopack, Cache Components)
+- Environments: .env
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 86s
+  Running TypeScript ...
+Failed to compile.
+
+./app/[locale]/(auth)/forgot-password/page.tsx:107:10
+Type error: Cannot find name 'Loader2'. Did you mean 'Loader'?
+
+[0m [90m 105 |[39m     [33m<[39m[33mSuspense[39m fallback[33m=[39m{
+ [90m 106 |[39m       [33m<[39m[33mdiv[39m className[33m=[39m[32m"flex items-center justify-center p-12"[39m[33m>[39m
+[31m[1m>[22m[39m[90m 107 |[39m         [33m<[39m[33mLoader2[39m className[33m=[39m[32m"w-8 h-8 animate-spin text-gray-400"[39m [33m/[39m[33m>[39m
+ [90m     |[39m          [31m[1m^[22m[39m
+ [90m 108 |[39m       [33m<[39m[33m/[39m[33mdiv[39m[33m>[39m
+ [90m 109 |[39m     }[33m>[39m
+ [90m 110 |[39m       [33m<[39m[33mForgotPasswordContent[39m [33m/[39m[33m>[39m[0m
+Next.js build worker exited with code: 1 and signal: null

@@ -13,14 +13,20 @@ import {
 } from "lucide-react";
 import { Link } from "@/i18n/routing";
 import { FeedbackForm } from "@/components/admin/feedback-form";
+import { Suspense } from "react";
+import { headers } from "next/headers";
 
-export default async function SurveyReviewPage({
+
+
+async function ReviewContent({
     params,
+    cookieHeader,
 }: {
     params: Promise<{ id: string }>;
+    cookieHeader: string | null;
 }) {
     const { id } = await params;
-    const survey = await getSurveyReviewDetails(id);
+    const survey = await getSurveyReviewDetails(id, cookieHeader);
 
     if (!survey) {
         notFound();
@@ -197,3 +203,21 @@ export default async function SurveyReviewPage({
         </div>
     );
 }
+
+export default function SurveyReviewPage(props: { params: Promise<{ id: string }> }) {
+    return (
+        <Suspense fallback={
+            <div className="flex items-center justify-center p-12">
+                <div className="w-8 h-8 border-4 border-gray-200 border-t-indigo-600 rounded-full animate-spin" />
+            </div>
+        }>
+            <ReviewContentWrapper {...props} />
+        </Suspense>
+    );
+}
+
+async function ReviewContentWrapper(props: { params: Promise<{ id: string }> }) {
+    const cookieHeader = (await headers()).get("cookie");
+    return <ReviewContent {...props} cookieHeader={cookieHeader} />;
+}
+

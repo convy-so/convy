@@ -1,0 +1,2 @@
+app/api/user/language/route.ts(22,26): error TS18048: 'db' is possibly 'undefined'.
+app/api/user/language/route.ts(64,11): error TS18048: 'db' is possibly 'undefined'.

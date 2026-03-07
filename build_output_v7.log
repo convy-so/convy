@@ -1,0 +1,25 @@
+
+> convy@0.1.0 build
+> next build
+
+▲ Next.js 16.1.5 (Turbopack, Cache Components)
+- Environments: .env
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 21.3min
+  Running TypeScript ...
+Failed to compile.
+
+./app/[locale]/(dashboard)/dashboard/team/page.tsx:175:14
+Type error: Type '{ children: string[]; }' is not assignable to type 'ClientTProps'.
+  Types of property 'children' are incompatible.
+    Type 'string[]' is not assignable to type 'string'.
+
+[0m [90m 173 |[39m           [33m<[39m[33m/[39m[33mh1[39m[33m>[39m
+ [90m 174 |[39m           [33m<[39m[33mp[39m className[33m=[39m[32m"text-gray-500"[39m[33m>[39m
+[31m[1m>[22m[39m[90m 175 |[39m             [33m<[39m[33mClientT[39m[33m>[39m[33mManage[39m your organization members and settings [36mfor[39m {activeWorkspace[33m.[39mname}[33m.[39m[33m<[39m[33m/[39m[33mClientT[39m[33m>[39m
+ [90m     |[39m              [31m[1m^[22m[39m
+ [90m 176 |[39m           [33m<[39m[33m/[39m[33mp[39m[33m>[39m
+ [90m 177 |[39m         [33m<[39m[33m/[39m[33mdiv[39m[33m>[39m
+ [90m 178 |[39m[0m
+Next.js build worker exited with code: 1 and signal: null
