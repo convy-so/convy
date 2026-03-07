@@ -14,62 +14,24 @@
             "TextMode": "Text Mode",
             "VoiceMode": "Voice Mode",
             "CreationMode": {
-                "Title": "AI Designer Mode",
-                "Description": "Choose how you want to build your survey with our expert AI.",
-                "Text": "Text Designer",
-                "Voice": "Voice Designer"
+                "Title": "AI Designer Experience",
+                "Description": "How do you want to collaborate with the AI to build your survey?",
+                "Text": "Text Chat",
+                "TextDescription": "Type messages and iterate on your design step-by-step in a familiar chat interface.",
+                "Voice": "Voice Assistant",
+                "VoiceDescription": "Design your survey hands-free using real-time, natural speech with the AI."
             },
             "RespondentFormat": {
                 "Title": "Participant Experience",
-                "Description": "How should people take this survey? Choose the interface they will use.",
-                "Text": "Text Survey",
-                "Voice": "Voice Survey"
+                "Description": "Choose the final format for people who will take your survey.",
+                "Text": "Text Conversation",
+                "TextDescription": "Respondents answer questions through a standard text-based chat interface.",
+                "Voice": "Immersive Voice",
+                "VoiceDescription": "Respondents talk to a lifelike AI agent that guides them through the survey."
             },
             "PageTitle": "Create a new survey",
             "PageSubtitle": "Select the domain expertise for your survey or describe your needs",
             "AIExpertLabel": "AI Expert",
-            "Domains": {
-                "1": {
-                    "Title": "Customer Experience & Satisfaction",
-                    "Description": "Evaluating a transaction or service that has ALREADY OCCURRED."
-                },
-                "2": {
-                    "Title": "Market Research & Consumer Intelligence",
-                    "Description": "Understanding markets, preferences, and behaviors to inform FUTURE decisions."
-                },
-                "3": {
-                    "Title": "Workforce & Organizational Development",
-                    "Description": "Assessing internal health, effectiveness, and employee sentiment."
-                },
-                "4": {
-                    "Title": "Product Design & User Research",
-                    "Description": "Optimizing usability, accessibility, and interface effectiveness."
-                },
-                "5": {
-                    "Title": "Education & Learning Assessment",
-                    "Description": "Measuring knowledge, skills, learning outcomes, or educational experiences."
-                },
-                "6": {
-                    "Title": "Civic Engagement & Public Opinion",
-                    "Description": "Capturing citizen views on political matters, policy, or community governance."
-                },
-                "7": {
-                    "Title": "Scientific & Academic Research",
-                    "Description": "Conducting rigorous research for generalizable knowledge."
-                },
-                "8": {
-                    "Title": "Health & Patient Experience",
-                    "Description": "Measuring care quality, patient outcomes, and clinical communication."
-                },
-                "9": {
-                    "Title": "Demographic & Social Characterization",
-                    "Description": "Counting, describing, and understanding population profiles."
-                },
-                "10": {
-                    "Title": "Infrastructure & Systems Performance",
-                    "Description": "Evaluating how physical systems or technical platforms are functioning."
-                }
-            },
             "Badges": {
                 "AIDraft": "AI DRAFT",
                 "ReadOnly": "Read Only"
@@ -110,8 +72,7 @@
                 "Speaking": "Speaking",
                 "SpeakingUser": "You're Speaking",
                 "TapToPause": "Tap to Pause",
-                "TapToSpeak": "Tap to Speak",
-                "SelectTopicFirst": "Select Topic First"
+                "TapToSpeak": "Tap to Speak"
             },
             "Completion": {
                 "Title": "Excellent! We're Ready.",
@@ -134,64 +95,10 @@
             "Input": {
                 "Placeholder": "Describe your survey or ask a question...",
                 "VoiceMode": "Switch to Voice Mode",
-                "PlaceholderLocked": "Select a topic above to start...",
+                "PlaceholderLocked": "Type a message to start...",
                 "AddMedia": "Add Context/Media",
                 "Send": "Send",
                 "ActionsTitle": "Actions"
-            },
-            "DomainSelection": {
-                "Title": "Choose your survey path",
-                "Description": "Select a domain to get specialized AI guidance and industry-standard templates."
-            },
-            "SuggestedPrompts": {
-                "1": [
-                    "Create a customer satisfaction survey (CSAT)",
-                    "Map a customer journey touchpoint",
-                    "Measure Net Promoter Score (NPS)",
-                    "Evaluate a support interaction"
-                ],
-                "2": [
-                    "Test a new product concept",
-                    "Analyze market trends",
-                    "Understand pricing sensitivity",
-                    "Conduct a competitor analysis"
-                ],
-                "3": [
-                    "Measure employee engagement",
-                    "Assess organizational culture",
-                    "Gather 360-degree feedback",
-                    "Evaluate manager effectiveness"
-                ],
-                "5": [
-                    "Evaluate a course or training",
-                    "Assess learning outcomes",
-                    "Gather student feedback",
-                    "Review curriculum effectiveness"
-                ],
-                "6": [
-                    "Survey public opinion on a local issue",
-                    "Measure civic engagement",
-                    "Gather community feedback",
-                    "Assess policy support"
-                ],
-                "7": [
-                    "Design a longitudinal study",
-                    "Test a social psychology hypothesis",
-                    "Validate a psychometric scale",
-                    "Conduct an experimental survey"
-                ],
-                "9": [
-                    "Collect demographic data",
-                    "Profile a household",
-                    "Analyze population trends",
-                    "Conduct a census-style survey"
-                ],
-                "10": [
-                    "Report a system outage",
-                    "Evaluate IT infrastructure",
-                    "Log a bug report",
-                    "Assess service reliability"
-                ]
             },
             "Authentication": {
                 "Required": "Authentication Required",
@@ -210,7 +117,6 @@
                 "VoiceSendFailed": "Failed to send voice message",
                 "FinalizeFailed": "Failed to finalize survey. Please try again.",
                 "Finalized": "Survey finalized! Loading sample conversations...",
-                "SaveTopicFailed": "Failed to save topic selection",
                 "GenericError": "An error occurred. Please try again."
             },
             "Feedback": {
@@ -333,7 +239,13 @@
             "thankYouMessage": "Your responses have been saved. We appreciate your feedback.",
             "close": "Close Window",
             "hideText": "Hide transcript",
-            "showText": "Show transcript"
+            "showText": "Show transcript",
+            "voiceSurveyIntro": "Join our voice-powered interview. Choose your preferred language and start speaking naturally.",
+            "selectLanguage": "Select Language",
+            "startInterview": "Start Interview",
+            "micPermissionDenied": "Microphone access is required for this survey. Please enable it in your browser settings to continue.",
+            "micConsentTitle": "Microphone Access",
+            "micConsentDescription": "I understand that this survey uses voice recording. I grant permission to use my microphone for the duration of the interview."
         },
         "Detail": {
             "Header": {
@@ -475,6 +387,7 @@
     },
     "SurveysPage": {
         "Status": {
+            "Active": "Active",
             "Published": "Published",
             "Draft": "Draft",
             "Creating": "Creating",
@@ -498,14 +411,19 @@
         "Card": {
             "Responses": "Responses",
             "Created": "Created",
+            "LastActivity": "Last activity:",
+            "InProject": "in {name}",
             "Menu": {
                 "Continue": "Continue",
                 "ViewDetails": "View Details",
-                "Analytics": "Analytics",
-                "Edit": "Edit",
+                "Analytics": "View Analytics",
+                "Edit": "Edit Survey",
                 "CopyLink": "Copy Link",
                 "Duplicate": "Duplicate",
-                "Delete": "Delete"
+                "Delete": "Delete",
+                "Resume": "Resume Creation",
+                "ViewChat": "View Creation Chat",
+                "ShareLink": "Share Link"
             },
             "Toasts": {
                 "Deleted": "Survey deleted successfully",
@@ -599,23 +517,31 @@
             "ManageProjects": {
                 "Title": "Manage Projects",
                 "Description": "Organize your surveys"
+            },
+            "TeamManagement": {
+                "Title": "Team Management",
+                "Description": "Collaboration settings"
             }
         },
         "RecentSurveys": {
             "Title": "Recent Surveys",
             "ViewAll": "View all",
             "NoSurveys": "No surveys yet",
-            "GetStarted": "Get started by creating your first AI-powered survey",
+            "GetStarted": "Get started by creating your first AI-powered survey.",
             "CreateFirst": "Create Your First Survey"
         },
         "Activity": {
-            "NewResponse": "New response received"
+            "Title": "Recent Activity",
+            "ViewAll": "View all",
+            "NewResponse": "New response received",
+            "SurveyCreated": "Survey created",
+            "SurveyPublished": "Survey published"
         }
     },
     "ProjectsPage": {
         "Header": {
             "Title": "Projects",
-            "Description": "Organize your surveys into projects.",
+            "Description": "Organize your surveys into projects to keep things tidy and systematic.",
             "CreateButton": "Create Project"
         },
         "Search": {
@@ -627,26 +553,26 @@
             "Menu": {
                 "ViewDetails": "View Details",
                 "AddSurvey": "Add Survey",
-                "Edit": "Edit Project",
-                "Delete": "Delete Project"
+                "Edit": "Edit",
+                "Delete": "Delete"
             }
         },
         "Empty": {
             "CreateNew": {
                 "Title": "Create New Project",
-                "Description": "Click to create a new project folder"
+                "Description": "Group related surveys for better tracking."
             },
-            "NoMatching": "No projects found matching \"{query}\""
+            "NoMatching": "No matching projects found."
         },
         "CreateModal": {
-            "Title": "Create New Project",
+            "Title": "Create Project",
             "NameLabel": "Project Name",
-            "NamePlaceholder": "e.g. Q1 Marketing Surveys",
+            "NamePlaceholder": "e.g. Q4 User Research",
             "DescriptionLabel": "Description",
-            "DescriptionPlaceholder": "What is this project for?",
+            "DescriptionPlaceholder": "Describe the objective of this project...",
             "Cancel": "Cancel",
             "Creating": "Creating...",
-            "Confirm": "Create Project"
+            "Confirm": "Confirm"
         },
         "EditModal": {
             "Title": "Edit Project",
@@ -659,21 +585,21 @@
         },
         "DeleteModal": {
             "Title": "Delete Project",
-            "Description": "Are you sure you want to delete \"{name}\"? This will not delete the surveys within the project.",
+            "Description": "Are you sure you want to delete this project? Surveys won't be deleted, only removed from this folder.",
             "Cancel": "Cancel",
             "Deleting": "Deleting...",
-            "Confirm": "Delete Project"
+            "Confirm": "Confirm Delete"
         },
         "ProjectSurveys": {
             "Empty": {
-                "Description": "No surveys in this project yet.",
-                "Button": "Add Survey"
+                "Description": "No surveys added to this project yet.",
+                "Button": "Add Surveyor"
             },
-            "AddAnother": "Add another survey"
+            "AddAnother": "Add More Surveys"
         },
         "AddSurveyModal": {
             "Title": "Add Survey to Project",
-            "Empty": "All surveys are already in this project or none exist.",
+            "Empty": "All your surveys are already in this project.",
             "Cancel": "Cancel"
         }
     },
@@ -686,18 +612,19 @@
             "Placeholder": "Search surveys..."
         },
         "Card": {
-            "Responses": "responses"
+            "Responses": "Responses"
         },
         "Empty": {
-            "Title": "No active surveys",
-            "Description": "Create and publish a survey to start seeing analytics.",
+            "Title": "No stats yet",
+            "Description": "Launch a survey and start collecting feedback to see analytics here.",
             "Button": "Create Survey"
         }
     },
     "TeamPage": {
         "Header": {
-            "Title": "Team Management",
-            "Description": "Manage members, roles, and permissions for {name}"
+
+            "Title": "Team & Workspace",
+            "Description": "Manage your organization members and settings for {name}."
         },
         "Stats": {
             "TotalMembers": "Total Members",
@@ -794,6 +721,11 @@
                 "Success": "Invitation sent successfully",
                 "Error": "Failed to send invitation"
             }
+        },
+        "ReadyToScale": {
+            "Title": "Ready to scale?",
+            "Description": "Get advanced analytics, higher response limits, and priority support.",
+            "Button": "See Pricing"
         }
     },
     "Settings": {
@@ -1038,6 +970,29 @@
             "GenericError": "An error occurred during verification",
             "ResendSuccess": "Verification email sent!",
             "ResendError": "Failed to send verification email"
+        },
+        "Invitation": {
+            "Verifying": "Verifying Invitation",
+            "VerifyingSubtitle": "Please wait a moment...",
+            "AuthRequired": "Workspace Invitation",
+            "SignInRequired": "Please sign in to accept this invitation",
+            "InviteMessage": "You've been invited to join a workspace on Convy.",
+            "SignInToAccept": "Sign in to Accept",
+            "NoAccount": "Don't have an account?",
+            "SignUp": "Sign up",
+            "Welcome": "Welcome to the team!",
+            "Invited": "You've been invited to join a workspace",
+            "JoinedSuccess": "Joined successfully!",
+            "JoinedDesc": "You are now a member of the workspace.",
+            "Redirecting": "Redirecting to dashboard...",
+            "ErrorTitle": "Invitation error",
+            "BackToDashboard": "Back to Dashboard",
+            "JoinWorkspace": "Join Workspace",
+            "JoinDesc": "Click the button below to accept the invitation and start collaborating.",
+            "AcceptButton": "Accept Invitation",
+            "Accepting": "Accepting...",
+            "ToastSuccess": "Joined workspace successfully!",
+            "GenericError": "Failed to accept invitation"
         }
     },
     "Profile": {
@@ -1054,5 +1009,46 @@
     "SurveyAnalytics": {
         "Title": "Survey Analysis",
         "Subtitle": "AI-powered insights and metrics"
+    },
+    "SurveyStatus": {
+        "Active": "Active",
+        "Draft": "Draft",
+        "Completed": "Completed",
+        "Paused": "Paused",
+        "Creating": "Creating"
+    },
+    "Workspace": {
+        "Switcher": {
+            "PersonalAccount": "Personal Account",
+            "Individual": "Individual",
+            "Workspace": "workspace",
+            "PersonalDesc": "Your individual surveys",
+            "CreateWorkspace": "Create Workspace",
+            "Roles": {
+                "Owner": "Owner",
+                "Member": "Member"
+            }
+        },
+        "Create": {
+            "Title": "Create Workspace",
+            "NameLabel": "Workspace Name *",
+            "NamePlaceholder": "e.g., Marketing Team",
+            "DescLabel": "Description (optional)",
+            "DescPlaceholder": "What is this workspace for?",
+            "TipTitle": "Tip:",
+            "TipDesc": "Workspaces help you organize surveys and collaborate with your team. You can invite members after creation.",
+            "Cancel": "Cancel",
+            "CreateButton": "Create Workspace",
+            "Creating": "Creating...",
+            "Error": "An unexpected error occurred"
+        }
+    },
+    "Common": {
+        "Cancel": "Cancel",
+        "Delete": "Delete",
+        "Save": "Save",
+        "Saving": "Saving...",
+        "Error": "An error occurred",
+        "Success": "Success"
     }
 }

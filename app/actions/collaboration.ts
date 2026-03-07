@@ -4,7 +4,7 @@ import { z } from "zod";
 import { eq, and, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys, surveyCreationComments, users } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getSurveyAccessLevel } from "@/lib/workspace-access";
@@ -26,7 +26,7 @@ export async function grantEditAccessAction(
     const session = await getVerifiedSession();
     const body = collaboratorSchema.parse(input);
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, body.surveyId));
@@ -39,7 +39,7 @@ export async function grantEditAccessAction(
 
     const currentCollaborators = survey.collaborators || [];
     if (!currentCollaborators.includes(body.userIdToGrant)) {
-      await db
+      await getDb()
         .update(surveys)
         .set({ collaborators: [...currentCollaborators, body.userIdToGrant] })
         .where(eq(surveys.id, body.surveyId));
@@ -58,7 +58,7 @@ export async function revokeEditAccessAction(
     const session = await getVerifiedSession();
     const body = collaboratorSchema.parse(input);
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, body.surveyId));
@@ -74,7 +74,7 @@ export async function revokeEditAccessAction(
       (id) => id !== body.userIdToGrant,
     );
 
-    await db
+    await getDb()
       .update(surveys)
       .set({ collaborators: newCollaborators })
       .where(eq(surveys.id, body.surveyId));
@@ -103,7 +103,7 @@ export async function postCreationCommentAction(
     }
 
     const commentId = nanoid();
-    await db.insert(surveyCreationComments).values({
+    await getDb().insert(surveyCreationComments).values({
       id: commentId,
       surveyId: body.surveyId,
       userId: session.user.id,
@@ -134,7 +134,7 @@ export async function getCreationCommentsAction(surveyId: string): Promise<
       return { success: false, error: "Unauthorized" };
     }
 
-    const commentsList = await db
+    const commentsList = await getDb()
       .select({
         id: surveyCreationComments.id,
         text: surveyCreationComments.text,

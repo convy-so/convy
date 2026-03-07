@@ -2,7 +2,7 @@ import { Worker, Job } from "bullmq";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import {
   conversationInsights,
   surveyAnalytics,
@@ -518,7 +518,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
     );
 
     // Fetch survey
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -538,7 +538,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
     await job.updateProgress(10);
 
     // Fetch all conversations with their insights
-    const conversations = await db
+    const conversations = await getDb()
       .select({
         id: surveyConversations.id,
         summary: surveyConversations.summary,
@@ -672,6 +672,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
       insightsForAI,
       surveyConfig,
       completedConversations.length,
+      creatorLanguage,
     );
 
     const analyticsResponse = await generateAIResponse(
@@ -716,7 +717,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
     await job.updateProgress(85);
 
     // Save to database
-    const [existingAnalytics] = await db
+    const [existingAnalytics] = await getDb()
       .select()
       .from(surveyAnalytics)
       .where(eq(surveyAnalytics.surveyId, surveyId));
@@ -735,7 +736,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
       `Recommended Actions:\n${analyticsData.executiveSummary.recommendedActions.map((a, idx) => `${idx + 1}. ${a}`).join("\n")}`;
 
     if (existingAnalytics) {
-      await db
+      await getDb()
         .update(surveyAnalytics)
         .set({
           overallSummary,
@@ -748,7 +749,7 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
         })
         .where(eq(surveyAnalytics.surveyId, surveyId));
     } else {
-      await db.insert(surveyAnalytics).values({
+      await getDb().insert(surveyAnalytics).values({
         id: crypto.randomUUID(),
         surveyId,
         overallSummary,

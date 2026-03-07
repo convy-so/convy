@@ -9,9 +9,13 @@
  * - Safety guardrail: if variant leads to significantly MORE abandonment, abort
  */
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { knowledgeBase } from "@/db/schema/vectors";
-import { experiments, experimentOutcomes, conversationMoves } from "@/db/schema/learning";
+import {
+  experiments,
+  experimentOutcomes,
+  conversationMoves,
+} from "@/db/schema/learning";
 import { eq, and, sql, avg, count } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
@@ -47,9 +51,14 @@ export interface ExperimentEvaluationReport {
  * Returns null if no experiment covers this situation.
  */
 export async function findActiveExperiment(
-  situation: SituationKey
-): Promise<{ id: string; controlPatternId: string | null; variantPatternId: string | null; trafficSplit: number } | null> {
-  const [experiment] = await db
+  situation: SituationKey,
+): Promise<{
+  id: string;
+  controlPatternId: string | null;
+  variantPatternId: string | null;
+  trafficSplit: number;
+} | null> {
+  const [experiment] = await getDb()
     .select({
       id: experiments.id,
       controlPatternId: experiments.controlPatternId,
@@ -65,8 +74,8 @@ export async function findActiveExperiment(
           : sql`${experiments.effectivePhase} IS NULL`,
         situation.style
           ? eq(experiments.effectiveStyle, situation.style)
-          : sql`${experiments.effectiveStyle} IS NULL`
-      )
+          : sql`${experiments.effectiveStyle} IS NULL`,
+      ),
     )
     .limit(1);
 
@@ -80,7 +89,7 @@ export async function findActiveExperiment(
 export function assignVariant(
   conversationId: string,
   experimentId: string,
-  trafficSplit: number
+  trafficSplit: number,
 ): "control" | "variant" {
   // Simple string hash — deterministic, no randomness at assignments time
   const hash = simpleHash(`${conversationId}::${experimentId}`);
@@ -95,9 +104,9 @@ export async function recordExperimentOutcome(
   moveId: string,
   experimentId: string,
   variant: "control" | "variant",
-  outcome: MoveOutcome
+  outcome: MoveOutcome,
 ): Promise<void> {
-  await db.insert(experimentOutcomes).values({
+  await getDb().insert(experimentOutcomes).values({
     id: nanoid(),
     experimentId,
     moveId,
@@ -117,7 +126,7 @@ export async function evaluateExperiments(): Promise<ExperimentEvaluationReport>
   let inconclusive = 0;
   let abortedUnsafe = 0;
 
-  const activeExperiments = await db
+  const activeExperiments = await getDb()
     .select()
     .from(experiments)
     .where(eq(experiments.status, "active"));
@@ -126,16 +135,26 @@ export async function evaluateExperiments(): Promise<ExperimentEvaluationReport>
     const stats = await getExperimentStats(exp.id);
 
     // Not enough data yet
-    if (stats.control.n < exp.minSampleSize || stats.variant.n < exp.minSampleSize) {
+    if (
+      stats.control.n < exp.minSampleSize ||
+      stats.variant.n < exp.minSampleSize
+    ) {
       inconclusive++;
       continue;
     }
 
     // Safety guardrail: if variant causes significantly more abandonment, abort
-    const abandonmentIncrease = stats.variant.abandonmentRate - stats.control.abandonmentRate;
+    const abandonmentIncrease =
+      stats.variant.abandonmentRate - stats.control.abandonmentRate;
     if (abandonmentIncrease > 0.15) {
-      console.log(`[ExperimentEngine] UNSAFE — variant has +${(abandonmentIncrease * 100).toFixed(0)}% abandonment. Aborting experiment ${exp.id}`);
-      await concludeExperiment(exp.id, exp.controlPatternId, "control_wins_safety");
+      console.log(
+        `[ExperimentEngine] UNSAFE — variant has +${(abandonmentIncrease * 100).toFixed(0)}% abandonment. Aborting experiment ${exp.id}`,
+      );
+      await concludeExperiment(
+        exp.id,
+        exp.controlPatternId,
+        "control_wins_safety",
+      );
       abortedUnsafe++;
       concluded++;
       continue;
@@ -146,34 +165,42 @@ export async function evaluateExperiments(): Promise<ExperimentEvaluationReport>
     const significant = Math.abs(tStat) > 1.96; // ~95% confidence (z-approx for large n)
 
     if (significant) {
-      const winner = tStat > 0
-        ? { id: exp.variantPatternId, side: "variant" as const }
-        : { id: exp.controlPatternId, side: "control" as const };
-      const loser = tStat > 0
-        ? { id: exp.controlPatternId, side: "control" as const }
-        : { id: exp.variantPatternId, side: "variant" as const };
+      const winner =
+        tStat > 0
+          ? { id: exp.variantPatternId, side: "variant" as const }
+          : { id: exp.controlPatternId, side: "control" as const };
+      const loser =
+        tStat > 0
+          ? { id: exp.controlPatternId, side: "control" as const }
+          : { id: exp.variantPatternId, side: "variant" as const };
 
-      console.log(`[ExperimentEngine] Experiment ${exp.id} concluded — ${winner.side} wins (t=${tStat.toFixed(2)})`);
+      console.log(
+        `[ExperimentEngine] Experiment ${exp.id} concluded — ${winner.side} wins (t=${tStat.toFixed(2)})`,
+      );
       await concludeExperiment(exp.id, winner.id, `${winner.side}_wins`);
 
       // Promote winner to ACTIVE
       if (winner.id) {
-        await db
+        await getDb()
           .update(knowledgeBase)
-          .set({ status: "ACTIVE", promotedAt: new Date(), experimentWins: sql`experiment_wins + 1` })
+          .set({
+            status: "ACTIVE",
+            promotedAt: new Date(),
+            experimentWins: sql`experiment_wins + 1`,
+          })
           .where(eq(knowledgeBase.id, winner.id));
       }
 
       // Deprecate loser (but only if it was IN_EXPERIMENT, not already ACTIVE)
       if (loser.id) {
-        await db
+        await getDb()
           .update(knowledgeBase)
           .set({ status: "DEPRECATED" })
           .where(
             and(
               eq(knowledgeBase.id, loser.id),
-              eq(knowledgeBase.status, "IN_EXPERIMENT")
-            )
+              eq(knowledgeBase.status, "IN_EXPERIMENT"),
+            ),
           );
       }
 
@@ -204,8 +231,10 @@ interface VariantStats {
   abandonmentRate: number;
 }
 
-async function getExperimentStats(experimentId: string): Promise<{ control: VariantStats; variant: VariantStats }> {
-  const rows = await db
+async function getExperimentStats(
+  experimentId: string,
+): Promise<{ control: VariantStats; variant: VariantStats }> {
+  const rows = await getDb()
     .select({
       variant: experimentOutcomes.assignedVariant,
       avgRichness: avg(experimentOutcomes.responseRichnessScore),
@@ -216,7 +245,7 @@ async function getExperimentStats(experimentId: string): Promise<{ control: Vari
     .where(eq(experimentOutcomes.experimentId, experimentId))
     .groupBy(experimentOutcomes.assignedVariant);
 
-  const makeStats = (row: typeof rows[0] | undefined): VariantStats => {
+  const makeStats = (row: (typeof rows)[0] | undefined): VariantStats => {
     if (!row) return { n: 0, mean: 0, variance: 0.01, abandonmentRate: 0 };
     const n = Number(row.sampleCount);
     const mean = Number(row.avgRichness) || 0;
@@ -237,7 +266,9 @@ async function getExperimentStats(experimentId: string): Promise<{ control: Vari
 /** Welch's t-statistic: positive means variant > control */
 function welchTStat(control: VariantStats, variant: VariantStats): number {
   if (control.n === 0 || variant.n === 0) return 0;
-  const se = Math.sqrt(control.variance / control.n + variant.variance / variant.n);
+  const se = Math.sqrt(
+    control.variance / control.n + variant.variance / variant.n,
+  );
   if (se === 0) return 0;
   return (variant.mean - control.mean) / se;
 }
@@ -245,9 +276,9 @@ function welchTStat(control: VariantStats, variant: VariantStats): number {
 async function concludeExperiment(
   experimentId: string,
   winnerId: string | null | undefined,
-  reason: string
+  reason: string,
 ): Promise<void> {
-  await db
+  await getDb()
     .update(experiments)
     .set({
       status: "concluded",

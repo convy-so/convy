@@ -16,6 +16,7 @@ Sentry.init({
   serverName: "websocket-server",
 });
 
+
 import { env } from "@/lib/env";
 import {
   authenticateWebSocket,
@@ -197,7 +198,7 @@ wss.on("connection", async (ws: WebSocket, req) => {
       ws.close();
     }
   } catch (error) {
-    console.error("[WebSocket] Connection error:", error);
+    console.error(`[WebSocket] Connection error at ${pathname}:`, error);
     ws.send(
       JSON.stringify({
         type: "error",
@@ -746,21 +747,4 @@ process.on("SIGTERM", async () => {
 process.on("SIGINT", async () => {
   console.log("[WebSocket] Received SIGINT, shutting down...");
   process.emit("SIGTERM");
-});
-
-// Handle uncaught errors
-process.on("uncaughtException", (error) => {
-  console.error("[WebSocket] Uncaught exception:", error);
-  Sentry.captureException(error, { tags: { type: "uncaughtException" } });
-  process.exit(1);
-});
-
-process.on("unhandledRejection", (reason, promise) => {
-  console.error(
-    "[WebSocket] Unhandled rejection at:",
-    promise,
-    "reason:",
-    reason,
-  );
-  Sentry.captureException(reason, { tags: { type: "unhandledRejection" } });
 });

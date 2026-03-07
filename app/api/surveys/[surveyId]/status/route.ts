@@ -1,7 +1,7 @@
 
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 
@@ -20,7 +20,7 @@ export async function PATCH(
         }
 
         // Get survey to verify ownership
-        const [survey] = await db
+        const [survey] = await getDb()
             .select()
             .from(surveys)
             .where(eq(surveys.id, surveyId));
@@ -34,7 +34,7 @@ export async function PATCH(
         }
 
         // Update survey status
-        await db
+        await getDb()
             .update(surveys)
             .set({
                 status: status as "active" | "paused",

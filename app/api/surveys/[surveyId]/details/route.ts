@@ -1,7 +1,7 @@
 import { eq, count, and, desc, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { env } from "@/lib/env";
@@ -18,7 +18,7 @@ export async function GET(
     const { surveyId } = await params;
 
     // Get survey
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -33,17 +33,24 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    // Get response statistics
-    const [stats] = await db
+    // Get response statistics (only count if they have at least one user message)
+    const [stats] = await getDb()
       .select({
         totalResponses: count(surveyConversations.id),
-        completedResponses: count(surveyConversations.completed),
       })
       .from(surveyConversations)
-      .where(eq(surveyConversations.surveyId, surveyId));
+      .where(
+        and(
+          eq(surveyConversations.surveyId, surveyId),
+          sql`EXISTS (
+            SELECT 1 FROM jsonb_array_elements(${surveyConversations.rawConversation}) as msg 
+            WHERE msg->>'role' = 'user'
+          )`,
+        ),
+      );
 
     // Get completed count separately
-    const [completedStats] = await db
+    const [completedStats] = await getDb()
       .select({
         count: count(surveyConversations.id),
       })
@@ -56,7 +63,7 @@ export async function GET(
       );
 
     // Get recent responses
-    const recentResponses = await db
+    const recentResponses = await getDb()
       .select({
         id: surveyConversations.id,
         participantId: surveyConversations.participantId,
@@ -78,7 +85,7 @@ export async function GET(
         : 0;
 
     // Calculate average duration using the stored durationMs column
-    const [durationStats] = await db
+    const [durationStats] = await getDb()
       .select({
         avgDuration: sql<number>`avg(${surveyConversations.durationMs})`,
       })
@@ -115,6 +122,7 @@ export async function GET(
         id: survey.id,
         title: survey.title,
         status: survey.status,
+        description: survey.description,
         createdAt: survey.createdAt,
         updatedAt: survey.updatedAt,
         expertState: survey.expertState,

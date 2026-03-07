@@ -17,6 +17,7 @@ import { logUsage } from "@/lib/billing/logger";
 // Configuration constants
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const IDLE_WARNING_MS = 30 * 1000;
+const VAD_INTERRUPT_COOLDOWN_MS = 800; // Ignore VAD immediately after agent starts speaking (echo protection)
 
 /**
  * Base handler for voice sessions using Deepgram's Voice Agent API.
@@ -30,8 +31,7 @@ export abstract class BaseVoiceAgentHandler {
   protected userId?: string;
   protected identifier: string;
   protected isActive: boolean = true;
-  protected hasStartedAudio: boolean = false;
-  protected settingsApplied: boolean = false; // Bug 5 fix: Track settings application state
+  protected initialDirective: string | null = null;
 
   // Attribution for billing
   protected surveyId?: string;
@@ -44,14 +44,12 @@ export abstract class BaseVoiceAgentHandler {
   protected idleTimeout: NodeJS.Timeout | null = null;
   protected idleWarningTimeout: NodeJS.Timeout | null = null;
   protected lastActivityTime: number = Date.now();
+  protected lastAgentSpeechStartTime: number = 0;
 
   // Duration tracking
   protected activeDurationMs: number = 0;
   protected lastInteractionEndTime: number = Date.now();
   protected readonly MAX_SILENCE_GAP_MS = 30 * 1000;
-
-  // Track the last injected user input to filter it from UI
-  protected lastInjectedInput: string | null = null;
 
   constructor(ws: WebSocket, identifier: string, userId?: string) {
     this.ws = ws;
@@ -70,12 +68,7 @@ export abstract class BaseVoiceAgentHandler {
   /** Get the language for this session */
   protected abstract getLanguage(): SupportedLanguage;
 
-  /** Get optional initial user input to trigger AI generation (e.g. "Start conversation") */
-  protected getInitialUserInput(): string | null {
-    return null;
-  }
-
-  /** Build the Voice Agent settings for this session */
+  /** Build the Voice Agent settings for this session (subclass provides greeting in settings) */
   protected abstract getVoiceAgentSettings(): Promise<VoiceAgentSettings>;
 
   /** Handle conversation text events (user or agent transcript) */
@@ -91,6 +84,12 @@ export abstract class BaseVoiceAgentHandler {
   /** Handle control messages from the browser (subclass-specific) */
   protected abstract handleControlMessage(message: any): Promise<void>;
 
+  /** Get initial user input to trigger proactively (AI speaks first) */
+  protected abstract getInitialUserInput(): string | null;
+
+  /** Check if this is a brand new session (no messages yet) */
+  protected abstract isNewSession(): boolean;
+
   // ── Voice Agent Management ─────────────────────────────────────────────
 
   /**
@@ -104,16 +103,16 @@ export abstract class BaseVoiceAgentHandler {
     this.voiceAgent.on("audio", (audioData: Buffer) => {
       // Relay agent audio to browser
       if (this.ws.readyState === WebSocket.OPEN) {
-        // Log every 50th chunk to avoid spam, but confirm flow
+        // Chain of Trust: Audio Egress
         if (Math.random() < 0.05) {
           console.log(
-            `[BaseVoiceAgent] Relaying audio chunk to browser: ${audioData.length} bytes (sample)`,
+            `[ChainOfTrust] [Server] 🔊 Relaying agent audio to browser: ${audioData.length} bytes`,
           );
         }
         this.ws.send(audioData);
       } else {
         console.warn(
-          "[BaseVoiceAgent] Cannot relay audio: Browser WS not open",
+          "[ChainOfTrust] [Server] ⚠️ Cannot relay audio: Browser WS not open",
         );
       }
     });
@@ -122,18 +121,14 @@ export abstract class BaseVoiceAgentHandler {
       "conversationText",
       async (event: ConversationTextEvent) => {
         console.log(
-          `[BaseVoiceAgent] Received text from agent (${event.role}): "${event.content.substring(0, 50)}..."`,
+          `[ChainOfTrust] [Server] 🤖 Received conversation text from agent (${event.role}): "${event.content.substring(0, 50)}..."`,
         );
         this.resetIdleTimeout();
 
-        // Filter out the injected initial user message so it doesn't show in the UI
-        if (
-          event.role === "user" &&
-          this.lastInjectedInput &&
-          event.content.trim() === this.lastInjectedInput.trim()
-        ) {
+        // Chain of Trust: Filter out internal directives
+        if (event.role === "user" && event.content === this.initialDirective) {
           console.log(
-            `[BaseVoiceAgent] 🤫 Skipping display of injected initial user message: "${event.content.substring(0, 30)}..."`,
+            `[ChainOfTrust] [Server] 🛡️ Filtered internal directive from browser relay: "${event.content.substring(0, 30)}..."`,
           );
           return;
         }
@@ -150,7 +145,7 @@ export abstract class BaseVoiceAgentHandler {
           await this.onConversationText(event);
         } catch (error) {
           console.error(
-            `[VoiceAgentHandler] Error in onConversationText:`,
+            `[ChainOfTrust] [Server] ❌ Error in onConversationText:`,
             error,
           );
         }
@@ -161,7 +156,7 @@ export abstract class BaseVoiceAgentHandler {
       "functionCallRequest",
       async (event: FunctionCallRequestEvent) => {
         console.log(
-          `[VoiceAgentHandler] Function call: ${event.function_name}`,
+          `[ChainOfTrust] [Server] 🛠️ AI requested function call: ${event.function_name}`,
           event.input,
         );
         try {
@@ -179,12 +174,21 @@ export abstract class BaseVoiceAgentHandler {
     );
 
     this.voiceAgent.on("userStartedSpeaking", () => {
+      const now = Date.now();
+      const timeSinceAgentStarted = now - this.lastAgentSpeechStartTime;
+
+      if (timeSinceAgentStarted < VAD_INTERRUPT_COOLDOWN_MS) {
+        console.log(
+          `[ChainOfTrust] [Server] 🛡️ Ignoring VAD interruption (cooldown: ${timeSinceAgentStarted}ms < ${VAD_INTERRUPT_COOLDOWN_MS}ms)`,
+        );
+        return;
+      }
+
       console.log(
-        "[BaseVoiceAgent] Event: userStartedSpeaking - Interrupting agent",
+        "[ChainOfTrust] [Server] 🗣️ Deepgram detected user speech start (VAD). Interrupting agent.",
       );
       this.resetIdleTimeout();
       // Track active duration
-      const now = Date.now();
       const gap = now - this.lastInteractionEndTime;
       if (gap > 0) {
         this.activeDurationMs += Math.min(gap, this.MAX_SILENCE_GAP_MS);
@@ -195,53 +199,53 @@ export abstract class BaseVoiceAgentHandler {
     });
 
     this.voiceAgent.on("agentThinking", () => {
-      console.log("[BaseVoiceAgent] Event: agentThinking");
+      console.log("[ChainOfTrust] [Server] 🧠 Agent is thinking...");
       this.send({ type: "agent_thinking" });
     });
 
     this.voiceAgent.on("agentStartedSpeaking", () => {
-      console.log("[BaseVoiceAgent] Event: agentStartedSpeaking");
+      console.log(
+        "[ChainOfTrust] [Server] 🗣️ Agent started speaking (TTS generation).",
+      );
+      this.lastAgentSpeechStartTime = Date.now();
       this.send({ type: "agent_started_speaking" });
     });
 
     this.voiceAgent.on("agentAudioDone", () => {
-      console.log("[BaseVoiceAgent] Event: agentAudioDone");
+      console.log("[ChainOfTrust] [Server] 🤐 Agent finished speaking.");
       this.lastInteractionEndTime = Date.now();
       this.send({ type: "agent_audio_done" });
     });
 
     this.voiceAgent.on("settingsApplied", () => {
       console.log(
-        `[VoiceAgentHandler] Voice Agent settings applied for ${this.identifier}`,
+        `[ChainOfTrust] [Server] ✅ Voice Agent settings applied. Agent is ready for ${this.identifier}`,
       );
-      this.settingsApplied = true;
+      this.send({ type: "agent_ready" });
 
-      // If audio already started flowing but we were waiting for settings, inject now
-      if (this.hasStartedAudio) {
-        console.log(
-          `[VoiceAgentHandler] Audio already started, triggering deferred injection...`,
-        );
-        this.triggerInitialInjection();
+      // Proactively trigger initial greeting if it's a new session
+      if (this.isNewSession()) {
+        const initialInput = this.getInitialUserInput();
+        if (initialInput) {
+          this.initialDirective = initialInput;
+          console.log(
+            `[BaseVoiceAgent] Brand new session detected. Injecting initial directive: "${initialInput}"`,
+          );
+          // We use InjectUserMessage so the AI "hears" the instruction and responds naturally
+          // based on its system prompt (e.g. greeting the user).
+          // sendInjectAgentMessage would cause the AI to literally say the directive.
+          this.voiceAgent?.sendInjectUserMessage(initialInput);
+        }
       }
     });
 
-    this.voiceAgent.on("injectionRefused", () => {
-      console.warn(
-        `[VoiceAgentHandler] Injection refused for ${this.identifier}, retrying in 500ms...`,
+    this.voiceAgent.on("error", (error: any) => {
+      console.error(
+        `[VoiceAgentHandler] Voice Agent error (${this.identifier}):`,
+        error,
       );
-      setTimeout(() => this.triggerInitialInjection(), 500);
+      this.sendError(error, error?.code);
     });
-
-    this.voiceAgent.on(
-      "error",
-      (error: { description: string; code?: string }) => {
-        console.error(
-          `[VoiceAgentHandler] Voice Agent error (${this.identifier}):`,
-          error,
-        );
-        this.sendError("Voice agent error: " + error.description, error.code);
-      },
-    );
 
     this.voiceAgent.on("close", () => {
       console.log(
@@ -271,23 +275,7 @@ export abstract class BaseVoiceAgentHandler {
       this.voiceAgent = null;
     }
     // Reset audio state so we inject again on new connection
-    // Reset audio state so we inject again on new connection
-    this.hasStartedAudio = false;
-    this.settingsApplied = false;
     await this.connectVoiceAgent();
-  }
-
-  private triggerInitialInjection(): void {
-    const initialInput = this.getInitialUserInput();
-    if (initialInput) {
-      this.lastInjectedInput = initialInput;
-      console.log(
-        `[VoiceAgentHandler] Injecting initial user input: "${initialInput}"`,
-      );
-      setTimeout(() => {
-        this.voiceAgent?.sendInjectUserMessage(initialInput);
-      }, 100);
-    }
   }
 
   // ── Browser Connection Handlers ────────────────────────────────────────
@@ -383,30 +371,16 @@ export abstract class BaseVoiceAgentHandler {
 
     // Relay to Voice Agent
     if (this.voiceAgent?.connected) {
-      // Log occasional chunk to verify flow
-      if (Math.random() < 0.05) {
+      if (Math.random() < 0.02) {
         console.log(
-          `[BaseVoiceAgent] 🎤 Relaying browser audio to Agent: ${audioData.length} bytes`,
+          `[ChainOfTrust] [Server] 🎤 Relaying browser audio to Deepgram: ${audioData.length} bytes`,
         );
       }
       this.voiceAgent.sendAudio(audioData);
-
-      // Fire initial injection ONCE, after audio is confirmed flowing AND settings are applied
-      if (!this.hasStartedAudio) {
-        this.hasStartedAudio = true;
-
-        if (this.settingsApplied) {
-          this.triggerInitialInjection();
-        } else {
-          console.log(
-            `[VoiceAgentHandler] Audio started but waiting for settings confirmation before injecting...`,
-          );
-        }
-      }
     } else {
       if (Math.random() < 0.01) {
         console.warn(
-          `[BaseVoiceAgent] ⚠️ Cannot relay audio: Voice Agent NOT connected`,
+          `[ChainOfTrust] [Server] ⚠️ Cannot relay audio: Deepgram agent NOT connected`,
         );
       }
     }
@@ -417,9 +391,26 @@ export abstract class BaseVoiceAgentHandler {
   protected send(data: any): void {
     if (this.ws.readyState === WebSocket.OPEN) {
       if (data.type !== "audio" && data.type !== "pong") {
-        console.log(`[BaseVoiceAgent] Sending to browser: ${data.type}`);
+        if (data.type === "error") {
+          console.error(
+            `[ChainOfTrust] [Server] 📤 Sending ERROR to browser:`,
+            JSON.stringify(data, null, 2),
+          );
+        } else {
+          console.log(
+            `[ChainOfTrust] [Server] 📤 Sending to browser: ${data.type}`,
+          );
+        }
       }
-      this.ws.send(JSON.stringify(data));
+      try {
+        this.ws.send(JSON.stringify(data));
+      } catch (err) {
+        console.error(
+          `[BaseVoiceAgent] Failed to stringify/send data:`,
+          err,
+          data,
+        );
+      }
     } else {
       console.warn(
         `[BaseVoiceAgent] Cannot send to browser (closed): ${data.type}`,
@@ -427,13 +418,8 @@ export abstract class BaseVoiceAgentHandler {
     }
   }
 
-  protected sendError(description: string, code?: string): void {
-    if (code) {
-      const voiceError = createVoiceError(code as any, description);
-      sendVoiceError(this.send.bind(this), voiceError);
-    } else {
-      this.send({ type: "error", description, code: code || "UNKNOWN_ERROR" });
-    }
+  protected sendError(errorPayload: any, code?: string): void {
+    this.send({ type: "error", error: errorPayload, code });
   }
 
   // ── Idle Timeout ───────────────────────────────────────────────────────

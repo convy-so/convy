@@ -1,0 +1,14 @@
+
+> convy@0.1.0 dev
+> next dev
+
+⚠ Port 3000 is in use by process 6836, using available port 3002 instead.
+▲ Next.js 16.1.5 (Turbopack, Cache Components)
+- Local:         http://localhost:3002
+- Network:       http://192.168.56.1:3002
+- Environments: .env
+
+✓ Starting...
+⨯ Unable to acquire lock at C:\Users\pc\convy\.next\dev\lock, is another instance of next dev running?
+  Suggestion: If you intended to restart next dev, terminate the other process, and then try again.
+[?25h

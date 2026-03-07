@@ -9,8 +9,8 @@ import { StatsCard } from "@/components/admin/stats-card";
 import { GrowthChart } from "@/components/admin/growth-chart";
 import { UsageTypeChart } from "@/components/admin/usage-type-chart";
 
-export default async function AdminOverviewPage() {
-    const stats = await getAdminStats();
+export default async function AdminOverviewPage({ params }: { params: Promise<{ locale: string }> }) {
+    await params;
 
     return (
         <div className="space-y-8">
@@ -19,30 +19,15 @@ export default async function AdminOverviewPage() {
                 <p className="text-gray-500">Real-time monitoring of costs and user engagement.</p>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatsCard
-                    title="Total Usage Cost"
-                    value={`$${parseFloat(stats.totalUsageCost).toFixed(2)}`}
-                    description="Accumulated LLM/Software costs"
-                    trend="up" // Placeholder
-                />
-                <StatsCard
-                    title="Total Users"
-                    value={stats.totalUsers.toString()}
-                    description={`${stats.newUsersLast30Days} new in last 30 days`}
-                />
-                <StatsCard
-                    title="Active Surveys"
-                    value={stats.totalSurveys.toString()}
-                    description="Total surveys created"
-                />
-                <StatsCard
-                    title="Active Sessions"
-                    value={stats.activeSessions.toString()}
-                    description="Currently authenticated users"
-                />
-            </div>
+            <Suspense fallback={
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-pulse">
+                    {[1, 2, 3, 4].map(i => (
+                        <div key={i} className="h-24 bg-gray-100 rounded-2xl border border-gray-100" />
+                    ))}
+                </div>
+            }>
+                <StatsGridSection />
+            </Suspense>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Main Growth Chart */}
@@ -61,7 +46,7 @@ export default async function AdminOverviewPage() {
                     </Suspense>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }
 
@@ -94,4 +79,34 @@ async function UsageBreakdownSection() {
     }));
 
     return <UsageTypeChart data={data} />;
+}
+
+async function StatsGridSection() {
+    const stats = await getAdminStats();
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <StatsCard
+                title="Total Usage Cost"
+                value={`$${parseFloat(stats.totalUsageCost).toFixed(2)}`}
+                description="Accumulated LLM/Software costs"
+                trend="up" // Placeholder
+            />
+            <StatsCard
+                title="Total Users"
+                value={stats.totalUsers.toString()}
+                description={`${stats.newUsersLast30Days} new in last 30 days`}
+            />
+            <StatsCard
+                title="Active Surveys"
+                value={stats.totalSurveys.toString()}
+                description="Total surveys created"
+            />
+            <StatsCard
+                title="Active Sessions"
+                value={stats.activeSessions.toString()}
+                description="Currently authenticated users"
+            />
+        </div>
+    );
 }

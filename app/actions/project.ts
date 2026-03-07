@@ -4,7 +4,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { eq, and, isNull, count, sum, getTableColumns, sql } from "drizzle-orm";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { projects, surveys, surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { isWorkspaceMember } from "@/lib/workspace-access";
@@ -38,7 +38,7 @@ export async function createProjectAction(
 
     const projectId = nanoid();
 
-    await db.insert(projects).values({
+    await getDb().insert(projects).values({
       id: projectId,
       userId: session.user.id,
       organizationId: activeOrgId,
@@ -77,7 +77,7 @@ export async function getProjectsAction(): Promise<
         return { success: false, error: "Unauthorized" };
       }
 
-      const projectList = await db
+      const projectList = await getDb()
         .select({
             ...getTableColumns(projects),
             surveyCount: count(surveys.id),
@@ -97,7 +97,7 @@ export async function getProjectsAction(): Promise<
 
       return { success: true, data: results };
     } else {
-      const projectList = await db
+      const projectList = await getDb()
         .select({
             ...getTableColumns(projects),
             surveyCount: count(surveys.id),
@@ -143,7 +143,7 @@ export async function getProjectAction(id: string): Promise<
   try {
     const session = await getVerifiedSession();
 
-    const [project] = await db
+    const [project] = await getDb()
       .select()
       .from(projects)
       .where(eq(projects.id, id));
@@ -172,7 +172,7 @@ export async function getProjectAction(id: string): Promise<
       return { success: false, error: "Unauthorized" };
     }
 
-    const projectSurveys = await db
+    const projectSurveys = await getDb()
       .select({
         ...getTableColumns(surveys),
         completedCount: count(surveyConversations.id),
@@ -218,7 +218,7 @@ export async function addSurveyToProjectAction(
     const session = await getVerifiedSession();
 
     // 1. Verify project access
-    const [project] = await db
+    const [project] = await getDb()
       .select()
       .from(projects)
       .where(eq(projects.id, projectId));
@@ -248,7 +248,7 @@ export async function addSurveyToProjectAction(
     }
 
     // 2. Verify survey access
-     const [survey] = await db
+     const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -269,7 +269,7 @@ export async function addSurveyToProjectAction(
     }
 
     // 3. Update survey
-    await db
+    await getDb()
       .update(surveys)
       .set({ projectId: projectId })
       .where(eq(surveys.id, surveyId));
@@ -289,7 +289,7 @@ export async function removeSurveyFromProjectAction(
     const session = await getVerifiedSession();
 
     // 1. Verify project access (mostly to ensure user has right to modify this project content)
-    const [project] = await db
+    const [project] = await getDb()
       .select()
       .from(projects)
       .where(eq(projects.id, projectId));
@@ -322,7 +322,7 @@ export async function removeSurveyFromProjectAction(
     }
 
      // 2. Verify survey is indeed in this project
-     const [survey] = await db
+     const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(and(eq(surveys.id, surveyId), eq(surveys.projectId, projectId)));
@@ -333,7 +333,7 @@ export async function removeSurveyFromProjectAction(
     }
 
     // 3. Update survey
-    await db
+    await getDb()
       .update(surveys)
       .set({ projectId: null })
       .where(eq(surveys.id, surveyId));
@@ -361,7 +361,7 @@ export async function updateProjectAction(
     const session = await getVerifiedSession();
     const body = updateProjectSchema.parse(input);
 
-    const [project] = await db
+    const [project] = await getDb()
       .select()
       .from(projects)
       .where(eq(projects.id, body.id));
@@ -392,7 +392,7 @@ export async function updateProjectAction(
     if (body.color !== undefined) updateData.color = body.color;
     if (body.icon !== undefined) updateData.icon = body.icon;
 
-    await db.update(projects).set(updateData).where(eq(projects.id, body.id));
+    await getDb().update(projects).set(updateData).where(eq(projects.id, body.id));
 
     return { success: true, data: { id: body.id } };
   } catch (error) {
@@ -404,7 +404,7 @@ export async function deleteProjectAction(id: string): Promise<ActionResult<void
   try {
     const session = await getVerifiedSession();
 
-    const [project] = await db
+    const [project] = await getDb()
       .select()
       .from(projects)
       .where(eq(projects.id, id));
@@ -436,11 +436,11 @@ export async function deleteProjectAction(id: string): Promise<ActionResult<void
       return { success: false, error: "Unauthorized" };
     }
    
-    await db.update(surveys)
+    await getDb().update(surveys)
       .set({ projectId: null })
       .where(eq(surveys.projectId, id));
 
-    await db.delete(projects).where(eq(projects.id, id));
+    await getDb().delete(projects).where(eq(projects.id, id));
 
     return { success: true, data: undefined };
   } catch (error) {

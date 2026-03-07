@@ -1,9 +1,10 @@
 import { eq, desc, and, isNull } from "drizzle-orm";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys, surveyCreationConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
+import { getTimeBasedGreeting } from "@/lib/greetings";
 
 /**
  * Get all surveys for the authenticated user
@@ -14,7 +15,7 @@ export async function GET() {
 
     const activeOrgId = session.session.activeOrganizationId;
 
-    const userSurveys = await db
+    const userSurveys = await getDb()
       .select({
         id: surveys.id,
         title: surveys.title,
@@ -86,12 +87,12 @@ export async function POST(request: Request) {
       body.language === "es" ||
       body.language === "it"
         ? body.language
-        : "en";
+        : (session.user as any).preferredLanguage || "en";
 
     const domainId = typeof body.domainId === "number" ? body.domainId : null;
 
     let survey;
-    await db.transaction(async (tx) => {
+    await getDb().transaction(async (tx) => {
       const [insertedSurvey] = await tx
         .insert(surveys)
         .values({
@@ -110,16 +111,38 @@ export async function POST(request: Request) {
 
       survey = insertedSurvey;
 
-      if (domainId) {
-        await tx.insert(surveyCreationConversations).values({
-          id: crypto.randomUUID(),
-          surveyId: surveyId,
-          messages: [],
-          status: "in_progress",
-          extractedData: { domainId },
-          collectedInfo: {},
-        });
-      }
+      const initialGreeting = getTimeBasedGreeting("creation", language as any);
+
+      await tx.insert(surveyCreationConversations).values({
+        id: crypto.randomUUID(),
+        surveyId: surveyId,
+        messages: [
+          {
+            id: nanoid(),
+            role: "assistant",
+            content: initialGreeting,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+        status: "in_progress",
+        extractedData: domainId ? { domainId } : {},
+        collectedInfo: {
+          objective: false,
+          targetAudience: false,
+          scope: false,
+          successCriteria: false,
+          constraints: false,
+          hypotheses: false,
+          tone: false,
+          requiredQuestions: false,
+          metrics: false,
+          personalInfo: false,
+          subjectDefined: false,
+          domainIdentified: false,
+          media: false,
+          subjectModelComplete: false,
+        },
+      });
     });
 
     return NextResponse.json(survey);

@@ -1,25 +1,23 @@
-
 import { getRedisClient } from "@/lib/redis";
-import { enqueueSurveyAnalytics } from "@/lib/queue";
-import { surveyAnalyticsQueue } from "@/lib/queue";
-import { db } from "@/db";
+import { enqueueSurveyAnalytics, getSurveyAnalyticsQueue } from "@/lib/queue";
+import { getDb } from "@/db";
 import { surveyAnalytics } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 /**
  * Analytics Scheduling System
- * 
+ *
  * Implements a two-stage approach:
  * 1. Accumulation mode: Track counter, generate only when threshold reached
  * 2. Debouncing mode: Once threshold reached, debounce for 5 minutes
- * 
+ *
  * Exceptions:
  * - First 3 responses generate immediately
  */
 
-const DEBOUNCE_DELAY_MS = 5 * 60 * 1000; 
-const RESPONSE_THRESHOLD = 10; 
-const IMMEDIATE_THRESHOLD = 3; 
+const DEBOUNCE_DELAY_MS = 5 * 60 * 1000;
+const RESPONSE_THRESHOLD = 10;
+const IMMEDIATE_THRESHOLD = 3;
 
 /**
  * Get the current analytics counter for a survey
@@ -58,7 +56,7 @@ async function resetAnalyticsCounter(surveyId: string): Promise<void> {
  */
 async function hasAnalyticsBeenGenerated(surveyId: string): Promise<boolean> {
   try {
-    const [analytics] = await db
+    const [analytics] = await getDb()
       .select()
       .from(surveyAnalytics)
       .where(eq(surveyAnalytics.surveyId, surveyId))
@@ -67,7 +65,7 @@ async function hasAnalyticsBeenGenerated(surveyId: string): Promise<boolean> {
   } catch (error) {
     console.error(
       `[Analytics Scheduler] Error checking if analytics exist for survey ${surveyId}:`,
-      error
+      error,
     );
     // If we can't check, assume they don't exist (safer default)
     return false;
@@ -87,17 +85,17 @@ function getScheduledJobId(surveyId: string): string {
 async function cancelScheduledAnalytics(surveyId: string): Promise<void> {
   try {
     const jobId = getScheduledJobId(surveyId);
-    const job = await surveyAnalyticsQueue.getJob(jobId);
+    const job = await getSurveyAnalyticsQueue().getJob(jobId);
     if (job) {
       await job.remove();
       console.log(
-        `[Analytics Scheduler] Cancelled scheduled analytics job for survey ${surveyId}`
+        `[Analytics Scheduler] Cancelled scheduled analytics job for survey ${surveyId}`,
       );
     }
   } catch (error) {
     // Job might not exist, which is fine
     console.log(
-      `[Analytics Scheduler] No scheduled job to cancel for survey ${surveyId}`
+      `[Analytics Scheduler] No scheduled job to cancel for survey ${surveyId}`,
     );
   }
 }
@@ -107,13 +105,13 @@ async function cancelScheduledAnalytics(surveyId: string): Promise<void> {
  */
 async function scheduleDebouncedAnalytics(
   surveyId: string,
-  userId: string
+  userId: string,
 ): Promise<void> {
   try {
     await cancelScheduledAnalytics(surveyId);
 
     const jobId = getScheduledJobId(surveyId);
-    await surveyAnalyticsQueue.add(
+    await getSurveyAnalyticsQueue().add(
       "generate-analytics",
       {
         surveyId,
@@ -123,16 +121,16 @@ async function scheduleDebouncedAnalytics(
         jobId,
         delay: DEBOUNCE_DELAY_MS,
         priority: 3,
-      }
+      },
     );
 
     console.log(
-      `[Analytics Scheduler] Scheduled debounced analytics generation for survey ${surveyId} (5 minute delay)`
+      `[Analytics Scheduler] Scheduled debounced analytics generation for survey ${surveyId} (5 minute delay)`,
     );
   } catch (error) {
     console.error(
       `[Analytics Scheduler] Failed to schedule debounced analytics:`,
-      error
+      error,
     );
     throw error;
   }
@@ -143,7 +141,7 @@ async function scheduleDebouncedAnalytics(
  */
 async function generateAnalyticsImmediately(
   surveyId: string,
-  userId: string
+  userId: string,
 ): Promise<void> {
   try {
     await enqueueSurveyAnalytics({
@@ -151,12 +149,12 @@ async function generateAnalyticsImmediately(
       userId,
     });
     console.log(
-      `[Analytics Scheduler] Generated analytics immediately for survey ${surveyId}`
+      `[Analytics Scheduler] Generated analytics immediately for survey ${surveyId}`,
     );
   } catch (error) {
     console.error(
       `[Analytics Scheduler] Failed to generate analytics immediately:`,
-      error
+      error,
     );
     throw error;
   }
@@ -164,7 +162,7 @@ async function generateAnalyticsImmediately(
 
 /**
  * Main function to handle analytics scheduling when a new conversation completes
- * 
+ *
  * Logic:
  * 1. If this is one of the first 3 responses → Generate immediately
  * 2. Otherwise, increment counter
@@ -176,12 +174,12 @@ async function generateAnalyticsImmediately(
  */
 export async function scheduleAnalyticsOnNewResponse(
   surveyId: string,
-  userId: string
+  userId: string,
 ): Promise<void> {
   try {
     // Check if analytics have been generated before
     const hasGenerated = await hasAnalyticsBeenGenerated(surveyId);
-    
+
     // Get current counter
     const currentCount = await getAnalyticsCounter(surveyId);
 
@@ -189,32 +187,32 @@ export async function scheduleAnalyticsOnNewResponse(
     if (!hasGenerated && currentCount < IMMEDIATE_THRESHOLD) {
       const newCount = await incrementAnalyticsCounter(surveyId);
       console.log(
-        `[Analytics Scheduler] Response ${newCount}/${IMMEDIATE_THRESHOLD} for survey ${surveyId} - generating immediately`
+        `[Analytics Scheduler] Response ${newCount}/${IMMEDIATE_THRESHOLD} for survey ${surveyId} - generating immediately`,
       );
-      
+
       // Generate immediately
       await generateAnalyticsImmediately(surveyId, userId);
-      
+
       return;
     }
 
     // Increment counter
     const newCount = await incrementAnalyticsCounter(surveyId);
     console.log(
-      `[Analytics Scheduler] Survey ${surveyId} response count: ${newCount}/${RESPONSE_THRESHOLD}`
+      `[Analytics Scheduler] Survey ${surveyId} response count: ${newCount}/${RESPONSE_THRESHOLD}`,
     );
 
     // If counter is below threshold, just accumulate (do nothing)
     if (newCount < RESPONSE_THRESHOLD) {
       console.log(
-        `[Analytics Scheduler] Survey ${surveyId} accumulating responses (${newCount}/${RESPONSE_THRESHOLD})`
+        `[Analytics Scheduler] Survey ${surveyId} accumulating responses (${newCount}/${RESPONSE_THRESHOLD})`,
       );
       return;
     }
 
     // Counter has reached threshold - enter debouncing mode
     console.log(
-      `[Analytics Scheduler] Survey ${surveyId} reached threshold (${newCount} responses) - entering debouncing mode`
+      `[Analytics Scheduler] Survey ${surveyId} reached threshold (${newCount} responses) - entering debouncing mode`,
     );
 
     // Cancel any existing scheduled job and schedule new one (resets timer)
@@ -222,7 +220,7 @@ export async function scheduleAnalyticsOnNewResponse(
   } catch (error) {
     console.error(
       `[Analytics Scheduler] Error scheduling analytics for survey ${surveyId}:`,
-      error
+      error,
     );
     // Don't throw - we don't want to fail the conversation insights job
   }
@@ -233,11 +231,10 @@ export async function scheduleAnalyticsOnNewResponse(
  * This is called by the analytics worker after successful generation
  */
 export async function resetAnalyticsCounterAfterGeneration(
-  surveyId: string
+  surveyId: string,
 ): Promise<void> {
   await resetAnalyticsCounter(surveyId);
   console.log(
-    `[Analytics Scheduler] Reset counter for survey ${surveyId} after analytics generation`
+    `[Analytics Scheduler] Reset counter for survey ${surveyId} after analytics generation`,
   );
 }
-

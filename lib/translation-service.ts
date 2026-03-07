@@ -218,11 +218,11 @@ export async function getUserPreferredLanguage(
   userId: string,
 ): Promise<SupportedLanguage> {
   try {
-    const { db } = await import("@/db");
+    const { getDb } = await import("@/db");
     const { users } = await import("@/db/schema");
     const { eq } = await import("drizzle-orm");
 
-    const [user] = await db
+    const [user] = await getDb()
       .select({ preferredLanguage: users.preferredLanguage })
       .from(users)
       .where(eq(users.id, userId))

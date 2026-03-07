@@ -1,11 +1,9 @@
 import { NextRequest } from "next/server";
 import { uploadSurveyMediaAction } from "@/app/actions/survey-media";
 
-export const runtime = "nodejs";
-
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ surveyId: string }> }
+  { params }: { params: Promise<{ surveyId: string }> },
 ) {
   const { surveyId } = await params;
   try {
@@ -16,7 +14,7 @@ export async function POST(
     if (!result.success) {
       return new Response(
         JSON.stringify({ success: false, error: result.error }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        { status: 400, headers: { "Content-Type": "application/json" } },
       );
     }
 
@@ -31,8 +29,7 @@ export async function POST(
         success: false,
         error: "Failed to upload media",
       }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+      { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
 }
-

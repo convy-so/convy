@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import {
   surveys,
   surveyAnalytics,
@@ -38,7 +38,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select({ title: surveys.title })
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -48,13 +48,13 @@ export async function GET(
     }
 
     // Fetch analytics
-    const [analytics] = await db
+    const [analytics] = await getDb()
       .select()
       .from(surveyAnalytics)
       .where(eq(surveyAnalytics.surveyId, surveyId));
 
     if (!analytics) {
-      const conversations = await db
+      const conversations = await getDb()
         .select({
           id: surveyConversations.id,
           completed: surveyConversations.completed,
@@ -306,7 +306,7 @@ export async function POST(
       );
     }
 
-    const conversations = await db
+    const conversations = await getDb()
       .select({
         id: surveyConversations.id,
         summary: surveyConversations.summary,
@@ -324,7 +324,7 @@ export async function POST(
     }
 
     if (!force) {
-      const [existingAnalytics] = await db
+      const [existingAnalytics] = await getDb()
         .select()
         .from(surveyAnalytics)
         .where(eq(surveyAnalytics.surveyId, surveyId));
@@ -375,7 +375,7 @@ export async function getConversationInsights(
     throw new Error("Unauthorized");
   }
 
-  const conversations = await db
+  const conversations = await getDb()
     .select({
       id: surveyConversations.id,
       summary: surveyConversations.summary,

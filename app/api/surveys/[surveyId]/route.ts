@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import {
   surveys,
   surveyCreationConversations,
@@ -31,7 +31,7 @@ export async function DELETE(
     }
 
     // Delete survey (cascades to related records)
-    await db.delete(surveys).where(eq(surveys.id, surveyId));
+    await getDb().delete(surveys).where(eq(surveys.id, surveyId));
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -75,7 +75,7 @@ export async function PATCH(
     }
 
     // Fetch survey for updates
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -108,7 +108,7 @@ export async function PATCH(
     }
 
     // Update survey
-    await db
+    await getDb()
       .update(surveys)
       .set({
         ...updates,

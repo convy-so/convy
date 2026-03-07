@@ -4,7 +4,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys, type SurveyMedia } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { fileTypeFromBuffer } from "file-type";
@@ -134,7 +134,7 @@ export async function uploadSurveyMediaAction(
       };
     }
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, validation.surveyId));
@@ -224,7 +224,7 @@ export async function uploadSurveyMediaAction(
 
     const updatedMedia = [...(survey.media || []), newMedia];
 
-    await db
+    await getDb()
       .update(surveys)
       .set({ media: updatedMedia })
       .where(eq(surveys.id, validation.surveyId));
@@ -263,7 +263,7 @@ export async function updateSurveyMediaAction(
     const session = await getVerifiedSession();
     const body = updateSurveyMediaSchema.parse(input);
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, body.surveyId));
@@ -307,7 +307,7 @@ export async function updateSurveyMediaAction(
     const newMediaArray = [...currentMedia];
     newMediaArray[mediaIndex] = updatedMedia;
 
-    await db
+    await getDb()
       .update(surveys)
       .set({ media: newMediaArray })
       .where(eq(surveys.id, body.surveyId));
@@ -343,7 +343,7 @@ export async function removeSurveyMediaAction(
     const session = await getVerifiedSession();
     const body = removeSurveyMediaSchema.parse(input);
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, body.surveyId));
@@ -405,7 +405,7 @@ export async function removeSurveyMediaAction(
 
     const updatedMedia = currentMedia.filter((m) => m.id !== body.mediaId);
 
-    await db
+    await getDb()
       .update(surveys)
       .set({ media: updatedMedia })
       .where(eq(surveys.id, body.surveyId));
@@ -442,7 +442,7 @@ export async function addSurveyMediaAction(
     const session = await getVerifiedSession();
     const body = addSurveyMediaSchema.parse(input);
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, body.surveyId));
@@ -479,7 +479,7 @@ export async function addSurveyMediaAction(
 
     const updatedMedia = [...(survey.media || []), newMedia];
 
-    await db
+    await getDb()
       .update(surveys)
       .set({ media: updatedMedia })
       .where(eq(surveys.id, body.surveyId));
@@ -518,7 +518,7 @@ export async function getSurveyMediaAction(
     const session = await getVerifiedSession();
 
     // Get survey and verify ownership
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -560,7 +560,7 @@ export async function reorderSurveyMediaAction(
   try {
     const session = await getVerifiedSession();
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -597,7 +597,7 @@ export async function reorderSurveyMediaAction(
       return { success: false, error: "Invalid media IDs provided" };
     }
 
-    await db
+    await getDb()
       .update(surveys)
       .set({ media: reorderedMedia })
       .where(eq(surveys.id, surveyId));
