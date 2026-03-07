@@ -3,16 +3,21 @@ import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema";
 import { ConversationManager } from "@/lib/conversation-manager";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
-import { selectModelForConversation, normalizeMessages } from "@/lib/ai";
+import { defaultModel, normalizeMessages } from "@/lib/ai";
 import { getTimeBasedGreeting } from "@/lib/greetings";
 import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
 import type { AgentContext } from "@/lib/agents/types";
 import { getRedisClient } from "@/lib/redis";
 import { logUsage } from "@/lib/billing/logger";
+import {
+  withGeminiLimit,
+  GeminiCapacityError,
+  geminiCapacityResponse,
+} from "@/lib/gemini-limiter";
 
 /**
  * GET - Initialize a survey response conversation and generate AI greeting
@@ -29,11 +34,11 @@ export async function GET(
     const language = ["en", "fr", "de", "es", "it"].includes(
       languageParam || "",
     )
-      ? (languageParam as any)
+      ? (languageParam as "en" | "fr" | "de" | "es" | "it")
       : undefined;
 
     // Get survey by shareable link (fetch full record for config building)
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.shareableLink, shareableLink));
@@ -51,7 +56,7 @@ export async function GET(
 
     // Handle resumption if conversationId is provided
     if (existingConversationId) {
-      const [existingConversation] = await db
+      const [existingConversation] = await getDb()
         .select()
         .from(surveyConversations)
         .where(eq(surveyConversations.id, existingConversationId));
@@ -73,8 +78,9 @@ export async function GET(
           survey: {
             id: survey.id,
             title: survey.title,
-            objective: (survey.expertState as any)?.objective,
-            targetAudience: (survey.expertState as any)?.targetAudience,
+            objective: (survey.expertState as Record<string, any>)?.objective,
+            targetAudience: (survey.expertState as Record<string, any>)
+              ?.targetAudience,
             tone: survey.tone,
             requiredQuestions: survey.requiredQuestions || [],
             isVoice: survey.isVoice,
@@ -110,7 +116,7 @@ export async function GET(
     };
 
     // Create new conversation record with greeting
-    await db.insert(surveyConversations).values({
+    await getDb().insert(surveyConversations).values({
       id: conversationId,
       surveyId: survey.id,
       participantId,
@@ -124,8 +130,9 @@ export async function GET(
       survey: {
         id: survey.id,
         title: survey.title,
-        objective: (survey.expertState as any)?.objective,
-        targetAudience: (survey.expertState as any)?.targetAudience,
+        objective: (survey.expertState as Record<string, any>)?.objective,
+        targetAudience: (survey.expertState as Record<string, any>)
+          ?.targetAudience,
         tone: survey.tone,
         requiredQuestions: survey.requiredQuestions || [],
         isVoice: survey.isVoice,
@@ -161,7 +168,7 @@ export async function POST(
     const { shareableLink } = await params;
 
     // Fetch survey by shareable link
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.shareableLink, shareableLink))
@@ -193,12 +200,18 @@ export async function POST(
 
     // AI SDK v6: Normalize UI messages to ModelMessages for proper handling
     const modelMessages = await normalizeMessages(messages);
+    console.log(
+      `[RespondAPI:POST] Normalized messages: ${modelMessages.length}. Last role: ${modelMessages[modelMessages.length - 1]?.role}`,
+    );
 
     // Load conversation context (handling hydration, compression, signals)
     const rollingContext = await ConversationManager.loadOrCreateContext(
       conversationId,
       modelMessages,
       surveyConfig,
+    );
+    console.log(
+      `[RespondAPI:POST] Context loaded. State: ${rollingContext.stateContext.currentState}. Topics: ${rollingContext.memory.topicsCovered.length}`,
     );
 
     // ── Build system prompt via ConductingSpecialist ────────────────────
@@ -209,6 +222,7 @@ export async function POST(
       rollingContext,
     };
     const agent = new ConductingSpecialist(agentContext);
+    console.log(`[RespondAPI:POST] Initializing agent...`);
     await agent.initialize();
     await Promise.all([
       agent.preloadSkills(),
@@ -217,8 +231,9 @@ export async function POST(
         2,
       ),
     ]).catch((err) =>
-      console.warn("[Respond Route] Agent preload warning:", err),
+      console.warn("[RespondAPI:POST] Agent preload warning:", err),
     );
+    console.log(`[RespondAPI:POST] Agent initialized. Building prompt...`);
     const systemPrompt = agent.buildSystemPrompt();
 
     // ── Redis attribution: log which pattern was injected this turn ──────
@@ -246,17 +261,10 @@ export async function POST(
     }
 
     // Intelligent model selection
-    const userMessages = modelMessages.filter((m: any) => m.role === "user");
+    const userMessages = modelMessages.filter((m) => m.role === "user");
     const minQuestions = Math.max(
-      (survey.requiredQuestions as any[])?.length || 0,
+      (survey.requiredQuestions as unknown[])?.length || 0,
       3,
-    );
-    const hasMedia = (survey.media as any[])?.length > 0;
-    const selectedModel = selectModelForConversation(
-      rollingContext,
-      userMessages.length,
-      minQuestions,
-      hasMedia,
     );
 
     // Dynamic Resume Logic
@@ -279,278 +287,177 @@ export async function POST(
         };
 
         // Stream the AI response with scratchpad filtering via agent.stream()
-        const result = agent.stream(
-          modelMessages,
-          onMediaDisplay,
-          async (params) => {
-            const { text, usage, response } = params;
+        console.log(`[RespondAPI:Stream] Starting agent.stream() call...`);
+        const result = await withGeminiLimit(async () => {
+          return agent.stream(
+            modelMessages,
+            onMediaDisplay,
+            async (params) => {
+              const { text, usage, response } = params;
+              console.log(
+                `[RespondAPI:Stream] onFinish triggered. Text length: ${text?.length}. Tool calls: ${response.messages?.find((m: any) => m.role === "assistant")?.toolInvocations?.length || 0}`,
+              );
 
-            // Log usage for survey response
-            logUsage({
-              surveyId: survey.id,
-              type: "llm_text",
-              provider: "google",
-              modelName: (selectedModel as any).modelId ?? "gemini-2.5-flash",
-              promptTokens: usage.inputTokens,
-              completionTokens: usage.outputTokens,
-              totalTokens: usage.totalTokens,
-            });
+              // Log usage for survey response
+              logUsage({
+                surveyId: survey.id,
+                type: "llm_text",
+                provider: (
+                  defaultModel as { modelId?: string }
+                ).modelId?.includes("gpt")
+                  ? "openai"
+                  : "google",
+                modelName:
+                  (defaultModel as { modelId?: string }).modelId ??
+                  "gpt-4.1-mini",
+                promptTokens: usage.inputTokens,
+                completionTokens: usage.outputTokens,
+                totalTokens: usage.totalTokens,
+              });
 
-            // Under Unified Tools, text is just text now
-            const cleanText = text;
+              // Under Unified Tools, text is just text now
+              const cleanText = text;
 
-            // Save conversation to database
-            const assistantMessage = response.messages?.find(
-              (m: any) => m.role === "assistant",
-            );
+              // Save conversation to database
+              const assistantMessage = response.messages?.find(
+                (m: any) => m.role === "assistant",
+              );
 
-            const updatedMessages = [
-              ...modelMessages,
-              {
-                role: "assistant" as const,
-                content: cleanText,
-                parts:
-                  (assistantMessage as any)?.content &&
-                  Array.isArray((assistantMessage as any).content)
-                    ? (assistantMessage as any).content
-                    : undefined,
-                timestamp: new Date().toISOString(),
-              },
-            ];
+              const updatedMessages = [
+                ...modelMessages,
+                {
+                  role: "assistant" as const,
+                  content: cleanText,
+                  parts:
+                    assistantMessage?.content &&
+                    Array.isArray(assistantMessage.content)
+                      ? assistantMessage.content
+                      : undefined,
+                  timestamp: new Date().toISOString(),
+                },
+              ];
 
-            // Update memory in background (learning)
-            ConversationManager.updateMemoryAsync(
-              conversationId,
-              updatedMessages,
-              surveyConfig,
-              rollingContext,
-            ).catch((err) =>
-              console.error("Background memory update failed:", err),
-            );
+              // Update memory in background (learning)
+              ConversationManager.updateMemoryAsync(
+                conversationId,
+                updatedMessages,
+                surveyConfig,
+                rollingContext,
+              ).catch((err) =>
+                console.error("Background memory update failed:", err),
+              );
 
-            // Check for survey completion
-            const toolInvocations = assistantMessage?.toolInvocations || [];
-            const finishSurveyCall = toolInvocations.find(
-              (call: any) => call.toolName === "finishSurvey",
-            );
+              // Check for survey completion
+              const toolInvocations = assistantMessage?.toolInvocations || [];
+              const finishSurveyCall = toolInvocations.find(
+                (call: any) => call.toolName === "finishSurvey",
+              );
 
-            const isCompletionPhrase =
-              cleanText.toLowerCase().includes("thank you for completing") ||
-              cleanText.toLowerCase().includes("survey is now complete");
+              const isCompletionPhrase =
+                cleanText.toLowerCase().includes("thank you for completing") ||
+                cleanText.toLowerCase().includes("survey is now complete");
 
-            const isCompleted =
-              (!!finishSurveyCall || isCompletionPhrase) &&
-              userMessages.length >= minQuestions;
+              const isCompleted =
+                (!!finishSurveyCall || isCompletionPhrase) &&
+                userMessages.length >= minQuestions;
 
-            if (conversationId) {
-              const dbMessages = updatedMessages.map((m: any) => ({
-                role: m.role,
-                content: m.content,
-                parts: m.parts,
-                timestamp: m.timestamp || new Date().toISOString(),
-              }));
+              if (conversationId) {
+                const dbMessages = updatedMessages.map((m: any) => ({
+                  role: m.role,
+                  content: m.content,
+                  parts: m.parts,
+                  timestamp: m.timestamp || new Date().toISOString(),
+                }));
 
-              await db
-                .update(surveyConversations)
-                .set({
-                  rawConversation: dbMessages,
-                  completed: isCompleted,
-                  updatedAt: new Date(),
-                })
-                .where(eq(surveyConversations.id, conversationId));
-            }
+                const [currentConv] = await getDb()
+                  .select({
+                    rawConversation: surveyConversations.rawConversation,
+                  })
+                  .from(surveyConversations)
+                  .where(eq(surveyConversations.id, conversationId));
 
-            if (isCompleted) {
-              await db
-                .update(surveys)
-                .set({
-                  currentParticipants: (survey.currentParticipants || 0) + 1,
-                  updatedAt: new Date(),
-                })
-                .where(eq(surveys.id, survey.id));
+                const prevMessages =
+                  (currentConv?.rawConversation as any[]) || [];
+                const prevUserMessages = prevMessages.filter(
+                  (m) => m.role === "user",
+                );
 
-              try {
-                const { enqueueConversationInsights } =
-                  await import("@/lib/queue");
-                await enqueueConversationInsights({
-                  conversationId,
-                  surveyId: survey.id,
-                  userId: survey.userId,
-                });
-              } catch (error) {
-                console.error("[HTTP Chat] Failed to enqueue insights:", error);
+                // Increment participant count ONLY on the very first user message (participation)
+                if (prevUserMessages.length === 0 && userMessages.length > 0) {
+                  await getDb()
+                    .update(surveys)
+                    .set({
+                      currentParticipants:
+                        (survey.currentParticipants || 0) + 1,
+                      updatedAt: new Date(),
+                    })
+                    .where(eq(surveys.id, survey.id));
+                }
+
+                await getDb()
+                  .update(surveyConversations)
+                  .set({
+                    rawConversation: dbMessages,
+                    completed: isCompleted,
+                    updatedAt: new Date(),
+                  })
+                  .where(eq(surveyConversations.id, conversationId));
               }
 
-              writer.write({
-                type: "data",
-                data: { isCompleted: true },
-              } as any);
-            }
-          },
-          dynamicDirective,
-        );
+              if (isCompleted) {
+                try {
+                  const {
+                    enqueueConversationInsights,
+                    enqueueGenerativeSummary,
+                  } = await import("@/lib/queue");
+                  await enqueueConversationInsights({
+                    conversationId,
+                    surveyId: survey.id,
+                    userId: survey.userId,
+                  });
+                  // Debounced: 2-min delay, 15-min max-wait, deduplication per surveyId
+                  await enqueueGenerativeSummary({
+                    surveyId: survey.id,
+                    userId: survey.userId,
+                  });
+                } catch (error) {
+                  console.error(
+                    "[HTTP Chat] Failed to enqueue insights:",
+                    error,
+                  );
+                }
 
-        // Iterate over fullStream to intercept tool calls
-        let capturedMessageId = null;
-        let streamedTextLength = 0;
-
-        // State for streaming tool arguments
-        let fullArgsBuffer = "";
-        let isStreamingMessageToUser = false;
-        let lastStreamedIndex = 0;
-
-        for await (const chunk of result.fullStream) {
-          switch (chunk.type) {
-            case "text-delta":
-              // If the model bypasses the tool and speaks text directly, stream it just in case
-              writer.write({
-                type: "text-delta",
-                delta: chunk.text,
-              } as any);
-              break;
-
-            case "tool-call-streaming-start" as any: {
-              const part = chunk as { toolName?: string; toolCallId?: string };
-              if (part.toolName === "think_and_respond" && part.toolCallId) {
-                capturedMessageId = part.toolCallId;
                 writer.write({
-                  type: "message-annotations",
-                  annotations: [{ type: "tool_start", id: part.toolCallId }],
+                  type: "data",
+                  data: { isCompleted: true },
                 } as any);
               }
-              break;
-            }
+            },
+            dynamicDirective,
+          );
+        });
 
-            case "tool-call-delta" as any: {
-              const part = chunk as { argsTextDelta?: string };
-              if (part.argsTextDelta) {
-                fullArgsBuffer += part.argsTextDelta;
+        // AI SDK v6: Stream the results correctly using protocol translation.
+        // This converts raw TextStreamParts into UIMessageChunks, stripping
+        // problematic metadata (like request/warnings in 'start-step').
+        const uiStream = result.toUIMessageStream();
 
-                // Look for the start of message_to_user if we haven't found it yet
-                if (!isStreamingMessageToUser) {
-                  const marker = '"message_to_user": "';
-                  const markerIndex = fullArgsBuffer.indexOf(marker);
-                  if (markerIndex !== -1) {
-                    isStreamingMessageToUser = true;
-                    lastStreamedIndex = markerIndex + marker.length;
-                  }
-                }
+        for await (const chunk of uiStream) {
+          const chunkType = (chunk as { type: string }).type;
+          console.log(`[RespondAPI:StreamPart] Chunk type: ${chunkType}`);
 
-                // If we are in streaming mode, extract and unescape new content
-                if (isStreamingMessageToUser) {
-                  // We look for the closing quote, but be careful of escaped quotes \"
-                  let contentToProcess =
-                    fullArgsBuffer.substring(lastStreamedIndex);
-
-                  // Finding the true end of the string (unescaped quote)
-                  let closingQuoteIndex = -1;
-                  for (let i = 0; i < contentToProcess.length; i++) {
-                    if (contentToProcess[i] === '"') {
-                      // Check if it's escaped
-                      let backslashes = 0;
-                      for (
-                        let j = i - 1;
-                        j >= 0 && contentToProcess[j] === "\\";
-                        j--
-                      ) {
-                        backslashes++;
-                      }
-                      if (backslashes % 2 === 0) {
-                        closingQuoteIndex = i;
-                        break;
-                      }
-                    }
-                  }
-
-                  let delta =
-                    closingQuoteIndex !== -1
-                      ? contentToProcess.substring(0, closingQuoteIndex)
-                      : contentToProcess;
-
-                  // If delta ends with a trailing backslash, hold it back to see if it's the start of an escape sequence
-                  if (closingQuoteIndex === -1 && delta.endsWith("\\")) {
-                    delta = delta.slice(0, -1);
-                  }
-
-                  if (delta.length > 0) {
-                    try {
-                      // Use JSON.parse to handle unescaping correctly
-                      const unescapedDelta = JSON.parse(`"${delta}"`);
-                      writer.write({
-                        type: "text-delta",
-                        delta: unescapedDelta,
-                      } as any);
-                      lastStreamedIndex += delta.length;
-                    } catch (e) {
-                      // If parsing fails (e.g. partial escape sequence), wait for more data
-                    }
-                  }
-
-                  if (closingQuoteIndex !== -1) {
-                    isStreamingMessageToUser = false; // Stop streaming once we hit the closing quote
-                  }
-                }
-              }
-              break;
-            }
-
-            case "tool-call": {
-              if (
-                "toolName" in chunk &&
-                chunk.toolName === "think_and_respond"
-              ) {
-                // If we didn't stream it (e.g. key was at the very end), send it now
-                if (!isStreamingMessageToUser && lastStreamedIndex === 0) {
-                  try {
-                    const payload = (chunk as any).args as any;
-                    if (payload.message_to_user) {
-                      writer.write({
-                        type: "text-delta",
-                        delta: payload.message_to_user,
-                      } as any);
-                    }
-                  } catch (e) {
-                    console.error("Failed to parse tool call args", e);
-                  }
-                }
-
-                // Process state updates
-                try {
-                  const payload = (chunk as any).args as any;
-                  if (
-                    payload.state_updates &&
-                    Object.keys(payload.state_updates).length > 0
-                  ) {
-                    console.log("[State Extracted]", payload.state_updates);
-                  }
-                } catch (e) {
-                  // silent
-                }
-              }
-              break;
-            }
-
-            case "tool-result":
-              // We DO NOT write the tool-result to the UI stream
-              break;
-
-            case "finish":
-              // Stream finished
-              break;
-
-            case "error":
-              writer.write({
-                type: "error",
-                errorText: String(chunk.error),
-              } as any);
-              break;
-          }
+          // Passthrough sanitized chunks.
+          writer.write(chunk as any);
         }
+        console.log(`[RespondAPI:Stream] Stream loop finished.`);
       },
     });
 
     return createUIMessageStreamResponse({ stream });
   } catch (error) {
+    if (error instanceof GeminiCapacityError) {
+      return geminiCapacityResponse();
+    }
     console.error("Error in survey response:", error);
     return NextResponse.json(
       { error: "Internal server error" },

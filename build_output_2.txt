@@ -1,0 +1,62 @@
+
+> convy@0.1.0 build
+> next build
+
+▲ Next.js 16.1.5 (Turbopack, Cache Components)
+- Environments: .env
+
+  Creating an optimized production build ...
+
+> Build error occurred
+Error: Turbopack build failed with 3 errors:
+./app/[locale]/(auth)/forgot-password/page.tsx:11:14
+Ecmascript file had an error
+[0m [90m  9 |[39m [36mimport[39m { [33mAuthCard[39m } [36mfrom[39m [32m"@/components/auth/auth-card"[39m[33m;[39m
+ [90m 10 |[39m
+[31m[1m>[22m[39m[90m 11 |[39m [36mexport[39m [36mconst[39m dynamic [33m=[39m [32m"force-dynamic"[39m[33m;[39m
+ [90m    |[39m              [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 12 |[39m
+ [90m 13 |[39m [36mimport[39m { [33mStatusCard[39m } [36mfrom[39m [32m"@/components/auth/status-card"[39m[33m;[39m
+ [90m 14 |[39m [36mimport[39m { [33mInputField[39m } [36mfrom[39m [32m"@/components/auth/input-field"[39m[33m;[39m[0m
+
+Route segment config "dynamic" is not compatible with `nextConfig.cacheComponents`. Please remove it.
+
+Import traces:
+  Client Component Browser:
+    ./app/[locale]/(auth)/forgot-password/page.tsx [Client Component Browser]
+    ./app/[locale]/(auth)/forgot-password/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./app/[locale]/(auth)/forgot-password/page.tsx [Client Component SSR]
+    ./app/[locale]/(auth)/forgot-password/page.tsx [Server Component]
+
+
+./app/[locale]/(dashboard)/dashboard/profile/page.tsx:5:14
+Ecmascript file had an error
+[0m [90m 3 |[39m [36mimport[39m { getVerifiedSession } [36mfrom[39m [32m"@/lib/auth/session"[39m[33m;[39m
+ [90m 4 |[39m
+[31m[1m>[22m[39m[90m 5 |[39m [36mexport[39m [36mconst[39m dynamic [33m=[39m [32m"force-dynamic"[39m[33m;[39m
+ [90m   |[39m              [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 6 |[39m
+ [90m 7 |[39m [36mimport[39m { [33mAuthProvider[39m } [36mfrom[39m [32m"@/components/providers/auth-provider"[39m[33m;[39m
+ [90m 8 |[39m [36mimport[39m { [33mProfileContent[39m } [36mfrom[39m [32m"@/components/dashboard/profile-content"[39m[33m;[39m[0m
+
+Route segment config "dynamic" is not compatible with `nextConfig.cacheComponents`. Please remove it.
+
+
+./app/[locale]/admin/usage/page.tsx:7:14
+Ecmascript file had an error
+[0m [90m  5 |[39m [36mimport[39m { headers } [36mfrom[39m [32m"next/headers"[39m[33m;[39m
+ [90m  6 |[39m
+[31m[1m>[22m[39m[90m  7 |[39m [36mexport[39m [36mconst[39m dynamic [33m=[39m [32m"force-dynamic"[39m[33m;[39m
+ [90m    |[39m              [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m  8 |[39m
+ [90m  9 |[39m
+ [90m 10 |[39m[0m
+
+Route segment config "dynamic" is not compatible with `nextConfig.cacheComponents`. Please remove it.
+
+
+    at <unknown> (./app/[locale]/(auth)/forgot-password/page.tsx:11:14)
+    at <unknown> (./app/[locale]/(dashboard)/dashboard/profile/page.tsx:5:14)
+    at <unknown> (./app/[locale]/admin/usage/page.tsx:7:14)

@@ -342,16 +342,21 @@ export function determineConversationState(
   if (progress.completionPercentage >= 90) return "CONCLUDING";
   if (progress.completionPercentage >= 75) return "CHECKING_COVERAGE";
 
-  // Early exploration
-  if (messageCount <= 4) return "EXPLORING_INITIAL";
-
   // Active topic coverage
   if (progress.remainingTopicsCount > 0) {
     // Check if we need to transition to a new topic
+    const nextState =
+      messageCount % 4 === 0 ? "TRANSITIONING" : "COVERING_TOPIC";
+    console.log(
+      `[ConvMemory:determineState] MsgCount: ${messageCount}. Progress: ${progress.completionPercentage}%. Topics: ${progress.remainingTopicsCount}. Next: ${nextState}`,
+    );
     if (messageCount % 4 === 0) return "TRANSITIONING";
     return "COVERING_TOPIC";
   }
 
+  console.log(
+    `[ConvMemory:determineState] MsgCount: ${messageCount}. Progress: ${progress.completionPercentage}%. Next: DRILLING_DEEPER`,
+  );
   // Drilling deeper on covered topics
   return "DRILLING_DEEPER";
 }
@@ -405,7 +410,7 @@ export function calculateProgress(
     wrapUpReason = "All main topics have been covered";
   }
 
-  return {
+  const result: ConversationProgress = {
     coveredRequiredQuestions,
     collectedMetrics: [],
     exploredHypotheses: [],
@@ -416,6 +421,11 @@ export function calculateProgress(
     shouldWrapUp,
     wrapUpReason,
   };
+
+  console.log(
+    `[ConvMemory:calculateProgress] Done. Coverage: ${completionPercentage}%. Remaining: ${remainingTopicsCount}. ShouldWrapUp: ${shouldWrapUp}`,
+  );
+  return result;
 }
 
 /**

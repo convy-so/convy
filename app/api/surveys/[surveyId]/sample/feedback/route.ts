@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
@@ -27,7 +27,7 @@ export async function POST(
     }
 
     // 1. Get current survey to check ownership + current count
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -58,7 +58,7 @@ export async function POST(
         ? `${survey.improvementFeedback}\n\n- ${feedback}`
         : `- ${feedback}`;
 
-    const [updatedSurvey] = await db
+    const [updatedSurvey] = await getDb()
       .update(surveys)
       .set({
         sampleConversationCount: survey.sampleConversationCount + 1,

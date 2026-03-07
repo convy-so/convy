@@ -20,9 +20,6 @@ export interface VoiceAgentFunction {
   name: string;
   description: string;
   parameters: Record<string, any>;
-  // client_side MUST be true for the server to route FunctionCallRequests to our client.
-  // If omitted/false, Deepgram tries to handle the function server-side (which fails for
-  // our custom tools) and the FunctionCallRequest never reaches our onFunctionCall handler.
   client_side?: boolean;
   endpoint?: {
     url: string;
@@ -38,7 +35,16 @@ export interface VoiceAgentSettings {
   };
   agent: {
     language?: string;
-    listen?: { provider: { type: string; model?: string } };
+    listen?: {
+      provider: {
+        type: string;
+        model?: string;
+        version?: string;
+        language?: string;
+        smart_format?: boolean;
+        endpointing?: number;
+      };
+    };
     think: {
       provider: { type: string; model?: string };
       endpoint?: {
@@ -48,10 +54,19 @@ export interface VoiceAgentSettings {
       prompt: string;
       functions?: VoiceAgentFunction[];
     };
-    speak?: { provider: { type: string; model?: string } };
+    speak?: {
+      provider: {
+        type: string;
+        model?: string;
+        model_id?: string;
+      };
+    };
     context?: {
       messages: Array<{ role: string; content: string }>;
     };
+  };
+  flags?: {
+    history?: boolean;
   };
 }
 
@@ -70,13 +85,33 @@ export interface FunctionCallRequestEvent {
 
 const VOICE_MODEL_MAP: Record<
   SupportedLanguage,
-  { casual: string; formal: string }
+  { casual: string; formal: string; empathetic: string }
 > = {
-  en: { casual: "aura-asteria-en", formal: "aura-athena-en" },
-  fr: { casual: "aura-2-agathe-fr", formal: "aura-2-hector-fr" },
-  de: { casual: "aura-2-viktoria-de", formal: "aura-2-julius-de" },
-  es: { casual: "aura-2-celeste-es", formal: "aura-2-nestor-es" },
-  it: { casual: "aura-2-livia-it", formal: "aura-2-dionisio-it" },
+  en: {
+    casual: "aura-2-asteria-en",
+    formal: "aura-2-orpheus-en",
+    empathetic: "aura-2-vesta-en",
+  },
+  fr: {
+    casual: "aura-2-agathe-fr",
+    formal: "aura-2-hector-fr",
+    empathetic: "aura-2-agathe-fr",
+  },
+  de: {
+    casual: "aura-2-viktoria-de",
+    formal: "aura-2-fabian-de",
+    empathetic: "aura-2-viktoria-de",
+  },
+  es: {
+    casual: "aura-2-celeste-es",
+    formal: "aura-2-nestor-es",
+    empathetic: "aura-2-celeste-es",
+  },
+  it: {
+    casual: "aura-2-livia-it",
+    formal: "aura-2-dionisio-it",
+    empathetic: "aura-2-livia-it",
+  },
 };
 
 /**
@@ -87,22 +122,22 @@ export function getVoiceModel(
   tone: "casual" | "formal" | "playful" | "empathetic" = "casual",
 ): string {
   const models = VOICE_MODEL_MAP[language] || VOICE_MODEL_MAP.en;
-  // playful/empathetic map to casual for non-English
   if (tone === "formal") return models.formal;
-  return models.casual;
+  if (tone === "empathetic") return models.empathetic; // now actually used
+  return models.casual; // covers "casual" and "playful"
 }
 
 // ── Connection Class ─────────────────────────────────────────────────────────
 
 const VOICE_AGENT_ENDPOINT = "wss://agent.deepgram.com/v1/agent/converse";
-const KEEP_ALIVE_INTERVAL_MS = 8000; // Send keep-alive every 8 seconds
+const KEEP_ALIVE_INTERVAL_MS = 8000;
 
 export class DeepgramVoiceAgentConnection extends EventEmitter {
   private ws: WebSocket | null = null;
   private keepAliveInterval: NodeJS.Timeout | null = null;
   private isConnected: boolean = false;
   // v1 sequencing gates (per Deepgram message flow docs)
-  private isWelcomeReceived: boolean = false; // Set on Welcome → enables Settings to be sent
+  private isWelcomeReceived: boolean = false;
   private isSettingsApplied: boolean = false; // Set on SettingsApplied → enables audio streaming
   private settings: VoiceAgentSettings;
 
@@ -132,11 +167,9 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
 
       this.ws.on("open", () => {
         console.log(
-          "[VoiceAgent] WebSocket connected to Deepgram. Waiting for Welcome...",
+          "[ChainOfTrust] [External:Deepgram] ✅ WebSocket connected to Deepgram. Handshake successful.",
         );
         this.isConnected = true;
-        // v1 doc: "Do not send any messages until you receive the Welcome message."
-        // Settings and KeepAlive are sent inside the Welcome handler below.
         resolve();
       });
 
@@ -154,7 +187,7 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
 
       this.ws.on("close", (code, reason) => {
         console.log(
-          `[VoiceAgent] WebSocket closed: Code=${code} Reason=${reason.toString()}`,
+          `[ChainOfTrust] [External:Deepgram] 🔴 WebSocket closed: Code=${code} Reason=${reason.toString()}`,
         );
         this.isConnected = false;
         this.isWelcomeReceived = false;
@@ -174,18 +207,16 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
       ...this.settings,
     };
 
-    console.log("[VoiceAgent] Sending 'Settings' message to Deepgram...");
     console.log(
-      "[VoiceAgent] Audio Config -> Input:",
-      JSON.stringify(this.settings.audio?.input),
-      "Output:",
-      JSON.stringify(this.settings.audio?.output),
+      "[ChainOfTrust] [External:Deepgram] 📤 Sending 'Settings' payload to Deepgram.",
     );
     console.log(
-      "[VoiceAgent] Agent Config -> Language:",
-      this.settings.agent.language,
-      "Model:",
-      this.settings.agent.listen?.provider?.model,
+      `[ChainOfTrust] [External:Deepgram] Agent Config: Lang=${this.settings.agent.listen?.provider?.language} Model=${this.settings.agent.listen?.provider?.model}`,
+    );
+
+    console.log(
+      "[ChainOfTrust] [External:Deepgram] 🔍 RAW SETTINGS JSON:\n",
+      JSON.stringify(settingsMessage, null, 2),
     );
 
     this.sendJson(settingsMessage);
@@ -197,9 +228,19 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
   sendAudio(audioData: Buffer): void {
     // v1 doc: "Do not send audio until you receive SettingsApplied."
     if (!this.isSettingsApplied) {
-      return; // Drop audio silently — settings not yet confirmed
+      if (Math.random() < 0.01) {
+        console.warn(
+          "[ChainOfTrust] [External:Deepgram] ⚠️ Dropping audio: Settings not yet applied.",
+        );
+      }
+      return;
     }
     if (this.ws?.readyState === WebSocket.OPEN) {
+      if (Math.random() < 0.05) {
+        console.log(
+          `[ChainOfTrust] [External:Deepgram] 📤 Forwarding audio to Deepgram: ${audioData.length} bytes`,
+        );
+      }
       this.ws.send(audioData);
     }
   }
@@ -233,13 +274,13 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
     output: string,
   ): void {
     console.log(
-      `[VoiceAgent] Sending function call response for ID: ${functionCallId}, Name: ${name}`,
+      `[ChainOfTrust] [External:Deepgram] 📤 Sending FunctionCallResponse for ${name} (ID: ${functionCallId})`,
     );
     this.sendJson({
       type: "FunctionCallResponse",
-      id: functionCallId, // V1 requires 'id'
+      id: functionCallId,
       name,
-      content: output, // V2+ content, but V1 also uses content/output depending on specific SDK/spec nuances. The research confirmed 'content' and 'name' are required.
+      content: output,
     });
   }
 
@@ -249,7 +290,8 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
   updateSettings(settings: VoiceAgentSettings): void {
     console.log("[VoiceAgent] Updating settings...");
     this.settings = settings;
-    if (this.isConnected) {
+    // We must only send settings if we have already received the Welcome message from Deepgram.
+    if (this.isWelcomeReceived) {
       this.sendSettings();
     }
   }
@@ -292,14 +334,17 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
     // String data = JSON event
     try {
       const message = JSON.parse(data.toString());
-      console.log(`[VoiceAgent] 📥 Received JSON: ${message.type}`);
+      if (message.type !== "KeepAliveResponse") {
+        console.log(
+          `[ChainOfTrust] [External:Deepgram] 📥 Received JSON message: ${message.type}`,
+        );
+      }
       this.handleJsonMessage(message);
     } catch (error) {
       console.error(
-        "[VoiceAgent] Failed to parse message:",
+        "[ChainOfTrust] [External:Deepgram] ❌ Failed to parse JSON from Deepgram:",
         error,
-        "Raw data:",
-        data.toString().substring(0, 50),
+        data.toString().substring(0, 100),
       );
     }
   }
@@ -316,7 +361,9 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         break;
 
       case "SettingsApplied":
-        console.log("[VoiceAgent] Settings applied successfully");
+        console.log(
+          "[ChainOfTrust] [External:Deepgram] ✅ Settings applied successfully. Audio streaming enabled.",
+        );
         this.isSettingsApplied = true;
         // v1 doc: audio streaming is now safe
         this.emit("settingsApplied", message);
@@ -394,14 +441,15 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
 
   private sendJson(data: any): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      if (data.type !== "Settings") {
-        // Settings already logged in detail
-        console.log(`[VoiceAgent] 📤 Sending JSON: ${data.type}`);
+      if (data.type !== "Settings" && data.type !== "KeepAlive") {
+        console.log(
+          `[ChainOfTrust] [External:Deepgram] 📤 Sending JSON message: ${data.type}`,
+        );
       }
       this.ws.send(JSON.stringify(data));
     } else {
       console.warn(
-        `[VoiceAgent] ⚠️ Cannot send JSON (WS not open): ${data.type}`,
+        `[ChainOfTrust] [External:Deepgram] ⚠️ Cannot send JSON (WS not open): ${data.type}`,
       );
     }
   }
@@ -446,10 +494,12 @@ export function buildVoiceAgentSettings(options: {
     conversationHistory,
   } = options;
 
-  const googleApiKey = env.GOOGLE_GENERATIVE_AI_API_KEY;
   const voiceModel = getVoiceModel(language, tone);
 
   return {
+    flags: {
+      history: true,
+    },
     audio: {
       // Input: 16000 Hz linear16 — matches our AudioWorklet which forces 16kHz context
       input: { encoding: "linear16", sample_rate: 16000 },
@@ -457,29 +507,36 @@ export function buildVoiceAgentSettings(options: {
       output: { encoding: "linear16", sample_rate: 24000, container: "none" },
     },
     agent: {
-      language,
       listen: {
         provider: {
           type: "deepgram",
           model: "nova-3",
+          version: "v1",
+          language: "multi",
+          smart_format: true,
+          endpointing: 300, // Wait 300ms of silence before endpointing user speech
         },
       },
       think: {
         provider: {
-          type: "google",
+          type: "open_ai",
+          model: "gpt-4o-mini",
         },
-        // BYO Google endpoint: API key in x-goog-api-key header
-        endpoint: {
-          url: `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:streamGenerateContent?alt=sse`,
-          headers: {
-            "x-goog-api-key": googleApiKey || "",
-          },
-        },
-        prompt: systemPrompt,
-        ...(functions && functions.length > 0 ? { functions } : {}),
+        prompt: `${systemPrompt}\n\nRespond to the user in the language they are speaking to you in. If the user speaks Spanish, reply in natural Spanish. Match the language of each user message independently to provide seamless multilingual support.`,
+        ...(functions && functions.length > 0
+          ? {
+              functions: functions.map((f) => {
+                const { client_side, ...rest } = f;
+                return rest;
+              }),
+            }
+          : {}),
       },
       speak: {
-        provider: { type: "deepgram", model: voiceModel },
+        provider: {
+          type: "deepgram",
+          model: voiceModel,
+        },
       },
       // Set greeting so Deepgram speaks first — no InjectAgentMessage needed
       ...(greeting ? { greeting } : {}),
@@ -488,7 +545,9 @@ export function buildVoiceAgentSettings(options: {
             context: {
               messages: conversationHistory.map((m) => ({
                 type: "History" as const,
-                role: m.role as "user" | "assistant",
+                role: (m.role === "user" ? "user" : "assistant") as
+                  | "user"
+                  | "assistant",
                 content: m.content,
               })),
             },

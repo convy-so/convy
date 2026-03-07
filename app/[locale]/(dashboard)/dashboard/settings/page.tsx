@@ -17,34 +17,37 @@ import {
     LogOut
 } from "lucide-react";
 import { usePathname, useRouter } from "@/i18n/routing";
-import { useLocale, useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/providers/auth-provider";
 import { authClient } from "@/lib/auth-client";
 import { getActiveWorkspace, updateWorkspace } from "@/app/actions/workspace";
 import toast from "react-hot-toast";
+import { useTranslations } from "next-intl";
+import { getClientTranslation, updateUserLanguage } from "@/app/actions/translate";
+import { SupportedLanguage } from "@/lib/i18n/ai-translator";
+import { ClientT } from "@/components/i18n/client-t";
 
 export default function SettingsPage() {
     const { user, session } = useAuth();
 
     // True when the user is actively in a workspace context
-    const isWorkspaceContext = !!(session as any)?.activeOrganizationId;
+    const isWorkspaceContext = !!session?.activeOrganizationId;
     const router = useRouter();
     const pathname = usePathname();
-    const currentLocale = useLocale();
-    const t = useTranslations('Settings');
+    const t = useTranslations("Settings");
+    const currentLocale = (user as { preferredLanguage?: SupportedLanguage })?.preferredLanguage || "en";
 
     const [activeTab, setActiveTab] = useState("profile");
     const [isSaving, setIsSaving] = useState(false);
     const [profileImage, setProfileImage] = useState<string | null>(null);
 
     const tabs = [
-        { id: "profile", name: t('Tabs.Profile'), icon: User },
+        { id: "profile", name: t("Tabs.Profile"), icon: User },
         // Workspace tab only shown when in a workspace context
-        ...(isWorkspaceContext ? [{ id: "workspace", name: t('Tabs.Workspace'), icon: Key }] : []),
-        { id: "notifications", name: t('Tabs.Notifications'), icon: Bell },
-        { id: "preferences", name: t('Tabs.Preferences'), icon: Globe },
-        { id: "security", name: t('Tabs.Security'), icon: Shield },
+        ...(isWorkspaceContext ? [{ id: "workspace", name: t("Tabs.Workspace"), icon: Key }] : []),
+        { id: "notifications", name: t("Tabs.Notifications"), icon: Bell },
+        { id: "preferences", name: t("Tabs.Preferences"), icon: Globe },
+        { id: "security", name: t("Tabs.Security"), icon: Shield },
     ];
 
     // Profile state
@@ -112,16 +115,16 @@ export default function SettingsPage() {
                 name: profile.name,
                 image: profileImage || profile.image || undefined,
                 fetchOptions: {
-                    onSuccess: () => {
-                        toast.success(t('Notifications.Saved'));
+                    onSuccess: async () => {
+                        toast.success(t("Profile.Saved") || "Settings saved successfully");
                     },
-                    onError: (ctx) => {
-                        toast.error(ctx.error.message || t('Notifications.Error'));
+                    onError: async (ctx) => {
+                        toast.error(await getClientTranslation(ctx.error.message || "Failed to save settings"));
                     }
                 }
             });
         } catch (error) {
-            toast.error(t('Notifications.Error'));
+            toast.error(await getClientTranslation("An error occurred while saving profile"));
         } finally {
             setIsSaving(false);
         }
@@ -129,7 +132,7 @@ export default function SettingsPage() {
 
     const handlePasswordUpdate = async () => {
         if (passwordData.newPassword !== passwordData.confirmPassword) {
-            toast.error(t('Security.PasswordMismatch'));
+            toast.error(await getClientTranslation("Passwords do not match"));
             return;
         }
         setIsSaving(true);
@@ -138,21 +141,21 @@ export default function SettingsPage() {
                 newPassword: passwordData.newPassword,
                 currentPassword: passwordData.currentPassword,
                 fetchOptions: {
-                    onSuccess: () => {
-                        toast.success(t('Notifications.Saved'));
+                    onSuccess: async () => {
+                        toast.success(await getClientTranslation("Password updated successfully"));
                         setPasswordData({
                             currentPassword: "",
                             newPassword: "",
                             confirmPassword: "",
                         });
                     },
-                    onError: (ctx) => {
-                        toast.error(ctx.error.message || t('Notifications.Error'));
+                    onError: async (ctx) => {
+                        toast.error(await getClientTranslation(ctx.error.message || "Failed to update password"));
                     }
                 }
             });
         } catch (error) {
-            toast.error(t('Notifications.Error'));
+            toast.error(await getClientTranslation("An error occurred while updating password"));
         } finally {
             setIsSaving(false);
         }
@@ -169,13 +172,13 @@ export default function SettingsPage() {
                 logo: wsLogo || undefined,
             });
             if (result.success) {
-                toast.success(t('Notifications.Saved'));
+                toast.success(await getClientTranslation("Workspace updated successfully"));
                 setActiveWorkspace({ ...activeWorkspace, name: wsName, slug: wsSlug, logo: wsLogo });
             } else {
-                toast.error(result.error || t('Notifications.Error'));
+                toast.error(await getClientTranslation(result.error || "Failed to update workspace"));
             }
         } catch (error) {
-            toast.error(t('Notifications.Error'));
+            toast.error(await getClientTranslation("An error occurred while updating workspace"));
         } finally {
             setIsSaving(false);
         }
@@ -198,30 +201,36 @@ export default function SettingsPage() {
         } else if (activeTab === "notifications") {
             setIsSaving(true);
             await new Promise((resolve) => setTimeout(resolve, 800));
-            toast.success(t('Notifications.Saved'));
+            toast.success(await getClientTranslation("Notification settings saved"));
             setIsSaving(false);
         } else if (activeTab === "preferences") {
-            toast.success(t('Preferences.Toast'));
+            toast.success(await getClientTranslation("Preferences saved"));
         } else {
             setIsSaving(true);
             await new Promise((resolve) => setTimeout(resolve, 1000));
             setIsSaving(false);
-            toast.success(t('Notifications.Saved'));
+            toast.success(await getClientTranslation("Settings saved successfully"));
         }
     };
 
-    const handleLanguageChange = (newLocale: string) => {
-        router.push(pathname, { locale: newLocale });
-        toast.success(t('Preferences.Toast'));
+    const handleLanguageChange = async (newLocale: string) => {
+        const result = await updateUserLanguage(newLocale as SupportedLanguage);
+        if (result.success) {
+            toast.success(t("Preferences.Toast") || "Language updated successfully");
+            // Navigate to the same path but with the new locale to update the UI shell
+            router.push(pathname, { locale: newLocale });
+        } else {
+            toast.error(t("Error") || "Failed to update language");
+        }
     };
 
     return (
         <div className="max-w-5xl mx-auto">
             {/* Header */}
             <div className="mb-8">
-                <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('Header.Title')}</h1>
+                <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t("Header.Title")}</h1>
                 <p className="text-gray-500 mt-1">
-                    {t('Header.Description')}
+                    {t("Header.Description")}
                 </p>
             </div>
 
@@ -253,8 +262,8 @@ export default function SettingsPage() {
                     {activeTab === "profile" && (
                         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-100">
-                                <h2 className="text-lg font-semibold text-gray-900">{t('Profile.Title')}</h2>
-                                <p className="text-sm text-gray-500">{t('Profile.Description')}</p>
+                                <h2 className="text-lg font-semibold text-gray-900">{t("Profile.Title")}</h2>
+                                <p className="text-sm text-gray-500">{t("Profile.Description")}</p>
                             </div>
 
                             <div className="p-6 space-y-6">
@@ -299,7 +308,7 @@ export default function SettingsPage() {
                                             className="text-xs text-red-500 hover:text-red-600 mt-1"
                                             style={{ display: profileImage ? 'block' : 'none' }}
                                         >
-                                            {t('Profile.RemovePhoto')}
+                                            {t("Profile.RemovePhoto")}
                                         </button>
                                     </div>
                                 </div>
@@ -308,7 +317,7 @@ export default function SettingsPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            {t('Profile.FullName')}
+                                            {t("Profile.FullName")}
                                         </label>
                                         <input
                                             type="text"
@@ -319,7 +328,7 @@ export default function SettingsPage() {
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            {t('Profile.Email')}
+                                            <ClientT>Email Address</ClientT>
                                         </label>
                                         <input
                                             type="email"
@@ -327,7 +336,7 @@ export default function SettingsPage() {
                                             disabled
                                             className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-500 cursor-not-allowed outline-none transition-all"
                                         />
-                                        <p className="mt-1 text-xs text-gray-400 font-normal italic">{t('Profile.EmailHint')}</p>
+                                        <p className="mt-1 text-xs text-gray-400 font-normal italic"><ClientT>Email cannot be changed. Contact support if needed.</ClientT></p>
                                     </div>
                                 </div>
                             </div>
@@ -341,12 +350,12 @@ export default function SettingsPage() {
                                     {isSaving ? (
                                         <>
                                             <Loader2 className="w-4 h-4 animate-spin" />
-                                            {t('Profile.Saving')}
+                                            <ClientT>Saving...</ClientT>
                                         </>
                                     ) : (
                                         <>
                                             <Check className="w-4 h-4" />
-                                            {t('Profile.Save')}
+                                            <ClientT>Save Changes</ClientT>
                                         </>
                                     )}
                                 </button>
@@ -358,8 +367,8 @@ export default function SettingsPage() {
                     {activeTab === "workspace" && (
                         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-100">
-                                <h2 className="text-lg font-semibold text-gray-900">{t('Workspace.Title')}</h2>
-                                <p className="text-sm text-gray-500">{t('Workspace.Description')}</p>
+                                <h2 className="text-lg font-semibold text-gray-900"><ClientT>Workspace Settings</ClientT></h2>
+                                <p className="text-sm text-gray-500"><ClientT>Manage your workspace identification and branding.</ClientT></p>
                             </div>
 
                             <div className="p-6 space-y-6">
@@ -403,14 +412,14 @@ export default function SettingsPage() {
                                                 </label>
                                             </div>
                                             <div>
-                                                <p className="font-medium text-gray-900">{t('Workspace.Logo')}</p>
-                                                <p className="text-xs text-gray-500">{t('Workspace.LogoHint')}</p>
+                                                <p className="font-medium text-gray-900"><ClientT>Workspace Logo</ClientT></p>
+                                                <p className="text-xs text-gray-500"><ClientT>Upload a square image for your workspace.</ClientT></p>
                                                 {wsLogo && (
                                                     <button
                                                         onClick={() => setWsLogo(null)}
                                                         className="text-xs text-red-500 hover:text-red-600 mt-1"
                                                     >
-                                                        {t('Workspace.Remove')}
+                                                        <ClientT>Remove</ClientT>
                                                     </button>
                                                 )}
                                             </div>
@@ -419,7 +428,7 @@ export default function SettingsPage() {
                                         <div className="grid grid-cols-1 gap-5">
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    {t('Workspace.Name')}
+                                                    <ClientT>Workspace Name</ClientT>
                                                 </label>
                                                 <input
                                                     type="text"
@@ -430,7 +439,7 @@ export default function SettingsPage() {
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    {t('Workspace.Slug')}
+                                                    <ClientT>Workspace Slug</ClientT>
                                                 </label>
                                                 <div className="flex gap-2">
                                                     <span className="flex items-center px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-500 text-sm">
@@ -459,12 +468,12 @@ export default function SettingsPage() {
                                         {isSaving ? (
                                             <>
                                                 <Loader2 className="w-4 h-4 animate-spin" />
-                                                {t('Workspace.Updating')}
+                                                <ClientT>Updating...</ClientT>
                                             </>
                                         ) : (
                                             <>
                                                 <Check className="w-4 h-4" />
-                                                {t('Workspace.Update')}
+                                                <ClientT>Update Workspace</ClientT>
                                             </>
                                         )}
                                     </button>
@@ -477,26 +486,26 @@ export default function SettingsPage() {
                     {activeTab === "notifications" && (
                         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-100">
-                                <h2 className="text-lg font-semibold text-gray-900">{t('Notifications.Title')}</h2>
-                                <p className="text-sm text-gray-500">{t('Notifications.Description')}</p>
+                                <h2 className="text-lg font-semibold text-gray-900"><ClientT>Notification Preferences</ClientT></h2>
+                                <p className="text-sm text-gray-500"><ClientT>Choose how and when you want to be notified.</ClientT></p>
                             </div>
                             <div className="p-6">
                                 <div className="space-y-6">
                                     {[
                                         {
-                                            title: t('Notifications.Types.NewResponse'),
-                                            description: t('Notifications.Types.NewResponseDesc'),
+                                            title: <ClientT>New Survey Response</ClientT>,
+                                            description: <ClientT>Get notified when someone completes your survey.</ClientT>,
                                             key: "NewResponse"
                                         },
                                         {
-                                            title: t('Notifications.Types.WeeklySummary'),
-                                            description: t('Notifications.Types.WeeklySummaryDesc'),
+                                            title: <ClientT>Weekly Summary</ClientT>,
+                                            description: <ClientT>A weekly digest of your survey performance.</ClientT>,
                                             key: "WeeklySummary"
                                         },
                                         // Team Updates notification only shown in workspace context
                                         ...(isWorkspaceContext ? [{
-                                            title: t('Notifications.Types.TeamUpdates'),
-                                            description: t('Notifications.Types.TeamUpdatesDesc'),
+                                            title: <ClientT>Team Updates</ClientT>,
+                                            description: <ClientT>Notifications about team member changes.</ClientT>,
                                             key: "TeamUpdates"
                                         }] : []),
                                     ].map((item, index) => (
@@ -516,7 +525,7 @@ export default function SettingsPage() {
                                                     <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${notifications[`email${item.key}` as keyof typeof notifications] ? 'bg-gray-900 border-gray-900' : 'border-gray-300 bg-white'}`}>
                                                         {notifications[`email${item.key}` as keyof typeof notifications] && <Check className="w-3.5 h-3.5 text-white" />}
                                                     </div>
-                                                    <span className="text-sm text-gray-600 group-hover:text-gray-900">{t('Notifications.Email')}</span>
+                                                    <span className="text-sm text-gray-600 group-hover:text-gray-900"><ClientT>Email</ClientT></span>
                                                 </label>
                                                 <label className="flex items-center gap-2 cursor-pointer group">
                                                     <input
@@ -528,7 +537,7 @@ export default function SettingsPage() {
                                                     <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${notifications[`push${item.key}` as keyof typeof notifications] ? 'bg-gray-900 border-gray-900' : 'border-gray-300 bg-white'}`}>
                                                         {notifications[`push${item.key}` as keyof typeof notifications] && <Check className="w-3.5 h-3.5 text-white" />}
                                                     </div>
-                                                    <span className="text-sm text-gray-600 group-hover:text-gray-900">{t('Notifications.Push')}</span>
+                                                    <span className="text-sm text-gray-600 group-hover:text-gray-900"><ClientT>Push</ClientT></span>
                                                 </label>
                                             </div>
                                         </div>
@@ -545,12 +554,12 @@ export default function SettingsPage() {
                                     {isSaving ? (
                                         <>
                                             <Loader2 className="w-4 h-4 animate-spin" />
-                                            {t('Notifications.Saving')}
+                                            <ClientT>Saving...</ClientT>
                                         </>
                                     ) : (
                                         <>
                                             <Check className="w-4 h-4" />
-                                            {t('Notifications.Save')}
+                                            <ClientT>Save Preferences</ClientT>
                                         </>
                                     )}
                                 </button>
@@ -562,15 +571,15 @@ export default function SettingsPage() {
                     {activeTab === "preferences" && (
                         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-100">
-                                <h2 className="text-lg font-semibold text-gray-900">{t('Preferences.Title')}</h2>
-                                <p className="text-sm text-gray-500">{t('Preferences.Description')}</p>
+                                <h2 className="text-lg font-semibold text-gray-900"><ClientT>App Preferences</ClientT></h2>
+                                <p className="text-sm text-gray-500"><ClientT>Customize your experience and regional settings.</ClientT></p>
                             </div>
 
                             <div className="p-6 space-y-6">
                                 <div>
                                     <div className="flex items-center gap-2 mb-4">
                                         <Globe className="w-5 h-5 text-gray-500" />
-                                        <h3 className="font-medium text-gray-900">{t('Preferences.Language')}</h3>
+                                        <h3 className="font-medium text-gray-900">{t("Preferences.Language")}</h3>
                                     </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                         {[
@@ -616,13 +625,13 @@ export default function SettingsPage() {
                             {/* Password */}
                             <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                                 <div className="px-6 py-4 border-b border-gray-100">
-                                    <h2 className="text-lg font-semibold text-gray-900">{t('Security.Title')}</h2>
-                                    <p className="text-sm text-gray-500">{t('Security.Description')}</p>
+                                    <h2 className="text-lg font-semibold text-gray-900"><ClientT>Security Settings</ClientT></h2>
+                                    <p className="text-sm text-gray-500"><ClientT>Manage your password and account security options.</ClientT></p>
                                 </div>
                                 <div className="p-6 space-y-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            {t('Security.Current')}
+                                            <ClientT>Current Password</ClientT>
                                         </label>
                                         <div className="relative">
                                             <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -636,7 +645,7 @@ export default function SettingsPage() {
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            {t('Security.New')}
+                                            <ClientT>New Password</ClientT>
                                         </label>
                                         <div className="relative">
                                             <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -650,7 +659,7 @@ export default function SettingsPage() {
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            {t('Security.Confirm')}
+                                            <ClientT>Confirm New Password</ClientT>
                                         </label>
                                         <div className="relative">
                                             <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -672,12 +681,12 @@ export default function SettingsPage() {
                                         {isSaving ? (
                                             <>
                                                 <Loader2 className="w-4 h-4 animate-spin" />
-                                                {t('Security.Updating')}
+                                                <ClientT>Updating...</ClientT>
                                             </>
                                         ) : (
                                             <>
                                                 <Check className="w-4 h-4" />
-                                                {t('Security.Update')}
+                                                <ClientT>Update Password</ClientT>
                                             </>
                                         )}
                                     </button>
@@ -692,14 +701,14 @@ export default function SettingsPage() {
                                             <Key className="w-5 h-5 text-orange-600" />
                                         </div>
                                         <div>
-                                            <h3 className="font-semibold text-gray-900">{t('Security.TwoFactor.Title')}</h3>
+                                            <h3 className="font-semibold text-gray-900"><ClientT>Two-Factor Authentication</ClientT></h3>
                                             <p className="text-sm text-gray-500 mt-1">
-                                                {t('Security.TwoFactor.Description')}
+                                                <ClientT>Add an extra layer of security to your account.</ClientT>
                                             </p>
                                         </div>
                                     </div>
                                     <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                                        {t('Security.TwoFactor.Enable')}
+                                        <ClientT>Enable</ClientT>
                                     </button>
                                 </div>
                             </div>
@@ -709,12 +718,12 @@ export default function SettingsPage() {
                                 <div className="flex items-start gap-4">
                                     <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
                                     <div>
-                                        <h3 className="font-semibold text-red-900">{t('Security.Delete.Title')}</h3>
+                                        <h3 className="font-semibold text-red-900"><ClientT>Delete Account</ClientT></h3>
                                         <p className="text-sm text-red-700 mt-1 mb-4">
-                                            {t('Security.Delete.Description')}
+                                            <ClientT>Permanently delete your account and all associated data. This action cannot be undone.</ClientT>
                                         </p>
                                         <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
-                                            {t('Security.Delete.Button')}
+                                            <ClientT>Delete Account</ClientT>
                                         </button>
                                     </div>
                                 </div>

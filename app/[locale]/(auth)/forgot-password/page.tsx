@@ -4,15 +4,17 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { Link } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
-import { Mail, ArrowLeft, Check } from "lucide-react";
+import { Mail, ArrowLeft, Check, Loader2 } from "lucide-react";
+import { Suspense } from "react";
 import { AuthCard } from "@/components/auth/auth-card";
+
 import { StatusCard } from "@/components/auth/status-card";
 import { InputField } from "@/components/auth/input-field";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
 
-export default function ForgotPasswordPage() {
+function ForgotPasswordContent() {
   const params = useParams();
   const locale = params.locale as string;
   const t = useTranslations('Auth.ForgotPassword');
@@ -95,5 +97,17 @@ export default function ForgotPasswordPage() {
         </Link>
       </div>
     </AuthCard>
+  );
+}
+
+export default function ForgotPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      </div>
+    }>
+      <ForgotPasswordContent />
+    </Suspense>
   );
 }

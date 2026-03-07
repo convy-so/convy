@@ -1,8 +1,10 @@
 import { google } from "@ai-sdk/google";
+import { openai } from "@ai-sdk/openai";
 import {
   generateText,
   streamText,
   type ModelMessage,
+  type LanguageModel,
   convertToModelMessages,
 } from "ai";
 import { RollingContext } from "./conversation-memory";
@@ -11,48 +13,35 @@ import { logUsage } from "./billing/logger";
 export async function normalizeMessages(
   messages: any[],
 ): Promise<ModelMessage[]> {
-  return await convertToModelMessages(messages);
+  console.log(
+    `[AI:normalizeMessages] Normalizing ${messages.length} messages...`,
+  );
+  const result = await convertToModelMessages(messages);
+  console.log(`[AI:normalizeMessages] Done. Result count: ${result.length}`);
+  return result;
 }
 
 export const GEMINI_FLASH_LITE_ID = "gemini-2.5-flash-lite";
 export const GEMINI_FLASH_ID = "gemini-2.5-flash";
+export const GEMINI_FLASH_STABLE_ID = "gemini-2.0-flash";
+export const GPT_4_1_MINI_ID = "gpt-4.1-mini";
 
 export const flashLiteModel = google(GEMINI_FLASH_LITE_ID);
 export const flashModel = google(GEMINI_FLASH_ID);
+// Stable production model with high quota — used for background extraction
+export const flashStableModel = google(GEMINI_FLASH_STABLE_ID);
+export const gpt41MiniModel = openai(GPT_4_1_MINI_ID);
 
-// Use flash-lite for analysis (cost-efficient, high-volume)
-export const analysisModel = flashLiteModel;
+// Use stable flash for analysis (high-volume background calls)
+export const analysisModel = flashStableModel;
 
-export function selectModelForConversation(
-  context: RollingContext,
-  userMessageCount: number,
-  minQuestions: number,
-  hasMedia: boolean,
-): ReturnType<typeof google> {
-  // Use Flash (stronger) for media-heavy or long conversations
-  if (hasMedia || userMessageCount > 12) {
-    return flashModel;
-  }
-
-  // Use Flash (stronger) for complex drilling states
-  if (
-    context.stateContext.currentState === "DRILLING_DEEPER" ||
-    context.stateContext.currentState === "CHECKING_COVERAGE"
-  ) {
-    return flashModel;
-  }
-
-  // Use Flash Lite (faster/cheaper) for early greeting or simple coverage
-  return flashLiteModel;
-}
-
-export const defaultModel = flashLiteModel;
+export const defaultModel = gpt41MiniModel;
 
 export async function generateAIResponse(
   prompt: string,
   systemPrompt?: string,
   options?: {
-    model?: ReturnType<typeof google>;
+    model?: LanguageModel;
     temperature?: number;
     maxTokens?: number;
     userId?: string;
@@ -75,7 +64,7 @@ export async function generateAIResponse(
     organizationId: options?.organizationId,
     surveyId: options?.surveyId,
     type: "llm_text",
-    provider: "google",
+    provider: (model as any).modelId?.includes("gpt") ? "openai" : "google",
     modelName: (model as any).modelId ?? GEMINI_FLASH_ID,
     promptTokens:
       result.usage.inputTokens ?? (result.usage as any).promptTokens,
@@ -94,7 +83,7 @@ export function streamAIResponse(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
   systemPrompt: string,
   options?: {
-    model?: ReturnType<typeof google>;
+    model?: LanguageModel;
     temperature?: number;
     maxTokens?: number;
     userId?: string;
@@ -116,7 +105,7 @@ export function streamAIResponse(
         organizationId: options?.organizationId,
         surveyId: options?.surveyId,
         type: "llm_text",
-        provider: "google",
+        provider: (model as any).modelId?.includes("gpt") ? "openai" : "google",
         modelName: (model as any).modelId ?? GEMINI_FLASH_ID,
         promptTokens:
           result.usage.inputTokens ?? (result.usage as any).promptTokens,

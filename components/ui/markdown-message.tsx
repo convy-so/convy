@@ -10,8 +10,8 @@ interface MarkdownMessageProps {
 /**
  * Pre-processes text to ensure better formatting for markdown rendering.
  */
-const formatMarkdown = (text: string) => {
-  if (!text) return "";
+const formatMarkdown = (text: any) => {
+  if (!text || typeof text !== 'string') return "";
 
   // 1. Strip scratchpad blocks (AI thinking)
   let formatted = text.replace(/<scratchpad>[\s\S]*?<\/scratchpad>/g, "").trim();

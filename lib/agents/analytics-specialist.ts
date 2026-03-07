@@ -1,18 +1,3 @@
-/**
- * Analytics Specialist Agent
- *
- * Interprets survey data with domain-specific analytical frameworks.
- * Used in two contexts:
- * 1. Generating analytics insights (survey-analytics.worker.ts)
- * 2. "Chat with your data" — answering creator questions about their data
- *
- * Key capabilities:
- * - Applies domain-specific metrics (NPS for CX, engagement scores for HR, etc.)
- * - Uses domain segmentation strategies to find meaningful patterns
- * - Distinguishes signal from noise using domain knowledge
- * - Generates actionable recommendations, not just observations
- */
-
 import { z } from "zod";
 import {
   generateText,
@@ -48,50 +33,38 @@ export class AnalyticsSpecialist extends BaseSpecialistAgent {
           `Directly answered the survey objective: "${config.coreObjective || config.expertState?.objective?.goal || config.information}"`,
         ),
         this.makeChecklistItem(
-          "pattern_identification",
-          "Identified the top 3-5 patterns across all conversations",
+          "metrics_comprehensive",
+          `Reported on ALL defined metrics: ${metrics.join(", ") || "No explicit metrics defined"}`,
         ),
-        ...(metrics.length > 0
-          ? [
-              this.makeChecklistItem(
-                "metrics_analysis",
-                `Analyzed and interpreted: ${metrics.join(", ")}`,
-              ),
-            ]
-          : []),
+        this.makeChecklistItem(
+          "media_performance",
+          "Analyzed the effectiveness and reactions to any media shown in the survey",
+        ),
+        this.makeChecklistItem(
+          "pattern_identification",
+          "Identified the top 3-5 patterns across all conversations with supporting evidence",
+        ),
         this.makeChecklistItem(
           "actionable_recommendations",
           "Provided specific, actionable recommendations (not just observations)",
         ),
       ],
       aspirational: [
-        ...(config.expertState?.hypotheses?.assumptions?.length
-          ? [
-              this.makeChecklistItem(
-                "hypotheses_verdict",
-                `Rendered a verdict on each hypothesis: ${config.expertState.hypotheses.assumptions.slice(0, 2).join("; ")}`,
-              ),
-            ]
-          : []),
+        this.makeChecklistItem(
+          "hypotheses_verdict",
+          "Rendered a clear 'Confirmed' or 'Refuted' verdict on all creator assumptions",
+        ),
         ...(insightTypes.includes("emotional")
           ? [
               this.makeChecklistItem(
-                "emotional_patterns",
-                "Identified emotional peaks, valleys, and the dominant sentiment arc",
-              ),
-            ]
-          : []),
-        ...(insightTypes.includes("behavioral")
-          ? [
-              this.makeChecklistItem(
-                "behavioral_patterns",
-                "Mapped the most common behavioral sequences and decision points",
+                "emotional_arc",
+                "Mapped the emotional sentiment arc of the participant pool",
               ),
             ]
           : []),
         this.makeChecklistItem(
           "segmentation",
-          "Identified meaningful differences between participant segments",
+          "Identified meaningful behavior differences between participant segments",
         ),
       ],
     };
@@ -101,74 +74,48 @@ export class AnalyticsSpecialist extends BaseSpecialistAgent {
   // System Prompt — Domain-Specialist Analyst
   // --------------------------------------------------------------------------
 
-  // --------------------------------------------------------------------------
-  // Reflection Protocol
-  // --------------------------------------------------------------------------
-
-  private getReflectionProtocol(): string {
-    return `<reflection_protocol>
-Before EVERY response you write, open a <scratchpad> block and silently reason through these checks. The scratchpad is NEVER shown to the participant — it is stripped before delivery.
-
-<scratchpad>
-Analysis Goal: [1-sentence summary of what the user is asking or what you need to find]
-Data Sources: [Which survey data, insights, or patterns are most relevant?]
-Check 1 — Objective: Does my analysis directly address the survey goal?
-Check 2 — Domain Lens: Am I interpreted this through the professional domain lens (not generic AI)?
-Check 3 — Evidence: Can I point to specific response patterns as evidence?
-Check 4 — Visualization: Would a chart make this clearer? (If yes, use renderChart)
-Check 5 — Recommendation: Did I include a specific, actionable next step for the creator?
-Verdict: [PASS / REWRITE — and if REWRITE, state why in one short sentence]
-</scratchpad>
-
-If any check fails, write a corrected response AFTER the scratchpad. The scratchpad itself is always stripped — ONLY write what the creator should see after </scratchpad>.
-</reflection_protocol>`;
-  }
-
   buildSystemPrompt(): string {
     const config = this.context.surveyConfig;
-    if (!config) {
-      return "You are an analytics assistant. Error: Survey configuration is missing.";
-    }
+    if (!config) return "Survey configuration is missing.";
 
-    const identity = this.getSpecialistIdentity();
+    const { domainName, coreContent, surveyTypeContent } =
+      this.context.loadedDomainSkills || {};
 
-    return `<role>
-You are ${identity}.
-You are analyzing survey data for: ${config.coreObjective || config.expertState?.objective?.goal || config.information}
-Target audience surveyed: ${config.expertState?.targetAudience?.description || "survey participants"}
+    return `
+<role>
+IDENTITY: You are a professional ${domainName || "Survey"} Insight Analyst.
+GOAL: Interpret data to answer the core objective: "${config.coreObjective || config.expertState?.objective?.goal || config.information}"
+AUDIENCE: Survey Creators / Stakeholders seeking actionable insights.
 </role>
 
-<specialist_mindset>
-You are NOT a generic data summarizer. You are a domain expert who interprets data through the lens of survey research.
-Your analysis should reveal insights that only a specialist would see — not just what the data says, but what it MEANS.
-</specialist_mindset>
+${this.getGlobalArchitectureRules()}
 
 ${this.getChecklistSection()}
 
-${
-  this.context.loadedDomainSkills
-    ? `
-<domain_skills>
-${this.context.loadedDomainSkills.coreContent}
+${this.getConstitutionalConstraints()}
 
-${this.context.loadedDomainSkills.surveyTypeContent}
-</domain_skills>`
-    : ""
-}
+<expert_analytical_protocols>
+${coreContent || ""}
+${surveyTypeContent || ""}
+</expert_analytical_protocols>
+
+${this.getSkillsSection()}
 
 ${this.getKnowledgeSection()}
 
-<analysis_principles>
-1. ANSWER THE OBJECTIVE FIRST: Start with the survey's core question, then support with evidence
-2. PATTERNS OVER ANECDOTES: Identify what's consistent across multiple responses
-3. HYPOTHESES VERDICT: If hypotheses were defined, explicitly confirm or refute each one
-4. SIGNAL VS NOISE: Distinguish meaningful patterns from outliers using domain knowledge
-5. ACTIONABLE RECOMMENDATIONS: Every insight must connect to a specific action the creator can take
-6. HONEST UNCERTAINTY: If the data is insufficient to conclude, say so clearly
-7. VISUALIZE WHEN POSSIBLE: If a pattern or trend is best explained visually, use the 'renderChart' tool.
-</analysis_principles>
+<proactive_insight_rules>
+1. METRICS FIRST: You MUST include a specific section evaluating every metric defined in the survey. If data is sparse, state "Inconclusive due to [Reason]".
+2. MEDIA ANALYTICS: If media was included in the survey, explicitly report on participant reactions to specific Media IDs.
+3. VISUALIZE: Use 'renderChart' for any distribution data (e.g., Sentiment, NPS, Frequency).
+4. THE "WHY" FACTOR: Don't just report numbers. Use the qualitative responses to explain WHY a metric is high or low.
+</proactive_insight_rules>
 
-${this.getReflectionProtocol()}`;
+<completion_protocol>
+1. Final output must be professional, structured, and free of conversational filler. 
+2. Ensure every REQUIRED checklist item is addressed in the final report.
+3. LANGUAGE: You MUST synthesize all findings and write the final report in ${this.context.language === "de" ? "German" : this.context.language === "fr" ? "French" : this.context.language === "es" ? "Spanish" : this.context.language === "it" ? "Italian" : "English"}.
+</completion_protocol>
+`.trim();
   }
 
   // --------------------------------------------------------------------------
@@ -176,13 +123,12 @@ ${this.getReflectionProtocol()}`;
   // --------------------------------------------------------------------------
 
   async generate(prompt: string): Promise<string> {
-    const { text, usage } = await generateText({
+    const { text } = await generateText({
       model: analysisModel,
       system: this.buildSystemPrompt(),
       prompt,
-      temperature: 0.3,
+      temperature: 0.1, // Lower temperature for more consistent analysis
     });
-
     return text;
   }
 
@@ -199,40 +145,28 @@ ${this.getReflectionProtocol()}`;
         description:
           "Load detailed instructions for a specific specialized skill.",
         inputSchema: z.object({
-          skillId: z
-            .string()
-            .describe("The ID of the skill to load (e.g., 'BiasDetector')"),
+          skillId: z.string().describe("The ID of the skill to load."),
         }),
         execute: async ({ skillId }) => {
           const { SkillRegistry } = await import("./skill-registry");
           const skill = await SkillRegistry.getSkill(skillId);
-          if (!skill) return { error: "Skill not found" };
-          return { instructions: skill.content };
+          return skill
+            ? { instructions: skill.content }
+            : { error: "Skill not found" };
         },
       }),
       searchSurveyData: tool({
         description:
-          "Search across all survey responses, insights, and analytics for specific information.",
-        inputSchema: z.object({
-          query: z
-            .string()
-            .describe("The search query to find relevant survey data"),
-        }),
+          "Search across all survey responses, insights, and analytics.",
+        inputSchema: z.object({ query: z.string().describe("Search query.") }),
         execute: async ({ query }) => {
           if (!surveyId) return { error: "No survey ID available" };
           const { hybridSearch } = await import("@/lib/rag/search");
-          const results = await hybridSearch(query, {
-            surveyId,
-            limit: 5,
-          });
-
-          if (results.length === 0) {
-            return {
-              results: [],
-              message: "No relevant data found for this query.",
-            };
-          }
-
+          const results = await hybridSearch(
+            query,
+            { surveyId, limit: 10 },
+            (this.context.language as any) || "en",
+          );
           return {
             results: results.map((r) => ({
               content: r.content,
@@ -243,22 +177,12 @@ ${this.getReflectionProtocol()}`;
         },
       }),
       renderChart: tool({
-        description:
-          "Render a visualization (Bar, Line, Pie) to represent survey data patterns.",
+        description: "Render a Bar, Line, or Pie chart to visualize patterns.",
         inputSchema: z.object({
-          type: z
-            .enum(["bar", "line", "pie"])
-            .describe("The type of chart to render"),
-          title: z.string().describe("The title of the chart"),
-          description: z
-            .string()
-            .optional()
-            .describe("A brief description of what the chart shows"),
-          data: z
-            .array(z.any())
-            .describe(
-              "The data points for the chart. For Bar/Pie: [{ label: string, value: number, color?: string }]. For Line: [{ x: string|number, y: number }]",
-            ),
+          type: z.enum(["bar", "line", "pie"]),
+          title: z.string(),
+          description: z.string().optional(),
+          data: z.array(z.any()),
           config: z
             .object({
               xAxisLabel: z.string().optional(),
@@ -267,16 +191,23 @@ ${this.getReflectionProtocol()}`;
             })
             .optional(),
         }),
-        execute: async (args) => {
-          // Generative UI tool: return args to be handled by the client
-          return args;
-        },
+        execute: async (args) => args,
+      }),
+      renderTable: tool({
+        description: "Render a formatted data table.",
+        inputSchema: z.object({
+          title: z.string(),
+          description: z.string().optional(),
+          columns: z.array(z.string()),
+          rows: z.array(z.array(z.string())),
+        }),
+        execute: async (args) => args,
       }),
     };
   }
 
   // --------------------------------------------------------------------------
-  // Stream — for "chat with your data" interactive queries
+  // Stream
   // --------------------------------------------------------------------------
 
   stream(
@@ -284,19 +215,17 @@ ${this.getReflectionProtocol()}`;
     onFinish?: (params: {
       text: string;
       response: any;
-      usage: any;
+      usage: import("ai").LanguageModelUsage;
     }) => Promise<void>,
   ) {
     const config = this.context.surveyConfig;
-    if (!config) {
-      throw new Error("Cannot stream without survey configuration");
-    }
+    if (!config) throw new Error("Cannot stream without survey configuration");
 
     return streamText({
       model: defaultModel,
       system: this.buildSystemPrompt(),
       messages,
-      temperature: 0.4,
+      temperature: 0.2,
       tools: this.getTools(),
       onFinish: async (result) => {
         logUsage({
@@ -304,7 +233,9 @@ ${this.getReflectionProtocol()}`;
           organizationId: this.context.organizationId,
           surveyId: config.id,
           type: "llm_text",
-          provider: "google",
+          provider: (defaultModel as any).modelId?.includes("gpt")
+            ? "openai"
+            : "google",
           modelName: (defaultModel as any).modelId ?? "gemini-2.5-flash",
           promptTokens: result.usage.inputTokens,
           completionTokens: result.usage.outputTokens,

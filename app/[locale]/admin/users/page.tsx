@@ -1,15 +1,11 @@
+import { Suspense } from "react";
+import { headers } from "next/headers";
+import { Loader2 } from "lucide-react";
 import { getUserGrowthData } from "@/app/actions/admin";
 import { GrowthChart } from "@/components/admin/growth-chart";
 
-export default async function AdminUsersPage() {
-    const userGrowth = await getUserGrowthData();
-
-    const chartData = userGrowth.map(ug => ({
-        date: new Date(ug.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-        newUsers: ug.count,
-        cost: 0 // Not needed here
-    }));
-
+export default async function AdminUsersPage({ params }: { params: Promise<{ locale: string }> }) {
+    await params;
     return (
         <div className="space-y-8">
             <div>
@@ -17,6 +13,29 @@ export default async function AdminUsersPage() {
                 <p className="text-gray-500">Tracking user acquisition and engagement trends.</p>
             </div>
 
+            <Suspense fallback={
+                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-center min-h-[400px]">
+                    <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+                </div>
+            }>
+                <AdminUsersContent />
+            </Suspense>
+        </div>
+    );
+}
+
+async function AdminUsersContent() {
+    const cookieHeader = (await headers()).get("cookie");
+    const userGrowth = await getUserGrowthData(cookieHeader);
+
+    const chartData = userGrowth.map((ug: { date: string; count: number }) => ({
+        date: new Date(ug.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        newUsers: ug.count,
+        cost: 0 // Not needed here
+    }));
+
+    return (
+        <>
             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                 <h3 className="text-lg font-semibold text-gray-900 mb-6">Sign-up Trends</h3>
                 <GrowthChart data={chartData} />
@@ -31,7 +50,7 @@ export default async function AdminUsersPage() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                        {userGrowth.reverse().map((ug) => (
+                        {[...userGrowth].reverse().map((ug: { date: string; count: number }) => (
                             <tr key={ug.date} className="hover:bg-gray-50/50 transition-colors">
                                 <td className="px-6 py-4 text-sm text-gray-600">{new Date(ug.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</td>
                                 <td className="px-6 py-4 text-sm text-gray-900 font-bold text-right">{ug.count} users</td>
@@ -40,6 +59,6 @@ export default async function AdminUsersPage() {
                     </tbody>
                 </table>
             </div>
-        </div>
+        </>
     );
 }

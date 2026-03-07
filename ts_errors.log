@@ -1,3 +1,0 @@
-app/api/surveys/[surveyId]/analytics/chat/route.ts(65,13): error TS2304: Cannot find name 'createUIMessageFilter'.
-app/api/surveys/[surveyId]/chat/route.ts(237,50): error TS2552: Cannot find name 'createUIMessageFilter'. Did you mean 'createUIMessageStream'?
-app/api/surveys/[surveyId]/sample/route.ts(217,50): error TS2552: Cannot find name 'createUIMessageFilter'. Did you mean 'createUIMessageStream'?

@@ -1,0 +1,749 @@
+
+> convy@0.1.0 build
+> next build --debug-prerender
+
+⚠ Prerendering is running in debug mode. Note: This may affect performance and should not be used for production.
+▲ Next.js 16.1.5 (Turbopack, Cache Components)
+- Environments: .env
+- Experiments (use with caution):
+  ⨯ prerenderEarlyExit (disabled by `--debug-prerender`)
+  ✓ serverSourceMaps (enabled by `--debug-prerender`)
+  ⨯ turbopackMinify (disabled by `--debug-prerender`)
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 2.2min
+  Running TypeScript ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/185) ...
+Error: Route "/[locale]/admin/surveys": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/surveys" in your browser to investigate the error.
+Error occurred prerendering page "/en/admin/surveys". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/analytics/conversations": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/analytics/conversations" in your browser to investigate the error.
+Error occurred prerendering page "/fr/dashboard/surveys/[surveyId]/analytics/conversations". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/surveys": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/surveys" in your browser to investigate the error.
+Error occurred prerendering page "/fr/admin/surveys". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/forgot-password": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/forgot-password" in your browser to investigate the error.
+Error occurred prerendering page "/en/forgot-password". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/verify-email": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/verify-email" in your browser to investigate the error.
+Error occurred prerendering page "/es/verify-email". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/profile": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/profile" in your browser to investigate the error.
+Error occurred prerendering page "/en/dashboard/profile". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/surveys": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/surveys" in your browser to investigate the error.
+Error occurred prerendering page "/de/admin/surveys". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/analytics/chat": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/analytics/chat" in your browser to investigate the error.
+Error occurred prerendering page "/es/dashboard/surveys/[surveyId]/analytics/chat". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/verify-email": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/verify-email" in your browser to investigate the error.
+Error occurred prerendering page "/it/verify-email". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/forgot-password": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/forgot-password" in your browser to investigate the error.
+Error occurred prerendering page "/fr/forgot-password". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/profile": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/profile" in your browser to investigate the error.
+Error occurred prerendering page "/fr/dashboard/profile". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/s/[shareableLink]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/s/[shareableLink]" in your browser to investigate the error.
+Error occurred prerendering page "/fr/s/[shareableLink]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/surveys": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/surveys" in your browser to investigate the error.
+Error occurred prerendering page "/es/admin/surveys". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/analytics/conversations": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/analytics/conversations" in your browser to investigate the error.
+Error occurred prerendering page "/en/dashboard/surveys/[surveyId]/analytics/conversations". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys" in your browser to investigate the error.
+Error occurred prerendering page "/fr/dashboard/surveys". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/forgot-password": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/forgot-password" in your browser to investigate the error.
+Error occurred prerendering page "/de/forgot-password". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/verify-email": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/verify-email" in your browser to investigate the error.
+Error occurred prerendering page "/fr/verify-email". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard" in your browser to investigate the error.
+Error occurred prerendering page "/it/dashboard". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/s/[shareableLink]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/s/[shareableLink]" in your browser to investigate the error.
+Error occurred prerendering page "/de/s/[shareableLink]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/surveys": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/surveys" in your browser to investigate the error.
+Error occurred prerendering page "/it/admin/surveys". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/analytics/conversations": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/analytics/conversations" in your browser to investigate the error.
+Error occurred prerendering page "/it/dashboard/surveys/[surveyId]/analytics/conversations". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys" in your browser to investigate the error.
+Error occurred prerendering page "/de/dashboard/surveys". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/forgot-password": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/forgot-password" in your browser to investigate the error.
+Error occurred prerendering page "/es/forgot-password". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/projects/[projectId]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/projects/[projectId]" in your browser to investigate the error.
+Error occurred prerendering page "/fr/dashboard/projects/[projectId]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/verify-email": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/verify-email" in your browser to investigate the error.
+Error occurred prerendering page "/de/verify-email". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/s/[shareableLink]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/s/[shareableLink]" in your browser to investigate the error.
+Error occurred prerendering page "/es/s/[shareableLink]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/usage": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/usage" in your browser to investigate the error.
+Error occurred prerendering page "/en/admin/usage". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/analytics/conversations": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/analytics/conversations" in your browser to investigate the error.
+Error occurred prerendering page "/de/dashboard/surveys/[surveyId]/analytics/conversations". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/forgot-password": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/forgot-password" in your browser to investigate the error.
+Error occurred prerendering page "/it/forgot-password". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/sample-review": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/sample-review" in your browser to investigate the error.
+Error occurred prerendering page "/de/dashboard/surveys/[surveyId]/sample-review". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/projects/[projectId]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/projects/[projectId]" in your browser to investigate the error.
+Error occurred prerendering page "/en/dashboard/projects/[projectId]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/workspace/accept-invitation/[id]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/workspace/accept-invitation/[id]" in your browser to investigate the error.
+Error occurred prerendering page "/es/workspace/accept-invitation/[id]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/s/[shareableLink]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/s/[shareableLink]" in your browser to investigate the error.
+Error occurred prerendering page "/it/s/[shareableLink]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/surveys/[id]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/surveys/[id]" in your browser to investigate the error.
+Error occurred prerendering page "/es/admin/surveys/[id]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/analytics/conversations": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/analytics/conversations" in your browser to investigate the error.
+Error occurred prerendering page "/es/dashboard/surveys/[surveyId]/analytics/conversations". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/sample-review": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/sample-review" in your browser to investigate the error.
+Error occurred prerendering page "/it/dashboard/surveys/[surveyId]/sample-review". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/profile": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/profile" in your browser to investigate the error.
+Error occurred prerendering page "/de/dashboard/profile". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/reset-password": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/reset-password" in your browser to investigate the error.
+Error occurred prerendering page "/en/reset-password". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/s/[shareableLink]/respond": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/s/[shareableLink]/respond" in your browser to investigate the error.
+Error occurred prerendering page "/fr/s/[shareableLink]/respond". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/surveys/[id]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/surveys/[id]" in your browser to investigate the error.
+Error occurred prerendering page "/it/admin/surveys/[id]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/analytics/chat": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/analytics/chat" in your browser to investigate the error.
+Error occurred prerendering page "/de/dashboard/surveys/[surveyId]/analytics/chat". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/workspace/accept-invitation/[id]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/workspace/accept-invitation/[id]" in your browser to investigate the error.
+Error occurred prerendering page "/en/workspace/accept-invitation/[id]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys" in your browser to investigate the error.
+Error occurred prerendering page "/en/dashboard/surveys". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/profile": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/profile" in your browser to investigate the error.
+Error occurred prerendering page "/es/dashboard/profile". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/s/[shareableLink]/respond": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/s/[shareableLink]/respond" in your browser to investigate the error.
+Error occurred prerendering page "/es/s/[shareableLink]/respond". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/analytics/chat": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/analytics/chat" in your browser to investigate the error.
+Error occurred prerendering page "/it/dashboard/surveys/[surveyId]/analytics/chat". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/reset-password": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/reset-password" in your browser to investigate the error.
+Error occurred prerendering page "/fr/reset-password". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/sample-review": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/sample-review" in your browser to investigate the error.
+Error occurred prerendering page "/fr/dashboard/surveys/[surveyId]/sample-review". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/profile": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/profile" in your browser to investigate the error.
+Error occurred prerendering page "/it/dashboard/profile". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/workspace/accept-invitation/[id]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/workspace/accept-invitation/[id]" in your browser to investigate the error.
+Error occurred prerendering page "/de/workspace/accept-invitation/[id]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/s/[shareableLink]/respond": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/s/[shareableLink]/respond" in your browser to investigate the error.
+Error occurred prerendering page "/de/s/[shareableLink]/respond". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/usage": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/usage" in your browser to investigate the error.
+Error occurred prerendering page "/fr/admin/usage". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/sample-review": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/sample-review" in your browser to investigate the error.
+Error occurred prerendering page "/es/dashboard/surveys/[surveyId]/sample-review". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/sign-in": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/sign-in" in your browser to investigate the error.
+Error occurred prerendering page "/fr/sign-in". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/workspace/accept-invitation/[id]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/workspace/accept-invitation/[id]" in your browser to investigate the error.
+Error occurred prerendering page "/fr/workspace/accept-invitation/[id]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/s/[shareableLink]/respond": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/s/[shareableLink]/respond" in your browser to investigate the error.
+Error occurred prerendering page "/en/s/[shareableLink]/respond". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/usage": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/usage" in your browser to investigate the error.
+Error occurred prerendering page "/es/admin/usage". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/projects/[projectId]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/projects/[projectId]" in your browser to investigate the error.
+Error occurred prerendering page "/de/dashboard/projects/[projectId]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/analytics": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/analytics" in your browser to investigate the error.
+Error occurred prerendering page "/fr/dashboard/surveys/[surveyId]/analytics". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/sample-review": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/sample-review" in your browser to investigate the error.
+Error occurred prerendering page "/en/dashboard/surveys/[surveyId]/sample-review". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/reset-password": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/reset-password" in your browser to investigate the error.
+Error occurred prerendering page "/de/reset-password". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/users": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/users" in your browser to investigate the error.
+Error occurred prerendering page "/fr/admin/users". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/projects/[projectId]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/projects/[projectId]" in your browser to investigate the error.
+Error occurred prerendering page "/es/dashboard/projects/[projectId]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/analytics": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/analytics" in your browser to investigate the error.
+Error occurred prerendering page "/de/dashboard/surveys/[surveyId]/analytics". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/sign-in": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/sign-in" in your browser to investigate the error.
+Error occurred prerendering page "/de/sign-in". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/users": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/users" in your browser to investigate the error.
+Error occurred prerendering page "/en/admin/users". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/projects/[projectId]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/projects/[projectId]" in your browser to investigate the error.
+Error occurred prerendering page "/it/dashboard/projects/[projectId]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/analytics": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/analytics" in your browser to investigate the error.
+Error occurred prerendering page "/en/dashboard/analytics". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/analytics": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/analytics" in your browser to investigate the error.
+Error occurred prerendering page "/es/dashboard/surveys/[surveyId]/analytics". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys" in your browser to investigate the error.
+Error occurred prerendering page "/es/dashboard/surveys". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/sign-in": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/sign-in" in your browser to investigate the error.
+Error occurred prerendering page "/es/sign-in". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/users": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/users" in your browser to investigate the error.
+Error occurred prerendering page "/de/admin/users". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/analytics": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/analytics" in your browser to investigate the error.
+Error occurred prerendering page "/de/dashboard/analytics". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/projects": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/projects" in your browser to investigate the error.
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/analytics": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/analytics" in your browser to investigate the error.
+Error occurred prerendering page "/it/dashboard/surveys/[surveyId]/analytics". Read more: https://nextjs.org/docs/messages/prerender-error
+Error occurred prerendering page "/fr/dashboard/projects". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys" in your browser to investigate the error.
+Error occurred prerendering page "/it/dashboard/surveys". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/sign-in": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/sign-in" in your browser to investigate the error.
+Error occurred prerendering page "/en/sign-in". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/usage": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/usage" in your browser to investigate the error.
+Error occurred prerendering page "/de/admin/usage". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/projects": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/projects" in your browser to investigate the error.
+Error occurred prerendering page "/de/dashboard/projects". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/analytics": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/analytics" in your browser to investigate the error.
+Error occurred prerendering page "/en/dashboard/surveys/[surveyId]/analytics". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/analytics": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/analytics" in your browser to investigate the error.
+Error occurred prerendering page "/fr/dashboard/analytics". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/team": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/team" in your browser to investigate the error.
+Error occurred prerendering page "/fr/dashboard/team". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/reset-password": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/reset-password" in your browser to investigate the error.
+Error occurred prerendering page "/es/reset-password". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/analytics": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/analytics" in your browser to investigate the error.
+Error occurred prerendering page "/it/dashboard/analytics". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+Error: Route "/[locale]/dashboard/projects": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/projects" in your browser to investigate the error.
+Error occurred prerendering page "/es/dashboard/projects". Read more: https://nextjs.org/docs/messages/prerender-error
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]" in your browser to investigate the error.
+Error occurred prerendering page "/fr/dashboard/surveys/[surveyId]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/usage": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/usage" in your browser to investigate the error.
+Error occurred prerendering page "/it/admin/usage". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/reset-password": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/reset-password" in your browser to investigate the error.
+Error occurred prerendering page "/it/reset-password". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/s/[shareableLink]/respond": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/s/[shareableLink]/respond" in your browser to investigate the error.
+Error occurred prerendering page "/it/s/[shareableLink]/respond". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/analytics": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/analytics" in your browser to investigate the error.
+Error occurred prerendering page "/es/dashboard/analytics". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/projects": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/projects" in your browser to investigate the error.
+Error occurred prerendering page "/en/dashboard/projects". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]" in your browser to investigate the error.
+Error occurred prerendering page "/en/dashboard/surveys/[surveyId]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/admin/surveys/[id]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/admin/surveys/[id]" in your browser to investigate the error.
+Error occurred prerendering page "/admin/surveys/[id]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/create": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/create" in your browser to investigate the error.
+Error occurred prerendering page "/en/dashboard/create". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]" in your browser to investigate the error.
+Error occurred prerendering page "/de/dashboard/surveys/[surveyId]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/projects": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/projects" in your browser to investigate the error.
+Error occurred prerendering page "/it/dashboard/projects". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/team": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/team" in your browser to investigate the error.
+Error occurred prerendering page "/en/dashboard/team". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/create": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/create" in your browser to investigate the error.
+Error occurred prerendering page "/fr/dashboard/create". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/team": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/team" in your browser to investigate the error.
+Error occurred prerendering page "/es/dashboard/team". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/responses/[responseId]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/responses/[responseId]" in your browser to investigate the error.
+Error occurred prerendering page "/en/dashboard/surveys/[surveyId]/responses/[responseId]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/users": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/users" in your browser to investigate the error.
+Error occurred prerendering page "/es/admin/users". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/workspace/accept-invitation/[id]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/workspace/accept-invitation/[id]" in your browser to investigate the error.
+Error occurred prerendering page "/it/workspace/accept-invitation/[id]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/settings": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/settings" in your browser to investigate the error.
+Error occurred prerendering page "/fr/dashboard/settings". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/team": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/team" in your browser to investigate the error.
+Error occurred prerendering page "/de/dashboard/team". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/responses/[responseId]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/responses/[responseId]" in your browser to investigate the error.
+Error occurred prerendering page "/fr/dashboard/surveys/[surveyId]/responses/[responseId]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/sign-up": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/sign-up" in your browser to investigate the error.
+Error occurred prerendering page "/fr/sign-up". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/settings": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/settings" in your browser to investigate the error.
+Error occurred prerendering page "/de/dashboard/settings". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/responses/[responseId]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/responses/[responseId]" in your browser to investigate the error.
+Error occurred prerendering page "/es/dashboard/surveys/[surveyId]/responses/[responseId]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/team": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/team" in your browser to investigate the error.
+Error occurred prerendering page "/it/dashboard/team". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/create": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/create" in your browser to investigate the error.
+Error occurred prerendering page "/it/dashboard/create". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/sign-up": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/sign-up" in your browser to investigate the error.
+Error occurred prerendering page "/es/sign-up". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/settings": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/settings" in your browser to investigate the error.
+Error occurred prerendering page "/en/dashboard/settings". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]" in your browser to investigate the error.
+Error occurred prerendering page "/es/dashboard/surveys/[surveyId]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin" in your browser to investigate the error.
+Error occurred prerendering page "/en/admin". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/create": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/create" in your browser to investigate the error.
+Error occurred prerendering page "/es/dashboard/create". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/users": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/users" in your browser to investigate the error.
+Error occurred prerendering page "/it/admin/users". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/sign-up": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/sign-up" in your browser to investigate the error.
+Error occurred prerendering page "/en/sign-up". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/settings": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/settings" in your browser to investigate the error.
+Error occurred prerendering page "/it/dashboard/settings". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]" in your browser to investigate the error.
+Error occurred prerendering page "/it/dashboard/surveys/[surveyId]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/create": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/create" in your browser to investigate the error.
+Error occurred prerendering page "/de/dashboard/create". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]" in your browser to investigate the error.
+Error occurred prerendering page "/de". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/surveys/[id]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/surveys/[id]" in your browser to investigate the error.
+Error occurred prerendering page "/en/admin/surveys/[id]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/sign-in": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/sign-in" in your browser to investigate the error.
+Error occurred prerendering page "/it/sign-in". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/settings": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/settings" in your browser to investigate the error.
+Error occurred prerendering page "/es/dashboard/settings". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard" in your browser to investigate the error.
+Error occurred prerendering page "/en/dashboard". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/responses/[responseId]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/responses/[responseId]" in your browser to investigate the error.
+Error occurred prerendering page "/it/dashboard/surveys/[surveyId]/responses/[responseId]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]" in your browser to investigate the error.
+Error occurred prerendering page "/fr". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/surveys/[id]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/surveys/[id]" in your browser to investigate the error.
+Error occurred prerendering page "/fr/admin/surveys/[id]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/sign-up": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/sign-up" in your browser to investigate the error.
+Error occurred prerendering page "/it/sign-up". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard" in your browser to investigate the error.
+Error occurred prerendering page "/fr/dashboard". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/analytics/chat": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/analytics/chat" in your browser to investigate the error.
+Error occurred prerendering page "/en/dashboard/surveys/[surveyId]/analytics/chat". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/responses/[responseId]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/responses/[responseId]" in your browser to investigate the error.
+Error occurred prerendering page "/de/dashboard/surveys/[surveyId]/responses/[responseId]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]" in your browser to investigate the error.
+Error occurred prerendering page "/es". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin/surveys/[id]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin/surveys/[id]" in your browser to investigate the error.
+Error occurred prerendering page "/de/admin/surveys/[id]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/verify-email": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/verify-email" in your browser to investigate the error.
+Error occurred prerendering page "/en/verify-email". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard" in your browser to investigate the error.
+Error occurred prerendering page "/de/dashboard". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard/surveys/[surveyId]/analytics/chat": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard/surveys/[surveyId]/analytics/chat" in your browser to investigate the error.
+Error occurred prerendering page "/fr/dashboard/surveys/[surveyId]/analytics/chat". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]" in your browser to investigate the error.
+Error occurred prerendering page "/en". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin" in your browser to investigate the error.
+Error occurred prerendering page "/de/admin". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/sign-up": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/sign-up" in your browser to investigate the error.
+Error occurred prerendering page "/de/sign-up". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/dashboard": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/dashboard" in your browser to investigate the error.
+Error occurred prerendering page "/es/dashboard". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]" in your browser to investigate the error.
+Error occurred prerendering page "/it". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin" in your browser to investigate the error.
+Error occurred prerendering page "/es/admin". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/s/[shareableLink]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/s/[shareableLink]" in your browser to investigate the error.
+Error occurred prerendering page "/en/s/[shareableLink]". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin" in your browser to investigate the error.
+Error occurred prerendering page "/it/admin". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: Route "/[locale]/admin": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, start the app in development mode by running `next dev`, then open "/[locale]/admin" in your browser to investigate the error.
+Error occurred prerendering page "/fr/admin". Read more: https://nextjs.org/docs/messages/prerender-error
+
+> Export encountered errors on following paths:
+	/[locale]/(auth)/forgot-password/page: /de/forgot-password
+	/[locale]/(auth)/forgot-password/page: /en/forgot-password
+	/[locale]/(auth)/forgot-password/page: /es/forgot-password
+	/[locale]/(auth)/forgot-password/page: /fr/forgot-password
+	/[locale]/(auth)/forgot-password/page: /it/forgot-password
+	/[locale]/(auth)/reset-password/page: /de/reset-password
+	/[locale]/(auth)/reset-password/page: /en/reset-password
+	/[locale]/(auth)/reset-password/page: /es/reset-password
+	/[locale]/(auth)/reset-password/page: /fr/reset-password
+	/[locale]/(auth)/reset-password/page: /it/reset-password
+	/[locale]/(auth)/sign-in/page: /de/sign-in
+	/[locale]/(auth)/sign-in/page: /en/sign-in
+	/[locale]/(auth)/sign-in/page: /es/sign-in
+	/[locale]/(auth)/sign-in/page: /fr/sign-in
+	/[locale]/(auth)/sign-in/page: /it/sign-in
+	/[locale]/(auth)/sign-up/page: /de/sign-up
+	/[locale]/(auth)/sign-up/page: /en/sign-up
+	/[locale]/(auth)/sign-up/page: /es/sign-up
+	/[locale]/(auth)/sign-up/page: /fr/sign-up
+	/[locale]/(auth)/sign-up/page: /it/sign-up
+	/[locale]/(auth)/verify-email/page: /de/verify-email
+	/[locale]/(auth)/verify-email/page: /en/verify-email
+	/[locale]/(auth)/verify-email/page: /es/verify-email
+	/[locale]/(auth)/verify-email/page: /fr/verify-email
+	/[locale]/(auth)/verify-email/page: /it/verify-email
+	/[locale]/(auth)/workspace/accept-invitation/[id]/page: /de/workspace/accept-invitation/[id]
+	/[locale]/(auth)/workspace/accept-invitation/[id]/page: /en/workspace/accept-invitation/[id]
+	/[locale]/(auth)/workspace/accept-invitation/[id]/page: /es/workspace/accept-invitation/[id]
+	/[locale]/(auth)/workspace/accept-invitation/[id]/page: /fr/workspace/accept-invitation/[id]
+	/[locale]/(auth)/workspace/accept-invitation/[id]/page: /it/workspace/accept-invitation/[id]
+	/[locale]/(dashboard)/dashboard/analytics/page: /de/dashboard/analytics
+	/[locale]/(dashboard)/dashboard/analytics/page: /en/dashboard/analytics
+	/[locale]/(dashboard)/dashboard/analytics/page: /es/dashboard/analytics
+	/[locale]/(dashboard)/dashboard/analytics/page: /fr/dashboard/analytics
+	/[locale]/(dashboard)/dashboard/analytics/page: /it/dashboard/analytics
+	/[locale]/(dashboard)/dashboard/create/page: /de/dashboard/create
+	/[locale]/(dashboard)/dashboard/create/page: /en/dashboard/create
+	/[locale]/(dashboard)/dashboard/create/page: /es/dashboard/create
+	/[locale]/(dashboard)/dashboard/create/page: /fr/dashboard/create
+	/[locale]/(dashboard)/dashboard/create/page: /it/dashboard/create
+	/[locale]/(dashboard)/dashboard/page: /de/dashboard
+	/[locale]/(dashboard)/dashboard/page: /en/dashboard
+	/[locale]/(dashboard)/dashboard/page: /es/dashboard
+	/[locale]/(dashboard)/dashboard/page: /fr/dashboard
+	/[locale]/(dashboard)/dashboard/page: /it/dashboard
+	/[locale]/(dashboard)/dashboard/profile/page: /de/dashboard/profile
+	/[locale]/(dashboard)/dashboard/profile/page: /en/dashboard/profile
+	/[locale]/(dashboard)/dashboard/profile/page: /es/dashboard/profile
+	/[locale]/(dashboard)/dashboard/profile/page: /fr/dashboard/profile
+	/[locale]/(dashboard)/dashboard/profile/page: /it/dashboard/profile
+	/[locale]/(dashboard)/dashboard/projects/[projectId]/page: /de/dashboard/projects/[projectId]
+	/[locale]/(dashboard)/dashboard/projects/[projectId]/page: /en/dashboard/projects/[projectId]
+	/[locale]/(dashboard)/dashboard/projects/[projectId]/page: /es/dashboard/projects/[projectId]
+	/[locale]/(dashboard)/dashboard/projects/[projectId]/page: /fr/dashboard/projects/[projectId]
+	/[locale]/(dashboard)/dashboard/projects/[projectId]/page: /it/dashboard/projects/[projectId]
+	/[locale]/(dashboard)/dashboard/projects/page: /de/dashboard/projects
+	/[locale]/(dashboard)/dashboard/projects/page: /en/dashboard/projects
+	/[locale]/(dashboard)/dashboard/projects/page: /es/dashboard/projects
+	/[locale]/(dashboard)/dashboard/projects/page: /fr/dashboard/projects
+	/[locale]/(dashboard)/dashboard/projects/page: /it/dashboard/projects
+	/[locale]/(dashboard)/dashboard/settings/page: /de/dashboard/settings
+	/[locale]/(dashboard)/dashboard/settings/page: /en/dashboard/settings
+	/[locale]/(dashboard)/dashboard/settings/page: /es/dashboard/settings
+	/[locale]/(dashboard)/dashboard/settings/page: /fr/dashboard/settings
+	/[locale]/(dashboard)/dashboard/settings/page: /it/dashboard/settings
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/chat/page: /de/dashboard/surveys/[surveyId]/analytics/chat
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/chat/page: /en/dashboard/surveys/[surveyId]/analytics/chat
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/chat/page: /es/dashboard/surveys/[surveyId]/analytics/chat
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/chat/page: /fr/dashboard/surveys/[surveyId]/analytics/chat
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/chat/page: /it/dashboard/surveys/[surveyId]/analytics/chat
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/conversations/page: /de/dashboard/surveys/[surveyId]/analytics/conversations
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/conversations/page: /en/dashboard/surveys/[surveyId]/analytics/conversations
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/conversations/page: /es/dashboard/surveys/[surveyId]/analytics/conversations
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/conversations/page: /fr/dashboard/surveys/[surveyId]/analytics/conversations
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/conversations/page: /it/dashboard/surveys/[surveyId]/analytics/conversations
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/page: /de/dashboard/surveys/[surveyId]/analytics
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/page: /en/dashboard/surveys/[surveyId]/analytics
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/page: /es/dashboard/surveys/[surveyId]/analytics
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/page: /fr/dashboard/surveys/[surveyId]/analytics
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/page: /it/dashboard/surveys/[surveyId]/analytics
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/page: /de/dashboard/surveys/[surveyId]
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/page: /en/dashboard/surveys/[surveyId]
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/page: /es/dashboard/surveys/[surveyId]
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/page: /fr/dashboard/surveys/[surveyId]
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/page: /it/dashboard/surveys/[surveyId]
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/responses/[responseId]/page: /de/dashboard/surveys/[surveyId]/responses/[responseId]
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/responses/[responseId]/page: /en/dashboard/surveys/[surveyId]/responses/[responseId]
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/responses/[responseId]/page: /es/dashboard/surveys/[surveyId]/responses/[responseId]
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/responses/[responseId]/page: /fr/dashboard/surveys/[surveyId]/responses/[responseId]
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/responses/[responseId]/page: /it/dashboard/surveys/[surveyId]/responses/[responseId]
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/sample-review/page: /de/dashboard/surveys/[surveyId]/sample-review
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/sample-review/page: /en/dashboard/surveys/[surveyId]/sample-review
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/sample-review/page: /es/dashboard/surveys/[surveyId]/sample-review
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/sample-review/page: /fr/dashboard/surveys/[surveyId]/sample-review
+	/[locale]/(dashboard)/dashboard/surveys/[surveyId]/sample-review/page: /it/dashboard/surveys/[surveyId]/sample-review
+	/[locale]/(dashboard)/dashboard/surveys/page: /de/dashboard/surveys
+	/[locale]/(dashboard)/dashboard/surveys/page: /en/dashboard/surveys
+	/[locale]/(dashboard)/dashboard/surveys/page: /es/dashboard/surveys
+	/[locale]/(dashboard)/dashboard/surveys/page: /fr/dashboard/surveys
+	/[locale]/(dashboard)/dashboard/surveys/page: /it/dashboard/surveys
+	/[locale]/(dashboard)/dashboard/team/page: /de/dashboard/team
+	/[locale]/(dashboard)/dashboard/team/page: /en/dashboard/team
+	/[locale]/(dashboard)/dashboard/team/page: /es/dashboard/team
+	/[locale]/(dashboard)/dashboard/team/page: /fr/dashboard/team
+	/[locale]/(dashboard)/dashboard/team/page: /it/dashboard/team
+	/[locale]/admin/page: /de/admin
+	/[locale]/admin/page: /en/admin
+	/[locale]/admin/page: /es/admin
+	/[locale]/admin/page: /fr/admin
+	/[locale]/admin/page: /it/admin
+	/[locale]/admin/surveys/[id]/page: /de/admin/surveys/[id]
+	/[locale]/admin/surveys/[id]/page: /en/admin/surveys/[id]
+	/[locale]/admin/surveys/[id]/page: /es/admin/surveys/[id]
+	/[locale]/admin/surveys/[id]/page: /fr/admin/surveys/[id]
+	/[locale]/admin/surveys/[id]/page: /it/admin/surveys/[id]
+	/[locale]/admin/surveys/page: /de/admin/surveys
+	/[locale]/admin/surveys/page: /en/admin/surveys
+	/[locale]/admin/surveys/page: /es/admin/surveys
+	/[locale]/admin/surveys/page: /fr/admin/surveys
+	/[locale]/admin/surveys/page: /it/admin/surveys
+	/[locale]/admin/usage/page: /de/admin/usage
+	/[locale]/admin/usage/page: /en/admin/usage
+	/[locale]/admin/usage/page: /es/admin/usage
+	/[locale]/admin/usage/page: /fr/admin/usage
+	/[locale]/admin/usage/page: /it/admin/usage
+	/[locale]/admin/users/page: /de/admin/users
+	/[locale]/admin/users/page: /en/admin/users
+	/[locale]/admin/users/page: /es/admin/users
+	/[locale]/admin/users/page: /fr/admin/users
+	/[locale]/admin/users/page: /it/admin/users
+	/[locale]/page: /de
+	/[locale]/page: /en
+	/[locale]/page: /es
+	/[locale]/page: /fr
+	/[locale]/page: /it
+	/[locale]/s/[shareableLink]/page: /de/s/[shareableLink]
+	/[locale]/s/[shareableLink]/page: /en/s/[shareableLink]
+	/[locale]/s/[shareableLink]/page: /es/s/[shareableLink]
+	/[locale]/s/[shareableLink]/page: /fr/s/[shareableLink]
+	/[locale]/s/[shareableLink]/page: /it/s/[shareableLink]
+	/[locale]/s/[shareableLink]/respond/page: /de/s/[shareableLink]/respond
+	/[locale]/s/[shareableLink]/respond/page: /en/s/[shareableLink]/respond
+	/[locale]/s/[shareableLink]/respond/page: /es/s/[shareableLink]/respond
+	/[locale]/s/[shareableLink]/respond/page: /fr/s/[shareableLink]/respond
+	/[locale]/s/[shareableLink]/respond/page: /it/s/[shareableLink]/respond
+	/admin/surveys/[id]/page: /admin/surveys/[id]

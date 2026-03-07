@@ -8,6 +8,7 @@ import { setActiveWorkspace } from "@/app/actions/workspace";
 import { fetchWorkspaces, fetchActiveWorkspace } from "@/lib/api/workspace";
 import { queryKeys } from "@/lib/query-keys";
 import { CreateWorkspaceModal } from "./create-workspace-modal";
+import { useTranslations } from "next-intl";
 
 type Workspace = {
     id: string;
@@ -21,6 +22,7 @@ export function WorkspaceSwitcher() {
     const [isOpen, setIsOpen] = useState(false);
     const [isSwitching, setIsSwitching] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const t = useTranslations("Workspace.Switcher");
 
     // Fetch workspaces using React Query
     const { data: workspaces = [], isLoading: isLoadingWorkspaces } = useQuery({
@@ -91,10 +93,10 @@ export function WorkspaceSwitcher() {
                 {/* Name & Role */}
                 <div className="flex-1 text-left min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">
-                        {activeWorkspace?.name || "Personal Account"}
+                        {activeWorkspace?.name || t("PersonalAccount")}
                     </p>
                     <p className="text-xs text-gray-500 truncate">
-                        {activeWorkspace ? `${activeWorkspace.role} • workspace` : "Individual"}
+                        {activeWorkspace ? <>{t(`Roles.${activeWorkspace.role === 'owner' ? 'Owner' : 'Member'}`)} • {t("Workspace")}</> : t("Individual")}
                     </p>
                 </div>
 
@@ -132,8 +134,8 @@ export function WorkspaceSwitcher() {
                                 <User className="w-4 h-4" />
                             </div>
                             <div className="flex-1 text-left">
-                                <p className="text-sm font-medium text-gray-900">Personal Account</p>
-                                <p className="text-xs text-gray-500">Your individual surveys</p>
+                                <p className="text-sm font-medium text-gray-900">{t("PersonalAccount")}</p>
+                                <p className="text-xs text-gray-500">{t("PersonalDesc")}</p>
                             </div>
                             {!activeWorkspace && (
                                 <Check className="w-4 h-4 text-green-500" />
@@ -165,7 +167,7 @@ export function WorkspaceSwitcher() {
                                     </div>
                                     <div className="flex-1 text-left min-w-0">
                                         <p className="text-sm font-medium text-gray-900 truncate">{workspace.name}</p>
-                                        <p className="text-xs text-gray-500 capitalize">{workspace.role}</p>
+                                        <p className="text-xs text-gray-500 capitalize">{t(`Roles.${workspace.role === 'owner' ? 'Owner' : 'Member'}`)}</p>
                                     </div>
                                     {activeWorkspace?.id === workspace.id && (
                                         <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
@@ -186,7 +188,7 @@ export function WorkspaceSwitcher() {
                                 <div className="w-8 h-8 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center">
                                     <Plus className="w-4 h-4" />
                                 </div>
-                                <span className="text-sm font-medium">Create Workspace</span>
+                                <span className="text-sm font-medium">{t("CreateWorkspace")}</span>
                             </button>
                         </div>
                     </div>

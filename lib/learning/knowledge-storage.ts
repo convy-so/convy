@@ -10,7 +10,7 @@
 import { ingestKnowledge, type KnowledgeEntry } from "@/lib/rag/ingest";
 import { generateEmbedding } from "@/lib/rag/embeddings";
 import type { ExtractedPattern } from "./pattern-extraction";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { knowledgeBase } from "@/db/schema/vectors";
 import { eq, and, sql, desc } from "drizzle-orm";
 
@@ -62,7 +62,7 @@ export async function storePatterns(
  * Count patterns grouped by lifecycle status (for monitoring).
  */
 export async function countPatternsByStatus(): Promise<Record<string, number>> {
-  const rows = await db
+  const rows = await getDb()
     .select({
       status: knowledgeBase.status,
       count: sql<number>`count(*)::int`,
@@ -88,7 +88,7 @@ export async function retrieveRelevantPatterns(
 ): Promise<Array<{ title: string; content: string; qualityScore: number }>> {
   const kbCategory = mapPatternCategoryToKnowledgeCategory(category);
 
-  const patterns = await db
+  const patterns = await getDb()
     .select({
       title: knowledgeBase.title,
       content: knowledgeBase.content,
@@ -136,7 +136,7 @@ async function findSimilarPattern(
     });
     const embeddingString = JSON.stringify(embedding);
 
-    const [existing] = await db
+    const [existing] = await getDb()
       .select({
         id: knowledgeBase.id,
         qualityScore: knowledgeBase.qualityScore,
@@ -162,7 +162,7 @@ async function findSimilarPattern(
       ? { ...existing, qualityScore: existing.qualityScore ?? 0 }
       : null;
   } catch {
-    const [fallback] = await db
+    const [fallback] = await getDb()
       .select({
         id: knowledgeBase.id,
         qualityScore: knowledgeBase.qualityScore,
@@ -219,7 +219,7 @@ async function storeNewPattern(pattern: ExtractedPattern): Promise<void> {
 
   // Now set the lifecycle-specific fields that ingestKnowledge doesn't know about.
   // We update the row we just inserted (find by title + source + recent creation).
-  await db
+  await getDb()
     .update(knowledgeBase)
     .set({
       status: "CANDIDATE",
@@ -244,7 +244,7 @@ async function updatePattern(
   const content = formatPatternContent(newPattern);
   const newPerformanceScore = newPattern.qualityScore / 100;
 
-  await db
+  await getDb()
     .update(knowledgeBase)
     .set({
       title: newPattern.title,
@@ -266,14 +266,14 @@ async function updatePattern(
 }
 
 async function incrementPatternUsage(patternId: string): Promise<void> {
-  const [pattern] = await db
+  const [pattern] = await getDb()
     .select({ usageCount: knowledgeBase.usageCount })
     .from(knowledgeBase)
     .where(eq(knowledgeBase.id, patternId))
     .limit(1);
 
   if (pattern) {
-    await db
+    await getDb()
       .update(knowledgeBase)
       .set({ usageCount: (pattern.usageCount || 0) + 1 })
       .where(eq(knowledgeBase.id, patternId));

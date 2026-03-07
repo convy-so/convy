@@ -1,20 +1,20 @@
 import { eq } from "drizzle-orm";
-import {
-  createUIMessageStream,
-  createUIMessageStreamResponse,
-} from "ai";
+import { createUIMessageStreamResponse } from "ai";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys, surveyCreationConversations } from "@/db/schema";
-import {  normalizeMessages } from "@/lib/ai";
+import { normalizeMessages } from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/session";
-import {
-  type CollectedInfo,
-} from "@/lib/prompts";
+import { type CollectedInfo } from "@/lib/prompts";
 import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
 import { CreationSpecialist } from "@/lib/agents/creation-specialist";
 import { type AgentContext } from "@/lib/agents/types";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
+import {
+  withGeminiLimit,
+  GeminiCapacityError,
+  geminiCapacityResponse,
+} from "@/lib/gemini-limiter";
 
 export const maxDuration = 300;
 
@@ -27,9 +27,16 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
+  const { surveyId } = await params;
+  console.log(`[CreateAPI:POST] Entry. SID: ${surveyId}`);
+
   try {
     const clientIP = getClientIP(request);
+    console.log(`[CreateAPI:POST] Checking rate limit for IP: ${clientIP}...`);
     const rateLimitResult = await apiRateLimiter.limit(clientIP);
+    console.log(
+      `[CreateAPI:POST] Rate limit result: ${rateLimitResult.success ? "PASS" : "FAIL"}`,
+    );
 
     if (!rateLimitResult.success) {
       return new Response(
@@ -51,17 +58,17 @@ export async function POST(
     }
 
     const session = await getVerifiedSession();
-    const { surveyId } = await params;
     const body = await request.json();
     const { messages } = body as {
       messages: Array<any>;
     };
 
     if (!Array.isArray(messages)) {
+      console.warn(`[CreateAPI:POST] Aborting: messages is not an array.`);
       return new Response("Invalid messages", { status: 400 });
     }
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -85,7 +92,7 @@ export async function POST(
       );
     }
 
-    const [creationConversation] = await db
+    const [creationConversation] = await getDb()
       .select()
       .from(surveyCreationConversations)
       .where(eq(surveyCreationConversations.surveyId, surveyId));
@@ -127,14 +134,14 @@ export async function POST(
     });
 
     if (creationConversation) {
-      await db
+      await getDb()
         .update(surveyCreationConversations)
         .set({
           messages: messagesWithTimestamp,
         })
         .where(eq(surveyCreationConversations.surveyId, surveyId));
     } else {
-      await db.insert(surveyCreationConversations).values({
+      await getDb().insert(surveyCreationConversations).values({
         id: crypto.randomUUID(),
         surveyId,
         messages: messagesWithTimestamp,
@@ -172,11 +179,15 @@ export async function POST(
       surveyConfig: currentConfig,
       language: survey.language,
       conversationId: creationConversation?.id || crypto.randomUUID(),
+      userId: session.user.id,
+      organizationId: (session.user as any).organizationId,
     };
 
     // 2. Instantiate Creation Specialist
     const agent = new CreationSpecialist(agentContext);
+    console.log(`[CreateAPI:Agent] Initializing...`);
     await agent.initialize();
+    console.log(`[CreateAPI:Agent] Initialized.`);
 
     // Preload capabilities
     await Promise.all([
@@ -202,125 +213,129 @@ export async function POST(
         "You are resuming this survey design session. The creator has returned after a pause. Acknowledge naturally and continue where you left off without re-introducing yourself or repeating questions already answered.";
     }
 
-    // 5. Stream response using Agent's prompt and tool logic
-    const streamResult = agent.stream(
-      outputMessages,
-      async (result) => {
-        const { text, response } = result;
-
-        // Save the assistant's response when done
-        try {
-          const assistantMessage = response.messages.find(
-            (m: any) => m.role === "assistant",
+    // 5. Stream response using Agent's prompt and tool logic (wrapped with concurrency limit)
+    const streamResult = await withGeminiLimit(async () => {
+      return agent.stream(
+        outputMessages,
+        async (result) => {
+          const { text, response } = result;
+          console.log(
+            `[CreateAPI:POST] agent.stream callback: onFinish triggered. TextLen: ${text?.length}`,
           );
+          try {
+            const assistantMessage = response.messages.find(
+              (m: any) => m.role === "assistant",
+            );
 
-          // Re-fetch to get latest state in case extraction updated it
-          const [latestConv] = await db
-            .select()
-            .from(surveyCreationConversations)
-            .where(eq(surveyCreationConversations.surveyId, surveyId));
+            // Re-fetch to get latest state in case extraction updated it
+            const [latestConv] = await getDb()
+              .select()
+              .from(surveyCreationConversations)
+              .where(eq(surveyCreationConversations.surveyId, surveyId));
 
-          if (latestConv) {
-            const currentMessages = latestConv.messages as Array<{
-              role: "user" | "assistant";
-              content: string;
-              timestamp: string;
-            }>;
+            if (latestConv) {
+              const currentMessages = latestConv.messages as Array<{
+                role: "user" | "assistant";
+                content: string;
+                timestamp: string;
+              }>;
 
-            const updatedMessages = [
-              ...currentMessages,
-              {
-                role: "assistant" as const,
-                content: text,
-                parts:
-                  (assistantMessage as any)?.content &&
-                  Array.isArray((assistantMessage as any).content)
-                    ? (assistantMessage as any).content
-                    : undefined,
-                timestamp: new Date().toISOString(),
-              },
-            ];
+              // Extract state_updates from think_and_respond tool calls
+              const stateUpdates: Record<string, string> = {};
 
-            // Extract state_updates from think_and_respond tool calls in the response messages
-            // response.messages contains all tool calls with their full args after streaming completes
-            const stateUpdates: Record<string, string> = {};
-            for (const msg of response.messages) {
-              if ((msg as any).role !== "assistant") continue;
-              const contentParts = Array.isArray((msg as any).content)
-                ? (msg as any).content
-                : [];
-              for (const part of contentParts) {
-                if (
-                  part.type === "tool-call" &&
-                  part.toolName === "think_and_respond" &&
-                  part.args?.state_updates &&
-                  Object.keys(part.args.state_updates).length > 0
-                ) {
-                  Object.assign(stateUpdates, part.args.state_updates);
+              if (
+                assistantMessage?.content &&
+                Array.isArray(assistantMessage.content)
+              ) {
+                for (const part of assistantMessage.content) {
+                  if (
+                    part.type === "tool-call" &&
+                    part.toolName === "think_and_respond"
+                  ) {
+                    if (part.args?.state_updates) {
+                      Object.assign(stateUpdates, part.args.state_updates);
+                    }
+                  }
                 }
               }
-            }
 
-            const dbUpdate: Record<string, any> = { messages: updatedMessages };
+              const finalContent = text;
 
-            if (Object.keys(stateUpdates).length > 0) {
-              const newCollectedFlags = Object.entries(stateUpdates).reduce(
-                (acc, [k, v]) => {
-                  if (v && v !== "false" && v !== "null" && v !== "no") {
-                    acc[k] = true;
-                  }
-                  return acc;
+              const updatedMessages = [
+                ...currentMessages,
+                {
+                  role: "assistant" as const,
+                  content: finalContent,
+                  parts:
+                    assistantMessage?.content &&
+                    Array.isArray(assistantMessage.content)
+                      ? assistantMessage.content
+                      : undefined,
+                  timestamp: new Date().toISOString(),
                 },
-                {} as Record<string, boolean>,
-              );
+              ];
 
-              if (Object.keys(newCollectedFlags).length > 0) {
-                const existingCollected = (latestConv.collectedInfo ||
-                  {}) as Record<string, boolean>;
-                const existingExtracted = (latestConv.extractedData ||
-                  {}) as Record<string, any>;
-                dbUpdate.collectedInfo = {
-                  ...existingCollected,
-                  ...newCollectedFlags,
-                };
-                dbUpdate.extractedData = {
-                  ...existingExtracted,
-                  ...stateUpdates,
-                };
-                console.log(
-                  "[Create Route] Persisting state_updates:",
-                  newCollectedFlags,
+              const dbUpdate: Record<string, any> = {
+                messages: updatedMessages,
+              };
+
+              if (Object.keys(stateUpdates).length > 0) {
+                const newCollectedFlags = Object.entries(stateUpdates).reduce(
+                  (acc, [k, v]) => {
+                    if (v && v !== "false" && v !== "null" && v !== "no") {
+                      acc[k] = true;
+                    }
+                    return acc;
+                  },
+                  {} as Record<string, boolean>,
                 );
+
+                if (Object.keys(newCollectedFlags).length > 0) {
+                  const existingCollected = (latestConv.collectedInfo ||
+                    {}) as Record<string, boolean>;
+                  const existingExtracted = (latestConv.extractedData ||
+                    {}) as Record<string, any>;
+                  dbUpdate.collectedInfo = {
+                    ...existingCollected,
+                    ...newCollectedFlags,
+                  };
+                  dbUpdate.extractedData = {
+                    ...existingExtracted,
+                    ...stateUpdates,
+                  };
+                  console.log(
+                    "[Create Route] Persisting state_updates:",
+                    newCollectedFlags,
+                  );
+                }
               }
+
+              await getDb()
+                .update(surveyCreationConversations)
+                .set(dbUpdate)
+                .where(eq(surveyCreationConversations.surveyId, surveyId));
             }
-
-            await db
-              .update(surveyCreationConversations)
-              .set(dbUpdate)
-              .where(eq(surveyCreationConversations.surveyId, surveyId));
+          } catch (error) {
+            console.error(
+              "Error saving conversation or performing extraction:",
+              error,
+            );
           }
-        } catch (error) {
-          console.error(
-            "Error saving conversation or performing extraction:",
-            error,
-          );
-        }
-      },
-      dynamicDirective,
-    );
-
-    // Use the SDK's own UIMessage stream — it emits the full correct protocol that @ai-sdk/react expects:
-    // step-start, text-start, text-delta, text-end, tool invocation parts, step-finish, finish.
-    // Writing bare text-delta chunks manually (our old approach) is IGNORED by the client stream processor
-    // because it requires the full protocol sequence.
-    const filterStream = createUIMessageStream({
-      execute: async ({ writer }) => {
-        writer.merge(streamResult.toUIMessageStream());
-      },
+        },
+        dynamicDirective,
+      );
     });
 
-    return createUIMessageStreamResponse({ stream: filterStream });
+    // Use the SDK's own UIMessage stream conversion. This translates raw parts
+    // into the strict protocol the client expects, stripping internal metadata.
+    const uiStream = streamResult.toUIMessageStream();
+
+    return createUIMessageStreamResponse({ stream: uiStream });
   } catch (error) {
+    console.error("[CreateAPI:POST] UNCAUGHT ERROR:", error);
+    if (error instanceof GeminiCapacityError) {
+      return geminiCapacityResponse();
+    }
     if (error instanceof Error) {
       if (
         error.message === "UNAUTHENTICATED" ||
@@ -352,11 +367,15 @@ export async function PUT(
       extractedData?: Record<string, unknown>;
     };
 
+    console.log(
+      `[CreateAPI:PUT] Entry. SID: ${surveyId}. Msgs: ${messages?.length}. State: ${!!collectedInfo}/${!!extractedData}`,
+    );
+
     if (messages && !Array.isArray(messages)) {
       return new Response("Invalid messages format", { status: 400 });
     }
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -373,12 +392,12 @@ export async function PUT(
       });
     }
 
-    const [existingConversation] = await db
+    const [existingConversation] = await getDb()
       .select()
       .from(surveyCreationConversations)
       .where(eq(surveyCreationConversations.surveyId, surveyId));
 
-    await db.transaction(async (tx) => {
+    await getDb().transaction(async (tx) => {
       if (existingConversation) {
         // Build the update payload dynamically — if nothing was provided, skip the DB call entirely
         // (Drizzle throws "No values to set" if .set({}) receives an empty object)
@@ -414,6 +433,7 @@ export async function PUT(
 
         // Nothing to update — body was empty (e.g. handleStart signal call)
         if (Object.keys(updatePayload).length === 0) {
+          console.log("[CreateAPI:PUT] payload empty, skipping DB update.");
           return; // exit transaction cleanly, no DB write needed
         }
 
@@ -421,6 +441,7 @@ export async function PUT(
           .update(surveyCreationConversations)
           .set(updatePayload)
           .where(eq(surveyCreationConversations.surveyId, surveyId));
+        console.log("[CreateAPI:PUT] conversationUpdate Success.");
       } else {
         await tx.insert(surveyCreationConversations).values({
           id: crypto.randomUUID(),
@@ -505,11 +526,11 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
+  const session = await getVerifiedSession();
+  const { surveyId } = await params;
+  console.log(`[CreateAPI:GET] Entry. SID: ${surveyId}`);
   try {
-    const session = await getVerifiedSession();
-    const { surveyId } = await params;
-
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -524,7 +545,7 @@ export async function GET(
       return new Response("Unauthorized", { status: 403 });
     }
 
-    const [creationConversation] = await db
+    const [creationConversation] = await getDb()
       .select()
       .from(surveyCreationConversations)
       .where(eq(surveyCreationConversations.surveyId, surveyId));

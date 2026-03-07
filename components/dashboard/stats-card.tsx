@@ -4,13 +4,13 @@ import { cn } from "@/lib/utils";
 import { LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
 
 interface StatsCardProps {
-    title: string;
+    title: React.ReactNode;
     value: string | number;
-    change?: string;
+    change?: React.ReactNode;
     changeType?: "positive" | "negative" | "neutral";
     icon: React.ReactNode;
     iconColor?: string;
-    description?: string;
+    description?: React.ReactNode;
 }
 
 export function StatsCard({

@@ -1,4 +1,4 @@
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys, surveyConversations, voiceSessions } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
@@ -81,7 +81,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
   async initialize(): Promise<void> {
     try {
       // Load survey by shareable link
-      const [survey] = await db
+      const [survey] = await getDb()
         .select()
         .from(surveys)
         .where(eq(surveys.shareableLink, this.state.surveyId));
@@ -141,7 +141,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
         : Date.now();
 
       // Create voice session in database
-      await db.insert(voiceSessions).values({
+      await getDb().insert(voiceSessions).values({
         id: this.state.voiceSessionId,
         surveyId: survey.id,
         sessionType: "survey_response",
@@ -151,7 +151,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
       // Create conversation
       const conversationId = nanoid();
-      await db.insert(surveyConversations).values({
+      await getDb().insert(surveyConversations).values({
         id: conversationId,
         surveyId: survey.id,
         participantId: this.participantId,
@@ -161,13 +161,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       });
 
       this.state.conversationId = conversationId;
-
-      await db
-        .update(surveys)
-        .set({
-          currentParticipants: sql`current_participants + 1`,
-        })
-        .where(eq(surveys.id, survey.id));
 
       // Start idle timeout
       this.resetIdleTimeout();
@@ -209,6 +202,10 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
     // If the assistant spoke last, do nothing (ball is in user's court)
     return null;
+  }
+
+  protected isNewSession(): boolean {
+    return this.state.messages.length === 0;
   }
 
   protected async getVoiceAgentSettings(): Promise<VoiceAgentSettings> {
@@ -296,7 +293,21 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
     // Update conversation in database
     if (this.state.conversationId) {
-      await db
+      // Logic to only increment participant count on first user message
+      if (event.role === "user") {
+        const userMessagesBefore =
+          this.state.messages.filter((m) => m.role === "user").length - 1; // Since we just pushed it
+        if (userMessagesBefore === 0 && this.state.survey) {
+          await getDb()
+            .update(surveys)
+            .set({
+              currentParticipants: sql`current_participants + 1`,
+            })
+            .where(eq(surveys.id, this.state.survey.id));
+        }
+      }
+
+      await getDb()
         .update(surveyConversations)
         .set({
           rawConversation: this.state.messages,
@@ -392,34 +403,33 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
           }
 
           // 2. Extract the text we actually want the TTS to speak
-          const messageToUser =
-            event.input.message_to_user ||
-            "I'm sorry, I encountered an internal error.";
+          const messageToUser = event.input.message_to_user;
+
+          if (!messageToUser) {
+            console.error(
+              `[Voice][think_and_respond] MISSING message_to_user. Payload:`,
+              JSON.stringify(event.input, null, 2),
+            );
+          }
+
+          const fallbackMessage = "I'm sorry, I encountered an internal error.";
+          const finalMessage = messageToUser || fallbackMessage;
 
           // 3. Complete the function call by giving Deepgram the text to say
           this.voiceAgent?.sendFunctionCallResponse(
             event.function_call_id,
             event.function_name,
-            JSON.stringify(messageToUser),
+            JSON.stringify(finalMessage),
           );
 
-          // 4. Also store the assistant's final response in our internal history
-          // so it's persisted in the DB correctly without the raw JSON
-          this.state.messages.push({
-            role: "assistant",
-            content: messageToUser,
-            timestamp: new Date().toISOString(),
-          });
-
-          this.send({
-            type: "conversation_text",
-            role: "assistant",
-            content: messageToUser,
-          });
+          // 4. (DELETED) Manual push removed to prevent double messages.
+          // Deepgram's ConversationText for the tool response will handle this via BaseVoiceAgentHandler.onConversationText.
         } catch (e) {
           console.error(
             "Failed to parse think_and_respond payload in voice handler:",
             e,
+            "Raw input:",
+            event.input,
           );
           this.voiceAgent?.sendFunctionCallResponse(
             event.function_call_id,
@@ -548,7 +558,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
     try {
       // Mark conversation as completed
       if (this.state.conversationId) {
-        await db
+        await getDb()
           .update(surveyConversations)
           .set({ completed: true })
           .where(eq(surveyConversations.id, this.state.conversationId));
@@ -592,7 +602,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       const totalCost = estimatedSttCost + estimatedTtsCost;
 
       // Update voice session status with metrics
-      await db
+      await getDb()
         .update(voiceSessions)
         .set({
           status: "completed",
@@ -607,7 +617,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
       // Update conversation with precise duration
       if (this.state.conversationId) {
-        await db
+        await getDb()
           .update(surveyConversations)
           .set({
             durationMs: sessionDurationMs,
@@ -652,7 +662,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       const sessionDurationMs = Date.now() - this.sessionStartTime;
 
       // Update session status and metrics
-      const [session] = await db
+      const [session] = await getDb()
         .select()
         .from(voiceSessions)
         .where(eq(voiceSessions.id, this.state.voiceSessionId));
@@ -666,7 +676,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
           console.log(
             `[Survey Response Voice] Cleaning up orphaned conversation ${this.state.conversationId} (no messages)`,
           );
-          await db
+          await getDb()
             .delete(surveyConversations)
             .where(eq(surveyConversations.id, this.state.conversationId));
         }
@@ -682,7 +692,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
           totalAssistantChars * ESTIMATED_TTS_COST_PER_CHAR;
         const totalCost = estimatedSttCost + estimatedTtsCost;
 
-        await db
+        await getDb()
           .update(voiceSessions)
           .set({
             status: newStatus,
@@ -697,7 +707,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
         // Update conversation with precise duration
         if (this.state.conversationId) {
-          await db
+          await getDb()
             .update(surveyConversations)
             .set({
               durationMs: sessionDurationMs,

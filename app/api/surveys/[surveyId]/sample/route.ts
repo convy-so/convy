@@ -1,10 +1,7 @@
-import {
-  createUIMessageStream,
-  createUIMessageStreamResponse,
-} from "ai";
+import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { and, eq, lt } from "drizzle-orm";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 
@@ -17,6 +14,11 @@ import { normalizeMessages } from "@/lib/ai";
 import { ConversationManager } from "@/lib/conversation-manager";
 import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
 import type { AgentContext } from "@/lib/agents/types";
+import {
+  withGeminiLimit,
+  GeminiCapacityError,
+  geminiCapacityResponse,
+} from "@/lib/gemini-limiter";
 
 export const maxDuration = 300;
 
@@ -77,7 +79,7 @@ export async function POST(
       );
     }
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -110,7 +112,7 @@ export async function POST(
     const surveyConfig = buildCompleteSurveyConfig(survey);
 
     // Get previous feedback from earlier sample conversations
-    const previousFeedbackRows = await db
+    const previousFeedbackRows = await getDb()
       .select({
         feedback: sampleConversations.feedback,
         finalComments: sampleConversations.finalComments,
@@ -135,6 +137,7 @@ export async function POST(
 
     // Deterministic ID for context persistence during this sample session
     const conversationId = `sample:${surveyId}:${conversationNumber}:${session.user.id}`;
+    const sampleId = `sample-${surveyId}-${conversationNumber}`;
 
     const normalizedMessages = await normalizeMessages(messages);
 
@@ -198,7 +201,69 @@ export async function POST(
 
     // Use the agent's stream method which includes domain expertise, checklist, and tools
     // No onFinish callback needed for DB persistence as sample routes are ephemeral
-    const result = conductingAgent.stream(messagesToLLM as any);
+    const streamResult = await withGeminiLimit(async () => {
+      return conductingAgent.stream(
+        messagesToLLM as any,
+        () => {}, // No media display in sample testing right now
+        async (params) => {
+          const { text, usage, response } = params;
+
+          // ... (existing logging / db / queue logic internally handled by stream wrapper)
+          const assistantMessage = response.messages?.find(
+            (m: any) => m.role === "assistant",
+          );
+
+          const updatedMessages = [
+            ...messagesToLLM, // Use messagesToLLM as the base for updated messages
+            {
+              role: "assistant" as const,
+              content: text,
+              parts:
+                (assistantMessage as any)?.content &&
+                Array.isArray((assistantMessage as any).content)
+                  ? (assistantMessage as any).content
+                  : undefined,
+              timestamp: new Date().toISOString(),
+            },
+          ];
+
+          if (sampleId) {
+            const dbMessages = updatedMessages.map((m: any) => ({
+              role: m.role,
+              content: m.content,
+              parts: m.parts,
+              timestamp: m.timestamp || new Date().toISOString(),
+            }));
+
+            // Check if AI completed survey
+            const toolInvocations = assistantMessage?.toolInvocations || [];
+            let isCompleted = !!toolInvocations.find(
+              (call: any) => call.toolName === "finishSurvey",
+            );
+
+            await getDb()
+              .update(sampleConversations)
+              .set({
+                messages: dbMessages,
+                updatedAt: new Date(),
+              })
+              .where(eq(sampleConversations.id, sampleId));
+
+            if (isCompleted) {
+              const { enqueueSampleConversationInsights } =
+                await import("@/lib/queue");
+              await enqueueSampleConversationInsights({
+                surveyId: survey.id,
+                conversationNumber: Number(sampleId.split("-").pop() || 1),
+                messages: dbMessages as any,
+                userId: session.user.id,
+              });
+            }
+          }
+        },
+        undefined,
+      );
+    });
 
     ConversationManager.updateMemoryAsync(
       conversationId,
@@ -210,15 +275,18 @@ export async function POST(
     // Save updated context to Redis using Manager
     await ConversationManager.saveContext(conversationId, context);
 
-    const stream = createUIMessageStream({
-      execute: async ({ writer }) => {
-        writer.merge(result.toUIMessageStream());
-      },
-    });
+    // AI SDK v6 native UIMessage stream conversion
+    const uiStream = streamResult.toUIMessageStream();
 
     const remainingSamples = MAX_SAMPLE_CONVERSATIONS - conversationNumber;
 
-    const response = createUIMessageStreamResponse({ stream });
+    const response = createUIMessageStreamResponse({
+      stream: createUIMessageStream({
+        execute: async ({ writer }) => {
+          writer.merge(uiStream);
+        },
+      }),
+    });
     response.headers.set("X-Remaining-Samples", remainingSamples.toString());
     response.headers.set(
       "X-Conversation-Number",

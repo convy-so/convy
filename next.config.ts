@@ -9,6 +9,15 @@ const nextConfig: NextConfig = {
   // server bundle that does not need the full node_modules directory.
   output: "standalone",
 
+  // Enable Next.js 16 Cache Components and React Compiler
+  cacheComponents: true,
+  reactCompiler: true,
+
+  // Explicitly set Turbopack root to the project directory to avoid root inference issues
+  turbopack: {
+    root: process.cwd(),
+  },
+
   rewrites: async () => {
     // Proxy /voice/* and /analytics WebSocket upgrade requests
     // from the Next.js server to the standalone WebSocket container.

@@ -1,0 +1,78 @@
+
+> convy@0.1.0 build
+> next build
+
+▲ Next.js 16.1.5 (Turbopack, Cache Components)
+- Environments: .env
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 99s
+  Running TypeScript ...
+  Collecting page data using 11 workers ...
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Connected
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Ready
+[Redis Client] Ready
+  Generating static pages using 11 workers (0/185) ...
+Error: Route "/[locale]/admin/surveys": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, try one of the following:
+  - Start the app in development mode by running `next dev`, then open "/[locale]/admin/surveys" in your browser to investigate the error.
+  - Rerun the production build with `next build --debug-prerender` to generate better stack traces.
+Error occurred prerendering page "/en/admin/surveys". Read more: https://nextjs.org/docs/messages/prerender-error
+Export encountered an error on /[locale]/admin/surveys/page: /en/admin/surveys, exiting the build.
+Error: Route "/[locale]/workspace/accept-invitation/[id]": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, try one of the following:
+  - Start the app in development mode by running `next dev`, then open "/[locale]/workspace/accept-invitation/[id]" in your browser to investigate the error.
+  - Rerun the production build with `next build --debug-prerender` to generate better stack traces.
+Error occurred prerendering page "/en/workspace/accept-invitation/[id]". Read more: https://nextjs.org/docs/messages/prerender-error
+Export encountered an error on /[locale]/(auth)/workspace/accept-invitation/[id]/page: /en/workspace/accept-invitation/[id], exiting the build.
+Error: Route "/[locale]/dashboard/profile": Uncached data was accessed outside of <Suspense>. This delays the entire page from rendering, resulting in a slow user experience. Learn more: https://nextjs.org/docs/messages/blocking-route
+    at ignore-listed frames
+To get a more detailed stack trace and pinpoint the issue, try one of the following:
+  - Start the app in development mode by running `next dev`, then open "/[locale]/dashboard/profile" in your browser to investigate the error.
+  - Rerun the production build with `next build --debug-prerender` to generate better stack traces.
+Error occurred prerendering page "/en/dashboard/profile". Read more: https://nextjs.org/docs/messages/prerender-error
+Export encountered an error on /[locale]/(dashboard)/dashboard/profile/page: /en/dashboard/profile, exiting the build.
+⨯ Next.js build worker exited with code: 1 and signal: null
