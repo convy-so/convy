@@ -25,6 +25,9 @@ import {
   Play,
   AlertTriangle,
   Mic,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -32,8 +35,10 @@ import { deleteSurveyAction, duplicateSurveyAction } from "@/app/actions/survey"
 import { fetchSurveys } from "@/lib/api/surveys";
 import { queryKeys } from "@/lib/query-keys";
 import { useAuth } from "@/components/providers/auth-provider";
+
 import { useTranslations } from "next-intl";
 import { getClientTranslation } from "@/app/actions/translate";
+
 
 interface Survey {
   id: string;
@@ -165,6 +170,7 @@ function SurveysContent() {
     return result;
   }, [surveys, filterTab, searchQuery]);
 
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Header */}
@@ -185,6 +191,7 @@ function SurveysContent() {
       {/* Filter Tabs */}
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-6">
+
           <button
             onClick={() => setFilterTab("all")}
             className={cn(
@@ -227,17 +234,57 @@ function SurveysContent() {
         </nav>
       </div>
 
-      {/* Search Bar */}
-      <div className="flex items-center gap-4">
-        <div className="flex-1 max-w-md relative">
+      {/* Search Bar and Page Size */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex-1 w-full max-w-md relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
             placeholder={t("Search.Placeholder")}
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none transition-all text-sm"
           />
+        </div>
+
+        <div className="flex items-center gap-4">
+          <p className="hidden md:block text-sm text-gray-500 whitespace-nowrap">
+            {t('Pagination.Showing', { 
+              start: (currentPage - 1) * pageSize + 1, 
+              end: Math.min(currentPage * pageSize, filteredSurveys.length), 
+              total: filteredSurveys.length 
+            })}
+          </p>
+
+          <div className="relative">
+            <button
+              onClick={() => setIsPageSizeOpen(!isPageSizeOpen)}
+              className="flex items-center gap-2 px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all "
+            >
+              <span>{pageSize} {t('Pagination.PerPage')}</span>
+              <ChevronDown className={cn("w-4 h-4 transition-transform", isPageSizeOpen && "rotate-180")} />
+            </button>
+            
+            {isPageSizeOpen && (
+              <>
+                <div className="fixed inset-0 z-[60]" onClick={() => setIsPageSizeOpen(false)} />
+                <div className="absolute top-full right-0 mt-2 w-40 bg-white rounded-xl border border-gray-100 shadow-xl z-[70] py-1.5 animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden">
+                  {[10, 20, 50, 100].map((size) => (
+                    <button
+                      key={size}
+                      onClick={() => handlePageSizeChange(size)}
+                      className={cn(
+                        "w-full text-left px-4 py-2 text-sm transition-colors hover:bg-gray-50",
+                        pageSize === size ? "text-gray-900 font-semibold bg-gray-50" : "text-gray-600"
+                      )}
+                    >
+                      {size} {t('Pagination.PerPage')}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -251,6 +298,7 @@ function SurveysContent() {
         </div>
       ) : (
         <>
+
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
             {filteredSurveys.map((survey, index) => (
               <div
@@ -401,6 +449,7 @@ function SurveysContent() {
               </div>
             ))}
           </div>
+
 
           {filteredSurveys.length === 0 && (
             <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">

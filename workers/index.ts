@@ -10,7 +10,16 @@
 import { loadEnvConfig } from "@next/env";
 loadEnvConfig(process.cwd());
 
-// Mark this process as a worker to ensure independent Redis connections
+import * as Sentry from "@sentry/node";
+
+// Initialize Sentry for the standalone Node.js Project (Workers)
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  tracesSampleRate: 1.0,
+  environment: process.env.NODE_ENV || "development",
+  serverName: "worker-process",
+});
+
 process.env.IS_WORKER = "true";
 
 
@@ -73,6 +82,12 @@ console.log("🚀 Starting all workers...");
   }
 
   console.log("\n📊 Workers are now processing jobs...");
+
+  if (process.env.SENTRY_TEST_TRIGGER === "true") {
+    console.log("⚠️ Sentry Test Trigger enabled. Throwing test error in worker...");
+    throw new Error("Sentry Test Worker Error: This is a test error from the Worker process.");
+  }
+
   console.log("Press Ctrl+C to gracefully shutdown\n");
 })();
 

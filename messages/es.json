@@ -514,50 +514,56 @@
     },
     "TeamPage": {
         "Header": {
-            "Title": "Team Management",
-            "Description": "Manage members, roles, and permissions for"
+            "Title": "Gestión de Equipos",
+            "Description": "Gestionar miembros, roles y permisos para {name}"
         },
         "Stats": {
-            "TotalMembers": "Total Members",
-            "YourRole": "Your Role",
-            "WorkspacePlan": "Workspace Plan",
-            "Upgrade": "Upgrade",
-            "Free": "Free"
+            "TotalMembers": "Miembros Totales",
+            "YourRole": "Tu Rol",
+            "WorkspacePlan": "Plan del Espacio de Trabajo",
+            "Upgrade": "Mejorar",
+            "Free": "Gratis"
         },
         "Permissions": {
-            "Title": "Role Permissions",
-            "Owner": "Owner",
-            "OwnerDesc": "Full access to workspace settings, billing, and team management. Can delete workspace.",
-            "Member": "Member",
-            "MemberDesc": "Can create and manage surveys, view analytics, and collaborate with other members."
+            "Title": "Permisos de Rol",
+            "Owner": {
+                "Title": "Propietario",
+                "Description": "Acceso total a la configuración del espacio de trabajo, facturación y gestión de equipos. Puede eliminar el espacio de trabajo."
+            },
+            "Member": {
+                "Title": "Miembro",
+                "Description": "Puede crear y gestionar encuestas, ver análisis y colaborar con otros miembros."
+            }
         },
         "Upgrade": {
-            "Title": "Need more seats?",
-            "Description": "Upgrade to Pro to add unlimited team members and access advanced collaboration features.",
-            "Button": "Upgrade Plan"
+            "Title": "¿Necesitas más asientos?",
+            "Description": "Mejora a Pro para añadir miembros ilimitados y acceder a funciones de colaboración avanzadas.",
+            "Button": "Mejorar Plan"
         },
-        "Danger": {
-            "Title": "Danger Zone",
-            "DeleteWorkspace": "Delete Workspace",
-            "DeleteDesc": "Deleting a workspace is permanent and cannot be undone. All surveys and data will be lost.",
-            "LeaveWorkspace": "Leave Workspace",
-            "LeaveDesc": "Leaving this workspace will revoke your access to all surveys and data."
-        },
-        "Modals": {
+        "DangerZone": {
+            "Title": "Zona de Peligro",
             "Delete": {
-                "Title": "Delete Workspace",
-                "Description": "Are you sure you want to delete \"{name}\"? This action is permanent and will delete all surveys, responses, and members.",
-                "Cancel": "Cancel",
-                "Confirm": "Delete Workspace",
-                "Deleting": "Deleting..."
+                "Description": "Eliminar un espacio de trabajo es permanente y no se puede deshacer. Todos los datos se perderán.",
+                "Button": "Eliminar Espacio"
             },
             "Leave": {
-                "Title": "Leave Workspace",
-                "Description": "Are you sure you want to leave \"{name}\"? You will lose access to all surveys and data in this workspace.",
-                "Cancel": "Cancel",
-                "Confirm": "Leave Workspace",
-                "Leaving": "Leaving..."
+                "Description": "Salir de este espacio de trabajo revocará tu acceso a todas las encuestas y datos.",
+                "Button": "Salir del Espacio"
             }
+        },
+        "DeleteModal": {
+            "Title": "Eliminar Espacio",
+            "Description": "¿Estás seguro de que quieres eliminar \"{name}\"? Esta acción es permanente y eliminará todo.",
+            "Cancel": "Cancelar",
+            "Confirm": "Eliminar Espacio",
+            "Deleting": "Eliminando..."
+        },
+        "LeaveModal": {
+            "Title": "Salir del Espacio",
+            "Description": "¿Estás seguro de que quieres salir de \"{name}\"? Perderás el acceso a todos los datos.",
+            "Cancel": "Cancelar",
+            "Confirm": "Salir del Espacio",
+            "Leaving": "Saliendo..."
         },
         "PersonalSpace": {
             "Title": "Personal Space",

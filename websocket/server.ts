@@ -6,6 +6,16 @@ import { loadEnvConfig } from "@next/env";
 const projectDir = process.cwd();
 loadEnvConfig(projectDir);
 
+import * as Sentry from "@sentry/node";
+
+// Initialize Sentry for the standalone Node.js Project
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  tracesSampleRate: 1.0,
+  environment: process.env.NODE_ENV || "development",
+  serverName: "websocket-server",
+});
+
 
 import { env } from "@/lib/env";
 import {
@@ -38,10 +48,10 @@ const activeConnections = new Map<
   string,
   {
     handler:
-      | SurveyCreationVoiceHandler
-      | SurveyResponseVoiceHandler
-      | SampleSurveyVoiceHandler
-      | AnalyticsHandler;
+    | SurveyCreationVoiceHandler
+    | SurveyResponseVoiceHandler
+    | SampleSurveyVoiceHandler
+    | AnalyticsHandler;
     userId?: string;
     createdAt: number; // Track when connection was created for cleanup
   }
@@ -536,7 +546,7 @@ function initializeRedisSubscriber(): void {
     // Clean up existing subscriber if any
     if (redisSubscriber) {
       try {
-        redisSubscriber.quit().catch(() => {});
+        redisSubscriber.quit().catch(() => { });
       } catch {
         // Ignore cleanup errors
       }
@@ -668,6 +678,11 @@ server.listen(PORT, () => {
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
   `);
+
+  if (process.env.SENTRY_TEST_TRIGGER === "true") {
+    console.log("⚠️ Sentry Test Trigger enabled. Throwing test error in websocket server...");
+    throw new Error("Sentry Test WebSocket Error: This is a test error from the WebSocket process.");
+  }
 });
 
 /**
@@ -699,7 +714,7 @@ process.on("SIGTERM", async () => {
       if (
         handler &&
         typeof (handler as { cleanup?: () => Promise<void> }).cleanup ===
-          "function"
+        "function"
       ) {
         await (handler as { cleanup: () => Promise<void> }).cleanup();
       }
