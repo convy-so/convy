@@ -7,7 +7,7 @@ import {
   type ModelMessage,
 } from "ai";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveyConversations, surveys } from "@/db/schema";
 import { chatRateLimiter, getClientIP } from "@/lib/ratelimit";
 import { normalizeMessages } from "@/lib/ai";
@@ -18,7 +18,7 @@ import {
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import { ConversationManager } from "@/lib/conversation-manager";
 import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
-import { createUIMessageFilter } from "@/lib/agents/scratchpad-filter";
+
 import type { AgentContext } from "@/lib/agents/types";
 
 export const maxDuration = 300;
@@ -61,7 +61,7 @@ export async function POST(
       return new Response("Invalid messages", { status: 400 });
     }
 
-    const normalizedMessages = normalizeMessages(messages);
+    const normalizedMessages = await normalizeMessages(messages);
 
     const sanitizedMessages = normalizedMessages.map((msg) => {
       if (msg.role === "user") {
@@ -78,7 +78,7 @@ export async function POST(
       return msg;
     });
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.shareableLink, surveyId));
@@ -103,7 +103,7 @@ export async function POST(
     if (!convId) {
       convId = nanoid();
 
-      await db.insert(surveyConversations).values({
+      await getDb().insert(surveyConversations).values({
         id: convId,
         surveyId: survey.id,
         rawConversation: sanitizedMessages.map((msg) => ({
@@ -121,7 +121,7 @@ export async function POST(
         completed: false,
       });
 
-      await db
+      await getDb()
         .update(surveys)
         .set({
           currentParticipants: survey.currentParticipants + 1,
@@ -145,7 +145,7 @@ export async function POST(
     // --- AGENT INTEGRATION: Use ConductingSpecialist for agentic behavior ---
     const agentContext: AgentContext = {
       conversationId: convId,
-      messages: messagesForAI as any,
+      messages: messagesForAI as ModelMessage[],
       surveyConfig,
       rollingContext: context,
       language: survey.language as "en" | "fr" | "de" | "es" | "it" | undefined,
@@ -170,7 +170,7 @@ export async function POST(
     // Use the agent's stream method which includes domain expertise, checklist, and tools
     // Pass onFinish callback for persistence
     const result = conductingAgent.stream(
-      messagesForAI as any,
+      messagesForAI as ModelMessage[],
       undefined, // onMediaDisplay - not needed for text chat
       async ({ text, response }) => {
         // Persistence logic for participant chat
@@ -179,7 +179,7 @@ export async function POST(
             (m: any) => m.role === "assistant",
           );
 
-          const [currentConv] = await db
+          const [currentConv] = await getDb()
             .select()
             .from(surveyConversations)
             .where(eq(surveyConversations.id, convId!));
@@ -192,15 +192,15 @@ export async function POST(
                 role: "assistant" as const,
                 content: text,
                 parts:
-                  (assistantMessage as any)?.content &&
-                  Array.isArray((assistantMessage as any).content)
-                    ? (assistantMessage as any).content
+                  assistantMessage?.content &&
+                  Array.isArray(assistantMessage.content)
+                    ? assistantMessage.content
                     : undefined,
                 timestamp: new Date().toISOString(),
               },
             ];
 
-            await db
+            await getDb()
               .update(surveyConversations)
               .set({
                 rawConversation: updatedMessages,
@@ -231,15 +231,10 @@ export async function POST(
     // Save updated context to Redis using Manager
     await ConversationManager.saveContext(convId, context);
 
-    const filterStream = createUIMessageStream({
-      execute: async ({ writer }) => {
-        writer.merge(
-          result.toUIMessageStream().pipeThrough(createUIMessageFilter()),
-        );
-      },
-    });
+    // AI SDK v6 native UIMessage stream conversion
+    const uiStream = result.toUIMessageStream();
 
-    const response = createUIMessageStreamResponse({ stream: filterStream });
+    const response = createUIMessageStreamResponse({ stream: uiStream });
     response.headers.set("X-Conversation-Id", convId);
     response.headers.set(
       "X-Conversation-Progress",
@@ -282,7 +277,7 @@ export async function PUT(
       return new Response("Invalid request", { status: 400 });
     }
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.shareableLink, surveyId));
@@ -323,7 +318,7 @@ export async function PUT(
       }
     }
 
-    await db
+    await getDb()
       .update(surveyConversations)
       .set({
         rawConversation: messages.map((msg) => ({

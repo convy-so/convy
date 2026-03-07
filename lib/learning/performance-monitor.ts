@@ -7,7 +7,7 @@
  *  - Weekly reports
  */
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { knowledgeBase } from "@/db/schema/vectors";
 import {
   conversationSignals,
@@ -61,7 +61,7 @@ export async function buildPerformanceSnapshot(): Promise<AgentPerformanceSnapsh
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   // ── Conversation signals (7-day) ────────────────────────────────────────────
-  const [signalStats] = await db
+  const [signalStats] = await getDb()
     .select({
       avgCompletion: avg(conversationSignals.completionRate),
       avgCoverage: avg(conversationSignals.objectiveCoverageScore),
@@ -72,7 +72,7 @@ export async function buildPerformanceSnapshot(): Promise<AgentPerformanceSnapsh
     .where(gte(conversationSignals.createdAt, sevenDaysAgo));
 
   // ── Participant feedback ─────────────────────────────────────────────────────
-  const [feedbackStats] = await db
+  const [feedbackStats] = await getDb()
     .select({
       avgRating: avg(participantFeedback.rating),
       total: count(),
@@ -82,7 +82,7 @@ export async function buildPerformanceSnapshot(): Promise<AgentPerformanceSnapsh
     .where(gte(participantFeedback.createdAt, sevenDaysAgo));
 
   // ── Move-level stats (7-day) ────────────────────────────────────────────────
-  const [moveStats] = await db
+  const [moveStats] = await getDb()
     .select({
       avgRichness: avg(conversationMoves.responseRichnessScore),
       total: count(),
@@ -95,12 +95,12 @@ export async function buildPerformanceSnapshot(): Promise<AgentPerformanceSnapsh
   const patternsByStatus = await countPatternsByStatus();
 
   // ── Experiments ─────────────────────────────────────────────────────────────
-  const [expStats] = await db
+  const [expStats] = await getDb()
     .select({ active: count() })
     .from(experiments)
     .where(eq(experiments.status, "active"));
 
-  const [concludedStats] = await db
+  const [concludedStats] = await getDb()
     .select({ concluded: count() })
     .from(experiments)
     .where(

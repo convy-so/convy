@@ -8,10 +8,12 @@ import { SubmitButton } from "@/components/auth/submit-button";
 import { authClient } from "@/lib/auth-client";
 import { useAuth } from "@/components/providers/auth-provider";
 import toast from "react-hot-toast";
+import { Suspense } from "react";
 import { CheckCircle2, XCircle, Users, Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 
-
-export default function AcceptInvitationPage() {
+function AcceptInvitationContent() {
+  const t = useTranslations("Auth.Invitation");
   const params = useParams();
   const router = useRouter();
   const { session, isLoading: authLoading } = useAuth();
@@ -31,7 +33,7 @@ export default function AcceptInvitationPage() {
         fetchOptions: {
           onSuccess: () => {
             setIsSuccess(true);
-            toast.success("Joined workspace successfully!");
+            toast.success(t("ToastSuccess"));
             setTimeout(() => {
               router.push("/dashboard");
             }, 2000);
@@ -43,7 +45,7 @@ export default function AcceptInvitationPage() {
         }
       });
     } catch (err) {
-      setError("Failed to accept invitation");
+      setError(t("GenericError"));
       console.error(err);
     } finally {
       setIsLoading(false);
@@ -53,8 +55,8 @@ export default function AcceptInvitationPage() {
   if (authLoading) {
     return (
       <AuthCard
-        title="Verifying Invitation"
-        subtitle="Please wait a moment..."
+        title={t("Verifying")}
+        subtitle={t("VerifyingSubtitle")}
       >
         <div className="flex items-center justify-center p-8">
           <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
@@ -67,24 +69,24 @@ export default function AcceptInvitationPage() {
   if (!session) {
     return (
       <AuthCard
-        title="Workspace Invitation"
-        subtitle="Please sign in to accept this invitation"
+        title={t("AuthRequired")}
+        subtitle={t("SignInRequired")}
       >
         <div className="space-y-4">
           <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 flex items-center gap-3">
             <Users className="w-8 h-8 text-gray-400" />
             <p className="text-sm text-gray-600 font-medium">
-              You've been invited to join a workspace on Convy.
+              {t("InviteMessage")}
             </p>
           </div>
           <Link href={`/sign-in?callbackUrl=/workspace/accept-invitation/${invitationId}`} className="block">
             <SubmitButton>
-              Sign in to Accept
+              {t("SignInToAccept")}
             </SubmitButton>
           </Link>
           <div className="text-center">
             <Link href="/sign-up" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">
-              Don't have an account? Sign up
+              {t("NoAccount")} {t("SignUp")}
             </Link>
           </div>
         </div>
@@ -94,8 +96,8 @@ export default function AcceptInvitationPage() {
 
   return (
     <AuthCard
-      title="Workspace Invitation"
-      subtitle={isSuccess ? "Welcome to the team!" : "You've been invited to join a workspace"}
+      title={t("AuthRequired")}
+      subtitle={isSuccess ? t("Welcome") : t("Invited")}
     >
       <div className="space-y-6">
         {isSuccess ? (
@@ -104,9 +106,9 @@ export default function AcceptInvitationPage() {
               <CheckCircle2 className="w-8 h-8 text-emerald-600" />
             </div>
             <div className="space-y-2">
-              <p className="text-gray-600 font-medium text-lg">Joined successfully!</p>
-              <p className="text-gray-500">You are now a member of the workspace.</p>
-              <p className="text-sm text-gray-400">Redirecting to dashboard...</p>
+              <p className="text-gray-600 font-medium text-lg">{t("JoinedSuccess")}</p>
+              <p className="text-gray-500">{t("JoinedDesc")}</p>
+              <p className="text-sm text-gray-400">{t("Redirecting")}</p>
             </div>
           </div>
         ) : error ? (
@@ -115,12 +117,12 @@ export default function AcceptInvitationPage() {
               <XCircle className="w-8 h-8 text-red-600" />
             </div>
             <div className="space-y-2">
-              <p className="text-red-900 font-semibold text-lg">Invitation error</p>
+              <p className="text-red-900 font-semibold text-lg">{t("ErrorTitle")}</p>
               <p className="text-sm text-gray-500">{error}</p>
             </div>
             <Link href="/dashboard" className="block w-full">
               <button className="w-full py-3 px-4 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors">
-                Back to Dashboard
+                {t("BackToDashboard")}
               </button>
             </Link>
           </div>
@@ -131,21 +133,33 @@ export default function AcceptInvitationPage() {
                 <Users className="w-6 h-6 text-gray-600" />
               </div>
               <div>
-                <p className="text-gray-900 font-semibold">Join Workspace</p>
-                <p className="text-sm text-gray-500 leading-tight">Click the button below to accept the invitation and start collaborating.</p>
+                <p className="text-gray-900 font-semibold">{t("JoinWorkspace")}</p>
+                <p className="text-sm text-gray-500 leading-tight">{t("JoinDesc")}</p>
               </div>
             </div>
-            
-            <SubmitButton 
-              onClick={handleAccept} 
+
+            <SubmitButton
+              onClick={handleAccept}
               isLoading={isLoading}
-              loadingText="Accepting..."
+              loadingText={t("Accepting")}
             >
-              Accept Invitation
+              {t("AcceptButton")}
             </SubmitButton>
           </div>
         )}
       </div>
     </AuthCard>
+  );
+}
+
+export default function AcceptInvitationPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      </div>
+    }>
+      <AcceptInvitationContent />
+    </Suspense>
   );
 }

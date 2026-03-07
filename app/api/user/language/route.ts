@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
@@ -19,7 +19,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [user] = await db
+    const [user] = await getDb()
       .select({ preferredLanguage: users.preferredLanguage })
       .from(users)
       .where(eq(users.id, session.user.id))
@@ -32,7 +32,7 @@ export async function GET() {
     console.error("[User Language API] Error fetching language:", error);
     return NextResponse.json(
       { error: "Failed to fetch language" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -55,13 +55,10 @@ export async function PATCH(request: NextRequest) {
     const { language } = body;
 
     if (!language || !["en", "fr", "de", "es", "it"].includes(language)) {
-      return NextResponse.json(
-        { error: "Invalid language" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid language" }, { status: 400 });
     }
 
-    await db
+    await getDb()
       .update(users)
       .set({ preferredLanguage: language })
       .where(eq(users.id, session.user.id));
@@ -71,7 +68,7 @@ export async function PATCH(request: NextRequest) {
     console.error("[User Language API] Error updating language:", error);
     return NextResponse.json(
       { error: "Failed to update language" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

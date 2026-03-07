@@ -1,6 +1,6 @@
 import { eq, and } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import {
   surveys,
   surveyConversations,
@@ -22,7 +22,7 @@ export async function GET(
     const session = await getVerifiedSession();
     const { surveyId, responseId } = await params;
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select({
         id: surveys.id,
         title: surveys.title,
@@ -41,7 +41,7 @@ export async function GET(
 
     // 2. Fetch the conversation (response)
     // We check both ID and SurveyID to ensure integrity
-    const [conversation] = await db
+    const [conversation] = await getDb()
       .select()
       .from(surveyConversations)
       .where(
@@ -56,7 +56,7 @@ export async function GET(
     }
 
     // 3. Fetch insights if they exist
-    const [insights] = await db
+    const [insights] = await getDb()
       .select()
       .from(conversationInsights)
       .where(eq(conversationInsights.conversationId, responseId));

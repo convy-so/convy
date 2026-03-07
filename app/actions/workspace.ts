@@ -8,7 +8,7 @@
 
 import { auth } from "@/lib/auth";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { organizations, members, invitations } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 
@@ -137,7 +137,7 @@ export async function getActiveWorkspace(): Promise<
       };
     }
 
-    const org = await db.query.organizations.findFirst({
+    const org = await getDb().query.organizations.findFirst({
       where: eq(organizations.id, activeOrganizationId),
     });
 
@@ -148,7 +148,7 @@ export async function getActiveWorkspace(): Promise<
       };
     }
 
-    const member = await db.query.members.findFirst({
+    const member = await getDb().query.members.findFirst({
       where: and(
         eq(members.organizationId, activeOrganizationId),
         eq(members.userId, session.user.id),
@@ -516,7 +516,7 @@ export async function getWorkspaceInvitations(organizationId: string): Promise<
   try {
     await getVerifiedSession();
 
-    const invites = await db.query.invitations.findMany({
+    const invites = await getDb().query.invitations.findMany({
       where: eq(invitations.organizationId, organizationId),
       orderBy: [desc(invitations.createdAt)],
       with: {

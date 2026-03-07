@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
 
 /**
@@ -14,7 +14,7 @@ export async function GET(
   try {
     const { shareableLink } = await params;
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select({
         id: surveys.id,
         title: surveys.title,

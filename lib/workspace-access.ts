@@ -1,7 +1,7 @@
 "use server";
 
 import { eq, and } from "drizzle-orm";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { members, organizations, surveys, projects } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 
@@ -12,7 +12,7 @@ export async function isWorkspaceMember(
   userId: string,
   organizationId: string,
 ): Promise<boolean> {
-  const [member] = await db
+  const [member] = await getDb()
     .select()
     .from(members)
     .where(
@@ -31,7 +31,7 @@ export async function isWorkspaceOwner(
   userId: string,
   organizationId: string,
 ): Promise<boolean> {
-  const [member] = await db
+  const [member] = await getDb()
     .select()
     .from(members)
     .where(
@@ -51,7 +51,7 @@ export async function isWorkspaceOwner(
 export async function getWorkspaceOwnerId(
   organizationId: string,
 ): Promise<string | null> {
-  const [owner] = await db
+  const [owner] = await getDb()
     .select({ userId: members.userId })
     .from(members)
     .where(
@@ -74,7 +74,7 @@ export async function getSurveyAccessLevel(
   userId: string,
   surveyId: string,
 ): Promise<"owner" | "editor" | "viewer" | "none"> {
-  const [survey] = await db
+  const [survey] = await getDb()
     .select({
       userId: surveys.userId,
       organizationId: surveys.organizationId,

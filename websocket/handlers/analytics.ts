@@ -1,6 +1,6 @@
 import { WebSocket } from "ws";
 import { AuthenticatedConnection } from "../middleware/auth";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys, surveyAnalytics } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -51,7 +51,7 @@ export class AnalyticsHandler {
   async initialize(): Promise<void> {
     try {
       // Verify survey ownership
-      const [survey] = await db
+      const [survey] = await getDb()
         .select()
         .from(surveys)
         .where(eq(surveys.id, this.surveyId));
@@ -85,7 +85,7 @@ export class AnalyticsHandler {
       await this.sendCurrentAnalytics();
 
       console.log(
-        `[Analytics Handler] Initialized for user ${this.userId}, survey ${this.surveyId}`
+        `[Analytics Handler] Initialized for user ${this.userId}, survey ${this.surveyId}`,
       );
     } catch (error) {
       console.error("[Analytics Handler] Initialization error:", error);
@@ -102,7 +102,7 @@ export class AnalyticsHandler {
    */
   private async sendCurrentAnalytics(): Promise<void> {
     try {
-      const [analytics] = await db
+      const [analytics] = await getDb()
         .select()
         .from(surveyAnalytics)
         .where(eq(surveyAnalytics.surveyId, this.surveyId));
@@ -124,7 +124,7 @@ export class AnalyticsHandler {
     } catch (error) {
       console.error(
         "[Analytics Handler] Error fetching current analytics:",
-        error
+        error,
       );
       // Don't fail initialization if we can't fetch current analytics
     }
@@ -150,7 +150,7 @@ export class AnalyticsHandler {
    */
   private async sendUpdatedAnalytics(): Promise<void> {
     try {
-      const [analytics] = await db
+      const [analytics] = await getDb()
         .select()
         .from(surveyAnalytics)
         .where(eq(surveyAnalytics.surveyId, this.surveyId));
@@ -172,7 +172,7 @@ export class AnalyticsHandler {
     } catch (error) {
       console.error(
         "[Analytics Handler] Error fetching updated analytics:",
-        error
+        error,
       );
       this.send({
         type: "error",
@@ -188,14 +188,14 @@ export class AnalyticsHandler {
     this.ws.on("close", () => {
       this.isActive = false;
       console.log(
-        `[Analytics Handler] Connection closed for user ${this.userId}, survey ${this.surveyId}`
+        `[Analytics Handler] Connection closed for user ${this.userId}, survey ${this.surveyId}`,
       );
     });
 
     this.ws.on("error", (error) => {
       console.error(
         `[Analytics Handler] WebSocket error for user ${this.userId}:`,
-        error
+        error,
       );
       this.isActive = false;
     });

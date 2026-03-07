@@ -1,7 +1,7 @@
 import { eq, desc, count, and } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 
@@ -38,7 +38,7 @@ export async function GET(
     }
 
     // Get total count
-    const [totalResult] = await db
+    const [totalResult] = await getDb()
       .select({ count: count() })
       .from(surveyConversations)
       .where(and(...whereConditions));
@@ -46,7 +46,7 @@ export async function GET(
     const total = totalResult?.count || 0;
 
     // Get paginated responses
-    const responses = await db
+    const responses = await getDb()
       .select()
       .from(surveyConversations)
       .where(and(...whereConditions))

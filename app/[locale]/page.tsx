@@ -5,7 +5,7 @@ import InsightsSection from "@/components/insights-section";
 import CtaSection from "@/components/cta-section";
 import FooterSection from "@/components/footer-section";
 
-export default function Home() {
+export default async function Home() {
   return (
     <>
       <Navbar />
