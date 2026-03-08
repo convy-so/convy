@@ -38,8 +38,6 @@ import { ClientT } from "@/components/i18n/client-t";
 import { Suspense } from "react";
 
 import { getClientTranslation } from "@/app/actions/translate";
-import { authClient } from "@/lib/auth-client";
-import type { SupportedLanguage } from "@/lib/i18n/ai-translator";
 
 function ProjectDetailContent() {
   const params = useParams();
@@ -69,9 +67,6 @@ function ProjectDetailContent() {
     description: "Describe the objective of this project...",
   });
 
-  const { data: session } = authClient.useSession();
-  const language = (session?.user as any)?.preferredLanguage as SupportedLanguage || "en";
-
   useEffect(() => {
     Promise.all([
       getClientTranslation("Search surveys...", "Project details search"),
@@ -94,7 +89,7 @@ function ProjectDetailContent() {
     return (
       <div className="flex flex-col items-center justify-center h-[50vh] gap-4">
         <h2 className="text-xl font-semibold text-gray-900"><ClientT>Project not found</ClientT></h2>
-        <p className="text-gray-500"><ClientT>The project you are looking for does not exist or you don't have permission to view it.</ClientT></p>
+        <p className="text-gray-500"><ClientT>The project you are looking for does not exist or you don&apos;t have permission to view it.</ClientT></p>
         <Link href="/dashboard/projects" className="text-blue-600 hover:underline">
           <ClientT>Back to Projects</ClientT>
         </Link>
@@ -531,7 +526,7 @@ function ProjectDetailContent() {
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2"><ClientT>Delete Project</ClientT></h3>
               <p className="text-gray-500">
-                <ClientT>Are you sure you want to delete</ClientT> <span className="font-semibold text-gray-900">"{project.name}"</span>?
+                <ClientT>Are you sure you want to delete</ClientT> <span className="font-semibold text-gray-900">&quot;{project.name}&quot;</span>?
                 <ClientT>This action cannot be undone and will remove all survey associations.</ClientT>
               </p>
             </div>

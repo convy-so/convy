@@ -1,4 +1,3 @@
-import { tool } from "ai";
 import { AgentContext, ChecklistItem, SpecialistChecklist } from "./types";
 import { searchKnowledgeBase } from "@/lib/rag/search";
 import { rerankResults } from "@/lib/rag/reranker";
@@ -54,7 +53,7 @@ export abstract class BaseSpecialistAgent {
 
   abstract buildSystemPrompt(): string;
 
-  abstract getTools(): Record<string, any>;
+  abstract getTools(): Record<string, unknown>;
 
   protected abstract buildChecklist(config: SurveyConfig): SpecialistChecklist;
 
@@ -160,7 +159,7 @@ Always prioritize Objective > Identity > Constraints. If a domain skill suggests
         query,
         limit,
         undefined,
-        (this.context.language as any) || "en",
+        this.context.language || "en",
       );
       if (kbResults.length === 0) return;
       const reranked = await rerankResults(

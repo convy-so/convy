@@ -11,6 +11,21 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
 import { organizations, members, invitations } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
+import { getRedisClient } from "@/lib/redis";
+
+const CACHE_TTL = 3600; // 1 hour
+
+const getWorkspacesCacheKey = (userId: string) => `user:workspaces:${userId}`;
+const getActiveWorkspaceCacheKey = (userId: string) =>
+  `active_workspace:${userId}`;
+
+async function invalidateWorkspaceCache(userId: string) {
+  const redis = await getRedisClient();
+  await Promise.all([
+    redis.del(getWorkspacesCacheKey(userId)),
+    redis.del(getActiveWorkspaceCacheKey(userId)),
+  ]);
+}
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -41,6 +56,10 @@ export async function createWorkspace(data: {
         error: "Failed to create workspace",
       };
     }
+
+    // Invalidate cache
+    const session = await getVerifiedSession();
+    await invalidateWorkspaceCache(session.user.id);
 
     return {
       success: true,
@@ -75,7 +94,15 @@ export async function getUserWorkspaces(): Promise<
   >
 > {
   try {
-    await getVerifiedSession();
+    const session = await getVerifiedSession();
+    const redis = await getRedisClient();
+    const cacheKey = getWorkspacesCacheKey(session.user.id);
+
+    // Check cache
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      return { success: true, data: JSON.parse(cached) };
+    }
 
     // Use Better Auth API to list organizations
     const result = await auth.api.listOrganizations({
@@ -89,15 +116,28 @@ export async function getUserWorkspaces(): Promise<
       };
     }
 
-    return {
-      success: true,
-      data: result.map((org: any) => ({
+    const workspaces = result.map(
+      (org: {
+        id: string;
+        name: string;
+        slug: string;
+        role?: string;
+        logo?: string | null;
+      }) => ({
         id: org.id,
         name: org.name,
         slug: org.slug,
         role: org.role || "member",
         logo: org.logo || null,
-      })),
+      }),
+    );
+
+    // Cache results
+    await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(workspaces));
+
+    return {
+      success: true,
+      data: workspaces,
     };
   } catch (error) {
     console.error("Error getting workspaces:", error);
@@ -124,11 +164,19 @@ export async function getActiveWorkspace(): Promise<
 > {
   try {
     const session = await getVerifiedSession();
+    const redis = await getRedisClient();
+    const cacheKey = getActiveWorkspaceCacheKey(session.user.id);
+
+    // Check cache
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      return { success: true, data: JSON.parse(cached) };
+    }
 
     // Get active organization ID from session
-    // Note: session.session has activeOrganizationId added by the organization plugin
-    const activeOrganizationId = (session.session as any)
-      .activeOrganizationId as string | null | undefined;
+    const activeOrganizationId = (
+      session.session as { activeOrganizationId?: string | null }
+    ).activeOrganizationId;
 
     if (!activeOrganizationId) {
       return {
@@ -155,16 +203,21 @@ export async function getActiveWorkspace(): Promise<
       ),
     });
 
+    const activeWorkspace = {
+      id: org.id,
+      name: org.name,
+      slug: org.slug,
+      role: member?.role || "member",
+      logo: org.logo || null,
+      plan: "Free",
+    };
+
+    // Cache results
+    await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(activeWorkspace));
+
     return {
       success: true,
-      data: {
-        id: org.id,
-        name: org.name,
-        slug: org.slug,
-        role: member?.role || "member",
-        logo: org.logo || null,
-        plan: "Free",
-      },
+      data: activeWorkspace,
     };
   } catch (error) {
     console.error("Error getting active workspace:", error);
@@ -194,6 +247,10 @@ export async function setActiveWorkspace(
       },
       headers: await getSessionHeaders(),
     });
+
+    // Invalidate cache
+    const session = await getVerifiedSession();
+    await invalidateWorkspaceCache(session.user.id);
 
     return {
       success: true,
@@ -302,6 +359,8 @@ export async function removeWorkspaceMember(data: {
       headers: await getSessionHeaders(),
     });
 
+    await invalidateWorkspaceCache(session.user.id);
+
     return {
       success: true,
       data: undefined,
@@ -357,17 +416,29 @@ export async function getWorkspaceMembers(data?: {
 
     return {
       success: true,
-      data: result.members.map((member: any) => ({
-        id: member.id,
-        userId: member.userId,
-        role: member.role,
-        user: {
-          id: member.user.id,
-          name: member.user.name,
-          email: member.user.email,
-          image: member.user.image || null,
-        },
-      })),
+      data: result.members.map(
+        (member: {
+          id: string;
+          userId: string;
+          role: string;
+          user: {
+            id: string;
+            name: string;
+            email: string;
+            image?: string | null;
+          };
+        }) => ({
+          id: member.id,
+          userId: member.userId,
+          role: member.role,
+          user: {
+            id: member.user.id,
+            name: member.user.name,
+            email: member.user.email,
+            image: member.user.image || null,
+          },
+        }),
+      ),
     };
   } catch (error) {
     console.error("Error getting workspace members:", error);
@@ -405,6 +476,10 @@ export async function updateWorkspace(data: {
       },
       headers: await getSessionHeaders(),
     });
+
+    // Invalidate cache for current user (this might affect other users too, but we mainly care about current user experience)
+    const session = await getVerifiedSession();
+    await invalidateWorkspaceCache(session.user.id);
 
     return {
       success: true,
@@ -566,6 +641,9 @@ export async function acceptInvitationAction(
       },
       headers: await getSessionHeaders(),
     });
+
+    // Invalidate cache
+    await invalidateWorkspaceCache(session.user.id);
 
     return {
       success: true,

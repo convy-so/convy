@@ -14,7 +14,7 @@
     if (script && script.src) {
       baseUrl = new URL(script.src).origin;
     }
-  } catch (e) {
+  } catch {
     console.warn("Convy: Failed to determine base URL, using default.");
   }
   const CONVY_BASE_URL = baseUrl;
@@ -87,7 +87,6 @@
     }
 
     render() {
-      const type = this.getAttribute("type") || "inline";
       const color = sanitize(this.getAttribute("color") || "#4F46E5");
       const position = this.getAttribute("position") || "right";
 
@@ -171,7 +170,6 @@
     renderContent() {
       const surveyId = sanitize(this.getAttribute("survey-id"));
       const type = this.getAttribute("type") || "inline";
-      const subType = this.getAttribute("position") || "right";
       const text = sanitize(this.getAttribute("text") || "Take Survey");
       const url = `${CONVY_BASE_URL}/s/${surveyId}`;
 

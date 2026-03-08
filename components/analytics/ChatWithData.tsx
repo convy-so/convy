@@ -30,7 +30,7 @@ interface ChatSession {
     id: string;
     title: string;
     updatedAt: string;
-    messages: any[];
+    messages: ChatMessage[];
 }
 
 interface ChatWithDataProps {
@@ -38,8 +38,8 @@ interface ChatWithDataProps {
 }
 
 type MyUITools = {
-    renderChart: { input: any; output: RenderChartResult };
-    renderTable: { input: any; output: RenderTableResult };
+    renderChart: { input: Record<string, unknown>; output: RenderChartResult };
+    renderTable: { input: Record<string, unknown>; output: RenderTableResult };
 };
 
 type ChatMessage = UIMessage<unknown, Record<string, unknown>, MyUITools>;
@@ -257,7 +257,7 @@ export function ChatWithData({ surveyId }: ChatWithDataProps) {
                                     {part.state === "output-available" ? (
                                         <GenerativeAnalyticsRenderer
                                             toolName={getToolName(part)}
-                                            result={(part as any).output}
+                                            result={(part as { output: RenderChartResult | RenderTableResult }).output}
                                         />
                                     ) : (
                                         <div className="flex items-center gap-3 text-sm text-gray-400 font-bold italic animate-pulse">

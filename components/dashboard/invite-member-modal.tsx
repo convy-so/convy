@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X, Loader2, UserPlus, Mail, ChevronDown, Check, Eye, Edit3, Shield, User } from "lucide-react";
+import { X, Loader2, UserPlus, Mail, ChevronDown, Check, Shield, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { inviteToWorkspace } from "@/app/actions/workspace";
 import { useRouter } from "@/i18n/routing";
@@ -57,7 +57,7 @@ export function InviteMemberModal({ isOpen, onClose, onSuccess, organizationId }
             } else {
                 setError(result.error);
             }
-        } catch (err) {
+        } catch {
             setError("An unexpected error occurred");
         } finally {
             setIsInviting(false);
@@ -116,7 +116,7 @@ export function InviteMemberModal({ isOpen, onClose, onSuccess, organizationId }
                             Role
                         </label>
                         <div className="relative">
-                            <button 
+                            <button
                                 onClick={() => setIsRoleOpen(!isRoleOpen)}
                                 className="w-full flex items-center justify-between px-4 py-3 border border-gray-200 rounded-xl hover:border-gray-300 transition-all text-left group bg-white focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none"
                             >
@@ -131,13 +131,13 @@ export function InviteMemberModal({ isOpen, onClose, onSuccess, organizationId }
                                 </div>
                                 <ChevronDown className={cn("w-4 h-4 text-gray-400 transition-transform", isRoleOpen && "rotate-180")} />
                             </button>
-                            
+
                             {isRoleOpen && (
                                 <>
                                     <div className="fixed inset-0 z-10" onClick={() => setIsRoleOpen(false)} />
                                     <div className="absolute top-full mt-2 w-full bg-white border border-gray-100 rounded-xl shadow-xl z-20 overflow-hidden animate-in fade-in zoom-in-95">
                                         {roles.map(r => (
-                                            <button 
+                                            <button
                                                 key={r.id}
                                                 onClick={() => { setRole(r.id); setIsRoleOpen(false); }}
                                                 className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"

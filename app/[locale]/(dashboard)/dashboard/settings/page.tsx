@@ -1,20 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import {
     User,
     Bell,
     Shield,
 
     Key,
-    Mail,
-    Smartphone,
     Check,
     Loader2,
     Camera,
     AlertCircle,
     Globe,
-    LogOut
 } from "lucide-react";
 import { usePathname, useRouter } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
@@ -123,7 +121,7 @@ export default function SettingsPage() {
                     }
                 }
             });
-        } catch (error) {
+        } catch {
             toast.error(await getClientTranslation("An error occurred while saving profile"));
         } finally {
             setIsSaving(false);
@@ -154,7 +152,7 @@ export default function SettingsPage() {
                     }
                 }
             });
-        } catch (error) {
+        } catch {
             toast.error(await getClientTranslation("An error occurred while updating password"));
         } finally {
             setIsSaving(false);
@@ -177,7 +175,7 @@ export default function SettingsPage() {
             } else {
                 toast.error(await getClientTranslation(result.error || "Failed to update workspace"));
             }
-        } catch (error) {
+        } catch {
             toast.error(await getClientTranslation("An error occurred while updating workspace"));
         } finally {
             setIsSaving(false);
@@ -271,11 +269,14 @@ export default function SettingsPage() {
                                 <div className="flex items-center gap-5">
                                     <div className="relative">
                                         {profileImage || profile.image ? (
-                                            <img
-                                                src={profileImage || profile.image}
-                                                alt="Profile"
-                                                className="w-20 h-20 rounded-2xl object-cover"
-                                            />
+                                            <div className="relative w-20 h-20 rounded-2xl overflow-hidden">
+                                                <Image
+                                                    src={profileImage || profile.image}
+                                                    alt="Profile"
+                                                    fill
+                                                    className="object-cover"
+                                                />
+                                            </div>
                                         ) : (
                                             <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-800 to-purple-600 flex items-center justify-center text-white text-2xl font-bold">
                                                 {profile.name.charAt(0)}
@@ -382,11 +383,14 @@ export default function SettingsPage() {
                                         <div className="flex items-center gap-5">
                                             <div className="relative">
                                                 {wsLogo ? (
-                                                    <img
-                                                        src={wsLogo}
-                                                        alt="Workspace Logo"
-                                                        className="w-16 h-16 rounded-xl object-cover border border-gray-100"
-                                                    />
+                                                    <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-gray-100">
+                                                        <Image
+                                                            src={wsLogo}
+                                                            alt="Workspace Logo"
+                                                            fill
+                                                            className="object-cover"
+                                                        />
+                                                    </div>
                                                 ) : (
                                                     <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400">
                                                         <Camera className="w-6 h-6" />

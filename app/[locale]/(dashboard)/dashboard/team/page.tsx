@@ -20,20 +20,7 @@ import { fetchActiveWorkspace, fetchWorkspaceMembers, fetchWorkspaceInvitations 
 import { deleteWorkspace, leaveWorkspace } from "@/app/actions/workspace";
 import { queryKeys } from "@/lib/query-keys";
 import { useTranslations } from "next-intl";
-import { SupportedLanguage } from "@/lib/i18n/ai-translator";
 import { ClientT } from "@/components/i18n/client-t";
-
-type TeamMember = {
-  id: string;
-  userId: string;
-  role: "owner" | "member";
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    image?: string | null;
-  };
-};
 
 export default function TeamPage() {
   const { user } = useAuth();
@@ -86,7 +73,7 @@ export default function TeamPage() {
     }
   };
 
-  const handleMemberRemoved = async (id: string) => {
+  const handleMemberRemoved = async () => {
     if (activeWorkspace?.id) {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.members(activeWorkspace.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.invitations(activeWorkspace.id) });
@@ -107,7 +94,7 @@ export default function TeamPage() {
         setIsProcessing(false);
         setShowDeleteModal(false);
       }
-    } catch (error) {
+    } catch {
       toast.error(t("Toasts.DeleteFailed"));
       setIsProcessing(false);
       setShowDeleteModal(false);
@@ -127,7 +114,7 @@ export default function TeamPage() {
         setIsProcessing(false);
         setShowLeaveModal(false);
       }
-    } catch (error) {
+    } catch {
       toast.error(t("Toasts.LeaveFailed"));
       setIsProcessing(false);
       setShowLeaveModal(false);

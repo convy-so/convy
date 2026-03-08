@@ -16,7 +16,7 @@ import { getVerifiedSession } from "@/lib/auth/session";
  */
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ surveyId: string; responseId: string }> }
+  { params }: { params: Promise<{ surveyId: string; responseId: string }> },
 ) {
   try {
     const session = await getVerifiedSession();
@@ -47,12 +47,15 @@ export async function GET(
       .where(
         and(
           eq(surveyConversations.id, responseId),
-          eq(surveyConversations.surveyId, surveyId)
-        )
+          eq(surveyConversations.surveyId, surveyId),
+        ),
       );
 
     if (!conversation) {
-      return NextResponse.json({ error: "Response not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Response not found" },
+        { status: 404 },
+      );
     }
 
     // 3. Fetch insights if they exist
@@ -62,24 +65,30 @@ export async function GET(
       .where(eq(conversationInsights.conversationId, responseId));
 
     // 4. Transform data for frontend
-    const insightsData = (insights?.insights as Record<string, any>) || {};
+    const insightsData = (insights?.insights as Record<string, unknown>) || {};
 
     // Calculate duration from raw conversation if not in insights
-    let duration = insightsData.durationMinutes 
-        ? `${Math.round(insightsData.durationMinutes)} min` 
-        : "N/A";
-        
+    let duration = insightsData.durationMinutes
+      ? `${Math.round(insightsData.durationMinutes as number)} min`
+      : "N/A";
+
     // If we have raw conversation timestamps, we can be more precise if insights are missing
-    if (duration === "N/A" && conversation.rawConversation && conversation.rawConversation.length > 0) {
-        // @ts-ignore
-        const firstMsg = conversation.rawConversation[0];
-        // @ts-ignore
-        const lastMsg = conversation.rawConversation[conversation.rawConversation.length - 1];
-        if (firstMsg?.timestamp && lastMsg?.timestamp) {
-            // Timestamps are usually "HH:MM:SS" string in current implementation
-            // Rough calculation or just keep it simple if it's display only
-            duration = "unknown"; 
-        }
+    if (
+      duration === "N/A" &&
+      Array.isArray(conversation.rawConversation) &&
+      conversation.rawConversation.length > 0
+    ) {
+      const firstMsg = conversation.rawConversation[0] as {
+        timestamp?: string;
+      };
+      const lastMsg = conversation.rawConversation[
+        conversation.rawConversation.length - 1
+      ] as { timestamp?: string };
+      if (firstMsg?.timestamp && lastMsg?.timestamp) {
+        // Timestamps are usually "HH:MM:SS" string in current implementation
+        // Rough calculation or just keep it simple if it's display only
+        duration = "unknown";
+      }
     }
 
     const response = {
@@ -88,32 +97,41 @@ export async function GET(
       surveyTitle: survey.title,
       participantId: conversation.participantId || "Anonymous",
       startedAt: conversation.createdAt.toISOString(),
-      completedAt: conversation.completed ? conversation.updatedAt.toISOString() : null, // Approx
-      duration: insightsData.durationMinutes ? `${Math.floor(insightsData.durationMinutes)}m ${Math.round((insightsData.durationMinutes % 1) * 60)}s` : "In Progress",
+      completedAt: conversation.completed
+        ? conversation.updatedAt.toISOString()
+        : null, // Approx
+      duration: insightsData.durationMinutes
+        ? `${Math.floor(insightsData.durationMinutes)}m ${Math.round((insightsData.durationMinutes % 1) * 60)}s`
+        : "In Progress",
       status: conversation.completed ? "completed" : "in_progress",
-      
+
       // Insights Data (fallbacks if missing)
       sentiment: insightsData.sentiment?.overall || null,
       sentimentScore: insightsData.sentiment?.score || 0,
       keyInsights: insights?.keyFindings?.split("\n\n") || [],
-      summary: conversation.summary || insightsData.summary || "No summary available yet.",
-      
+      summary:
+        conversation.summary ||
+        insightsData.summary ||
+        "No summary available yet.",
+
       // Conversation Transcript
       conversation: conversation.rawConversation || [],
     };
 
     return NextResponse.json(response);
-
   } catch (error) {
     if (error instanceof Error) {
-        if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
-            return NextResponse.json({ error: error.message }, { status: 401 });
-        }
+      if (
+        error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED"
+      ) {
+        return NextResponse.json({ error: error.message }, { status: 401 });
+      }
     }
     console.error("[Response Details API] Error:", error);
     return NextResponse.json(
       { error: "Failed to fetch response details" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

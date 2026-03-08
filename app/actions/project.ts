@@ -2,7 +2,7 @@
 
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { eq, and, isNull, count, sum, getTableColumns, sql } from "drizzle-orm";
+import { eq, and, isNull, count, sum, getTableColumns } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { projects, surveys, surveyConversations } from "@/db/schema";
@@ -21,7 +21,7 @@ const createProjectSchema = z.object({
 });
 
 export async function createProjectAction(
-  input: z.infer<typeof createProjectSchema>
+  input: z.infer<typeof createProjectSchema>,
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const session = await getVerifiedSession();
@@ -79,45 +79,45 @@ export async function getProjectsAction(): Promise<
 
       const projectList = await getDb()
         .select({
-            ...getTableColumns(projects),
-            surveyCount: count(surveys.id),
-            totalResponses: sum(surveys.currentParticipants),
+          ...getTableColumns(projects),
+          surveyCount: count(surveys.id),
+          totalResponses: sum(surveys.currentParticipants),
         })
         .from(projects)
         .leftJoin(surveys, eq(projects.id, surveys.projectId))
         .where(eq(projects.organizationId, activeOrgId))
         .groupBy(projects.id)
         .orderBy(projects.createdAt);
-        
-      const results = projectList.map(p => ({
-            ...p,
-            surveyCount: Number(p.surveyCount),
-            totalResponses: Number(p.totalResponses || 0)
+
+      const results = projectList.map((p) => ({
+        ...p,
+        surveyCount: Number(p.surveyCount),
+        totalResponses: Number(p.totalResponses || 0),
       }));
 
       return { success: true, data: results };
     } else {
       const projectList = await getDb()
         .select({
-            ...getTableColumns(projects),
-            surveyCount: count(surveys.id),
-            totalResponses: sum(surveys.currentParticipants),
+          ...getTableColumns(projects),
+          surveyCount: count(surveys.id),
+          totalResponses: sum(surveys.currentParticipants),
         })
         .from(projects)
         .leftJoin(surveys, eq(projects.id, surveys.projectId))
         .where(
           and(
             eq(projects.userId, session.user.id),
-            isNull(projects.organizationId)
-          )
+            isNull(projects.organizationId),
+          ),
         )
         .groupBy(projects.id)
         .orderBy(projects.createdAt);
 
-       const results = projectList.map(p => ({
-            ...p,
-            surveyCount: Number(p.surveyCount),
-            totalResponses: Number(p.totalResponses || 0)
+      const results = projectList.map((p) => ({
+        ...p,
+        surveyCount: Number(p.surveyCount),
+        totalResponses: Number(p.totalResponses || 0),
       }));
 
       return { success: true, data: results };
@@ -157,7 +157,7 @@ export async function getProjectAction(id: string): Promise<
     if (project.organizationId) {
       const isMember = await isWorkspaceMember(
         session.user.id,
-        project.organizationId
+        project.organizationId,
       );
       if (isMember) {
         isAuthorized = true;
@@ -179,40 +179,40 @@ export async function getProjectAction(id: string): Promise<
       })
       .from(surveys)
       .leftJoin(
-        surveyConversations, 
+        surveyConversations,
         and(
           eq(surveyConversations.surveyId, surveys.id),
-          eq(surveyConversations.completed, true)
-        )
+          eq(surveyConversations.completed, true),
+        ),
       )
       .where(eq(surveys.projectId, id))
       .groupBy(surveys.id);
-    
-    // We add a summary field to match the frontend expectations if needed, 
-    // or just return the surveys as is. The frontend type expectations 
+
+    // We add a summary field to match the frontend expectations if needed,
+    // or just return the surveys as is. The frontend type expectations
     // might need to be adjusted or mapped.
     // For now, returning surveys directly.
-    
+
     return {
       success: true,
       data: {
         ...project,
-        surveys: projectSurveys.map(s => ({
-            ...s,
-            summary: null, // Placeholder if needed, or derived from analytics
-            completedCount: Number(s.completedCount)
+        surveys: projectSurveys.map((s) => ({
+          ...s,
+          summary: null, // Placeholder if needed, or derived from analytics
+          completedCount: Number(s.completedCount),
         })),
       },
     };
   } catch (error) {
-     console.error("Error fetching project:", error);
+    console.error("Error fetching project:", error);
     return { success: false, error: "Failed to fetch project" };
   }
 }
 
 export async function addSurveyToProjectAction(
   projectId: string,
-  surveyId: string
+  surveyId: string,
 ): Promise<ActionResult<void>> {
   try {
     const session = await getVerifiedSession();
@@ -227,12 +227,12 @@ export async function addSurveyToProjectAction(
       return { success: false, error: "Project not found" };
     }
 
-     let isAuthorized = false;
+    let isAuthorized = false;
 
     if (project.organizationId) {
       const isMember = await isWorkspaceMember(
         session.user.id,
-        project.organizationId
+        project.organizationId,
       );
       if (isMember) {
         isAuthorized = true;
@@ -248,24 +248,27 @@ export async function addSurveyToProjectAction(
     }
 
     // 2. Verify survey access
-     const [survey] = await getDb()
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
-    
-     if (!survey) {
+
+    if (!survey) {
       return { success: false, error: "Survey not found" };
     }
-    
+
     // Check if survey belongs to same org/user context
     if (project.organizationId) {
-        if (survey.organizationId !== project.organizationId) {
-             return { success: false, error: "Survey belongs to a different workspace" };
-        }
+      if (survey.organizationId !== project.organizationId) {
+        return {
+          success: false,
+          error: "Survey belongs to a different workspace",
+        };
+      }
     } else {
-        if (survey.userId !== session.user.id || survey.organizationId) {
-             return { success: false, error: "Unauthorized access to survey" };
-        }
+      if (survey.userId !== session.user.id || survey.organizationId) {
+        return { success: false, error: "Unauthorized access to survey" };
+      }
     }
 
     // 3. Update survey
@@ -283,9 +286,9 @@ export async function addSurveyToProjectAction(
 
 export async function removeSurveyFromProjectAction(
   projectId: string,
-  surveyId: string
+  surveyId: string,
 ): Promise<ActionResult<void>> {
-   try {
+  try {
     const session = await getVerifiedSession();
 
     // 1. Verify project access (mostly to ensure user has right to modify this project content)
@@ -295,18 +298,18 @@ export async function removeSurveyFromProjectAction(
       .where(eq(projects.id, projectId));
 
     if (!project) {
-        // Even if project doesn't exist, if we are just removing the link from survey, 
-        // we mainly need to check survey access. But for consistency, let's enforce project existence verification
-        // or just verify survey access is enough? 
-        // Let's stick to verifying project access to be safe.
+      // Even if project doesn't exist, if we are just removing the link from survey,
+      // we mainly need to check survey access. But for consistency, let's enforce project existence verification
+      // or just verify survey access is enough?
+      // Let's stick to verifying project access to be safe.
       return { success: false, error: "Project not found" };
     }
-    
+
     let isAuthorized = false;
     if (project.organizationId) {
       const isMember = await isWorkspaceMember(
         session.user.id,
-        project.organizationId
+        project.organizationId,
       );
       if (isMember) {
         isAuthorized = true;
@@ -316,20 +319,20 @@ export async function removeSurveyFromProjectAction(
         isAuthorized = true;
       }
     }
-    
+
     if (!isAuthorized) {
       return { success: false, error: "Unauthorized access to project" };
     }
 
-     // 2. Verify survey is indeed in this project
-     const [survey] = await getDb()
+    // 2. Verify survey is indeed in this project
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(and(eq(surveys.id, surveyId), eq(surveys.projectId, projectId)));
 
     if (!survey) {
-        // Survey not in this project or doesn't exist
-         return { success: false, error: "Survey not found in this project" };
+      // Survey not in this project or doesn't exist
+      return { success: false, error: "Survey not found in this project" };
     }
 
     // 3. Update survey
@@ -337,13 +340,12 @@ export async function removeSurveyFromProjectAction(
       .update(surveys)
       .set({ projectId: null })
       .where(eq(surveys.id, surveyId));
-    
-     return { success: true, data: undefined };
 
-   } catch (error) {
-     console.error("Error removing survey from project:", error);
-     return { success: false, error: "Failed to remove survey from project" };
-   }
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error("Error removing survey from project:", error);
+    return { success: false, error: "Failed to remove survey from project" };
+  }
 }
 
 const updateProjectSchema = z.object({
@@ -355,7 +357,7 @@ const updateProjectSchema = z.object({
 });
 
 export async function updateProjectAction(
-  input: z.infer<typeof updateProjectSchema>
+  input: z.infer<typeof updateProjectSchema>,
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const session = await getVerifiedSession();
@@ -368,13 +370,16 @@ export async function updateProjectAction(
 
     if (!project) {
       return { success: false, error: "Project not found" };
-    }    
+    }
     let isAuthorized = false;
 
     if (project.organizationId) {
-      const isMember = await isWorkspaceMember(session.user.id, project.organizationId);
+      const isMember = await isWorkspaceMember(
+        session.user.id,
+        project.organizationId,
+      );
       if (isMember) {
-         isAuthorized = true;
+        isAuthorized = true;
       }
     } else {
       if (project.userId === session.user.id) {
@@ -388,19 +393,25 @@ export async function updateProjectAction(
 
     const updateData: Partial<typeof projects.$inferInsert> = {};
     if (body.name !== undefined) updateData.name = body.name;
-    if (body.description !== undefined) updateData.description = body.description;
+    if (body.description !== undefined)
+      updateData.description = body.description;
     if (body.color !== undefined) updateData.color = body.color;
     if (body.icon !== undefined) updateData.icon = body.icon;
 
-    await getDb().update(projects).set(updateData).where(eq(projects.id, body.id));
+    await getDb()
+      .update(projects)
+      .set(updateData)
+      .where(eq(projects.id, body.id));
 
     return { success: true, data: { id: body.id } };
-  } catch (error) {
+  } catch {
     return { success: false, error: "Failed to update project" };
   }
 }
 
-export async function deleteProjectAction(id: string): Promise<ActionResult<void>> {
+export async function deleteProjectAction(
+  id: string,
+): Promise<ActionResult<void>> {
   try {
     const session = await getVerifiedSession();
 
@@ -416,16 +427,22 @@ export async function deleteProjectAction(id: string): Promise<ActionResult<void
     let isAuthorized = false;
 
     if (project.organizationId) {
-        if (project.userId === session.user.id) {
-            const { isWorkspaceMember } = await import("@/lib/workspace-access");
-            const isMember = await isWorkspaceMember(session.user.id, project.organizationId);
-            if (isMember) {
-                isAuthorized = true;
-            }
-        } else {
-             const { isWorkspaceOwner } = await import("@/lib/workspace-access");
-             isAuthorized = await isWorkspaceOwner(session.user.id, project.organizationId);
+      if (project.userId === session.user.id) {
+        const { isWorkspaceMember } = await import("@/lib/workspace-access");
+        const isMember = await isWorkspaceMember(
+          session.user.id,
+          project.organizationId,
+        );
+        if (isMember) {
+          isAuthorized = true;
         }
+      } else {
+        const { isWorkspaceOwner } = await import("@/lib/workspace-access");
+        isAuthorized = await isWorkspaceOwner(
+          session.user.id,
+          project.organizationId,
+        );
+      }
     } else {
       if (project.userId === session.user.id) {
         isAuthorized = true;
@@ -435,15 +452,16 @@ export async function deleteProjectAction(id: string): Promise<ActionResult<void
     if (!isAuthorized) {
       return { success: false, error: "Unauthorized" };
     }
-   
-    await getDb().update(surveys)
+
+    await getDb()
+      .update(surveys)
       .set({ projectId: null })
       .where(eq(surveys.projectId, id));
 
     await getDb().delete(projects).where(eq(projects.id, id));
 
     return { success: true, data: undefined };
-  } catch (error) {
+  } catch {
     return { success: false, error: "Failed to delete project" };
   }
 }

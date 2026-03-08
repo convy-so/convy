@@ -42,7 +42,7 @@ export function PublishSurveyModal({
       await new Promise(resolve => setTimeout(resolve, 1000));
       setTitle("Customer Satisfaction Survey");
       toast.success(t("Toasts.TitleSuggestionGenerated"));
-    } catch (error) {
+    } catch {
       toast.error(t("Toasts.TitleSuggestionFailed"));
     } finally {
       setIsGeneratingTitle(false);
@@ -82,13 +82,13 @@ export function PublishSurveyModal({
 
   const handleCopyLink = async () => {
     if (!publishedUrl) return;
-    
+
     try {
       await navigator.clipboard.writeText(publishedUrl);
       setCopied(true);
       toast.success(t("Toasts.LinkCopied"));
       setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
+    } catch {
       toast.error(t("Toasts.CopyFailed"));
     }
   };
@@ -96,11 +96,11 @@ export function PublishSurveyModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
-      
+
       {/* Modal */}
       <div className="relative bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 p-6 animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
@@ -114,8 +114,8 @@ export function PublishSurveyModal({
                 {publishedUrl ? t("Title.Published") : t("Title.Publish")}
               </h2>
               <p className="text-sm text-gray-500">
-                {publishedUrl 
-                  ? t("Description.Published") 
+                {publishedUrl
+                  ? t("Description.Published")
                   : t("Description.Draft")}
               </p>
             </div>
@@ -131,36 +131,36 @@ export function PublishSurveyModal({
         {publishedUrl ? (
           // Published state - show share options
           <div className="space-y-4">
-              <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
-                <p className="text-sm text-green-800 font-medium mb-2">
-                  {t("SuccessMessage")}
-                </p>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={publishedUrl}
-                    className="flex-1 bg-white border border-green-300 rounded-lg px-3 py-2 text-sm text-gray-900"
-                  />
-                  <button
-                    onClick={handleCopyLink}
-                    className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                  >
-                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <a
-                  href={publishedUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors"
+            <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+              <p className="text-sm text-green-800 font-medium mb-2">
+                {t("SuccessMessage")}
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={publishedUrl}
+                  className="flex-1 bg-white border border-green-300 rounded-lg px-3 py-2 text-sm text-gray-900"
+                />
+                <button
+                  onClick={handleCopyLink}
+                  className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                 >
-                  <ExternalLink className="w-4 h-4" />
-                  {t("Actions.ViewSurvey")}
-                </a>
+                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <a
+                href={publishedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                {t("Actions.ViewSurvey")}
+              </a>
               <button
                 onClick={onClose}
                 className="px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-medium hover:bg-gray-50 transition-colors"
@@ -215,27 +215,27 @@ export function PublishSurveyModal({
             </div>
 
             {/* Voice Mode Toggle */}
-             <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
-                  <div>
-                    <h4 className="font-medium text-gray-900 text-sm mb-0.5">{t("VoiceMode.Title")}</h4>
-                    <p className="text-xs text-gray-500">{t("VoiceMode.Description")}</p>
-                  </div>
-                  <button
-                    onClick={() => setIsVoice(!isVoice)}
-                    className={cn(
-                        "relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2",
-                        isVoice ? "bg-indigo-600" : "bg-gray-200"
-                    )}
-                  >
-                    <span
-                        aria-hidden="true"
-                        className={cn(
-                            "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                            isVoice ? "translate-x-4" : "translate-x-0"
-                        )}
-                    />
-                  </button>
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+              <div>
+                <h4 className="font-medium text-gray-900 text-sm mb-0.5">{t("VoiceMode.Title")}</h4>
+                <p className="text-xs text-gray-500">{t("VoiceMode.Description")}</p>
               </div>
+              <button
+                onClick={() => setIsVoice(!isVoice)}
+                className={cn(
+                  "relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2",
+                  isVoice ? "bg-indigo-600" : "bg-gray-200"
+                )}
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                    isVoice ? "translate-x-4" : "translate-x-0"
+                  )}
+                />
+              </button>
+            </div>
 
             {/* Actions */}
             <div className="flex gap-3 pt-2">

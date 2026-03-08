@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { eq, and, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
@@ -46,7 +46,7 @@ export async function grantEditAccessAction(
     }
 
     return { success: true, data: undefined };
-  } catch (error) {
+  } catch {
     return { success: false, error: "Failed to grant access" };
   }
 }
@@ -80,7 +80,7 @@ export async function revokeEditAccessAction(
       .where(eq(surveys.id, body.surveyId));
 
     return { success: true, data: undefined };
-  } catch (error) {
+  } catch {
     return { success: false, error: "Failed to revoke access" };
   }
 }
@@ -111,7 +111,7 @@ export async function postCreationCommentAction(
     });
 
     return { success: true, data: { id: commentId } };
-  } catch (error) {
+  } catch {
     return { success: false, error: "Failed to post comment" };
   }
 }
@@ -150,7 +150,7 @@ export async function getCreationCommentsAction(surveyId: string): Promise<
       .orderBy(surveyCreationComments.createdAt);
 
     return { success: true, data: commentsList };
-  } catch (error) {
+  } catch {
     return { success: false, error: "Failed to fetch comments" };
   }
 }
@@ -199,7 +199,7 @@ export async function updatePresenceAction(
     }
 
     return { success: true, data: { activeUsers: [] } };
-  } catch (error) {
+  } catch {
     return { success: false, error: "Failed to update presence" };
   }
 }

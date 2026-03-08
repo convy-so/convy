@@ -112,7 +112,12 @@ async function verifySessionToken(token: string): Promise<{
 
     return processSession(session);
 
-    async function processSession(session: any) {
+    async function processSession(session: {
+      id: string;
+      userId: string;
+      expiresAt: Date;
+      token: string;
+    }) {
       // Check if session is expired
       const now = new Date();
       if (session.expiresAt && session.expiresAt < now) {
@@ -145,7 +150,7 @@ async function verifySessionToken(token: string): Promise<{
         sessionId: session.id,
         userEmail: user.email,
         emailVerified: user.emailVerified,
-        role: user.role as any,
+        role: user.role as AuthenticatedConnection["role"],
       };
     }
   } catch (error) {

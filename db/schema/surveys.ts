@@ -92,7 +92,9 @@ const surveys = pgTable(
     title: text("title").notNull(),
     description: text("description"),
     coreObjective: text("core_objective"),
-    expertState: jsonb("expert_state").$type<Record<string, any>>().default({}),
+    expertState: jsonb("expert_state")
+      .$type<Record<string, unknown>>()
+      .default({}),
     tone: toneEnum("tone").default("casual"),
     requiredQuestions: text("required_questions").array().default([]),
     metrics: text("metrics").array().default([]),
@@ -137,7 +139,7 @@ const surveyCreationConversations = pgTable(
           id?: string;
           role: "user" | "assistant";
           content: string;
-          parts?: any[]; // For AI SDK v6 parts (tool calls, etc.)
+          parts?: Array<Record<string, unknown>>; // For AI SDK v6 parts (tool calls, etc.)
           timestamp: string;
         }>
       >()
@@ -152,7 +154,7 @@ const surveyCreationConversations = pgTable(
       .$type<Record<string, boolean>>()
       .default({}),
     extractedData: jsonb("extracted_data")
-      .$type<Record<string, any>>()
+      .$type<Record<string, unknown>>()
       .default({}),
   },
   (table) => [
@@ -176,7 +178,7 @@ const sampleConversations = pgTable(
           id?: string;
           role: "user" | "assistant";
           content: string;
-          parts?: any[];
+          parts?: Array<Record<string, unknown>>;
           timestamp?: string;
         }>
       >()
@@ -229,7 +231,7 @@ const surveyConversations = pgTable(
           id?: string;
           role: "user" | "assistant";
           content: string;
-          parts?: any[];
+          parts?: Array<Record<string, unknown>>;
           timestamp: string;
         }>
       >()
@@ -244,7 +246,7 @@ const surveyConversations = pgTable(
         id?: string;
         role: "user" | "assistant";
         content: string;
-        parts?: any[];
+        parts?: Array<Record<string, unknown>>;
         timestamp: string;
       }>
     >(),
@@ -252,6 +254,7 @@ const surveyConversations = pgTable(
   (table) => [
     index("survey_conversations_survey_id_idx").on(table.surveyId),
     index("survey_conversations_completed_idx").on(table.completed),
+    index("survey_conversations_created_at_idx").on(table.createdAt),
   ],
 );
 

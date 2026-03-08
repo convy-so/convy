@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/components/providers/auth-provider";
 import { getCreationCommentsAction, postCreationCommentAction, updatePresenceAction, grantEditAccessAction, revokeEditAccessAction } from "@/app/actions/collaboration";
 import { getWorkspaceMembers } from "@/app/actions/workspace";
-import { Users, MessageSquare, Send, ShieldPlus, Loader2, X, Plus } from "lucide-react";
+import { Users, MessageSquare, Send, ShieldPlus, Loader2, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { ClientT } from "@/components/i18n/client-t";
 import { getClientTranslation } from "@/app/actions/translate";

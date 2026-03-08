@@ -92,7 +92,7 @@ async function cancelScheduledAnalytics(surveyId: string): Promise<void> {
         `[Analytics Scheduler] Cancelled scheduled analytics job for survey ${surveyId}`,
       );
     }
-  } catch (error) {
+  } catch {
     // Job might not exist, which is fine
     console.log(
       `[Analytics Scheduler] No scheduled job to cancel for survey ${surveyId}`,

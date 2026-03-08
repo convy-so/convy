@@ -20,14 +20,11 @@ export async function translateUIString(
   targetLanguage: SupportedLanguage,
   context: string = "General UI label",
 ): Promise<string> {
-  "use cache";
   if (targetLanguage === "en") return text;
 
-  // 1. Check Cache
   const cached = await getCachedTranslation(text, targetLanguage);
   if (cached) return cached;
 
-  // 2. Generate with AI
   const prompt = `Translate the following UI string from English to ${LANGUAGE_NAMES[targetLanguage]}.
 Context: ${context} or similar application UI.
 
@@ -41,9 +38,9 @@ ${LANGUAGE_NAMES[targetLanguage]} Translation:`;
 
   try {
     const { text: translation } = await generateText({
-      model: google("gemini-2.0-flash-exp"),
+      model: google("gemini-2.5-flash-lite"),
       prompt,
-      temperature: 0, // High precision
+      temperature: 0, 
     });
 
     const result = translation.trim().replace(/^"|"$/g, "");
@@ -75,7 +72,7 @@ Code:`;
 
   try {
     const { text: code } = await generateText({
-      model: google("gemini-1.5-flash"),
+      model: google("gemini-2.5-flash-lite"),
       prompt,
       temperature: 0,
     });

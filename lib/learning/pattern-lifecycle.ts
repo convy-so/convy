@@ -9,7 +9,7 @@
 
 import { getDb } from "@/db";
 import { knowledgeBase } from "@/db/schema/vectors";
-import { conversationSignals, experiments } from "@/db/schema/learning";
+import { experiments } from "@/db/schema/learning";
 import { eq, sql, and, lt, isNull, not } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
@@ -129,18 +129,20 @@ export async function runLifecycleEvaluator(): Promise<LifecycleReport> {
     if (existingExperiment) continue; // already in an experiment
 
     // Create the experiment
-    await getDb().insert(experiments).values({
-      id: nanoid(),
-      name: `${shadow.title} vs. incumbent`,
-      status: "active",
-      effectivePhase: shadow.effectivePhase,
-      effectiveStyle: shadow.effectiveStyle,
-      effectiveObstacle: null,
-      controlPatternId: incumbent.id,
-      variantPatternId: shadow.id,
-      trafficSplit: 0.5,
-      minSampleSize: 30,
-    });
+    await getDb()
+      .insert(experiments)
+      .values({
+        id: nanoid(),
+        name: `${shadow.title} vs. incumbent`,
+        status: "active",
+        effectivePhase: shadow.effectivePhase,
+        effectiveStyle: shadow.effectiveStyle,
+        effectiveObstacle: null,
+        controlPatternId: incumbent.id,
+        variantPatternId: shadow.id,
+        trafficSplit: 0.5,
+        minSampleSize: 30,
+      });
 
     await getDb()
       .update(knowledgeBase)

@@ -76,7 +76,15 @@ export async function vectorSearch(
     .limit(limit);
 
   // Search knowledge base if relevant (no surveyId usually, or globally relevant)
-  let kbResults: any[] = [];
+  let kbResults: Array<{
+    id: string;
+    content: string;
+    metadata: unknown;
+    sourceType: string;
+    sourceId: string;
+    createdAt: Date;
+    similarity: number;
+  }> = [];
   if (!filters.surveyId || filters.sourceType?.includes("knowledge")) {
     kbResults = await getDb()
       .select({
@@ -179,7 +187,15 @@ export async function fullTextSearch(
     .limit(limit);
 
   // Knowledge base FTS
-  let kbResults: any[] = [];
+  let kbResults: Array<{
+    id: string;
+    content: string;
+    metadata: unknown;
+    sourceType: string;
+    sourceId: string;
+    createdAt: Date;
+    rank: number;
+  }> = [];
   if (!filters.surveyId || filters.sourceType?.includes("knowledge")) {
     const kbRank = sql<number>`ts_rank(to_tsvector(${tsConfig}, ${knowledgeBase.content}), ${tsQuery})`;
 

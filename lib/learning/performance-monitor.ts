@@ -8,7 +8,6 @@
  */
 
 import { getDb } from "@/db";
-import { knowledgeBase } from "@/db/schema/vectors";
 import {
   conversationSignals,
   conversationMoves,

@@ -48,10 +48,11 @@ Rank the top ${topK} results.`,
       surveyId: metadata?.surveyId,
       type: "llm_text",
       provider: "google",
-      modelName: (rerankModel as any).modelId,
-      promptTokens: (usage as any).inputTokens,
-      completionTokens: (usage as any).outputTokens,
-      totalTokens: (usage as any).totalTokens,
+      modelName:
+        (rerankModel as { modelId?: string }).modelId ?? "gemini-1.5-flash-8b",
+      promptTokens: (usage as { inputTokens?: number }).inputTokens ?? 0,
+      completionTokens: (usage as { outputTokens?: number }).outputTokens ?? 0,
+      totalTokens: (usage as { totalTokens?: number }).totalTokens ?? 0,
     });
 
     const rankedResults: SearchResult[] = [];

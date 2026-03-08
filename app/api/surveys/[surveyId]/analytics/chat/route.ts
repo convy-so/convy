@@ -59,7 +59,7 @@ export async function POST(
         typeof m === "object" &&
         m !== null &&
         (m as Record<string, unknown>).id !== "welcome",
-    ) as any[];
+    ) as Record<string, unknown>[];
 
     const modelMessages = await convertToModelMessages(uiMessages);
 

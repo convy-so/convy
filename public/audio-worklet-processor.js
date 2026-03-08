@@ -52,7 +52,7 @@ class PCMProcessor extends AudioWorkletProcessor {
    * Process audio input with buffering (Input is already 16kHz from AudioContext)
    * Called for each 128-sample audio block
    */
-  process(inputs, outputs, parameters) {
+  process(inputs) {
     if (this.stopped) return false;
 
     if (!this.hasStarted) {

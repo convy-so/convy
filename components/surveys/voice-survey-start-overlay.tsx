@@ -45,7 +45,7 @@ export function VoiceSurveyStartOverlay({
 
             // Permission granted, proceed to start
             await onStart(selectedLanguage);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Microphone permission denied:", err);
             setPermissionError(
                 t("micPermissionDenied") ||

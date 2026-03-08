@@ -442,6 +442,27 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
         break;
       }
 
+      case "loadSkill": {
+        const { skillId } = event.input;
+        console.log(
+          `[SurveyResponseVoiceHandler] 🛠️ loadSkill called. Skill: ${skillId}`,
+        );
+
+        const { SkillRegistry } = await import("@/lib/agents/skill-registry");
+        const skill = await SkillRegistry.getSkill(skillId);
+
+        this.voiceAgent?.sendFunctionCallResponse(
+          event.function_call_id,
+          event.function_name,
+          JSON.stringify(
+            skill
+              ? { instructions: skill.content }
+              : { error: "Skill not found" },
+          ),
+        );
+        break;
+      }
+
       case "showMedia": {
         const mediaId = event.input?.mediaId;
         const media = this.state.surveyConfig?.media?.find(

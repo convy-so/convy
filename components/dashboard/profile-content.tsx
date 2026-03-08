@@ -1,5 +1,5 @@
 "use client";
-
+import Image from "next/image";
 import { Link } from "@/i18n/routing";
 import { useAuth } from "@/components/providers/auth-provider";
 import { getActiveWorkspace } from "@/app/actions/workspace";
@@ -10,18 +10,18 @@ interface ProfileContentProps {
     cookieHeader: string | null;
 }
 
-export function ProfileContent({ cookieHeader }: ProfileContentProps) {
-    const { user, session } = useAuth();
+export function ProfileContent({ }: ProfileContentProps) {
+    const { user } = useAuth();
     const t = useTranslations("Profile");
-    const [workspace, setWorkspace] = useState<any>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [workspace, setWorkspace] = useState<{ role?: string } | null>(null);
+    // const [isLoading, setIsLoading] = useState(true); // Unused
 
     useEffect(() => {
         async function loadData() {
             const wsRes = await getActiveWorkspace();
 
             if (wsRes.success && wsRes.data) setWorkspace(wsRes.data);
-            setIsLoading(false);
+            // setIsLoading(false);
         }
         loadData();
     }, []);
@@ -38,9 +38,15 @@ export function ProfileContent({ cookieHeader }: ProfileContentProps) {
             {/* Profile Header Card */}
             <div className="bg-white rounded-3xl border border-gray-100 p-8 flex flex-col md:flex-row items-center md:items-start gap-8">
                 <div className="relative group">
-                    <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-gray-50 bg-gray-50 flex items-center justify-center">
+                    <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-gray-50 bg-gray-50 flex items-center justify-center relative">
                         {user.image ? (
-                            <img src={user.image} alt={user.name ?? ""} className="w-full h-full object-cover" />
+                            <Image
+                                src={user.image}
+                                alt={user.name ?? "Profile Image"}
+                                width={96}
+                                height={96}
+                                className="w-full h-full object-cover"
+                            />
                         ) : (
                             <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-white text-3xl font-medium uppercase">
                                 {user.name?.charAt(0)}

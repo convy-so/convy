@@ -79,7 +79,7 @@ export function AnalyticsDashboard({ surveyId }: AnalyticsDashboardProps) {
                 </div>
                 <h3 className="text-2xl font-bold text-gray-900 mb-3 tracking-tight">Synthesizing Results</h3>
                 <p className="text-gray-500 max-w-md mx-auto mb-8 leading-relaxed italic">
-                    "{data.message}"
+                    &quot;{data.message}&quot;
                 </p>
                 <div className="flex gap-8 text-sm bg-gray-50 px-8 py-5 rounded-[2rem]">
                     <div className="flex flex-col items-center">

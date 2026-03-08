@@ -1,18 +1,18 @@
 import {
-  type ToneProfile,
-} from "./surveys";
-import type {
-  SurveyMedia,
-} from "@/db/schema";
-
+  type SurveyLanguage,
+  type SurveyExtractionData,
+  type SurveyMedia,
+  type CollectedInfoFlags,
+} from "./types/survey-flow";
+import { type ToneProfile } from "./surveys";
 
 export interface SurveyConfig {
   id: string;
   information: string;
   requiredQuestions: string[];
   metrics: string[];
-  language?: "en" | "fr" | "de" | "es" | "it";
-  expertState?: Record<string, any>;
+  language?: SurveyLanguage;
+  expertState?: SurveyExtractionData;
   coreObjective?: string;
   tone?: ToneProfile;
   media?: SurveyMedia[];
@@ -20,6 +20,7 @@ export interface SurveyConfig {
   domainId?: number;
   improvementFeedback?: string;
   subjectModelComplete?: boolean;
+  collectedInfo?: CollectedInfoFlags;
 }
 
 export type CollectedInfo = Record<string, boolean>;
