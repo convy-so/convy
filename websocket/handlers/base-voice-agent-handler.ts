@@ -1,10 +1,8 @@
-import { surveys } from "@/db/schema";
 import { WebSocket } from "ws";
 import {
   checkMessageAllowed,
   checkAudioChunkAllowed,
 } from "../middleware/rate-limit";
-import { createVoiceError, sendVoiceError } from "@/lib/voice/errors";
 import {
   DeepgramVoiceAgentConnection,
   type VoiceAgentSettings,
@@ -82,7 +80,9 @@ export abstract class BaseVoiceAgentHandler {
   ): Promise<void>;
 
   /** Handle control messages from the browser (subclass-specific) */
-  protected abstract handleControlMessage(message: any): Promise<void>;
+  protected abstract handleControlMessage(
+    message: Record<string, unknown>,
+  ): Promise<void>;
 
   /** Get initial user input to trigger proactively (AI speaks first) */
   protected abstract getInitialUserInput(): string | null;
@@ -239,7 +239,7 @@ export abstract class BaseVoiceAgentHandler {
       }
     });
 
-    this.voiceAgent.on("error", (error: any) => {
+    this.voiceAgent.on("error", (error: unknown) => {
       console.error(
         `[VoiceAgentHandler] Voice Agent error (${this.identifier}):`,
         error,
@@ -388,7 +388,7 @@ export abstract class BaseVoiceAgentHandler {
 
   // ── Helpers ────────────────────────────────────────────────────────────
 
-  protected send(data: any): void {
+  protected send(data: Record<string, unknown>): void {
     if (this.ws.readyState === WebSocket.OPEN) {
       if (data.type !== "audio" && data.type !== "pong") {
         if (data.type === "error") {
@@ -418,7 +418,7 @@ export abstract class BaseVoiceAgentHandler {
     }
   }
 
-  protected sendError(errorPayload: any, code?: string): void {
+  protected sendError(errorPayload: unknown, code?: string): void {
     this.send({ type: "error", error: errorPayload, code });
   }
 

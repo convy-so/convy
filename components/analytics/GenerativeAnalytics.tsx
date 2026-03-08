@@ -35,7 +35,7 @@ interface ChartProps {
 
 interface CustomTooltipProps {
     active?: boolean;
-    payload?: any[];
+    payload?: Array<{ value: number; name: string; color?: string; payload: ChartDataPoint }>;
     label?: string;
 }
 

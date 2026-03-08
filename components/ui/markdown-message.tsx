@@ -10,7 +10,7 @@ interface MarkdownMessageProps {
 /**
  * Pre-processes text to ensure better formatting for markdown rendering.
  */
-const formatMarkdown = (text: any) => {
+const formatMarkdown = (text: string | null | undefined) => {
   if (!text || typeof text !== 'string') return "";
 
   // 1. Strip scratchpad blocks (AI thinking)
@@ -62,26 +62,26 @@ export function MarkdownMessage({ content, className }: MarkdownMessageProps) {
         remarkPlugins={[remarkGfm]}
         components={{
           // Headings
-          h1: ({ node, ...props }) => (
+          h1: ({ ...props }) => (
             <h1 className="text-lg font-bold mt-4 mb-2" {...props} />
           ),
-          h2: ({ node, ...props }) => (
+          h2: ({ ...props }) => (
             <h2 className="text-base font-bold mt-3 mb-2" {...props} />
           ),
-          h3: ({ node, ...props }) => (
+          h3: ({ ...props }) => (
             <h3 className="text-sm font-bold mt-2 mb-1" {...props} />
           ),
 
           // Paragraphs - Preserve sentence spacing with whitespace-pre-wrap
-          p: ({ node, ...props }) => (
+          p: ({ ...props }) => (
             <p className="mb-2 last:mb-0 leading-relaxed whitespace-pre-wrap" {...props} />
           ),
 
           // Lists
-          ul: ({ node, ...props }) => (
+          ul: ({ ...props }) => (
             <ul className="list-disc list-inside mb-2 space-y-1" {...props} />
           ),
-          ol: ({ node, ...props }) => (
+          ol: ({ ...props }) => (
             <ol
               className={cn(
                 "list-inside mb-2 space-y-1",
@@ -90,18 +90,24 @@ export function MarkdownMessage({ content, className }: MarkdownMessageProps) {
               {...props}
             />
           ),
-          li: ({ node, ...props }) => (
+          li: ({ ...props }) => (
             <li className="leading-relaxed" {...props} />
           ),
 
           // ... rest of components ...
-          strong: ({ node, ...props }) => (
+          strong: ({ ...props }) => (
             <strong className="font-bold" {...props} />
           ),
-          em: ({ node, ...props }) => (
+          em: ({ ...props }) => (
             <em className="italic" {...props} />
           ),
-          code: ({ node, inline, ...props }: any) =>
+          code: ({
+            inline,
+            ...props
+          }: {
+            node?: unknown;
+            inline?: boolean;
+          } & React.ComponentPropsWithoutRef<"code">) =>
             inline ? (
               <code
                 className="px-1.5 py-0.5 bg-gray-100 text-gray-800 rounded text-xs font-mono"
@@ -113,7 +119,7 @@ export function MarkdownMessage({ content, className }: MarkdownMessageProps) {
                 {...props}
               />
             ),
-          a: ({ node, ...props }) => (
+          a: ({ ...props }) => (
             <a
               className="text-blue-600 hover:text-blue-800 underline"
               target="_blank"
@@ -121,7 +127,7 @@ export function MarkdownMessage({ content, className }: MarkdownMessageProps) {
               {...props}
             />
           ),
-          blockquote: ({ node, ...props }) => (
+          blockquote: ({ ...props }) => (
             <blockquote
               className="border-l-4 border-gray-300 pl-4 py-1 my-2 italic text-gray-700"
               {...props}

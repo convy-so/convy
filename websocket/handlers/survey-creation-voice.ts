@@ -1,3 +1,4 @@
+import { ModelMessage } from "ai";
 import { getDb } from "@/db";
 import {
   surveyCreationConversations,
@@ -18,10 +19,47 @@ import {
   buildVoiceAgentSettings,
   type VoiceAgentSettings,
   type SupportedLanguage,
-  type VoiceAgentFunction,
   type FunctionCallRequestEvent,
   type ConversationTextEvent,
 } from "@/lib/voice/deepgram-voice-agent";
+
+interface ExtractedSurveyData {
+  information?: string;
+  requiredQuestions?: string[];
+  metrics?: string[];
+  domainId?: string | number;
+  summaryOfWhatWeKnow?: string;
+  objective?: {
+    goal: string;
+    context?: string;
+    decision?: string;
+    subjectDomain?: string;
+    subjectDescription?: string;
+  };
+  targetAudience?: {
+    description: string;
+    relationship: string;
+    knowledgeLevel: string;
+  };
+  scope?: {
+    breadthVsDepth: string;
+    mainTopics: string[];
+    boundaries: string;
+  };
+  successCriteria?: {
+    insightTypes: string[];
+    detailLevel: string;
+    description: string;
+  };
+  constraints?: {
+    timeLimit: number | null;
+    sensitiveTopics: string[];
+    otherConstraints: string;
+  };
+  hypotheses?: {
+    assumptions: string[];
+  };
+}
 
 interface CreationState {
   surveyId: string | null;
@@ -29,12 +67,13 @@ interface CreationState {
   messages: Array<{
     role: "user" | "assistant";
     content: string;
+    parts?: Record<string, unknown>[]; // For AI SDK v6 parts (tool calls, etc.)
     timestamp: string;
   }>;
   collectedInfo: CollectedInfo;
   isProcessing: boolean;
   language: SupportedLanguage;
-  extractedData: any;
+  extractedData: ExtractedSurveyData | null;
   /** Timestamp of the last extraction call — used to enforce cooldown */
   lastExtractionAt: number;
 }
@@ -68,7 +107,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       },
       isProcessing: false,
       language: "en",
-      extractedData: null as any,
+      extractedData: null,
       lastExtractionAt: 0,
     };
   }
@@ -167,7 +206,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       messages: this.state.messages.map((m) => ({
         role: m.role,
         content: m.content,
-      })) as any[],
+      })) as ModelMessage[],
       surveyConfig: partialConfig,
       language: this.state.language,
     };
@@ -175,8 +214,11 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
     const creationAgent = new CreationSpecialist(agentContext);
     await creationAgent.initialize();
 
-    // Preload pattern learnings for self-improvement
-    await creationAgent.preloadPatternLearnings(["creation", "general"], 2);
+    // Preload capabilities
+    await Promise.all([
+      creationAgent.preloadSkills(),
+      creationAgent.preloadPatternLearnings(["creation", "general"], 2),
+    ]);
 
     // Use the agent's system prompt (includes domain expertise, checklist)
     const systemPrompt = creationAgent.buildSystemPrompt();
@@ -306,6 +348,24 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
             message: "Upload UI presented to user.",
           }),
         );
+      } else if (event.function_name === "loadSkill") {
+        const { skillId } = event.input;
+        console.log(
+          `[SurveyCreationVoiceHandler] 🛠️ loadSkill called. Skill: ${skillId}`,
+        );
+
+        const { SkillRegistry } = await import("@/lib/agents/skill-registry");
+        const skill = await SkillRegistry.getSkill(skillId);
+
+        this.voiceAgent?.sendFunctionCallResponse(
+          event.function_call_id,
+          event.function_name,
+          JSON.stringify(
+            skill
+              ? { instructions: skill.content }
+              : { error: "Skill not found" },
+          ),
+        );
       } else if (event.function_name === "setSurveyDomain") {
         const { domainId, summaryOfWhatWeKnow } = event.input;
         console.log(
@@ -403,13 +463,15 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
     }
   }
 
-  protected async handleControlMessage(message: any): Promise<void> {
+  protected async handleControlMessage(
+    message: Record<string, unknown>,
+  ): Promise<void> {
     switch (message.type) {
       case "set_survey_id":
         console.log(
           `[ChainOfTrust] [Server:Creation] 📥 Received 'set_survey_id': ${message.surveyId}`,
         );
-        this.state.surveyId = message.surveyId;
+        this.state.surveyId = message.surveyId as string;
         try {
           console.log(
             `[ChainOfTrust] [Server:Creation] 📂 Loading existing state from DB...`,
@@ -433,7 +495,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
         if (message.collectedInfo) {
           this.state.collectedInfo = {
             ...this.state.collectedInfo,
-            ...message.collectedInfo,
+            ...(message.collectedInfo as CollectedInfo),
           };
         }
         break;
@@ -458,7 +520,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       case "text_message":
         if (message.text) {
           if (this.voiceAgent?.connected) {
-            this.voiceAgent.sendInjectUserMessage(message.text);
+            this.voiceAgent.sendInjectUserMessage(message.text as string);
           }
         }
         break;
@@ -466,13 +528,13 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       case "set_language":
         if (
           message.language &&
-          ["en", "fr", "de", "es", "it"].includes(message.language)
+          ["en", "fr", "de", "es", "it"].includes(message.language as string)
         ) {
-          this.state.language = message.language;
+          this.state.language = message.language as SupportedLanguage;
           if (this.state.surveyId) {
             await getDb()
               .update(surveys)
-              .set({ language: message.language })
+              .set({ language: message.language as SupportedLanguage })
               .where(eq(surveys.id, this.state.surveyId));
           }
           // Reconnect Voice Agent with new language if already connected
@@ -511,9 +573,10 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
     }
 
     if (conv) {
-      this.state.messages = (conv.messages as any[]) || [];
+      this.state.messages = (conv.messages as CreationState["messages"]) || [];
       this.state.collectedInfo = conv.collectedInfo as CollectedInfo;
-      this.state.extractedData = conv.extractedData || null;
+      this.state.extractedData =
+        (conv.extractedData as ExtractedSurveyData) || null;
 
       // Update voice session with surveyId
       await getDb()

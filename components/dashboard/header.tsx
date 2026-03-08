@@ -1,8 +1,7 @@
-
 "use client"
-import { User } from "better-auth/types";
+import Image from "next/image";
 import { Search, LogOut, Settings, User as UserIcon, Bell } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
 import { useRouter, Link } from "@/i18n/routing";
@@ -13,32 +12,21 @@ import toast from "react-hot-toast";
 
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/providers/auth-provider";
-import { ClientT } from "@/components/i18n/client-t";
 
-interface DashboardHeaderProps {
-  user?: User | null;
-}
-
-export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
+export function DashboardHeader() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
   const t = useTranslations("Header");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [searchPlaceholder, setSearchPlaceholder] = useState("Search");
-  const [unreadCountText, setUnreadCountText] = useState("");
 
   // Fetch notifications using React Query
-  const { data: notifications = [], isLoading, refetch: refetchNotifications } = useQuery({
+  const { data: notifications = [], isLoading } = useQuery({
     queryKey: queryKeys.notifications.all(),
     queryFn: fetchNotificationsAPI,
   });
 
-  // Keep fetchNotifications function for backwards compatibility (for manual refetch if needed)
-  const fetchNotifications = () => {
-    refetchNotifications();
-  };
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -47,7 +35,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
   const handleMarkAsRead = async (id: string) => {
     const result = await markNotificationAsRead(id);
     if (result.success) {
-      queryClient.setQueryData(queryKeys.notifications.all(), (prev: any[]) =>
+      queryClient.setQueryData(queryKeys.notifications.all(), (prev: Array<{ id: string; read: boolean } & Record<string, unknown>>) =>
         prev ? prev.map(n => n.id === id ? { ...n, read: true } : n) : []
       );
     }
@@ -160,9 +148,11 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
               </div>
               <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shadow-sm ring-2 ring-white">
                 {user.image ? (
-                  <img
+                  <Image
                     src={user.image}
-                    alt={user.name ?? ""}
+                    alt={user.name ?? "User Avatar"}
+                    width={32}
+                    height={32}
                     className="w-full h-full object-cover"
                   />
                 ) : (

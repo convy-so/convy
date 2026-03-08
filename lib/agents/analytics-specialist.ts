@@ -136,7 +136,7 @@ ${this.getKnowledgeSection()}
   // Agent Tools
   // --------------------------------------------------------------------------
 
-  getTools(): Record<string, any> {
+  getTools(): Record<string, unknown> {
     const config = this.context.surveyConfig;
     const surveyId = config?.id;
 
@@ -165,7 +165,7 @@ ${this.getKnowledgeSection()}
           const results = await hybridSearch(
             query,
             { surveyId, limit: 10 },
-            (this.context.language as any) || "en",
+            this.context.language || "en",
           );
           return {
             results: results.map((r) => ({
@@ -182,7 +182,7 @@ ${this.getKnowledgeSection()}
           type: z.enum(["bar", "line", "pie"]),
           title: z.string(),
           description: z.string().optional(),
-          data: z.array(z.any()),
+          data: z.array(z.record(z.unknown())),
           config: z
             .object({
               xAxisLabel: z.string().optional(),
@@ -214,7 +214,7 @@ ${this.getKnowledgeSection()}
     messages: ModelMessage[],
     onFinish?: (params: {
       text: string;
-      response: any;
+      response: unknown;
       usage: import("ai").LanguageModelUsage;
     }) => Promise<void>,
   ) {
@@ -233,10 +233,14 @@ ${this.getKnowledgeSection()}
           organizationId: this.context.organizationId,
           surveyId: config.id,
           type: "llm_text",
-          provider: (defaultModel as any).modelId?.includes("gpt")
+          provider: (defaultModel as { modelId?: string }).modelId?.includes(
+            "gpt",
+          )
             ? "openai"
             : "google",
-          modelName: (defaultModel as any).modelId ?? "gemini-2.5-flash",
+          modelName:
+            (defaultModel as { modelId?: string }).modelId ??
+            "gemini-2.5-flash",
           promptTokens: result.usage.inputTokens,
           completionTokens: result.usage.outputTokens,
           totalTokens: result.usage.totalTokens,

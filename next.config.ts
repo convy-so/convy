@@ -9,9 +9,10 @@ const nextConfig: NextConfig = {
   // server bundle that does not need the full node_modules directory.
   output: "standalone",
 
-  // Enable Next.js 16 Cache Components and React Compiler
-  cacheComponents: true,
+  // Enable React Compiler
   reactCompiler: true,
+
+  serverExternalPackages: ["bullmq"],
 
   // Explicitly set Turbopack root to the project directory to avoid root inference issues
   turbopack: {

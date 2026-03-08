@@ -16,7 +16,13 @@ export const queryKeys = {
 
   // Survey-related queries
   surveys: {
-    all: (orgId?: string | null) => ["surveys", orgId] as const,
+    all: (
+      orgId?: string | null,
+      page?: number,
+      pageSize?: number,
+      search?: string,
+      filter?: string,
+    ) => ["surveys", orgId, page, pageSize, search, filter] as const,
     detail: (surveyId: string) => ["survey", surveyId] as const,
     responses: (surveyId: string, page: number, status: string) =>
       ["surveyResponses", surveyId, page, status] as const,

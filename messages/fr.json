@@ -888,5 +888,46 @@
     "SurveyAnalytics": {
         "Title": "Analyse d'enquête",
         "Subtitle": "Insights et métriques alimentés par l'IA"
+    },
+    "SurveyStatus": {
+        "Active": "Actif",
+        "Draft": "Brouillon",
+        "Completed": "Terminé",
+        "Paused": "En pause",
+        "Creating": "En création"
+    },
+    "Workspace": {
+        "Switcher": {
+            "PersonalAccount": "Compte Personnel",
+            "Individual": "Individuel",
+            "Workspace": "espace de travail",
+            "PersonalDesc": "Vos enquêtes individuelles",
+            "CreateWorkspace": "Créer un espace de travail",
+            "Roles": {
+                "Owner": "Propriétaire",
+                "Member": "Membre"
+            }
+        },
+        "Create": {
+            "Title": "Créer un espace de travail",
+            "NameLabel": "Nom de l'espace de travail *",
+            "NamePlaceholder": "ex: Équipe Marketing",
+            "DescLabel": "Description (optionnel)",
+            "DescPlaceholder": "À quoi sert cet espace de travail ?",
+            "TipTitle": "Conseil :",
+            "TipDesc": "Les espaces de travail vous aident à organiser vos enquêtes et à collaborer avec votre équipe. Vous pouvez inviter des membres après la création.",
+            "Cancel": "Annuler",
+            "CreateButton": "Créer l'espace de travail",
+            "Creating": "Création...",
+            "Error": "Une erreur inattendue est survenue"
+        }
+    },
+    "Common": {
+        "Cancel": "Annuler",
+        "Delete": "Supprimer",
+        "Save": "Enregistrer",
+        "Saving": "Enregistrement...",
+        "Error": "Une erreur est survenue",
+        "Success": "Succès"
     }
 }

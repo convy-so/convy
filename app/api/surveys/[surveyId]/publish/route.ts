@@ -43,15 +43,15 @@ export async function POST(
       .from(surveyCreationConversations)
       .where(eq(surveyCreationConversations.surveyId, surveyId));
 
-    // Cast to any since extractedData can contain more fields than what's typed
-    const extractedData: Record<string, any> =
-      (creationConversation?.extractedData as any) || {};
+    // Cast to record since extractedData can contain more fields than what's typed
+    const extractedData: Record<string, unknown> =
+      (creationConversation?.extractedData as Record<string, unknown>) || {};
 
     // Generate shareable link if not already present
     const shareableLink = survey.shareableLink || nanoid(10);
 
     // Core fields that remain as columns
-    const updateData: Record<string, any> = {
+    const updateData: Record<string, unknown> = {
       status: "active",
       shareableLink,
       updatedAt: new Date(),
@@ -69,8 +69,10 @@ export async function POST(
       updateData.description = extractedData.description;
     }
 
-    if (extractedData.objective?.goal) {
-      updateData.coreObjective = extractedData.objective.goal;
+    if ((extractedData.objective as { goal?: string })?.goal) {
+      updateData.coreObjective = (
+        extractedData.objective as { goal: string }
+      ).goal;
     }
 
     if (typeof isVoice === "boolean") {
@@ -94,7 +96,7 @@ export async function POST(
       "media",
     ];
 
-    const expertState = (survey.expertState || {}) as Record<string, any>;
+    const expertState = (survey.expertState || {}) as Record<string, unknown>;
 
     for (const field of expertStateFields) {
       if (extractedData[field] !== undefined) {

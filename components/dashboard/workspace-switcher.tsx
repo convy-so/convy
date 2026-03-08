@@ -1,8 +1,9 @@
 "use client";
-
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import Image from "next/image";
+import { useState, useTransition } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Plus, Building2, User, Check, Loader2 } from "lucide-react";
+import { useRouter } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 import { setActiveWorkspace } from "@/app/actions/workspace";
 import { fetchWorkspaces, fetchActiveWorkspace } from "@/lib/api/workspace";
@@ -19,8 +20,10 @@ type Workspace = {
 };
 
 export function WorkspaceSwitcher() {
+    const router = useRouter();
+    const queryClient = useQueryClient();
     const [isOpen, setIsOpen] = useState(false);
-    const [isSwitching, setIsSwitching] = useState(false);
+    const [isPending, startTransition] = useTransition();
     const [showCreateModal, setShowCreateModal] = useState(false);
     const t = useTranslations("Workspace.Switcher");
 
@@ -39,19 +42,22 @@ export function WorkspaceSwitcher() {
     const isLoading = isLoadingWorkspaces || isLoadingActive;
 
     const handleSwitchWorkspace = async (workspace: Workspace | null) => {
-        setIsSwitching(true);
-        try {
-            const result = await setActiveWorkspace(workspace?.id || null);
-            if (result.success) {
-                // Refresh the page to update content
-                window.location.reload();
+        startTransition(async () => {
+            try {
+                const result = await setActiveWorkspace(workspace?.id || null);
+                if (result.success) {
+                    // Invalidate queries to update UI state
+                    queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all() });
+                    queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.active });
+                    // Use router.refresh() to update server components without full reload
+                    router.refresh();
+                }
+            } catch (error) {
+                console.error("Failed to switch workspace:", error);
+            } finally {
+                setIsOpen(false);
             }
-        } catch (error) {
-            console.error("Failed to switch workspace:", error);
-        } finally {
-            setIsSwitching(false);
-            setIsOpen(false);
-        }
+        });
     };
 
     if (isLoading) {
@@ -70,7 +76,7 @@ export function WorkspaceSwitcher() {
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-all duration-200"
-                disabled={isSwitching}
+                disabled={isPending}
             >
                 {/* Avatar */}
                 <div className={cn(
@@ -81,7 +87,13 @@ export function WorkspaceSwitcher() {
                 )}>
                     {activeWorkspace ? (
                         activeWorkspace.logo ? (
-                            <img src={activeWorkspace.logo} alt="" className="w-full h-full rounded-lg object-cover" />
+                            <Image
+                                src={activeWorkspace.logo}
+                                alt={activeWorkspace.name}
+                                width={36}
+                                height={36}
+                                className="w-full h-full rounded-lg object-cover"
+                            />
                         ) : (
                             <Building2 className="w-4 h-4" />
                         )
@@ -101,7 +113,7 @@ export function WorkspaceSwitcher() {
                 </div>
 
                 {/* Chevron */}
-                {isSwitching ? (
+                {isPending ? (
                     <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
                 ) : (
                     <ChevronDown className={cn(
@@ -158,9 +170,15 @@ export function WorkspaceSwitcher() {
                                         activeWorkspace?.id === workspace.id && "bg-gray-50"
                                     )}
                                 >
-                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 text-white flex items-center justify-center">
+                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 text-white flex items-center justify-center relative overflow-hidden">
                                         {workspace.logo ? (
-                                            <img src={workspace.logo} alt="" className="w-full h-full rounded-lg object-cover" />
+                                            <Image
+                                                src={workspace.logo}
+                                                alt={workspace.name}
+                                                width={32}
+                                                height={32}
+                                                className="w-full h-full rounded-lg object-cover"
+                                            />
                                         ) : (
                                             <Building2 className="w-4 h-4" />
                                         )}

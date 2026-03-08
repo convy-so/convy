@@ -1,5 +1,5 @@
 import { Queue, QueueEvents, QueueOptions } from "bullmq";
-import { getRedisClient, createBlockingClient } from "@/lib/redis";
+import { getRedisClient } from "@/lib/redis";
 
 /**
  * Lazy Queue Management
@@ -8,9 +8,7 @@ import { getRedisClient, createBlockingClient } from "@/lib/redis";
  */
 
 declare global {
-  // eslint-disable-next-line no-var
-  var queues: Record<string, Queue<any>> | undefined;
-  // eslint-disable-next-line no-var
+  var queues: Record<string, Queue<unknown>> | undefined;
   var queueEvents: Record<string, QueueEvents> | undefined;
 }
 
@@ -30,17 +28,7 @@ function getQueue<T>(
   return global.queues![name] as Queue<T>;
 }
 
-function getQueueEvents(name: string): QueueEvents {
-  if (!global.queueEvents) global.queueEvents = {};
-
-  if (!global.queueEvents[name]) {
-    global.queueEvents[name] = new QueueEvents(name, {
-      connection: createBlockingClient(),
-    });
-  }
-
-  return global.queueEvents[name];
-}
+// getQueueEvents removed as it was unused
 
 export interface ConversationInsightsJobData {
   conversationId: string;

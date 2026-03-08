@@ -57,7 +57,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
             } else {
                 setError(result.error);
             }
-        } catch (err) {
+        } catch {
             setError(t("Error"));
         } finally {
             setIsCreating(false);

@@ -14,6 +14,7 @@ import {
   getStartTimeKey,
 } from "@/lib/conversation-memory";
 import { type SurveyConfig } from "@/lib/prompts";
+import { type SurveyMedia } from "@/lib/types/survey-flow";
 import { analysisModel } from "@/lib/ai";
 import { getRedisClient } from "@/lib/redis";
 import { logUsage } from "./billing/logger";
@@ -36,7 +37,7 @@ export class ConversationManager {
    * Now media-aware: injects markers for tool calls (e.g. showMedia).
    */
   static normalizeMessages(
-    messages: Array<any>,
+    messages: Array<Record<string, unknown>>,
     config?: SurveyConfig,
   ): Array<{ role: "user" | "assistant"; content: string }> {
     const normalized: Array<{ role: "user" | "assistant"; content: string }> =
@@ -52,8 +53,8 @@ export class ConversationManager {
       } else if (Array.isArray(m.content)) {
         // AI SDK Part-based content
         content = m.content
-          .filter((p: any) => p.type === "text")
-          .map((p: any) => p.text)
+          .filter((p: Record<string, unknown>) => p.type === "text")
+          .map((p: Record<string, unknown>) => p.text as string)
           .join("\n");
       }
 
@@ -61,10 +62,11 @@ export class ConversationManager {
       const invocations = m.toolCalls || m.toolInvocations;
       if (m.role === "assistant" && invocations && Array.isArray(invocations)) {
         const markers = invocations
-          .map((inv: any) => {
-            const toolName = inv.toolName;
+          .map((inv: Record<string, unknown>) => {
+            const toolName = inv.toolName as string;
             if (toolName === "showMedia") {
-              const mediaId = inv.input?.mediaId || inv.args?.mediaId;
+              const input = (inv.input || inv.args) as Record<string, unknown>;
+              const mediaId = input?.mediaId as string;
               const media = config?.media?.find((item) => item.id === mediaId);
               const label = media
                 ? `${media.type} "${media.description}"`
@@ -100,7 +102,7 @@ export class ConversationManager {
     messages:
       | Array<{ role: "user" | "assistant"; content: string }>
       | ModelMessage[]
-      | any[],
+      | Array<Record<string, unknown>>,
     config: SurveyConfig,
     forceNew: boolean = false,
   ): Promise<RollingContext> {
@@ -161,7 +163,7 @@ export class ConversationManager {
 
     // Initialize if needed
     if (!context) {
-      context = createRollingContext(config.id, config, startTime);
+      context = createRollingContext(config.id, config);
       // Store start time for new conversations - non-blocking safety
       if (redis.status === "ready" || redis.status === "connect") {
         redis
@@ -195,7 +197,6 @@ export class ConversationManager {
       currentState: determineConversationState(
         context.progress,
         normalizedMessages.length,
-        config,
       ),
       stateEnteredAt: normalizedMessages.length,
       transitionReason: null,
@@ -216,7 +217,7 @@ export class ConversationManager {
     messages:
       | Array<{ role: "user" | "assistant"; content: string }>
       | ModelMessage[]
-      | any[],
+      | Array<Record<string, unknown>>,
     config: SurveyConfig,
     existingContext: RollingContext,
     metadata?: {
@@ -277,10 +278,10 @@ export class ConversationManager {
         surveyId: config.id,
         type: "llm_text",
         provider: "google",
-        modelName: (analysisModel as any).modelId,
-        promptTokens: (usage as any).inputTokens,
-        completionTokens: (usage as any).outputTokens,
-        totalTokens: (usage as any).totalTokens,
+        modelName: (analysisModel as { modelId: string }).modelId,
+        promptTokens: (usage as { inputTokens: number }).inputTokens,
+        completionTokens: (usage as { outputTokens: number }).outputTokens,
+        totalTokens: (usage as { totalTokens: number }).totalTokens,
       });
 
       const updatedMemory = applyMemoryUpdate(
@@ -326,8 +327,9 @@ export class ConversationManager {
           setTimeout(() => reject(new Error("Redis write timeout")), 1000),
         ),
       ]);
-    } catch (e: any) {
-      console.warn("[ConversationManager:saveContext] Failed:", e.message);
+    } catch (e) {
+      const error = e as Error;
+      console.warn("[ConversationManager:saveContext] Failed:", error.message);
     }
   }
 
@@ -345,8 +347,7 @@ export class ConversationManager {
       language?: "en" | "fr" | "de" | "es" | "it";
     } = {},
   ): string {
-    const { isSample, sampleFeedback, conversationNumber, language } = options;
-    const finalLanguage = language || config.language || "en";
+    const { isSample, conversationNumber } = options;
 
     if (isSample) {
       return `You are conducting a sample survey conversation for testing purposes. Survey goal: ${config.coreObjective || config.expertState?.objective?.goal || config.information}. Conversation ${conversationNumber ?? 1} of 3.
@@ -371,7 +372,10 @@ Write your actual response AFTER the </scratchpad> tag.
    * Get standard tools available to the AI.
    * Specifically handles 'showMedia'.
    */
-  static getTools(config: SurveyConfig, onMediaDisplay?: (media: any) => void) {
+  static getTools(
+    config: SurveyConfig,
+    onMediaDisplay?: (media: SurveyMedia) => void,
+  ) {
     return {
       showMedia: tool({
         description:

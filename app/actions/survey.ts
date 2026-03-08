@@ -2,7 +2,7 @@
 
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { and, eq, ne, or, sql, isNull } from "drizzle-orm";
+import { and, eq, ne, or, sql, isNull, ilike, count, desc } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { surveys, users, organizations } from "@/db/schema";
@@ -77,7 +77,10 @@ export async function updateSurveyAction(
       updateData.participantLimit = body.participantLimit;
     if (body.language !== undefined) updateData.language = body.language;
 
-    await getDb().update(surveys).set(updateData).where(eq(surveys.id, body.id));
+    await getDb()
+      .update(surveys)
+      .set(updateData)
+      .where(eq(surveys.id, body.id));
 
     return { success: true, data: { id: body.id } };
   } catch (error) {
@@ -101,79 +104,126 @@ export async function updateSurveyAction(
 }
 
 /**
- * Get all surveys for the current user
+ * Get all surveys for the current user with pagination
  */
-export async function getSurveysAction(): Promise<
-  ActionResult<
-    Array<{
+export async function getSurveysAction(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+}): Promise<
+  ActionResult<{
+    surveys: Array<{
       id: string;
       title: string;
       status: string;
       createdAt: Date;
+      updatedAt: Date;
       currentParticipants: number;
       participantLimit: number;
       shareableLink: string | null;
       projectId: string | null;
+      expertState: unknown;
       creatorName: string | null;
       isOwner: boolean;
       isVoice: boolean;
-    }>
-  >
+    }>;
+    total: number;
+  }>
 > {
   try {
     const session = await getVerifiedSession();
     const activeOrgId = session.session.activeOrganizationId;
+    const page = params?.page || 1;
+    const pageSize = params?.pageSize || 10;
+    const offset = (page - 1) * pageSize;
+    const search = params?.search;
+    const filterStatus = params?.status;
 
-    if (activeOrgId) {
-      // Workspace context: Get all surveys in the workspace
-      const workspaceSurveys = await getDb()
-        .select({
-          id: surveys.id,
-          title: surveys.title,
-          status: surveys.status,
-          createdAt: surveys.createdAt,
-          currentParticipants: surveys.currentParticipants,
-          participantLimit: surveys.participantLimit,
-          shareableLink: surveys.shareableLink,
-          projectId: surveys.projectId,
-          creatorName: users.name,
-          isOwner: sql<boolean>`${surveys.userId} = ${session.user.id}`,
-          isVoice: surveys.isVoice,
-        })
-        .from(surveys)
-        .leftJoin(users, eq(surveys.userId, users.id))
-        .where(eq(surveys.organizationId, activeOrgId))
-        .orderBy(surveys.createdAt);
+    let baseWhere = activeOrgId
+      ? eq(surveys.organizationId, activeOrgId)
+      : and(
+          eq(surveys.userId, session.user.id),
+          isNull(surveys.organizationId),
+        );
 
-      return { success: true, data: workspaceSurveys };
-    } else {
-      // Personal context: Get only user's personal surveys (no organizationId)
-      const personalSurveys = await getDb()
-        .select({
-          id: surveys.id,
-          title: surveys.title,
-          status: surveys.status,
-          createdAt: surveys.createdAt,
-          currentParticipants: surveys.currentParticipants,
-          participantLimit: surveys.participantLimit,
-          shareableLink: surveys.shareableLink,
-          projectId: surveys.projectId,
-          creatorName: users.name,
-          isOwner: sql<boolean>`${surveys.userId} = ${session.user.id}`,
-          isVoice: surveys.isVoice,
-        })
-        .from(surveys)
-        .leftJoin(users, eq(surveys.userId, users.id))
-        .where(
-          and(
-            eq(surveys.userId, session.user.id),
-            isNull(surveys.organizationId),
-          ),
-        )
-        .orderBy(surveys.createdAt);
-
-      return { success: true, data: personalSurveys };
+    if (search) {
+      baseWhere = and(baseWhere, ilike(surveys.title, `%${search}%`));
     }
+
+    if (filterStatus && filterStatus !== "all") {
+      if (filterStatus === "published") {
+        baseWhere = and(baseWhere, eq(surveys.status, "active"));
+      } else if (filterStatus === "unpublished") {
+        baseWhere = and(baseWhere, ne(surveys.status, "active"));
+      } else {
+        const validStatuses = [
+          "draft",
+          "creating",
+          "sample_review",
+          "active",
+          "paused",
+          "completed",
+          "archived",
+        ] as const;
+
+        if (
+          validStatuses.includes(
+            filterStatus as
+              | "draft"
+              | "creating"
+              | "sample_review"
+              | "active"
+              | "paused"
+              | "completed"
+              | "archived",
+          )
+        ) {
+          baseWhere = and(
+            baseWhere,
+            eq(surveys.status, filterStatus as (typeof validStatuses)[number]),
+          );
+        }
+      }
+    }
+
+    // Get total count in parallel with the paginated results
+    const [[countRes], results] = await Promise.all([
+      getDb().select({ total: count() }).from(surveys).where(baseWhere),
+      getDb()
+        .select({
+          id: surveys.id,
+          title: surveys.title,
+          status: surveys.status,
+          createdAt: surveys.createdAt,
+          updatedAt: surveys.updatedAt,
+          currentParticipants: surveys.currentParticipants,
+          participantLimit: surveys.participantLimit,
+          shareableLink: surveys.shareableLink,
+          projectId: surveys.projectId,
+          expertState: surveys.expertState as unknown as Record<
+            string,
+            unknown
+          >,
+          creatorName: users.name,
+          isOwner: sql<boolean>`${surveys.userId} = ${session.user.id}`,
+          isVoice: surveys.isVoice,
+        })
+        .from(surveys)
+        .leftJoin(users, eq(surveys.userId, users.id))
+        .where(baseWhere)
+        .orderBy(desc(surveys.createdAt))
+        .limit(pageSize)
+        .offset(offset),
+    ]);
+
+    return {
+      success: true,
+      data: {
+        surveys: results,
+        total: countRes?.total || 0,
+      },
+    };
   } catch (error) {
     if (error instanceof Error) {
       if (
@@ -868,12 +918,10 @@ export async function deleteSurveyAction(
   }
 }
 
-/**
- * Duplicate a survey
- */
+// Duplicate a survey
 export async function duplicateSurveyAction(
   surveyId: string,
-): Promise<ActionResult<{ id: string; survey: any }>> {
+): Promise<ActionResult<{ id: string; survey: Record<string, unknown> }>> {
   try {
     const session = await getVerifiedSession();
 
@@ -924,7 +972,8 @@ export async function duplicateSurveyAction(
       title: newSurvey.title || "Untitled Survey",
       description:
         newSurvey.description ||
-        (newSurvey.expertState as any)?.objective?.description ||
+        (newSurvey.expertState as { objective?: { description?: string } })
+          ?.objective?.description ||
         "",
       status: newSurvey.status,
       shareableLink: newSurvey.shareableLink,

@@ -6,7 +6,7 @@ import { loadDomainSkills } from "./domain-skill-loader";
 import { stepCountIs } from "ai";
 import { z } from "zod";
 import { BaseSpecialistAgent } from "./base-agent";
-import type { AgentContext, ChecklistItem, SpecialistChecklist } from "./types";
+import type { AgentContext, SpecialistChecklist } from "./types";
 import type { SurveyConfig } from "@/lib/prompts";
 import type { VoiceAgentFunction } from "@/lib/voice/deepgram-voice-agent";
 import { getDb } from "@/db";
@@ -24,7 +24,7 @@ export class CreationSpecialist extends BaseSpecialistAgent {
 
   protected buildChecklist(config: SurveyConfig): SpecialistChecklist {
     const domainName = this.context.loadedDomainSkills?.domainName ?? "survey";
-    const collected = (config as any).collectedInfo || {};
+    const collected = config.collectedInfo || {};
     const expertState = config.expertState || {};
 
     return {
@@ -32,7 +32,10 @@ export class CreationSpecialist extends BaseSpecialistAgent {
         this.makeChecklistItem(
           "subjectDefined",
           "Identified the specific product, service, or experience being surveyed (not vague)",
-          !!(collected.subjectDefined || expertState.subjectDescription),
+          !!(
+            collected.subjectDefined ||
+            expertState.objective?.subjectDescription
+          ),
         ),
         this.makeChecklistItem(
           "domainIdentified",
@@ -249,6 +252,17 @@ TRIGGER: As soon as you can guess the domain, silently call 'setSurveyDomain' wi
         },
       },
       {
+        name: "loadSkill",
+        description: "Load detailed instructions for a specialized skill.",
+        parameters: {
+          type: "object",
+          properties: {
+            skillId: { type: "string", description: "The ID of the skill." },
+          },
+          required: ["skillId"],
+        },
+      },
+      {
         name: "finishSurvey",
         description: "Signal the survey design is complete.",
         parameters: {
@@ -282,7 +296,7 @@ TRIGGER: As soon as you can guess the domain, silently call 'setSurveyDomain' wi
   // Agent Tools (AI SDK)
   // --------------------------------------------------------------------------
 
-  getTools(): Record<string, any> {
+  getTools(): Record<string, unknown> {
     const ctx = this.context;
     return {
       think_and_respond: tool({
@@ -292,11 +306,11 @@ TRIGGER: As soon as you can guess the domain, silently call 'setSurveyDomain' wi
             .string()
             .describe("Internal analysis of the turn."),
           state_updates: z
-            .record(z.any())
+            .record(z.unknown())
             .optional()
             .describe("Checklist item completions."),
         }),
-        execute: async ({ internal_reasoning, state_updates }) => {
+        execute: async ({ internal_reasoning }) => {
           console.log(
             `[CreationSpecialist:think_and_respond] Reasoning: ${internal_reasoning.substring(0, 50)}...`,
           );
@@ -323,7 +337,8 @@ TRIGGER: As soon as you can guess the domain, silently call 'setSurveyDomain' wi
               .from(surveys)
               .where(eq(surveys.id, ctx.surveyConfig!.id));
             if (currentSurvey) {
-              const expertState = (currentSurvey.expertState || {}) as any;
+              const expertState = (currentSurvey.expertState ||
+                {}) as SurveyExtractionData;
               await tx
                 .update(surveys)
                 .set({
@@ -341,7 +356,8 @@ TRIGGER: As soon as you can guess the domain, silently call 'setSurveyDomain' wi
                 eq(surveyCreationConversations.surveyId, ctx.surveyConfig!.id),
               );
             if (currentConv) {
-              const currentExtracted = (currentConv.extractedData || {}) as any;
+              const currentExtracted = (currentConv.extractedData ||
+                {}) as SurveyExtractionData;
               await tx
                 .update(surveyCreationConversations)
                 .set({ extractedData: { ...currentExtracted, domainId } })
@@ -412,10 +428,8 @@ TRIGGER: As soon as you can guess the domain, silently call 'setSurveyDomain' wi
                 .from(surveys)
                 .where(eq(surveys.id, ctx.surveyConfig!.id));
               if (currentSurvey) {
-                const expertState = (currentSurvey.expertState || {}) as Record<
-                  string,
-                  any
-                >;
+                const expertState = (currentSurvey.expertState ||
+                  {}) as SurveyExtractionData;
                 await tx
                   .update(surveys)
                   .set({ expertState: { ...expertState, ...statePartial } })
@@ -431,7 +445,7 @@ TRIGGER: As soon as you can guess the domain, silently call 'setSurveyDomain' wi
                   );
                 if (currentConv) {
                   const extractedData = (currentConv.extractedData ||
-                    {}) as Record<string, any>;
+                    {}) as SurveyExtractionData;
                   await tx
                     .update(surveyCreationConversations)
                     .set({
@@ -510,7 +524,7 @@ TRIGGER: As soon as you can guess the domain, silently call 'setSurveyDomain' wi
     onFinish?: (result: {
       text: string;
       usage: import("ai").LanguageModelUsage;
-      response: any;
+      response: unknown;
     }) => Promise<void>,
     dynamicSystemDirective?: string,
   ) {
@@ -535,7 +549,9 @@ TRIGGER: As soon as you can guess the domain, silently call 'setSurveyDomain' wi
           surveyId: ctx.surveyConfig?.id,
           type: "llm_text",
           provider: "google",
-          modelName: (defaultModel as any).modelId ?? "gemini-2.5-flash",
+          modelName:
+            (defaultModel as { modelId?: string }).modelId ??
+            "gemini-2.5-flash",
           promptTokens: result.usage.inputTokens,
           completionTokens: result.usage.outputTokens,
           totalTokens: result.usage.totalTokens,

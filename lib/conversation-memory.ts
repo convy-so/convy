@@ -330,7 +330,6 @@ export function calculateQualitySignals(
 export function determineConversationState(
   progress: ConversationProgress,
   messageCount: number,
-  config: SurveyConfig,
 ): ConversationState {
   // First message - greeting
   if (messageCount <= 1) return "GREETING";
@@ -367,11 +366,11 @@ export function determineConversationState(
 export function calculateProgress(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
   config: SurveyConfig,
-  startTime: Date,
+  _startTime: Date,
   coveredTopics: string[],
 ): ConversationProgress {
   const now = new Date();
-  const elapsedMinutes = (now.getTime() - startTime.getTime()) / 1000 / 60;
+  const elapsedMinutes = (now.getTime() - _startTime.getTime()) / 1000 / 60;
 
   const totalRequiredQuestions = config.requiredQuestions.length || 1;
   const coveredRequiredQuestions = config.requiredQuestions.filter((q) =>
@@ -472,7 +471,6 @@ export function createEmptyMemory(config: SurveyConfig): ConversationMemory {
 export function createRollingContext(
   surveyId: string,
   config: SurveyConfig,
-  startTime: Date,
 ): RollingContext {
   return {
     surveyId,
@@ -513,7 +511,6 @@ export function createRollingContext(
 // ============================================================================
 
 const MAX_RECENT_MESSAGES = 8; // Keep last 8 messages in full
-const SUMMARY_TRIGGER_THRESHOLD = 12; // Start summarizing after 12 messages
 
 /**
  * Build a compressed context from full conversation history

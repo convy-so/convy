@@ -120,13 +120,13 @@ async function ConversationsList({ surveyId }: { surveyId: string }) {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {conversations.map((conv: any) => {
-        const insightsData = conv.insights?.insights as any;
+      {conversations.map((conv) => {
+        const insightsData = conv.insights?.insights as { sentiment?: { score: number }; summary?: string } | undefined;
         const sentiment = insightsData?.sentiment?.score ?? 0;
         const startTime = new Date(conv.createdAt).getTime();
         const endTime = new Date(conv.updatedAt).getTime();
         const duration = Math.max(1, Math.round((endTime - startTime) / 60000));
-        const msgCount = (conv.rawConversation as any[])?.length || 0;
+        const msgCount = (conv.rawConversation as unknown[])?.length || 0;
 
         return (
           <ConversationCard

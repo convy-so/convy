@@ -76,7 +76,7 @@ Translated Conversation (${languageNames[targetLanguage]}):`;
 
   try {
     const { text, usage } = await generateText({
-      model: google("gemini-2.0-flash-exp"),
+      model: google("gemini-1.5-flash"),
       prompt,
       temperature: 0.3, // Lower temperature for more consistent translations
     });
@@ -87,7 +87,7 @@ Translated Conversation (${languageNames[targetLanguage]}):`;
       surveyId: metadata?.surveyId,
       type: "llm_text",
       provider: "google",
-      modelName: "gemini-2.0-flash-exp",
+      modelName: "gemini-1.5-flash",
       promptTokens: usage.inputTokens,
       completionTokens: usage.outputTokens,
       totalTokens: usage.totalTokens,

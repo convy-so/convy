@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "@/i18n/routing";
 import {
   FolderOpen,

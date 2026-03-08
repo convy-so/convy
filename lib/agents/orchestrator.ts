@@ -97,7 +97,9 @@ export class AgentOrchestrator {
             surveyId: context.surveyConfig?.id,
             type: "llm_text",
             provider: "google",
-            modelName: (defaultModel as any).modelId,
+            modelName:
+              (defaultModel as { modelId?: string }).modelId ??
+              "gemini-2.5-flash",
             promptTokens: usage.inputTokens,
             completionTokens: usage.outputTokens,
             totalTokens: usage.totalTokens,
@@ -148,7 +150,9 @@ export class AgentOrchestrator {
             surveyId: context.surveyConfig?.id,
             type: "llm_text",
             provider: "google",
-            modelName: (defaultModel as any).modelId,
+            modelName:
+              (defaultModel as { modelId?: string }).modelId ??
+              "gemini-2.5-flash",
             promptTokens: usage.inputTokens,
             completionTokens: usage.outputTokens,
             totalTokens: usage.totalTokens,
@@ -197,7 +201,7 @@ export class AgentOrchestrator {
   // It understands the task and delegates to the right specialist.
   // --------------------------------------------------------------------------
 
-  buildAgent(): ToolLoopAgent<any, any, any> {
+  buildAgent() {
     const config = this.context.surveyConfig;
     const domainName =
       this.context.loadedDomainSkills?.domainName ?? "the survey domain";

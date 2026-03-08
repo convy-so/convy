@@ -2,11 +2,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
-import {
-  surveys,
-  surveyCreationConversations,
-  surveyConversations,
-} from "@/db/schema";
+import { surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 
 /**

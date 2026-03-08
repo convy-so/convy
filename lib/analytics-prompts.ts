@@ -31,14 +31,7 @@ export function getStructuredConversationInsightsPrompt(
   const metrics =
     config.metrics.length > 0 ? config.metrics.join(", ") : "None specified";
 
-  const hypotheses =
-    (config.expertState?.hypotheses?.assumptions?.length ?? 0) > 0
-      ? config
-          .expertState!.hypotheses.assumptions.map(
-            (h: string, i: number) => `${i + 1}. "${h}"`,
-          )
-          .join("\n")
-      : "";
+  // hypotheses extraction moved to direct usage in template
 
   const mediaAssets =
     (config.media?.length ?? 0) > 0
@@ -46,6 +39,11 @@ export function getStructuredConversationInsightsPrompt(
           .media!.map((m) => `- ${m.type}[${m.id}]: ${m.description}`)
           .join("\n")
       : "";
+
+  const hypothesesToEvaluate = config.expertState?.hypotheses?.assumptions;
+  const hypothesesList = hypothesesToEvaluate?.length
+    ? `Hypotheses to evaluate:\n${hypothesesToEvaluate.map((h, i) => `${i + 1}. "${h}"`).join("\n")}`
+    : "";
 
   return `<task>
 Analyze this survey conversation and extract structured insights.
@@ -58,7 +56,7 @@ Audience: ${config.expertState?.targetAudience?.description || "General particip
 Insight types needed: ${config.expertState?.successCriteria?.insightTypes?.join(", ") || "Any"}
 Required questions: ${requiredQuestions}
 Metrics to extract: ${metrics}
-${(config.expertState?.hypotheses?.assumptions?.length ?? 0) > 0 ? `Hypotheses to evaluate:\n${config.expertState!.hypotheses.assumptions.map((h: string, i: number) => `${i + 1}. "${h}"`).join("\n")}` : ""}
+${hypothesesList}
 ${mediaAssets ? `Media assets:\n${mediaAssets}` : ""}
 </survey_context>
 
@@ -192,11 +190,11 @@ Media Interactions: ${
 ${config.metrics.map((m, i) => `${i + 1}. "${m}"`).join("\n")}`
       : "";
 
-  const hypothesesToValidate =
-    (config.expertState?.hypotheses?.assumptions?.length ?? 0) > 0
-      ? `Hypotheses to Validate:
-${config.expertState!.hypotheses.assumptions.map((h: string, i: number) => `${i + 1}. "${h}"`).join("\n")}`
-      : "";
+  const hypothesesToValidate = config.expertState?.hypotheses?.assumptions
+    ?.length
+    ? `Hypotheses to Validate:
+${config.expertState.hypotheses.assumptions.map((h, i) => `${i + 1}. "${h}"`).join("\n")}`
+    : "";
 
   const mediaToAnalyze =
     config.media && config.media.length > 0
@@ -490,7 +488,7 @@ export function getAIDiscoveryPrompt(
 ): string {
   const quotesText = allQuotes
     .slice(0, 50)
-    .map((q, i) => `[${q.conversationId}] "${q.text}"`)
+    .map((q) => `[${q.conversationId}] "${q.text}"`)
     .join("\n");
 
   return `You are a pattern-recognition AI analyst. Your job is to find insights that the survey creator DIDN'T think to ask about.

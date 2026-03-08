@@ -23,7 +23,6 @@ Sentry.init({
 process.env.IS_WORKER = "true";
 
 
-import { env } from "@/lib/env";
 
 import { testRedisConnection } from "@/lib/redis";
 

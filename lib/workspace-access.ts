@@ -2,7 +2,7 @@
 
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/db";
-import { members, organizations, surveys, projects } from "@/db/schema";
+import { members, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 
 /**

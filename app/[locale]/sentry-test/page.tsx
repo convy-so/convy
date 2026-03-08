@@ -17,7 +17,7 @@ export default function SentryTestPage() {
       if (!response.ok) {
         toast.error("API error returned 500 (Check Sentry)");
       }
-    } catch (error) {
+    } catch {
       toast.error("Fetch failed");
     }
   };
@@ -38,32 +38,32 @@ export default function SentryTestPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Button 
-            variant="destructive" 
-            className="w-full" 
+          <Button
+            variant="destructive"
+            className="w-full"
             onClick={triggerClientError}
           >
             Trigger Client-Side Error
           </Button>
-          
-          <Button 
-            variant="outline" 
-            className="w-full" 
+
+          <Button
+            variant="outline"
+            className="w-full"
             onClick={triggerApiError}
           >
             Trigger API Route Error
           </Button>
 
-          <Button 
-            variant="secondary" 
-            className="w-full" 
+          <Button
+            variant="secondary"
+            className="w-full"
             onClick={triggerServerError}
           >
             Trigger Server-Side Error
           </Button>
         </CardContent>
       </Card>
-      
+
       <p className="text-sm text-neutral-500">
         Check your <a href="https://sentry.io" target="_blank" className="text-primary hover:underline">Sentry Dashboard</a> after clicking these buttons.
       </p>

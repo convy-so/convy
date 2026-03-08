@@ -1,6 +1,7 @@
 import { LanguageModel, ModelMessage } from "ai";
 import { SurveyConfig } from "@/lib/prompts";
 import { RollingContext } from "@/lib/conversation-memory";
+import { type SurveyLanguage } from "@/lib/types/survey-flow";
 
 export interface SubjectIntelligence {
   userVocabulary: string[];
@@ -12,7 +13,7 @@ export interface SubjectIntelligence {
 }
 
 export interface DomainPivot {
-  condition: string; 
+  condition: string;
   skill: string;
   reason: string;
 }
@@ -38,7 +39,7 @@ export interface AgentContext {
   rollingContext?: RollingContext; // For stateful agents like conducting
   ragContext?: string; // Retrieved context from RAG
   knowledgeContext?: string; // Additional context passed from orchestrator
-  language?: "en" | "fr" | "de" | "es" | "it"; // Language for the conversation
+  language?: SurveyLanguage; // Language for the conversation
   userId?: string;
   organizationId?: string;
 
@@ -75,8 +76,8 @@ export interface AgentContext {
 
 export interface AgentResult {
   output: string; // The text response
-  toolCalls?: any[]; // Any tool calls made
-  metadata?: Record<string, any>; // Extra info like confidence, thoughts
+  toolCalls?: unknown[]; // Any tool calls made
+  metadata?: Record<string, unknown>; // Extra info like confidence, thoughts
   nextAgent?: string; // For handing off to another agent
   specialist?: string; // Name of specialist that handled it
   response?: string; // Compatibility with Orchestrator tool return
