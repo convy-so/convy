@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
   // Enable Next.js 16 Cache Components and React Compiler
   cacheComponents: true,
   reactCompiler: true,
+  serverExternalPackages: ["ioredis", "bullmq"],
 
   // Explicitly set Turbopack root to the project directory to avoid root inference issues
   turbopack: {

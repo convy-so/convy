@@ -8,6 +8,7 @@ import { getDb } from "@/db";
 import { surveys, users, organizations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getSurveyAccessLevel } from "@/lib/workspace-access";
+import { cache, cacheKeys } from "@/lib/cache";
 import { env } from "@/lib/env";
 
 type ActionResult<T> =
@@ -77,7 +78,18 @@ export async function updateSurveyAction(
       updateData.participantLimit = body.participantLimit;
     if (body.language !== undefined) updateData.language = body.language;
 
-    await getDb().update(surveys).set(updateData).where(eq(surveys.id, body.id));
+    await getDb()
+      .update(surveys)
+      .set(updateData)
+      .where(eq(surveys.id, body.id));
+
+    // Invalidate dashboard cache
+    await cache.delete(
+      cacheKeys.dashboardRecentSurveys(
+        session.user.id,
+        existingSurvey.organizationId,
+      ),
+    );
 
     return { success: true, data: { id: body.id } };
   } catch (error) {
@@ -295,6 +307,14 @@ export async function confirmSurveyAction(
         shareableLink,
       })
       .where(eq(surveys.id, surveyId));
+
+    // Invalidate dashboard cache
+    await cache.delete(
+      cacheKeys.dashboardStats(session.user.id, survey.organizationId),
+    );
+    await cache.delete(
+      cacheKeys.dashboardRecentSurveys(session.user.id, survey.organizationId),
+    );
 
     const publicUrl = `/s/${shareableLink}`;
 
@@ -698,6 +718,14 @@ export async function deactivateSurveyAction(
       .set({ status: "completed" })
       .where(eq(surveys.id, surveyId));
 
+    // Invalidate dashboard cache
+    await cache.delete(
+      cacheKeys.dashboardStats(session.user.id, survey.organizationId),
+    );
+    await cache.delete(
+      cacheKeys.dashboardRecentSurveys(session.user.id, survey.organizationId),
+    );
+
     return { success: true, data: { id: surveyId } };
   } catch (error) {
     if (error instanceof Error) {
@@ -752,6 +780,14 @@ export async function reactivateSurveyAction(
       .update(surveys)
       .set({ status: "active" })
       .where(eq(surveys.id, surveyId));
+
+    // Invalidate dashboard cache
+    await cache.delete(
+      cacheKeys.dashboardStats(session.user.id, survey.organizationId),
+    );
+    await cache.delete(
+      cacheKeys.dashboardRecentSurveys(session.user.id, survey.organizationId),
+    );
 
     return { success: true, data: { id: surveyId } };
   } catch (error) {
@@ -814,8 +850,19 @@ export async function deleteSurveyAction(
     const surveyTitle = survey.title;
     const organizationId = survey.organizationId;
 
-    // Delete survey (Waterfall cascade deletes everything else)
+    // Cascade delete will handle related table rows
     await getDb().delete(surveys).where(eq(surveys.id, surveyId));
+
+    // Invalidate dashboard cache
+    await cache.delete(
+      cacheKeys.dashboardStats(session.user.id, survey.organizationId),
+    );
+    await cache.delete(
+      cacheKeys.dashboardRecentSurveys(session.user.id, survey.organizationId),
+    );
+    await cache.delete(
+      cacheKeys.dashboardActivity(session.user.id, survey.organizationId),
+    );
 
     // Send Notifications if in a workspace
     if (organizationId) {

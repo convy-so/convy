@@ -3,11 +3,11 @@
 import { translateUIString, SupportedLanguage } from "@/lib/i18n/ai-translator";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
 import { users } from "@/db/schema/auth";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 
 /**
  * Server Action to translate a string for client-side components
@@ -51,6 +51,12 @@ export async function updateUserLanguage(language: SupportedLanguage) {
       .where(eq(users.id, session.user.id));
 
     revalidatePath("/", "layout");
+
+    // Sync the NEXT_LOCALE cookie so the proxy can perform optimistic redirects
+    (await cookies()).set("NEXT_LOCALE", language, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365, // 1 year
+    });
 
     return { success: true };
   } catch (error) {

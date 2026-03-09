@@ -4,7 +4,9 @@ import { DashboardHeader } from "@/components/dashboard/header";
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
-import { headers } from "next/headers";
+import { headers, cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { type SupportedLanguage } from "@/lib/i18n/ai-translator";
 
 export default function DashboardLayout({
   children,
@@ -34,6 +36,18 @@ async function DashboardLayoutContent({
   const { locale } = await params;
   const authHeaders = await headers();
   const session = await getCurrentSession(authHeaders);
+
+  // Deep Sync: Verify database preference matches URL locale
+  if (session?.user) {
+    const preferredLanguage = (session.user as any)
+      .preferredLanguage as SupportedLanguage;
+
+    if (preferredLanguage && preferredLanguage !== locale) {
+      // 1. Redirect to the sync API to safely update cookies and then land on the correct locale
+      // This is the production-ready way to handle "Deep Sync" in Next.js 16
+      redirect(`/api/user/language/sync?locale=${preferredLanguage}&redirect=/${preferredLanguage}/dashboard`);
+    }
+  }
 
   return (
     <AuthProvider initialSession={session}>
