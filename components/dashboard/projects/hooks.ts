@@ -86,14 +86,42 @@ export function useCreateProject() {
       if (!result.success) throw new Error(result.error);
       return result.data;
     },
+    onMutate: async (newProject) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({
+        queryKey: projectKeys.lists(activeOrgId),
+      });
+
+      // Snapshot the previous value
+      const previousProjects = queryClient.getQueryData(
+        projectKeys.lists(activeOrgId),
+      );
+
+      // Optimistically update to the new value
+      queryClient.setQueryData(projectKeys.lists(activeOrgId), (old: any) => [
+        ...(old || []),
+        { ...newProject, id: "temp-id", createdAt: new Date() },
+      ]);
+
+      // Return a context object with the snapshotted value
+      return { previousProjects };
+    },
     onSuccess: () => {
       toast.success("Project created");
+    },
+    onError: (err, newProject, context: any) => {
+      toast.error(err.message);
+      // Rollback to the previous value
+      queryClient.setQueryData(
+        projectKeys.lists(activeOrgId),
+        context.previousProjects,
+      );
+    },
+    onSettled: () => {
+      // Always refetch after error or success to ensure sync
       queryClient.invalidateQueries({
         queryKey: projectKeys.lists(activeOrgId),
       });
-    },
-    onError: (error) => {
-      toast.error(error.message);
     },
   });
 }
@@ -113,17 +141,54 @@ export function useUpdateProject() {
       if (!result.success) throw new Error(result.error);
       return result.data;
     },
-    onSuccess: (_, variables) => {
+    onMutate: async (updatedProject) => {
+      await queryClient.cancelQueries({
+        queryKey: projectKeys.lists(activeOrgId),
+      });
+      await queryClient.cancelQueries({
+        queryKey: projectKeys.detail(updatedProject.id),
+      });
+
+      const previousProjects = queryClient.getQueryData(
+        projectKeys.lists(activeOrgId),
+      );
+      const previousProject = queryClient.getQueryData(
+        projectKeys.detail(updatedProject.id),
+      );
+
+      queryClient.setQueryData(projectKeys.lists(activeOrgId), (old: any) =>
+        old?.map((p: any) =>
+          p.id === updatedProject.id ? { ...p, ...updatedProject } : p,
+        ),
+      );
+      queryClient.setQueryData(
+        projectKeys.detail(updatedProject.id),
+        (old: any) => ({ ...old, ...updatedProject }),
+      );
+
+      return { previousProjects, previousProject };
+    },
+    onSuccess: () => {
       toast.success("Project updated");
+    },
+    onError: (err, updatedProject, context: any) => {
+      toast.error(err.message);
+      queryClient.setQueryData(
+        projectKeys.lists(activeOrgId),
+        context.previousProjects,
+      );
+      queryClient.setQueryData(
+        projectKeys.detail(updatedProject.id),
+        context.previousProject,
+      );
+    },
+    onSettled: (_, __, variables) => {
       queryClient.invalidateQueries({
         queryKey: projectKeys.lists(activeOrgId),
       });
       queryClient.invalidateQueries({
         queryKey: projectKeys.detail(variables.id),
       });
-    },
-    onError: (error) => {
-      toast.error(error.message);
     },
   });
 }
@@ -139,18 +204,38 @@ export function useDeleteProject() {
       if (!result.success) throw new Error(result.error);
       return result.data;
     },
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({
+        queryKey: projectKeys.lists(activeOrgId),
+      });
+
+      const previousProjects = queryClient.getQueryData(
+        projectKeys.lists(activeOrgId),
+      );
+
+      queryClient.setQueryData(projectKeys.lists(activeOrgId), (old: any) =>
+        old?.filter((p: any) => p.id !== id),
+      );
+
+      return { previousProjects };
+    },
     onSuccess: () => {
       toast.success("Project deleted");
+    },
+    onError: (err, _, context: any) => {
+      toast.error(err.message);
+      queryClient.setQueryData(
+        projectKeys.lists(activeOrgId),
+        context.previousProjects,
+      );
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: projectKeys.lists(activeOrgId),
       });
-      // Surveys might need invalidation if they revert to "no project"
       queryClient.invalidateQueries({
         queryKey: surveyKeys.lists(activeOrgId),
       });
-    },
-    onError: (error) => {
-      toast.error(error.message);
     },
   });
 }

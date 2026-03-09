@@ -19,7 +19,7 @@ export function RobotIllustration() {
             >
                 {/* Head */}
                 <motion.div
-                    className="w-24 h-20 bg-gray-900 rounded-2xl mx-auto relative border-4 border-gray-800 shadow-xl"
+                    className="w-24 h-20 bg-slate-50 rounded-2xl mx-auto relative border-4 border-slate-200 shadow-xl"
                     animate={{ rotate: [-1, 1, -1] }}
                     transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
                 >
@@ -47,13 +47,13 @@ export function RobotIllustration() {
                 </motion.div>
 
                 {/* Body */}
-                <div className="w-32 h-28 bg-gray-800 rounded-3xl mx-auto mt-2 relative border-4 border-gray-700 shadow-2xl overflow-hidden">
+                <div className="w-32 h-28 bg-slate-50 rounded-3xl mx-auto mt-2 relative border-4 border-slate-200 shadow-2xl overflow-hidden">
                     {/* Chest Light */}
                     <motion.div
-                        className="absolute top-4 left-1/2 -translate-x-1/2 w-12 h-2 bg-gray-900 rounded-full overflow-hidden"
+                        className="absolute top-4 left-1/2 -translate-x-1/2 w-12 h-2 bg-slate-200 rounded-full overflow-hidden"
                     >
                         <motion.div
-                            className="h-full bg-blue-500 w-1/3"
+                            className="h-full bg-blue-400 w-1/3"
                             animate={{ x: [-20, 60] }}
                             transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
                         />
@@ -61,22 +61,34 @@ export function RobotIllustration() {
 
                     {/* Gears / Lines */}
                     <div className="mt-10 px-4 space-y-2">
-                        <div className="h-1 bg-gray-700 w-full rounded-full opacity-50" />
-                        <div className="h-1 bg-gray-700 w-3/4 rounded-full opacity-50" />
-                        <div className="h-1 bg-gray-700 w-1/2 rounded-full opacity-50" />
+                        <div className="h-1 bg-slate-200 w-full rounded-full opacity-100" />
+                        <div className="h-1 bg-slate-200 w-3/4 rounded-full opacity-100" />
+                        <div className="h-1 bg-slate-200 w-1/2 rounded-full opacity-100" />
                     </div>
                 </div>
 
                 {/* Arms */}
                 <motion.div
-                    className="absolute -left-4 top-24 w-6 h-16 bg-gray-700 rounded-full border-2 border-gray-600 origin-top"
+                    className="absolute -left-4 top-24 w-6 h-16 bg-slate-100 rounded-full border-2 border-slate-200 origin-top"
                     animate={{ rotate: [10, 20, 10] }}
                     transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
                 />
                 <motion.div
-                    className="absolute -right-4 top-24 w-6 h-16 bg-gray-700 rounded-full border-2 border-gray-600 origin-top"
+                    className="absolute -right-4 top-24 w-6 h-16 bg-slate-100 rounded-full border-2 border-slate-200 origin-top"
                     animate={{ rotate: [-10, -20, -10] }}
                     transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                />
+
+                {/* Legs */}
+                <motion.div
+                    className="absolute left-1/2 -translate-x-10 top-[190px] w-6 h-14 bg-slate-100 rounded-full border-2 border-slate-200 origin-top"
+                    animate={{ rotate: [-5, 5, -5] }}
+                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                />
+                <motion.div
+                    className="absolute left-1/2 translate-x-4 top-[190px] w-6 h-14 bg-slate-100 rounded-full border-2 border-slate-200 origin-top"
+                    animate={{ rotate: [5, -5, 5] }}
+                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
                 />
             </motion.div>
 

@@ -187,83 +187,83 @@
             }
         },
         "PublishModal": {
-            "Title": "Publish Survey",
-            "TitlePublished": "Survey Published!",
-            "Subtitle": "Make your survey live and shareable",
-            "SubtitlePublished": "Your survey is now live and shareable",
-            "SuccessMessage": "🎉 Your survey is now live!",
+            "Title": "Publier le sondage",
+            "TitlePublished": "Sondage publié !",
+            "Subtitle": "Rendez votre sondage actif et partageable",
+            "SubtitlePublished": "Votre sondage est maintenant actif et partageable",
+            "SuccessMessage": "🎉 Votre sondage est maintenant actif !",
             "Buttons": {
-                "CopyLink": "Copy Link",
-                "ViewSurvey": "View Survey",
-                "Done": "Done",
-                "Cancel": "Cancel",
-                "Publish": "Publish Survey",
-                "Publishing": "Publishing..."
+                "CopyLink": "Copier le lien",
+                "ViewSurvey": "Voir le sondage",
+                "Done": "Terminé",
+                "Cancel": "Annuler",
+                "Publish": "Publier le sondage",
+                "Publishing": "Publication..."
             },
             "Inputs": {
-                "TitleLabel": "Survey Title",
-                "TitlePlaceholder": "Enter a title for your survey",
+                "TitleLabel": "Titre du sondage",
+                "TitlePlaceholder": "Entrez un titre pour votre sondage",
                 "DescLabel": "Description",
-                "DescOptional": "(optional)",
-                "DescPlaceholder": "Add a brief description for your survey",
-                "VoiceModeLabel": "Voice Mode",
-                "VoiceModeDesc": "Respondents will start with voice."
+                "DescOptional": "(optionnel)",
+                "DescPlaceholder": "Ajoutez une brève description pour votre sondage",
+                "VoiceModeLabel": "Mode vocal",
+                "VoiceModeDesc": "Les répondants commenceront par la voix."
             },
             "Toasts": {
-                "TitleGenerated": "Title suggestion generated!",
-                "GenerateFailed": "Failed to generate title suggestion",
-                "EnterTitle": "Please enter a title for your survey",
-                "Success": "Survey published successfully!",
-                "Failed": "Failed to publish survey",
-                "Copied": "Link copied to clipboard!",
-                "CopyFailed": "Failed to copy link"
+                "TitleGenerated": "Suggestion de titre générée !",
+                "GenerateFailed": "Échec de la génération de la suggestion de titre",
+                "EnterTitle": "Veuillez entrer un titre pour votre sondage",
+                "Success": "Sondage publié avec succès !",
+                "Failed": "Échec de la publication du sondage",
+                "Copied": "Lien copié dans le presse-papier !",
+                "CopyFailed": "Échec de la copie du lien"
             }
         },
         "SampleReview": {
             "Header": {
-                "Title": "Sample Conversation Review",
-                "Back": "Back to Survey"
+                "Title": "Révision de la conversation d'exemple",
+                "Back": "Retour au sondage"
             },
             "Actions": {
-                "ShowText": "Show Text",
-                "HideText": "Hide Text",
-                "Publish": "Publish Survey"
+                "ShowText": "Afficher le texte",
+                "HideText": "Masquer le texte",
+                "Publish": "Publier le sondage"
             },
             "VoiceVisualizer": {
-                "Listening": "Listening...",
-                "AISpeaking": "AI Speaking...",
-                "TapToSpeak": "Tap to speak",
-                "SpeakInstruction": "Speak continuously. The AI will respond naturally.",
-                "Connecting": "Connecting to voice service..."
+                "Listening": "Écoute...",
+                "AISpeaking": "L'IA parle...",
+                "TapToSpeak": "Appuyez pour parler",
+                "SpeakInstruction": "Parlez en continu. L'IA répondra naturellement.",
+                "Connecting": "Connexion au service vocal..."
             },
             "EmptyState": {
-                "StartTitle": "Start the conversation",
-                "VoiceInstruction": "Tap the microphone below to start speaking.",
-                "TextInstruction": "Type a greeting to begin the test."
+                "StartTitle": "Démarrer la conversation",
+                "VoiceInstruction": "Appuyez sur le microphone ci-dessous pour commencer à parler.",
+                "TextInstruction": "Tapez un message pour commencer le test."
             },
             "Input": {
-                "Voice": "Voice",
-                "Text": "Text",
-                "Placeholder": "Type your message...",
-                "LiveTranscription": "Live Transcription"
+                "Voice": "Voix",
+                "Text": "Texte",
+                "Placeholder": "Tapez votre message...",
+                "LiveTranscription": "Transcription en direct"
             },
             "Feedback": {
-                "Title": "Refine Simulation",
-                "Description": "Not satisfied with the AI's behavior? Provide instructions below to adjust the next sample.",
-                "Placeholder": "e.g. 'Be more concise', 'Ask about budget earlier', 'Don't use emojis'...",
-                "Chars": "{count} chars",
-                "RetriesLeft": "{count} retries left",
-                "Button": "Update & Restart",
-                "Applying": "Applying...",
-                "LimitReached": "You have used all available sample conversations. Please publish or edit the survey directly."
+                "Title": "Affiner la simulation",
+                "Description": "Pas satisfait du comportement de l'IA ? Donnez des instructions ci-dessous pour ajuster le prochain exemple.",
+                "Placeholder": "ex: 'Soyez plus concis', 'Posez des questions sur le budget plus tôt', 'N'utilisez pas d'emojis'...",
+                "Chars": "{count} caractères",
+                "RetriesLeft": "{count} essais restants",
+                "Button": "Mettre à jour & Redémarrer",
+                "Applying": "Application...",
+                "LimitReached": "Vous avez utilisé toutes les conversations d'exemple disponibles. Veuillez publier ou modifier le sondage directement."
             },
             "Toasts": {
-                "Finished": "Conversation finished! You can now refine or publish.",
-                "Limitreached": "You've used all 3 sample conversations",
-                "FeedbackApplied": "Feedback applied! Starting new conversation...",
-                "FeedbackFailed": "Failed to apply feedback",
-                "Confirmed": "Survey confirmed and published!",
-                "ConfirmFailed": "Failed to confirm survey"
+                "Finished": "Conversation terminée ! Vous pouvez maintenant affiner ou publier.",
+                "LimitReached": "Vous avez utilisé vos 3 conversations d'exemple",
+                "FeedbackApplied": "Commentaire appliqué ! Démarrage d'une nouvelle conversation...",
+                "FeedbackFailed": "Échec de l'application du commentaire",
+                "Confirmed": "Sondage confirmé et publié !",
+                "ConfirmFailed": "Échec de la confirmation du sondage"
             }
         },
         "Response": {
@@ -330,7 +330,7 @@
         "Stats": {
             "TotalSurveys": "Total des sondages",
             "AllTime": "Tout le temps",
-            "AvgDuration": "Durée myenne",
+            "AvgDuration": "Durée moyenne",
             "PerCompleted": "Par sondage terminé",
             "NoCompletions": "Pas de réponses encore"
         },
@@ -346,170 +346,190 @@
             "ManageProjects": {
                 "Title": "Gérer les projets",
                 "Description": "Organiser vos sondages"
+            },
+            "TeamManagement": {
+                "Title": "Gestion de l'équipe",
+                "Description": "Paramètres de collaboration"
             }
         },
         "RecentSurveys": {
             "Title": "Sondages récents",
             "ViewAll": "Voir tout",
-            "NoSurveys": "Pas de sondages encore",
-            "GetStarted": "Commencez par créer votre premier sondage IA",
+            "NoSurveys": "Pas encore de sondages",
+            "GetStarted": "Commencez par créer votre premier sondage IA.",
             "CreateFirst": "Créer votre premier sondage"
         },
         "Activity": {
-            "NewResponse": "Nouvelle réponse reçue"
+            "Title": "Activité récente",
+            "ViewAll": "Voir tout",
+            "NewResponse": "Nouvelle réponse reçue",
+            "SurveyCreated": "Sondage créé",
+            "SurveyPublished": "Sondage publié"
         }
     },
     "SurveysPage": {
+        "Status": {
+            "Active": "Actif",
+            "Published": "Publié",
+            "Draft": "Brouillon",
+            "Creating": "Création",
+            "Completed": "Terminé",
+            "Paused": "En pause"
+        },
         "Header": {
-            "Title": "Surveys",
-            "Description": "Manage and monitor your conversational surveys",
-            "CreateButton": "Create Survey"
+            "Title": "Sondages",
+            "Description": "Gérez et surveillez vos sondages conversationnels.",
+            "CreateButton": "Nouveau sondage"
         },
         "Tabs": {
-            "All": "All Surveys",
-            "Published": "Published",
-            "Unpublished": "Unpublished"
+            "All": "Tous",
+            "Published": "Publiés",
+            "Unpublished": "Brouillons"
         },
         "Search": {
-            "Placeholder": "Search surveys..."
+            "Placeholder": "Rechercher des sondages..."
         },
-        "Status": {
-            "Published": "Published",
-            "Draft": "Draft",
-            "Creating": "Creating",
-            "Completed": "Completed",
-            "Paused": "Paused"
-        },
-        "Loading": "Loading your surveys...",
-        "Empty": {
-            "NoMatching": {
-                "Title": "No matching surveys",
-                "Description": "Try adjusting your search criteria",
-                "Clear": "Clear search"
-            },
-            "NoPublished": {
-                "Title": "No published surveys",
-                "Description": "Create a survey and publish it to start collecting responses",
-                "Button": "Create Survey"
-            },
-            "NoUnpublished": {
-                "Title": "No drafts or creating surveys",
-                "Description": "All your surveys are published!"
-            },
-            "NoSurveys": {
-                "Title": "No surveys yet",
-                "Description": "Get started by creating your first conversational survey",
-                "Button": "Create Your First Survey"
-            }
-        },
+        "Loading": "Chargement de vos sondages...",
         "Card": {
-            "Responses": "Responses",
-            "Created": "Created",
+            "Responses": "Réponses",
+            "Created": "Créé",
+            "LastActivity": "Dernière activité :",
+            "InProject": "dans {name}",
             "Menu": {
-                "Continue": "Continue Creating",
-                "ViewDetails": "View Details",
-                "Analytics": "Analytics",
-                "Edit": "Edit",
-                "CopyLink": "Copy Link",
-                "Duplicate": "Duplicate",
-                "Delete": "Delete"
+                "Continue": "Continuer la création",
+                "ViewDetails": "Voir les détails",
+                "Analytics": "Analyses",
+                "Edit": "Modifier",
+                "CopyLink": "Copier le lien",
+                "Duplicate": "Dupliquer",
+                "Delete": "Supprimer",
+                "Resume": "Reprendre la création",
+                "ViewChat": "Voir le chat de création",
+                "ShareLink": "Partager le lien"
             },
             "Toasts": {
-                "Deleted": "Survey deleted successfully",
-                "DeleteFailed": "Failed to delete survey",
-                "Duplicated": "Survey duplicated!",
-                "DuplicateFailed": "Failed to duplicate survey",
-                "Duplicating": "Duplicating survey...",
-                "LinkCopied": "Link copied to clipboard!",
-                "CopyFailed": "Failed to copy link"
+                "Deleted": "Sondage supprimé avec succès",
+                "DeleteFailed": "Échec de la suppression du sondage",
+                "Duplicated": "Sondage dupliqué !",
+                "DuplicateFailed": "Échec de la duplication du sondage",
+                "Duplicating": "Duplication du sondage...",
+                "LinkCopied": "Lien copié dans le presse-papier !",
+                "CopyFailed": "Échec de la copie du lien"
+            }
+        },
+        "Empty": {
+            "NoMatching": {
+                "Title": "Aucun sondage correspondant",
+                "Description": "Essayez d'ajuster vos critères de recherche",
+                "Clear": "Effacer la recherche"
+            },
+            "NoPublished": {
+                "Title": "Aucun sondage publié",
+                "Description": "Créez un sondage et publiez-le pour commencer à collecter des réponses",
+                "Button": "Créer un sondage"
+            },
+            "NoUnpublished": {
+                "Title": "Aucun brouillon ou sondage en cours",
+                "Description": "Tous vos sondages sont publiés !"
+            },
+            "NoSurveys": {
+                "Title": "Pas encore de sondages",
+                "Description": "Commencez par créer votre premier sondage conversationnel",
+                "Button": "Créer votre premier sondage"
             }
         },
         "DeleteModal": {
-            "Title": "Delete Survey",
-            "Description": "Are you sure you want to delete \"{title}\"? This action cannot be undone and will permanently remove all responses.",
-            "Cancel": "Cancel",
-            "Confirm": "Delete Survey",
-            "Deleting": "Deleting..."
+            "Title": "Supprimer le sondage",
+            "Description": "Êtes-vous sûr de vouloir supprimer \"{title}\" ? Cette action ne peut pas être annulée et supprimera définitivement toutes les réponses.",
+            "Cancel": "Annuler",
+            "Confirm": "Supprimer le sondage",
+            "Deleting": "Suppression..."
+        },
+        "Pagination": {
+            "Previous": "Précédent",
+            "Next": "Suivant",
+            "PerPage": "par page",
+            "Showing": "Affichage de {start} à {end} sur {total} sondages"
         }
     },
     "ProjectsPage": {
         "Header": {
-            "Title": "Projects",
-            "Description": "Organize your surveys into projects for better management",
-            "NewProject": "New Project"
+            "Title": "Projets",
+            "Description": "Organisez vos sondages en projets pour une meilleure gestion",
+            "NewProject": "Nouveau projet"
         },
         "Search": {
-            "Placeholder": "Search projects..."
+            "Placeholder": "Rechercher des projets..."
         },
         "CreateCard": {
-            "Title": "Create New Project",
-            "Description": "Organize your surveys"
+            "Title": "Créer un nouveau projet",
+            "Description": "Organisez vos sondages"
         },
         "Empty": {
-            "NoMatching": "No projects found matching \"{query}\""
+            "NoMatching": "Aucun projet trouvé correspondant à \"{query}\""
         },
         "Card": {
-            "Surveys": "surveys",
-            "Responses": "responses",
+            "Surveys": "sondages",
+            "Responses": "réponses",
             "Menu": {
-                "ViewDetails": "View Details",
-                "AddSurvey": "Add Survey",
-                "Edit": "Edit Project",
-                "Delete": "Delete"
+                "ViewDetails": "Voir les détails",
+                "AddSurvey": "Ajouter un sondage",
+                "Edit": "Modifier le projet",
+                "Delete": "Supprimer"
             }
         },
         "SurveysList": {
             "Empty": {
-                "Title": "No surveys in this project yet",
-                "Button": "Add Survey"
+                "Title": "Pas encore de sondages dans ce projet",
+                "Button": "Ajouter un sondage"
             },
-            "Responses": "responses",
-            "AddAnother": "Add another survey"
+            "Responses": "réponses",
+            "AddAnother": "Ajouter un autre sondage"
         },
         "Modals": {
             "Create": {
-                "Title": "Create Project",
-                "NameLabel": "Project Name",
-                "NamePlaceholder": "e.g., Q1 Customer Research",
-                "DescLabel": "Description (optional)",
-                "DescPlaceholder": "What is this project about?",
-                "Cancel": "Cancel",
-                "Submit": "Create Project",
-                "Submitting": "Creating..."
+                "Title": "Créer un projet",
+                "NameLabel": "Nom du projet",
+                "NamePlaceholder": "ex: Recherche Clients T1",
+                "DescLabel": "Description (optionnel)",
+                "DescPlaceholder": "De quoi parle ce projet ?",
+                "Cancel": "Annuler",
+                "Submit": "Créer le projet",
+                "Submitting": "Création..."
             },
             "Edit": {
-                "Title": "Edit Project",
-                "Save": "Save Changes"
+                "Title": "Modifier le projet",
+                "Save": "Enregistrer les modifications"
             },
             "Delete": {
-                "Title": "Delete Project",
-                "Description": "Are you sure you want to delete \"{name}\"? This action cannot be undone and will remove all survey associations.",
-                "Cancel": "Cancel",
-                "Confirm": "Delete Project",
-                "Deleting": "Deleting..."
+                "Title": "Supprimer le projet",
+                "Description": "Êtes-vous sûr de vouloir supprimer \"{name}\" ? Cette action ne peut pas être annulée et supprimera toutes les associations de sondages.",
+                "Cancel": "Annuler",
+                "Confirm": "Supprimer le projet",
+                "Deleting": "Suppression..."
             },
             "AddSurvey": {
-                "Title": "Add Survey to Project",
-                "AllAdded": "All surveys are already in a project!",
-                "Cancel": "Cancel"
+                "Title": "Ajouter un sondage au projet",
+                "AllAdded": "Tous vos sondages sont déjà dans un projet !",
+                "Cancel": "Annuler"
             }
         }
     },
     "AnalyticsPage": {
         "Header": {
-            "Title": "Analytics",
-            "Description": "Overview of your survey performance and engagement"
+            "Title": "Analyse",
+            "Description": "Aperçu de la performance et de l'engagement de vos sondages"
         },
         "Search": {
-            "Placeholder": "Search surveys..."
+            "Placeholder": "Rechercher des sondages..."
         },
         "Card": {
-            "Responses": "responses"
+            "Responses": "réponses"
         },
         "Empty": {
-            "Title": "No active surveys",
-            "Description": "Create and publish a survey to start seeing analytics.",
-            "Button": "Create Survey"
+            "Title": "Pas encore de statistiques",
+            "Description": "Créez et publiez un sondage pour commencer à voir les analyses.",
+            "Button": "Créer un sondage"
         }
     },
     "TeamPage": {
@@ -566,51 +586,51 @@
             "Leaving": "Départ..."
         },
         "PersonalSpace": {
-            "Title": "Personal Space",
-            "Description": "You are currently in your personal space. To manage a team, please switch to a workspace or create a new one."
+            "Title": "Espace personnel",
+            "Description": "Vous êtes actuellement dans votre espace personnel. Pour gérer une équipe, veuillez basculer vers un espace de travail ou en créer un nouveau."
         },
         "Toasts": {
-            "MemberRemoved": "Member removed",
-            "InvitationSent": "Invitation sent successfully",
-            "WorkspaceDeleted": "Workspace deleted",
-            "DeleteFailed": "Failed to delete workspace",
-            "LeftWorkspace": "Left workspace",
-            "LeaveFailed": "Failed to leave workspace"
+            "MemberRemoved": "Membre supprimé",
+            "InvitationSent": "Invitation envoyée avec succès",
+            "WorkspaceDeleted": "Espace de travail supprimé",
+            "DeleteFailed": "Échec de la suppression de l'espace de travail",
+            "LeftWorkspace": "Espace de travail quitté",
+            "LeaveFailed": "Échec du départ de l'espace de travail"
         },
         "MemberList": {
-            "Header": "Team Members",
-            "Count": "{count, plural, one {# member} other {# members}}",
-            "PendingCount": "• {count} pending",
-            "InviteButton": "Invite",
-            "You": "(you)",
+            "Header": "Membres de l'équipe",
+            "Count": "{count, plural, one {# membre} other {# membres}}",
+            "PendingCount": "• {count} en attente",
+            "InviteButton": "Inviter",
+            "You": "(vous)",
             "Menu": {
-                "Remove": "Remove"
+                "Remove": "Supprimer"
             },
             "Pending": {
-                "Status": "Invitation pending",
-                "Badge": "Pending"
+                "Status": "Invitation en attente",
+                "Badge": "En attente"
             },
             "Empty": {
-                "Title": "No team members yet",
-                "Description": "Invite colleagues to collaborate on surveys together",
-                "Button": "Invite Team Members"
+                "Title": "Pas encore de membres d'équipe",
+                "Description": "Invitez des collègues pour collaborer ensemble sur des sondages",
+                "Button": "Inviter des membres d'équipe"
             },
             "InviteModal": {
-                "Title": "Invite Team Member",
-                "EmailLabel": "Email Address",
-                "EmailPlaceholder": "colleague@company.com",
-                "RoleLabel": "Role",
+                "Title": "Inviter un membre d'équipe",
+                "EmailLabel": "Adresse e-mail",
+                "EmailPlaceholder": "collegue@entreprise.com",
+                "RoleLabel": "Rôle",
                 "Roles": {
-                    "Member": "Member",
-                    "MemberDesc": "Can view surveys and analytics",
-                    "Owner": "Owner",
-                    "OwnerDesc": "Full access to workspace"
+                    "Member": "Membre",
+                    "MemberDesc": "Peut voir les sondages et les analyses",
+                    "Owner": "Propriétaire",
+                    "OwnerDesc": "Accès complet à l'espace de travail"
                 },
-                "Cancel": "Cancel",
-                "Submit": "Send Invitation",
-                "Submitting": "Sending...",
-                "Success": "Invitation sent successfully",
-                "Error": "Failed to send invitation"
+                "Cancel": "Annuler",
+                "Submit": "Envoyer l'invitation",
+                "Submitting": "Envoi...",
+                "Success": "Invitation envoyée avec succès",
+                "Error": "Échec de l'envoi de l'invitation"
             }
         }
     },
