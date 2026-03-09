@@ -7,6 +7,9 @@ import { retrieveRelevantPatterns } from "@/lib/learning/knowledge-storage";
 import { retrievePatternForSituation } from "@/lib/learning/context-engine";
 import { SkillRegistry } from "./skill-registry";
 import { loadDomainSkills } from "./domain-skill-loader";
+import { getRedisClient } from "@/lib/redis";
+
+const PRELOAD_CACHE_TTL_SECONDS = 300; // 5 minutes
 
 export abstract class BaseSpecialistAgent {
   protected role: string;
@@ -18,6 +21,9 @@ export abstract class BaseSpecialistAgent {
   }
 
   async initialize(): Promise<void> {
+    console.log(
+      `[BaseAgent] initialize: Role=${this.role}. SID=${this.context.surveyConfig?.id || "none"}. Domain=${this.context.surveyConfig?.domainId || "none"}`,
+    );
     if (this.context.surveyConfig?.domainId) {
       const surveyDescription = [
         this.context.surveyConfig.coreObjective,
@@ -71,14 +77,62 @@ export abstract class BaseSpecialistAgent {
     const checklist = this.buildChecklist(this.context.surveyConfig);
     return `
 <success_criteria>
-To succeed, you must complete this checklist:
+You are bound by a "Measurement Contract." To succeed, you must satisfy these criteria.
 
-REQUIRED:
-${checklist.required.map((i) => `[${i.status === "met" ? "x" : " "}] ${i.description}`).join("\n")}
+REQUIRED (Contractual):
+${checklist.required.map((i) => `• [${i.status.toUpperCase()}] ID: ${i.id} | ${i.description}`).join("\n")}
 
-ASPIRATIONAL (Try to achieve):
-${checklist.aspirational.map((i) => `[${i.status === "met" ? "x" : " "}] ${i.description}`).join("\n")}
+ASPIRATIONAL (Excellence):
+${checklist.aspirational.map((i) => `• [${i.status.toUpperCase()}] ID: ${i.id} | ${i.description}`).join("\n")}
+
+CRITICAL OPERATIONAL RULES:
+1. Every turn MUST begin with a 'think_and_respond' call.
+2. Use 'internal_reasoning' to audit your progress against the REQUIRED IDs above.
+3. Once a REQUIRED item is fully met, mark it as 'met' in your next state_update.
 </success_criteria>
+    `.trim();
+  }
+
+  protected getConstitutionalConstraints(): string {
+    const languageNames: Record<string, string> = {
+      en: "English",
+      fr: "French",
+      de: "German",
+      es: "Spanish",
+      it: "Italian",
+    };
+    const targetLang = this.context.language || "en";
+    const targetLangName = languageNames[targetLang] || "English";
+
+    return `
+<output_language_enforcement>
+1. MANDATORY: You must ONLY speak in ${targetLangName}.
+2. NO CODE: Never output raw markdown code blocks unless explicitly requested.
+3. UNSUPPORTED LANGUAGE: If the participant provides input in a language other than [English, French, German, Spanish, Italian], you MUST respond in ${targetLangName} with: "I apologize, but I am only able to assist you in English, French, German, Spanish, or Italian. Could we please continue in ${targetLangName}?" (Translate this refusal into ${targetLangName}).
+4. PIVOT: After the refusal, immediately try to pivot back to the last valid topic in ${targetLangName}.
+</output_language_enforcement>
+
+<constitutional_constraints>
+1. MINIMAL FOOTPRINT: Prefer the shortest effective path to the next data point. Do not ramble.
+2. EMOTIONAL CALIBRATION: Acknowledge participant sentiment specifically before pivoting to the next question.
+3. GROUNDING ENFORCEMENT: Never assume a metric or topic is satisfied without a direct participant quote or clear evidence.
+4. ONE AT A TIME: Ask exactly ONE question per turn. Never double-barrel questions.
+5. NO HALLUCINATION: If a participant asks about product features or company policies not in your <knowledge_context>, do not guess. State that you are a researcher focused on their feedback.
+6. TOOL PRECEDENCE: Tool calculations and state updates are your source of truth for "progress," not your own memory.
+</constitutional_constraints>
+    `.trim();
+  }
+
+  protected getGlobalArchitectureRules(): string {
+    return `
+<architecture_rules>
+You operate under a Role-Goal-Constraint (RGC) framework:
+- IDENTITY: Your defined role and domain expertise.
+- OBJECTIVE: The specific survey goal and metric contract.
+- CONSTRAINTS: Hard rules and constitutional principles.
+
+Always prioritize Objective > Identity > Constraints. If a domain skill suggests a behavior that contradicts the core survey goal, the goal wins.
+</architecture_rules>
     `.trim();
   }
 
@@ -102,7 +156,12 @@ ${checklist.aspirational.map((i) => `[${i.status === "met" ? "x" : " "}] ${i.des
     limit: number = 3,
   ): Promise<void> {
     try {
-      const kbResults = await searchKnowledgeBase(query, limit);
+      const kbResults = await searchKnowledgeBase(
+        query,
+        limit,
+        undefined,
+        (this.context.language as any) || "en",
+      );
       if (kbResults.length === 0) return;
       const reranked = await rerankResults(
         query,
@@ -128,7 +187,6 @@ ${checklist.aspirational.map((i) => `[${i.status === "met" ? "x" : " "}] ${i.des
     const p = this.context.situationalPattern;
     if (!p) return "";
 
-    // Extract the core instruction from the stored content (first 3 lines after DESCRIPTION:)
     const lines = p.content.split("\n");
     const descStart = lines.findIndex((l) => l.startsWith("DESCRIPTION:"));
     const contextStart = lines.findIndex((l) => l.startsWith("CONTEXT:"));
@@ -257,6 +315,9 @@ ${example ? `Example: "${example}"` : ""}
     limitPerCategory: number = 2,
     query?: string,
   ): Promise<void> {
+    console.log(
+      `[BaseAgent] preloadPatternLearnings: Cats=${categories.join(",")}`,
+    );
     try {
       // ── Step 1: Situational (conducting only, requires rolling context) ──────
       if (this.role === "conducting" && this.context.rollingContext) {
@@ -293,7 +354,19 @@ ${example ? `Example: "${example}"` : ""}
         }
       }
 
-      // ── Step 2: Broad semantic search ────────────────────────────────────────
+      // ── Step 2: Broad semantic search (Redis-cached) ──────────────────────────
+      const cacheKey = `agent:patterns:${categories.join(",")}:${limitPerCategory}`;
+      const redis = getRedisClient();
+      const cachedBullets = await redis.get(cacheKey).catch(() => null);
+
+      if (cachedBullets) {
+        console.log(
+          `[BaseSpecialistAgent] preloadPatternLearnings: cache hit (${cacheKey})`,
+        );
+        this.context.patternLearnings = cachedBullets;
+        return;
+      }
+
       const bullets: string[] = [];
       for (const category of categories) {
         const categoryBullets = await this.loadPatternLearnings(
@@ -304,7 +377,11 @@ ${example ? `Example: "${example}"` : ""}
       }
 
       if (bullets.length > 0) {
-        this.context.patternLearnings = bullets.join("\n");
+        const joined = bullets.join("\n");
+        this.context.patternLearnings = joined;
+        redis
+          .set(cacheKey, joined, "EX", PRELOAD_CACHE_TTL_SECONDS)
+          .catch(() => {});
       }
     } catch (error) {
       console.warn(
@@ -321,12 +398,22 @@ ${example ? `Example: "${example}"` : ""}
   }
 
   public async preloadSkills(): Promise<void> {
+    console.log("[BaseAgent] preloadSkills: starting...");
     try {
+      const redis = getRedisClient();
+      const cacheKey = "agent:skills-metadata";
+
+      // Check Redis cache first — skills list rarely changes
+      const cached = await redis.get(cacheKey).catch(() => null);
+      if (cached) {
+        console.log("[BaseSpecialistAgent] preloadSkills: cache hit");
+        this.context.skillsMetadata = cached;
+        return;
+      }
+
       const skills = await SkillRegistry.listSkills();
       if (skills.length === 0) return;
 
-      // Filter out foundational domain core skills. They are loaded once at init.
-      // We only want to expose dynamic/modifier skills to the 'loadSkill' tool.
       const callableSkills = skills.filter((s) => !s.id.endsWith("-core"));
 
       if (callableSkills.length === 0) return;
@@ -338,7 +425,7 @@ ${example ? `Example: "${example}"` : ""}
         )
         .join("\n");
 
-      this.context.skillsMetadata = `
+      const metadata = `
 <available_skills>
 You have access to the following specialized skills. These are "Expert Protocols" you can apply to handle specific conversation scenarios.
 To use a skill, call the 'loadSkill' tool with its ID to get detailed instructions.
@@ -350,6 +437,13 @@ Rules for Skills:
 2. Once loaded, strictly follow the skill's instructions until the situation is resolved.
 3. IMPORTANT: You MUST use the standard native JSON format to call tools. DO NOT use python-style 'tool_code' blocks or write raw code.
 </available_skills>`.trim();
+
+      this.context.skillsMetadata = metadata;
+
+      // Store in Redis for next request
+      redis
+        .set(cacheKey, metadata, "EX", PRELOAD_CACHE_TTL_SECONDS)
+        .catch(() => {});
     } catch (error) {
       console.warn(`[BaseSpecialistAgent] Failed to preload skills:`, error);
     }

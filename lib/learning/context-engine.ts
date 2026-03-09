@@ -10,7 +10,7 @@
  *  4. Vector fallback — hybrid search across ACTIVE knowledge base
  */
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { knowledgeBase } from "@/db/schema/vectors";
 import { eq, and, sql, isNull, desc } from "drizzle-orm";
 import { searchKnowledgeBase } from "@/lib/rag/search";
@@ -41,19 +41,24 @@ export async function retrievePatternForSituation(
   situation: SituationKey,
   query: string,
   conversationId: string,
-  domainId?: number | null
+  domainId?: number | null,
 ): Promise<RetrievedPattern | null> {
   // ── Step 1: Check for live A/B experiment ──────────────────────────────────
   const experiment = await findActiveExperiment(situation);
 
   if (experiment) {
-    const variant = assignVariant(conversationId, experiment.id, experiment.trafficSplit);
-    const patternId = variant === "variant"
-      ? experiment.variantPatternId
-      : experiment.controlPatternId;
+    const variant = assignVariant(
+      conversationId,
+      experiment.id,
+      experiment.trafficSplit,
+    );
+    const patternId =
+      variant === "variant"
+        ? experiment.variantPatternId
+        : experiment.controlPatternId;
 
     if (patternId) {
-      const [pattern] = await db
+      const [pattern] = await getDb()
         .select({
           id: knowledgeBase.id,
           title: knowledgeBase.title,
@@ -90,7 +95,11 @@ export async function retrievePatternForSituation(
   }
 
   // ── Step 4: Vector fallback across ACTIVE knowledge base ──────────────────
-  const vectorResults = await searchKnowledgeBase(query, 1, domainId ?? undefined);
+  const vectorResults = await searchKnowledgeBase(
+    query,
+    1,
+    domainId ?? undefined,
+  );
   if (vectorResults.length > 0) {
     const top = vectorResults[0];
     return {
@@ -112,9 +121,9 @@ export async function retrievePatternForSituation(
 
 async function findExactSituationalPattern(
   situation: SituationKey,
-  domainId?: number | null
+  domainId?: number | null,
 ): Promise<Omit<RetrievedPattern, "source"> | null> {
-  const [row] = await db
+  const [row] = await getDb()
     .select({
       id: knowledgeBase.id,
       title: knowledgeBase.title,
@@ -134,8 +143,8 @@ async function findExactSituationalPattern(
           : isNull(knowledgeBase.effectiveStyle),
         domainId != null
           ? eq(knowledgeBase.domainId, domainId)
-          : isNull(knowledgeBase.domainId)
-      )
+          : isNull(knowledgeBase.domainId),
+      ),
     )
     .orderBy(desc(knowledgeBase.performanceScore))
     .limit(1);
@@ -145,9 +154,9 @@ async function findExactSituationalPattern(
 
 async function findPhasePattern(
   phase: "opening" | "exploration" | "deepdive" | "closing",
-  domainId?: number | null
+  domainId?: number | null,
 ): Promise<Omit<RetrievedPattern, "source"> | null> {
-  const [row] = await db
+  const [row] = await getDb()
     .select({
       id: knowledgeBase.id,
       title: knowledgeBase.title,
@@ -162,8 +171,8 @@ async function findPhasePattern(
         eq(knowledgeBase.effectivePhase, phase),
         domainId != null
           ? eq(knowledgeBase.domainId, domainId)
-          : sql`${knowledgeBase.domainId} IS NULL OR ${knowledgeBase.domainId} = ${domainId}`
-      )
+          : sql`${knowledgeBase.domainId} IS NULL OR ${knowledgeBase.domainId} = ${domainId}`,
+      ),
     )
     .orderBy(desc(knowledgeBase.performanceScore))
     .limit(1);

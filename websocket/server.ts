@@ -8,15 +8,14 @@ loadEnvConfig(projectDir);
 
 import * as Sentry from "@sentry/node";
 
-/*
 // Initialize Sentry for the standalone Node.js Project
 Sentry.init({
-  dsn: process.env.SENTRY_NODE_DSN || process.env.SENTRY_DSN,
+  dsn: process.env.SENTRY_DSN,
   tracesSampleRate: 1.0,
   environment: process.env.NODE_ENV || "development",
   serverName: "websocket-server",
 });
-*/
+
 
 import { env } from "@/lib/env";
 import {
@@ -49,10 +48,10 @@ const activeConnections = new Map<
   string,
   {
     handler:
-      | SurveyCreationVoiceHandler
-      | SurveyResponseVoiceHandler
-      | SampleSurveyVoiceHandler
-      | AnalyticsHandler;
+    | SurveyCreationVoiceHandler
+    | SurveyResponseVoiceHandler
+    | SampleSurveyVoiceHandler
+    | AnalyticsHandler;
     userId?: string;
     createdAt: number; // Track when connection was created for cleanup
   }
@@ -199,7 +198,7 @@ wss.on("connection", async (ws: WebSocket, req) => {
       ws.close();
     }
   } catch (error) {
-    console.error("[WebSocket] Connection error:", error);
+    console.error(`[WebSocket] Connection error at ${pathname}:`, error);
     ws.send(
       JSON.stringify({
         type: "error",
@@ -547,7 +546,7 @@ function initializeRedisSubscriber(): void {
     // Clean up existing subscriber if any
     if (redisSubscriber) {
       try {
-        redisSubscriber.quit().catch(() => {});
+        redisSubscriber.quit().catch(() => { });
       } catch {
         // Ignore cleanup errors
       }
@@ -679,6 +678,11 @@ server.listen(PORT, () => {
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
   `);
+
+  if (process.env.SENTRY_TEST_TRIGGER === "true") {
+    console.log("⚠️ Sentry Test Trigger enabled. Throwing test error in websocket server...");
+    throw new Error("Sentry Test WebSocket Error: This is a test error from the WebSocket process.");
+  }
 });
 
 /**
@@ -710,7 +714,7 @@ process.on("SIGTERM", async () => {
       if (
         handler &&
         typeof (handler as { cleanup?: () => Promise<void> }).cleanup ===
-          "function"
+        "function"
       ) {
         await (handler as { cleanup: () => Promise<void> }).cleanup();
       }
@@ -743,21 +747,4 @@ process.on("SIGTERM", async () => {
 process.on("SIGINT", async () => {
   console.log("[WebSocket] Received SIGINT, shutting down...");
   process.emit("SIGTERM");
-});
-
-// Handle uncaught errors
-process.on("uncaughtException", (error) => {
-  console.error("[WebSocket] Uncaught exception:", error);
-  Sentry.captureException(error, { tags: { type: "uncaughtException" } });
-  process.exit(1);
-});
-
-process.on("unhandledRejection", (reason, promise) => {
-  console.error(
-    "[WebSocket] Unhandled rejection at:",
-    promise,
-    "reason:",
-    reason,
-  );
-  Sentry.captureException(reason, { tags: { type: "unhandledRejection" } });
 });

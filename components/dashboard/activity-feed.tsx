@@ -10,6 +10,7 @@ import {
     Activity
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ClientT } from "@/components/i18n/client-t";
 
 type ActivityType =
     | "new_response"
@@ -86,14 +87,14 @@ export function ActivityFeed({
     if (activities.length === 0) {
         return (
             <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                <h3 className="text-base font-semibold text-gray-900 mb-4">{title}</h3>
+                <h3 className="text-base font-semibold text-gray-900 mb-4"><ClientT>{title}</ClientT></h3>
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                     <div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center mb-3">
                         <Clock className="w-6 h-6 text-gray-400" />
                     </div>
-                    <p className="text-sm text-gray-500">No activity yet</p>
+                    <p className="text-sm text-gray-500"><ClientT>No activity yet</ClientT></p>
                     <p className="text-xs text-gray-400 mt-1">
-                        Activity will appear here as you use Convy
+                        <ClientT>Activity will appear here as you use Convy</ClientT>
                     </p>
                 </div>
             </div>
@@ -103,13 +104,13 @@ export function ActivityFeed({
     return (
         <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-md transition-shadow duration-300">
             <div className="flex items-center justify-between mb-5">
-                <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+                <h3 className="text-base font-semibold text-gray-900"><ClientT>{title}</ClientT></h3>
                 {showViewAll && activities.length > maxItems && (
                     <button
                         onClick={onViewAll}
                         className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
                     >
-                        View all
+                        <ClientT>View all</ClientT>
                     </button>
                 )}
             </div>
@@ -134,7 +135,7 @@ export function ActivityFeed({
                                 {/* Content */}
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-gray-900 truncate">
-                                        {activity.title}
+                                        <ClientT>{activity.title}</ClientT>
                                     </p>
                                     <p className="text-xs text-gray-500 truncate mt-0.5">
                                         {activity.description}

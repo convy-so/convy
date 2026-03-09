@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 type SurveyStatus = "active" | "draft" | "completed" | "paused" | "creating";
 
@@ -34,12 +35,12 @@ interface SurveyCardProps {
     onDuplicate?: (id: string) => void;
 }
 
-const statusConfig: Record<SurveyStatus, { label: string; color: string; bgColor: string }> = {
-    active: { label: "Active", color: "text-emerald-700", bgColor: "bg-emerald-50 border-emerald-200" },
-    draft: { label: "Draft", color: "text-amber-700", bgColor: "bg-amber-50 border-amber-200" },
-    completed: { label: "Completed", color: "text-gray-700", bgColor: "bg-gray-50 border-gray-200" },
-    paused: { label: "Paused", color: "text-orange-700", bgColor: "bg-orange-50 border-orange-200" },
-    creating: { label: "Creating", color: "text-blue-700", bgColor: "bg-blue-50 border-blue-200" },
+const statusConfig: Record<SurveyStatus, { key: string; color: string; bgColor: string }> = {
+    active: { key: "Active", color: "text-emerald-700", bgColor: "bg-emerald-50 border-emerald-200" },
+    draft: { key: "Draft", color: "text-amber-700", bgColor: "bg-amber-50 border-amber-200" },
+    completed: { key: "Completed", color: "text-gray-700", bgColor: "bg-gray-50 border-gray-200" },
+    paused: { key: "Paused", color: "text-orange-700", bgColor: "bg-orange-50 border-orange-200" },
+    creating: { key: "Creating", color: "text-blue-700", bgColor: "bg-blue-50 border-blue-200" },
 };
 
 export function SurveyCard({
@@ -56,6 +57,7 @@ export function SurveyCard({
     onDuplicate,
 }: SurveyCardProps) {
     const [showMenu, setShowMenu] = useState(false);
+    const t = useTranslations("SurveysPage");
     const statusStyle = statusConfig[status] || statusConfig.draft;
     const progress = maxResponses > 0 ? (responses / maxResponses) * 100 : 0;
 
@@ -82,7 +84,9 @@ export function SurveyCard({
                             {title}
                         </Link>
                         {projectName && (
-                            <p className="text-xs text-gray-400 truncate">in {projectName}</p>
+                            <p className="text-xs text-gray-400 truncate">
+                                {t("Card.InProject", { name: projectName })}
+                            </p>
                         )}
                     </div>
                 </div>
@@ -94,7 +98,7 @@ export function SurveyCard({
                         statusStyle.bgColor,
                         statusStyle.color
                     )}>
-                        {statusStyle.label}
+                        {t(`Status.${statusStyle.key}`)}
                     </span>
 
                     <div className="relative">
@@ -118,7 +122,7 @@ export function SurveyCard({
                                         onClick={() => setShowMenu(false)}
                                     >
                                         <Eye className="w-4 h-4" />
-                                        View Details
+                                        {t("Card.Menu.ViewDetails")}
                                     </Link>
                                     {/* Resume or View Creation Chat based on status */}
                                     {status === "creating" ? (
@@ -128,7 +132,7 @@ export function SurveyCard({
                                             onClick={() => setShowMenu(false)}
                                         >
                                             <Sparkles className="w-4 h-4" />
-                                            Resume Creation
+                                            {t("Card.Menu.Resume")}
                                         </Link>
                                     ) : (
                                         <Link
@@ -137,7 +141,7 @@ export function SurveyCard({
                                             onClick={() => setShowMenu(false)}
                                         >
                                             <MessageSquare className="w-4 h-4" />
-                                            View Creation Chat
+                                            {t("Card.Menu.ViewChat")}
                                         </Link>
                                     )}
                                     <Link
@@ -146,7 +150,7 @@ export function SurveyCard({
                                         onClick={() => setShowMenu(false)}
                                     >
                                         <Edit className="w-4 h-4" />
-                                        Edit Survey
+                                        {t("Card.Menu.Edit")}
                                     </Link>
                                     <Link
                                         href={`/dashboard/surveys/${id}?tab=analytics`}
@@ -154,7 +158,7 @@ export function SurveyCard({
                                         onClick={() => setShowMenu(false)}
                                     >
                                         <BarChart3 className="w-4 h-4" />
-                                        View Analytics
+                                        {t("Card.Menu.Analytics")}
                                     </Link>
                                     <button
                                         onClick={() => {
@@ -164,13 +168,13 @@ export function SurveyCard({
                                         className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                     >
                                         <Copy className="w-4 h-4" />
-                                        Duplicate
+                                        {t("Card.Menu.Duplicate")}
                                     </button>
                                     <button
                                         className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                     >
                                         <Share2 className="w-4 h-4" />
-                                        Share Link
+                                        {t("Card.Menu.ShareLink")}
                                     </button>
                                     <div className="border-t border-gray-100 my-1" />
                                     <button
@@ -181,7 +185,7 @@ export function SurveyCard({
                                         className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
                                     >
                                         <Trash2 className="w-4 h-4" />
-                                        Delete
+                                        {t("Card.Menu.Delete")}
                                     </button>
                                 </div>
                             </>
@@ -196,7 +200,7 @@ export function SurveyCard({
                     <div className="flex items-center gap-1.5 text-sm text-gray-600">
                         <Users className="w-4 h-4" />
                         <span className="font-medium">{responses}</span>
-                        <span className="text-gray-400">/ {maxResponses} responses</span>
+                        <span className="text-gray-400">/ {maxResponses} {t("Card.Responses")}</span>
                     </div>
                     <span className="text-sm font-medium text-gray-500">{Math.round(progress)}%</span>
                 </div>
@@ -217,9 +221,9 @@ export function SurveyCard({
             <div className="flex items-center justify-between text-xs text-gray-400">
                 <div className="flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5" />
-                    <span>Last activity: {lastActivity}</span>
+                    <span>{t("Card.LastActivity")} {lastActivity}</span>
                 </div>
-                <span>Created {createdAt}</span>
+                <span>{t("Card.Created")} {createdAt}</span>
             </div>
         </div>
     );

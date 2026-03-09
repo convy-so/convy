@@ -12,10 +12,10 @@ import {
     X,
     Loader2,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { inviteToWorkspace, removeWorkspaceMember } from "@/app/actions/workspace";
 import toast from "react-hot-toast";
 import { useTranslations } from "next-intl";
+import { cn } from "@/lib/utils";
 
 interface TeamMember {
     id: string;
@@ -56,7 +56,6 @@ export function TeamMemberList({
     onMemberRemoved,
     onInviteSent,
 }: TeamMemberListProps) {
-    const t = useTranslations('TeamPage');
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [inviteEmail, setInviteEmail] = useState("");
     const [inviteRole, setInviteRole] = useState<"owner" | "member">("member");
@@ -64,6 +63,7 @@ export function TeamMemberList({
     const [inviteError, setInviteError] = useState<string | null>(null);
     const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
     const [showMenuFor, setShowMenuFor] = useState<string | null>(null);
+    const t = useTranslations("TeamPage.MemberList");
 
     const handleInvite = async () => {
         if (!inviteEmail.trim()) return;
@@ -82,15 +82,14 @@ export function TeamMemberList({
                 setShowInviteModal(false);
                 setInviteEmail("");
                 setInviteRole("member");
-                toast.success(t('MemberList.InviteModal.Success'));
+                toast.success(t("InviteModal.Success"));
                 onInviteSent?.();
             } else {
                 setInviteError(result.error);
-                toast.error(result.error || t('MemberList.InviteModal.Error'));
+                toast.error(t("InviteModal.Error"));
             }
         } catch (error) {
-            setInviteError(t('MemberList.InviteModal.Error'));
-            toast.error(t('Toasts.Error'));
+            toast.error(t("InviteModal.Error"));
         } finally {
             setIsInviting(false);
         }
@@ -105,14 +104,13 @@ export function TeamMemberList({
             });
 
             if (result.success) {
-                toast.success(t('Toasts.MemberRemoved'));
+                toast.success(t("Toasts.MemberRemoved"));
                 onMemberRemoved?.(memberIdOrEmail);
             } else {
-                toast.error(result.error || t('Toasts.Error'));
+                toast.error(t("Toasts.RemoveFailed"));
             }
         } catch (error) {
-            console.error("Failed to remove member:", error);
-            toast.error(t('Toasts.Error'));
+            toast.error(t("Toasts.RemoveFailed"));
         } finally {
             setRemovingMemberId(null);
             setShowMenuFor(null);
@@ -124,10 +122,10 @@ export function TeamMemberList({
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                 <div>
-                    <h3 className="text-base font-semibold text-gray-900">{t('MemberList.Header')}</h3>
+                    <h3 className="text-base font-semibold text-gray-900">{t("Header")}</h3>
                     <p className="text-sm text-gray-500 mt-0.5">
-                        {t('MemberList.Count', {count: members.length})}
-                        {pendingInvites.length > 0 && ` ${t('MemberList.PendingCount', {count: pendingInvites.length})}`}
+                        {t("Count", { count: members.length })}
+                        {pendingInvites.length > 0 && <span> {t("PendingCount", { count: pendingInvites.length })}</span>}
                     </p>
                 </div>
                 {isOwner && (
@@ -136,7 +134,7 @@ export function TeamMemberList({
                         className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors"
                     >
                         <UserPlus className="w-4 h-4" />
-                        {t('MemberList.InviteButton')}
+                        {t("InviteButton")}
                     </button>
                 )}
             </div>
@@ -180,7 +178,7 @@ export function TeamMemberList({
                                             {member.user.name}
                                         </p>
                                         {isCurrentUser && (
-                                            <span className="text-xs text-gray-400">{t('MemberList.You')}</span>
+                                            <span className="text-xs text-gray-400">{t("You")}</span>
                                         )}
                                     </div>
                                     <p className="text-sm text-gray-500">{member.user.email}</p>
@@ -195,7 +193,7 @@ export function TeamMemberList({
                                         ? "bg-amber-50 text-amber-700 border border-amber-200"
                                         : "bg-gray-50 text-gray-600 border border-gray-200"
                                 )}>
-                                    {member.role}
+                                    {t(`Roles.${member.role === 'owner' ? 'Owner' : 'Member'}`)}
                                 </span>
 
                                 {canRemove && (
@@ -224,7 +222,7 @@ export function TeamMemberList({
                                                         ) : (
                                                             <Trash2 className="w-4 h-4" />
                                                         )}
-                                                        {t('MemberList.Menu.Remove')}
+                                                        {t("Menu.Remove")}
                                                     </button>
                                                 </div>
                                             </>
@@ -251,14 +249,14 @@ export function TeamMemberList({
                             {/* Info */}
                             <div>
                                 <p className="text-sm font-medium text-gray-700">{invite.email}</p>
-                                <p className="text-xs text-gray-400">{t('MemberList.Pending.Status')}</p>
+                                <p className="text-xs text-gray-400">{t("Pending.Status")}</p>
                             </div>
                         </div>
 
                         {/* Status */}
                         <div className="flex items-center gap-2">
                             <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-600 border border-blue-200">
-                                {t('MemberList.Pending.Badge')}
+                                {t("Pending.Badge")}
                             </span>
                             {isOwner && (
                                 <button
@@ -284,9 +282,9 @@ export function TeamMemberList({
                     <div className="w-16 h-16 rounded-full bg-gray-50 flex items-center justify-center mx-auto mb-4">
                         <User className="w-8 h-8 text-gray-400" />
                     </div>
-                    <h4 className="text-base font-semibold text-gray-900 mb-1">{t('MemberList.Empty.Title')}</h4>
+                    <h4 className="text-base font-semibold text-gray-900 mb-1">{t("Empty.Title")}</h4>
                     <p className="text-sm text-gray-500 mb-4">
-                        {t('MemberList.Empty.Description')}
+                        {t("Empty.Description")}
                     </p>
                     {isOwner && (
                         <button
@@ -294,7 +292,7 @@ export function TeamMemberList({
                             className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors"
                         >
                             <UserPlus className="w-4 h-4" />
-                            {t('MemberList.Empty.Button')}
+                            {t("MemberList.InviteButton")}
                         </button>
                     )}
                 </div>
@@ -313,7 +311,7 @@ export function TeamMemberList({
                     <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
                         {/* Header */}
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                            <h3 className="text-lg font-semibold text-gray-900">{t('MemberList.InviteModal.Title')}</h3>
+                            <h3 className="text-lg font-semibold text-gray-900">{t("InviteModal.Title")}</h3>
                             <button
                                 onClick={() => setShowInviteModal(false)}
                                 className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
@@ -327,7 +325,7 @@ export function TeamMemberList({
                             {/* Email Input */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    {t('MemberList.InviteModal.EmailLabel')}
+                                    {t("InviteModal.EmailLabel")}
                                 </label>
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -335,7 +333,7 @@ export function TeamMemberList({
                                         type="email"
                                         value={inviteEmail}
                                         onChange={(e) => setInviteEmail(e.target.value)}
-                                        placeholder={t('MemberList.InviteModal.EmailPlaceholder')}
+                                        placeholder="email@example.com"
                                         className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
                                     />
                                 </div>
@@ -344,7 +342,7 @@ export function TeamMemberList({
                             {/* Role Selection */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    {t('MemberList.InviteModal.RoleLabel')}
+                                    {t("InviteModal.RoleLabel")}
                                 </label>
                                 <div className="grid grid-cols-2 gap-3">
                                     <button
@@ -358,10 +356,10 @@ export function TeamMemberList({
                                     >
                                         <div className="flex items-center gap-2 mb-1">
                                             <Shield className="w-4 h-4 text-gray-600" />
-                                            <span className="font-semibold text-gray-900">{t('MemberList.InviteModal.Roles.Member')}</span>
+                                            <span className="font-semibold text-gray-900">{t("InviteModal.Roles.Member")}</span>
                                         </div>
                                         <p className="text-xs text-gray-500">
-                                            {t('MemberList.InviteModal.Roles.MemberDesc')}
+                                            {t("InviteModal.Roles.MemberDesc")}
                                         </p>
                                     </button>
                                     <button
@@ -375,10 +373,10 @@ export function TeamMemberList({
                                     >
                                         <div className="flex items-center gap-2 mb-1">
                                             <Crown className="w-4 h-4 text-amber-500" />
-                                            <span className="font-semibold text-gray-900">{t('MemberList.InviteModal.Roles.Owner')}</span>
+                                            <span className="font-semibold text-gray-900">{t("InviteModal.Roles.Owner")}</span>
                                         </div>
                                         <p className="text-xs text-gray-500">
-                                            {t('MemberList.InviteModal.Roles.OwnerDesc')}
+                                            {t("InviteModal.Roles.OwnerDesc")}
                                         </p>
                                     </button>
                                 </div>
@@ -398,7 +396,7 @@ export function TeamMemberList({
                                 onClick={() => setShowInviteModal(false)}
                                 className="px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                             >
-                                {t('MemberList.InviteModal.Cancel')}
+                                {t("InviteModal.Cancel")}
                             </button>
                             <button
                                 onClick={handleInvite}
@@ -408,12 +406,12 @@ export function TeamMemberList({
                                 {isInviting ? (
                                     <>
                                         <Loader2 className="w-4 h-4 animate-spin" />
-                                        {t('MemberList.InviteModal.Submitting')}
+                                        {t("InviteModal.Submitting")}
                                     </>
                                 ) : (
                                     <>
                                         <Mail className="w-4 h-4" />
-                                        {t('MemberList.InviteModal.Submit')}
+                                        {t("InviteModal.Submit")}
                                     </>
                                 )}
                             </button>

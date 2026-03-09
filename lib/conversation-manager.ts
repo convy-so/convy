@@ -106,6 +106,9 @@ export class ConversationManager {
   ): Promise<RollingContext> {
     // Normalize messages for analysis
     const normalizedMessages = this.normalizeMessages(messages, config);
+    console.log(
+      `[ConversationManager:loadOrCreateContext] Normalized count: ${normalizedMessages.length}. CID: ${conversationId}`,
+    );
 
     const redis = getRedisClient();
     const contextKey = getContextKey(conversationId);
@@ -115,16 +118,25 @@ export class ConversationManager {
     let context: RollingContext | null = null;
     let startTime = new Date();
 
-    if (!forceNew) {
-      const existingContext = await redis.get(contextKey);
-      const startTimeStr = await redis.get(startTimeKey);
+    if (!forceNew && (redis.status === "ready" || redis.status === "connect")) {
+      try {
+        console.log(
+          `[ConversationManager:loadOrCreateContext] Attempting to load context from Redis...`,
+        );
+        const result = (await Promise.race([
+          Promise.all([redis.get(contextKey), redis.get(startTimeKey)]),
+          new Promise<null[]>((_, reject) =>
+            setTimeout(() => reject(new Error("Redis timeout")), 1500),
+          ),
+        ])) as [string | null, string | null];
 
-      if (startTimeStr) {
-        startTime = new Date(startTimeStr);
-      }
+        const [existingContext, startTimeStr] = result;
 
-      if (existingContext) {
-        try {
+        if (startTimeStr) {
+          startTime = new Date(startTimeStr);
+        }
+
+        if (existingContext) {
           const parsedContext = JSON.parse(existingContext) as RollingContext;
 
           // Security check: ensure the conversation belongs to this survey
@@ -138,20 +150,24 @@ export class ConversationManager {
           } else {
             context = parsedContext;
           }
-        } catch (error) {
-          console.warn(
-            `[ConversationManager] Failed to parse existing context for ${conversationId}, recreating fresh session.`,
-            error,
-          );
         }
+      } catch (error) {
+        console.warn(
+          `[ConversationManager] Failed to parse existing context for ${conversationId}, recreating fresh session.`,
+          error,
+        );
       }
     }
 
     // Initialize if needed
     if (!context) {
       context = createRollingContext(config.id, config, startTime);
-      // Store start time for new conversations
-      await redis.set(startTimeKey, startTime.toISOString(), "EX", 7200); // 2 hour expiry
+      // Store start time for new conversations - non-blocking safety
+      if (redis.status === "ready" || redis.status === "connect") {
+        redis
+          .set(startTimeKey, startTime.toISOString(), "EX", 7200)
+          .catch(() => {});
+      }
     }
 
     // Update context with current messages (Compression)
@@ -185,6 +201,9 @@ export class ConversationManager {
       transitionReason: null,
     };
 
+    console.log(
+      `[ConversationManager:loadOrCreateContext] Updated context. Progress: ${context.progress.completionPercentage}%. State: ${context.stateContext.currentState}`,
+    );
     return context;
   }
 
@@ -206,6 +225,7 @@ export class ConversationManager {
     },
   ): Promise<void> {
     try {
+      const redis = getRedisClient();
       // Normalize messages for analysis
       const normalizedMessages = this.normalizeMessages(messages, config);
 
@@ -269,35 +289,46 @@ export class ConversationManager {
         config,
       );
 
-      // Save updated context to Redis
-      const redis = getRedisClient();
+      // Save updated context to Redis - with timeout
       const contextKey = getContextKey(conversationId);
-      const updatedContext: RollingContext = {
-        ...existingContext,
-        memory: updatedMemory,
-      };
-      await redis.set(contextKey, JSON.stringify(updatedContext), "EX", 7200);
+      if (redis.status === "ready" || redis.status === "connect") {
+        const updatedContext: RollingContext = {
+          ...existingContext,
+          memory: updatedMemory,
+        };
+        await Promise.race([
+          redis.set(contextKey, JSON.stringify(updatedContext), "EX", 7200),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Redis write timeout")), 1000),
+          ),
+        ]).catch((e) =>
+          console.warn("[ConversationManager] Redis write failed:", e.message),
+        );
+      }
     } catch (error) {
       console.error("[ConversationManager] Memory update error:", error);
       // Non-critical - continue without memory update
     }
   }
 
-  /**
-   * Save the current context state to Redis immediately.
-   * Useful for ensuring state is persisted between turns even if memory update hasn't run.
-   */
   static async saveContext(
     conversationId: string,
     context: RollingContext,
   ): Promise<void> {
     const redis = getRedisClient();
-    await redis.set(
-      getContextKey(conversationId),
-      JSON.stringify(context),
-      "EX",
-      7200,
-    );
+    if (redis.status !== "ready" && redis.status !== "connect") return;
+
+    try {
+      const contextKey = getContextKey(conversationId);
+      await Promise.race([
+        redis.set(contextKey, JSON.stringify(context), "EX", 7200),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Redis write timeout")), 1000),
+        ),
+      ]);
+    } catch (e: any) {
+      console.warn("[ConversationManager:saveContext] Failed:", e.message);
+    }
   }
 
   /**

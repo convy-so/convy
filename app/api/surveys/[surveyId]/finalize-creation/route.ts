@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys, surveyCreationConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 
@@ -17,7 +17,7 @@ export async function POST(
     const session = await getVerifiedSession();
     const { surveyId } = await params;
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -41,7 +41,7 @@ export async function POST(
     }
 
     // Get extracted data from creation conversation
-    const [creationConversation] = await db
+    const [creationConversation] = await getDb()
       .select()
       .from(surveyCreationConversations)
       .where(eq(surveyCreationConversations.surveyId, surveyId));
@@ -123,14 +123,14 @@ export async function POST(
     if (extractedData.metrics) updateData.metrics = extractedData.metrics;
 
     // Update survey with all extracted data
-    const [updatedSurvey] = await db
+    const [updatedSurvey] = await getDb()
       .update(surveys)
       .set(updateData)
       .where(eq(surveys.id, surveyId))
       .returning();
 
     // Mark creation conversation as completed
-    await db
+    await getDb()
       .update(surveyCreationConversations)
       .set({
         status: "completed",
