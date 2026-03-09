@@ -52,15 +52,4 @@ export function getDb() {
   return db as NonNullable<typeof global.db>;
 }
 
-// Export a proxy for 'db' to maintain compatibility while preserving lazy initialization.
-// This prevents top-level side effects during build while avoiding the need to refactor 50+ files.
-export const db = new Proxy({} as ReturnType<typeof getDb>, {
-  get(target, prop, receiver) {
-    const d = getDb();
-    const value = Reflect.get(d, prop, receiver);
-    // If the value is a function (e.g., db.select, db.insert), bind it to the real db instance.
-    return typeof value === "function" ? value.bind(d) : value;
-  },
-});
-
 export type DbClient = ReturnType<typeof getDb>;
