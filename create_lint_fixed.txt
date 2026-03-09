@@ -1,0 +1,38 @@
+
+C:\Users\pc\convy\app\[locale]\(dashboard)\dashboard\create\page.tsx
+   111:14   warning  'error' is defined but never used                                                                                                               @typescript-eslint/no-unused-vars
+   221:9    error    'currentSurveyId' is never reassigned. Use 'const' instead                                                                                      prefer-const
+   244:55   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   247:39   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   247:75   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   247:110  error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   249:40   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   249:84   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   347:18   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   392:6    warning  React Hook useEffect has missing dependencies: 'hasGreetingPlayed' and 'voiceWs.isPlaying'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+   405:6    warning  React Hook useEffect has a missing dependency: 'voiceWs'. Either include it or remove the dependency array                                      react-hooks/exhaustive-deps
+   427:6    warning  React Hook useEffect has a missing dependency: 'voiceWs'. Either include it or remove the dependency array                                      react-hooks/exhaustive-deps
+   438:16   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   550:6    warning  React Hook useEffect has missing dependencies: 'language', 'surveyId', and 'voiceWs'. Either include them or remove the dependency array        react-hooks/exhaustive-deps
+   583:49   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   586:41   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   586:77   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   586:112  error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   588:42   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   588:86   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   649:6    warning  React Hook useEffect has a missing dependency: 'setMessages'. Either include it or remove the dependency array                                  react-hooks/exhaustive-deps
+   677:10   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   688:13   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   712:6    warning  React Hook useEffect has a missing dependency: 'fetchUpdatedData'. Either include it or remove the dependency array                             react-hooks/exhaustive-deps
+   719:6    warning  React Hook useEffect has a missing dependency: 'fetchUpdatedData'. Either include it or remove the dependency array                             react-hooks/exhaustive-deps
+   725:25   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+  1077:43   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+  1077:110  error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+  1324:47   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+  1326:62   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+  1326:97   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+  1333:58   error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+
+✖ 32 problems (24 errors, 8 warnings)
+  1 error and 0 warnings potentially fixable with the `--fix` option.
+
