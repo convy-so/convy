@@ -65,7 +65,7 @@ export function useAvailableSurveys() {
       const result = await getSurveysAction();
       if (!result.success) throw new Error(result.error);
       // Filter client-side for simplicity, or backend action could optionally filter
-      return result.data.surveys.filter((s) => !s.projectId);
+      return result.data.filter((s) => !s.projectId);
     },
   });
 }
