@@ -1,0 +1,97 @@
+
+C:\Users\pc\convy\app\[locale]\s\[shareableLink]\respond\page.tsx
+   38:11  warning  'Survey' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          @typescript-eslint/no-unused-vars
+   50:71  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+  219:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\pc\convy\app\[locale]\s\[shareableLink]\respond\page.tsx:219:7
+  217 |   useEffect(() => {
+  218 |     if (initiallyCompleted && !isCompleted) {
+> 219 |       setIsCompleted(true);
+      |       ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  220 |     }
+  221 |   }, [initiallyCompleted, isCompleted]);
+  222 |                                                                                                                                                                                                                                                                                     react-hooks/set-state-in-effect
+  232:66  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+  240:28  warning  'setSelectedLanguage' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    @typescript-eslint/no-unused-vars
+  329:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\pc\convy\app\[locale]\s\[shareableLink]\respond\page.tsx:329:7
+  327 |
+  328 |     if (hasToolCompletion) {
+> 329 |       setIsCompleted(true);
+      |       ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  330 |     }
+  331 |   }, [messages, isCompleted, shareableLink, setIsCompleted]);
+  332 |                                                                                                                                                                                                                                                                                                     react-hooks/set-state-in-effect
+  351:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\pc\convy\app\[locale]\s\[shareableLink]\respond\page.tsx:351:7
+  349 |     ) {
+  350 |       // Just mark it as started, the backend already provided the initial messages
+> 351 |       setHasStarted(true);
+      |       ^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  352 |     }
+  353 |   }, [
+  354 |     isInitializing,                                                                                                                                                                                                                                                                           react-hooks/set-state-in-effect
+  377:42  error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `survey`, but the source dependencies were [survey?.media, t, setMessages, voiceWs, setIsCompleted, setIsVoiceMode]. Inferred less specific property than source.
+
+C:\Users\pc\convy\app\[locale]\s\[shareableLink]\respond\page.tsx:377:42
+  375 |   });
+  376 |
+> 377 |   const handleVoiceMessage = useCallback((data: Record<string, unknown>) => {
+      |                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 378 |     const type = data.type as string;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 379 |     // Chain of Trust: Unified message handling via Voice Agent events
+      …
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 433 |     }
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 434 |   }, [survey?.media, t, setMessages, voiceWs, setIsCompleted, setIsVoiceMode]);
+      | ^^^^ Could not preserve existing manual memoization
+  435 |
+  436 |   // Sync the ref with the handler
+  437 |   useEffect(() => {  react-hooks/preserve-manual-memoization
+  444:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\pc\convy\app\[locale]\s\[shareableLink]\respond\page.tsx:444:7
+  442 |   useEffect(() => {
+  443 |     if (survey?.isVoice && !isVoiceMode) {
+> 444 |       setIsVoiceMode(true);
+      |       ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  445 |     } else if (!survey?.isVoice && isVoiceMode) {
+  446 |       setIsVoiceMode(false);
+  447 |     }                                                                                                                                                                                                                                                  react-hooks/set-state-in-effect
+  453:62  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+  597:39  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+  604:19  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+
+✖ 12 problems (10 errors, 2 warnings)
+
