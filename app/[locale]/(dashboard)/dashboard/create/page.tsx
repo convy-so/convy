@@ -39,6 +39,7 @@ import { CollaborationSidebar } from "@/components/surveys/collaboration-sidebar
 import {
   type SurveyLanguage,
   type SurveyUIMessage,
+  type CollectedInfoFlags,
   type SurveyExtractionData,
 } from "@/lib/types/survey-flow";
 
@@ -67,98 +68,7 @@ function CreateSurveyContent() {
   const [wasStartedWithVoice, setWasStartedWithVoice] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  const voiceWs = useVoiceWebSocket({
-    url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-creation`,
-    onReady: () => {
-      console.log("[ChainOfTrust] [Hook] WebSocket connection established. Waiting for server 'ready'...");
-    },
-    onMessage: (data) => {
-      console.log(`[ChainOfTrust] [Hook] Received message type: ${data.type}`, data);
-      // Handle speech activity events from Deepgram
-      if (data.type === "ready") {
-        console.log("[ChainOfTrust] [Server] Server is READY to accept commands.");
-        setIsServerReady(true);
-      } else if (data.type === "agent_ready") {
-        console.log("[ChainOfTrust] [Deepgram] 🤖 Agent initialized and ready. Clearing UI connection state.");
-        setIsConnecting(false);
-      } else if (data.type === "speech_start") {
-        console.log("[ChainOfTrust] [Deepgram] 🗣️ User speech started (VAD).");
-        setIsSpeaking(true);
-      } else if (data.type === "speech_end") {
-        console.log("[ChainOfTrust] [Deepgram] 🤐 User speech ended (VAD).");
-        setIsSpeaking(false);
-      } else if (data.type === "survey_state_loaded") {
-        console.log("[ChainOfTrust] [Server] Previous survey state successfully restored into handler.");
-        setSurveyStateLoaded(true);
-      } else if (data.type === "conversation_text") {
-        const { role, content } = data;
-        console.log(`[ChainOfTrust] [Server] Appending ${role} message to UI: ${content.substring(0, 30)}...`);
-        const now = Date.now();
-        setMessages((prev) => {
-          const lastMessage = prev[prev.length - 1];
-          // Use a smaller threshold or no threshold for Voice Agent unified events to ensure clarity
-          // but reuse the merge logic for consistency
-          if (
-            lastMessage &&
-            lastMessage.role === role &&
-            (now - (Number(lastMessage.timestamp) || now)) < MERGE_THRESHOLD_MS &&
-            lastMessage.role === 'assistant'
-          ) {
-            return [
-              ...prev.slice(0, -1),
-              {
-                ...lastMessage,
-                content: (lastMessage.content || "") + " " + content,
-                displayedContent: (lastMessage.displayedContent || "") + " " + content,
-                timestamp: now
-              }
-            ];
-          }
-          return [
-            ...prev,
-            {
-              id: `vmsg-${now}-${Math.random().toString(36).substr(2, 9)}`,
-              role: role as "assistant" | "user",
-              content,
-              displayedContent: content,
-              timestamp: now,
-              isTyping: false
-            }
-          ];
-        });
-      } else if (data.type === "agent_started_speaking") {
-        console.log("[ChainOfTrust] [Deepgram] 🔊 Agent started speaking.");
-      } else if (data.type === "agent_audio_done") {
-        console.log("[ChainOfTrust] [Deepgram] 🤫 Agent finished speaking.");
-      } else if (data.type === "collected_info") {
-        const info = data.info as CollectedInfoFlags;
-        console.log("[ChainOfTrust] [Server] 📊 Updated collection flags:", info);
-        setCollectedInfo(info);
-      } else if (data.type === "request_media_upload") {
-        const { toolId, allowedTypes } = data;
-        console.log("[ChainOfTrust] [Server] 📸 Tool Request: requestMediaUpload", { toolId, allowedTypes });
-        setMessages((prev: UIMessage[]) => [
-          ...prev,
-          {
-            id: `tool-${toolId}`,
-            role: "assistant",
-            content: "Please upload the requested files.",
-            parts: [{
-              type: 'tool-invocation',
-              toolCallId: toolId,
-              toolName: 'requestMediaUpload',
-              state: 'input-available',
-              args: { allowedTypes }
-            } as SurveyUIMessage['parts'][number]]
-          }
-        ]);
-      } else if (data.type === "update_extracted_data") {
-        console.log("[ChainOfTrust] [Server] 📥 Received extractions:", data.data);
-        setExtractedData(data.data as SurveyExtractionData);
-        setCollectedInfo((data as { collectedInfo: CollectedInfoFlags }).collectedInfo);
-      }
-    }
-  });
+
 
 
   const [showPublishModal, setShowPublishModal] = useState(false);
@@ -204,6 +114,7 @@ function CreateSurveyContent() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.log("[Client] ensureDraftExists error:", msg);
+      return null;
     } finally {
       setIsCreatingDraft(false);
     }
@@ -258,7 +169,7 @@ function CreateSurveyContent() {
     fetch: (async (url: RequestInfo | URL, init?: RequestInit) => {
       const response = await fetch(url, init);
       return response;
-    }),
+    }) as typeof fetch,
     prepareSendMessagesRequest: async ({ api, body, id, messages: msgs, trigger, messageId }) => {
       const sid = surveyIdRef.current;
       const targetApi = sid ? `/api/surveys/${sid}/create` : api;
@@ -284,10 +195,12 @@ function CreateSurveyContent() {
   }, []);
 
   const handleFinish = useCallback(({ message }: { message: SDKMessage }) => {
-    const content = message.content || message.parts?.filter(p => p.type === 'text').map(p => {
-      if ('text' in p) return p.text;
-      return '';
-    }).join('') || "";
+    const content = message.parts
+      ?.filter(p => p.type === 'text')
+      .map(p => {
+        if (p.type === 'text' && 'text' in p) return p.text;
+        return '';
+      }).join('') || "";
     console.log("[useChat:onFinish] AI finished responding:", content.substring(0, 50) + "...");
   }, []);
 
@@ -401,7 +314,8 @@ function CreateSurveyContent() {
             lastMessage &&
             lastMessage.role === role &&
             lastMessage.timestamp &&
-            now - lastMessage.timestamp < MERGE_THRESHOLD_MS
+            now - lastMessage.timestamp < MERGE_THRESHOLD_MS &&
+            lastMessage.role === 'assistant'
           ) {
             const updated = [...prev];
             const updatedContent = (lastMessage.parts?.find(p => p.type === 'text')?.text || "") + " " + content;
@@ -424,10 +338,18 @@ function CreateSurveyContent() {
           };
           return [...prev, newMessage];
         });
+      } else if (data.type === "agent_started_speaking") {
+        console.log("[ChainOfTrust] [Deepgram] 🔊 Agent started speaking.");
+      } else if (data.type === "agent_audio_done") {
+        console.log("[ChainOfTrust] [Deepgram] 🤫 Agent finished speaking.");
+      } else if (data.type === "collected_info") {
+        const info = data.info as CollectedInfoFlags;
+        console.log("[ChainOfTrust] [Server] 📊 Updated collection flags:", info);
+        setCollectedInfo(info);
       } else if (data.type === "request_media_upload") {
         console.log("[ChainOfTrust] [Server] AI requested media upload tool UI:", data.allowedTypes);
-        const { allowedTypes } = data;
-        const toolId = `voice-tool-${Date.now()}`;
+        const { allowedTypes, toolId: providedToolId } = data;
+        const toolId = providedToolId || `voice-tool-${Date.now()}`;
 
         setMessages((prev: UIMessage[]) => [
           ...prev,
@@ -447,19 +369,13 @@ function CreateSurveyContent() {
       } else if (data.type === "update_extracted_data") {
         console.log("[ChainOfTrust] [Server] Extracted data update received.");
         setExtractedData(data.extractedData as SurveyExtractionData);
-        setCollectedInfo(data.collectedInfo as CollectedInfoFlags);
+        if (data.collectedInfo) setCollectedInfo(data.collectedInfo as CollectedInfoFlags);
       } else if (data.type === "transcription_interim") {
         // Reduced noise logging
       } else if (data.type === "survey_completed") {
         console.log("[ChainOfTrust] [Server] ✅ Survey completion signal received.");
-        // Refresh survey data to ensure we have the latest status/extracted info
-        // This will trigger the 'isReadyForSample' check in the main effect
         router.refresh();
-
-        // Optimistically set status to allow immediate UI update
         setSurveyStatus("completed");
-
-        // Force a fetch of the latest data
         if (surveyId) {
           fetch(`/api/surveys/${surveyId}/create`)
             .then(res => res.json())
@@ -749,8 +665,8 @@ function CreateSurveyContent() {
     }
   }, [idFromUrl, authLoading, user, surveyId, setSurveyId, setMessages, setCollectedInfo, setExtractedData, setSurveyStatus, setOrgId, setIsOwner, setCollaborators, setLanguage, setIsVoiceSurvey, setIsReadOnly, setIsInitializing]);
 
-  // Lazy creation state
-  const [isCreatingDraft, setIsCreatingDraft] = useState(false);
+  // Lazy creation state (Consolidated at line 59)
+
 
 
   const scrollToBottom = () => {
