@@ -64,7 +64,7 @@ function VerifyEmailContent() {
               }
             }
           });
-        } catch {
+        } catch (error) {
           setIsVerifying(false);
           toast.error(t('GenericError'));
         }
@@ -84,7 +84,7 @@ function VerifyEmailContent() {
         callbackURL: `/${locale}/dashboard`
       });
       toast.success(t('ResendSuccess'));
-    } catch {
+    } catch (err) {
       toast.error(t('ResendError'));
     } finally {
       setIsResending(false);

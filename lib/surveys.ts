@@ -1,4 +1,3 @@
-import { type SurveyExtractionData } from "./types/survey-flow";
 import type { SurveyConfig } from "./prompts";
 import type { surveys } from "@/db/schema";
 
@@ -10,7 +9,7 @@ export const MAX_SAMPLE_CONVERSATIONS = 3;
 export function buildCompleteSurveyConfig(
   survey: typeof surveys.$inferSelect,
 ): SurveyConfig {
-  const expertState = (survey.expertState || {}) as SurveyExtractionData;
+  const expertState = (survey.expertState || {}) as Record<string, any>;
 
   return {
     id: survey.id,

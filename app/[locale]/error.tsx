@@ -36,7 +36,7 @@ export default function Error({
 
                     <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
                         {isUnauthorized ? (
-                            <ClientT>You&apos;re a stranger here!</ClientT>
+                            <ClientT>You're a stranger here!</ClientT>
                         ) : (
                             <ClientT>Oops! Our robot tripped.</ClientT>
                         )}
@@ -46,7 +46,7 @@ export default function Error({
                         {isUnauthorized ? (
                             <ClientT>Please sign in to meet our robot and access your dashboard.</ClientT>
                         ) : (
-                            <ClientT>Something went wrong on our end. We&apos;re looking into it, but our robot might need a quick reboot.</ClientT>
+                            <ClientT>Something went wrong on our end. We're looking into it, but our robot might need a quick reboot.</ClientT>
                         )}
                     </p>
                 </div>

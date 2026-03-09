@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef, startTransition } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Sparkles, Send, X, ChevronDown } from "lucide-react";
+import { Sparkles, Send, X,ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+
 import { InferSelectModel } from "drizzle-orm";
 import { projects, surveys } from "@/db/schema";
 
@@ -29,23 +30,18 @@ export function ProjectAIChat({ project }: ProjectAIChatProps) {
     const [aiMessages, setAiMessages] = useState<Array<{ role: 'user' | 'assistant', content: string }>>([
         { role: 'assistant', content: `Hi! I've analyzed your project "${project.name}". Ask me anything about your surveys or responses!` }
     ]);
+    const [mounted, setMounted] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const [mounted, setMounted] = useState(false);
-
     useEffect(() => {
-        startTransition(() => {
-            setMounted(true);
-        });
+        setMounted(true);
     }, []);
 
     useEffect(() => {
-        if (isOpen && mounted) {
+        if (isOpen) {
             messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
         }
-    }, [aiMessages, isOpen, mounted]);
-
-    if (!mounted) return null;
+    }, [aiMessages, isOpen]);
 
     const handleSend = () => {
         if (!aiQuery.trim()) return;
@@ -56,7 +52,7 @@ export function ProjectAIChat({ project }: ProjectAIChatProps) {
 
         // Mock AI response
         const totalSurveys = project.surveys?.length || project.stats?.totalSurveys || 0;
-
+        
         setTimeout(() => {
             setAiMessages(prev => [...prev, {
                 role: 'assistant',
@@ -64,6 +60,8 @@ export function ProjectAIChat({ project }: ProjectAIChatProps) {
             }]);
         }, 1000);
     };
+
+    if (!mounted) return null;
 
     return createPortal(
         <div className="fixed bottom-6 right-6 z-[90] flex flex-col items-end gap-4 pointer-events-none">
@@ -78,7 +76,7 @@ export function ProjectAIChat({ project }: ProjectAIChatProps) {
                         <Sparkles className="w-5 h-5" />
                         <span className="font-semibold">AI Assistant</span>
                     </div>
-                    <button
+                    <button 
                         onClick={() => setIsOpen(false)}
                         className="text-white/80 hover:text-white transition-colors"
                     >
@@ -97,8 +95,8 @@ export function ProjectAIChat({ project }: ProjectAIChatProps) {
                                 "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1",
                                 msg.role === 'assistant' ? "bg-gray-900" : "bg-gray-200"
                             )}>
-                                {msg.role === 'assistant' ?
-                                    <Sparkles className="w-4 h-4 text-white" /> :
+                                {msg.role === 'assistant' ? 
+                                    <Sparkles className="w-4 h-4 text-white" /> : 
                                     <div className="text-gray-700 text-xs font-medium">U</div>
                                 }
                             </div>
@@ -126,7 +124,7 @@ export function ProjectAIChat({ project }: ProjectAIChatProps) {
                             placeholder="Ask about your project..."
                             className="flex-1 bg-transparent text-sm outline-none min-w-0"
                         />
-                        <button
+                        <button 
                             onClick={handleSend}
                             disabled={!aiQuery.trim()}
                             className="p-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

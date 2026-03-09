@@ -1,0 +1,304 @@
+
+> convy@0.1.0 build
+> next build --debug-prerender
+
+⚠ Prerendering is running in debug mode. Note: This may affect performance and should not be used for production.
+▲ Next.js 16.1.5 (Turbopack, Cache Components)
+- Environments: .env
+- Experiments (use with caution):
+  · clientTraceMetadata
+  ⨯ prerenderEarlyExit (disabled by `--debug-prerender`)
+  ✓ serverSourceMaps (enabled by `--debug-prerender`)
+  ⨯ turbopackMinify (disabled by `--debug-prerender`)
+
+  Creating an optimized production build ...
+Turbopack build encountered 2 warnings:
+./node_modules/.pnpm/bullmq@5.66.7/node_modules/bullmq/dist/esm/classes
+Package ioredis can't be external
+The request ioredis/built/utils matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the importing module. The way Node.js resolves modules is slightly different from the way Next.js resolves modules. Next.js was able to resolve it, while Node.js would not be able to.
+Try to remove this package from serverExternalPackages.
+Or update the import side to use a compatible request that can be resolved by Node.js.
+
+
+./node_modules/.pnpm/bullmq@5.66.7/node_modules/bullmq/dist/esm/utils
+Package ioredis can't be external
+The request ioredis/built/utils matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the importing module. The way Node.js resolves modules is slightly different from the way Next.js resolves modules. Next.js was able to resolve it, while Node.js would not be able to.
+Try to remove this package from serverExternalPackages.
+Or update the import side to use a compatible request that can be resolved by Node.js.
+
+
+✓ Compiled successfully in 80s
+  Running next.config.js provided runAfterProductionCompile ...
+✓ Completed runAfterProductionCompile in 9091ms
+  Running TypeScript ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/191) ...
+  Generating static pages using 11 workers (47/191) 
+  Generating static pages using 11 workers (95/191) 
+Failed to build /[locale]/(auth)/workspace/accept-invitation/[id]/page: /it/workspace/accept-invitation/[id] (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/analytics/page: /en/dashboard/analytics (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/analytics/page: /fr/dashboard/analytics (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/analytics/page: /de/dashboard/analytics (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/analytics/page: /es/dashboard/analytics (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/analytics/page: /it/dashboard/analytics (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/create/page: /en/dashboard/create (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/create/page: /fr/dashboard/create (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(auth)/sign-in/page: /it/sign-in (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(auth)/sign-up/page: /en/sign-up (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(auth)/sign-up/page: /fr/sign-up (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(auth)/sign-up/page: /de/sign-up (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(auth)/sign-up/page: /es/sign-up (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(auth)/sign-up/page: /it/sign-up (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(auth)/verify-email/page: /en/verify-email (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/surveys/[surveyId]/page: /es/dashboard/surveys/[surveyId] (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/surveys/[surveyId]/page: /it/dashboard/surveys/[surveyId] (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/surveys/[surveyId]/responses/[responseId]/page: /en/dashboard/surveys/[surveyId]/responses/[responseId] (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/surveys/[surveyId]/responses/[responseId]/page: /fr/dashboard/surveys/[surveyId]/responses/[responseId] (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/surveys/[surveyId]/responses/[responseId]/page: /de/dashboard/surveys/[surveyId]/responses/[responseId] (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/surveys/[surveyId]/responses/[responseId]/page: /es/dashboard/surveys/[surveyId]/responses/[responseId] (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/surveys/[surveyId]/responses/[responseId]/page: /it/dashboard/surveys/[surveyId]/responses/[responseId] (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/settings/page: /en/dashboard/settings (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/settings/page: /fr/dashboard/settings (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/settings/page: /de/dashboard/settings (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/settings/page: /es/dashboard/settings (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/settings/page: /it/dashboard/settings (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/chat/page: /en/dashboard/surveys/[surveyId]/analytics/chat (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/surveys/[surveyId]/analytics/chat/page: /fr/dashboard/surveys/[surveyId]/analytics/chat (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/admin/users/page: /it/admin/users (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/page: /en (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/page: /fr (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/page: /de (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/page: /es (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/page: /it (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/s/[shareableLink]/page: /en/s/[shareableLink] (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/surveys/page: /es/dashboard/surveys (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/surveys/page: /it/dashboard/surveys (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/team/page: /en/dashboard/team (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/team/page: /fr/dashboard/team (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/team/page: /de/dashboard/team (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/team/page: /es/dashboard/team (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/(dashboard)/dashboard/team/page: /it/dashboard/team (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /[locale]/admin/page: /en/admin (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+  Generating static pages using 11 workers (97/191) 
+  Generating static pages using 11 workers (143/191) 
+✓ Generating static pages using 11 workers (191/191) in 13.2min
+Failed to build /api/internal/agent-performance/route: /api/internal/agent-performance (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /api/sentry-test/route: /api/sentry-test (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /icon.png/route: /icon.png (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /robots.txt/route: /robots.txt (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+Failed to build /sitemap.xml/route: /sitemap.xml (attempt 1 of 3) because it took more than 60 seconds. Retrying again shortly.
+  Finalizing page optimization ...
+⚠ Failed to copy traced files for C:\Users\pc\convy\.next\server\app\_not-found\page.js Error: EINVAL: invalid argument, copyfile 'C:\Users\pc\convy\.next\server\chunks\ssr\[externals]_node:inspector_7a4283c6._.js' -> 'C:\Users\pc\convy\.next\standalone\.next\server\chunks\ssr\[externals]_node:inspector_7a4283c6._.js'
+    at ignore-listed frames {
+  errno: -4071,
+  code: 'EINVAL',
+  syscall: 'copyfile',
+  path: 'C:\\Users\\pc\\convy\\.next\\server\\chunks\\ssr\\[externals]_node:inspector_7a4283c6._.js',
+  dest: 'C:\\Users\\pc\\convy\\.next\\standalone\\.next\\server\\chunks\\ssr\\[externals]_node:inspector_7a4283c6._.js'
+}
+⚠ Failed to copy traced files for C:\Users\pc\convy\.next\server\app\api\sentry-test\route.js Error: EINVAL: invalid argument, copyfile 'C:\Users\pc\convy\.next\server\chunks\[externals]_node:inspector_7a4283c6._.js' -> 'C:\Users\pc\convy\.next\standalone\.next\server\chunks\[externals]_node:inspector_7a4283c6._.js'
+    at ignore-listed frames {
+  errno: -4071,
+  code: 'EINVAL',
+  syscall: 'copyfile',
+  path: 'C:\\Users\\pc\\convy\\.next\\server\\chunks\\[externals]_node:inspector_7a4283c6._.js',
+  dest: 'C:\\Users\\pc\\convy\\.next\\standalone\\.next\\server\\chunks\\[externals]_node:inspector_7a4283c6._.js'
+}
+
+Route (app)
+┌ ○ /_not-found
+├ ◐ /[locale]
+│ ├ /[locale]
+│ ├ /en
+│ ├ /fr
+│ └ [+3 more paths]
+├ ◐ /[locale]/admin
+│ ├ /[locale]/admin
+│ ├ /en/admin
+│ ├ /fr/admin
+│ └ [+3 more paths]
+├ ◐ /[locale]/admin/surveys
+│ ├ /[locale]/admin/surveys
+│ ├ /en/admin/surveys
+│ ├ /fr/admin/surveys
+│ └ [+3 more paths]
+├ ◐ /[locale]/admin/surveys/[id]
+│ ├ /[locale]/admin/surveys/[id]
+│ ├ /en/admin/surveys/[id]
+│ ├ /fr/admin/surveys/[id]
+│ └ [+3 more paths]
+├ ◐ /[locale]/admin/usage
+│ ├ /[locale]/admin/usage
+│ ├ /en/admin/usage
+│ ├ /fr/admin/usage
+│ └ [+3 more paths]
+├ ◐ /[locale]/admin/users
+│ ├ /[locale]/admin/users
+│ ├ /en/admin/users
+│ ├ /fr/admin/users
+│ └ [+3 more paths]
+├ ◐ /[locale]/dashboard
+│ ├ /[locale]/dashboard
+│ ├ /en/dashboard
+│ ├ /fr/dashboard
+│ └ [+3 more paths]
+├ ◐ /[locale]/dashboard/analytics
+│ ├ /[locale]/dashboard/analytics
+│ ├ /en/dashboard/analytics
+│ ├ /fr/dashboard/analytics
+│ └ [+3 more paths]
+├ ◐ /[locale]/dashboard/create
+│ ├ /[locale]/dashboard/create
+│ ├ /en/dashboard/create
+│ ├ /fr/dashboard/create
+│ └ [+3 more paths]
+├ ◐ /[locale]/dashboard/profile
+│ ├ /[locale]/dashboard/profile
+│ ├ /en/dashboard/profile
+│ ├ /fr/dashboard/profile
+│ └ [+3 more paths]
+├ ◐ /[locale]/dashboard/projects
+│ ├ /[locale]/dashboard/projects
+│ ├ /en/dashboard/projects
+│ ├ /fr/dashboard/projects
+│ └ [+3 more paths]
+├ ◐ /[locale]/dashboard/projects/[projectId]
+│ ├ /[locale]/dashboard/projects/[projectId]
+│ ├ /en/dashboard/projects/[projectId]
+│ ├ /fr/dashboard/projects/[projectId]
+│ └ [+3 more paths]
+├ ◐ /[locale]/dashboard/settings
+│ ├ /[locale]/dashboard/settings
+│ ├ /en/dashboard/settings
+│ ├ /fr/dashboard/settings
+│ └ [+3 more paths]
+├ ◐ /[locale]/dashboard/surveys
+│ ├ /[locale]/dashboard/surveys
+│ ├ /en/dashboard/surveys
+│ ├ /fr/dashboard/surveys
+│ └ [+3 more paths]
+├ ◐ /[locale]/dashboard/surveys/[surveyId]
+│ ├ /[locale]/dashboard/surveys/[surveyId]
+│ ├ /en/dashboard/surveys/[surveyId]
+│ ├ /fr/dashboard/surveys/[surveyId]
+│ └ [+3 more paths]
+├ ◐ /[locale]/dashboard/surveys/[surveyId]/analytics
+│ ├ /[locale]/dashboard/surveys/[surveyId]/analytics
+│ ├ /en/dashboard/surveys/[surveyId]/analytics
+│ ├ /fr/dashboard/surveys/[surveyId]/analytics
+│ └ [+3 more paths]
+├ ◐ /[locale]/dashboard/surveys/[surveyId]/analytics/chat
+│ ├ /[locale]/dashboard/surveys/[surveyId]/analytics/chat
+│ ├ /en/dashboard/surveys/[surveyId]/analytics/chat
+│ ├ /fr/dashboard/surveys/[surveyId]/analytics/chat
+│ └ [+3 more paths]
+├ ◐ /[locale]/dashboard/surveys/[surveyId]/analytics/conversations
+│ ├ /[locale]/dashboard/surveys/[surveyId]/analytics/conversations
+│ ├ /en/dashboard/surveys/[surveyId]/analytics/conversations
+│ ├ /fr/dashboard/surveys/[surveyId]/analytics/conversations
+│ └ [+3 more paths]
+├ ◐ /[locale]/dashboard/surveys/[surveyId]/responses/[responseId]
+│ ├ /[locale]/dashboard/surveys/[surveyId]/responses/[responseId]
+│ ├ /en/dashboard/surveys/[surveyId]/responses/[responseId]
+│ ├ /fr/dashboard/surveys/[surveyId]/responses/[responseId]
+│ └ [+3 more paths]
+├ ◐ /[locale]/dashboard/surveys/[surveyId]/sample-review
+│ ├ /[locale]/dashboard/surveys/[surveyId]/sample-review
+│ ├ /en/dashboard/surveys/[surveyId]/sample-review
+│ ├ /fr/dashboard/surveys/[surveyId]/sample-review
+│ └ [+3 more paths]
+├ ◐ /[locale]/dashboard/team
+│ ├ /[locale]/dashboard/team
+│ ├ /en/dashboard/team
+│ ├ /fr/dashboard/team
+│ └ [+3 more paths]
+├ ◐ /[locale]/forgot-password
+│ ├ /[locale]/forgot-password
+│ ├ /en/forgot-password
+│ ├ /fr/forgot-password
+│ └ [+3 more paths]
+├ ◐ /[locale]/reset-password
+│ ├ /[locale]/reset-password
+│ ├ /en/reset-password
+│ ├ /fr/reset-password
+│ └ [+3 more paths]
+├ ◐ /[locale]/s/[shareableLink]
+│ ├ /[locale]/s/[shareableLink]
+│ ├ /en/s/[shareableLink]
+│ ├ /fr/s/[shareableLink]
+│ └ [+3 more paths]
+├ ◐ /[locale]/s/[shareableLink]/respond
+│ ├ /[locale]/s/[shareableLink]/respond
+│ ├ /en/s/[shareableLink]/respond
+│ ├ /fr/s/[shareableLink]/respond
+│ └ [+3 more paths]
+├ ◐ /[locale]/sentry-test
+│ ├ /[locale]/sentry-test
+│ ├ /en/sentry-test
+│ ├ /fr/sentry-test
+│ └ [+3 more paths]
+├ ◐ /[locale]/sign-in
+│ ├ /[locale]/sign-in
+│ ├ /en/sign-in
+│ ├ /fr/sign-in
+│ └ [+3 more paths]
+├ ◐ /[locale]/sign-up
+│ ├ /[locale]/sign-up
+│ ├ /en/sign-up
+│ ├ /fr/sign-up
+│ └ [+3 more paths]
+├ ◐ /[locale]/verify-email
+│ ├ /[locale]/verify-email
+│ ├ /en/verify-email
+│ ├ /fr/verify-email
+│ └ [+3 more paths]
+├ ◐ /[locale]/workspace/accept-invitation/[id]
+│ ├ /[locale]/workspace/accept-invitation/[id]
+│ ├ /en/workspace/accept-invitation/[id]
+│ ├ /fr/workspace/accept-invitation/[id]
+│ └ [+3 more paths]
+├ ƒ /api/auth/[...better-auth]
+├ ƒ /api/auth/token
+├ ƒ /api/health
+├ ƒ /api/internal/agent-performance
+├ ƒ /api/sentry-test
+├ ƒ /api/surveys
+├ ƒ /api/surveys/[surveyId]
+├ ƒ /api/surveys/[surveyId]/analytics
+├ ƒ /api/surveys/[surveyId]/analytics/chat
+├ ƒ /api/surveys/[surveyId]/analytics/chat-sessions
+├ ƒ /api/surveys/[surveyId]/analytics/chat-sessions/[sessionId]
+├ ƒ /api/surveys/[surveyId]/analytics/check-delta
+├ ƒ /api/surveys/[surveyId]/analytics/conversations
+├ ƒ /api/surveys/[surveyId]/analytics/generative
+├ ƒ /api/surveys/[surveyId]/chat
+├ ƒ /api/surveys/[surveyId]/conversations/[conversationId]/feedback
+├ ƒ /api/surveys/[surveyId]/create
+├ ƒ /api/surveys/[surveyId]/details
+├ ƒ /api/surveys/[surveyId]/finalize
+├ ƒ /api/surveys/[surveyId]/finalize-creation
+├ ƒ /api/surveys/[surveyId]/media/remove
+├ ƒ /api/surveys/[surveyId]/media/update
+├ ƒ /api/surveys/[surveyId]/media/upload
+├ ƒ /api/surveys/[surveyId]/publish
+├ ƒ /api/surveys/[surveyId]/responses
+├ ƒ /api/surveys/[surveyId]/responses/[responseId]
+├ ƒ /api/surveys/[surveyId]/sample
+├ ƒ /api/surveys/[surveyId]/sample/feedback
+├ ƒ /api/surveys/[surveyId]/status
+├ ƒ /api/surveys/respond/[shareableLink]
+├ ƒ /api/surveys/shared/[shareableLink]
+├ ƒ /api/user/language
+├ ○ /icon.png
+├ ○ /robots.txt
+└ ƒ /sitemap.xml
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)             prerendered as static content
+◐  (Partial Prerender)  prerendered as static HTML with dynamic server-streamed content
+ƒ  (Dynamic)            server-rendered on demand
+

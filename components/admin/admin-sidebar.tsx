@@ -18,7 +18,7 @@ interface AdminSidebarProps {
     locale: string;
 }
 
-export function AdminSidebar({ }: AdminSidebarProps) {
+export function AdminSidebar({ locale }: AdminSidebarProps) {
     const pathname = usePathname();
     const router = useRouter();
 

@@ -1,9 +1,9 @@
-import { ModelMessage } from "ai";
 import { getDb } from "@/db";
 import { surveys, sampleConversations, voiceSessions } from "@/db/schema";
 import { eq, and, lt } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { type SurveyConfig } from "@/lib/prompts";
+import { getTimeBasedGreeting } from "@/lib/greetings";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import { type RollingContext } from "@/lib/conversation-memory";
 import type { AuthenticatedConnection } from "../middleware/auth";
@@ -14,6 +14,7 @@ import type { AgentContext } from "@/lib/agents/types";
 import {
   buildVoiceAgentSettings,
   type VoiceAgentSettings,
+  type VoiceAgentFunction,
   type ConversationTextEvent,
   type FunctionCallRequestEvent,
   type SupportedLanguage,
@@ -222,7 +223,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       messages: this.state.messages.map((m) => ({
         role: m.role,
         content: m.content,
-      })) as ModelMessage[],
+      })) as any[],
       surveyConfig: this.state.surveyConfig,
       rollingContext: this.state.context,
       language: this.state.language,
@@ -414,9 +415,7 @@ ${combinedFeedback ? `- Apply the survey creator's latest feedback precisely:\n$
     }
   }
 
-  protected async handleControlMessage(
-    message: Record<string, unknown>,
-  ): Promise<void> {
+  protected async handleControlMessage(message: any): Promise<void> {
     if (message.type === "end_session") {
       await this.cleanup();
     }

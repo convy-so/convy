@@ -95,7 +95,7 @@ function parseSurveyAnalyticsResponse(
   coreMetrics: Partial<CoreMetrics>,
   requiredQuestions: string[],
   coreObjective?: string,
-  expertState?: Record<string, unknown>,
+  expertState?: Record<string, any>,
   mediaAnalytics?: SurveyAnalyticsData["mediaAnalytics"],
 ): SurveyAnalyticsData | null {
   try {

@@ -6,12 +6,12 @@ import {
   type ModelMessage,
   type LanguageModel,
   convertToModelMessages,
-  type UIMessage,
 } from "ai";
+import { RollingContext } from "./conversation-memory";
 import { logUsage } from "./billing/logger";
 
 export async function normalizeMessages(
-  messages: UIMessage[] | unknown[],
+  messages: any[],
 ): Promise<ModelMessage[]> {
   console.log(
     `[AI:normalizeMessages] Normalizing ${messages.length} messages...`,
@@ -64,18 +64,12 @@ export async function generateAIResponse(
     organizationId: options?.organizationId,
     surveyId: options?.surveyId,
     type: "llm_text",
-    provider: (model as { modelId?: string }).modelId?.includes("gpt")
-      ? "openai"
-      : "google",
-    modelName: (model as { modelId?: string }).modelId ?? GEMINI_FLASH_ID,
+    provider: (model as any).modelId?.includes("gpt") ? "openai" : "google",
+    modelName: (model as any).modelId ?? GEMINI_FLASH_ID,
     promptTokens:
-      result.usage.inputTokens ??
-      (result.usage as { promptTokens?: number }).promptTokens ??
-      0,
+      result.usage.inputTokens ?? (result.usage as any).promptTokens,
     completionTokens:
-      result.usage.outputTokens ??
-      (result.usage as { completionTokens?: number }).completionTokens ??
-      0,
+      result.usage.outputTokens ?? (result.usage as any).completionTokens,
     totalTokens: result.usage.totalTokens,
   });
 
@@ -111,18 +105,12 @@ export function streamAIResponse(
         organizationId: options?.organizationId,
         surveyId: options?.surveyId,
         type: "llm_text",
-        provider: (model as { modelId?: string }).modelId?.includes("gpt")
-          ? "openai"
-          : "google",
-        modelName: (model as { modelId?: string }).modelId ?? GEMINI_FLASH_ID,
+        provider: (model as any).modelId?.includes("gpt") ? "openai" : "google",
+        modelName: (model as any).modelId ?? GEMINI_FLASH_ID,
         promptTokens:
-          result.usage.inputTokens ??
-          (result.usage as { promptTokens?: number }).promptTokens ??
-          0,
+          result.usage.inputTokens ?? (result.usage as any).promptTokens,
         completionTokens:
-          result.usage.outputTokens ??
-          (result.usage as { completionTokens?: number }).completionTokens ??
-          0,
+          result.usage.outputTokens ?? (result.usage as any).completionTokens,
         totalTokens: result.usage.totalTokens,
       });
     },

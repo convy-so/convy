@@ -11,11 +11,14 @@ import {
 } from "@/lib/surveys";
 import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
 import { normalizeMessages } from "@/lib/ai";
-import { type SurveyUIMessage } from "@/lib/types/survey-flow";
 import { ConversationManager } from "@/lib/conversation-manager";
 import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
 import type { AgentContext } from "@/lib/agents/types";
-import { withGeminiLimit } from "@/lib/gemini-limiter";
+import {
+  withGeminiLimit,
+  GeminiCapacityError,
+  geminiCapacityResponse,
+} from "@/lib/gemini-limiter";
 
 export const maxDuration = 300;
 
@@ -56,7 +59,7 @@ export async function POST(
     const { surveyId } = await params;
     const body = await request.json();
     const { messages, feedback, conversationNumber } = body as {
-      messages: Array<SurveyUIMessage>;
+      messages: any[];
       feedback?: string;
       conversationNumber?: number;
     };
@@ -157,7 +160,7 @@ export async function POST(
     // --- AGENT INTEGRATION: Use ConductingSpecialist for agentic behavior ---
     const agentContext: AgentContext = {
       conversationId,
-      messages: messagesForAI as SurveyUIMessage[],
+      messages: messagesForAI as any,
       surveyConfig,
       rollingContext: context,
       language: survey.language as "en" | "fr" | "de" | "es" | "it" | undefined,
@@ -200,17 +203,15 @@ export async function POST(
     // No onFinish callback needed for DB persistence as sample routes are ephemeral
     const streamResult = await withGeminiLimit(async () => {
       return conductingAgent.stream(
-        messagesToLLM as SurveyUIMessage[],
+        messagesToLLM as any,
         () => {}, // No media display in sample testing right now
-        async ({ text, response }) => {
+        async (params) => {
+          const { text, usage, response } = params;
+
           // ... (existing logging / db / queue logic internally handled by stream wrapper)
-          const assistantMessage = (
-            response.messages as Array<{
-              role: string;
-              content?: unknown;
-              toolInvocations?: Array<{ toolName: string }>;
-            }>
-          )?.find((m) => m.role === "assistant");
+          const assistantMessage = response.messages?.find(
+            (m: any) => m.role === "assistant",
+          );
 
           const updatedMessages = [
             ...messagesToLLM, // Use messagesToLLM as the base for updated messages
@@ -218,36 +219,27 @@ export async function POST(
               role: "assistant" as const,
               content: text,
               parts:
-                (assistantMessage as { content?: unknown })?.content &&
-                Array.isArray(
-                  (assistantMessage as { content?: unknown }).content,
-                )
-                  ? (
-                      assistantMessage as {
-                        content: Array<{ type: string; text?: string }>;
-                      }
-                    ).content
+                (assistantMessage as any)?.content &&
+                Array.isArray((assistantMessage as any).content)
+                  ? (assistantMessage as any).content
                   : undefined,
               timestamp: new Date().toISOString(),
             },
           ];
 
           if (sampleId) {
-            const dbMessages = updatedMessages.map((m) => ({
+            const dbMessages = updatedMessages.map((m: any) => ({
               role: m.role,
-              content:
-                m.displayedContent || (m as { content?: string }).content || "",
+              content: m.content,
               parts: m.parts,
-              timestamp:
-                (m as { timestamp?: string }).timestamp ||
-                new Date().toISOString(),
+              timestamp: m.timestamp || new Date().toISOString(),
             }));
 
             // Check if AI completed survey
             const toolInvocations = assistantMessage?.toolInvocations || [];
-            const isCompleted = !!(
-              toolInvocations as Array<{ toolName: string }>
-            ).find((call) => call.toolName === "finishSurvey");
+            let isCompleted = !!toolInvocations.find(
+              (call: any) => call.toolName === "finishSurvey",
+            );
 
             await getDb()
               .update(sampleConversations)
@@ -263,7 +255,7 @@ export async function POST(
               await enqueueSampleConversationInsights({
                 surveyId: survey.id,
                 conversationNumber: Number(sampleId.split("-").pop() || 1),
-                messages: dbMessages as SurveyUIMessage[],
+                messages: dbMessages as any,
                 userId: session.user.id,
               });
             }

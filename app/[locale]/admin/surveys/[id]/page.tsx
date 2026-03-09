@@ -18,31 +18,6 @@ import { headers } from "next/headers";
 
 
 
-interface CreationMessage {
-    role: "user" | "assistant" | "system";
-    content: string;
-}
-
-interface CreationConversation {
-    messages: CreationMessage[];
-}
-
-interface ReviewSurvey {
-    id: string;
-    title: string | null;
-    description: string | null;
-    status: string;
-    language: string;
-    createdAt: Date;
-    improvementFeedback: string | null;
-    expertState?: Record<string, unknown> | null;
-    user?: {
-        name: string | null;
-        email: string;
-    } | null;
-    creationConversation?: CreationConversation | null;
-}
-
 async function ReviewContent({
     params,
     cookieHeader,
@@ -51,7 +26,7 @@ async function ReviewContent({
     cookieHeader: string | null;
 }) {
     const { id } = await params;
-    const survey = await getSurveyReviewDetails(id, cookieHeader) as unknown as ReviewSurvey;
+    const survey = await getSurveyReviewDetails(id, cookieHeader);
 
     if (!survey) {
         notFound();
@@ -86,7 +61,7 @@ async function ReviewContent({
                                 <p className="text-xs font-semibold text-gray-400 uppercase">Creator</p>
                                 <div className="flex items-center gap-2 text-sm text-gray-900 font-medium">
                                     <UserIcon className="w-4 h-4 text-gray-400" />
-                                    {survey.user?.name}
+                                    {(survey as any).user?.name}
                                 </div>
                             </div>
                             <div className="space-y-1">
@@ -186,12 +161,12 @@ async function ReviewContent({
                                 Creation Conversation
                             </h3>
                             <span className="text-xs text-gray-400">
-                                {survey.creationConversation?.messages?.length || 0} messages
+                                {(survey as any).creationConversation?.messages?.length || 0} messages
                             </span>
                         </div>
 
                         <div className="space-y-6 max-h-[500px] overflow-y-auto pr-4 custom-scrollbar">
-                            {survey.creationConversation?.messages?.map((msg: CreationMessage, idx: number) => (
+                            {(survey as any).creationConversation?.messages?.map((msg: any, idx: number) => (
                                 <div key={idx} className={`space-y-1 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
                                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">
                                         {msg.role}
@@ -204,7 +179,7 @@ async function ReviewContent({
                                     </div>
                                 </div>
                             ))}
-                            {!survey.creationConversation && (
+                            {!(survey as any).creationConversation && (
                                 <div className="py-12 text-center text-gray-400 italic">
                                     No creation conversation transcript found.
                                 </div>

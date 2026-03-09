@@ -85,7 +85,7 @@ const surveyCreationExtractionWorker =
                 .nullable(),
               title: zod.any().nullable(),
               collectedInfo: zod.any(),
-            }) as zod.ZodType<Record<string, unknown>>,
+            }) as any,
           }),
           prompt: extractionPrompt,
         }),
@@ -97,16 +97,13 @@ const surveyCreationExtractionWorker =
         surveyId,
         type: "llm_text",
         provider: "google",
-        modelName: (analysisModel as { modelId: string }).modelId,
+        modelName: (analysisModel as any).modelId,
         promptTokens: usage.inputTokens,
         completionTokens: usage.outputTokens,
         totalTokens: usage.totalTokens,
       });
 
-      const { collectedInfo, ...extractedData } = parsed as {
-        collectedInfo: Record<string, boolean>;
-        [key: string]: unknown;
-      };
+      const { collectedInfo, ...extractedData } = parsed as any;
 
       await getDb()
         .update(surveyCreationConversations)

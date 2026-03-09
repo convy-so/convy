@@ -15,7 +15,7 @@ export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://convy.ai";
 
 const aspekta = localFont({
   src: [
@@ -34,7 +34,7 @@ const fasthand = Fasthand({
   variable: "--font-fasthand",
 });
 
-import { SupportedLanguage } from "@/lib/i18n/ai-translator";
+import { translateUIString, SupportedLanguage } from "@/lib/i18n/ai-translator";
 
 const METADATA_CONFIG: Record<SupportedLanguage, { title: string; description: string }> = {
   en: {
@@ -71,7 +71,7 @@ export async function generateMetadata({
   return {
     title,
     description,
-    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"),
+    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://convy.ai"),
     alternates: {
       canonical: `/${locale}`,
       languages: {
@@ -127,7 +127,7 @@ export default async function LocaleLayout({
   const { locale } = await params;
 
   // Ensure that the incoming `locale` is valid
-  if (!routing.locales.includes(locale as SupportedLanguage)) {
+  if (!routing.locales.includes(locale as any)) {
     notFound();
   }
 

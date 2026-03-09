@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { Link } from "@/i18n/routing";
 import { LucideIcon } from "lucide-react";
 
@@ -22,15 +21,15 @@ interface StatusCardProps {
   showLogo?: boolean;
 }
 
-export function StatusCard({
-  icon: Icon,
-  iconColor = "blue",
+export function StatusCard({ 
+  icon: Icon, 
+  iconColor = "blue", 
   imageSrc,
-  title,
-  description,
+  title, 
+  description, 
   actionButton,
   secondaryAction,
-  showLogo = true
+  showLogo = true 
 }: StatusCardProps) {
   const iconColorClasses = {
     green: "bg-green-100 text-green-600",
@@ -46,31 +45,25 @@ export function StatusCard({
             <h1 className="text-2xl font-bold text-[#080808]">Convy</h1>
           </Link>
         )}
-
+        
         {imageSrc ? (
           <div className="flex justify-center mb-6">
-            <Image
-              src={imageSrc}
-              alt={title}
-              width={128}
-              height={128}
-              className="w-32 h-32 object-contain"
-            />
+            <img src={imageSrc} alt={title} className="w-32 h-32 object-contain" />
           </div>
-        ) : Icon ? (
+        ) : Icon && (
           <div className={`w-16 h-16 ${iconColorClasses[iconColor]} rounded-full flex items-center justify-center mx-auto mb-6`}>
             <Icon className="w-8 h-8" />
           </div>
-        ) : null}
-
+        )}
+        
         <h2 className="text-2xl font-semibold text-[#080808] mb-2">
           {title}
         </h2>
-
+        
         <p className="text-[#696969] text-sm mb-6">
           {description}
         </p>
-
+        
         <div className="space-y-3">
           {actionButton && (
             <>
@@ -92,7 +85,7 @@ export function StatusCard({
               )}
             </>
           )}
-
+          
           {secondaryAction && (
             <>
               {secondaryAction.href ? (

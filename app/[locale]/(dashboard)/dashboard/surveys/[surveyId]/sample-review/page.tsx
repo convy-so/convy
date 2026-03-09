@@ -31,15 +31,20 @@ import { MediaDisplay } from "@/components/surveys/media-display";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { useQuery } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type ToolInvocation } from "ai";
+import { DefaultChatTransport } from "ai";
 import { VoiceSurveyStartOverlay } from "@/components/surveys/voice-survey-start-overlay";
 import { addSampleConversationCommentAction } from "@/app/actions/sample-conversation";
 
 const MAX_SAMPLE_CONVERSATIONS = 3;
 
-import { type SurveyUIMessage, type SurveyMedia } from "@/lib/types/survey-flow";
-
-type Message = SurveyUIMessage;
+type Message = {
+    id: string;
+    role: "user" | "assistant";
+    parts: Array<{ type: string; text?: string;[key: string]: any }>;
+    timestamp: string;
+    media?: any;
+    toolInvocations?: Array<any>;
+};
 
 
 
@@ -160,7 +165,7 @@ export default function SampleReviewPage() {
     // A workspace context exists if the current session is in a workspace
     // OR the survey itself belongs to an organization.
     const isWorkspaceContext = !!(
-        (session as { activeOrganizationId?: string } | null)?.activeOrganizationId ||
+        (session as any)?.activeOrganizationId ||
         survey?.organizationId
     );
 
@@ -197,7 +202,7 @@ export default function SampleReviewPage() {
     const visibleMessages = messages.map(msg => {
         const textPart = msg.parts?.find(p => p.type === 'text');
         const hasCompletionTag = msg.role === "assistant" && textPart && textPart.text.includes("[[SURVEY_COMPLETED]]");
-        const hasCompletionTool = msg.role === "assistant" && msg.parts?.some(p => (p.type === 'tool-invocation' || p.type === 'tool-call') && (p as { toolName?: string }).toolName === 'finishSurvey');
+        const hasCompletionTool = msg.role === "assistant" && msg.parts?.some(p => (p.type === 'tool-invocation' || p.type === 'tool-call') && (p as any).toolName === 'finishSurvey');
 
         if (hasCompletionTag || hasCompletionTool) {
             return {
@@ -239,7 +244,7 @@ export default function SampleReviewPage() {
                         role: role as "assistant" | "user",
                         parts: [{ type: 'text', text: content }],
                         timestamp: new Date().toISOString()
-                    } as Message];
+                    } as any];
                 });
             } else if (data.type === "audio_sent" || data.type === "text_response") {
                 if (!data.text) return;
@@ -248,13 +253,13 @@ export default function SampleReviewPage() {
                     role: "assistant",
                     parts: [{ type: 'text', text: data.text }],
                     timestamp: new Date().toISOString()
-                } as Message]);
+                } as any]);
             } else if (data.type === "transcription" && data.isFinal) {
                 // DUAL-AGENT BUG FIX: No longer calling sendMessage() here
                 console.log("[Sample Review] Transcription received (Voice):", data.text);
             } else if (data.type === 'display_media') {
                 if (survey?.media) {
-                    const fullMedia = survey.media.find((m: SurveyMedia) => m.id === data.media.id);
+                    const fullMedia = survey.media.find((m: any) => m.id === data.media.id);
                     if (fullMedia) {
                         setMessages(prev => [...prev, {
                             id: `media-${Date.now()}`,
@@ -262,7 +267,7 @@ export default function SampleReviewPage() {
                             parts: [{ type: 'text', text: "Shared media" }],
                             timestamp: new Date().toISOString(),
                             media: fullMedia
-                        } as Message]);
+                        } as any]);
                     }
                 }
             }
@@ -297,12 +302,12 @@ export default function SampleReviewPage() {
                             ? "Start the conversation now. Greet the participant according to the system prompt instructions."
                             : "The user has returned to this sample survey review. Respond to their last input and continue the interview naturally."
                     }]
-                } as Message);
+                } as any);
             }
         }
 
         setHasAutoGreeted(true);
-    }, [survey, inputMode, hasAutoGreeted, messages, sendMessage, hasStarted, voiceWs]);
+    }, [survey, inputMode, hasAutoGreeted, messages, sendMessage, hasStarted]);
 
     // Initialize inputMode based on survey type
     useEffect(() => {
@@ -325,8 +330,8 @@ export default function SampleReviewPage() {
             await sendMessage({
                 role: "user",
                 parts: [{ type: 'text', text: currentInput }],
-            } as Message);
-        } catch {
+            } as any);
+        } catch (error) {
             getClientTranslation("Failed to send message. Please try again.").then(toast.error);
         }
     };
@@ -368,13 +373,13 @@ export default function SampleReviewPage() {
                             id: "init_ping_hidden",
                             role: "user",
                             parts: [{ type: 'text', text: "Start the conversation now. Greet the participant according to the system prompt instructions." }]
-                        } as Message);
+                        } as any);
                     }, 500);
                 }
             } else {
                 getClientTranslation("Failed to apply feedback.").then(toast.error);
             }
-        } catch {
+        } catch (error) {
             getClientTranslation("An error occurred. Please try again.").then(toast.error);
         } finally {
             setIsRetrying(false);
@@ -410,7 +415,7 @@ export default function SampleReviewPage() {
                 setIsPublishModalOpen(false);
 
                 // Optimistically update the query cache so the destination page doesn't flash the old State & "sample_review" button
-                queryClient.setQueryData(queryKeys.surveys.detail(surveyId), (oldData: { survey: Record<string, unknown> } | undefined) => {
+                queryClient.setQueryData(queryKeys.surveys.detail(surveyId), (oldData: any) => {
                     if (!oldData || !oldData.survey) return oldData;
                     return {
                         ...oldData,
@@ -430,7 +435,7 @@ export default function SampleReviewPage() {
             } else {
                 getClientTranslation("Failed to publish survey.").then(toast.error);
             }
-        } catch {
+        } catch (error) {
             getClientTranslation("An error occurred while publishing.").then(toast.error);
         } finally {
             setIsConfirming(false);
@@ -455,7 +460,7 @@ export default function SampleReviewPage() {
             } else {
                 toast.error(result.error);
             }
-        } catch {
+        } catch (error) {
             toast.error("Failed to add comment");
         } finally {
             setIsCommenting(false);
@@ -484,7 +489,7 @@ export default function SampleReviewPage() {
                     initialLanguage={survey?.language || "en"}
                     title={survey?.title || "Sample Review"}
                     description={survey?.expertState?.objective?.context || "Experience your survey exactly as a participant will."}
-                    t={t}
+                    t={t as any}
                 />
             )}
 
@@ -579,7 +584,7 @@ export default function SampleReviewPage() {
                             </div>
                         )}
 
-                        {visibleMessages.map((msg: Message) => (
+                        {visibleMessages.map((msg: any) => (
                             <div key={msg.id} className={cn("flex flex-col gap-2 max-w-[85%]", msg.role === "user" ? "self-end items-end" : "self-start items-start")}>
                                 <div className={cn(
                                     "px-5 py-3 rounded-2xl text-[15px] leading-relaxed shadow-sm",
@@ -587,7 +592,7 @@ export default function SampleReviewPage() {
                                         ? "bg-gray-50 text-gray-800 rounded-tl-sm border border-gray-100"
                                         : "bg-black text-white rounded-tr-sm"
                                 )}>
-                                    {msg.toolInvocations?.map((inv: ToolInvocation, index: number) => {
+                                    {msg.toolInvocations?.map((inv: any, index: number) => {
                                         if (inv.toolName === 'showMedia' && inv.state === 'result') {
                                             const media = inv.result?.media || (typeof inv.result === 'string' ? JSON.parse(inv.result).media : null);
                                             return media ? <MediaDisplay key={inv.toolCallId || index} media={media} /> : null;
@@ -604,12 +609,12 @@ export default function SampleReviewPage() {
                                     })}
 
                                     {/* Legacy multipart/fallback support */}
-                                    {(!msg.toolInvocations || msg.toolInvocations.length === 0) && msg.parts?.map((part: { type: string; text?: string }, index: number) => {
+                                    {(!msg.toolInvocations || msg.toolInvocations.length === 0) && msg.parts?.map((part: any, index: number) => {
                                         if (part.type === 'text') {
                                             return <MarkdownMessage key={index} content={part.text} />;
                                         }
                                         if (part.type === 'tool-invocation' || part.type === 'tool-call') {
-                                            const inv = part as ToolInvocation;
+                                            const inv = part as any;
                                             if (inv.toolName === 'showMedia' && inv.state === 'result') {
                                                 const media = inv.result?.media || (typeof inv.result === 'string' ? JSON.parse(inv.result).media : null);
                                                 return media ? <MediaDisplay key={inv.toolCallId || index} media={media} /> : null;
@@ -861,7 +866,7 @@ export default function SampleReviewPage() {
                             <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/50">
                                 <h2 className="text-xl font-semibold text-gray-900"><ClientT>Publish Survey</ClientT></h2>
                                 <p className="text-sm text-gray-500 mt-1">
-                                    <ClientT>{"Review your survey's details before making it live and shareable."}</ClientT>
+                                    <ClientT>Review your survey's details before making it live and shareable.</ClientT>
                                 </p>
                             </div>
 

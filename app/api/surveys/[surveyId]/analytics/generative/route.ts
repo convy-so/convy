@@ -253,15 +253,15 @@ ${analytics?.metrics ? JSON.stringify(analytics.metrics).substring(0, 2000) : "N
             parts: (
               streamResult.response.messages[
                 streamResult.response.messages.length - 1
-              ] as { content?: unknown }
-            ).content || [{ type: "text", text: streamResult.text }],
+              ] as any
+            )?.content || [{ type: "text", text: streamResult.text }],
           },
         ];
 
         await getDb()
           .update(analyticsChatSessions)
           .set({
-            messages: finalMessages as unknown[],
+            messages: finalMessages as any,
           })
           .where(eq(analyticsChatSessions.id, existingSession.id));
       },

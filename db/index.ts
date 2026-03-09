@@ -23,7 +23,9 @@ const poolConfig = {
 };
 
 declare global {
+  // eslint-disable-next-line no-var
   var db: ReturnType<typeof drizzle<typeof schema>> | undefined;
+  // eslint-disable-next-line no-var
   var pool: Pool | undefined;
 }
 

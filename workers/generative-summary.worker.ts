@@ -30,7 +30,7 @@ const BASE_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
 const worker = new Worker<GenerativeSummaryJobData>(
   "generative-summary",
   async (job) => {
-    const { surveyId } = job.data;
+    const { surveyId, userId } = job.data;
 
     // ─── 1. Count current completed + partial responses ───────────────────
     const [{ value: currentCount }] = await getDb()

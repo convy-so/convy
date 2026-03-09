@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/routing";
 import {
@@ -19,6 +19,7 @@ import {
   Calendar,
   Mic,
   CheckCircle,
+  Download,
   Filter,
   Search,
   Loader2,
@@ -38,13 +39,7 @@ import toast from "react-hot-toast";
 import { useTranslations } from "next-intl";
 import { getClientTranslation } from "@/app/actions/translate";
 import { ClientT } from "@/components/i18n/client-t";
-import {
-  getSurveyEmbedCodeAction,
-  updateSurveyAction,
-  deactivateSurveyAction,
-  reactivateSurveyAction,
-  deleteSurveyAction,
-} from "@/app/actions/survey";
+import { getSurveyEmbedCodeAction } from "@/app/actions/survey";
 import { fetchSurveyDetails, fetchSurveyResponses } from "@/lib/api/surveys";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -54,7 +49,7 @@ interface Survey {
   status: "active" | "draft" | "completed" | "paused" | "creating" | "sample_review";
   createdAt: string;
   updatedAt: string;
-  expertState?: { objective?: { goal?: string; context?: string } | string; targetAudience?: { description?: string } | string; tone?: string };
+  expertState?: any;
   coreObjective?: string;
   tone?: string;
   shareableLink?: string;
@@ -90,6 +85,25 @@ interface Response {
 
 
 
+interface AnalyticsTheme {
+  theme: string;
+  mentions: number;
+  sentiment: "neutral" | "positive" | "negative";
+}
+
+interface AnalyticsData {
+  sentimentBreakdown: {
+    positive: number;
+    neutral: number;
+    negative: number;
+  };
+  completionFunnel: {
+    stage: string;
+    count: number;
+    percentage: number;
+  }[];
+  topThemes: AnalyticsTheme[];
+}
 
 type TabType = "overview" | "responses" | "settings";
 
@@ -174,43 +188,29 @@ export default function SurveyDetailPage() {
 
 
 
-  // Save settings mutation
-  const saveSettingsMutation = useMutation({
-    mutationFn: (data: { title: string; participantLimit: number; isVoice: boolean }) =>
-      updateSurveyAction({ id: surveyId, ...data }),
-    onMutate: async (newData) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
-      const previousData = queryClient.getQueryData<{ survey: Survey; stats: SurveyStats }>(
-        queryKeys.surveys.detail(surveyId)
-      );
-
-      if (previousData) {
-        queryClient.setQueryData(queryKeys.surveys.detail(surveyId), {
-          ...previousData,
-          survey: { ...previousData.survey, ...newData },
-        });
-      }
-
-      return { previousData };
-    },
-    onError: (err, newData, context) => {
-      if (context?.previousData) {
-        queryClient.setQueryData(queryKeys.surveys.detail(surveyId), context.previousData);
-      }
-      toast.error(t("Toasts.SettingsFailed") || "Failed to save settings");
-    },
-    onSuccess: () => {
-      toast.success(t("Toasts.SettingsSaved") || "Settings saved successfully");
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
-      setIsSavingSettings(false);
-    },
-  });
-
   const handleSaveSettings = async () => {
     setIsSavingSettings(true);
-    saveSettingsMutation.mutate(settingsForm);
+    const savingMsg = await getClientTranslation("Saving settings...");
+    const loadingToast = toast.loading(savingMsg);
+    try {
+      const response = await fetch(`/api/surveys/${surveyId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settingsForm),
+      });
+
+      if (response.ok) {
+        toast.success(t("Toasts.SettingsSaved") || "Settings saved successfully", { id: loadingToast });
+        // Invalidate survey query to refetch updated data
+        queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
+      } else {
+        toast.error(t("Toasts.SettingsFailed") || "Failed to save settings", { id: loadingToast });
+      }
+    } catch (_) {
+      toast.error(t("Toasts.Error") || "An unexpected error occurred", { id: loadingToast });
+    } finally {
+      setIsSavingSettings(false);
+    }
   };
 
   // Handle tab from URL
@@ -221,67 +221,45 @@ export default function SurveyDetailPage() {
     }
   }, [searchParams]);
 
-  // Status update mutation
-  const statusMutation = useMutation({
-    mutationFn: (newStatus: "active" | "paused") =>
-      newStatus === "active" ? reactivateSurveyAction(surveyId) : deactivateSurveyAction(surveyId),
-    onMutate: async (newStatus) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
-      const previousData = queryClient.getQueryData<{ survey: Survey; stats: SurveyStats }>(
-        queryKeys.surveys.detail(surveyId)
-      );
-
-      if (previousData) {
-        queryClient.setQueryData(queryKeys.surveys.detail(surveyId), {
-          ...previousData,
-          survey: { ...previousData.survey, status: newStatus },
-        });
-      }
-
-      return { previousData };
-    },
-    onError: (err, newStatus, context) => {
-      if (context?.previousData) {
-        queryClient.setQueryData(queryKeys.surveys.detail(surveyId), context.previousData);
-      }
-      toast.error(t("Toasts.StatusFailed") || "Failed to update status");
-    },
-    onSuccess: (_, newStatus) => {
-      toast.success(t("Toasts.StatusUpdated", { status: newStatus === "active" ? "resumed" : "paused" }));
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
-    },
-  });
-
   const handleStatusUpdate = async (newStatus: "active" | "paused") => {
-    statusMutation.mutate(newStatus);
+    try {
+      const response = await fetch(`/api/surveys/${surveyId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (response.ok) {
+        // Invalidate survey query to refetch updated data
+        queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
+        toast.success(t("Toasts.StatusUpdated", { status: newStatus === "active" ? "resumed" : "paused" }));
+      } else {
+        toast.error(t("Toasts.StatusFailed"));
+      }
+    } catch (_) {
+      toast.error(t("Toasts.Error"));
+    }
   };
 
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: () => deleteSurveyAction(surveyId),
-    onMutate: async () => {
-      // For detail view, deletion means the page will soon be invalid.
-      // We don't necessarily update the cache here since we're redirecting,
-      // but we set the loading state.
-      setIsDeletingSurvey(true);
-    },
-    onSuccess: () => {
-      toast.success(t("Toasts.Deleted") || "Survey deleted successfully");
-      router.push("/dashboard/surveys");
-    },
-    onError: () => {
-      toast.error(t("Toasts.DeleteFailed") || "Failed to delete survey");
-      setIsDeletingSurvey(false);
-    },
-    onSettled: () => {
-      setShowDeleteModal(false);
-    },
-  });
-
   const handleDelete = async () => {
-    deleteMutation.mutate();
+    setIsDeletingSurvey(true);
+    try {
+      const response = await fetch(`/api/surveys/${surveyId}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        toast.success(t("Toasts.Deleted") || "Survey deleted successfully");
+        router.push("/dashboard/surveys");
+      } else {
+        toast.error(t("Toasts.DeleteFailed") || "Failed to delete survey");
+      }
+    } catch (_) {
+      toast.error(t("Toasts.Error") || "An unexpected error occurred");
+    } finally {
+      setIsDeletingSurvey(false);
+      setShowDeleteModal(false);
+    }
   };
 
   const copyLink = async () => {
@@ -293,7 +271,7 @@ export default function SurveyDetailPage() {
     }
   };
 
-  const generateEmbedCode = useCallback(async () => {
+  const generateEmbedCode = async () => {
     setIsLoadingEmbed(true);
     setEmbedError(null);
 
@@ -301,7 +279,7 @@ export default function SurveyDetailPage() {
       const result = await getSurveyEmbedCodeAction(surveyId);
 
       if (result.success) {
-        setEmbedCodes(result.data as { iframeCode: string; inlineScriptSnippet: string; popoverScriptSnippet: string; sideTabScriptSnippet: string; url: string });
+        setEmbedCodes(result.data as any);
         // toast.success(t("Toasts.EmbedGenerated")); // Remove toast for auto-generation
       } else {
         const errorMsg = await getClientTranslation(result.error || "Failed to generate embed code");
@@ -316,14 +294,14 @@ export default function SurveyDetailPage() {
     } finally {
       setIsLoadingEmbed(false);
     }
-  }, [surveyId]);
+  };
 
   // Auto-generate embed code on mount or when status becomes active
   useEffect(() => {
     if (survey?.status === 'active' && !embedCodes && activeTab === 'settings') {
       generateEmbedCode();
     }
-  }, [survey?.status, activeTab, embedCodes, generateEmbedCode]);
+  }, [survey?.status, activeTab]);
 
   const copyEmbedCode = (type: 'iframe' | 'inline' | 'popover' | 'sidetab') => {
     if (!embedCodes) return;
@@ -868,7 +846,7 @@ export default function SurveyDetailPage() {
                   ].map((type) => (
                     <button
                       key={type.id}
-                      onClick={() => setSelectedEmbedType(type.id as 'inline' | 'popover' | 'sidetab' | 'iframe')}
+                      onClick={() => setSelectedEmbedType(type.id as any)}
                       className={cn(
                         "flex flex-col items-center gap-2 p-3 rounded-xl border text-sm font-medium transition-all",
                         selectedEmbedType === type.id

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import {
     UserPlus,
     Mail,
@@ -17,8 +16,6 @@ import { inviteToWorkspace, removeWorkspaceMember } from "@/app/actions/workspac
 import toast from "react-hot-toast";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/query-keys";
 
 interface TeamMember {
     id: string;
@@ -68,129 +65,56 @@ export function TeamMemberList({
     const [showMenuFor, setShowMenuFor] = useState<string | null>(null);
     const t = useTranslations("TeamPage.MemberList");
 
-    const queryClient = useQueryClient();
-
-    // Invite mutation
-    const inviteMutation = useMutation({
-        mutationFn: (data: { email: string; role: "owner" | "member"; organizationId: string }) =>
-            inviteToWorkspace(data),
-        onMutate: async (newInvite) => {
-            await queryClient.cancelQueries({ queryKey: queryKeys.workspaces.invitations(workspaceId) });
-            const previousInvites = queryClient.getQueryData<PendingInvite[]>(
-                queryKeys.workspaces.invitations(workspaceId)
-            );
-
-            if (previousInvites) {
-                queryClient.setQueryData(queryKeys.workspaces.invitations(workspaceId), [
-                    ...previousInvites,
-                    {
-                        id: `temp-${Date.now()}`,
-                        email: newInvite.email,
-                        role: newInvite.role,
-                        status: "pending",
-                        createdAt: new Date().toLocaleDateString(),
-                    },
-                ]);
-            }
-
-            return { previousInvites };
-        },
-        onError: (err, newInvite, context) => {
-            if (context?.previousInvites) {
-                queryClient.setQueryData(
-                    queryKeys.workspaces.invitations(workspaceId),
-                    context.previousInvites
-                );
-            }
-            toast.error(t("InviteModal.Error"));
-        },
-        onSuccess: () => {
-            setShowInviteModal(false);
-            setInviteEmail("");
-            setInviteRole("member");
-            toast.success(t("InviteModal.Success"));
-            onInviteSent?.();
-        },
-        onSettled: () => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.invitations(workspaceId) });
-            setIsInviting(false);
-        },
-    });
-
     const handleInvite = async () => {
         if (!inviteEmail.trim()) return;
+
         setIsInviting(true);
         setInviteError(null);
-        inviteMutation.mutate({
-            email: inviteEmail,
-            role: inviteRole,
-            organizationId: workspaceId,
-        });
+
+        try {
+            const result = await inviteToWorkspace({
+                email: inviteEmail,
+                role: inviteRole,
+                organizationId: workspaceId,
+            });
+
+            if (result.success) {
+                setShowInviteModal(false);
+                setInviteEmail("");
+                setInviteRole("member");
+                toast.success(t("InviteModal.Success"));
+                onInviteSent?.();
+            } else {
+                setInviteError(result.error);
+                toast.error(t("InviteModal.Error"));
+            }
+        } catch (error) {
+            toast.error(t("InviteModal.Error"));
+        } finally {
+            setIsInviting(false);
+        }
     };
-
-    // Remove member mutation
-    const removeMutation = useMutation({
-        mutationFn: (memberIdOrEmail: string) =>
-            removeWorkspaceMember({ memberIdOrEmail, organizationId: workspaceId }),
-        onMutate: async (memberIdOrEmail) => {
-            // Cancel outgoing refetches
-            await queryClient.cancelQueries({ queryKey: queryKeys.workspaces.members(workspaceId) });
-            await queryClient.cancelQueries({ queryKey: queryKeys.workspaces.invitations(workspaceId) });
-
-            // Snapshot members and invites
-            const previousMembers = queryClient.getQueryData<TeamMember[]>(
-                queryKeys.workspaces.members(workspaceId)
-            );
-            const previousInvites = queryClient.getQueryData<PendingInvite[]>(
-                queryKeys.workspaces.invitations(workspaceId)
-            );
-
-            // Optimistically update
-            if (previousMembers) {
-                queryClient.setQueryData(
-                    queryKeys.workspaces.members(workspaceId),
-                    previousMembers.filter((m) => m.userId !== memberIdOrEmail)
-                );
-            }
-            if (previousInvites) {
-                queryClient.setQueryData(
-                    queryKeys.workspaces.invitations(workspaceId),
-                    previousInvites.filter((i) => i.email !== memberIdOrEmail)
-                );
-            }
-
-            return { previousMembers, previousInvites };
-        },
-        onError: (err, memberIdOrEmail, context) => {
-            if (context?.previousMembers) {
-                queryClient.setQueryData(
-                    queryKeys.workspaces.members(workspaceId),
-                    context.previousMembers
-                );
-            }
-            if (context?.previousInvites) {
-                queryClient.setQueryData(
-                    queryKeys.workspaces.invitations(workspaceId),
-                    context.previousInvites
-                );
-            }
-            toast.error(t("Toasts.RemoveFailed"));
-        },
-        onSuccess: (_, memberIdOrEmail) => {
-            toast.success(t("Toasts.MemberRemoved"));
-            onMemberRemoved?.(memberIdOrEmail);
-        },
-        onSettled: () => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.members(workspaceId) });
-            queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.invitations(workspaceId) });
-            setRemovingMemberId(null);
-            setShowMenuFor(null);
-        },
-    });
 
     const handleRemoveMember = async (memberIdOrEmail: string) => {
         setRemovingMemberId(memberIdOrEmail);
-        removeMutation.mutate(memberIdOrEmail);
+        try {
+            const result = await removeWorkspaceMember({
+                memberIdOrEmail,
+                organizationId: workspaceId,
+            });
+
+            if (result.success) {
+                toast.success(t("Toasts.MemberRemoved"));
+                onMemberRemoved?.(memberIdOrEmail);
+            } else {
+                toast.error(t("Toasts.RemoveFailed"));
+            }
+        } catch (error) {
+            toast.error(t("Toasts.RemoveFailed"));
+        } finally {
+            setRemovingMemberId(null);
+            setShowMenuFor(null);
+        }
     };
 
     return (
@@ -230,14 +154,11 @@ export function TeamMemberList({
                                 {/* Avatar */}
                                 <div className="relative">
                                     {member.user.image ? (
-                                        <div className="relative w-10 h-10 rounded-full overflow-hidden">
-                                            <Image
-                                                src={member.user.image}
-                                                alt={member.user.name}
-                                                fill
-                                                className="object-cover"
-                                            />
-                                        </div>
+                                        <img
+                                            src={member.user.image}
+                                            alt={member.user.name}
+                                            className="w-10 h-10 rounded-full object-cover"
+                                        />
                                     ) : (
                                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-white font-semibold text-sm">
                                             {member.user.name?.charAt(0)?.toUpperCase() || "U"}

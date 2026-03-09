@@ -1,6 +1,8 @@
-import { surveys, surveyCreationConversations } from "@/db/schema";
-import { getDb } from "@/db";
 import { eq } from "drizzle-orm";
+import { createUIMessageStreamResponse } from "ai";
+
+import { getDb } from "@/db";
+import { surveys, surveyCreationConversations } from "@/db/schema";
 import { normalizeMessages } from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { type CollectedInfo } from "@/lib/prompts";
@@ -13,7 +15,6 @@ import {
   GeminiCapacityError,
   geminiCapacityResponse,
 } from "@/lib/gemini-limiter";
-import { type SurveyUIMessage } from "@/lib/types/survey-flow";
 
 export const maxDuration = 300;
 
@@ -59,7 +60,7 @@ export async function POST(
     const session = await getVerifiedSession();
     const body = await request.json();
     const { messages } = body as {
-      messages: Array<SurveyUIMessage>;
+      messages: Array<any>;
     };
 
     if (!Array.isArray(messages)) {
@@ -116,12 +117,11 @@ export async function POST(
 
     // SAVE CONVERSATION STATE (Important for extraction to work)
     const messagesWithTimestamp = messages.map((msg) => {
-      let textContent =
-        msg.displayedContent || (msg as { content?: string }).content;
+      let textContent = msg.content;
       if (!textContent && Array.isArray(msg.parts)) {
         textContent = msg.parts
-          .filter((p: unknown) => (p as { type: string }).type === "text")
-          .map((p: unknown) => (p as { text: string }).text)
+          .filter((p: any) => p.type === "text")
+          .map((p: any) => p.text)
           .join("");
       }
       return {
@@ -177,11 +177,10 @@ export async function POST(
 
     const agentContext: AgentContext = {
       surveyConfig: currentConfig,
-      language: survey.language as SurveyLanguage | undefined,
+      language: survey.language,
       conversationId: creationConversation?.id || crypto.randomUUID(),
       userId: session.user.id,
-      organizationId: (session.user as { organizationId?: string })
-        .organizationId,
+      organizationId: (session.user as any).organizationId,
     };
 
     // 2. Instantiate Creation Specialist
@@ -201,8 +200,8 @@ export async function POST(
       ),
     );
 
-    // 3. Get System Prompt from Agent (Pre-computation for future use or logging if needed)
-    agent.buildSystemPrompt();
+    // 3. Get System Prompt from Agent
+    const systemPrompt = agent.buildSystemPrompt();
 
     // 4. Dynamic Resume Logic — only fire for genuine resumes (existing conversation beyond greeting + first reply)
     // The last message is ALWAYS a user message (that's what triggered the POST), so we can't use
@@ -225,7 +224,7 @@ export async function POST(
           );
           try {
             const assistantMessage = response.messages.find(
-              (m) => m.role === "assistant",
+              (m: any) => m.role === "assistant",
             );
 
             // Re-fetch to get latest state in case extraction updated it
@@ -248,11 +247,7 @@ export async function POST(
                 assistantMessage?.content &&
                 Array.isArray(assistantMessage.content)
               ) {
-                for (const part of assistantMessage.content as Array<{
-                  type: string;
-                  toolName?: string;
-                  args?: { state_updates?: Record<string, string> };
-                }>) {
+                for (const part of assistantMessage.content) {
                   if (
                     part.type === "tool-call" &&
                     part.toolName === "think_and_respond"
@@ -270,25 +265,18 @@ export async function POST(
                 ...currentMessages,
                 {
                   role: "assistant" as const,
-                  content: finalContent || "",
-                  parts: (
-                    streamResult.response.messages[
-                      streamResult.response.messages.length - 1
-                    ] as { content?: unknown }
-                  ).content || [{ type: "text", text: streamResult.text }],
+                  content: finalContent,
+                  parts:
+                    assistantMessage?.content &&
+                    Array.isArray(assistantMessage.content)
+                      ? assistantMessage.content
+                      : undefined,
                   timestamp: new Date().toISOString(),
                 },
               ];
 
-              const finalMessages = updatedMessages.filter(
-                (m) => (m as Record<string, unknown>).id !== "welcome",
-              );
-              const dbUpdate: {
-                messages: unknown[];
-                collectedInfo?: Record<string, boolean>;
-                extractedData?: Record<string, unknown>;
-              } = {
-                messages: finalMessages,
+              const dbUpdate: Record<string, any> = {
+                messages: updatedMessages,
               };
 
               if (Object.keys(stateUpdates).length > 0) {
@@ -306,7 +294,7 @@ export async function POST(
                   const existingCollected = (latestConv.collectedInfo ||
                     {}) as Record<string, boolean>;
                   const existingExtracted = (latestConv.extractedData ||
-                    {}) as Record<string, unknown>;
+                    {}) as Record<string, any>;
                   dbUpdate.collectedInfo = {
                     ...existingCollected,
                     ...newCollectedFlags,
@@ -374,7 +362,7 @@ export async function PUT(
     const { surveyId } = await params;
     const body = await request.json();
     const { messages, collectedInfo, extractedData } = body as {
-      messages?: Array<SurveyUIMessage>;
+      messages?: Array<any>;
       collectedInfo?: CollectedInfo;
       extractedData?: Record<string, unknown>;
     };
@@ -413,15 +401,15 @@ export async function PUT(
       if (existingConversation) {
         // Build the update payload dynamically — if nothing was provided, skip the DB call entirely
         // (Drizzle throws "No values to set" if .set({}) receives an empty object)
-        const updatePayload: Record<string, unknown> = {};
+        const updatePayload: Record<string, any> = {};
 
         if (messages) {
           updatePayload.messages = messages.map((msg) => {
-            let textContent = (msg as { content?: string }).content;
+            let textContent = msg.content;
             if (!textContent && Array.isArray(msg.parts)) {
               textContent = msg.parts
-                .filter((p: unknown) => (p as { type: string }).type === "text")
-                .map((p: unknown) => (p as { text: string }).text)
+                .filter((p: any) => p.type === "text")
+                .map((p: any) => p.text)
                 .join("");
             }
             return {
@@ -466,11 +454,8 @@ export async function PUT(
                   msg.content ||
                   (Array.isArray(msg.parts)
                     ? msg.parts
-                        .filter(
-                          (p: unknown) =>
-                            (p as { type: string }).type === "text",
-                        )
-                        .map((p: unknown) => (p as { text: string }).text)
+                        .filter((p: any) => p.type === "text")
+                        .map((p: any) => p.text)
                         .join("")
                     : ""),
                 parts: msg.parts,
@@ -502,7 +487,7 @@ export async function PUT(
       if (extractedData) {
         const currentExpertState = (survey.expertState || {}) as Record<
           string,
-          unknown
+          any
         >;
         await tx
           .update(surveys)
@@ -581,8 +566,6 @@ export async function GET(
             personalInfo: false,
             subjectDefined: false,
             domainIdentified: false,
-            media: false,
-            subjectModelComplete: false,
           },
           extractedData: {},
         }),

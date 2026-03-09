@@ -161,10 +161,10 @@ export async function uploadSurveyMediaAction(
     const mediaId = nanoid();
 
     const arrayBuffer = await file.arrayBuffer();
-    let buffer: Buffer = Buffer.from(arrayBuffer);
+    let buffer = Buffer.from(arrayBuffer);
 
     // SERVER-SIDE VERIFICATION: Verify file type using magic bytes
-    const fileType = await fileTypeFromBuffer(buffer);
+    const fileType = await fileTypeFromBuffer(buffer as any);
     if (!fileType) {
       return { success: false, error: "Could not determine file type" };
     }
@@ -193,9 +193,9 @@ export async function uploadSurveyMediaAction(
     // IMAGE HARDENING: Strip metadata/EXIF and normalize
     if (type === "image") {
       try {
-        buffer = (await sharp(buffer as Buffer)
+        buffer = (await sharp(buffer as any)
           .rotate() // Auto-rotate based on EXIF before stripping
-          .toBuffer()) as Buffer; // metadata is stripped by default in toBuffer unless specifically kept
+          .toBuffer()) as any; // metadata is stripped by default in toBuffer unless specifically kept
       } catch (sharpError) {
         console.error("[Media Upload] Sharp processing failed:", sharpError);
         return { success: false, error: "Failed to process image safely" };

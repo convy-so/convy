@@ -38,11 +38,7 @@ export async function getCurrentSession(
     finalHeaders.append("cookie", authHeaders);
   } else if (
     authHeaders &&
-    typeof (
-      authHeaders as unknown as {
-        forEach: (cb: (v: string, k: string) => void) => void;
-      }
-    ).forEach === "function"
+    typeof (authHeaders as { forEach?: Function }).forEach === "function"
   ) {
     // Handle cases where ReadonlyHeaders are passed directly but fail instanceof
     finalHeaders = await cloneRequestHeaders(authHeaders as Headers);

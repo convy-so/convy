@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useState, useMemo, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useRouter } from "@/i18n/routing";
 import { Suspense } from "react";
 
@@ -12,6 +12,7 @@ import {
   Edit,
   Trash2,
   Copy,
+  BarChart3,
   MessageSquare,
   MoreVertical,
   Clock,
@@ -36,12 +37,13 @@ import { queryKeys } from "@/lib/query-keys";
 import { useAuth } from "@/components/providers/auth-provider";
 
 import { useTranslations } from "next-intl";
+import { getClientTranslation } from "@/app/actions/translate";
 
 
 interface Survey {
   id: string;
   title: string;
-  expertState?: { objective?: { goal?: string } };
+  expertState?: any;
   status: string;
   shareableLink?: string;
   responses: number;
@@ -67,19 +69,18 @@ function SurveysContent() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [isPageSizeOpen, setIsPageSizeOpen] = useState(false);
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const t = useTranslations("SurveysPage");
 
 
   const { session } = useAuth();
   const activeOrgId = session?.activeOrganizationId || null;
 
-  // Fetch surveys using React Query with server-side pagination and filtering
-  const { data, isLoading } = useQuery<{ surveys: Survey[], total: number }>({
-    queryKey: queryKeys.surveys.all(activeOrgId, currentPage, pageSize, searchQuery, filterTab),
+  // Fetch surveys using React Query
+  const { data: surveys = [], isLoading } = useQuery<Survey[]>({
+    queryKey: queryKeys.surveys.all(activeOrgId),
     queryFn: fetchSurveys,
   });
-
-  const totalCount = data?.total || 0;
 
   // Delete survey click handler
   const handleDelete = (survey: { id: string; title: string }) => {
@@ -87,58 +88,28 @@ function SurveysContent() {
     setShowMenuFor(null);
   };
 
-  // Delete survey mutation
-  const deleteMutation = useMutation({
-    mutationFn: (surveyId: string) => deleteSurveyAction(surveyId),
-    onMutate: async (surveyId) => {
-      // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
-      await queryClient.cancelQueries({ queryKey: queryKeys.surveys.all(activeOrgId) });
-
-      // Snapshot the previous value
-      const previousData = queryClient.getQueryData<{ surveys: Survey[]; total: number }>(
-        queryKeys.surveys.all(activeOrgId, currentPage, pageSize, searchQuery, filterTab)
-      );
-
-      // Optimistically update to the new value
-      if (previousData) {
-        queryClient.setQueryData(
-          queryKeys.surveys.all(activeOrgId, currentPage, pageSize, searchQuery, filterTab),
-          {
-            ...previousData,
-            surveys: previousData.surveys.filter((s) => s.id !== surveyId),
-            total: Math.max(0, previousData.total - 1),
-          }
-        );
-      }
-
-      return { previousData };
-    },
-    onError: (err, surveyId, context) => {
-      // If the mutation fails, use the context returned from onMutate to roll back
-      if (context?.previousData) {
-        queryClient.setQueryData(
-          queryKeys.surveys.all(activeOrgId, currentPage, pageSize, searchQuery, filterTab),
-          context.previousData
-        );
-      }
-      toast.error(t("Card.Toasts.DeleteFailed") || "Failed to delete survey.");
-    },
-    onSuccess: () => {
-      toast.success(t("Card.Toasts.Deleted") || "Survey deleted successfully.");
-      setSurveyToDelete(null);
-    },
-    onSettled: () => {
-      // Always refetch after error or success to ensure we are in sync with the server
-      queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all(activeOrgId) });
-      setIsDeleting(null);
-    },
-  });
-
   // Confirm delete handler
   const confirmDeleteSurvey = async () => {
     if (!surveyToDelete) return;
+
     setIsDeleting(surveyToDelete.id);
-    deleteMutation.mutate(surveyToDelete.id);
+
+    try {
+      const result = await deleteSurveyAction(surveyToDelete.id);
+
+      if (result.success) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all(activeOrgId) });
+        toast.success(t("Card.Toasts.Deleted") || "Survey deleted successfully.");
+        setSurveyToDelete(null);
+      } else {
+        toast.error(t("Card.Toasts.DeleteFailed") || "Failed to delete survey.");
+      }
+    } catch (error) {
+      const errorMsg = await getClientTranslation("An error occurred while deleting.");
+      toast.error(errorMsg);
+    } finally {
+      setIsDeleting(null);
+    }
   };
 
   // Continue creating survey
@@ -159,7 +130,7 @@ function SurveysContent() {
       } else {
         toast.error(t("Card.Toasts.DuplicateFailed") || "Failed to delete survey.");
       }
-    } catch {
+    } catch (error) {
       toast.error(t("Card.Toasts.DuplicateFailed") || "An error occurred during duplication.");
     }
   };
@@ -167,8 +138,10 @@ function SurveysContent() {
   const handleCopyLink = async (shareableLink: string) => {
     try {
       await navigator.clipboard.writeText(shareableLink);
+      setCopiedLink(shareableLink);
       toast.success(t("Card.Toasts.LinkCopied") || "Link copied to clipboard!");
-    } catch {
+      setTimeout(() => setCopiedLink(null), 2000);
+    } catch (error) {
       toast.error(t("Card.Toasts.CopyFailed") || "Failed to copy link.");
     }
   };
@@ -184,16 +157,36 @@ function SurveysContent() {
     setIsPageSizeOpen(false);
   };
 
+  // Computed counts
   const counts = useMemo(() => {
-    return { all: totalCount, published: 0, unpublished: 0 };
-    // TODO: Implement summary counts API if needed for all tabs simultaneously
-  }, [totalCount]);
+    const published = surveys.filter(s => s.status === "active").length;
+    const unpublished = surveys.filter(s => s.status !== "active").length;
+    return { all: surveys.length, published, unpublished };
+  }, [surveys]);
 
-  // Filtered and paginated surveys - Now handled by server
+  // Filtered and paginated surveys
   const { paginatedSurveys, totalFiltered } = useMemo(() => {
-    const surveys = data?.surveys || [];
-    return { paginatedSurveys: surveys, totalFiltered: totalCount };
-  }, [data?.surveys, totalCount]);
+    let result = surveys;
+
+    if (filterTab === "published") {
+      result = result.filter(s => s.status === "active");
+    } else if (filterTab === "unpublished") {
+      result = result.filter(s => s.status !== "active");
+    }
+
+    if (searchQuery) {
+      result = result.filter(s =>
+        s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.expertState?.objective?.goal?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    const total = result.length;
+    const startIndex = (currentPage - 1) * pageSize;
+    const paginated = result.slice(startIndex, startIndex + pageSize);
+
+    return { paginatedSurveys: paginated, totalFiltered: total };
+  }, [surveys, filterTab, searchQuery, currentPage, pageSize]);
 
 
   return (
@@ -474,77 +467,6 @@ function SurveysContent() {
               </div>
             ))}
           </div>
-
-          {totalCount > pageSize && (
-            <div className="flex items-center justify-between px-6 py-4 bg-white border-t border-gray-100">
-              <div className="flex-1 flex justify-between sm:hidden">
-                <button
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
-                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                >
-                  {t("Pagination.Previous")}
-                </button>
-                <button
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(totalCount / pageSize)))}
-                  disabled={currentPage >= Math.ceil(totalCount / pageSize)}
-                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                >
-                  {t("Pagination.Next")}
-                </button>
-              </div>
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm text-gray-700">
-                    {t("Pagination.Showing", {
-                      start: (currentPage - 1) * pageSize + 1,
-                      end: Math.min(currentPage * pageSize, totalCount),
-                      total: totalCount
-                    })}
-                  </p>
-                </div>
-                <div>
-                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                      disabled={currentPage === 1}
-                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      <span className="sr-only">Previous</span>
-                      <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-                    </button>
-
-                    {Array.from({ length: Math.min(5, Math.ceil(totalCount / pageSize)) }).map((_, i) => {
-                      const pageNum = i + 1;
-                      return (
-                        <button
-                          key={pageNum}
-                          onClick={() => setCurrentPage(pageNum)}
-                          className={cn(
-                            "relative inline-flex items-center px-4 py-2 border text-sm font-medium transition-colors",
-                            currentPage === pageNum
-                              ? "z-10 bg-gray-900 border-gray-900 text-white"
-                              : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50"
-                          )}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    })}
-
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(totalCount / pageSize)))}
-                      disabled={currentPage >= Math.ceil(totalCount / pageSize)}
-                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      <span className="sr-only">Next</span>
-                      <ChevronRight className="h-5 w-5" aria-hidden="true" />
-                    </button>
-                  </nav>
-                </div>
-              </div>
-            </div>
-          )}
 
 
           {paginatedSurveys.length === 0 && (

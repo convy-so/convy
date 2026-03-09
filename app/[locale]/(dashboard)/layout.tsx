@@ -31,7 +31,7 @@ async function DashboardLayoutContent({
   children: React.ReactNode;
   params: Promise<{ locale: string }>;
 }) {
-  await params;
+  const { locale } = await params;
   const authHeaders = await headers();
   const session = await getCurrentSession(authHeaders);
 

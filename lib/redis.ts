@@ -37,7 +37,9 @@ const getEffectiveOptions = (url: string) => {
  */
 
 declare global {
+  // eslint-disable-next-line no-var
   var sharedRedisClient: Redis | undefined;
+  // eslint-disable-next-line no-var
   var sharedRedisSubscriber: Redis | undefined;
 }
 

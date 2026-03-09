@@ -29,9 +29,7 @@ export async function ingestConversation(
 
   // 1. Chunk and embed the conversation transcript
   // We'll format it as a dialogue
-  const transcript = (
-    conversation.rawConversation as Array<{ role: string; content: string }>
-  )
+  const transcript = (conversation.rawConversation as any[])
     .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
     .join("\n\n");
 
@@ -44,25 +42,21 @@ export async function ingestConversation(
       organizationId: conversation.survey.organizationId || undefined,
     });
 
-    await getDb()
-      .insert(documentEmbeddings)
-      .values({
-        id: nanoid(),
-        surveyId: conversation.surveyId,
-        sourceType: "response",
-        sourceId: conversation.id,
-        chunkIndex: i,
-        content: chunk,
-        metadata: {
-          participantId: conversation.participantId,
-          date: conversation.createdAt.toISOString(),
-          language:
-            conversation.originalLanguage ||
-            conversation.survey.language ||
-            "en",
-        },
-        embedding,
-      });
+    await getDb().insert(documentEmbeddings).values({
+      id: nanoid(),
+      surveyId: conversation.surveyId,
+      sourceType: "response",
+      sourceId: conversation.id,
+      chunkIndex: i,
+      content: chunk,
+      metadata: {
+        participantId: conversation.participantId,
+        date: conversation.createdAt.toISOString(),
+        language:
+          conversation.originalLanguage || conversation.survey.language || "en",
+      },
+      embedding,
+    });
   }
 
   // 2. Embed the insights
@@ -76,24 +70,20 @@ export async function ingestConversation(
       organizationId: conversation.survey.organizationId || undefined,
     });
 
-    await getDb()
-      .insert(documentEmbeddings)
-      .values({
-        id: nanoid(),
-        surveyId: conversation.surveyId,
-        sourceType: "insight",
-        sourceId: conversation.insights.id,
-        chunkIndex: i,
-        content: chunk,
-        metadata: {
-          conversationId: conversation.id,
-          language:
-            conversation.originalLanguage ||
-            conversation.survey.language ||
-            "en",
-        },
-        embedding,
-      });
+    await getDb().insert(documentEmbeddings).values({
+      id: nanoid(),
+      surveyId: conversation.surveyId,
+      sourceType: "insight",
+      sourceId: conversation.insights.id,
+      chunkIndex: i,
+      content: chunk,
+      metadata: {
+        conversationId: conversation.id,
+        language:
+          conversation.originalLanguage || conversation.survey.language || "en",
+      },
+      embedding,
+    });
   }
 }
 
@@ -121,21 +111,19 @@ export async function ingestAnalytics(surveyId: string): Promise<void> {
       // organizationId should ideally be passed in or fetched
     });
 
-    await getDb()
-      .insert(documentEmbeddings)
-      .values({
-        id: nanoid(),
-        surveyId: surveyId,
-        sourceType: "analytics",
-        sourceId: analytics.id,
-        chunkIndex: i,
-        content: chunk,
-        metadata: {
-          updatedAt: analytics.lastUpdated.toISOString(),
-          language: analytics.generatedLanguage || "en",
-        },
-        embedding,
-      });
+    await getDb().insert(documentEmbeddings).values({
+      id: nanoid(),
+      surveyId: surveyId,
+      sourceType: "analytics",
+      sourceId: analytics.id,
+      chunkIndex: i,
+      content: chunk,
+      metadata: {
+        updatedAt: analytics.lastUpdated.toISOString(),
+        language: analytics.generatedLanguage || "en",
+      },
+      embedding,
+    });
   }
 }
 
@@ -144,18 +132,16 @@ export async function ingestKnowledge(entry: KnowledgeEntry): Promise<void> {
     // knowledge is usually global or domain-bound
   });
 
-  await getDb()
-    .insert(knowledgeBase)
-    .values({
-      id: nanoid(),
-      domainId: entry.domainId,
-      category: entry.category,
-      title: entry.title,
-      content: entry.content,
-      embedding,
-      source: entry.source || "system",
-      metadata: entry.metadata || {},
-    });
+  await getDb().insert(knowledgeBase).values({
+    id: nanoid(),
+    domainId: entry.domainId,
+    category: entry.category,
+    title: entry.title,
+    content: entry.content,
+    embedding,
+    source: entry.source || "system",
+    metadata: entry.metadata || {},
+  });
 }
 
 export async function ingestDocument(
@@ -170,21 +156,19 @@ export async function ingestDocument(
       surveyId: surveyId,
     });
 
-    await getDb()
-      .insert(documentEmbeddings)
-      .values({
-        id: nanoid(),
-        surveyId: surveyId,
-        sourceType: "document",
-        sourceId: file.name, // Using filename as ID for now
-        chunkIndex: i,
-        content: chunk,
-        metadata: {
-          filename: file.name,
-          type: file.type,
-          language: "en", // Default for direct documents, or could be detected
-        },
-        embedding,
-      });
+    await getDb().insert(documentEmbeddings).values({
+      id: nanoid(),
+      surveyId: surveyId,
+      sourceType: "document",
+      sourceId: file.name, // Using filename as ID for now
+      chunkIndex: i,
+      content: chunk,
+      metadata: {
+        filename: file.name,
+        type: file.type,
+        language: "en", // Default for direct documents, or could be detected
+      },
+      embedding,
+    });
   }
 }

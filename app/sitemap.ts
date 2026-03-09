@@ -1,7 +1,7 @@
 import { MetadataRoute } from "next";
 import { routing } from "@/i18n/routing";
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://getconvy.pro";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const routes = ["", "/features", "/pricing", "/about"];

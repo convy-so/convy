@@ -1,11 +1,16 @@
 import { nanoid } from "nanoid";
 import { eq } from "drizzle-orm";
-import { createUIMessageStreamResponse, type ModelMessage } from "ai";
+import {
+  stepCountIs,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  type ModelMessage,
+} from "ai";
 
 import { getDb } from "@/db";
 import { surveyConversations, surveys } from "@/db/schema";
+import { chatRateLimiter, getClientIP } from "@/lib/ratelimit";
 import { normalizeMessages } from "@/lib/ai";
-import { type SurveyUIMessage } from "@/lib/types/survey-flow";
 import {
   logPromptInjectionAttempt,
   sanitizeUserInput,
@@ -48,7 +53,7 @@ export async function POST(
     const { surveyId } = await params;
     const body = await request.json();
     const { messages, conversationId } = body as {
-      messages: Array<SurveyUIMessage>;
+      messages: Array<any>;
       conversationId?: string;
     };
 
@@ -98,25 +103,23 @@ export async function POST(
     if (!convId) {
       convId = nanoid();
 
-      await getDb()
-        .insert(surveyConversations)
-        .values({
-          id: convId,
-          surveyId: survey.id,
-          rawConversation: sanitizedMessages.map((msg) => ({
-            ...msg,
-            content:
-              typeof msg.content === "string"
-                ? msg.content
-                : JSON.stringify(msg.content),
-            role:
-              msg.role === "system"
-                ? "assistant"
-                : (msg.role as "user" | "assistant"),
-            timestamp: new Date().toISOString(),
-          })),
-          completed: false,
-        });
+      await getDb().insert(surveyConversations).values({
+        id: convId,
+        surveyId: survey.id,
+        rawConversation: sanitizedMessages.map((msg) => ({
+          ...msg,
+          content:
+            typeof msg.content === "string"
+              ? msg.content
+              : JSON.stringify(msg.content),
+          role:
+            msg.role === "system"
+              ? "assistant"
+              : (msg.role as "user" | "assistant"),
+          timestamp: new Date().toISOString(),
+        })),
+        completed: false,
+      });
 
       await getDb()
         .update(surveys)
@@ -173,7 +176,7 @@ export async function POST(
         // Persistence logic for participant chat
         try {
           const assistantMessage = response.messages.find(
-            (m) => m.role === "assistant",
+            (m: any) => m.role === "assistant",
           );
 
           const [currentConv] = await getDb()
@@ -182,9 +185,8 @@ export async function POST(
             .where(eq(surveyConversations.id, convId!));
 
           if (currentConv) {
-            const currentMessages =
-              currentConv.rawConversation as SurveyUIMessage[];
-            const updatedMessages: SurveyUIMessage[] = [
+            const currentMessages = currentConv.rawConversation as Array<any>;
+            const updatedMessages = [
               ...currentMessages,
               {
                 role: "assistant" as const,
@@ -267,7 +269,7 @@ export async function PUT(
     const body = await request.json();
     const { conversationId, messages, completed } = body as {
       conversationId: string;
-      messages: Array<SurveyUIMessage>;
+      messages: Array<any>;
       completed?: boolean;
     };
 
@@ -322,8 +324,7 @@ export async function PUT(
         rawConversation: messages.map((msg) => ({
           id: msg.id,
           role: msg.role,
-          content:
-            msg.displayedContent || (msg as { content?: string }).content || "",
+          content: msg.content,
           parts: msg.parts,
           timestamp: msg.timestamp || new Date().toISOString(),
         })),

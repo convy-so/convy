@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Link } from "@/i18n/routing";
+import { Link, useRouter } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
 import { Eye, EyeOff, Lock, Check } from "lucide-react";
 import { Suspense } from "react";
@@ -18,6 +18,7 @@ import toast from "react-hot-toast";
 function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
+  const router = useRouter();
   const t = useTranslations('Auth.ResetPassword');
 
   const [showPassword, setShowPassword] = useState(false);
