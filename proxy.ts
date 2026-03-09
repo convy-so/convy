@@ -1,5 +1,6 @@
 import createMiddleware from "next-intl/middleware";
 import { routing } from "./i18n/routing";
+import { betterFetch } from "@better-fetch/fetch";
 import { NextResponse, type NextRequest } from "next/server";
 
 const intlMiddleware = createMiddleware(routing);
@@ -16,11 +17,44 @@ export default async function middleware(request: NextRequest) {
     );
 
   if (isDashboardRoute) {
-    const sessionCookie =
-      request.cookies.get("better-auth.session_token") ||
-      request.cookies.get("__secure-better-auth.session_token");
+    try {
+      const { data } = await betterFetch<{
+        session: any;
+        user: { preferredLanguage?: string };
+      }>("/api/auth/get-session", {
+        baseURL: process.env.BETTER_AUTH_URL || request.nextUrl.origin,
+        headers: {
+          // get the cookie from the request
+          cookie: request.headers.get("cookie") || "",
+        },
+      });
 
-    if (!sessionCookie) {
+      if (!data) {
+        // Detect Server Action
+        const isServerAction = request.headers.has("Next-Action");
+
+        if (isServerAction) {
+          return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        return NextResponse.redirect(new URL("/sign-in", request.url));
+      }
+
+      // Sync preferredLanguage with NEXT_LOCALE cookie
+      const preferredLanguage = data.user.preferredLanguage;
+      const currentLocale = request.cookies.get("NEXT_LOCALE")?.value;
+
+      if (preferredLanguage && preferredLanguage !== currentLocale) {
+        const response = intlMiddleware(request);
+        response.cookies.set("NEXT_LOCALE", preferredLanguage, {
+          path: "/",
+          maxAge: 60 * 60 * 24 * 365, // 1 year
+        });
+        return response;
+      }
+    } catch (error) {
+      console.error("Auth middleware error:", error);
+
       // Detect Server Action
       const isServerAction = request.headers.has("Next-Action");
 
@@ -30,10 +64,6 @@ export default async function middleware(request: NextRequest) {
 
       return NextResponse.redirect(new URL("/sign-in", request.url));
     }
-
-    // Since we are downstream in a Server Component (Layout/Page),
-    // the actual cryptographic verification happens there via auth.api.getSession().
-    // We only perform an "Optimistic" check here to keep the middleware thin and prevent loops.
   }
 
   // Run internationalization middleware
