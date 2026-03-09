@@ -17,13 +17,17 @@
                 "Title": "Mode Designer IA",
                 "Description": "Choisissez comment vous souhaitez construire votre sondage avec notre IA experte.",
                 "Text": "Designer Texte",
-                "Voice": "Designer Vocal"
+                "TextDescription": "Envoyez des messages et itérez sur votre design étape par étape dans une interface de chat familière.",
+                "Voice": "Designer Vocal",
+                "VoiceDescription": "Concevez votre sondage les mains libres en utilisant la parole naturelle en temps réel avec l'IA."
             },
             "RespondentFormat": {
                 "Title": "Expérience Participant",
                 "Description": "Comment les gens doivent-ils répondre à ce sondage ? Choisissez l'interface qu'ils utiliseront.",
                 "Text": "Sondage Texte",
-                "Voice": "Sondage Vocal"
+                "TextDescription": "Les répondants répondent aux questions via une interface de chat textuelle standard.",
+                "Voice": "Sondage Vocal",
+                "VoiceDescription": "Les répondants parlent à un agent IA réaliste qui les guide tout au long du sondage."
             },
             "PageTitle": "Créer un nouveau sondage",
             "PageSubtitle": "Sélectionnez l'expertise métier pour votre sondage ou décrivez vos besoins",
@@ -133,6 +137,7 @@
             },
             "Input": {
                 "Placeholder": "Décrivez vos objectifs de sondage...",
+                "VoiceMode": "Passer en mode vocal",
                 "PlaceholderLocked": "Sélectionnez un sujet ci-dessus pour commencer...",
                 "AddMedia": "Ajouter contexte/média",
                 "Send": "Envoyer",
@@ -263,7 +268,18 @@
                 "FeedbackApplied": "Commentaire appliqué ! Démarrage d'une nouvelle conversation...",
                 "FeedbackFailed": "Échec de l'application du commentaire",
                 "Confirmed": "Sondage confirmé et publié !",
-                "ConfirmFailed": "Échec de la confirmation du sondage"
+                "ConfirmFailed": "Échec de la confirmation du sondage",
+                "ResponseFailed": "Échec de l'obtention de la réponse",
+                "AIResponseFailed": "Échec de l'obtention de la réponse de l'IA",
+                "NoRetries": "Vous avez utilisé vos 3 conversations d'exemple",
+                "FeedbackError": "Erreur lors de l'application du commentaire",
+                "StartFailed": "Échec du démarrage de la conversation"
+            },
+            "ConfirmDialog": {
+                "Title": "Publier le sondage ?",
+                "Message": "Êtes-vous sûr de vouloir publier ce sondage ? Vous ne pourrez plus modifier les questions de base une fois qu'il sera en ligne.",
+                "Confirm": "Publier",
+                "Cancel": "Continuer à modifier"
             }
         },
         "Response": {
@@ -290,12 +306,151 @@
             "liveTranscription": "Transcription en direct",
             "typeAnswer": "Tapez votre réponse...",
             "sharedMedia": "Média partagé",
+            "tapToRetry": "Appuyez sur l'icône pour réessayer",
+            "loadFailed": "Échec du chargement du sondage",
             "voiceSurveyIntro": "Participez à notre entretien à commande vocale. Choisissez votre langue préférée et commencez à parler naturellement.",
             "selectLanguage": "Choisir la langue",
             "startInterview": "Commencer l'entretien",
             "micPermissionDenied": "L'accès au microphone est requis pour ce sondage. Veuillez l'activer dans les paramètres de votre navigateur pour continuer.",
             "micConsentTitle": "Accès au Microphone",
             "micConsentDescription": "Je comprends que cette enquête utilise l'enregistrement vocal. J'autorise l'utilisation de mon microphone pour la durée de l'entretien."
+        },
+        "Detail": {
+            "Header": {
+                "Copied": "Copié",
+                "CopyLink": "Copier le lien",
+                "Pause": "Pause",
+                "Resume": "Reprendre",
+                "Continue": "Continuer la création",
+                "Preview": "Aperçu",
+                "NoDescription": "Aucune description fournie."
+            },
+            "SampleReview": {
+                "Badge": "Étape requise",
+                "Title": "Prêt pour les conversations d'exemple",
+                "Description": "La logique de votre sondage a été générée ! Effectuez une conversation vocale d'exemple avec l'IA pour vérifier l'expérience avant de mettre en ligne.",
+                "Button": "Démarrer la conversation d'exemple"
+            },
+            "Tabs": {
+                "Overview": "Vue d'ensemble",
+                "Responses": "Réponses",
+                "Settings": "Paramètres"
+            },
+            "Overview": {
+                "Responses": {
+                    "Title": "Réponses",
+                    "Target": "sur {limit} cibles"
+                },
+                "Completion": {
+                    "Title": "Complétion",
+                    "Completed": "{count} terminés"
+                },
+                "Duration": {
+                    "Title": "Durée moy.",
+                    "Unit": "minutes"
+                },
+                "Created": {
+                    "Title": "Créé"
+                },
+                "ShareLink": "Partager le lien",
+                "Configuration": {
+                    "Title": "Configuration du sondage",
+                    "Objective": "Objectif",
+                    "TargetAudience": "Public cible",
+                    "Tone": "Ton de la conversation",
+                    "NotSpecified": "Non spécifié"
+                },
+                "RecentResponses": {
+                    "Title": "Réponses récentes",
+                    "ViewAll": "Voir tout",
+                    "NoResponses": "Pas encore de réponses"
+                }
+            },
+            "Responses": {
+                "SearchPlaceholder": "Rechercher des réponses...",
+                "Filter": {
+                    "All": "Tous les statuts",
+                    "Completed": "Terminé",
+                    "InProgress": "En cours"
+                },
+                "Export": "Exporter",
+                "Table": {
+                    "Empty": "Pas encore de réponses",
+                    "Participant": "Participant {id}",
+                    "Anonymous": "Anonyme",
+                    "Status": {
+                        "Completed": "Terminé",
+                        "InProgress": "En cours"
+                    },
+                    "Summary": "Aucun résumé disponible"
+                },
+                "Pagination": {
+                    "Page": "Page {current} sur {total}"
+                }
+            },
+            "Settings": {
+                "Title": "Paramètres du sondage",
+                "Fields": {
+                    "Title": "Titre du sondage",
+                    "Description": "Description",
+                    "Limit": "Limite de réponses"
+                },
+                "VoiceMode": {
+                    "Title": "Mode de conversation vocale",
+                    "Description": "Activer l'interaction vocale prioritaire pour ce sondage."
+                },
+                "Save": "Enregistrer les modifications",
+                "Saving": "Enregistrement..."
+            },
+            "Embed": {
+                "Title": "Widget d'intégration",
+                "ActiveWarning": {
+                    "Title": "Le sondage doit être actif",
+                    "Description": "Publiez votre sondage avant de générer un widget d'intégration."
+                },
+                "Generate": {
+                    "Description": "Intégrez votre sondage sur n'importe quel site web avec un simple extrait de code.",
+                    "Button": "Générer le code d'intégration",
+                    "Generating": "Génération..."
+                },
+                "Options": {
+                    "Iframe": "Option 1 : Intégration iframe",
+                    "Script": "Option 2 : Script en ligne",
+                    "Copy": "Copier",
+                    "Copied": "Copié !"
+                },
+                "Instructions": {
+                    "Title": "Comment utiliser",
+                    "Step1": "Copiez l'un des extraits de code ci-dessus",
+                    "Step2": "Collez-le dans le HTML de votre site web là où vous souhaitez que le sondage apparaisse",
+                    "Step3": "Le sondage se chargera comme une iframe interactive sur votre page",
+                    "Step4": "Les réponses seront collectées et visibles dans votre tableau de bord"
+                },
+                "DirectLink": "Lien direct :"
+            },
+            "DeleteModal": {
+                "Title": "Supprimer le sondage",
+                "Description": "Êtes-vous sûr de vouloir supprimer \"{title}\" ? Cette action ne peut pas être annulée et supprimera définitivement toutes les réponses.",
+                "Cancel": "Annuler",
+                "Delete": "Supprimer le sondage",
+                "Deleting": "Suppression..."
+            },
+            "Toasts": {
+                "ExportStarted": "Exportation démarrée",
+                "ExportFailed": "Échec de l'exportation",
+                "NoData": "Aucune donnée à exporter",
+                "SettingsSaved": "Paramètres enregistrés avec succès",
+                "SettingsFailed": "Échec de l'enregistrement des paramètres",
+                "StatusUpdated": "Sondage {status}",
+                "StatusFailed": "Échec de la mise à jour du statut",
+                "Deleted": "Sondage supprimé",
+                "DeleteFailed": "Échec de la suppression du sondage",
+                "LinkCopied": "Lien copié !",
+                "EmbedGenerated": "Code d'intégration généré !",
+                "EmbedFailed": "Échec de la génération du code d'intégration",
+                "CodeCopied": "Code copié dans le presse-papier !",
+                "Error": "Une erreur est survenue"
+            }
         }
     },
     "Sidebar": {
@@ -442,6 +597,7 @@
             "Title": "Supprimer le sondage",
             "Description": "Êtes-vous sûr de vouloir supprimer \"{title}\" ? Cette action ne peut pas être annulée et supprimera définitivement toutes les réponses.",
             "Cancel": "Annuler",
+            "Delete": "Supprimer",
             "Confirm": "Supprimer le sondage",
             "Deleting": "Suppression..."
         },
@@ -452,69 +608,7 @@
             "Showing": "Affichage de {start} à {end} sur {total} sondages"
         }
     },
-    "ProjectsPage": {
-        "Header": {
-            "Title": "Projets",
-            "Description": "Organisez vos sondages en projets pour une meilleure gestion",
-            "NewProject": "Nouveau projet"
-        },
-        "Search": {
-            "Placeholder": "Rechercher des projets..."
-        },
-        "CreateCard": {
-            "Title": "Créer un nouveau projet",
-            "Description": "Organisez vos sondages"
-        },
-        "Empty": {
-            "NoMatching": "Aucun projet trouvé correspondant à \"{query}\""
-        },
-        "Card": {
-            "Surveys": "sondages",
-            "Responses": "réponses",
-            "Menu": {
-                "ViewDetails": "Voir les détails",
-                "AddSurvey": "Ajouter un sondage",
-                "Edit": "Modifier le projet",
-                "Delete": "Supprimer"
-            }
-        },
-        "SurveysList": {
-            "Empty": {
-                "Title": "Pas encore de sondages dans ce projet",
-                "Button": "Ajouter un sondage"
-            },
-            "Responses": "réponses",
-            "AddAnother": "Ajouter un autre sondage"
-        },
-        "Modals": {
-            "Create": {
-                "Title": "Créer un projet",
-                "NameLabel": "Nom du projet",
-                "NamePlaceholder": "ex: Recherche Clients T1",
-                "DescLabel": "Description (optionnel)",
-                "DescPlaceholder": "De quoi parle ce projet ?",
-                "Cancel": "Annuler",
-                "Submit": "Créer le projet",
-                "Submitting": "Création..."
-            },
-            "Edit": {
-                "Title": "Modifier le projet",
-                "Save": "Enregistrer les modifications"
-            },
-            "Delete": {
-                "Title": "Supprimer le projet",
-                "Description": "Êtes-vous sûr de vouloir supprimer \"{name}\" ? Cette action ne peut pas être annulée et supprimera toutes les associations de sondages.",
-                "Cancel": "Annuler",
-                "Confirm": "Supprimer le projet",
-                "Deleting": "Suppression..."
-            },
-            "AddSurvey": {
-                "Title": "Ajouter un sondage au projet",
-                "AllAdded": "Tous vos sondages sont déjà dans un projet !",
-                "Cancel": "Annuler"
-            }
-        }
-    },
+
     "AnalyticsPage": {
         "Header": {
             "Title": "Analyse",
@@ -632,6 +726,11 @@
                 "Success": "Invitation envoyée avec succès",
                 "Error": "Échec de l'envoi de l'invitation"
             }
+        },
+        "ReadyToScale": {
+            "Title": "Prêt à passer à l'échelle ?",
+            "Description": "Obtenez des analyses avancées, des limites de réponse plus élevées et un support prioritaire.",
+            "Button": "Voir les tarifs"
         }
     },
     "Settings": {
@@ -691,7 +790,8 @@
                 "MilestonesDesc": "Quand les sondages atteignent des objectifs de réponse"
             },
             "Error": "Une erreur est survenue",
-            "Saving": "Enregistrement..."
+            "Saving": "Enregistrement...",
+            "Save": "Enregistrer les modifications"
         },
         "Security": {
             "Title": "Changer le mot de passe",
@@ -880,6 +980,29 @@
             "GenericError": "Une erreur s'est produite lors de la vérification",
             "ResendSuccess": "E-mail de vérification envoyé!",
             "ResendError": "Échec de l'envoi de l'e-mail de vérification"
+        },
+        "Invitation": {
+            "Verifying": "Vérification de l'invitation",
+            "VerifyingSubtitle": "Veuillez patienter un instant...",
+            "AuthRequired": "Invitation à l'espace de travail",
+            "SignInRequired": "Veuillez vous connecter pour accepter cette invitation",
+            "InviteMessage": "Vous avez été invité à rejoindre un espace de travail sur Convy.",
+            "SignInToAccept": "Se connecter pour accepter",
+            "NoAccount": "Vous n'avez pas de compte ?",
+            "SignUp": "S'inscrire",
+            "Welcome": "Bienvenue dans l'équipe !",
+            "Invited": "Vous avez été invité à rejoindre un espace de travail",
+            "JoinedSuccess": "Rejoint avec succès !",
+            "JoinedDesc": "Vous êtes maintenant membre de l'espace de travail.",
+            "Redirecting": "Redirection vers le tableau de bord...",
+            "ErrorTitle": "Erreur d'invitation",
+            "BackToDashboard": "Retour au tableau de bord",
+            "JoinWorkspace": "Rejoindre l'espace de travail",
+            "JoinDesc": "Cliquez sur le bouton ci-dessous pour accepter l'invitation et commencer à collaborer.",
+            "AcceptButton": "Accepter l'invitation",
+            "Accepting": "Acceptation...",
+            "ToastSuccess": "Espace de travail rejoint avec succès !",
+            "GenericError": "Échec de l'acceptation de l'invitation"
         }
     },
     "Profile": {
@@ -908,5 +1031,114 @@
     "SurveyAnalytics": {
         "Title": "Analyse d'enquête",
         "Subtitle": "Insights et métriques alimentés par l'IA"
+    },
+    "SurveyStatus": {
+        "Active": "Actif",
+        "Draft": "Brouillon",
+        "Completed": "Terminé",
+        "Paused": "En pause",
+        "Creating": "Création"
+    },
+    "Workspace": {
+        "Switcher": {
+            "PersonalAccount": "Compte personnel",
+            "Individual": "Individuel",
+            "Workspace": "espace de travail",
+            "PersonalDesc": "Vos sondages individuels",
+            "CreateWorkspace": "Créer un espace de travail",
+            "Roles": {
+                "Owner": "Propriétaire",
+                "Member": "Membre"
+            }
+        },
+        "Create": {
+            "Title": "Créer un espace de travail",
+            "NameLabel": "Nom de l'espace de travail *",
+            "NamePlaceholder": "ex: Équipe Marketing",
+            "DescLabel": "Description (optionnel)",
+            "DescPlaceholder": "À quoi sert cet espace de travail ?",
+            "TipTitle": "Conseil :",
+            "TipDesc": "Les espaces de travail vous aident à organiser vos sondages et à collaborer avec votre équipe. Vous pouvez inviter des membres après la création.",
+            "Cancel": "Annuler",
+            "CreateButton": "Créer l'espace de travail",
+            "Creating": "Création...",
+            "Error": "Une erreur inattendue est survenue"
+        }
+    },
+    "Common": {
+        "Cancel": "Annuler",
+        "Delete": "Supprimer",
+        "Save": "Enregistrer",
+        "Saving": "Enregistrement...",
+        "Error": "Une erreur est survenue",
+        "Success": "Succès"
+    },
+    "ProjectsPage": {
+        "Header": {
+            "Title": "Projets",
+            "Description": "Organisez vos sondages en projets pour garder les choses ordonnées et systématiques.",
+            "CreateButton": "Créer un projet"
+        },
+        "Search": {
+            "Placeholder": "Rechercher des projets..."
+        },
+        "Card": {
+            "Surveys": "Sondages",
+            "Responses": "Réponses",
+            "Menu": {
+                "ViewDetails": "Voir les détails",
+                "AddSurvey": "Ajouter un sondage",
+                "Edit": "Modifier",
+                "Delete": "Supprimer"
+            }
+        },
+        "Empty": {
+            "CreateNew": {
+                "Title": "Créer un nouveau projet",
+                "Description": "Regroupez les sondages liés pour un meilleur suivi."
+            },
+            "NoMatching": "Aucun projet correspondant trouvé."
+        },
+        "CreateModal": {
+            "Title": "Créer un projet",
+            "NameLabel": "Nom du projet",
+            "NamePlaceholder": "ex: Recherche utilisateur T4",
+            "DescriptionLabel": "Description",
+            "DescriptionPlaceholder": "Décrivez l'objectif de ce projet...",
+            "Cancel": "Annuler",
+            "Creating": "Création...",
+            "Confirm": "Confirmer"
+        },
+        "EditModal": {
+            "Title": "Modifier le projet",
+            "NameLabel": "Nom du projet",
+            "NamePlaceholder": "Entrez le nom du projet",
+            "DescriptionLabel": "Description",
+            "DescriptionPlaceholder": "Entrez la description du projet",
+            "Cancel": "Annuler",
+            "Confirm": "Enregistrer les modifications"
+        },
+        "DeleteModal": {
+            "Title": "Supprimer le projet",
+            "Description": "Êtes-vous sûr de vouloir supprimer ce projet ? Les sondages ne seront pas supprimés, seulement retirés de ce dossier.",
+            "Cancel": "Annuler",
+            "Deleting": "Suppression...",
+            "Confirm": "Confirmer la suppression"
+        },
+        "ProjectSurveys": {
+            "Empty": {
+                "Description": "Aucun sondage ajouté à ce projet pour le moment.",
+                "Button": "Ajouter un sondage"
+            },
+            "AddAnother": "Ajouter plus de sondages"
+        },
+        "AddSurveyModal": {
+            "Title": "Ajouter des sondages au projet",
+            "Empty": "Tous vos sondages sont déjà dans ce projet.",
+            "SearchPlaceholder": "Rechercher des sondages...",
+            "NoSurveys": "Aucun sondage disponible trouvé.",
+            "Cancel": "Annuler",
+            "Confirm": "Ajouter {count} sondage(s)"
+        }
     }
 }
