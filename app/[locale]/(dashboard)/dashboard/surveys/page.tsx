@@ -66,9 +66,6 @@ function SurveysContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [surveyToDelete, setSurveyToDelete] = useState<{ id: string; title: string } | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [isPageSizeOpen, setIsPageSizeOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const t = useTranslations("SurveysPage");
 
@@ -146,17 +143,6 @@ function SurveysContent() {
     }
   };
 
-  const handleSearchChange = (value: string) => {
-    setSearchQuery(value);
-    setCurrentPage(1);
-  };
-
-  const handlePageSizeChange = (size: number) => {
-    setPageSize(size);
-    setCurrentPage(1);
-    setIsPageSizeOpen(false);
-  };
-
   // Computed counts
   const counts = useMemo(() => {
     const published = surveys.filter(s => s.status === "active").length;
@@ -164,8 +150,8 @@ function SurveysContent() {
     return { all: surveys.length, published, unpublished };
   }, [surveys]);
 
-  // Filtered and paginated surveys
-  const { paginatedSurveys, totalFiltered } = useMemo(() => {
+  // Filtered surveys
+  const filteredSurveys = useMemo(() => {
     let result = surveys;
 
     if (filterTab === "published") {
@@ -181,12 +167,8 @@ function SurveysContent() {
       );
     }
 
-    const total = result.length;
-    const startIndex = (currentPage - 1) * pageSize;
-    const paginated = result.slice(startIndex, startIndex + pageSize);
-
-    return { paginatedSurveys: paginated, totalFiltered: total };
-  }, [surveys, filterTab, searchQuery, currentPage, pageSize]);
+    return result;
+  }, [surveys, filterTab, searchQuery]);
 
 
   return (
@@ -267,10 +249,10 @@ function SurveysContent() {
 
         <div className="flex items-center gap-4">
           <p className="hidden md:block text-sm text-gray-500 whitespace-nowrap">
-            {t('Pagination.Showing', {
-              start: totalFiltered === 0 ? 0 : (currentPage - 1) * pageSize + 1,
-              end: Math.min(currentPage * pageSize, totalFiltered),
-              total: totalFiltered
+            {t('Pagination.Showing', { 
+              start: (currentPage - 1) * pageSize + 1, 
+              end: Math.min(currentPage * pageSize, filteredSurveys.length), 
+              total: filteredSurveys.length 
             })}
           </p>
 
@@ -282,7 +264,7 @@ function SurveysContent() {
               <span>{pageSize} {t('Pagination.PerPage')}</span>
               <ChevronDown className={cn("w-4 h-4 transition-transform", isPageSizeOpen && "rotate-180")} />
             </button>
-
+            
             {isPageSizeOpen && (
               <>
                 <div className="fixed inset-0 z-[60]" onClick={() => setIsPageSizeOpen(false)} />
@@ -318,12 +300,12 @@ function SurveysContent() {
         <>
 
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-            {paginatedSurveys.map((survey, index) => (
+            {filteredSurveys.map((survey, index) => (
               <div
                 key={survey.id}
                 className={cn(
                   "group flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-gray-50/50 transition-colors",
-                  index !== paginatedSurveys.length - 1 ? "border-b border-gray-100" : ""
+                  index !== filteredSurveys.length - 1 ? "border-b border-gray-100" : ""
                 )}
               >
                 <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">
@@ -469,7 +451,7 @@ function SurveysContent() {
           </div>
 
 
-          {paginatedSurveys.length === 0 && (
+          {filteredSurveys.length === 0 && (
             <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
               <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">{t("Empty.NoSurveys.Title")}</h3>
