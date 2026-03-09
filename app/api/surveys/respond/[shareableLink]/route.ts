@@ -13,11 +13,11 @@ import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
 import type { AgentContext } from "@/lib/agents/types";
 import { getRedisClient } from "@/lib/redis";
 import { logUsage } from "@/lib/billing/logger";
-import { withGeminiLimit } from "@/lib/gemini-limiter";
 import {
-  type SurveyLanguage,
-  type SurveyUIMessage,
-} from "@/lib/types/survey-flow";
+  withGeminiLimit,
+  GeminiCapacityError,
+  geminiCapacityResponse,
+} from "@/lib/gemini-limiter";
 
 /**
  * GET - Initialize a survey response conversation and generate AI greeting
@@ -34,7 +34,7 @@ export async function GET(
     const language = ["en", "fr", "de", "es", "it"].includes(
       languageParam || "",
     )
-      ? (languageParam as SurveyLanguage)
+      ? (languageParam as "en" | "fr" | "de" | "es" | "it")
       : undefined;
 
     // Get survey by shareable link (fetch full record for config building)
@@ -78,9 +78,8 @@ export async function GET(
           survey: {
             id: survey.id,
             title: survey.title,
-            objective: (survey.expertState as { objective?: unknown })
-              ?.objective,
-            targetAudience: (survey.expertState as { targetAudience?: unknown })
+            objective: (survey.expertState as Record<string, any>)?.objective,
+            targetAudience: (survey.expertState as Record<string, any>)
               ?.targetAudience,
             tone: survey.tone,
             requiredQuestions: survey.requiredQuestions || [],
@@ -89,8 +88,7 @@ export async function GET(
           },
           conversationId: existingConversation.id,
           participantId: existingConversation.participantId,
-          messages:
-            (existingConversation.rawConversation as SurveyUIMessage[]) || [], // Resume history
+          messages: existingConversation.rawConversation || [], // Resume history
         });
       }
     }
@@ -118,24 +116,22 @@ export async function GET(
     };
 
     // Create new conversation record with greeting
-    await getDb()
-      .insert(surveyConversations)
-      .values({
-        id: conversationId,
-        surveyId: survey.id,
-        participantId,
-        rawConversation: [greetingMessage],
-        completed: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+    await getDb().insert(surveyConversations).values({
+      id: conversationId,
+      surveyId: survey.id,
+      participantId,
+      rawConversation: [greetingMessage],
+      completed: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
     return NextResponse.json({
       survey: {
         id: survey.id,
         title: survey.title,
-        objective: (survey.expertState as { objective?: unknown })?.objective,
-        targetAudience: (survey.expertState as { targetAudience?: unknown })
+        objective: (survey.expertState as Record<string, any>)?.objective,
+        targetAudience: (survey.expertState as Record<string, any>)
           ?.targetAudience,
         tone: survey.tone,
         requiredQuestions: survey.requiredQuestions || [],
@@ -164,9 +160,10 @@ export async function POST(
 ) {
   try {
     const body = await req.json();
-    const { messages, context } = body as {
-      messages: SurveyUIMessage[];
-      context?: { conversationId?: string };
+    const { messages, context, language } = body as {
+      messages: any[];
+      context?: any;
+      language?: string;
     };
     const { shareableLink } = await params;
 
@@ -221,7 +218,7 @@ export async function POST(
     const agentContext: AgentContext = {
       conversationId,
       surveyConfig,
-      language: survey.language as SurveyLanguage | undefined,
+      language: survey.language as "en" | "fr" | "de" | "es" | "it" | undefined,
       rollingContext,
     };
     const agent = new ConductingSpecialist(agentContext);
@@ -237,7 +234,7 @@ export async function POST(
       console.warn("[RespondAPI:POST] Agent preload warning:", err),
     );
     console.log(`[RespondAPI:POST] Agent initialized. Building prompt...`);
-    console.log(`[RespondAPI:POST] Agent initialized. Building prompt...`);
+    const systemPrompt = agent.buildSystemPrompt();
 
     // ── Redis attribution: log which pattern was injected this turn ──────
     if (agentContext.situationalPattern) {
@@ -282,11 +279,11 @@ export async function POST(
 
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
-        const onMediaDisplay = (media: unknown) => {
+        const onMediaDisplay = (media: any) => {
           writer.write({
             type: "data",
             data: { media },
-          });
+          } as any);
         };
 
         // Stream the AI response with scratchpad filtering via agent.stream()
@@ -295,24 +292,10 @@ export async function POST(
           return agent.stream(
             modelMessages,
             onMediaDisplay,
-            async (params: {
-              text: string;
-              usage: {
-                inputTokens: number;
-                outputTokens: number;
-                totalTokens: number;
-              };
-              response: {
-                messages: Array<{
-                  role: string;
-                  content?: unknown;
-                  toolInvocations?: Array<{ toolName: string; args?: unknown }>;
-                }>;
-              };
-            }) => {
+            async (params) => {
               const { text, usage, response } = params;
               console.log(
-                `[RespondAPI:Stream] onFinish triggered. Text length: ${text?.length}. Tool calls: ${response.messages?.find((m) => m.role === "assistant")?.toolInvocations?.length || 0}`,
+                `[RespondAPI:Stream] onFinish triggered. Text length: ${text?.length}. Tool calls: ${response.messages?.find((m: any) => m.role === "assistant")?.toolInvocations?.length || 0}`,
               );
 
               // Log usage for survey response
@@ -337,20 +320,20 @@ export async function POST(
 
               // Save conversation to database
               const assistantMessage = response.messages?.find(
-                (m) => m.role === "assistant",
+                (m: any) => m.role === "assistant",
               );
 
-              const updatedMessages: SurveyUIMessage[] = [
-                ...messages,
+              const updatedMessages = [
+                ...modelMessages,
                 {
-                  id: `ai-${Date.now()}`,
                   role: "assistant" as const,
-                  displayedContent: cleanText,
+                  content: cleanText,
                   parts:
                     assistantMessage?.content &&
                     Array.isArray(assistantMessage.content)
                       ? assistantMessage.content
                       : undefined,
+                  timestamp: new Date().toISOString(),
                 },
               ];
 
@@ -367,7 +350,7 @@ export async function POST(
               // Check for survey completion
               const toolInvocations = assistantMessage?.toolInvocations || [];
               const finishSurveyCall = toolInvocations.find(
-                (call) => call.toolName === "finishSurvey",
+                (call: any) => call.toolName === "finishSurvey",
               );
 
               const isCompletionPhrase =
@@ -379,16 +362,11 @@ export async function POST(
                 userMessages.length >= minQuestions;
 
               if (conversationId) {
-                const dbMessages = updatedMessages.map((m) => ({
+                const dbMessages = updatedMessages.map((m: any) => ({
                   role: m.role,
-                  content:
-                    m.displayedContent ||
-                    (m as { content?: string }).content ||
-                    "",
+                  content: m.content,
                   parts: m.parts,
-                  timestamp:
-                    (m as { timestamp?: string }).timestamp ||
-                    new Date().toISOString(),
+                  timestamp: m.timestamp || new Date().toISOString(),
                 }));
 
                 const [currentConv] = await getDb()
@@ -399,9 +377,9 @@ export async function POST(
                   .where(eq(surveyConversations.id, conversationId));
 
                 const prevMessages =
-                  (currentConv?.rawConversation as SurveyUIMessage[]) || [];
+                  (currentConv?.rawConversation as any[]) || [];
                 const prevUserMessages = prevMessages.filter(
-                  (m) => (m as { role: string }).role === "user",
+                  (m) => m.role === "user",
                 );
 
                 // Increment participant count ONLY on the very first user message (participation)
@@ -452,7 +430,7 @@ export async function POST(
                 writer.write({
                   type: "data",
                   data: { isCompleted: true },
-                });
+                } as any);
               }
             },
             dynamicDirective,
@@ -469,7 +447,7 @@ export async function POST(
           console.log(`[RespondAPI:StreamPart] Chunk type: ${chunkType}`);
 
           // Passthrough sanitized chunks.
-          writer.write(chunk);
+          writer.write(chunk as any);
         }
         console.log(`[RespondAPI:Stream] Stream loop finished.`);
       },
@@ -477,6 +455,9 @@ export async function POST(
 
     return createUIMessageStreamResponse({ stream });
   } catch (error) {
+    if (error instanceof GeminiCapacityError) {
+      return geminiCapacityResponse();
+    }
     console.error("Error in survey response:", error);
     return NextResponse.json(
       { error: "Internal server error" },

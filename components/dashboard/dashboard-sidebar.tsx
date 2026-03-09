@@ -1,5 +1,7 @@
 "use client";
 
+import { User } from "better-auth/types";
+
 import { useState } from "react";
 import { Link, usePathname, useRouter } from "@/i18n/routing";
 import Image from "next/image";
@@ -24,7 +26,11 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
 
-export function DashboardSidebar() {
+interface DashboardSidebarProps {
+  user?: User | null;
+}
+
+export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
   const { user, session } = useAuth();
   const pathname = usePathname();
   const router = useRouter();

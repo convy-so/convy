@@ -8,7 +8,7 @@ import {
     getToolName,
     UIMessage,
 } from "ai";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
     RefreshCw,
     Loader2,
@@ -34,8 +34,8 @@ interface GenerativeSummaryProps {
 }
 
 type MyUITools = {
-    renderChart: { input: Record<string, unknown>; output: RenderChartResult };
-    renderTable: { input: Record<string, unknown>; output: RenderTableResult };
+    renderChart: { input: any; output: RenderChartResult };
+    renderTable: { input: any; output: RenderTableResult };
 };
 
 type ChatMessage = UIMessage<unknown, Record<string, unknown>, MyUITools>;
@@ -79,17 +79,10 @@ export function GenerativeSummary({ surveyId, surveyTitle }: GenerativeSummaryPr
     }, [messages.length, sendMessage, surveyTitle]);
 
     // ── Move to latest slide when a new AI message arrives ────────────────
-    const prevSlidesCount = useRef(0);
     useEffect(() => {
-        if (slides.length > prevSlidesCount.current) {
-            // Move state update to next tick to avoid synchronous cascading renders
-            // and satisfy react-hooks/set-state-in-effect
-            const nextSlide = slides.length - 1;
-            setTimeout(() => {
-                setCurrentPage(nextSlide);
-            }, 0);
+        if (slides.length > 0) {
+            setCurrentPage(slides.length - 1);
         }
-        prevSlidesCount.current = slides.length;
     }, [slides.length]);
 
     // ── WebSocket: listen for new-summary-ready ────────────────────────────
@@ -158,39 +151,6 @@ export function GenerativeSummary({ surveyId, surveyTitle }: GenerativeSummaryPr
         });
     }, [isLoading, sendMessage, surveyId]);
 
-    const markdownComponents = useMemo(() => ({
-        p: (props: React.HTMLAttributes<HTMLParagraphElement>) => (
-            <p className="mb-4 text-[14px]" {...props} />
-        ),
-        h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-            <h1
-                className="text-xl font-bold mt-8 mb-4 text-gray-900"
-                {...props}
-            />
-        ),
-        h2: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-            <h2
-                className="text-lg font-bold mt-6 mb-3 text-gray-900"
-                {...props}
-            />
-        ),
-        h3: (props: React.HTMLAttributes<HTMLHeadingElement>) => (
-            <h3
-                className="text-base font-bold mt-4 mb-2 text-gray-900"
-                {...props}
-            />
-        ),
-        ul: (props: React.HTMLAttributes<HTMLUListElement>) => (
-            <ul
-                className="list-disc pl-5 mb-4 space-y-2 text-[14px]"
-                {...props}
-            />
-        ),
-        li: (props: React.LiHTMLAttributes<HTMLLIElement>) => (
-            <li className="marker:text-gray-400" {...props} />
-        ),
-    }), []);
-
     // ── Error state ────────────────────────────────────────────────────────
     if (error && messages.length === 0) {
         return (
@@ -210,6 +170,8 @@ export function GenerativeSummary({ surveyId, surveyTitle }: GenerativeSummaryPr
             </div>
         );
     }
+
+    const activeSlide = slides[currentPage];
 
     return (
         <div className="space-y-6 pb-20 animate-in fade-in duration-700 max-w-4xl mx-auto">
@@ -277,7 +239,38 @@ export function GenerativeSummary({ surveyId, surveyTitle }: GenerativeSummaryPr
                             {message.parts.filter(isTextUIPart).map((part, index) => (
                                 <ReactMarkdown
                                     key={index}
-                                    components={markdownComponents}
+                                    components={{
+                                        p: ({ node, ...props }) => (
+                                            <p className="mb-4 text-[14px]" {...props} />
+                                        ),
+                                        h1: ({ node, ...props }) => (
+                                            <h1
+                                                className="text-xl font-bold mt-8 mb-4 text-gray-900"
+                                                {...props}
+                                            />
+                                        ),
+                                        h2: ({ node, ...props }) => (
+                                            <h2
+                                                className="text-lg font-bold mt-6 mb-3 text-gray-900"
+                                                {...props}
+                                            />
+                                        ),
+                                        h3: ({ node, ...props }) => (
+                                            <h3
+                                                className="text-base font-bold mt-4 mb-2 text-gray-900"
+                                                {...props}
+                                            />
+                                        ),
+                                        ul: ({ node, ...props }) => (
+                                            <ul
+                                                className="list-disc pl-5 mb-4 space-y-2 text-[14px]"
+                                                {...props}
+                                            />
+                                        ),
+                                        li: ({ node, ...props }) => (
+                                            <li className="marker:text-gray-400" {...props} />
+                                        ),
+                                    }}
                                 >
                                     {part.text}
                                 </ReactMarkdown>
@@ -294,7 +287,7 @@ export function GenerativeSummary({ surveyId, surveyTitle }: GenerativeSummaryPr
                                             >
                                                 <GenerativeAnalyticsRenderer
                                                     toolName={toolName}
-                                                    result={(part as { output: RenderChartResult | RenderTableResult }).output}
+                                                    result={(part as any).output}
                                                 />
                                             </div>
                                         );

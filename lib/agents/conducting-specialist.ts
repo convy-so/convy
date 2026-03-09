@@ -3,7 +3,10 @@ import { z } from "zod";
 import { BaseSpecialistAgent } from "./base-agent";
 import type { AgentContext, SpecialistChecklist } from "./types";
 import type { SurveyConfig } from "@/lib/prompts";
-import type { SurveyMedia } from "@/lib/types/survey-flow";
+import { defaultModel } from "@/lib/ai";
+import { logUsage } from "@/lib/billing/logger";
+import { TONE_PROFILES } from "@/lib/surveys";
+import { SkillRegistry } from "./skill-registry";
 import type { VoiceAgentFunction } from "@/lib/voice/deepgram-voice-agent";
 
 export class ConductingSpecialist extends BaseSpecialistAgent {
@@ -295,21 +298,6 @@ ${strategies.join("\n")}
     }
 
     functions.push({
-      name: "loadSkill",
-      description: "Load detailed instructions for a specialized skill.",
-      parameters: {
-        type: "object",
-        properties: {
-          skillId: {
-            type: "string",
-            description: "The ID of the skill to load",
-          },
-        },
-        required: ["skillId"],
-      },
-    });
-
-    functions.push({
       name: "finishSurvey",
       description:
         "Signal that the survey conversation is complete and should end. Call this when you have covered all required topics and gathered sufficient information from the participant.",
@@ -333,9 +321,7 @@ ${strategies.join("\n")}
   // Agent Tools
   // --------------------------------------------------------------------------
 
-  getTools(
-    onMediaDisplay?: (media: SurveyMedia) => void,
-  ): Record<string, unknown> {
+  getTools(onMediaDisplay?: (media: any) => void): Record<string, any> {
     const config = this.context.surveyConfig;
     return {
       think_and_respond: tool({
@@ -398,7 +384,7 @@ ${strategies.join("\n")}
             .describe("The unique ID of the media item to display"),
         }),
         execute: async ({ mediaId }) => {
-          const media = config?.media?.find((m) => m.id === mediaId);
+          const media = config?.media?.find((m: any) => m.id === mediaId);
           if (!media) return { error: "Media not found" };
           if (onMediaDisplay) onMediaDisplay(media);
           return { success: true, media };
@@ -428,10 +414,10 @@ ${strategies.join("\n")}
 
   stream(
     messages: ModelMessage[],
-    onMediaDisplay?: (media: SurveyMedia) => void,
+    onMediaDisplay?: (media: any) => void,
     onFinish?: (params: {
       text: string;
-      response: unknown;
+      response: any;
       usage: import("ai").LanguageModelUsage;
     }) => Promise<void>,
     dynamicSystemDirective?: string,

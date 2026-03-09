@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Loader2,
 } from "lucide-react";
+import { SupportedLanguage } from "@/lib/i18n/ai-translator";
 import { formatDistanceToNow } from "date-fns";
 import { Suspense } from "react";
 import { headers } from "next/headers";
@@ -20,6 +21,7 @@ async function AnalyticsContent({ authHeaders }: { authHeaders: Headers | string
   const t = await getTranslations("AnalyticsPage");
 
   const activeOrgId = session.session.activeOrganizationId;
+  const language = (session.user as { preferredLanguage?: SupportedLanguage }).preferredLanguage || "en";
 
   const userSurveys = await getDb()
     .select({
@@ -160,7 +162,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ locale: st
 }
 
 async function AnalyticsContentWrapper({ params }: { params: Promise<{ locale: string }> }) {
-  await params;
+  await params; 
   const authHeaders = await headers();
   return <AnalyticsContent authHeaders={authHeaders} />;
 }

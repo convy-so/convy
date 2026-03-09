@@ -1,0 +1,50 @@
+
+> convy@0.1.0 build
+> next build --debug-prerender
+
+⚠ Prerendering is running in debug mode. Note: This may affect performance and should not be used for production.
+▲ Next.js 16.1.5 (Turbopack, Cache Components)
+- Environments: .env
+- Experiments (use with caution):
+  · clientTraceMetadata
+  ⨯ prerenderEarlyExit (disabled by `--debug-prerender`)
+  ✓ serverSourceMaps (enabled by `--debug-prerender`)
+  ⨯ turbopackMinify (disabled by `--debug-prerender`)
+
+  Creating an optimized production build ...
+Turbopack build encountered 2 warnings:
+./node_modules/.pnpm/bullmq@5.66.7/node_modules/bullmq/dist/esm/classes
+Package ioredis can't be external
+The request ioredis/built/utils matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the importing module. The way Node.js resolves modules is slightly different from the way Next.js resolves modules. Next.js was able to resolve it, while Node.js would not be able to.
+Try to remove this package from serverExternalPackages.
+Or update the import side to use a compatible request that can be resolved by Node.js.
+
+
+./node_modules/.pnpm/bullmq@5.66.7/node_modules/bullmq/dist/esm/utils
+Package ioredis can't be external
+The request ioredis/built/utils matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the importing module. The way Node.js resolves modules is slightly different from the way Next.js resolves modules. Next.js was able to resolve it, while Node.js would not be able to.
+Try to remove this package from serverExternalPackages.
+Or update the import side to use a compatible request that can be resolved by Node.js.
+
+
+
+> Build error occurred
+Error: Turbopack build failed with 1 errors:
+./app/api/surveys/[surveyId]/finalize/route.ts:4:1
+Export db doesn't exist in target module
+[0m [90m 2 |[39m [36mimport[39m { nanoid } [36mfrom[39m [32m"nanoid"[39m[33m;[39m
+ [90m 3 |[39m
+[31m[1m>[22m[39m[90m 4 |[39m [36mimport[39m { db } [36mfrom[39m [32m"@/db"[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 5 |[39m [36mimport[39m { surveys } [36mfrom[39m [32m"@/db/schema"[39m[33m;[39m
+ [90m 6 |[39m [36mimport[39m { getVerifiedSession } [36mfrom[39m [32m"@/lib/auth/session"[39m[33m;[39m
+ [90m 7 |[39m [36mimport[39m { env } [36mfrom[39m [32m"@/lib/env"[39m[33m;[39m[0m
+
+The export db was not found in module [project]/db/index.ts [app-route] (ecmascript).
+Did you mean to import getDb?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+
+    at <unknown> (./app/api/surveys/[surveyId]/finalize/route.ts:4:1)

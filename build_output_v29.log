@@ -1,0 +1,57 @@
+
+> convy@0.1.0 build
+> next build --debug-prerender
+
+⚠ Prerendering is running in debug mode. Note: This may affect performance and should not be used for production.
+▲ Next.js 16.1.5 (Turbopack, Cache Components)
+- Environments: .env
+- Experiments (use with caution):
+  · clientTraceMetadata
+  ⨯ prerenderEarlyExit (disabled by `--debug-prerender`)
+  ✓ serverSourceMaps (enabled by `--debug-prerender`)
+  ⨯ turbopackMinify (disabled by `--debug-prerender`)
+
+  Creating an optimized production build ...
+Turbopack build encountered 3 warnings:
+./node_modules/.pnpm/bullmq@5.66.7/node_modules/bullmq/dist/esm/classes
+Package ioredis can't be external
+The request ioredis/built/utils matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the importing module. The way Node.js resolves modules is slightly different from the way Next.js resolves modules. Next.js was able to resolve it, while Node.js would not be able to.
+Try to remove this package from serverExternalPackages.
+Or update the import side to use a compatible request that can be resolved by Node.js.
+
+
+./node_modules/.pnpm/bullmq@5.66.7/node_modules/bullmq/dist/esm/utils
+Package ioredis can't be external
+The request ioredis/built/utils matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the importing module. The way Node.js resolves modules is slightly different from the way Next.js resolves modules. Next.js was able to resolve it, while Node.js would not be able to.
+Try to remove this package from serverExternalPackages.
+Or update the import side to use a compatible request that can be resolved by Node.js.
+
+
+[next]/internal/font/google/fasthand_b65ef962.module.css
+Error while requesting resource
+There was an issue establishing a connection while requesting https://fonts.googleapis.com/css2?family=Fasthand:wght@400&display=swap
+
+Import trace:
+  Server Component:
+    [next]/internal/font/google/fasthand_b65ef962.module.css
+    [next]/internal/font/google/fasthand_b65ef962.js
+    ./app/[locale]/layout.tsx
+
+
+
+> Build error occurred
+Error: Turbopack build failed with 1 errors:
+[next]/internal/font/google/fasthand_b65ef962.module.css
+next/font: error:
+Failed to fetch `Fasthand` from Google Fonts.
+
+Import trace:
+  Server Component:
+    [next]/internal/font/google/fasthand_b65ef962.module.css
+    [next]/internal/font/google/fasthand_b65ef962.js
+    ./app/[locale]/layout.tsx
+
+
+    at ignore-listed frames

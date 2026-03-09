@@ -13,6 +13,7 @@ import {
     ResponsiveContainer,
 } from "recharts";
 import { ArrowRight } from "lucide-react";
+import { SentimentGauge } from "./SentimentGauge";
 import { Link } from "@/i18n/routing";
 
 interface NarrativeReportProps {
@@ -137,14 +138,13 @@ function NarrativeWidget({ widget }: { widget: DashboardWidget }) {
 }
 
 function NarrativeWidgetContent({ widget }: { widget: DashboardWidget }) {
-    const data = widget.data as Record<string, unknown>;
+    const data = widget.data as any;
 
     switch (widget.type) {
-        case "pie_chart": {
-            const pieDataSegments = (data.segments as Array<Record<string, unknown>>) || [];
-            const pieData = pieDataSegments.map((entry, index) => ({
+        case "pie_chart":
+            const pieData = data.segments.map((entry: any, index: number) => ({
                 ...entry,
-                fill: (entry.color as string) || COLORS[index % COLORS.length]
+                fill: entry.color || COLORS[index % COLORS.length]
             }));
             return (
                 <div className="h-64 w-full max-w-md">
@@ -166,14 +166,13 @@ function NarrativeWidgetContent({ widget }: { widget: DashboardWidget }) {
                     </ResponsiveContainer>
                 </div>
             );
-        }
 
         case "bar_chart":
-        case "histogram": {
-            const rawBars = (Array.isArray(data) ? data : (data as { bars?: Array<Record<string, unknown>> }).bars || []) as Array<Record<string, unknown>>;
-            const bars = rawBars.map((entry, index) => ({
+        case "histogram":
+            const rawBars = Array.isArray(data) ? data : data.bars || [];
+            const bars = rawBars.map((entry: any, index: number) => ({
                 ...entry,
-                fill: (entry.color as string) || COLORS[index % COLORS.length]
+                fill: entry.color || COLORS[index % COLORS.length]
             }));
             return (
                 <div className="h-64 w-full">
@@ -195,15 +194,14 @@ function NarrativeWidgetContent({ widget }: { widget: DashboardWidget }) {
                     </ResponsiveContainer>
                 </div>
             );
-        }
 
         case "metric_breakdown":
         case "metric_list":
-        case "insight_list": {
-            const items = ((data as { insights?: unknown[] }).insights || (data as { values?: unknown[] }).values || data) as Array<{ text?: string; label?: string; value?: string }>;
+        case "insight_list":
+            const items = data.insights || data.values || data;
             return (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {items.slice(0, 6).map((item, i) => (
+                    {items.slice(0, 6).map((item: any, i: number) => (
                         <div key={i} className="flex items-start gap-4 p-4 rounded-2xl bg-gray-50/50">
                             <div className="w-1.5 h-1.5 rounded-full bg-gray-300 mt-2 flex-shrink-0" />
                             <p className="text-sm text-gray-600 leading-relaxed font-medium">
@@ -213,29 +211,25 @@ function NarrativeWidgetContent({ widget }: { widget: DashboardWidget }) {
                     ))}
                 </div>
             );
-        }
 
-        case "hypothesis_card": {
-            const hData = data as { status?: string; hypothesis?: string; summary?: string };
+        case "hypothesis_card":
             return (
                 <div className="p-8 rounded-[2.5rem] bg-[#F2F5F8] space-y-4">
                     <div className={cn(
                         "inline-flex px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest",
-                        hData.status === 'validated' ? "bg-black text-white" : "bg-gray-200 text-gray-600"
+                        data.status === 'validated' ? "bg-black text-white" : "bg-gray-200 text-gray-600"
                     )}>
-                        Hypothesis {hData.status}
+                        Hypothesis {data.status}
                     </div>
-                    <p className="text-xl font-bold text-gray-900 leading-tight">{hData.hypothesis}</p>
-                    <p className="text-sm text-gray-600 leading-relaxed">{hData.summary}</p>
+                    <p className="text-xl font-bold text-gray-900 leading-tight">{data.hypothesis}</p>
+                    <p className="text-sm text-gray-600 leading-relaxed">{data.summary}</p>
                 </div>
             );
-        }
 
-        case "coverage_matrix": {
-            const cData = (data as unknown) as Array<{ question?: string; coverageRate: number }>;
+        case "coverage_matrix":
             return (
                 <div className="space-y-4">
-                    {cData.slice(0, 4).map((item, i) => (
+                    {data.slice(0, 4).map((item: any, i: number) => (
                         <div key={i} className="flex items-center gap-6">
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm font-bold text-gray-900 truncate">{item.question}</p>
@@ -248,14 +242,13 @@ function NarrativeWidgetContent({ widget }: { widget: DashboardWidget }) {
                     ))}
                 </div>
             );
-        }
 
         default:
             return null;
     }
 }
 
-function BreakdownSection({ title, subtitle, items }: { title: string; subtitle: string; items: Array<{ label: string; value: number; total?: number; color?: string }> }) {
+function BreakdownSection({ title, subtitle, items }: { title: string; subtitle: string; items: any[] }) {
     return (
         <div className="space-y-6">
             <div className="space-y-1">

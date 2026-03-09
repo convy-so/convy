@@ -11,7 +11,11 @@
 
 import { getDb } from "@/db";
 import { knowledgeBase } from "@/db/schema/vectors";
-import { experiments, experimentOutcomes } from "@/db/schema/learning";
+import {
+  experiments,
+  experimentOutcomes,
+  conversationMoves,
+} from "@/db/schema/learning";
 import { eq, and, sql, avg, count } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
@@ -46,7 +50,9 @@ export interface ExperimentEvaluationReport {
  * Find the active experiment (if any) for a given situation.
  * Returns null if no experiment covers this situation.
  */
-export async function findActiveExperiment(situation: SituationKey): Promise<{
+export async function findActiveExperiment(
+  situation: SituationKey,
+): Promise<{
   id: string;
   controlPatternId: string | null;
   variantPatternId: string | null;
@@ -270,6 +276,7 @@ function welchTStat(control: VariantStats, variant: VariantStats): number {
 async function concludeExperiment(
   experimentId: string,
   winnerId: string | null | undefined,
+  reason: string,
 ): Promise<void> {
   await getDb()
     .update(experiments)

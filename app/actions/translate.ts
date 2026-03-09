@@ -2,8 +2,8 @@
 
 import { translateUIString, SupportedLanguage } from "@/lib/i18n/ai-translator";
 import { auth } from "@/lib/auth";
-import { headers, cookies } from "next/headers";
-// import { getVerifiedSession } from "@/lib/auth/session";
+import { headers } from "next/headers";
+import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
 import { users } from "@/db/schema/auth";
 import { eq } from "drizzle-orm";
@@ -14,11 +14,15 @@ import { revalidatePath } from "next/cache";
  */
 export async function getClientTranslation(text: string, context?: string) {
   try {
-    const cookieStore = await cookies();
-    const targetLanguage =
-      (cookieStore.get("NEXT_LOCALE")?.value as SupportedLanguage) || "en";
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
 
-    if (!targetLanguage || targetLanguage === "en") return text;
+    const targetLanguage =
+      (session?.user as { preferredLanguage?: SupportedLanguage })
+        ?.preferredLanguage || "en";
+
+    if (targetLanguage === "en") return text;
 
     return await translateUIString(text, targetLanguage, context);
   } catch (error) {
@@ -45,13 +49,6 @@ export async function updateUserLanguage(language: SupportedLanguage) {
       .update(users)
       .set({ preferredLanguage: language })
       .where(eq(users.id, session.user.id));
-
-    // Sync cookie with Next-intl
-    const cookieStore = await cookies();
-    cookieStore.set("NEXT_LOCALE", language, {
-      path: "/",
-      maxAge: 60 * 60 * 24 * 365,
-    });
 
     revalidatePath("/", "layout");
 

@@ -11,16 +11,15 @@
 import { WebSocket } from "ws";
 import { EventEmitter } from "events";
 import { env } from "@/lib/env";
-import { type SurveyLanguage } from "@/lib/types/survey-flow";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export type SupportedLanguage = SurveyLanguage;
+export type SupportedLanguage = "en" | "fr" | "de" | "es" | "it";
 
 export interface VoiceAgentFunction {
   name: string;
   description: string;
-  parameters: Record<string, unknown>;
+  parameters: Record<string, any>;
   client_side?: boolean;
   endpoint?: {
     url: string;
@@ -79,7 +78,7 @@ export interface ConversationTextEvent {
 export interface FunctionCallRequestEvent {
   function_call_id: string;
   function_name: string;
-  input: Record<string, unknown>;
+  input: Record<string, any>;
 }
 
 // ── Voice/Language Mapping ───────────────────────────────────────────────────
@@ -350,29 +349,15 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
     }
   }
 
-  private handleJsonMessage(message: Record<string, unknown>): void {
-    const type = message["type"] as string;
-    const msg = message as Record<string, unknown> & {
-      role?: string;
-      content?: string;
-      request_id?: string;
-      description?: string;
-      code?: string;
-      functions?: Array<{
-        id: string;
-        name: string;
-        arguments: string;
-        client_side: boolean;
-      }>;
-    };
-
-    switch (type) {
+  private handleJsonMessage(message: any): void {
+    switch (message.type) {
       case "Welcome":
-        console.log("[VoiceAgent] Welcome received:", msg.request_id);
+        console.log("[VoiceAgent] Welcome received:", message.request_id);
         this.isWelcomeReceived = true;
+        // v1 doc: send Settings only after Welcome, then start KeepAlive
         this.sendSettings();
         this.startKeepAlive();
-        this.emit("welcome", msg);
+        this.emit("welcome", message);
         break;
 
       case "SettingsApplied":
@@ -380,13 +365,14 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
           "[ChainOfTrust] [External:Deepgram] ✅ Settings applied successfully. Audio streaming enabled.",
         );
         this.isSettingsApplied = true;
-        this.emit("settingsApplied", msg);
+        // v1 doc: audio streaming is now safe
+        this.emit("settingsApplied", message);
         break;
 
       case "ConversationText":
         this.emit("conversationText", {
-          role: msg.role as "user" | "assistant",
-          content: msg.content as string,
+          role: message.role,
+          content: message.content,
         } as ConversationTextEvent);
         break;
 
@@ -394,7 +380,7 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         console.warn(
           "[VoiceAgent] InjectionRefused received — will retry inject.",
         );
-        this.emit("injectionRefused", msg);
+        this.emit("injectionRefused", message);
         break;
 
       case "UserStartedSpeaking":
@@ -402,7 +388,7 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         break;
 
       case "AgentThinking":
-        this.emit("agentThinking", msg.content);
+        this.emit("agentThinking", message.content);
         break;
 
       case "AgentStartedSpeaking":
@@ -414,8 +400,10 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         break;
 
       case "FunctionCallRequest":
-        if (msg.functions && Array.isArray(msg.functions)) {
-          for (const fn of msg.functions) {
+        // V1 schema: { type: "FunctionCallRequest", functions: [{ id, name, arguments, client_side, ... }] }
+        if (message.functions && Array.isArray(message.functions)) {
+          for (const fn of message.functions) {
+            // Only emit if it's a client-side function
             if (fn.client_side) {
               this.emit("functionCallRequest", {
                 function_call_id: fn.id,
@@ -423,6 +411,7 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
                 input: fn.arguments ? JSON.parse(fn.arguments) : {},
               } as FunctionCallRequestEvent);
             } else {
+              // Server-side function (handled internally by Deepgram or not relevant to client)
               console.log(
                 `[VoiceAgent] Server-side function call received (ignoring): ${fn.name}`,
               );
@@ -432,25 +421,25 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         break;
 
       case "Error":
-        console.error("[VoiceAgent] Error from Deepgram:", msg);
+        console.error("[VoiceAgent] Error from Deepgram:", message);
         this.emit("error", {
-          description: msg.description || JSON.stringify(msg),
-          code: msg.code,
+          description: message.description || JSON.stringify(message),
+          code: message.code,
         });
         break;
 
       case "Warning":
-        console.warn("[VoiceAgent] Warning from Deepgram:", msg);
-        this.emit("warning", msg);
+        console.warn("[VoiceAgent] Warning from Deepgram:", message);
+        this.emit("warning", message);
         break;
 
       default:
-        console.log("[VoiceAgent] Unhandled message type:", type);
+        console.log("[VoiceAgent] Unhandled message type:", message.type);
         break;
     }
   }
 
-  private sendJson(data: Record<string, unknown>): void {
+  private sendJson(data: any): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       if (data.type !== "Settings" && data.type !== "KeepAlive") {
         console.log(
@@ -537,8 +526,7 @@ export function buildVoiceAgentSettings(options: {
         ...(functions && functions.length > 0
           ? {
               functions: functions.map((f) => {
-                const rest = { ...f };
-                delete rest.client_side;
+                const { client_side, ...rest } = f;
                 return rest;
               }),
             }

@@ -10,6 +10,7 @@ import {
     ThumbsDown,
     Minus,
     Bot,
+    Download,
     Loader2,
     Calendar,
     Clock
@@ -17,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ClientT } from "@/components/i18n/client-t";
+import { getClientTranslation } from "@/app/actions/translate";
 
 interface ResponseData {
     id: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo, useCallback, Suspense, useId } from "react";
+import { useState, useRef, useEffect, useMemo, Suspense, useId } from "react";
 import { useSearchParams, useParams } from "next/navigation";
 import { useRouter, Link } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
@@ -36,13 +36,19 @@ import { clientEnv } from "@/lib/env.client";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { uploadSurveyMediaAction } from "@/app/actions/survey-media";
 import { CollaborationSidebar } from "@/components/surveys/collaboration-sidebar";
-import {
-  type SurveyLanguage,
-  type SurveyUIMessage,
-  type SurveyExtractionData,
-} from "@/lib/types/survey-flow";
 
-type UIMessage = SurveyUIMessage;
+
+
+
+type CreationStep = "objective" | "audience" | "questions" | "tone" | "review";
+
+type UIMessage = SDKMessage & {
+  displayedContent?: string;
+  isTyping?: boolean;
+  timestamp?: number;
+  toolInvocations?: Array<any>;
+  parts: SDKMessage['parts']; // Explicitly include parts
+};
 
 const MERGE_THRESHOLD_MS = 3000;
 
@@ -56,109 +62,10 @@ function CreateSurveyContent() {
   const locale = params.locale as string;
   const [surveyId, setSurveyId] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
-  const [isCreatingDraft, setIsCreatingDraft] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [collectedInfo, setCollectedInfo] = useState<CollectedInfoFlags | null>(null);
-  const [extractedData, setExtractedData] = useState<SurveyExtractionData | null>(null);
-  const [hasGreetingPlayed, setHasGreetingPlayed] = useState(false);
-  const [input, setInput] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [wasStartedWithVoice, setWasStartedWithVoice] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-
-  const voiceWs = useVoiceWebSocket({
-    url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-creation`,
-    onReady: () => {
-      console.log("[ChainOfTrust] [Hook] WebSocket connection established. Waiting for server 'ready'...");
-    },
-    onMessage: (data) => {
-      console.log(`[ChainOfTrust] [Hook] Received message type: ${data.type}`, data);
-      // Handle speech activity events from Deepgram
-      if (data.type === "ready") {
-        console.log("[ChainOfTrust] [Server] Server is READY to accept commands.");
-        setIsServerReady(true);
-      } else if (data.type === "agent_ready") {
-        console.log("[ChainOfTrust] [Deepgram] 🤖 Agent initialized and ready. Clearing UI connection state.");
-        setIsConnecting(false);
-      } else if (data.type === "speech_start") {
-        console.log("[ChainOfTrust] [Deepgram] 🗣️ User speech started (VAD).");
-        setIsSpeaking(true);
-      } else if (data.type === "speech_end") {
-        console.log("[ChainOfTrust] [Deepgram] 🤐 User speech ended (VAD).");
-        setIsSpeaking(false);
-      } else if (data.type === "survey_state_loaded") {
-        console.log("[ChainOfTrust] [Server] Previous survey state successfully restored into handler.");
-        setSurveyStateLoaded(true);
-      } else if (data.type === "conversation_text") {
-        const { role, content } = data;
-        console.log(`[ChainOfTrust] [Server] Appending ${role} message to UI: ${content.substring(0, 30)}...`);
-        const now = Date.now();
-        setMessages((prev) => {
-          const lastMessage = prev[prev.length - 1];
-          // Use a smaller threshold or no threshold for Voice Agent unified events to ensure clarity
-          // but reuse the merge logic for consistency
-          if (
-            lastMessage &&
-            lastMessage.role === role &&
-            (now - (Number(lastMessage.timestamp) || now)) < MERGE_THRESHOLD_MS &&
-            lastMessage.role === 'assistant'
-          ) {
-            return [
-              ...prev.slice(0, -1),
-              {
-                ...lastMessage,
-                content: (lastMessage.content || "") + " " + content,
-                displayedContent: (lastMessage.displayedContent || "") + " " + content,
-                timestamp: now
-              }
-            ];
-          }
-          return [
-            ...prev,
-            {
-              id: `vmsg-${now}-${Math.random().toString(36).substr(2, 9)}`,
-              role: role as "assistant" | "user",
-              content,
-              displayedContent: content,
-              timestamp: now,
-              isTyping: false
-            }
-          ];
-        });
-      } else if (data.type === "agent_started_speaking") {
-        console.log("[ChainOfTrust] [Deepgram] 🔊 Agent started speaking.");
-      } else if (data.type === "agent_audio_done") {
-        console.log("[ChainOfTrust] [Deepgram] 🤫 Agent finished speaking.");
-      } else if (data.type === "collected_info") {
-        const info = data.info as CollectedInfoFlags;
-        console.log("[ChainOfTrust] [Server] 📊 Updated collection flags:", info);
-        setCollectedInfo(info);
-      } else if (data.type === "request_media_upload") {
-        const { toolId, allowedTypes } = data;
-        console.log("[ChainOfTrust] [Server] 📸 Tool Request: requestMediaUpload", { toolId, allowedTypes });
-        setMessages((prev: UIMessage[]) => [
-          ...prev,
-          {
-            id: `tool-${toolId}`,
-            role: "assistant",
-            content: "Please upload the requested files.",
-            parts: [{
-              type: 'tool-invocation',
-              toolCallId: toolId,
-              toolName: 'requestMediaUpload',
-              state: 'input-available',
-              args: { allowedTypes }
-            } as SurveyUIMessage['parts'][number]]
-          }
-        ]);
-      } else if (data.type === "update_extracted_data") {
-        console.log("[ChainOfTrust] [Server] 📥 Received extractions:", data.data);
-        setExtractedData(data.data as SurveyExtractionData);
-        setCollectedInfo((data as { collectedInfo: CollectedInfoFlags }).collectedInfo);
-      }
-    }
-  });
 
 
   const [showPublishModal, setShowPublishModal] = useState(false);
@@ -168,196 +75,198 @@ function CreateSurveyContent() {
   const [isResearching, setIsResearching] = useState(false); // Research animation state
 
   // Language state initialized from locale
-  const [language, setLanguage] = useState<SurveyLanguage>((locale as SurveyLanguage) || "en");
+  const [language, setLanguage] = useState<"en" | "fr" | "de" | "es" | "it">((locale as any) || "en");
   const [isVoiceSurvey, setIsVoiceSurvey] = useState(false);
 
   const [isOwner, setIsOwner] = useState(false);
   const [collaborators, setCollaborators] = useState<string[]>([]);
   const [orgId, setOrgId] = useState<string | null>(null);
 
-  // 1. Move helper functions to the top for stable references
-  const ensureDraftExists = useCallback(async (): Promise<string | null> => {
-    if (surveyId) return surveyId;
-    if (isCreatingDraft) return null;
-
-    setIsCreatingDraft(true);
-    try {
-      const response = await fetch("/api/surveys", {
-        method: "POST",
-        credentials: "include",
-        body: JSON.stringify({ language, isVoice: isVoiceSurvey, domainId: null }),
-      });
-
-      if (response.status === 401) {
-        setAuthError(await getClientTranslation("Authentication Required"));
-        return null;
-      }
-
-      if (!response.ok) {
-        throw new Error(`Failed to create draft: ${response.status}`);
-      }
-
-      const survey = await response.json();
-      setSurveyId(survey.id);
-      window.history.replaceState(null, '', `?id=${survey.id}`);
-      return survey.id;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.log("[Client] ensureDraftExists error:", msg);
-    } finally {
-      setIsCreatingDraft(false);
-    }
-  }, [surveyId, isCreatingDraft, language, isVoiceSurvey, setIsCreatingDraft]);
-
-  const updateSurveyMode = useCallback(async (id: string | null, isVoice: boolean) => {
-    setIsVoiceSurvey(isVoice);
-    if (id) {
-      try {
-        await fetch(`/api/surveys/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ isVoice })
-        });
-      } catch (error) {
-        console.error("[Client] updateSurveyMode ERROR:", error);
-      }
-    }
-  }, []);
-
-  const surveyIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    surveyIdRef.current = surveyId;
-  }, [surveyId]);
-
-  const extractedDataRef = useRef<SurveyExtractionData | null>(null);
-  useEffect(() => {
-    extractedDataRef.current = extractedData;
-  }, [extractedData]);
-
-  const fetchUpdatedData = useCallback(async () => {
-    if (!surveyId) return;
-    try {
-      const res = await fetch(`/api/surveys/${encodeURIComponent(surveyId)}/create`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.collectedInfo) setCollectedInfo(data.collectedInfo);
-        if (data.extractedData && Object.keys(data.extractedData).length > 0) {
-          setExtractedData(data.extractedData);
-        }
-      }
-    } catch (err) {
-      if (!(err instanceof TypeError && err.message === "Failed to fetch")) {
-        console.error("[Client] fetchUpdatedData ERROR:", err);
-      }
-    }
-  }, [surveyId]);
-
-  // 2. Wrap useChat in useMemo/useCallback
-  const chatTransport = useMemo(() => new DefaultChatTransport({
-    api: "/api/surveys/create-draft",
-    fetch: (async (url: RequestInfo | URL, init?: RequestInit) => {
-      const response = await fetch(url, init);
-      return response;
-    }),
-    prepareSendMessagesRequest: async ({ api, body, id, messages: msgs, trigger, messageId }) => {
-      const sid = surveyIdRef.current;
-      const targetApi = sid ? `/api/surveys/${sid}/create` : api;
-      return {
-        api: targetApi,
-        body: {
-          id,
-          messages: msgs,
-          trigger,
-          messageId,
-          ...(body || {}),
-          extractedData: extractedDataRef.current,
-        },
-      };
-    },
-  }), []);
-
-  const handleToolCall = useCallback(async ({ toolCall }: { toolCall: { toolName: string } }) => {
-    console.log("[Client] Tool call received:", toolCall.toolName, toolCall);
-    if (toolCall.toolName === 'researchBestPractices') {
-      setIsResearching(true);
-    }
-  }, []);
-
-  const handleFinish = useCallback(({ message }: { message: SDKMessage }) => {
-    const content = message.content || message.parts?.filter(p => p.type === 'text').map(p => {
-      if ('text' in p) return p.text;
-      return '';
-    }).join('') || "";
-    console.log("[useChat:onFinish] AI finished responding:", content.substring(0, 50) + "...");
-  }, []);
-
-  const {
-    messages,
-    setMessages,
-    status,
-    sendMessage,
-    addToolResult,
-  } = useChat({
-    id: "survey-creation-session",
-    transport: chatTransport,
-    messages: [],
-    onToolCall: handleToolCall,
-    onFinish: handleFinish,
-    onError: (error) => console.error("[useChat:onError] Chat encountered an error:", error)
-  });
-
-  const isLoading = status === "streaming" || status === "submitted";
-
-  const handleStart = useCallback(async () => {
+  const handleStart = async () => {
+    // 1. Optimistic UI: Immediately show loading state
     setIsConnecting(true);
+
+    // Track if started with voice for this builder session
     if (isVoiceMode) {
       setWasStartedWithVoice(true);
-      voiceWs.startRecording().catch(console.error);
+      console.log("[Client] 🎤 Pre-emptive mic request for voice mode...");
+      voiceWs.startRecording().catch(err => {
+        console.error("[Client] Failed to get early mic access:", err);
+      });
     }
 
-    const currentSurveyId = await ensureDraftExists();
+    // 2. Ensure draft exists
+    let currentSurveyId = surveyId;
+    if (!currentSurveyId) {
+      try {
+        currentSurveyId = await ensureDraftExists();
+      } catch (e) {
+        console.error("Failed to create draft", e);
+        getClientTranslation("Failed to initialize survey draft.").then(msg => toast.error(msg));
+        setIsConnecting(false);
+        voiceWs.stopRecording(); // Cleanup if failed
+        return;
+      }
+    }
+
     if (!currentSurveyId) {
       setIsConnecting(false);
       voiceWs.stopRecording();
       return;
     }
 
+    // 3. Set the survey respondent mode once ID is known
     await updateSurveyMode(currentSurveyId, isVoiceSurvey);
 
     try {
+      // 4. Update Backend - NOTE: We do NOT send messages here to avoid clobbering the pre-cached greeting
       await fetch(`/api/surveys/${currentSurveyId}/create`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({})
+        body: JSON.stringify({}) // Intentionally empty — greeting is stored server-side at draft creation
       });
+      console.log(`[Client] Prepared discovery for survey ${currentSurveyId}`);
 
+      // Persist creation modality if voice was chosen
       if (isVoiceMode) {
+        localStorage.setItem(`convy_creation_mode_${currentSurveyId}`, "voice");
+      }
+
+      // 5. Trigger Interaction based on Mode
+      if (isVoiceMode) {
+        // VOICE MODE: Connection is triggered via useEffect monitoring (isVoiceMode && surveyId)
+        // or we can call connect() explicitly here now that we have surveyId
+        console.log("[Client] Voice mode active, initiating connection...");
         await voiceWs.connect();
       } else {
-        const greetingRes = await fetch(`/api/surveys/${currentSurveyId}/create`);
-        if (greetingRes.ok) {
-          const greetingData = await greetingRes.json();
-          if (greetingData.messages?.length > 0) {
-            setMessages(greetingData.messages.map((m: SurveyUIMessage, idx: number) => ({
-              id: m.id || `msg-${idx}-${Date.now()}`,
-              role: m.role,
-              displayedContent: m.displayedContent || (m.parts as Array<{ type: string; text?: string }>)?.filter(p => p.type === 'text').map(p => p.text || '').join(''),
-              isTyping: false,
-              parts: m.parts || (m.content ? [{ type: 'text', text: m.content }] : [])
-            })));
+        // TEXT MODE: Load the cached greeting from server into the messages state
+        console.log("[Client] Text mode active, loading cached greeting from server...");
+        try {
+          const greetingRes = await fetch(`/api/surveys/${currentSurveyId}/create`);
+          if (greetingRes.ok) {
+            const greetingData = await greetingRes.json();
+            if (greetingData.messages && greetingData.messages.length > 0) {
+              setMessages(greetingData.messages.map((m: any, idx: number) => ({
+                id: m.id || `msg-${idx}-${Date.now()}`,
+                role: m.role,
+                displayedContent: (m as any).content || m.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join(''),
+                isTyping: false,
+                parts: m.parts || ((m as any).content ? [{ type: 'text', text: (m as any).content }] : [])
+              })));
+              console.log(`[Client] Loaded ${greetingData.messages.length} message(s) incl. greeting.`);
+            }
+            if (greetingData.collectedInfo) setCollectedInfo(greetingData.collectedInfo);
+            if (greetingData.extractedData) setExtractedData(greetingData.extractedData);
           }
-          if (greetingData.collectedInfo) setCollectedInfo(greetingData.collectedInfo);
-          if (greetingData.extractedData) setExtractedData(greetingData.extractedData);
+        } catch (greetingErr) {
+          console.error("[Client] Failed to load cached greeting:", greetingErr);
         }
       }
-      if (!isVoiceMode) setIsConnecting(false);
+
+      if (!isVoiceMode) {
+        setIsConnecting(false);
+      }
+
     } catch (error) {
       console.error("Failed to start discovery:", error);
+      getClientTranslation("Failed to save topic. Please try again.").then(msg => toast.error(msg));
       setIsConnecting(false);
       voiceWs.stopRecording();
     }
-  }, [isVoiceMode, isVoiceSurvey, ensureDraftExists, updateSurveyMode, setMessages, voiceWs, setIsConnecting, setWasStartedWithVoice, setCollectedInfo, setExtractedData]);
+  };
 
+
+  const updateSurveyMode = async (id: string | null, isVoice: boolean) => {
+    setIsVoiceSurvey(isVoice);
+    console.log(`[Client] updateSurveyMode: ${isVoice ? 'voice' : 'text'}. SID: ${id}`);
+
+    if (id) {
+      try {
+        const res = await fetch(`/api/surveys/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isVoice })
+        });
+        console.log(`[Client] updateSurveyMode PATCH result: ${res.status}`);
+      } catch (error) {
+        console.error("[Client] updateSurveyMode ERROR:", error);
+        getClientTranslation("Failed to update survey mode.").then(msg => toast.error(msg));
+      }
+    }
+  };
+
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [hasGreetingPlayed, setHasGreetingPlayed] = useState(false);
+
+
+
+  const [extractedData, setExtractedData] = useState<any>(null);
+  const [collectedInfo, setCollectedInfo] = useState<any>(null);
+
+  // Local input state for the chat (AI SDK v6 migration)
+  const [input, setInput] = useState("");
+
+  // Refs to track the latest surveyId and extractedData without causing useChat to reinitialize
+  const surveyIdRef = useRef<string | null>(surveyId);
+  const extractedDataRef = useRef<any>(extractedData);
+
+  useEffect(() => { surveyIdRef.current = surveyId; }, [surveyId]);
+  useEffect(() => { extractedDataRef.current = extractedData; }, [extractedData]);
+
+  const {
+    messages,
+    setMessages,
+    status,
+    sendMessage,
+    addToolOutput,
+  } = useChat({
+    id: "survey-creation-session",
+    transport: new DefaultChatTransport({
+      api: "/api/surveys/create-draft", // base default — overridden per-request via prepareSendMessagesRequest
+      fetch: (async (url: RequestInfo | URL, init?: RequestInit) => {
+        const response = await fetch(url, init);
+        console.log("[useChat:onResponse] Received response from server:", response.status, response.statusText);
+        return response;
+      }) as any,
+      prepareSendMessagesRequest: async ({ api, body, id, messages: msgs, trigger, messageId }) => {
+        const sid = surveyIdRef.current;
+        const targetApi = sid ? `/api/surveys/${sid}/create` : api;
+
+        console.log(`[useChat:Prepare] Triggered by ${trigger}. SID: ${sid}. Target API: ${targetApi}`);
+        console.log(`[useChat:Prepare] Body length: ${JSON.stringify(body).length}. Messages count: ${msgs.length}`);
+
+        return {
+          api: targetApi,
+          body: {
+            id,
+            messages: msgs,
+            trigger,
+            messageId,
+            ...(body || {}),
+            extractedData: extractedDataRef.current,
+          },
+        };
+      },
+    }),
+    messages: [],
+    onToolCall: async ({ toolCall }) => {
+      console.log("[Client] Tool call received:", toolCall.toolName, toolCall);
+      if (toolCall.toolName === 'researchBestPractices') {
+        setIsResearching(true);
+      }
+      // NOTE: finishSurvey is server-executed — no client resolution needed here.
+      // NOTE: requestMediaUpload is client-side — the MediaUploadFlow component resolves it.
+    },
+    onFinish: ({ message }) => {
+      const content = (message as any).content || message.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('') || "";
+      console.log("[useChat:onFinish] AI finished responding:", content.substring(0, 50) + "...");
+    },
+    onError: (error) => {
+      console.error("[useChat:onError] Chat encountered an error:", error);
+    }
+  });
+
+  const isLoading = status === "streaming" || status === "submitted";
 
   useEffect(() => {
     console.log(`[useChat:Status] ${status}`);
@@ -441,13 +350,13 @@ function CreateSurveyContent() {
               toolName: 'requestMediaUpload',
               state: 'input-available',
               args: { allowedTypes }
-            } as SurveyUIMessage['parts'][number]]
+            } as any]
           }
         ]);
       } else if (data.type === "update_extracted_data") {
         console.log("[ChainOfTrust] [Server] Extracted data update received.");
-        setExtractedData(data.extractedData as SurveyExtractionData);
-        setCollectedInfo(data.collectedInfo as CollectedInfoFlags);
+        setExtractedData(data.extractedData);
+        setCollectedInfo(data.collectedInfo);
       } else if (data.type === "transcription_interim") {
         // Reduced noise logging
       } else if (data.type === "survey_completed") {
@@ -490,11 +399,7 @@ function CreateSurveyContent() {
     voiceWs.hasAudioPlayed,
     isConnecting,
     voiceWs.status,
-    isVoiceMode,
-    voiceWs.isPlaying,
-    hasGreetingPlayed,
-    setIsConnecting,
-    setHasGreetingPlayed
+    isVoiceMode
   ]);
 
   // Effect to sync surveyId with WebSocket - ONLY when server is ready
@@ -503,14 +408,14 @@ function CreateSurveyContent() {
       console.log("[ChainOfTrust] [UI] Server ready. Sending survey ID initialization:", surveyId);
       voiceWs.sendJson({ type: "set_survey_id", surveyId });
     }
-  }, [surveyId, voiceWs.status, isServerReady, voiceWs]);
+  }, [surveyId, voiceWs.status, isServerReady]);
 
   // Reset ready state on disconnect
   useEffect(() => {
     if (voiceWs.status !== "connected") {
       setIsServerReady(false);
     }
-  }, [voiceWs.status, setIsServerReady]);
+  }, [voiceWs.status]);
 
 
 
@@ -525,7 +430,7 @@ function CreateSurveyContent() {
       console.log("[ChainOfTrust] [UI] State loaded on server. Sending 'start_conversation' request...");
       voiceWs.sendJson({ type: "start_conversation" });
     }
-  }, [isVoiceMode, surveyStateLoaded, voiceWs.status, voiceWs]);
+  }, [isVoiceMode, surveyStateLoaded, voiceWs.status]);
 
   // Detect if all required info has been collected for sample conversations
   const isReadyForSample = useMemo(() => {
@@ -536,7 +441,7 @@ function CreateSurveyContent() {
     const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant');
     const messageContent = lastAssistantMessage?.parts
       ?.filter(p => p.type === 'text')
-      .map(p => 'text' in p ? p.text : '')
+      .map((p: any) => p.text)
       .join('') || "";
 
     const aiMentionedSamples = messageContent.toLowerCase().includes('sample conversation') ||
@@ -618,7 +523,7 @@ function CreateSurveyContent() {
 
     setAuthError(null);
     setIsInitializing(false);
-  }, [user, authLoading, setAuthError, setIsInitializing]);
+  }, [user, authLoading]);
 
   // Fetch user's preferred language on mount
   useEffect(() => {
@@ -648,7 +553,7 @@ function CreateSurveyContent() {
     };
 
     fetchUserLanguage();
-  }, [user, authLoading, language, surveyId, voiceWs.status, voiceWs, setLanguage]);
+  }, [user, authLoading]);
 
   // Restore voice creation preference
   useEffect(() => {
@@ -658,7 +563,7 @@ function CreateSurveyContent() {
         setWasStartedWithVoice(true);
       }
     }
-  }, [surveyId, setWasStartedWithVoice]);
+  }, [surveyId]);
 
 
   useEffect(() => {
@@ -681,12 +586,12 @@ function CreateSurveyContent() {
             const data = await conversationRes.json();
 
             if (data.messages && data.messages.length > 0) {
-              setMessages(data.messages.map((m: SurveyUIMessage, idx: number) => ({
+              setMessages(data.messages.map((m: any, idx: number) => ({
                 id: m.id || `msg-${idx}-${Date.now()}`,
                 role: m.role,
-                displayedContent: m.displayedContent || m.parts?.filter(p => p.type === 'text').map(p => 'text' in p ? p.text : '').join(''),
+                displayedContent: (m as any).content || m.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join(''),
                 isTyping: false,
-                parts: m.parts || (m.content ? [{ type: 'text', text: m.content }] : [])
+                parts: m.parts || ((m as any).content ? [{ type: 'text', text: (m as any).content }] : [])
               })));
             }
 
@@ -747,11 +652,64 @@ function CreateSurveyContent() {
 
       loadConversation();
     }
-  }, [idFromUrl, authLoading, user, surveyId, setSurveyId, setMessages, setCollectedInfo, setExtractedData, setSurveyStatus, setOrgId, setIsOwner, setCollaborators, setLanguage, setIsVoiceSurvey, setIsReadOnly, setIsInitializing]);
+  }, [idFromUrl, authLoading, user, surveyId, messages.length]);
 
   // Lazy creation state
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
 
+  // Helper to ensure draft exists before sending message
+  const ensureDraftExists = async (): Promise<string | null> => {
+    if (surveyId) return surveyId;
+    if (isCreatingDraft) {
+      console.warn("[Client] ensureDraftExists skipped: already creating...");
+      return null;
+    }
+
+    console.log("[Client] ensureDraftExists: starting...");
+    setIsCreatingDraft(true);
+    try {
+      const response = await fetch("/api/surveys", {
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({ language, isVoice: isVoiceSurvey, domainId: null }),
+      });
+
+      console.log(`[Client] ensureDraftExists POST result: ${response.status}`);
+
+      if (response.status === 401) {
+        setAuthError(await getClientTranslation("Authentication Required"));
+        return null;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Client] ensureDraftExists FAILED: ${response.status} ${errorText}`);
+        if (errorText === "EMAIL_NOT_VERIFIED") {
+          setAuthError(await getClientTranslation("Please verify your email to continue."));
+          return null;
+        }
+        throw new Error(`Failed to create draft: ${response.status}`);
+      }
+
+      const survey = await response.json();
+      console.log("[Client] ensureDraftExists SUCCESS. New SID:", survey.id);
+      setSurveyId(survey.id);
+
+      // Update URL to include the survey ID to prevent reload issues
+      window.history.replaceState(null, '', `?id=${survey.id}`);
+
+      return survey.id;
+    } catch (error) {
+      getClientTranslation("Failed to initialize draft.").then(msg => {
+        toast.error(msg);
+        setAuthError(msg);
+      });
+      console.error("[Client] ensureDraftExists UNCAUGHT ERROR:", error);
+      return null;
+    } finally {
+      setIsCreatingDraft(false);
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -759,24 +717,63 @@ function CreateSurveyContent() {
 
 
 
+  // Poll for extracted data to update preview
+  const fetchUpdatedData = async () => {
+    if (!surveyId) return;
+    try {
+      const res = await fetch(`/api/surveys/${encodeURIComponent(surveyId)}/create`);
+      if (res.ok) {
+        const data = await res.json();
+        console.log(`[Client] fetchUpdatedData: OK. Msgs: ${data.messages?.length}. Extracted: ${Object.keys(data.extractedData || {}).length}`);
+        // Always update collectedInfo if present — do NOT gate it on extractedData being non-empty
+        if (data.collectedInfo) {
+          setCollectedInfo(data.collectedInfo);
+        }
+        // Only update extractedData if there's meaningful data to avoid unnecessary re-renders
+        if (data.extractedData && Object.keys(data.extractedData).length > 0) {
+          setExtractedData(data.extractedData);
+        }
+      } else {
+        console.warn(`[Client] fetchUpdatedData non-OK: ${res.status}`);
+      }
+    } catch (err) {
+      // Suppress "Failed to fetch" (network error) which is common during dev/HMR
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        return;
+      }
+      console.error("[Client] fetchUpdatedData ERROR:", err);
+    }
+  };
 
 
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
-  }, [setInput]);
+  };
 
-  const handleSubmit = useCallback((e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     console.log("[handleSubmit] Attempting to send message. Input:", input?.trim());
-    if (!input?.trim() || isLoading || authError) return;
+    if (!input?.trim()) {
+      console.warn("[handleSubmit] Aborting: Input is empty");
+      return;
+    }
+    if (isLoading) {
+      console.warn("[handleSubmit] Aborting: Already loading/streaming");
+      return;
+    }
+    if (authError) {
+      console.warn("[handleSubmit] Aborting: Auth error active:", authError);
+      return;
+    }
 
     const currentInput = input;
-    setInput("");
+    setInput(""); // Clear input locally
+    console.log("[handleSubmit] Calling sendMessage...");
     sendMessage({
       role: "user",
       parts: [{ type: 'text', text: currentInput }],
-    } as SDKMessage);
-  }, [input, isLoading, authError, sendMessage, setInput]);
+    } as any);
+  };
 
   useEffect(() => {
     scrollToBottom();
@@ -786,15 +783,15 @@ function CreateSurveyContent() {
   useEffect(() => {
     const hasResearchResult = messages.some(m =>
       m.parts?.some(
-        (p) =>
+        (p: any) =>
           (p.type === "tool-result" || p.type === "tool-call") &&
-          'toolName' in p && p.toolName === "researchBestPractices"
+          p.toolName === "researchBestPractices"
       )
     );
     if (hasResearchResult) {
       setIsResearching(false);
     }
-  }, [messages, setIsResearching]);
+  }, [messages]);
 
   useEffect(() => {
     if (isVoiceMode) {
@@ -810,41 +807,45 @@ function CreateSurveyContent() {
     fetchUpdatedData(); // Initial fetch
 
     return () => clearInterval(timer);
-  }, [surveyId, fetchUpdatedData]);
+  }, [surveyId]);
 
   // Instant refresh when AI finishes response
   useEffect(() => {
     if ((status as string) === 'idle' && surveyId) {
       fetchUpdatedData();
     }
-  }, [status, surveyId, fetchUpdatedData]);
+  }, [status, surveyId]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (!input?.trim() || isLoading) return;
-      handleSubmit(e as unknown as React.FormEvent);
+      handleSubmit(e as any);
     }
-  }, [input, isLoading, handleSubmit]);
+  };
 
-  const toggleVoiceMode = useCallback(() => {
+  const toggleVoiceMode = () => {
     const newMode = !isVoiceMode;
     setIsVoiceMode(newMode);
     if (newMode) {
       setSurveyStateLoaded(false);
-      voiceWs.startRecording().catch(console.error);
+      // 🔥 Also initiate recording here as this is triggered by a user click
+      voiceWs.startRecording().catch(err => {
+        console.error("[Client] Failed to start recording on mode toggle:", err);
+      });
       voiceWs.connect();
     } else {
       voiceWs.disconnect();
     }
-  }, [isVoiceMode, voiceWs]);
+  };
 
 
-  const handleGoToSampleConversations = useCallback(async () => {
+  const handleGoToSampleConversations = async () => {
     if (!surveyId) return;
 
     setIsFinalizing(true);
     try {
+      // Call finalize endpoint to transfer extracted data to survey
       const response = await fetch(`/api/surveys/${surveyId}/finalize-creation`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -852,18 +853,25 @@ function CreateSurveyContent() {
       });
 
       if (!response.ok) {
-        getClientTranslation("Failed to finalize survey.").then(msg => toast.error(msg));
+        const error = await response.text();
+        console.error("Failed to finalize survey:", error);
+        getClientTranslation("Failed to finalize survey.", "Creation finalization error toast").then(msg => toast.error(msg));
         setIsFinalizing(false);
         return;
       }
 
+      const data = await response.json();
+      console.log("Survey finalized:", data);
+      getClientTranslation("Survey finalized successfully!").then(msg => toast.success(msg));
+
+      // Navigate to sample review page
       router.push(`/dashboard/surveys/${surveyId}/sample-review`);
     } catch (error) {
       console.error("Error finalizing survey:", error);
       getClientTranslation("An error occurred. Please try again.").then(msg => toast.error(msg));
       setIsFinalizing(false);
     }
-  }, [surveyId, router, setIsFinalizing]);
+  };
 
   if (authError) {
     return (
@@ -964,7 +972,7 @@ function CreateSurveyContent() {
             <div className="bg-blue-50/50 border-b border-blue-100 px-4 py-2 flex items-center justify-center gap-2 text-sm text-blue-800">
               <Sparkles className="w-4 h-4 text-blue-600" />
               <span><ClientT>This survey is finalized and cannot be edited.</ClientT></span>
-              <Link href={`/ dashboard / surveys / ${surveyId} `} className="font-medium hover:underline">
+              <Link href={`/dashboard/surveys/${surveyId}`} className="font-medium hover:underline">
                 <ClientT>View Dashboard</ClientT>
               </Link>
             </div>
@@ -1175,7 +1183,7 @@ function CreateSurveyContent() {
                                   ? "bg-slate-900 text-white rounded-tr-none"
                                   : "bg-white border border-gray-100 text-gray-800 rounded-tl-none"
                               )}>
-                                {msg.content || msg.parts?.filter(p => p.type === 'text').map(p => 'text' in p ? p.text : '').join('') || ""}
+                                {((msg as any).content || (msg.parts?.filter(p => p.type === 'text').map((p: any) => p.text).join('') || ""))}
                               </div>
 
                               {msg.role === 'user' && (
@@ -1309,8 +1317,8 @@ function CreateSurveyContent() {
                                       {[...Array(5)].map((_, i) => (
                                         <div key={i} className="w-1.5 bg-red-500 rounded-full animate-[music-bar_0.5s_ease-in-out_infinite]"
                                           style={{
-                                            height: `${Math.random() * 100}% `,
-                                            animationDelay: `${i * 0.1} s`
+                                            height: `${Math.random() * 100}%`,
+                                            animationDelay: `${i * 0.1}s`
                                           }}
                                         />
                                       ))}
@@ -1361,7 +1369,15 @@ function CreateSurveyContent() {
                         </div>
                       </div>
 
-
+                      {/* Footer Exit Button */}
+                      <div className="absolute top-6 right-6">
+                        <button
+                          onClick={toggleVoiceMode}
+                          className="px-4 py-2 rounded-xl bg-white/50 border border-gray-200 hover:bg-white text-gray-500 font-medium transition-colors text-sm backdrop-blur-sm"
+                        >
+                          <ClientT>Exit Voice Mode</ClientT>
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -1422,15 +1438,17 @@ function CreateSurveyContent() {
                               <MarkdownMessage
                                 content={
                                   // Priority 1: standard content field (set after streaming completes)
-                                  message.content ||
-                                  ((message.parts as Array<{ type: string; text?: string }>)?.filter(p => p.type === 'text').map(p => p.text || '').join('')) ||
+                                  (message as any).content ||
+                                  // Priority 2: text parts (when model writes text-deltas directly — standard AI SDK pattern)
+                                  (message.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('')) ||
                                   ""
                                 }
                                 className="text-gray-800 prose-sm"
                               />
                               {/* Single unified path — AI SDK uses type 'tool-{toolName}' for tool parts */}
 
-                              {message.parts?.map((part, idx) => {
+                              {message.parts?.map((part: any, idx) => {
+
                                 // AI SDK v6 emits parts with type 'tool-{toolName}', e.g. 'tool-requestMediaUpload'
                                 // The toolName is embedded in the type string
                                 if (!part.type?.startsWith('tool-')) return null;
@@ -1442,11 +1460,11 @@ function CreateSurveyContent() {
 
                                 const toolCallId = part.toolCallId;
 
-                                const toolState = 'state' in part ? part.state : 'call'; // 'input-available' | 'output-available'
+                                const toolState = part.state; // 'input-available' | 'output-available'
 
-                                const args = ('input' in part ? part.input : (('args' in part ? part.args : {}) as Record<string, unknown>)) || {};
+                                const args = part.input ?? part.args ?? {};  // SDK uses 'input' not 'args'
 
-                                const result = ('output' in part ? part.output : ('result' in part ? part.result : undefined)) as string | undefined;
+                                const result = part.output ?? part.result;   // SDK uses 'output' not 'result'
 
 
 
@@ -1482,9 +1500,10 @@ function CreateSurveyContent() {
                                             aiDescription={aiDescription}
                                             aiLearningGoal={aiLearningGoal}
                                             onAllUploaded={(mediaItems) => {
-                                              addToolResult({
+                                              addToolOutput({
                                                 toolCallId: toolCallId,
-                                                result: JSON.stringify({
+                                                tool: 'requestMediaUpload',
+                                                output: JSON.stringify({
                                                   success: true,
                                                   count: mediaItems.length,
                                                   media: mediaItems.map(m => ({
@@ -1498,9 +1517,10 @@ function CreateSurveyContent() {
                                               });
                                             }}
                                             onSkip={() => {
-                                              addToolResult({
+                                              addToolOutput({
                                                 toolCallId: toolCallId,
-                                                result: JSON.stringify({ success: false, skipped: true })
+                                                tool: 'requestMediaUpload',
+                                                output: JSON.stringify({ success: false, skipped: true })
                                               });
                                             }}
                                             allowedTypes={args?.allowedTypes || ['image', 'audio', 'video']}
@@ -1528,7 +1548,7 @@ function CreateSurveyContent() {
                             </div>
                           ) : (
                             <p className="text-[15px] leading-7 whitespace-pre-wrap">
-                              {message.content || (message.parts?.filter(p => p.type === 'text').map(p => (p as { text: string }).text).join('') || "")}
+                              {(message as any).content || (message.parts?.filter(p => p.type === 'text').map((p: any) => p.text).join('') || "")}
                             </p>
                           )}
                         </div>
@@ -1697,7 +1717,7 @@ function MediaUploadFlow({
   aiLearningGoal,
 }: {
   surveyId: string;
-  onAllUploaded: (media: unknown[]) => void;
+  onAllUploaded: (media: any[]) => void;
   onSkip: () => void;
   allowedTypes: string[];
   aiDescription?: string;
@@ -1709,7 +1729,7 @@ function MediaUploadFlow({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uid = useId();
 
-  const makeId = () => `${uid} -${Date.now()} -${Math.random().toString(36).slice(2, 8)} `;
+  const makeId = () => `${uid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   const acceptAttr = allowedTypes.map((t) => `${t}/*`).join(',');
 
@@ -1753,7 +1773,7 @@ function MediaUploadFlow({
       return;
     }
     setIsUploadingAll(true);
-    const uploadedMedia: unknown[] = [];
+    const uploadedMedia: any[] = [];
     for (const item of queue) {
       setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'uploading' } : q));
       try {
@@ -1774,7 +1794,7 @@ function MediaUploadFlow({
           setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'error', errorMsg: result.error } : q));
           getClientTranslation(`Failed: ${result.error}`, "Media upload failure toast").then(msg => toast.error(msg));
         }
-      } catch {
+      } catch (err) {
         setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'error', errorMsg: 'Unexpected error' } : q));
         getClientTranslation("Upload failed. Please try again.", "Media upload error toast").then(msg => toast.error(msg));
       }
@@ -1863,7 +1883,7 @@ function MediaUploadFlow({
         {/* File Queue */}
         {queue.length > 0 && (
           <div className="flex-1 overflow-y-auto px-8 mt-5 space-y-4 pb-4">
-            {queue.map((item) => (
+            {queue.map((item, idx) => (
               <div key={item.id} className="border border-gray-100 bg-white" style={{ borderRadius: '2px' }}>
                 {/* File row */}
                 <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
@@ -1959,7 +1979,7 @@ function MediaUploadFlow({
           </div>
         </div>
       </div>
-    </div >
+    </div>
   );
 }
 

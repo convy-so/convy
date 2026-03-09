@@ -55,9 +55,9 @@ export async function POST(
       );
     }
 
-    // Cast to record since extractedData can contain more fields than what's typed
-    const extractedData: Record<string, unknown> =
-      (creationConversation.extractedData as Record<string, unknown>) || {};
+    // Cast to any since extractedData can contain more fields than what's typed
+    const extractedData: Record<string, any> =
+      (creationConversation.extractedData as any) || {};
 
     console.log(
       `[Finalize Creation] Survey ${surveyId} - Transferring data...`,
@@ -68,7 +68,7 @@ export async function POST(
     );
 
     // Build update object with extracted data
-    const updateData: Record<string, unknown> = {
+    const updateData: Record<string, any> = {
       status: "sample_review",
       updatedAt: new Date(),
     };
@@ -76,8 +76,8 @@ export async function POST(
     // Copy title from extracted data if available
     if (extractedData.title) {
       updateData.title = extractedData.title;
-    } else if ((extractedData.objective as { goal?: string })?.goal) {
-      const goal = (extractedData.objective as { goal: string }).goal;
+    } else if (extractedData.objective?.goal) {
+      const goal = extractedData.objective.goal;
       updateData.title =
         goal.length > 60 ? goal.substring(0, 57) + "..." : goal;
       updateData.coreObjective = goal;
@@ -106,7 +106,7 @@ export async function POST(
       "media",
     ];
 
-    const expertState = (survey.expertState || {}) as Record<string, unknown>;
+    const expertState = (survey.expertState || {}) as Record<string, any>;
 
     for (const field of expertStateFields) {
       if (extractedData[field] !== undefined) {

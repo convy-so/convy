@@ -1,0 +1,14 @@
+
+> convy@0.1.0 build
+> next build --debug-prerender
+
+⚠ Prerendering is running in debug mode. Note: This may affect performance and should not be used for production.
+⨯ Failed to load next.config.ts, see more info here https://nextjs.org/docs/messages/next-config-error
+
+> Build error occurred
+Error: Cannot find module 'C:\Users\pc\convy\node_modules\.pnpm\@sentry+nextjs@10.36.0_@ope_f4c97b1b201e7bba042cabc3d87932fd\node_modules\stacktrace-parser\dist\stack-trace-parser.cjs.js'. Please verify that the package.json has a valid "main" entry
+    at ignore-listed frames {
+  code: 'MODULE_NOT_FOUND',
+  path: '\\\\?\\C:\\Users\\pc\\convy\\node_modules\\.pnpm\\@sentry+nextjs@10.36.0_@ope_f4c97b1b201e7bba042cabc3d87932fd\\node_modules\\stacktrace-parser\\package.json',
+  requestPath: 'stacktrace-parser'
+}

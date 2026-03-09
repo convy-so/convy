@@ -2,7 +2,7 @@
 
 import { clientEnv } from "@/lib/env.client";
 
-import { useState, useRef, useEffect, useMemo, useCallback, Suspense } from "react";
+import { useState, useRef, useEffect, useMemo, Suspense } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import {
   Mic,
@@ -14,12 +14,12 @@ import {
   User,
   Sparkles,
   Paperclip,
+  ArrowRight,
 } from "lucide-react";
-import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, UIMessage, Message as SDKMessage } from "ai";
+import { DefaultChatTransport, UIMessage } from "ai";
 import { MediaDisplay } from "@/components/surveys/media-display";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { VoiceSurveyStartOverlay } from "@/components/surveys/voice-survey-start-overlay";
@@ -29,14 +29,28 @@ import { useLocale, useTranslations } from "next-intl";
 import { usePathname, useRouter } from "@/i18n/routing";
 import { Globe } from "lucide-react";
 
-import {
-  type SurveyInitResponse,
-  type SurveyUIMessage,
-  type SurveyLanguage
-} from "@/lib/types/survey-flow";
+interface Survey {
+  id: string;
+  title: string;
+  objective?: { description?: string };
+  targetAudience?: { description?: string };
+  tone?: string;
+  isVoice?: boolean;
+  media?: any[];
+  language?: "en" | "fr" | "de" | "es" | "it";
+}
 
-interface MessageWithTools extends SurveyUIMessage {
-  toolInvocations?: Array<{ toolName: string; state: string; result?: unknown; toolCallId?: string }>;
+interface SurveyInitResponse {
+  survey: Survey;
+  conversationId: string;
+  participantId: string;
+  messages?: any[];
+  completed?: boolean;
+}
+
+interface MessageWithTools extends UIMessage {
+  media?: any;
+  toolInvocations?: Array<any>;
 }
 
 async function initializeSurvey(
@@ -64,83 +78,6 @@ async function initializeSurvey(
 
   return response.json();
 }
-
-// Premium UI Components
-const VisualizerRing = ({
-  isRecording,
-  isAgentSpeaking,
-  status,
-  size = "normal",
-}: {
-  isRecording: boolean;
-  isAgentSpeaking: boolean;
-  status: string;
-  size?: "normal" | "large";
-}) => (
-  <div className="relative flex items-center justify-center">
-    {(isRecording || isAgentSpeaking) && (
-      <>
-        <div
-          className={cn(
-            "absolute inset-0 rounded-full border-4 border-indigo-500/20 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite]",
-            size === "large" ? "border-8" : "border-4",
-            isAgentSpeaking ? "border-emerald-500/20" : "border-indigo-500/20"
-          )}
-        />
-        <div
-          className={cn(
-            "absolute inset-0 rounded-full border-4 border-indigo-500/10 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]",
-            size === "large" ? "border-8" : "border-4",
-            isAgentSpeaking ? "border-emerald-500/10" : "border-indigo-500/10"
-          )}
-        />
-      </>
-    )}
-    <div
-      className={cn(
-        "relative z-10 rounded-full flex items-center justify-center transition-all duration-500 shadow-xl backdrop-blur-sm border border-white/10",
-        status === "error"
-          ? "bg-red-500 shadow-red-500/50"
-          : isAgentSpeaking
-            ? "bg-gradient-to-br from-emerald-500 to-teal-600 scale-110 shadow-emerald-500/30"
-            : isRecording
-              ? "bg-gradient-to-br from-indigo-600 to-violet-600 scale-110 shadow-indigo-500/30"
-              : "bg-gray-900 shadow-md hover:scale-105",
-        size === "large" ? "w-32 h-32" : "w-20 h-20",
-      )}
-    >
-      {status === "error" ? (
-        <AlertCircle
-          className={cn(
-            "text-white",
-            size === "large" ? "w-12 h-12" : "w-8 h-8",
-          )}
-        />
-      ) : isAgentSpeaking ? (
-        <Sparkles
-          className={cn(
-            "text-white animate-pulse",
-            size === "large" ? "w-12 h-12" : "w-8 h-8",
-          )}
-        />
-      ) : isRecording ? (
-        <MicOff
-          className={cn(
-            "text-white",
-            size === "large" ? "w-12 h-12" : "w-8 h-8",
-          )}
-        />
-      ) : (
-        <Mic
-          className={cn(
-            "text-white",
-            size === "large" ? "w-12 h-12" : "w-8 h-8",
-          )}
-        />
-      )}
-    </div>
-  </div>
-);
 
 function SurveyContent() {
   const params = useParams();
@@ -199,16 +136,15 @@ function SurveyContent() {
 
   // State declarations - must be before hooks that reference them
   const [input, setInput] = useState("");
-  // Sync completion state from API - use initializer to avoid effect
-  const [isCompleted, setIsCompleted] = useState(initiallyCompleted);
+  const [isCompleted, setIsCompleted] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
 
-  // Still keep effect for reactive updates if initiallyCompleted changes (edge case)
-  const [prevInitiallyCompleted, setPrevInitiallyCompleted] = useState(initiallyCompleted);
-  if (initiallyCompleted !== prevInitiallyCompleted) {
-    setPrevInitiallyCompleted(initiallyCompleted);
-    if (!isCompleted) setIsCompleted(true);
-  }
+  // Sync completion state from API
+  useEffect(() => {
+    if (initiallyCompleted) {
+      setIsCompleted(true);
+    }
+  }, [initiallyCompleted]);
 
   // Redirect to survey language if different from current locale on first load
   useEffect(() => {
@@ -219,33 +155,42 @@ function SurveyContent() {
 
       if (!hasRedirected) {
         sessionStorage.setItem(storageKey, "true");
-        router.replace({ pathname, query: { shareableLink } } as { pathname: string; query: Record<string, string> }, {
-          locale: survey.language,
+        router.replace({ pathname, query: { shareableLink } } as any, {
+          locale: survey.language as any,
         });
       }
     }
-  }, [survey?.language, locale, shareableLink, pathname, router]);
+  }, [survey, locale, shareableLink, pathname, router]);
 
   const [isVoiceMode, setIsVoiceMode] = useState(false);
-  // Unused state can be removed if not needed, but keeping for now if it was intended for lang switching
-  // const [selectedLanguage, setSelectedLanguage] = useState<SurveyLanguage>((locale as SurveyLanguage) || "en");
-  const selectedLanguage = (locale as SurveyLanguage) || "en";
+  const [selectedLanguage, setSelectedLanguage] = useState<
+    "en" | "fr" | "de" | "es" | "it"
+  >((locale as any) || "en");
 
   // Prepare initial messages for useChat
   // Sync Greeting: If voice survey and only 1 message exists (the initial greeting), 
   // clear it so the Voice Agent can initiate the conversation naturally.
   const initialChatMessages =
     resumedMessages.length > 1 || (!survey?.isVoice && resumedMessages.length > 0)
-      ? resumedMessages.map((msg: SurveyUIMessage, i: number) => {
+      ? resumedMessages.map((msg: any, i) => {
         // Ensure we handle the transition from 'content' (old) to 'parts' (v6) robustly
+        const hasTextPart = msg.parts?.some((p: any) => p.type === 'text' && p.text);
         const parts = msg.parts && msg.parts.length > 0
           ? msg.parts
           : (msg.content ? [{ type: "text", text: msg.content }] : []);
 
+        console.log(`[SurveyPage] Mapping resumed message ${i}:`, {
+          role: msg.role,
+          hasParts: !!msg.parts,
+          partsCount: msg.parts?.length,
+          hasContent: !!msg.content,
+          finalPartsCount: parts.length
+        });
+
         return {
           id: msg.id || `msg-${i}`,
           role: msg.role as "system" | "user" | "assistant" | "data",
-          displayedContent: msg.content || (parts.length > 0 && parts[0].type === 'text' ? (parts[0] as { text: string }).text : ""),
+          content: msg.content || "", // Keep content for fallback renderer
           parts
         };
       })
@@ -265,20 +210,20 @@ function SurveyContent() {
   } = useChat({
     id: conversationId ?? "pending",
     transport,
-    messages: initialChatMessages as SDKMessage[],
+    messages: initialChatMessages as any, // Cast to avoid strict type issues with mapped messages
     onFinish: ({ message }: { message: UIMessage }) => {
       // Check for explicit tool calls (robust detection)
       const hasToolCompletion = message.parts?.some(
-        (part) =>
+        (part: any) =>
           (part.type === "tool-invocation" || part.type === "tool-call") &&
-          (part as { toolName: string }).toolName === "finishSurvey",
+          (part as any).toolName === "finishSurvey",
       );
 
       // Fallback to text detection
       const messageText =
         message.parts
-          ?.filter((part) => part.type === "text")
-          .map((part) => (part as { text: string }).text)
+          ?.filter((part: any) => part.type === "text")
+          .map((part: any) => part.text)
           .join(" ")
           .toLowerCase() || "";
 
@@ -307,141 +252,163 @@ function SurveyContent() {
       }
       return;
     }
-  }, [isCompleted, shareableLink]);
+
+    const lastMessage = messages[messages.length - 1] as MessageWithTools;
+    if (!lastMessage || lastMessage.role !== "assistant") return;
+
+    const hasToolCompletion = lastMessage.parts?.some(
+      (part: any) =>
+        (part.type === "tool-invocation" || part.type === "tool-call") &&
+        (part as any).toolName === "finishSurvey",
+    );
+
+    if (hasToolCompletion) {
+      setIsCompleted(true);
+    }
+  }, [messages, isCompleted]);
 
   const setMessages = originalSetMessages;
   const isChatLoading = status === "streaming" || status === "submitted";
-
-  // set-state-in-effect fix: move completion detection from messages into render phase
-  const lastMessage = messages[messages.length - 1] as MessageWithTools;
-  const hasToolCompletion = lastMessage?.role === "assistant" && lastMessage.parts?.some(
-    (part) =>
-      (part.type === "tool-invocation" || part.type === "tool-call") &&
-      (part as { toolName: string }).toolName === "finishSurvey",
-  );
-
-  if (hasToolCompletion && !isCompleted) {
-    setIsCompleted(true);
-  }
 
   // Auto-start or Resume for text mode is now handled SERVER-SIDE
   // The frontend no longer injects fake "user" messages like "Start the conversation..."
   // This prevents LLM confusion and corrupting the database chat history.
   // The backend's GET endpoint already initializes the conversation with a greeting.
-  // set-state-in-effect fix: use render phase update or verify if effect is needed
-  const [prevConversationId, setPrevConversationId] = useState(conversationId);
-  if (
-    !isInitializing &&
-    !initError &&
-    survey &&
-    !survey.isVoice &&
-    !isCompleted &&
-    !hasStarted &&
-    conversationId &&
-    conversationId !== prevConversationId
-  ) {
-    setPrevConversationId(conversationId);
-    setHasStarted(true);
-  }
+  useEffect(() => {
+    if (
+      !isInitializing &&
+      !initError &&
+      survey &&
+      !survey.isVoice &&
+      !isCompleted &&
+      !hasStarted &&
+      conversationId
+    ) {
+      // Just mark it as started, the backend already provided the initial messages
+      setHasStarted(true);
+    }
+  }, [
+    isInitializing,
+    initError,
+    survey,
+    isVoiceMode,
+    isCompleted,
+    hasStarted,
+    conversationId,
+  ]);
 
   // Voice WebSocket Integration
-  const wsUrl = useMemo(() => survey?.isVoice
+  const wsUrl = survey?.isVoice
     ? `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-response?surveyId=${shareableLink}&language=${selectedLanguage}`
-    : "", [survey?.isVoice, shareableLink, selectedLanguage]);
+    : "";
 
-  // Ref for voice message handler to avoid circular dependency
-  const onVoiceMessageRef = useRef<(data: Record<string, unknown>) => void>(() => { });
+  if (survey?.isVoice) {
+    console.log("[Survey Page] WS URL:", wsUrl);
+    console.log("[Survey Page] Survey State:", {
+      isVoice: survey?.isVoice,
+      isVoiceMode,
+      isCompleted,
+    });
+  }
 
   const voiceWs = useVoiceWebSocket({
     url: wsUrl,
-    onMessage: useCallback((data) => onVoiceMessageRef.current(data), []),
+    onMessage: (data) => {
+      console.log("[SurveyPage] Voice WS Message:", data.type);
+
+      // Chain of Trust: Unified message handling via Voice Agent events
+      if (data.type === "conversation_text") {
+        const { role, content } = data;
+
+        // Filter out internal thinking/directives
+        if (content.includes("<thinking>") || content.includes("Internal instructions:")) {
+          console.log("[SurveyPage] Filtering internal directive from UI:", content.substring(0, 30));
+          return;
+        }
+
+        const assistantMessage = {
+          id: `voice-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          role: role as "assistant" | "user",
+          parts: [{ type: "text" as const, text: content }],
+        };
+
+        setMessages((prev) => {
+          // Avoid duplicate messages if the same text was already transcribed or sent
+          const lastMsg = prev[prev.length - 1];
+          const lastText = lastMsg?.parts?.find(p => p.type === 'text')?.text;
+          if (lastText === content && lastMsg?.role === role) return prev;
+
+          return [...prev, assistantMessage];
+        });
+
+        if (role === "assistant") {
+          const lowerText = content.toLowerCase();
+          if (
+            lowerText.includes("thank you for completing") ||
+            lowerText.includes("survey is now complete")
+          ) {
+            setIsCompleted(true);
+          }
+        }
+      } else if (data.type === "audio_sent" || data.type === "text_response") {
+        // AI started speaking (legacy or fallback)
+        // We handle this for backward compatibility but prefer conversation_text
+        if (!data.text) return;
+
+        const assistantMessage = {
+          id: `legacy-${Date.now()}`,
+          role: "assistant" as const,
+          parts: [{ type: "text" as const, text: data.text }],
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+
+        const lowerText = data.text.toLowerCase();
+        if (
+          lowerText.includes("thank you for completing") ||
+          lowerText.includes("survey is now complete")
+        ) {
+          setIsCompleted(true);
+        }
+      } else if (data.type === "transcription" && data.isFinal) {
+        if (isCompleted) return;
+        // DUAL-AGENT BUG FIX: 
+        // We NO LONGER call sendMessage() here because the Voice Agent 
+        // back-end already receives the audio and generates the response.
+        // Calling sendMessage() triggers a redundant Text AI response.
+        console.log("[SurveyPage] Final transcription received (Voice Mode):", data.text);
+      } else if (data.type === "display_media" && survey?.media) {
+        const fullMedia = survey.media.find((m: any) => m.id === data.media.id);
+        if (fullMedia) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `media-${Date.now()}`,
+              role: "assistant" as const,
+              parts: [{ type: "text" as const, text: t("sharedMedia") }],
+              media: fullMedia,
+            },
+          ]);
+        }
+      } else if (data.type === "survey_completed") {
+        setIsCompleted(true);
+        // Disconnect voice immediately to stop recording
+        setIsVoiceMode(false);
+        voiceWs.disconnect();
+      }
+    },
   });
 
-  const handleVoiceMessage = useCallback((data: Record<string, unknown>) => {
-    const type = data.type as string;
-    // Chain of Trust: Unified message handling via Voice Agent events
-    if (type === "conversation_text") {
-      const { role, content } = data as { role: string; content: string };
-      if (content.includes("<thinking>") || content.includes("Internal instructions:")) return;
-
-      const assistantMessage = {
-        id: `voice-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        role: role as "assistant" | "user",
-        displayedContent: content,
-        parts: [{ type: "text" as const, text: content }],
-      };
-
-      setMessages((prev) => {
-        const lastMsg = prev[prev.length - 1];
-        const lastText = lastMsg?.parts?.find(p => p.type === 'text')?.text;
-        if (lastText === content && lastMsg?.role === role) return prev;
-        return [...prev, assistantMessage];
-      });
-
-      if (role === "assistant" && (content.toLowerCase().includes("thank you for completing") || content.toLowerCase().includes("survey is now complete"))) {
-        setIsCompleted(true);
-      }
-    } else if (type === "audio_sent" || type === "text_response") {
-      const text = (data as { text: string }).text;
-      if (!text) return;
-      const assistantMessage = {
-        id: `legacy-${Date.now()}`,
-        role: "assistant" as const,
-        displayedContent: text,
-        parts: [{ type: "text" as const, text }],
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-      if (text.toLowerCase().includes("thank you for completing") || text.toLowerCase().includes("survey is now complete")) {
-        setIsCompleted(true);
-      }
-    } else if (type === "display_media" && survey?.media) {
-      const mediaId = (data as { media: { id: string } }).media?.id;
-      const fullMedia = survey.media.find((m: { id: string }) => m.id === mediaId);
-      if (fullMedia) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `media-${Date.now()}`,
-            role: "assistant" as const,
-            displayedContent: t("sharedMedia"),
-            parts: [{ type: "text" as const, text: t("sharedMedia") }],
-            media: fullMedia,
-          } as SDKMessage,
-        ]);
-      }
-    } else if (type === "survey_completed") {
-      setIsCompleted(true);
-      setIsVoiceMode(false);
-      voiceWs.disconnect();
-    }
-  }, [survey, t, setMessages, voiceWs, setIsCompleted, setIsVoiceMode]);
-
-  // Sync the ref with the handler
+  // Initial setup based on survey type
   useEffect(() => {
-    onVoiceMessageRef.current = handleVoiceMessage;
-  }, [handleVoiceMessage]);
-
-  // Initial setup based on survey type - fix set-state-in-effect
-  const [prevSurveyId, setPrevSurveyId] = useState(survey?.id);
-  if (survey?.id !== prevSurveyId) {
-    setPrevSurveyId(survey?.id);
-    if (survey?.isVoice && !isVoiceMode) {
+    if (survey?.isVoice) {
       setIsVoiceMode(true);
-    } else if (!survey?.isVoice && isVoiceMode) {
+    } else {
       setIsVoiceMode(false);
     }
-  }
+  }, [survey?.isVoice]);
 
   // Handle initial start (User Gesture)
-  // Handle language switch behavior
-  const handleLanguageChange = useCallback((newLocale: string) => {
-    router.replace({ pathname, query: { shareableLink: shareableLink ?? "" } }, {
-      locale: newLocale as "en" | "fr" | "de" | "es" | "it",
-    });
-  }, [router, pathname, shareableLink]);
-
-  // Handle initial start (User Gesture)
-  const handleStartSurvey = useCallback(async (lang?: string) => {
+  const handleStartSurvey = async (lang?: string) => {
     if (lang && lang !== locale) {
       handleLanguageChange(lang);
     }
@@ -452,18 +419,29 @@ function SurveyContent() {
         await voiceWs.connect();
       } catch (e) {
         console.error("Failed to connect voice:", e);
+        // Fallback to allowing manual retry
       }
     }
-  }, [locale, handleLanguageChange, isVoiceMode, voiceWs]);
+  };
 
+  // Handle language switch behavior
   useEffect(() => {
+    // If the user hasn't manually switched and survey has a specific language, redirect (optional)
+    // But for now, we'll let the user choose.
     if (isVoiceMode && voiceWs.status === "connected") {
+      // Reconnect on language change to ensure correct voice parameters
       voiceWs.disconnect();
       setTimeout(() => voiceWs.connect(), 100);
     }
-  }, [locale, isVoiceMode, voiceWs]);
+  }, [locale]);
 
-  const toggleVoiceMode = useCallback(() => {
+  const handleLanguageChange = (newLocale: string) => {
+    router.replace({ pathname, query: { shareableLink } } as any, {
+      locale: newLocale,
+    });
+  };
+
+  const toggleVoiceMode = () => {
     const newMode = !isVoiceMode;
     setIsVoiceMode(newMode);
     if (newMode) {
@@ -471,27 +449,29 @@ function SurveyContent() {
     } else {
       voiceWs.disconnect();
     }
-  }, [isVoiceMode, voiceWs]);
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
+  };
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, scrollToBottom]);
+  }, [messages]);
 
   // Manual handleSubmit
-  const handleSubmit = useCallback(async (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     if (e) {
       e.preventDefault();
     }
 
     // Prevent sending messages after survey completion
-    if (isCompleted || !input.trim() || isChatLoading || !conversationId) return;
+    if (isCompleted) return;
+
+    if (!input.trim() || isChatLoading || !conversationId) return;
 
     const currentInput = input;
     setInput("");
@@ -500,11 +480,11 @@ function SurveyContent() {
       await sendMessage({
         role: "user",
         parts: [{ type: 'text', text: currentInput }]
-      } as SDKMessage);
+      } as any);
     } catch (error) {
       console.error("Failed to send message:", error);
     }
-  }, [isCompleted, input, isChatLoading, conversationId, sendMessage]);
+  };
 
   // Loading state
   if (isInitializing) {
@@ -572,6 +552,81 @@ function SurveyContent() {
     );
   }
 
+  // Premium UI Components
+  const VisualizerRing = ({
+    isRecording,
+    isAgentSpeaking,
+    size = "normal",
+  }: {
+    isRecording: boolean;
+    isAgentSpeaking: boolean;
+    size?: "normal" | "large";
+  }) => (
+    <div className="relative flex items-center justify-center">
+      {(isRecording || isAgentSpeaking) && (
+        <>
+          <div
+            className={cn(
+              "absolute inset-0 rounded-full border-4 border-indigo-500/20 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite]",
+              size === "large" ? "border-8" : "border-4",
+              isAgentSpeaking ? "border-emerald-500/20" : "border-indigo-500/20"
+            )}
+          />
+          <div
+            className={cn(
+              "absolute inset-0 rounded-full border-4 border-indigo-500/10 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]",
+              size === "large" ? "border-8" : "border-4",
+              isAgentSpeaking ? "border-emerald-500/10" : "border-indigo-500/10"
+            )}
+          />
+        </>
+      )}
+      <div
+        className={cn(
+          "relative z-10 rounded-full flex items-center justify-center transition-all duration-500 shadow-xl backdrop-blur-sm border border-white/10",
+          voiceWs.status === "error"
+            ? "bg-red-500 shadow-red-500/50"
+            : isAgentSpeaking
+              ? "bg-gradient-to-br from-emerald-500 to-teal-600 scale-110 shadow-emerald-500/30"
+              : isRecording
+                ? "bg-gradient-to-br from-indigo-600 to-violet-600 scale-110 shadow-indigo-500/30"
+                : "bg-gray-900 shadow-md hover:scale-105",
+          size === "large" ? "w-32 h-32" : "w-20 h-20",
+        )}
+      >
+        {voiceWs.status === "error" ? (
+          <AlertCircle
+            className={cn(
+              "text-white",
+              size === "large" ? "w-12 h-12" : "w-8 h-8",
+            )}
+          />
+        ) : isAgentSpeaking ? (
+          <Sparkles
+            className={cn(
+              "text-white animate-pulse",
+              size === "large" ? "w-12 h-12" : "w-8 h-8",
+            )}
+          />
+        ) : isRecording ? (
+          <MicOff
+            className={cn(
+              "text-white",
+              size === "large" ? "w-12 h-12" : "w-8 h-8",
+            )}
+          />
+        ) : (
+          <Mic
+            className={cn(
+              "text-white",
+              size === "large" ? "w-12 h-12" : "w-8 h-8",
+            )}
+          />
+        )}
+      </div>
+    </div>
+  );
+
   // Main UI Render
   return (
     <div className="min-h-[100dvh] bg-gray-50 flex items-center justify-center p-0 sm:p-4 font-sans selection:bg-gray-900 selection:text-white">
@@ -579,14 +634,14 @@ function SurveyContent() {
       {survey?.isVoice && !hasStarted && !isCompleted && !isInitializing && (
         <VoiceSurveyStartOverlay
           onStart={handleStartSurvey}
-          initialLanguage={selectedLanguage}
+          initialLanguage={(locale as any) || "en"}
           title={survey?.title || t("voiceSurveyTitle")}
           description={
             survey?.objective?.description ||
             t("voiceSurveyIntro") ||
             "Join our voice-powered interview. Choose your preferred language and start speaking naturally."
           }
-          t={t}
+          t={t as any}
         />
       )}
 
@@ -603,7 +658,7 @@ function SurveyContent() {
             <div className="flex items-center justify-between gap-4 h-14">
               {/* Brand - Left */}
               <div className="flex items-center gap-2 flex-1 min-w-0">
-                <Image
+                <img
                   src="/logo.svg"
                   alt="Convy Logo"
                   width={32}
@@ -701,8 +756,8 @@ function SurveyContent() {
         <main className="flex-1 overflow-y-auto scroll-smooth bg-slate-50/30 relative">
           <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
             {messages
-              .filter((m) => m.id !== "init_ping_hidden")
-              .map((message) => (
+              .filter((m: any) => m.id !== "init_ping_hidden")
+              .map((message: any) => (
                 <div
                   key={message.id}
                   className={cn(
@@ -736,9 +791,9 @@ function SurveyContent() {
                     <div className="whitespace-pre-wrap">
                       {/* AI SDK v6 recommended: use parts for rendering */}
                       {message.parts && message.parts.length > 0 ? (
-                        message.parts.map((part, index) =>
+                        message.parts.map((part: any, index: number) =>
                           part.type === "text" ? (
-                            <MarkdownMessage key={index} content={(part as { text: string }).text} />
+                            <MarkdownMessage key={index} content={part.text} />
                           ) : null,
                         )
                       ) : (
@@ -749,7 +804,7 @@ function SurveyContent() {
                       {/* Handle direct media attachment */}
                       {message.media && <MediaDisplay media={message.media} />}
 
-                      {message.toolInvocations?.map((inv, idx) => {
+                      {message.toolInvocations?.map((inv: any, idx: number) => {
                         if (inv.toolName === "showMedia" && inv.state === "result") {
                           const result = inv.result;
                           const media = result?.media || (typeof result === "string" ? JSON.parse(result).media : null);
@@ -766,7 +821,7 @@ function SurveyContent() {
                       })}
 
                       {/* Legacy multipart support */}
-                      {!message.toolInvocations && message.parts?.map((part, idx) => {
+                      {!message.toolInvocations && message.parts?.map((part: any, idx: number) => {
                         if (
                           part.type === "tool-invocation" ||
                           part.type === "tool-call"
@@ -829,7 +884,6 @@ function SurveyContent() {
                     <VisualizerRing
                       isRecording={voiceWs.isRecording}
                       isAgentSpeaking={voiceWs.isPlaying}
-                      status={voiceWs.status}
                       size={voiceWs.status === "error" ? "large" : "normal"}
                     />
                   </button>

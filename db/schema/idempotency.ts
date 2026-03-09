@@ -1,4 +1,5 @@
 import { pgTable, text, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { timestamps } from "./common";
 
 export const idempotencyKeys = pgTable("idempotency_keys", {
   key: text("key").primaryKey(), // The unique idempotency key (UUID or hash)

@@ -1,10 +1,9 @@
 "use client";
-import React from "react";
 
 import { DashboardWidget } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import {
-  PieChart, Pie, ResponsiveContainer,
+  PieChart, Pie, Tooltip, ResponsiveContainer,
   Sector
 } from "recharts";
 import {
@@ -13,7 +12,7 @@ import {
   Lightbulb, Car, MapPin, BarChart2, Laptop, Cloud,
   Smile, Frown, Phone, Activity, ShoppingCart,
   Clock, DollarSign, Calendar, MessageCircle,
-  Home, Briefcase, Zap, Globe, Shield, HelpCircle
+  Heart, Home, Briefcase, Zap, Globe, Shield, HelpCircle
 } from "lucide-react";
 import { SentimentGauge } from "./SentimentGauge";
 
@@ -73,21 +72,8 @@ function WidgetCard({ widget }: { widget: DashboardWidget }) {
   );
 }
 
-import {
-  DashboardWidget,
-  StatCardData,
-  PieChartData,
-  BarChartData,
-  InsightListData,
-  HypothesisValidation,
-  Recommendation,
-  MediaEffectivenessMetrics,
-  RequiredQuestionCoverage,
-  ExtractedQuote
-} from "@/lib/analytics";
-
 function WidgetContent({ widget }: { widget: DashboardWidget }) {
-  const data = widget.data;
+  const data = widget.data as any;
 
   switch (widget.type) {
     case "stat_card":
@@ -139,13 +125,9 @@ function WidgetContent({ widget }: { widget: DashboardWidget }) {
 
 // --- Specific Content Components ---
 
-const IconComponent = ({ name, className }: { name: string; className?: string }) => {
-  const Icon = getIcon(name);
-  if (!Icon) return null;
-  return <Icon className={className} />;
-};
+function StatCardContent({ data }: { data: any }) {
+  const Icon = getIcon(data.icon);
 
-function StatCardContent({ data }: { data: StatCardData }) {
   return (
     <div className="flex flex-col justify-between h-full py-2">
       <div className="flex items-baseline gap-2">
@@ -173,16 +155,17 @@ function StatCardContent({ data }: { data: StatCardData }) {
         )}
       </div>
 
-      {data.icon && (
+      {/* Absolute positioned icon for visual flair */}
+      {Icon && (
         <div className="absolute top-0 right-0 p-2 opacity-5">
-          <IconComponent name={data.icon} className="w-16 h-16 text-black" />
+          <Icon className="w-16 h-16 text-black" />
         </div>
       )}
     </div>
   );
 }
 
-function PieChartContent({ data }: { data: PieChartData }) {
+function PieChartContent({ data }: { data: any }) {
   if (!data?.segments?.length) return <EmptyState />;
 
   return (
@@ -198,7 +181,15 @@ function PieChartContent({ data }: { data: PieChartData }) {
               dataKey="value"
               stroke="none"
               cornerRadius={4}
-              shape={renderPieSector}
+              shape={(props: any) => {
+                const { index, payload } = props;
+                return (
+                  <Sector
+                    {...props}
+                    fill={payload.color || COLORS[index % COLORS.length]}
+                  />
+                );
+              }}
             />
           </PieChart>
         </ResponsiveContainer>
@@ -211,7 +202,7 @@ function PieChartContent({ data }: { data: PieChartData }) {
       </div>
 
       <div className="flex flex-col justify-center gap-2 flex-grow min-w-0 w-full">
-        {data.segments.slice(0, 4).map((entry, i) => (
+        {data.segments.slice(0, 4).map((entry: any, i: number) => (
           <div key={i} className="flex justify-between items-center w-full">
             <div className="flex items-center gap-2 min-w-0">
               <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color || COLORS[i % COLORS.length] }} />
@@ -228,9 +219,9 @@ function PieChartContent({ data }: { data: PieChartData }) {
   );
 }
 
-function BarChartContent({ data }: { data: BarChartData | ChartDataPoint[] }) {
+function BarChartContent({ data }: { data: any[] }) {
   // Adapter for legacy format or new format
-  const chartData = Array.isArray(data) ? data : (data as BarChartData).bars || [];
+  const chartData = Array.isArray(data) ? data : (data as any).bars || [];
 
   if (!chartData.length) return <EmptyState />;
 
@@ -300,12 +291,12 @@ function BarChartContent({ data }: { data: BarChartData | ChartDataPoint[] }) {
     }
   };
 
-  const maxVal = Math.max(...chartData.map((d) => d.value ?? 0), 1);
+  const maxVal = Math.max(...chartData.map((d: any) => d.value ?? 0), 1);
 
   return (
     <div className="w-full h-full min-h-[220px] flex items-center bg-[#F2F5F8] rounded-2xl py-6 -mx-2 px-2">
       <div className="flex flex-col w-full h-full justify-center relative">
-        {chartData.map((item, i) => {
+        {chartData.map((item: any, i: number) => {
           const color = item.color || INFOGRAPHIC_COLORS[i % INFOGRAPHIC_COLORS.length];
           // Min width 30%, Max width 70% to leave room for circle and number
           const widthPercent = Math.max(30, Math.min(70, ((item.value || 0) / maxVal) * 70));
@@ -361,7 +352,7 @@ function BarChartContent({ data }: { data: BarChartData | ChartDataPoint[] }) {
   )
 }
 
-function ListContent({ data }: { data: Array<{ label?: string; topic?: string; value: string | number | boolean; count?: number; percentage?: number }> }) {
+function ListContent({ data }: { data: any[] }) {
   if (!data?.length) return <EmptyState />;
   // Assuming data is array of { value, count, percentage } or similar
   // We sort and take top 5
@@ -410,13 +401,13 @@ function ListContent({ data }: { data: Array<{ label?: string; topic?: string; v
   )
 }
 
-function InsightListContent({ data }: { data: InsightListData }) {
+function InsightListContent({ data }: { data: any }) {
   const insights = data.insights || [];
   if (!insights.length) return <EmptyState />;
 
   return (
     <div className="space-y-3 h-full overflow-y-auto custom-scrollbar pr-2">
-      {insights.map((insight, i) => (
+      {insights.map((insight: any, i: number) => (
         <div key={i} className="flex gap-3 items-start p-3 bg-gray-50/50 rounded-xl hover:bg-gray-50 transition-colors">
           <span className={cn(
             "w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0",
@@ -432,12 +423,12 @@ function InsightListContent({ data }: { data: InsightListData }) {
   )
 }
 
-function CoverageMatrixContent({ data }: { data: RequiredQuestionCoverage[] }) {
+function CoverageMatrixContent({ data }: { data: any[] }) {
   if (!data?.length) return <EmptyState />;
 
   return (
     <div className="space-y-3 h-full overflow-y-auto custom-scrollbar pr-2">
-      {data.map((item, i) => (
+      {data.map((item: any, i: number) => (
         <div key={i} className="p-3 bg-gray-50/50 rounded-xl hover:bg-gray-50 transition-colors">
           <div className="flex justify-between items-start gap-4 mb-2">
             <p className="text-xs font-medium text-gray-900 leading-snug">{item.question}</p>
@@ -458,7 +449,7 @@ function CoverageMatrixContent({ data }: { data: RequiredQuestionCoverage[] }) {
           </div>
           {item.sampleResponses && item.sampleResponses.length > 0 && (
             <p className="text-[10px] text-gray-500 italic border-l-2 border-gray-200 pl-2 leading-relaxed">
-              &quot;{item.sampleResponses[0]}&quot;
+              "{item.sampleResponses[0]}"
             </p>
           )}
         </div>
@@ -479,7 +470,7 @@ function EmptyState() {
 // Helper to map icon strings to Lucide components
 function getIcon(name?: string) {
   if (!name) return null;
-  const map: Record<string, React.ElementType> = {
+  const map: Record<string, any> = {
     users: Users,
     "check-circle": CheckCircle,
     star: Star,
@@ -490,36 +481,16 @@ function getIcon(name?: string) {
   return map[name] || null;
 }
 
-function renderPieSector(props: {
-  cx: number;
-  cy: number;
-  innerRadius: number;
-  outerRadius: number;
-  startAngle: number;
-  endAngle: number;
-  fill: string;
-  payload: { color?: string };
-  index: number;
-}) {
-  const { index, payload } = props;
-  return (
-    <Sector
-      {...props}
-      fill={payload.color || COLORS[index % COLORS.length]}
-    />
-  );
-}
-
-function QuoteListContent({ data }: { data: { quotes: ExtractedQuote[] } }) {
+function QuoteListContent({ data }: { data: any }) {
   const quotes = data.quotes || [];
   if (!quotes.length) return <EmptyState />;
 
   return (
     <div className="space-y-4 h-full overflow-y-auto custom-scrollbar p-1">
-      {quotes.map((q, i) => (
+      {quotes.map((q: any, i: number) => (
         <div key={i} className="relative pl-6 italic text-sm text-gray-600">
           <Quote className="absolute left-0 top-0 w-4 h-4 text-gray-300" />
-          <p>&quot;{q.text}&quot;</p>
+          <p>"{q.text}"</p>
           {q.context && <p className="text-[10px] text-gray-400 not-italic mt-1">— {q.context}</p>}
         </div>
       ))}
@@ -527,7 +498,7 @@ function QuoteListContent({ data }: { data: { quotes: ExtractedQuote[] } }) {
   )
 }
 
-function HypothesisContent({ data }: { data: HypothesisValidation }) {
+function HypothesisContent({ data }: { data: any }) {
   return (
     <div className="flex flex-col h-full justify-between">
       <div>
@@ -546,12 +517,12 @@ function HypothesisContent({ data }: { data: HypothesisValidation }) {
   )
 }
 
-function RecommendationContent({ data }: { data: Recommendation[] }) {
+function RecommendationContent({ data }: { data: any[] }) {
   if (!data?.length) return <EmptyState />;
 
   return (
     <div className="space-y-3 h-full overflow-y-auto custom-scrollbar">
-      {data.slice(0, 4).map((rec, i) => (
+      {data.slice(0, 4).map((rec: any, i: number) => (
         <div key={i} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
           <div className={cn(
             "w-1 h-full rounded-full flex-shrink-0 bg-gray-300",
@@ -568,12 +539,12 @@ function RecommendationContent({ data }: { data: Recommendation[] }) {
   )
 }
 
-function MediaEffectivenessContent({ data }: { data: MediaEffectivenessMetrics[] }) {
+function MediaEffectivenessContent({ data }: { data: any[] }) {
   if (!data?.length) return <EmptyState />;
 
   return (
     <div className="space-y-2">
-      {data.slice(0, 5).map((media, i) => (
+      {data.slice(0, 5).map((media: any, i: number) => (
         <div key={i} className="flex items-center justify-between text-xs">
           <span className="truncate max-w-[60%] text-gray-600">{media.description}</span>
           <div className="flex items-center gap-2">
@@ -591,7 +562,7 @@ function MediaEffectivenessContent({ data }: { data: MediaEffectivenessMetrics[]
   )
 }
 
-function MediaCardContent({ data }: { data: MediaEffectivenessMetrics }) {
+function MediaCardContent({ data }: { data: any }) {
   if (!data) return <EmptyState />;
   return (
     <div className="flex flex-col h-full bg-gray-50 rounded-xl p-3 overflow-hidden">
@@ -607,7 +578,7 @@ function MediaCardContent({ data }: { data: MediaEffectivenessMetrics }) {
         </div>
         {data.topQuotes && data.topQuotes.length > 0 && (
           <p className="text-xs italic text-gray-600 bg-white p-2 rounded border border-gray-100 leading-relaxed">
-            &quot;{data.topQuotes[0].text}&quot;
+            "{data.topQuotes[0].text}"
           </p>
         )}
       </div>

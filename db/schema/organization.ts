@@ -5,41 +5,30 @@ import { users } from "./auth";
 import { surveys } from "./surveys";
 
 // Organization/Workspace tables (managed by Better Auth organization plugin)
-export const organizations = pgTable(
-  "organization",
-  {
-    id: text("id").primaryKey(),
-    name: text("name").notNull(),
-    slug: text("slug").notNull(),
-    logo: text("logo"),
-    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [index("organization_slug_idx").on(table.slug)],
-);
+export const organizations = pgTable("organization", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  logo: text("logo"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+    .defaultNow()
+    .notNull(),
+});
 
-export const members = pgTable(
-  "member",
-  {
-    id: text("id").primaryKey(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
-    role: text("role").notNull(), // 'owner' | 'member'
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    index("member_user_id_idx").on(table.userId),
-    index("member_organization_id_idx").on(table.organizationId),
-  ],
-);
+export const members = pgTable("member", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  role: text("role").notNull(), // 'owner' | 'member'
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+    .defaultNow()
+    .notNull(),
+});
 
 export const invitations = pgTable("invitation", {
   id: text("id").primaryKey(),
@@ -83,7 +72,7 @@ export const projects = pgTable(
     index("projects_user_id_idx").on(table.userId),
     index("projects_organization_id_idx").on(table.organizationId),
     index("projects_created_by_idx").on(table.userId), // createdBy is same as userId
-  ],
+  ]
 );
 
 export const organizationsRelations = relations(organizations, ({ many }) => ({
@@ -125,5 +114,6 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   surveys: many(surveys),
 }));
 
-export // All tables and relations are now exported directly using 'export const'
- {};
+export {
+  // All tables and relations are now exported directly using 'export const'
+};
