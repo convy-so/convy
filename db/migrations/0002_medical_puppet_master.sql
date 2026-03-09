@@ -1,0 +1,2 @@
+CREATE INDEX "survey_conversations_survey_completed_created_idx" ON "survey_conversations" USING btree ("survey_id","completed","created_at");--> statement-breakpoint
+CREATE INDEX "surveys_user_org_updated_idx" ON "surveys" USING btree ("user_id","organization_id","updated_at");
