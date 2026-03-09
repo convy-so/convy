@@ -67,6 +67,9 @@ function SurveysContent() {
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [surveyToDelete, setSurveyToDelete] = useState<{ id: string; title: string } | null>(null);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [isPageSizeOpen, setIsPageSizeOpen] = useState(false);
   const t = useTranslations("SurveysPage");
 
 
@@ -143,6 +146,20 @@ function SurveysContent() {
     }
   };
 
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setCurrentPage(1);
+    setIsPageSizeOpen(false);
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
   // Computed counts
   const counts = useMemo(() => {
     const published = surveys.filter(s => s.status === "active").length;
@@ -169,6 +186,23 @@ function SurveysContent() {
 
     return result;
   }, [surveys, filterTab, searchQuery]);
+
+  // Paginated surveys for display
+  const paginatedSurveys = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredSurveys.slice(startIndex, endIndex);
+  }, [filteredSurveys, currentPage, pageSize]);
+
+  // Reset current page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterTab, searchQuery]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredSurveys.length / pageSize);
+  const hasNextPage = currentPage < totalPages;
+  const hasPreviousPage = currentPage > 1;
 
 
   return (
@@ -300,12 +334,12 @@ function SurveysContent() {
         <>
 
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-            {filteredSurveys.map((survey, index) => (
+            {paginatedSurveys.map((survey, index) => (
               <div
                 key={survey.id}
                 className={cn(
                   "group flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-gray-50/50 transition-colors",
-                  index !== filteredSurveys.length - 1 ? "border-b border-gray-100" : ""
+                  index !== paginatedSurveys.length - 1 ? "border-b border-gray-100" : ""
                 )}
               >
                 <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">
@@ -450,6 +484,65 @@ function SurveysContent() {
             ))}
           </div>
 
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-sm text-gray-500">
+                {t('Pagination.Showing', { 
+                  start: (currentPage - 1) * pageSize + 1, 
+                  end: Math.min(currentPage * pageSize, filteredSurveys.length), 
+                  total: filteredSurveys.length 
+                })}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={!hasPreviousPage}
+                  className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => handlePageChange(pageNum)}
+                        className={cn(
+                          "px-3 py-1 text-sm font-medium rounded-lg transition-colors",
+                          currentPage === pageNum 
+                            ? "bg-gray-900 text-white" 
+                            : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                        )}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={!hasNextPage}
+                  className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
 
           {filteredSurveys.length === 0 && (
             <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">

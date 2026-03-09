@@ -26,8 +26,6 @@ export default function Error({
     return (
         <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center p-6">
             <div className="max-w-md w-full text-center space-y-8">
-                <RobotIllustration />
-
                 <div className="space-y-3">
                     <div className="inline-flex items-center gap-2 px-3 py-1 bg-red-50 text-red-600 rounded-full text-xs font-semibold mb-2">
                         <AlertCircle className="w-3 h-3" />
@@ -38,18 +36,20 @@ export default function Error({
                         {isUnauthorized ? (
                             <ClientT>You're a stranger here!</ClientT>
                         ) : (
-                            <ClientT>Oops! Our robot tripped.</ClientT>
+                            <ClientT>Oops! Our agent tripped.</ClientT>
                         )}
                     </h1>
 
                     <p className="text-gray-500 text-lg">
                         {isUnauthorized ? (
-                            <ClientT>Please sign in to meet our robot and access your dashboard.</ClientT>
+                            <ClientT>Please sign in to meet our agent and access your dashboard.</ClientT>
                         ) : (
-                            <ClientT>Something went wrong on our end. We're looking into it, but our robot might need a quick reboot.</ClientT>
+                            <ClientT>Something went wrong on our end. We're looking into it, but our agent might need a quick reboot.</ClientT>
                         )}
                     </p>
                 </div>
+
+                <RobotIllustration />
 
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
                     {isUnauthorized ? (
@@ -69,22 +69,11 @@ export default function Error({
                                 <RefreshCw className="w-4 h-4" />
                                 <ClientT>Try Again</ClientT>
                             </button>
-                            <Link
-                                href="/dashboard"
-                                className="flex items-center gap-2 px-6 py-3 bg-white text-gray-700 border border-gray-200 rounded-xl font-medium hover:bg-gray-50 transition-all"
-                            >
-                                <ClientT>Back to Dashboard</ClientT>
-                            </Link>
                         </>
                     )}
                 </div>
 
-                {!isUnauthorized && (
-                    <div className="bg-gray-100/50 rounded-xl p-4 text-left border border-gray-100">
-                        <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-1">Developer Info</p>
-                        <p className="text-xs text-gray-500 break-all font-mono line-clamp-2">{error.message || "Unknown error"}</p>
-                    </div>
-                )}
+
             </div>
         </div>
     );
