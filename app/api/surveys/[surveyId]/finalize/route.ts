@@ -1,10 +1,9 @@
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
-
-import { db } from "@/db";
 import { surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { env } from "@/lib/env";
+import { getDb } from "@/db";
 
 export async function POST(
   request: Request,
@@ -14,7 +13,7 @@ export async function POST(
     const session = await getVerifiedSession();
     const { surveyId } = await params;
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -39,7 +38,7 @@ export async function POST(
     }
 
     // Update survey status to active
-    const [updatedSurvey] = await db
+    const [updatedSurvey] = await getDb()
       .update(surveys)
       .set({
         status: "active",
