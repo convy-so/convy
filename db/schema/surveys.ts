@@ -119,6 +119,11 @@ const surveys = pgTable(
     index("surveys_shareable_link_idx").on(table.shareableLink),
     index("surveys_custom_slug_idx").on(table.customSlug),
     index("surveys_status_idx").on(table.status),
+    index("surveys_user_org_updated_idx").on(
+      table.userId,
+      table.organizationId,
+      table.updatedAt,
+    ),
   ],
 );
 
@@ -252,6 +257,11 @@ const surveyConversations = pgTable(
   (table) => [
     index("survey_conversations_survey_id_idx").on(table.surveyId),
     index("survey_conversations_completed_idx").on(table.completed),
+    index("survey_conversations_survey_completed_created_idx").on(
+      table.surveyId,
+      table.completed,
+      table.createdAt,
+    ),
   ],
 );
 

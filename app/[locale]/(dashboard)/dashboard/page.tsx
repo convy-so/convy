@@ -20,6 +20,7 @@ import { Suspense } from "react";
 import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import { Loader2 } from "lucide-react";
+import { cache, cacheKeys } from "@/lib/cache";
 
 async function DashboardContent({ authHeaders }: { authHeaders: Headers | string | null }) {
   const session = await getVerifiedSession(authHeaders);
@@ -53,100 +54,136 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
     },
   ];
 
-  // 1. Fetch Stats
-  const [surveysCountRes] = await getDb()
-    .select({ count: count() })
-    .from(surveys)
-    .where(
-      and(
-        eq(surveys.userId, userId),
-        activeOrgId
-          ? eq(surveys.organizationId, activeOrgId)
-          : isNull(surveys.organizationId)
-      )
-    );
-  const totalSurveys = surveysCountRes?.count || 0;
+  // Parallelize data fetching and use Redis caching
+  const [stats, recentSurveys, activities] = await Promise.all([
+    // 1 & 2. Stats
+    cache.wrap(
+      cacheKeys.dashboardStats(userId, activeOrgId),
+      async () => {
+        const [surveysCountRes, durationStats] = await Promise.all([
+          getDb()
+            .select({ count: count() })
+            .from(surveys)
+            .where(
+              and(
+                eq(surveys.userId, userId),
+                activeOrgId
+                  ? eq(surveys.organizationId, activeOrgId)
+                  : isNull(surveys.organizationId)
+              )
+            ),
+          getDb()
+            .select({
+              avgDuration: sql<number>`avg(extract(epoch from ${surveyConversations.updatedAt} - ${surveyConversations.createdAt}))`
+            })
+            .from(surveyConversations)
+            .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
+            .where(
+              and(
+                eq(surveys.userId, userId),
+                eq(surveyConversations.completed, true),
+                activeOrgId
+                  ? eq(surveys.organizationId, activeOrgId)
+                  : isNull(surveys.organizationId)
+              )
+            )
+        ]);
 
-  // 2. Fetch Average Duration
-  const [durationStats] = await getDb()
-    .select({
-      avgDuration: sql<number>`avg(extract(epoch from ${surveyConversations.updatedAt} - ${surveyConversations.createdAt}))`
-    })
-    .from(surveyConversations)
-    .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
-    .where(
-      and(
-        eq(surveys.userId, userId),
-        eq(surveyConversations.completed, true),
-        activeOrgId
-          ? eq(surveys.organizationId, activeOrgId)
-          : isNull(surveys.organizationId)
-      )
-    );
+        const totalSurveys = surveysCountRes[0]?.count || 0;
+        const avgSeconds = Math.round(durationStats[0]?.avgDuration || 0);
+        const avgMinutes = Math.floor(avgSeconds / 60);
+        const remainingSeconds = avgSeconds % 60;
+        const durationDisplay = avgSeconds > 0
+          ? `${avgMinutes}m ${remainingSeconds}s`
+          : "N/A";
 
-  const avgSeconds = Math.round(durationStats?.avgDuration || 0);
-  const avgMinutes = Math.floor(avgSeconds / 60);
-  const remainingSeconds = avgSeconds % 60;
-  const durationDisplay = avgSeconds > 0
-    ? `${avgMinutes}m ${remainingSeconds}s`
-    : "N/A";
-
-  // 3. Fetch Recent Surveys
-  const recentSurveysData = await getDb().query.surveys.findMany({
-    where: and(
-      eq(surveys.userId, userId),
-      activeOrgId
-        ? eq(surveys.organizationId, activeOrgId)
-        : isNull(surveys.organizationId)
+        return { totalSurveys, durationDisplay, avgSeconds };
+      },
+      60 * 5 // Cache for 5 minutes
     ),
-    orderBy: [desc(surveys.updatedAt)],
-    limit: 3,
-  });
 
-  const recentSurveys = recentSurveysData.map(survey => ({
-    id: survey.id,
-    title: survey.title,
+    // 3. Recent Surveys
+    cache.wrap(
+      cacheKeys.dashboardRecentSurveys(userId, activeOrgId),
+      async () => {
+        const surveysData = await getDb().query.surveys.findMany({
+          where: and(
+            eq(surveys.userId, userId),
+            activeOrgId
+              ? eq(surveys.organizationId, activeOrgId)
+              : isNull(surveys.organizationId)
+          ),
+          orderBy: [desc(surveys.updatedAt)],
+          limit: 3,
+        });
+
+        return surveysData.map(survey => ({
+          id: survey.id,
+          title: survey.title,
+          status: survey.status,
+          responses: survey.currentParticipants,
+          maxResponses: survey.participantLimit,
+          updatedAt: survey.updatedAt,
+          createdAt: survey.createdAt,
+          isVoice: survey.isVoice,
+          projectId: survey.projectId,
+        }));
+      },
+      60 * 2 // Cache for 2 minutes
+    ),
+
+    // 4. Recent Activity
+    cache.wrap(
+      cacheKeys.dashboardActivity(userId, activeOrgId),
+      async () => {
+        const recentActivitiesRaw = await getDb()
+          .select({
+            id: surveyConversations.id,
+            surveyTitle: surveys.title,
+            createdAt: surveyConversations.createdAt,
+          })
+          .from(surveyConversations)
+          .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
+          .where(
+            and(
+              eq(surveys.userId, userId),
+              activeOrgId
+                ? eq(surveys.organizationId, activeOrgId)
+                : isNull(surveys.organizationId)
+            )
+          )
+          .orderBy(desc(surveyConversations.createdAt))
+          .limit(5);
+
+        return recentActivitiesRaw.map(activity => ({
+          id: activity.id,
+          type: "new_response" as const,
+          description: activity.surveyTitle,
+          createdAt: activity.createdAt!,
+        }));
+      },
+      60 * 1 // Cache for 1 minute
+    )
+  ]);
+
+  // Format data for display using the request locale
+  const formattedRecentSurveys = recentSurveys.map(survey => ({
+    ...survey,
     status: survey.status as any,
-    responses: survey.currentParticipants,
-    maxResponses: survey.participantLimit,
     lastActivity: new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(survey.updatedAt)),
-    createdAt: new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(survey.createdAt)),
-    isVoice: survey.isVoice,
-    projectName: survey.projectId ? "Project" : "Default Project", // Simplified for now, but should be fetched
+    createdAtFormatted: new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(survey.createdAt)),
+    projectName: survey.projectId ? "Project" : "Default Project",
   }));
 
-  // 4. Fetch Recent Activity
-  const recentActivitiesRaw = await getDb()
-    .select({
-      id: surveyConversations.id,
-      title: sql<string>`'New response'`,
-      surveyTitle: surveys.title,
-      createdAt: surveyConversations.createdAt,
-    })
-    .from(surveyConversations)
-    .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
-    .where(
-      and(
-        eq(surveys.userId, userId),
-        activeOrgId
-          ? eq(surveys.organizationId, activeOrgId)
-          : isNull(surveys.organizationId)
-      )
-    )
-    .orderBy(desc(surveyConversations.createdAt))
-    .limit(5);
-
-  const activities = recentActivitiesRaw.map(activity => ({
-    id: activity.id,
-    type: "new_response" as const,
+  const formattedActivities = activities.map(activity => ({
+    ...activity,
     title: t("Activity.NewResponse"),
-    description: activity.surveyTitle,
     time: new Intl.DateTimeFormat(language, {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
-    }).format(new Date(activity.createdAt!)),
+    }).format(new Date(activity.createdAt)),
   }));
 
   return (
@@ -175,7 +212,7 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <StatsCard
           title={t("Stats.TotalSurveys")}
-          value={totalSurveys.toString()}
+          value={stats.totalSurveys.toString()}
           change={t("Stats.AllTime")}
           changeType="neutral"
           icon={<MessageSquare className="w-6 h-6" />}
@@ -184,8 +221,8 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
 
         <StatsCard
           title={t("Stats.AvgDuration")}
-          value={durationDisplay}
-          change={avgSeconds > 0 ? t("Stats.PerCompleted") : t("Stats.NoCompletions")}
+          value={stats.durationDisplay}
+          change={stats.avgSeconds > 0 ? t("Stats.PerCompleted") : t("Stats.NoCompletions")}
           changeType="neutral"
           icon={<TrendingUp className="w-6 h-6" />}
           iconColor="bg-amber-50 text-amber-600"
@@ -225,12 +262,12 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
             </Link>
           </div>
           <div className="grid grid-cols-1 gap-4">
-            {recentSurveys.map((survey) => (
-              <SurveyCard key={survey.id} {...survey} />
+            {formattedRecentSurveys.map((survey) => (
+              <SurveyCard key={survey.id} {...survey} createdAt={survey.createdAtFormatted} />
             ))}
           </div>
 
-          {recentSurveys.length === 0 && (
+          {formattedRecentSurveys.length === 0 && (
             <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
               <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-4">
                 <MessageSquare className="w-8 h-8 text-gray-400" />
@@ -251,7 +288,7 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
         </div>
 
         <div className="lg:col-span-1 space-y-6">
-          <ActivityFeed activities={activities} />
+          <ActivityFeed activities={formattedActivities} />
         </div>
       </div>
     </div>

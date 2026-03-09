@@ -41,7 +41,7 @@ ${LANGUAGE_NAMES[targetLanguage]} Translation:`;
 
   try {
     const { text: translation } = await generateText({
-      model: google("gemini-2.0-flash-exp"),
+      model: google("gemini-2.5-flash-lite"),
       prompt,
       temperature: 0, // High precision
     });
