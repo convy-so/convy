@@ -1,0 +1,47 @@
+
+C:\Users\pc\convy\app\api\surveys\[surveyId]\chat\route.ts
+   4:3  warning  'stepCountIs' is defined but never used            @typescript-eslint/no-unused-vars
+   5:3  warning  'createUIMessageStream' is defined but never used  @typescript-eslint/no-unused-vars
+  15:8  warning  'SurveyLanguage' is defined but never used         @typescript-eslint/no-unused-vars
+
+C:\Users\pc\convy\app\api\surveys\[surveyId]\create\route.ts
+   20:8   warning  'CollectedInfoFlags' is defined but never used     @typescript-eslint/no-unused-vars
+   21:8   warning  'SurveyExtractionData' is defined but never used   @typescript-eslint/no-unused-vars
+  129:23  error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  130:20  error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  211:11  warning  'systemPrompt' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  288:48  error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  308:43  error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  415:45  error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  422:29  error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  423:26  error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  468:37  error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  469:34  error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+
+C:\Users\pc\convy\app\api\surveys\[surveyId]\sample\route.ts
+   20:3   warning  'GeminiCapacityError' is defined but never used     @typescript-eslint/no-unused-vars
+   21:3   warning  'geminiCapacityResponse' is defined but never used  @typescript-eslint/no-unused-vars
+  164:34  error    Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+  207:26  error    Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+  210:25  warning  'usage' is assigned a value but never used          @typescript-eslint/no-unused-vars
+  223:38  error    Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+  224:52  error    Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+  225:42  error    Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+
+C:\Users\pc\convy\app\api\surveys\respond\[shareableLink]\route.ts
+   22:8    warning  'SurveyInitResponse' is defined but never used     @typescript-eslint/no-unused-vars
+   86:62   error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+   87:67   error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  141:57   error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  142:67   error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  245:11   warning  'systemPrompt' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  290:40   error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  313:29   error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  314:37   error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  320:130  error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  407:52   error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  460:22   error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  477:33   error    Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+
+✖ 36 problems (25 errors, 11 warnings)
+
