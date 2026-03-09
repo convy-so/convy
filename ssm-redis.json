@@ -1,0 +1,6 @@
+{
+  "Name": "/convy/staging/REDIS_URL",
+  "Value": "redis://convy-staging-redis.phncpa.0001.eun1.cache.amazonaws.com:6379",
+  "Type": "SecureString",
+  "Overwrite": true
+}

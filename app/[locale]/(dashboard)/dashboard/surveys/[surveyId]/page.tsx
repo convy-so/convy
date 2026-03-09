@@ -37,6 +37,8 @@ import { ConversationCard } from "@/components/analytics/ConversationCard";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useTranslations } from "next-intl";
+import { getClientTranslation } from "@/app/actions/translate";
+import { ClientT } from "@/components/i18n/client-t";
 import { getSurveyEmbedCodeAction } from "@/app/actions/survey";
 import { fetchSurveyDetails, fetchSurveyResponses } from "@/lib/api/surveys";
 import { queryKeys } from "@/lib/query-keys";
@@ -57,6 +59,7 @@ interface Survey {
   requiredQuestions?: string[];
   metrics?: string[];
   isVoice?: boolean;
+  description?: string;
 }
 
 interface SurveyStats {
@@ -105,7 +108,6 @@ interface AnalyticsData {
 type TabType = "overview" | "responses" | "settings";
 
 export default function SurveyDetailPage() {
-  const t = useTranslations("Survey.Detail");
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -144,6 +146,13 @@ export default function SurveyDetailPage() {
     position: 'right' as 'left' | 'right'
   });
 
+  const t = useTranslations("Survey.Detail");
+  const [searchPlaceholder, setSearchPlaceholder] = useState("Search responses...");
+
+  useEffect(() => {
+    setSearchPlaceholder(t("Responses.SearchPlaceholder") || "Search responses...");
+  }, [t]);
+
   // Fetch survey details using React Query
   const { data: surveyData, isLoading } = useQuery({
     queryKey: queryKeys.surveys.detail(surveyId),
@@ -181,7 +190,8 @@ export default function SurveyDetailPage() {
 
   const handleSaveSettings = async () => {
     setIsSavingSettings(true);
-    const loadingToast = toast.loading(t("Settings.Saving"));
+    const savingMsg = await getClientTranslation("Saving settings...");
+    const loadingToast = toast.loading(savingMsg);
     try {
       const response = await fetch(`/api/surveys/${surveyId}`, {
         method: "PATCH",
@@ -190,14 +200,14 @@ export default function SurveyDetailPage() {
       });
 
       if (response.ok) {
-        toast.success(t("Toasts.SettingsSaved"), { id: loadingToast });
+        toast.success(t("Toasts.SettingsSaved") || "Settings saved successfully", { id: loadingToast });
         // Invalidate survey query to refetch updated data
         queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
       } else {
-        toast.error(t("Toasts.SettingsFailed"), { id: loadingToast });
+        toast.error(t("Toasts.SettingsFailed") || "Failed to save settings", { id: loadingToast });
       }
     } catch (_) {
-      toast.error(t("Toasts.Error"), { id: loadingToast });
+      toast.error(t("Toasts.Error") || "An unexpected error occurred", { id: loadingToast });
     } finally {
       setIsSavingSettings(false);
     }
@@ -239,24 +249,24 @@ export default function SurveyDetailPage() {
       });
 
       if (response.ok) {
-        toast.success(t("Toasts.Deleted"));
+        toast.success(t("Toasts.Deleted") || "Survey deleted successfully");
         router.push("/dashboard/surveys");
       } else {
-        toast.error(t("Toasts.DeleteFailed"));
+        toast.error(t("Toasts.DeleteFailed") || "Failed to delete survey");
       }
     } catch (_) {
-      toast.error(t("Toasts.Error"));
+      toast.error(t("Toasts.Error") || "An unexpected error occurred");
     } finally {
       setIsDeletingSurvey(false);
       setShowDeleteModal(false);
     }
   };
 
-  const copyLink = () => {
+  const copyLink = async () => {
     if (survey?.shareableUrl) {
       navigator.clipboard.writeText(survey.shareableUrl);
       setCopied(true);
-      toast.success(t("Toasts.LinkCopied"));
+      toast.success(t("Toasts.LinkCopied") || "Link copied to clipboard");
       setTimeout(() => setCopied(false), 2000);
     }
   };
@@ -265,17 +275,25 @@ export default function SurveyDetailPage() {
     setIsLoadingEmbed(true);
     setEmbedError(null);
 
-    const result = await getSurveyEmbedCodeAction(surveyId);
+    try {
+      const result = await getSurveyEmbedCodeAction(surveyId);
 
-    if (result.success) {
-      setEmbedCodes(result.data as any);
-      // toast.success(t("Toasts.EmbedGenerated")); // Remove toast for auto-generation
-    } else {
-      setEmbedError(result.error || t("Toasts.EmbedFailed"));
-      // toast.error(result.error || t("Toasts.EmbedFailed"));
+      if (result.success) {
+        setEmbedCodes(result.data as any);
+        // toast.success(t("Toasts.EmbedGenerated")); // Remove toast for auto-generation
+      } else {
+        const errorMsg = await getClientTranslation(result.error || "Failed to generate embed code");
+        setEmbedError(errorMsg);
+        toast.error(errorMsg);
+      }
+    } catch (err) {
+      console.error("Embed generation error:", err);
+      const errorMsg = await getClientTranslation("Communication error. Please try refreshing.");
+      setEmbedError(errorMsg);
+      toast.error(errorMsg);
+    } finally {
+      setIsLoadingEmbed(false);
     }
-
-    setIsLoadingEmbed(false);
   };
 
   // Auto-generate embed code on mount or when status becomes active
@@ -305,11 +323,11 @@ export default function SurveyDetailPage() {
 
     navigator.clipboard.writeText(code);
     setCopiedEmbed(type);
-    toast.success(t("Toasts.CodeCopied"));
+    getClientTranslation("Code copied to clipboard").then(msg => toast.success(msg));
     setTimeout(() => setCopiedEmbed(null), 2000);
   };
 
-  const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
+  const tabs: { id: TabType; label: string | React.ReactNode; icon: React.ReactNode }[] = [
     { id: "overview", label: t("Tabs.Overview"), icon: <MessageSquare className="w-4 h-4" /> },
     { id: "responses", label: t("Tabs.Responses"), icon: <Users className="w-4 h-4" /> },
     { id: "settings", label: t("Tabs.Settings"), icon: <Settings className="w-4 h-4" /> },
@@ -328,9 +346,9 @@ export default function SurveyDetailPage() {
   if (!survey) {
     return (
       <div className="text-center py-24">
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">{t("NotFound.Title")}</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">{t("NotFound")}</h2>
         <Link href="/dashboard/surveys" className="text-gray-500 hover:text-gray-700">
-          {t("NotFound.Back")}
+          {t("BackToSurveys") || "Back to Surveys"}
         </Link>
       </div>
     );
@@ -355,7 +373,7 @@ export default function SurveyDetailPage() {
                 survey.status === "paused" && "bg-orange-50 text-orange-700 border border-orange-200",
                 survey.status === "sample_review" && "bg-blue-50 text-blue-700 border border-blue-200"
               )}>
-                {survey.status === "draft" || survey.status === "creating" ? "Not Completed" : survey.status.replace('_', ' ')}
+                {survey.status === "draft" || survey.status === "creating" ? t("Status.Draft") : t(`Status.${survey.status.charAt(0).toUpperCase() + survey.status.slice(1)}`)}
               </span>
             </div>
           </div>
@@ -370,7 +388,6 @@ export default function SurveyDetailPage() {
               <button
                 onClick={() => handleStatusUpdate("paused")}
                 className="flex items-center gap-2 px-3 py-2 bg-orange-50 text-orange-700 border border-orange-200 rounded-xl text-sm font-medium hover:bg-orange-100 transition-colors"
-                title={t("Header.Pause")}
               >
                 <Pause className="w-4 h-4" />
                 <span className="hidden sm:inline">{t("Header.Pause")}</span>
@@ -379,7 +396,6 @@ export default function SurveyDetailPage() {
               <button
                 onClick={() => handleStatusUpdate("active")}
                 className="flex items-center gap-2 px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-sm font-medium hover:bg-emerald-100 transition-colors"
-                title={t("Header.Resume")}
               >
                 <Play className="w-4 h-4" />
                 <span className="hidden sm:inline">{t("Header.Resume")}</span>
@@ -407,7 +423,9 @@ export default function SurveyDetailPage() {
 
           </div>
         </div>
-        <p className="text-gray-500 mt-4 sm:ml-12 text-sm max-w-2xl leading-relaxed">{survey.coreObjective || survey.expertState?.objective?.goal || t("Header.NoDescription")}</p>
+        <p className="text-gray-500 mt-4 sm:ml-12 text-sm max-w-2xl leading-relaxed">
+          {survey.description || survey.coreObjective || (typeof survey.expertState?.objective === 'string' ? survey.expertState.objective : survey.expertState?.objective?.goal) || t("Header.NoDescription")}
+        </p>
       </div>
 
       {/* Sample Review Banner */}
@@ -472,10 +490,10 @@ export default function SurveyDetailPage() {
             <div className="bg-white rounded-xl border border-gray-100 p-4">
               <div className="flex items-center gap-2 text-gray-500 mb-2">
                 <TrendingUp className="w-4 h-4" />
-                <span className="text-sm">{t("Overview.Completion.Title")}</span>
+                <span className="text-sm"><ClientT>Completion Rate</ClientT></span>
               </div>
               <p className="text-2xl font-bold text-gray-900">{stats?.completionRate || 0}%</p>
-              <p className="text-xs text-gray-400 mt-1">{t("Overview.Completion.Completed", { count: stats?.completedResponses || 0 })}</p>
+              <p className="text-xs text-gray-400 mt-1"><ClientT>{`${stats?.completedResponses || 0} completions`}</ClientT></p>
             </div>
             <div className="bg-white rounded-xl border border-gray-100 p-4">
               <div className="flex items-center gap-2 text-gray-500 mb-2">
@@ -483,12 +501,12 @@ export default function SurveyDetailPage() {
                 <span className="text-sm">{t("Overview.Duration.Title")}</span>
               </div>
               <p className="text-2xl font-bold text-gray-900">{stats?.avgDuration || '0s'}</p>
-              <p className="text-xs text-gray-400 mt-1">{t("Overview.Duration.Unit")}</p>
+              <p className="text-xs text-gray-400 mt-1">{t("Overview.Duration.PerSession")}</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-100 p-4">
               <div className="flex items-center gap-2 text-gray-500 mb-2">
                 <Calendar className="w-4 h-4" />
-                <span className="text-sm">{t("Overview.Created.Title")}</span>
+                <span className="text-sm">{t("Overview.CreatedDate.Title")}</span>
               </div>
               <p className="text-2xl font-bold text-gray-900">{survey.createdAt ? new Date(survey.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}</p>
               <p className="text-xs text-gray-400 mt-1">{survey.createdAt ? new Date(survey.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : ''}</p>
@@ -498,7 +516,7 @@ export default function SurveyDetailPage() {
           <div className="bg-white rounded-xl border border-gray-100 p-5">
             <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
               <Share2 className="w-4 h-4" />
-              {t("Overview.ShareLink")}
+              {t("Overview.Share.Title")}
             </h3>
             <div className="flex items-center gap-2">
               <input type="text" value={survey.shareableUrl || 'Not published yet'} readOnly className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600 truncate" />
@@ -509,18 +527,22 @@ export default function SurveyDetailPage() {
           </div>
 
           <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 p-5">
-            <h3 className="font-semibold text-gray-900 mb-4">{t("Overview.Configuration.Title")}</h3>
+            <h3 className="font-semibold text-gray-900 mb-4">{t("Overview.Config.Title")}</h3>
             <div className="space-y-4">
               <div>
-                <p className="text-sm text-gray-500 mb-1">{t("Overview.Configuration.Objective")}</p>
-                <p className="text-gray-900">{survey.coreObjective || survey.expertState?.objective?.goal || t("Overview.Configuration.NotSpecified")}</p>
+                <p className="text-sm text-gray-500 mb-1">{t("Overview.Config.Objective")}</p>
+                <p className="text-gray-900">
+                  {survey.coreObjective || (typeof survey.expertState?.objective === 'string' ? survey.expertState.objective : survey.expertState?.objective?.goal) || t("Overview.Config.NotSpecified")}
+                </p>
               </div>
               <div>
-                <p className="text-sm text-gray-500 mb-1">{t("Overview.Configuration.TargetAudience")}</p>
-                <p className="text-gray-900">{survey.expertState?.targetAudience?.description || t("Overview.Configuration.NotSpecified")}</p>
+                <p className="text-sm text-gray-500 mb-1">{t("Overview.Config.Audience")}</p>
+                <p className="text-gray-900">
+                  {(typeof survey.expertState?.targetAudience === 'string' ? survey.expertState.targetAudience : survey.expertState?.targetAudience?.description) || t("Overview.Config.NotSpecified")}
+                </p>
               </div>
               <div>
-                <p className="text-sm text-gray-500 mb-1">{t("Overview.Configuration.Tone")}</p>
+                <p className="text-sm text-gray-500 mb-1">{t("Overview.Config.Tone")}</p>
                 <p className="text-gray-900 capitalize">{survey.tone || survey.expertState?.tone || 'casual'}</p>
               </div>
             </div>
@@ -528,8 +550,8 @@ export default function SurveyDetailPage() {
 
           <div className="bg-white rounded-xl border border-gray-100 p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">{t("Overview.RecentResponses.Title")}</h3>
-              <button onClick={() => setActiveTab("responses")} className="text-sm text-gray-500 hover:text-gray-900">{t("Overview.RecentResponses.ViewAll")}</button>
+              <h3 className="font-semibold text-gray-900">{t("Overview.Recent.Title")}</h3>
+              <button onClick={() => setActiveTab("responses")} className="text-sm text-gray-500 hover:text-gray-900">{t("Overview.Recent.ViewAll")}</button>
             </div>
             <div className="space-y-3">
               {responses.length > 0 ? responses.slice(0, 3).map((response: Response) => (
@@ -540,9 +562,9 @@ export default function SurveyDetailPage() {
                       response.status === "completed" ? "bg-emerald-500 shadow-sm shadow-emerald-200" : "bg-amber-400 shadow-sm shadow-amber-200"
                     )} />
                     <div className="flex flex-col">
-                      <span className="text-sm font-semibold text-gray-900">{response.participantId === 'Anonymous' ? t("Responses.Table.Anonymous") : t("Responses.Table.Participant", { id: response.id.slice(0, 4) })}</span>
+                      <span className="text-sm font-semibold text-gray-900">{response.participantId === 'Anonymous' ? t("Overview.Recent.Anonymous") : t("Overview.Recent.Participant", { id: response.id.slice(0, 4) })}</span>
                       <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span>{response.status === 'completed' ? t("Responses.Table.Status.Completed") : t("Responses.Table.Status.InProgress")}</span>
+                        <span>{response.status === 'completed' ? t("Overview.Recent.Status.Completed") : t("Overview.Recent.Status.InProgress")}</span>
                         <span>•</span>
                         <span>{response.completedAt ? new Date(response.completedAt).toLocaleDateString() : new Date(response.createdAt || Date.now()).toLocaleDateString()}</span>
                       </div>
@@ -567,7 +589,7 @@ export default function SurveyDetailPage() {
                   </div>
                 </div>
               )) : (
-                <p className="text-sm text-gray-500 text-center py-4">{t("Overview.RecentResponses.NoResponses")}</p>
+                <p className="text-sm text-gray-500 text-center py-4">{t("Overview.Recent.NoResponses")}</p>
               )}
             </div>
           </div>
@@ -580,7 +602,7 @@ export default function SurveyDetailPage() {
           <div className="flex items-center gap-4">
             <div className="flex-1 max-w-md relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input type="text" placeholder={t("Responses.SearchPlaceholder")} className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none text-sm" />
+              <input type="text" placeholder={searchPlaceholder} className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none text-sm" />
             </div>
 
             <div className="relative">
@@ -591,9 +613,9 @@ export default function SurveyDetailPage() {
                 <div className="flex items-center gap-2">
                   <Filter className="w-4 h-4 text-gray-500" />
                   <span>
-                    {statusFilter === "all" && t("Responses.Filter.All")}
-                    {statusFilter === "completed" && t("Responses.Filter.Completed")}
-                    {statusFilter === "in_progress" && t("Responses.Filter.InProgress")}
+                    {statusFilter === "all" && t("Responses.Filters.All")}
+                    {statusFilter === "completed" && t("Responses.Filters.Completed")}
+                    {statusFilter === "in_progress" && t("Responses.Filters.InProgress")}
                   </span>
                 </div>
                 <ChevronDown className={cn("w-4 h-4 text-gray-400 transition-transform", isFilterOpen && "rotate-180")} />
@@ -607,9 +629,9 @@ export default function SurveyDetailPage() {
                   />
                   <div className="absolute top-full mt-2 right-0 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-20 animate-in fade-in zoom-in-95 duration-200">
                     {[
-                      { value: "all", label: t("Responses.Filter.All") },
-                      { value: "completed", label: t("Responses.Filter.Completed") },
-                      { value: "in_progress", label: t("Responses.Filter.InProgress") }
+                      { value: "all", label: t("Responses.Filters.All") },
+                      { value: "completed", label: t("Responses.Filters.Completed") },
+                      { value: "in_progress", label: t("Responses.Filters.InProgress") }
                     ].map((option) => (
                       <button
                         key={option.value}
@@ -642,7 +664,7 @@ export default function SurveyDetailPage() {
             ) : responses.length === 0 ? (
               <div className="text-center py-12">
                 <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">{t("Responses.Table.Empty")}</p>
+                <p className="text-gray-500">{t("Responses.NoMatches")}</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
@@ -665,7 +687,7 @@ export default function SurveyDetailPage() {
                       key={response.id}
                       id={response.id}
                       surveyId={surveyId}
-                      summary={response.summary || response.keyInsights?.[0] || t("Responses.Table.Summary")}
+                      summary={response.summary || response.keyInsights?.[0] || "No summary generated yet."}
                       sentimentScore={sentimentScore}
                       durationMinutes={durationMinutes}
                       messageCount={response.messageCount || 0}
@@ -682,11 +704,7 @@ export default function SurveyDetailPage() {
           {responses.length > 0 && (
             <div className="flex items-center justify-between border-t border-gray-200 pt-4">
               <div className="text-sm text-gray-500">
-                {t.rich("Responses.Pagination.Page", {
-                  current: currentPage,
-                  total: totalPages,
-                  span: (chunks) => <span className="font-medium text-gray-900">{chunks}</span>
-                })}
+                {t("Responses.Pagination", { current: currentPage, total: totalPages })}
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -733,10 +751,10 @@ export default function SurveyDetailPage() {
       {activeTab === "settings" && (
         <div className="max-w-2xl space-y-6">
           <div className="bg-white rounded-xl border border-gray-100 p-5">
-            <h3 className="font-semibold text-gray-900 mb-4">{t("Settings.Title")}</h3>
+            <h3 className="font-semibold text-gray-900 mb-4">{t("Settings.General.Title")}</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t("Settings.Fields.Title")}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t("Settings.General.SurveyTitle")}</label>
                 <input
                   type="text"
                   value={settingsForm.title}
@@ -745,7 +763,7 @@ export default function SurveyDetailPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t("Settings.Fields.Limit")}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t("Settings.General.ParticipantLimit")}</label>
                 <input
                   type="number"
                   value={settingsForm.participantLimit}
@@ -756,8 +774,8 @@ export default function SurveyDetailPage() {
 
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-1">{t("Settings.VoiceMode.Title")}</h4>
-                  <p className="text-sm text-gray-500">{t("Settings.VoiceMode.Description")}</p>
+                  <h4 className="font-medium text-gray-900 mb-1">{t("Settings.General.VoiceMode.Title")}</h4>
+                  <p className="text-sm text-gray-500">{t("Settings.General.VoiceMode.Description")}</p>
                 </div>
                 <button
                   onClick={() => setSettingsForm({ ...settingsForm, isVoice: !settingsForm.isVoice })}
@@ -782,7 +800,7 @@ export default function SurveyDetailPage() {
                 disabled={isSavingSettings}
                 className="px-4 py-2.5 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50"
               >
-                {isSavingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : t("Settings.Save")}
+                {isSavingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : t("Settings.General.SaveButton")}
               </button>
             </div>
           </div>
@@ -791,7 +809,7 @@ export default function SurveyDetailPage() {
           <div className="bg-white rounded-xl border border-gray-100 p-5">
             <div className="flex items-center gap-2 mb-4">
               <Code className="w-5 h-5 text-gray-700" />
-              <h3 className="font-semibold text-gray-900">{t("Embed.Title")}</h3>
+              <h3 className="font-semibold text-gray-900">{t("Settings.Embed.Title")}</h3>
             </div>
 
             {survey.status !== "active" ? (
@@ -799,21 +817,21 @@ export default function SurveyDetailPage() {
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
                   <div>
-                    <p className="font-medium text-amber-900 mb-1">{t("Embed.ActiveWarning.Title")}</p>
-                    <p className="text-sm text-amber-700">{t("Embed.ActiveWarning.Description")}</p>
+                    <p className="font-medium text-amber-900 mb-1">{t("Settings.Embed.Inactive.Title")}</p>
+                    <p className="text-sm text-amber-700">{t("Settings.Embed.Inactive.Description")}</p>
                   </div>
                 </div>
               </div>
             ) : !embedCodes ? (
               <div className="text-center py-6">
-                <p className="text-gray-500 mb-4">{t("Embed.Generate.Description")}</p>
+                <p className="text-gray-500 mb-4">{t("Settings.Embed.Description")}</p>
                 <button
                   onClick={generateEmbedCode}
                   disabled={isLoadingEmbed}
                   className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50"
                 >
                   {isLoadingEmbed ? <Loader2 className="w-4 h-4 animate-spin" /> : <Code className="w-4 h-4" />}
-                  {isLoadingEmbed ? t("Embed.Generate.Generating") : t("Embed.Generate.Button")}
+                  {isLoadingEmbed ? t("Settings.Embed.Generating") : t("Settings.Embed.GenerateButton")}
                 </button>
               </div>
             ) : (
@@ -837,7 +855,7 @@ export default function SurveyDetailPage() {
                       )}
                     >
                       {type.icon}
-                      {type.label}
+                      {t(`Settings.Embed.Types.${type.id === 'sidetab' ? 'SideTab' : type.label}`)}
                     </button>
                   ))}
                 </div>
@@ -846,7 +864,7 @@ export default function SurveyDetailPage() {
                 {(selectedEmbedType === 'popover' || selectedEmbedType === 'sidetab') && (
                   <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Theme Color</label>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("Settings.Embed.Options.Color")}</label>
                       <div className="flex items-center gap-3">
                         <input
                           type="color"
@@ -864,7 +882,7 @@ export default function SurveyDetailPage() {
                     </div>
                     {selectedEmbedType === 'sidetab' && (
                       <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Tab Text</label>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("Settings.Embed.Options.TabText")}</label>
                         <input
                           type="text"
                           value={embedOptions.text}
@@ -874,19 +892,19 @@ export default function SurveyDetailPage() {
                       </div>
                     )}
                     <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Position</label>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("Settings.Embed.Options.Position.Label")}</label>
                       <div className="flex bg-white p-1 rounded-lg border border-gray-200">
                         <button
                           onClick={() => setEmbedOptions({ ...embedOptions, position: 'left' })}
                           className={cn("flex-1 py-1 px-3 rounded-md text-xs transition-colors", embedOptions.position === 'left' ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50")}
                         >
-                          Left
+                          {t("Settings.Embed.Options.Position.Left")}
                         </button>
                         <button
                           onClick={() => setEmbedOptions({ ...embedOptions, position: 'right' })}
                           className={cn("flex-1 py-1 px-3 rounded-md text-xs transition-colors", embedOptions.position === 'right' ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50")}
                         >
-                          Right
+                          {t("Settings.Embed.Options.Position.Right")}
                         </button>
                       </div>
                     </div>
@@ -897,7 +915,7 @@ export default function SurveyDetailPage() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-sm font-medium text-gray-700 capitalize">
-                      {selectedEmbedType} Script
+                      {t("Settings.Embed.ScriptLabel", { type: selectedEmbedType })}
                     </label>
                     <button
                       onClick={() => copyEmbedCode(selectedEmbedType)}
@@ -906,12 +924,12 @@ export default function SurveyDetailPage() {
                       {copiedEmbed === selectedEmbedType ? (
                         <>
                           <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                          <span className="text-emerald-600">{t("Embed.Options.Copied")}</span>
+                          <span className="text-emerald-600">{t("Toasts.Copied")}</span>
                         </>
                       ) : (
                         <>
                           <Copy className="w-3.5 h-3.5" />
-                          {t("Embed.Options.Copy")}
+                          {t("Settings.Embed.CopyButton")}
                         </>
                       )}
                     </button>
@@ -934,22 +952,22 @@ export default function SurveyDetailPage() {
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                   <h4 className="font-medium text-blue-900 mb-2 flex items-center gap-2">
                     <Sparkles className="w-4 h-4" />
-                    {selectedEmbedType === 'iframe' ? t("Embed.Instructions.Title") : "Installation Guide"}
+                    {t(`Settings.Embed.Guide.${selectedEmbedType === 'iframe' ? 'IframeTitle' : 'InstallationTitle'}`)}
                   </h4>
                   <ul className="text-sm text-blue-800 space-y-1.5 list-disc list-inside">
                     {selectedEmbedType === 'iframe' ? (
                       <>
-                        <li>{t("Embed.Instructions.Step1")}</li>
-                        <li>{t("Embed.Instructions.Step2")}</li>
-                        <li>{t("Embed.Instructions.Step3")}</li>
-                        <li>{t("Embed.Instructions.Step4")}</li>
+                        <li>{t("Settings.Embed.Guide.Iframe.Step1")}</li>
+                        <li>{t("Settings.Embed.Guide.Iframe.Step2")}</li>
+                        <li>{t("Settings.Embed.Guide.Iframe.Step3")}</li>
+                        <li>{t("Settings.Embed.Guide.Iframe.Step4")}</li>
                       </>
                     ) : (
                       <>
-                        <li>Copy the script above and paste it into your website's HTML.</li>
-                        <li>{selectedEmbedType === 'inline' ? "The survey will load inside the <div> container wherever you place it." : `A ${selectedEmbedType} button will appear automatically on your page.`}</li>
-                        <li>The widget uses Shadow DOM to ensure no style conflicts with your site.</li>
-                        <li>Microphone and camera permissions are automatically requested when needed.</li>
+                        <li>{t("Settings.Embed.Guide.Installation.Step1")}</li>
+                        <li>{selectedEmbedType === 'inline' ? t("Settings.Embed.Guide.Installation.Step2Inline") : t("Settings.Embed.Guide.Installation.Step2Button", { type: selectedEmbedType })}</li>
+                        <li>{t("Settings.Embed.Guide.Installation.Step3")}</li>
+                        <li>{t("Settings.Embed.Guide.Installation.Step4")}</li>
                       </>
                     )}
                   </ul>
@@ -957,7 +975,7 @@ export default function SurveyDetailPage() {
 
                 {/* Survey URL */}
                 <div className="pt-3 border-t border-gray-100">
-                  <p className="text-xs text-gray-500 mb-1">{t("Embed.DirectLink")}</p>
+                  <p className="text-xs text-gray-500 mb-1">{t("Settings.Embed.DirectUrl")}</p>
                   <p className="text-sm text-gray-700 font-mono bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 break-all">{embedCodes.url}</p>
                 </div>
               </div>
@@ -987,10 +1005,7 @@ export default function SurveyDetailPage() {
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">{t("DeleteModal.Title")}</h3>
               <p className="text-gray-500">
-                {t.rich("DeleteModal.Description", {
-                  title: survey.title,
-                  span: (chunks) => <span className="font-semibold text-gray-900">"{chunks}"</span>
-                })}
+                {t("DeleteModal.Description", { title: survey.title })}
               </p>
             </div>
 
@@ -1015,7 +1030,7 @@ export default function SurveyDetailPage() {
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4" />
-                    {t("DeleteModal.Delete")}
+                    {t("DeleteModal.Confirm")}
                   </>
                 )}
               </button>
@@ -1024,6 +1039,6 @@ export default function SurveyDetailPage() {
         </div>
       )
       }
-    </div >
+    </div>
   );
 }

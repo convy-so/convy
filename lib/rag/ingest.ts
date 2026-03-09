@@ -1,4 +1,4 @@
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { documentEmbeddings, knowledgeBase } from "@/db/schema/vectors";
 import { surveyConversations, surveyAnalytics } from "@/db/schema/surveys";
 import { eq } from "drizzle-orm";
@@ -17,7 +17,7 @@ export interface KnowledgeEntry {
 export async function ingestConversation(
   conversationId: string,
 ): Promise<void> {
-  const conversation = await db.query.surveyConversations.findFirst({
+  const conversation = await getDb().query.surveyConversations.findFirst({
     where: eq(surveyConversations.id, conversationId),
     with: {
       survey: true,
@@ -42,7 +42,7 @@ export async function ingestConversation(
       organizationId: conversation.survey.organizationId || undefined,
     });
 
-    await db.insert(documentEmbeddings).values({
+    await getDb().insert(documentEmbeddings).values({
       id: nanoid(),
       surveyId: conversation.surveyId,
       sourceType: "response",
@@ -52,6 +52,8 @@ export async function ingestConversation(
       metadata: {
         participantId: conversation.participantId,
         date: conversation.createdAt.toISOString(),
+        language:
+          conversation.originalLanguage || conversation.survey.language || "en",
       },
       embedding,
     });
@@ -68,7 +70,7 @@ export async function ingestConversation(
       organizationId: conversation.survey.organizationId || undefined,
     });
 
-    await db.insert(documentEmbeddings).values({
+    await getDb().insert(documentEmbeddings).values({
       id: nanoid(),
       surveyId: conversation.surveyId,
       sourceType: "insight",
@@ -77,6 +79,8 @@ export async function ingestConversation(
       content: chunk,
       metadata: {
         conversationId: conversation.id,
+        language:
+          conversation.originalLanguage || conversation.survey.language || "en",
       },
       embedding,
     });
@@ -84,7 +88,7 @@ export async function ingestConversation(
 }
 
 export async function ingestAnalytics(surveyId: string): Promise<void> {
-  const analytics = await db.query.surveyAnalytics.findFirst({
+  const analytics = await getDb().query.surveyAnalytics.findFirst({
     where: eq(surveyAnalytics.surveyId, surveyId),
   });
 
@@ -96,7 +100,7 @@ export async function ingestAnalytics(surveyId: string): Promise<void> {
   // Delete existing analytics embeddings for this survey to avoid accumulation
   // (Since analytics is a snapshot)
   // Note: drizzle-orm delete
-  // await db.delete(documentEmbeddings).where(and(eq(documentEmbeddings.surveyId, surveyId), eq(documentEmbeddings.sourceType, 'analytics')));
+  // await getDb().delete(documentEmbeddings).where(and(eq(documentEmbeddings.surveyId, surveyId), eq(documentEmbeddings.sourceType, 'analytics')));
   // But strictly, we should upsert or wipe. Wiping is safer for now.
   // ... skipping delete for brevity, assuming standard usage pattern
 
@@ -107,7 +111,7 @@ export async function ingestAnalytics(surveyId: string): Promise<void> {
       // organizationId should ideally be passed in or fetched
     });
 
-    await db.insert(documentEmbeddings).values({
+    await getDb().insert(documentEmbeddings).values({
       id: nanoid(),
       surveyId: surveyId,
       sourceType: "analytics",
@@ -116,6 +120,7 @@ export async function ingestAnalytics(surveyId: string): Promise<void> {
       content: chunk,
       metadata: {
         updatedAt: analytics.lastUpdated.toISOString(),
+        language: analytics.generatedLanguage || "en",
       },
       embedding,
     });
@@ -127,7 +132,7 @@ export async function ingestKnowledge(entry: KnowledgeEntry): Promise<void> {
     // knowledge is usually global or domain-bound
   });
 
-  await db.insert(knowledgeBase).values({
+  await getDb().insert(knowledgeBase).values({
     id: nanoid(),
     domainId: entry.domainId,
     category: entry.category,
@@ -151,7 +156,7 @@ export async function ingestDocument(
       surveyId: surveyId,
     });
 
-    await db.insert(documentEmbeddings).values({
+    await getDb().insert(documentEmbeddings).values({
       id: nanoid(),
       surveyId: surveyId,
       sourceType: "document",
@@ -161,6 +166,7 @@ export async function ingestDocument(
       metadata: {
         filename: file.name,
         type: file.type,
+        language: "en", // Default for direct documents, or could be detected
       },
       embedding,
     });

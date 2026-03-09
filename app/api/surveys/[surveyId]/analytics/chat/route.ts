@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
+import { convertToModelMessages } from "ai";
 
-import { db } from "@/db";
-import { surveys } from "@/db/schema";
+import { getDb } from "@/db";
+import { surveys, users } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import { AgentOrchestrator } from "@/lib/agents/orchestrator";
 import type { AgentContext } from "@/lib/agents/types";
-import { createUIMessageFilter } from "@/lib/agents/scratchpad-filter";
 
 export const maxDuration = 300;
 
@@ -24,14 +24,15 @@ export async function POST(
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
-    const { messages } = await request.json();
+    const body = (await request.json()) as { messages?: unknown[] };
+    const rawMessages = body.messages;
 
-    if (!messages || !Array.isArray(messages)) {
+    if (!rawMessages || !Array.isArray(rawMessages)) {
       return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
     }
 
     // 1. Verify survey ownership
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -46,26 +47,47 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    // 2. Prepare Agent Context
+    // Fetch user preferred language
+    const [user] = await getDb()
+      .select({ preferredLanguage: users.preferredLanguage })
+      .from(users)
+      .where(eq(users.id, session.user.id));
+
+    // 2. Convert UIMessages → ModelMessages and strip synthetic welcome message
+    const uiMessages = rawMessages.filter(
+      (m): m is Record<string, unknown> =>
+        typeof m === "object" &&
+        m !== null &&
+        (m as Record<string, unknown>).id !== "welcome",
+    ) as any[];
+
+    const modelMessages = await convertToModelMessages(uiMessages);
+
+    if (!modelMessages.length) {
+      return NextResponse.json(
+        { error: "No messages to process" },
+        { status: 400 },
+      );
+    }
+
+    // 3. Prepare Agent Context
     const surveyConfig = buildCompleteSurveyConfig(survey);
     const agentContext: AgentContext = {
       conversationId: `creator-chat-${surveyId}-${session.user.id}`,
-      messages: messages,
+      messages: uiMessages as AgentContext["messages"],
       surveyConfig,
-      language: (survey.language as "en" | "fr" | "de" | "es" | "it") || "en",
+      language:
+        (user?.preferredLanguage as "en" | "fr" | "de" | "es" | "it") || "en",
     };
 
-    // 3. Initialize Orchestrator and get Analytics Specialist
+    // 4. Initialize Orchestrator and get Analytics Specialist
     const orchestrator = new AgentOrchestrator(agentContext);
     const analyticsSpecialist = orchestrator.getAnalyticsSpecialist();
 
-    // 4. Stream response
-    const result = analyticsSpecialist.stream(messages as any);
+    // 5. Stream response using correctly typed ModelMessages
+    const result = analyticsSpecialist.stream(modelMessages);
 
-    const streamOptions: any = {
-      pipe: createUIMessageFilter(),
-    };
-    return result.toUIMessageStreamResponse(streamOptions);
+    return result.toTextStreamResponse();
   } catch (error) {
     if (error instanceof Error) {
       if (

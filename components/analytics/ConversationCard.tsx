@@ -2,6 +2,7 @@
 
 import { MessageSquare, Clock, ArrowRight } from "lucide-react";
 import { Link } from "@/i18n/routing";
+import { ClientT } from "@/components/i18n/client-t";
 
 interface ConversationCardProps {
   id: string;
@@ -31,9 +32,9 @@ export function ConversationCard({
   };
 
   const getSentimentLabel = (score: number) => {
-    if (score >= 0.5) return "Positive";
-    if (score <= -0.5) return "Negative";
-    return "Neutral";
+    if (score >= 0.5) return <ClientT>Positive</ClientT>;
+    if (score <= -0.5) return <ClientT>Negative</ClientT>;
+    return <ClientT>Neutral</ClientT>;
   };
 
   return (
@@ -49,12 +50,12 @@ export function ConversationCard({
           <span className="text-xs text-gray-400 font-mono">#{id.slice(-4)}</span>
         </div>
         <span className="text-xs text-gray-400">
-           {new Date(createdAt).toLocaleDateString()}
+          {new Date(createdAt).toLocaleDateString()}
         </span>
       </div>
 
       <p className="text-sm text-gray-700 font-medium mb-4 line-clamp-2 leading-relaxed">
-        {summary || "No summary available for this conversation."}
+        {summary || <ClientT>No summary available for this conversation.</ClientT>}
       </p>
 
       <div className="flex items-center justify-between pt-4 border-t border-gray-50">
@@ -65,15 +66,15 @@ export function ConversationCard({
           </div>
           <div className="flex items-center gap-1.5">
             <MessageSquare className="w-3.5 h-3.5 text-gray-400" />
-            {messageCount} msgs
+            {messageCount} <ClientT>msgs</ClientT>
           </div>
           {!isCompleted && (
-              <span className="text-amber-600 bg-amber-50 px-1.5 rounded">Incomplete</span>
+            <span className="text-amber-600 bg-amber-50 px-1.5 rounded"><ClientT>Incomplete</ClientT></span>
           )}
         </div>
-        
+
         <div className="text-black opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-[-10px] group-hover:translate-x-0 duration-200">
-            <ArrowRight className="w-4 h-4" />
+          <ArrowRight className="w-4 h-4" />
         </div>
       </div>
     </Link>

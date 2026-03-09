@@ -1,5 +1,5 @@
 import { getVerifiedSession } from "@/lib/auth/session";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema";
 import { eq, desc, count, and, isNull } from "drizzle-orm";
 import { Link } from "@/i18n/routing";
@@ -8,21 +8,22 @@ import {
   ChevronRight,
   BarChart3,
   MessageSquare,
+  Loader2,
 } from "lucide-react";
+import { SupportedLanguage } from "@/lib/i18n/ai-translator";
 import { formatDistanceToNow } from "date-fns";
+import { Suspense } from "react";
+import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 
-export const metadata = {
-  title: "Analytics | Convy",
-  description: "Global analytics overview for all your surveys",
-};
+async function AnalyticsContent({ authHeaders }: { authHeaders: Headers | string | null }) {
+  const session = await getVerifiedSession(authHeaders);
+  const t = await getTranslations("AnalyticsPage");
 
-export default async function AnalyticsPage() {
-  const session = await getVerifiedSession();
   const activeOrgId = session.session.activeOrganizationId;
-  const t = await getTranslations('AnalyticsPage');
+  const language = (session.user as { preferredLanguage?: SupportedLanguage }).preferredLanguage || "en";
 
-  const userSurveys = await db
+  const userSurveys = await getDb()
     .select({
       id: surveys.id,
       title: surveys.title,
@@ -47,9 +48,6 @@ export default async function AnalyticsPage() {
     .groupBy(surveys.id, surveys.title, surveys.description, surveys.status, surveys.createdAt)
     .orderBy(desc(surveys.createdAt));
 
-  const totalSurveys = userSurveys.length;
-  const totalResponses = userSurveys.reduce((acc, curr) => acc + (curr._count?.conversations || 0), 0);
-
   const statusConfig: Record<string, { color: string; bgColor: string; icon: React.ReactNode }> = {
     active: { color: "text-emerald-600", bgColor: "bg-emerald-50", icon: <BarChart3 className="w-6 h-6" /> },
     draft: { color: "text-amber-600", bgColor: "bg-amber-50", icon: <BarChart3 className="w-6 h-6" /> },
@@ -64,19 +62,17 @@ export default async function AnalyticsPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t('Header.Title')}</h1>
-            <p className="text-gray-500 mt-1">
-              {t('Header.Description')}
-            </p>
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t("Header.Title")}</h1>
+            <p className="text-gray-500 mt-1">{t("Header.Description")}</p>
           </div>
         </div>
 
-        {/* Search (Consistent with Projects Page) */}
+        {/* Search */}
         <div className="relative max-w-md">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder={t('Search.Placeholder')}
+            placeholder={t("Search.Placeholder")}
             className="w-full pl-11 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none transition-all"
           />
         </div>
@@ -114,7 +110,7 @@ export default async function AnalyticsPage() {
                         <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                           <span className="flex items-center gap-1.5">
                             <MessageSquare className="w-4 h-4" />
-                            {survey._count?.conversations || 0} {t('Card.Responses')}
+                            {survey._count?.conversations || 0} {t("Card.Responses")}
                           </span>
                           <span className="text-xs text-gray-400">
                             {formatDistanceToNow(new Date(survey.createdAt), { addSuffix: true })}
@@ -140,10 +136,10 @@ export default async function AnalyticsPage() {
               <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-300">
                 <BarChart3 className="w-10 h-10" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">{t('Empty.Title')}</h3>
-              <p className="text-gray-500 mb-8 max-w-sm mx-auto">{t('Empty.Description')}</p>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">{t("Empty.Title")}</h3>
+              <p className="text-gray-500 mb-8 max-w-sm mx-auto">{t("Empty.Description")}</p>
               <Link href="/dashboard/create" className="bg-black text-white px-8 py-3 rounded-xl font-bold hover:scale-105 transition-transform duration-200 inline-block">
-                {t('Empty.Button')}
+                {t("Empty.Button")}
               </Link>
             </div>
           )}
@@ -151,4 +147,22 @@ export default async function AnalyticsPage() {
       </div>
     </div>
   );
+}
+
+export default function AnalyticsPage({ params }: { params: Promise<{ locale: string }> }) {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      </div>
+    }>
+      <AnalyticsContentWrapper params={params} />
+    </Suspense>
+  );
+}
+
+async function AnalyticsContentWrapper({ params }: { params: Promise<{ locale: string }> }) {
+  await params; 
+  const authHeaders = await headers();
+  return <AnalyticsContent authHeaders={authHeaders} />;
 }

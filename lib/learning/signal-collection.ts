@@ -9,7 +9,7 @@
  */
 
 import { nanoid } from "nanoid";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { conversationSignals } from "@/db/schema/learning";
 import { surveyConversations } from "@/db/schema/surveys";
 import { eq } from "drizzle-orm";
@@ -46,7 +46,7 @@ export async function collectConversationSignals(
   surveyConfig: SurveyConfig,
 ): Promise<ConversationSignals> {
   // 1. Load raw conversation
-  const [conv] = await db
+  const [conv] = await getDb()
     .select({
       rawConversation: surveyConversations.rawConversation,
       completed: surveyConversations.completed,
@@ -119,7 +119,7 @@ export async function collectConversationSignals(
     avgResponseRichnessScore,
   };
 
-  await db.insert(conversationSignals).values({
+  await getDb().insert(conversationSignals).values({
     id: nanoid(),
     conversationId,
     surveyId,

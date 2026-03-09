@@ -1,4 +1,3 @@
-
 import IORedis, { Redis, RedisOptions } from "ioredis";
 import { env } from "@/lib/env";
 
@@ -7,7 +6,10 @@ const redisOptions: RedisOptions = {
   enableReadyCheck: false,
   retryStrategy(times) {
     const delay = Math.min(times * 50, 2000);
-    console.log(`[Redis] Reconnecting... attempt ${times}, delay ${delay}ms`);
+    // Suppress reconnection logs during build to keep output clean, but log in dev/prod
+    if (process.env.NEXT_PHASE !== "phase-production-build") {
+      console.log(`[Redis] Reconnecting... attempt ${times}, delay ${delay}ms`);
+    }
     return delay;
   },
   connectTimeout: 10000,
@@ -27,67 +29,71 @@ const getEffectiveOptions = (url: string) => {
   return redisOptions;
 };
 
-let sharedClient: Redis | null = null;
-let sharedSubscriber: Redis | null = null;
+/**
+ * Redis Connection Management
+ *
+ * We use a lazy singleton for the main app process.
+ * For separate worker processes or when explicitly needed, we allow creating fresh instances.
+ */
 
-export function getRedisClient(): Redis {
-  if (!sharedClient) {
-    sharedClient = new IORedis(env.REDIS_URL, getEffectiveOptions(env.REDIS_URL));
+declare global {
+  // eslint-disable-next-line no-var
+  var sharedRedisClient: Redis | undefined;
+  // eslint-disable-next-line no-var
+  var sharedRedisSubscriber: Redis | undefined;
+}
 
-    sharedClient.on("error", (err) => {
+export function getRedisClient(options?: { fresh?: boolean }): Redis {
+  // If we're in a worker process or a fresh client is requested, bypass the singleton
+  // This ensures workers don't share the same instance as producers in the same environment.
+  if (options?.fresh || process.env.IS_WORKER === "true") {
+    return new IORedis(env.REDIS_URL, getEffectiveOptions(env.REDIS_URL));
+  }
+
+  if (!global.sharedRedisClient) {
+    global.sharedRedisClient = new IORedis(
+      env.REDIS_URL,
+      getEffectiveOptions(env.REDIS_URL),
+    );
+
+    global.sharedRedisClient.on("error", (err) => {
       console.error("[Redis Client] Error:", err.message);
     });
 
-    sharedClient.on("connect", () => {
-      console.log("[Redis Client] Connected");
-    });
-
-    sharedClient.on("ready", () => {
-      console.log("[Redis Client] Ready");
-    });
-
-    sharedClient.on("close", () => {
-      console.log("[Redis Client] Connection closed");
-    });
-
-    sharedClient.on("reconnecting", () => {
-      console.log("[Redis Client] Reconnecting...");
-    });
+    if (process.env.NEXT_PHASE !== "phase-production-build") {
+      global.sharedRedisClient.on("connect", () =>
+        console.log("[Redis Client] Connected"),
+      );
+      global.sharedRedisClient.on("ready", () =>
+        console.log("[Redis Client] Ready"),
+      );
+    }
   }
 
-  return sharedClient;
+  return global.sharedRedisClient;
 }
 
 /**
  * Get or create shared Redis subscriber
  * Used for pub/sub operations
  */
-export function getRedisSubscriber(): Redis {
-  if (!sharedSubscriber) {
-    sharedSubscriber = new IORedis(env.REDIS_URL, getEffectiveOptions(env.REDIS_URL));
+export function getRedisSubscriber(options?: { fresh?: boolean }): Redis {
+  if (options?.fresh || process.env.IS_WORKER === "true") {
+    return new IORedis(env.REDIS_URL, getEffectiveOptions(env.REDIS_URL));
+  }
 
-    sharedSubscriber.on("error", (err) => {
+  if (!global.sharedRedisSubscriber) {
+    global.sharedRedisSubscriber = new IORedis(
+      env.REDIS_URL,
+      getEffectiveOptions(env.REDIS_URL),
+    );
+
+    global.sharedRedisSubscriber.on("error", (err) => {
       console.error("[Redis Subscriber] Error:", err.message);
-    });
-
-    sharedSubscriber.on("connect", () => {
-      console.log("[Redis Subscriber] Connected");
-    });
-
-    sharedSubscriber.on("ready", () => {
-      console.log("[Redis Subscriber] Ready");
-    });
-
-    sharedSubscriber.on("close", () => {
-      console.log("[Redis Subscriber] Connection closed");
-    });
-
-    sharedSubscriber.on("reconnecting", () => {
-      console.log("[Redis Subscriber] Reconnecting...");
     });
   }
 
-  return sharedSubscriber;
+  return global.sharedRedisSubscriber;
 }
 
 /**
@@ -115,16 +121,16 @@ export function createBlockingClient(): Redis {
 export async function closeRedisConnections(): Promise<void> {
   const promises: Promise<string>[] = [];
 
-  if (sharedClient) {
+  if (global.sharedRedisClient) {
     console.log("[Redis] Closing client connection...");
-    promises.push(sharedClient.quit());
-    sharedClient = null;
+    promises.push(global.sharedRedisClient.quit());
+    global.sharedRedisClient = undefined;
   }
 
-  if (sharedSubscriber) {
+  if (global.sharedRedisSubscriber) {
     console.log("[Redis] Closing subscriber connection...");
-    promises.push(sharedSubscriber.quit());
-    sharedSubscriber = null;
+    promises.push(global.sharedRedisSubscriber.quit());
+    global.sharedRedisSubscriber = undefined;
   }
 
   await Promise.all(promises);
@@ -146,4 +152,3 @@ export async function testRedisConnection(): Promise<boolean> {
     return false;
   }
 }
-

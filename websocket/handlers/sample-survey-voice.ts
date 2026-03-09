@@ -1,4 +1,4 @@
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys, sampleConversations, voiceSessions } from "@/db/schema";
 import { eq, and, lt } from "drizzle-orm";
 import { nanoid } from "nanoid";
@@ -62,7 +62,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
 
   async initialize(): Promise<void> {
     try {
-      const [survey] = await db
+      const [survey] = await getDb()
         .select()
         .from(surveys)
         .where(eq(surveys.id, this.state.surveyId));
@@ -101,7 +101,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       );
 
       // Create voice session in database
-      await db.insert(voiceSessions).values({
+      await getDb().insert(voiceSessions).values({
         id: this.state.voiceSessionId,
         surveyId: survey.id,
         userId: this.userId,
@@ -111,7 +111,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       });
 
       // Check if sample conversation already exists
-      const existingConversation = await db
+      const existingConversation = await getDb()
         .select()
         .from(sampleConversations)
         .where(
@@ -134,7 +134,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
         );
       } else {
         conversationId = nanoid();
-        await db.insert(sampleConversations).values({
+        await getDb().insert(sampleConversations).values({
           id: conversationId,
           surveyId: survey.id,
           conversationNumber: this.state.conversationNumber,
@@ -169,8 +169,25 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
   }
 
   protected getInitialUserInput(): string | null {
-    // Triggers the AI to generate the greeting based on the system prompt (Expert Persona)
-    return "Start the conversation now. Greet the participant according to the system prompt instructions.";
+    // If no history, trigger the AI to generate the initial greeting
+    if (this.state.messages.length === 0) {
+      return "Start the conversation now. Greet the participant according to the system prompt instructions.";
+    }
+
+    // RESUME CASE: Check who spoke last
+    const lastMessage = this.state.messages[this.state.messages.length - 1];
+
+    // If the user was the last to speak, the AI must catch up/continue
+    if (lastMessage.role === "user") {
+      return "The user is returning to this sample survey session and their last response was not addressed. Briefly acknowledge their return and continue the interview naturally, picking up where you left off.";
+    }
+
+    // If the assistant spoke last, do nothing (ball is in user's court)
+    return null;
+  }
+
+  protected isNewSession(): boolean {
+    return this.state.messages.length === 0;
   }
 
   protected async getVoiceAgentSettings(): Promise<VoiceAgentSettings> {
@@ -179,7 +196,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
     }
 
     // Get previous feedback for rehearsal
-    const previousFeedbackRows = await db
+    const previousFeedbackRows = await getDb()
       .select({
         feedback: sampleConversations.feedback,
         finalComments: sampleConversations.finalComments,
@@ -293,7 +310,7 @@ ${combinedFeedback ? `- Apply the survey creator's latest feedback precisely:\n$
 
     // Save to database
     if (this.state.conversationId) {
-      await db
+      await getDb()
         .update(sampleConversations)
         .set({
           messages: this.state.messages.map((m) => ({
@@ -411,7 +428,8 @@ ${combinedFeedback ? `- Apply the survey creator's latest feedback precisely:\n$
 
     // Update DB status
     if (this.state.voiceSessionId) {
-      db.update(voiceSessions)
+      getDb()
+        .update(voiceSessions)
         .set({ status: "completed", endedAt: new Date() })
         .where(eq(voiceSessions.id, this.state.voiceSessionId))
         .catch(console.error);
@@ -420,7 +438,8 @@ ${combinedFeedback ? `- Apply the survey creator's latest feedback precisely:\n$
       if (this.state.conversationId) {
         const sessionDurationMs = Date.now() - this.sessionStartTime;
 
-        db.update(sampleConversations)
+        getDb()
+          .update(sampleConversations)
           .set({
             durationMs: sessionDurationMs,
             activeDurationMs: Math.round(this.activeDurationMs),
