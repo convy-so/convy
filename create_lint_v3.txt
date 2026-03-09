@@ -1,6 +1,0 @@
-
-C:\Users\pc\convy\app\[locale]\(dashboard)\dashboard\create\page.tsx
-  1328:43  error  Parsing error: ',' expected
-
-✖ 1 problem (1 error, 0 warnings)
-
