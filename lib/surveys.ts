@@ -20,15 +20,34 @@ export function buildCompleteSurveyConfig(
     coreObjective:
       survey.coreObjective || expertState.objective?.goal || undefined,
     expertState,
-    requiredQuestions: survey.requiredQuestions || [],
-    metrics: survey.metrics || [],
+    requiredQuestions: survey.requiredQuestions?.length
+      ? survey.requiredQuestions
+      : Array.isArray(expertState.requiredQuestions)
+        ? expertState.requiredQuestions
+        : typeof expertState.requiredQuestions === "string"
+          ? [expertState.requiredQuestions]
+          : [],
+    metrics: survey.metrics?.length
+      ? survey.metrics
+      : Array.isArray(expertState.metrics)
+        ? expertState.metrics
+        : typeof expertState.metrics === "string"
+          ? [expertState.metrics]
+          : [],
     language: survey.language,
 
     tone: (survey.tone as ToneProfile) ?? "casual",
     media: survey.media ?? undefined,
-    personalInfo: survey.personalInfo ?? undefined,
+    personalInfo: survey.personalInfo?.length
+      ? survey.personalInfo
+      : Array.isArray(expertState.personalInfo)
+        ? expertState.personalInfo
+        : typeof expertState.personalInfo === "string"
+          ? [expertState.personalInfo]
+          : undefined,
     domainId: survey.domainId ?? undefined,
     improvementFeedback: survey.improvementFeedback ?? undefined,
+    subjectIntelligence: expertState.subjectIntelligence ?? undefined,
   };
 }
 

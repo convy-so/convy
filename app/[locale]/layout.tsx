@@ -9,7 +9,7 @@ import { getMessages } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { routing } from "@/i18n/routing";
 import { Suspense } from "react";
-
+import { CookieConsent } from "@/components/cookie-consent";
 
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
@@ -169,6 +169,7 @@ export default async function LocaleLayout({
           }>
             <RootI18nProvider>
               {children}
+              <CookieConsent />
             </RootI18nProvider>
           </Suspense>
           <Toaster
