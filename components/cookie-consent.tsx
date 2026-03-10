@@ -1,17 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "@/i18n/routing";
 
 export function CookieConsent() {
-    const [isVisible, setIsVisible] = useState(false);
-
-    useEffect(() => {
-        const consent = localStorage.getItem("convy_cookie_consent");
-        if (!consent) {
-            setIsVisible(true);
+    const [isVisible, setIsVisible] = useState(() => {
+        if (typeof window === "undefined") {
+            return false;
         }
-    }, []);
+        const consent = localStorage.getItem("convy_cookie_consent");
+        return !consent;
+    });
 
     const handleAcceptAll = () => {
         localStorage.setItem("convy_cookie_consent", "all");
