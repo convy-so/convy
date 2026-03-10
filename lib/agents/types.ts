@@ -1,18 +1,11 @@
 import { LanguageModel, ModelMessage } from "ai";
-import { SurveyConfig } from "@/lib/prompts";
+import { SurveyConfig, SubjectIntelligence } from "@/lib/prompts";
 import { RollingContext } from "@/lib/conversation-memory";
 
-export interface SubjectIntelligence {
-  userVocabulary: string[];
-  knownPainPoints: string[];
-  journeySteps: string[];
-  intelligentProbes: string[];
-  confidence: "high" | "medium" | "low";
-  confidenceReason: string;
-}
+// SubjectIntelligence relocated to prompts.ts to avoid circular deps
 
 export interface DomainPivot {
-  condition: string; 
+  condition: string;
   skill: string;
   reason: string;
 }

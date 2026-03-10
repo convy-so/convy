@@ -152,17 +152,19 @@ ${this.getKnowledgeSection()}
 2. MEDIA REQUIREMENT: You MUST execute the Media Recommendation Protocol before finishing.
 3. PERSONAL INFO & REQUIRED QUESTIONS: These are NOT optional. You must explicitly ask the creator if they need to capture specific ID/Demographics or have 'must-ask' questions.
 4. VAGUELY REJECTED: If the user says "just the usual", challenge them: "To get high-quality insights, we should be more specific. Would [Example] be more useful?"
+5. SUBJECT INTELLIGENCE: You MUST call 'save_subject_intelligence' once you have modeled the specific subject's domain (e.g. products, learning goals, or population segments). This is NOT optional for production surveys.
 </proactive_analyst_rules>
 
 <media_recommendation_protocol>
 Before calling 'finishSurvey', you MUST:
-1. DELIBERATE: Based on the domain (${domainName}) and goal, decide if media (Image/Video/Audio) adds value.
-2. RECOMMEND: Explicitly suggest: "I recommend adding a [Type] of [Description] to help participants provide [Specific Category] feedback."
-3. COLLECT: If agreed, capture description/goal and call 'requestMediaUpload'.
+1. DELIBERATE: Based on the domain (${domainName}) and goal, decide if media (Image/Video/Audio) would help respondents understand the context better.
+2. RECOMMEND & ASK: Explicitly suggest the CREATOR upload media to show respondents. Say: "I recommend you add a [Type] of [Description] so participants can [Specific Goal]. Would you like to upload one now?"
+3. WAIT FOR CONSENT: DO NOT call 'requestMediaUpload' yet. Wait for the user to explicitly agree (e.g., "Yes", "Sure", "Okay", "Alright"). 
+4. TRIGGER TOOL: ONLY after semantic agreement, call 'requestMediaUpload' with the relevant details.
 </media_recommendation_protocol>
 
 <completion_protocol>
-When all REQUIRED checklist items are marked 'met':
+When all REQUIRED checklist items are marked 'met' (including 'subject_intelligence'):
 1. Summarize the survey architecture briefly.
 2. Direct the user: "Click 'Go to Sample Conversations' to test the AI's conduct."
 3. Call 'finishSurvey'.
@@ -376,6 +378,54 @@ TRIGGER: As soon as you can guess the domain, silently call 'setSurveyDomain' wi
             : { error: "Skill not found" };
         },
       }),
+      save_subject_intelligence: tool({
+        description:
+          "Save deep domain findings (Subject Intelligence) about the survey topic.",
+        inputSchema: z.object({
+          findings: z
+            .record(z.any())
+            .describe(
+              "Domain-specific expert findings (e.g. learning goals, pain points, identity dimensions)",
+            ),
+          intelligentProbes: z
+            .array(z.string())
+            .describe("Specific deep-dive questions for the conductor to use"),
+          confidence: z
+            .enum(["high", "medium", "low"])
+            .describe("AI confidence in the extracted model"),
+          confidenceReason: z.string().optional(),
+        }),
+        execute: async (si) => {
+          if (ctx.surveyConfig?.id) {
+            await getDb().transaction(async (tx) => {
+              const [currentSurvey] = await tx
+                .select()
+                .from(surveys)
+                .where(eq(surveys.id, ctx.surveyConfig!.id));
+              if (currentSurvey) {
+                const expertState = (currentSurvey.expertState || {}) as Record<
+                  string,
+                  any
+                >;
+                await tx
+                  .update(surveys)
+                  .set({
+                    expertState: {
+                      ...expertState,
+                      subjectIntelligence: si,
+                      subjectModelComplete: true,
+                    },
+                  })
+                  .where(eq(surveys.id, ctx.surveyConfig!.id));
+              }
+            });
+          }
+          return {
+            success: true,
+            message: "Subject intelligence model saved.",
+          };
+        },
+      }),
       save_survey_configuration: tool({
         description: "Update exact survey configuration fields.",
         inputSchema: z.object({
@@ -401,7 +451,25 @@ TRIGGER: As soon as you can guess the domain, silently call 'setSurveyDomain' wi
           constraints: z.string().optional(),
           scope: z.string().optional(),
           hypotheses: z.string().optional(),
-          requiredQuestions: z.string().optional(),
+          requiredQuestions: z
+            .array(z.string())
+            .describe(
+              "An array of specific questions that MUST be asked during the survey.",
+            )
+            .optional(),
+          metrics: z
+            .array(z.string())
+            .describe(
+              "An array of specific metrics to track, e.g. ['NPS', 'CSAT', 'Ease of Use']",
+            )
+            .optional(),
+          personalInfo: z
+            .array(z.string())
+            .describe(
+              "An array of personal details that MUST be collected, e.g. ['Name', 'Email']",
+            )
+            .optional(),
+          subjectIntelligence: z.any().optional(),
           extraContext: z.string().optional(),
         }),
         execute: async (statePartial) => {

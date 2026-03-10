@@ -141,15 +141,34 @@ export async function POST(
 
     const normalizedMessages = await normalizeMessages(messages);
 
+    // UPSERT the sampleConversations row so onFinish UPDATE always finds a real row.
+    // Without this, conversation history was silently dropped every turn (stuck survey bug).
+    const upsertSampleRowPromise = getDb()
+      .insert(sampleConversations)
+      .values({
+        id: sampleId,
+        surveyId: survey.id,
+        conversationNumber,
+        messages: [],
+      })
+      .onConflictDoNothing()
+      .catch((err) =>
+        console.error("[Sample Route] Failed to upsert sample row:", err),
+      );
+
     // Load or create rolling context using Manager
     // If it's the first message, force new context to reset previous runs of this sample number
     const isStart = normalizedMessages.length <= 1;
-    const context = await ConversationManager.loadOrCreateContext(
-      conversationId,
-      normalizedMessages,
-      surveyConfig,
-      isStart, // forceNew
-    );
+    const [context] = await Promise.all([
+      ConversationManager.loadOrCreateContext(
+        conversationId,
+        normalizedMessages,
+        surveyConfig,
+        isStart, // forceNew
+      ),
+      // Ensure the sample row exists — runs concurrently with context load
+      upsertSampleRowPromise,
+    ]);
 
     // Use the compressed messages for the AI call
     const messagesForAI =

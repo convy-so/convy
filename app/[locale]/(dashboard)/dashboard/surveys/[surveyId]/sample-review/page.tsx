@@ -32,7 +32,7 @@ import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { useQuery } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { VoiceSurveyStartOverlay } from "@/components/surveys/voice-survey-start-overlay";
+import { SurveyStartOverlay } from "@/components/surveys/survey-start-overlay";
 import { addSampleConversationCommentAction } from "@/app/actions/sample-conversation";
 
 const MAX_SAMPLE_CONVERSATIONS = 3;
@@ -484,11 +484,12 @@ export default function SampleReviewPage() {
 
             {/* Start Overlay for Voice Samples */}
             {survey?.isVoice && !hasStarted && !isLoading && (
-                <VoiceSurveyStartOverlay
+                <SurveyStartOverlay
                     onStart={handleStartSample}
                     initialLanguage={survey?.language || "en"}
                     title={survey?.title || "Sample Review"}
                     description={survey?.expertState?.objective?.context || "Experience your survey exactly as a participant will."}
+                    isVoice={survey?.isVoice}
                     t={t as any}
                 />
             )}
