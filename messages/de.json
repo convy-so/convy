@@ -705,6 +705,10 @@
             "Upgrade": "Upgrade",
             "Free": "Kostenlos"
         },
+        "Roles": {
+            "Owner": "Besitzer",
+            "Member": "Mitglied"
+        },
         "Permissions": {
             "Title": "Rollenberechtigungen",
             "Owner": {
@@ -716,39 +720,28 @@
                 "Description": "Kann Umfragen erstellen und verwalten, Analysen ansehen und mit anderen Mitgliedern zusammenarbeiten."
             }
         },
-        "Upgrade": {
-            "Title": "Benötigen Sie mehr Plätze?",
-            "Description": "Upgrade auf Pro, um unbegrenzte Teammitglieder hinzuzufügen und erweiterte Zusammenarbeitsfunktionen zu nutzen.",
-            "Button": "Plan upgraden"
-        },
-        "DangerZone": {
+        "Danger": {
             "Title": "Gefahrenzone",
+            "DeleteDesc": "Das Löschen eines Workspaces ist dauerhaft und kann nicht rückgängig gemacht werden. Alle Umfragen und Daten gehen verloren.",
+            "DeleteWorkspace": "Workspace löschen",
+            "LeaveDesc": "Das Verlassen dieses Workspaces entzieht Ihnen den Zugriff auf alle Umfragen und Daten.",
+            "LeaveWorkspace": "Workspace verlassen"
+        },
+        "Modals": {
             "Delete": {
-                "Description": "Das Löschen eines Workspaces ist dauerhaft und kann nicht rückgängig gemacht werden. Alle Umfragen und Daten gehen verloren.",
-                "Button": "Workspace löschen"
+                "Title": "Workspace löschen",
+                "Description": "Sind Sie sicher, dass Sie \"{name}\" löschen möchten? Diese Aktion ist dauerhaft und löscht alle Umfragen, Antworten und Mitglieder.",
+                "Cancel": "Abbrechen",
+                "Confirm": "Workspace löschen",
+                "Deleting": "Löschen..."
             },
             "Leave": {
-                "Description": "Das Verlassen dieses Workspaces entzieht Ihnen den Zugriff auf alle Umfragen und Daten.",
-                "Button": "Workspace verlassen"
+                "Title": "Workspace verlassen",
+                "Description": "Sind Sie sicher, dass Sie \"{name}\" verlassen möchten? Sie verlieren den Zugriff auf alle Umfragen und Daten in diesem Workspace.",
+                "Cancel": "Abbrechen",
+                "Confirm": "Workspace verlassen",
+                "Leaving": "Verlassen..."
             }
-        },
-        "DeleteModal": {
-            "Title": "Workspace löschen",
-            "Description": "Sind Sie sicher, dass Sie \"{name}\" löschen möchten? Diese Aktion ist dauerhaft und löscht alle Umfragen, Antworten und Mitglieder.",
-            "Cancel": "Abbrechen",
-            "Confirm": "Workspace löschen",
-            "Deleting": "Löschen..."
-        },
-        "LeaveModal": {
-            "Title": "Workspace verlassen",
-            "Description": "Sind Sie sicher, dass Sie \"{name}\" verlassen möchten? Sie verlieren den Zugriff auf alle Umfragen und Daten in diesem Workspace.",
-            "Cancel": "Abbrechen",
-            "Confirm": "Workspace verlassen",
-            "Leaving": "Verlassen..."
-        },
-        "PersonalSpace": {
-            "Title": "Persönlicher Bereich",
-            "Description": "Sie befinden sich derzeit in Ihrem persönlichen Bereich. Um ein Team zu verwalten, wechseln Sie bitte zu einem Workspace oder erstellen Sie einen neuen."
         },
         "Toasts": {
             "MemberRemoved": "Mitglied entfernt",
@@ -756,16 +749,17 @@
             "WorkspaceDeleted": "Workspace gelöscht",
             "DeleteFailed": "Workspace konnte nicht gelöscht werden",
             "LeftWorkspace": "Workspace verlassen",
-            "LeaveFailed": "Workspace konnte nicht verlassen werden"
+            "LeaveFailed": "Workspace konnte nicht verlassen werden",
+            "RemoveFailed": "Mitglied konnte nicht entfernt werden"
         },
         "MemberList": {
-            "Header": "Team Members",
-            "Count": "{count, plural, one {# member} other {# members}}",
-            "PendingCount": "• {count} pending",
-            "InviteButton": "Invite",
-            "You": "(you)",
+            "Header": "Teammitglieder",
+            "Count": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
+            "PendingCount": "• {count} ausstehend",
+            "InviteButton": "Einladen",
+            "You": "(Sie)",
             "Menu": {
-                "Remove": "Remove"
+                "Remove": "Entfernen"
             },
             "Pending": {
                 "Status": "Einladung ausstehend",
@@ -781,12 +775,6 @@
                 "EmailLabel": "E-Mail-Adresse",
                 "EmailPlaceholder": "kollege@unternehmen.com",
                 "RoleLabel": "Rolle",
-                "Roles": {
-                    "Member": "Mitglied",
-                    "MemberDesc": "Kann Umfragen und Analysen einsehen",
-                    "Owner": "Eigentümer",
-                    "OwnerDesc": "Vollständiger Zugriff auf den Arbeitsbereich"
-                },
                 "Cancel": "Abbrechen",
                 "Submit": "Einladung senden",
                 "Submitting": "Wird gesendet...",
@@ -798,6 +786,15 @@
             "Title": "Bereit zu skalieren?",
             "Description": "Erhalten Sie erweiterte Analysen, höhere Antwortlimits und Priority-Support.",
             "Button": "Preise ansehen"
+        },
+        "Upgrade": {
+            "Title": "Benötigen Sie mehr Plätze?",
+            "Description": "Upgrade auf Pro, um unbegrenzte Teammitglieder hinzuzufügen und erweiterte Zusammenarbeitsfunktionen zu nutzen.",
+            "Button": "Plan upgraden"
+        },
+        "PersonalSpace": {
+            "Title": "Persönlicher Bereich",
+            "Description": "Sie befinden sich derzeit in Ihrem persönlichen Bereich. Um ein Team zu verwalten, wechseln Sie bitte zu einem Workspace oder erstellen Sie einen neuen."
         }
     },
     "Settings": {
