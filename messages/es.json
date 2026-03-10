@@ -705,6 +705,10 @@
             "Upgrade": "Mejorar",
             "Free": "Gratis"
         },
+        "Roles": {
+            "Owner": "Propietario",
+            "Member": "Miembro"
+        },
         "Permissions": {
             "Title": "Permisos de Rol",
             "Owner": {
@@ -716,39 +720,28 @@
                 "Description": "Puede crear y gestionar encuestas, ver análisis y colaborar con otros miembros."
             }
         },
-        "Upgrade": {
-            "Title": "¿Necesitas más asientos?",
-            "Description": "Mejora a Pro para añadir miembros ilimitados y acceder a funciones de colaboración avanzadas.",
-            "Button": "Mejorar Plan"
-        },
-        "DangerZone": {
+        "Danger": {
             "Title": "Zona de Peligro",
+            "DeleteDesc": "Eliminar un espacio de trabajo es permanente y no se puede deshacer. Todos los datos se perderán.",
+            "DeleteWorkspace": "Eliminar Espacio",
+            "LeaveDesc": "Salir de este espacio de trabajo revocará tu acceso a todas las encuestas y datos.",
+            "LeaveWorkspace": "Salir del Espacio"
+        },
+        "Modals": {
             "Delete": {
-                "Description": "Eliminar un espacio de trabajo es permanente y no se puede deshacer. Todos los datos se perderán.",
-                "Button": "Eliminar Espacio"
+                "Title": "Eliminar Espacio",
+                "Description": "¿Estás seguro de que quieres eliminar \"{name}\"? Esta acción es permanente y eliminará todo.",
+                "Cancel": "Cancelar",
+                "Confirm": "Eliminar Espacio",
+                "Deleting": "Eliminando..."
             },
             "Leave": {
-                "Description": "Salir de este espacio de trabajo revocará tu acceso a todas las encuestas y datos.",
-                "Button": "Salir del Espacio"
+                "Title": "Salir del Espacio",
+                "Description": "¿Estás seguro de que quieres salir de \"{name}\"? Perderás el acceso a todos los datos.",
+                "Cancel": "Cancelar",
+                "Confirm": "Salir del Espacio",
+                "Leaving": "Saliendo..."
             }
-        },
-        "DeleteModal": {
-            "Title": "Eliminar Espacio",
-            "Description": "¿Estás seguro de que quieres eliminar \"{name}\"? Esta acción es permanente y eliminará todo.",
-            "Cancel": "Cancelar",
-            "Confirm": "Eliminar Espacio",
-            "Deleting": "Eliminando..."
-        },
-        "LeaveModal": {
-            "Title": "Salir del Espacio",
-            "Description": "¿Estás seguro de que quieres salir de \"{name}\"? Perderás el acceso a todos los datos.",
-            "Cancel": "Cancelar",
-            "Confirm": "Salir del Espacio",
-            "Leaving": "Saliendo..."
-        },
-        "PersonalSpace": {
-            "Title": "Espacio Personal",
-            "Description": "Actualmente te encuentras en tu espacio personal. Para gestionar un equipo, cambia a un espacio de trabajo o crea uno nuevo."
         },
         "Toasts": {
             "MemberRemoved": "Miembro eliminado",
@@ -756,7 +749,8 @@
             "WorkspaceDeleted": "Espacio de trabajo eliminado",
             "DeleteFailed": "Error al eliminar el espacio de trabajo",
             "LeftWorkspace": "Has salido del espacio de trabajo",
-            "LeaveFailed": "Error al salir del espacio de trabajo"
+            "LeaveFailed": "Error al salir del espacio de trabajo",
+            "RemoveFailed": "Error al eliminar el miembro"
         },
         "MemberList": {
             "Header": "Miembros del Equipo",
@@ -781,12 +775,6 @@
                 "EmailLabel": "Correo Electrónico",
                 "EmailPlaceholder": "colega@empresa.com",
                 "RoleLabel": "Rol",
-                "Roles": {
-                    "Member": "Miembro",
-                    "MemberDesc": "Puede ver encuestas y analíticas",
-                    "Owner": "Propietario",
-                    "OwnerDesc": "Acceso total al espacio de trabajo"
-                },
                 "Cancel": "Cancelar",
                 "Submit": "Enviar Invitación",
                 "Submitting": "Enviando...",
@@ -798,6 +786,15 @@
             "Title": "¿Listo para escalar?",
             "Description": "Obtén analíticas avanzadas, mayores límites de respuesta y soporte prioritario.",
             "Button": "Ver precios"
+        },
+        "Upgrade": {
+            "Title": "¿Necesitas más asientos?",
+            "Description": "Mejora a Pro para añadir miembros ilimitados y acceder a funciones de colaboración avanzadas.",
+            "Button": "Mejorar Plan"
+        },
+        "PersonalSpace": {
+            "Title": "Espacio Personal",
+            "Description": "Actualmente te encuentras en tu espacio personal. Para gestionar un equipo, cambia a un espacio de trabajo o crea uno nuevo."
         }
     },
     "Settings": {
