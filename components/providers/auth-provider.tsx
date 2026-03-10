@@ -1,8 +1,9 @@
+
 "use client";
 
 import { authClient } from "@/lib/auth-client";
 import { Session, User } from "better-auth/types";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext } from "react";
 
 type SessionData = typeof authClient.$Infer.Session;
 
@@ -28,35 +29,11 @@ export function AuthProvider({
         user: User | null;
     } | null;
 }) {
-    const [session, setSession] = useState<SessionData["session"] | null>(
-        initialSession?.session ?? null
-    );
-    const [user, setUser] = useState<SessionData["user"] | null>(
-        initialSession?.user ?? null
-    );
-    const [isLoading, setIsLoading] = useState(!initialSession);
-
-    useEffect(() => {
-        // If we have initial session, we might still want to verify/update it or listen to changes
-        // better-auth's useSession hook handles subscription, but here we want to provide context
-        // Let's use authClient.useSession which is a hook
-    }, []);
-
     // Sync with better-auth hook
     const { data, isPending } = authClient.useSession();
-
-    useEffect(() => {
-        if (!isPending) {
-            if (data) {
-                setSession(data.session);
-                setUser(data.user);
-            } else {
-                setSession(null);
-                setUser(null);
-            }
-            setIsLoading(false);
-        }
-    }, [data, isPending]);
+    const session = isPending ? initialSession?.session ?? null : data?.session ?? null;
+    const user = isPending ? initialSession?.user ?? null : data?.user ?? null;
+    const isLoading = isPending && !initialSession;
 
     return (
         <AuthContext.Provider value={{ session, user, isLoading }}>

@@ -30,12 +30,7 @@ export function ProjectAIChat({ project }: ProjectAIChatProps) {
     const [aiMessages, setAiMessages] = useState<Array<{ role: 'user' | 'assistant', content: string }>>([
         { role: 'assistant', content: `Hi! I've analyzed your project "${project.name}". Ask me anything about your surveys or responses!` }
     ]);
-    const [mounted, setMounted] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        setMounted(true);
-    }, []);
 
     useEffect(() => {
         if (isOpen) {
@@ -61,7 +56,7 @@ export function ProjectAIChat({ project }: ProjectAIChatProps) {
         }, 1000);
     };
 
-    if (!mounted) return null;
+    if (typeof document === "undefined") return null;
 
     return createPortal(
         <div className="fixed bottom-6 right-6 z-[90] flex flex-col items-end gap-4 pointer-events-none">
