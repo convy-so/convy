@@ -667,6 +667,10 @@
             "Upgrade": "Mettre à niveau",
             "Free": "Gratuit"
         },
+        "Roles": {
+            "Owner": "Propriétaire",
+            "Member": "Membre"
+        },
         "Permissions": {
             "Title": "Autorisations de Rôle",
             "Owner": {
@@ -678,39 +682,28 @@
                 "Description": "Peut créer et gérer des sondages, voir les analyses et collaborer avec d'autres membres."
             }
         },
-        "Upgrade": {
-            "Title": "Besoin de plus de places ?",
-            "Description": "Passez à Pro pour ajouter un nombre illimité de membres d'équipe et accéder à des fonctionnalités de collaboration avancées.",
-            "Button": "Mettre à niveau le plan"
-        },
-        "DangerZone": {
+        "Danger": {
             "Title": "Zone de Danger",
+            "DeleteDesc": "La suppression d'un espace de travail est permanente et irréversible. Tous les sondages et données seront perdus.",
+            "DeleteWorkspace": "Supprimer l'Espace",
+            "LeaveDesc": "Quitter cet espace de travail révoquera votre accès à tous les sondages et données.",
+            "LeaveWorkspace": "Quitter l'Espace"
+        },
+        "Modals": {
             "Delete": {
-                "Description": "La suppression d'un espace de travail est permanente et irréversible. Tous les sondages et données seront perdus.",
-                "Button": "Supprimer l'Espace"
+                "Title": "Supprimer l'Espace",
+                "Description": "Êtes-vous sûr de vouloir supprimer \"{name}\" ? Cette action est permanente et supprimera tous les sondages, réponses et membres.",
+                "Cancel": "Annuler",
+                "Confirm": "Supprimer l'Espace",
+                "Deleting": "Suppression..."
             },
             "Leave": {
-                "Description": "Quitter cet espace de travail révoquera votre accès à tous les sondages et données.",
-                "Button": "Quitter l'Espace"
+                "Title": "Quitter l'Espace",
+                "Description": "Êtes-vous sûr de vouloir quitter \"{name}\" ? Vous perdrez l'accès à tous les sondages et données de cet espace de travail.",
+                "Cancel": "Annuler",
+                "Confirm": "Quitter l'Espace",
+                "Leaving": "Départ..."
             }
-        },
-        "DeleteModal": {
-            "Title": "Supprimer l'Espace",
-            "Description": "Êtes-vous sûr de vouloir supprimer \"{name}\" ? Cette action est permanente et supprimera tous les sondages, réponses et membres.",
-            "Cancel": "Annuler",
-            "Confirm": "Supprimer l'Espace",
-            "Deleting": "Suppression..."
-        },
-        "LeaveModal": {
-            "Title": "Quitter l'Espace",
-            "Description": "Êtes-vous sûr de vouloir quitter \"{name}\" ? Vous perdrez l'accès à tous les sondages et données de cet espace de travail.",
-            "Cancel": "Annuler",
-            "Confirm": "Quitter l'Espace",
-            "Leaving": "Départ..."
-        },
-        "PersonalSpace": {
-            "Title": "Espace personnel",
-            "Description": "Vous êtes actuellement dans votre espace personnel. Pour gérer une équipe, veuillez basculer vers un espace de travail ou en créer un nouveau."
         },
         "Toasts": {
             "MemberRemoved": "Membre supprimé",
@@ -718,7 +711,8 @@
             "WorkspaceDeleted": "Espace de travail supprimé",
             "DeleteFailed": "Échec de la suppression de l'espace de travail",
             "LeftWorkspace": "Espace de travail quitté",
-            "LeaveFailed": "Échec du départ de l'espace de travail"
+            "LeaveFailed": "Échec du départ de l'espace de travail",
+            "RemoveFailed": "Échec de la suppression du membre"
         },
         "MemberList": {
             "Header": "Membres de l'équipe",
@@ -743,12 +737,6 @@
                 "EmailLabel": "Adresse e-mail",
                 "EmailPlaceholder": "collegue@entreprise.com",
                 "RoleLabel": "Rôle",
-                "Roles": {
-                    "Member": "Membre",
-                    "MemberDesc": "Peut voir les sondages et les analyses",
-                    "Owner": "Propriétaire",
-                    "OwnerDesc": "Accès complet à l'espace de travail"
-                },
                 "Cancel": "Annuler",
                 "Submit": "Envoyer l'invitation",
                 "Submitting": "Envoi...",
@@ -760,6 +748,15 @@
             "Title": "Prêt à passer à l'échelle ?",
             "Description": "Obtenez des analyses avancées, des limites de réponse plus élevées et un support prioritaire.",
             "Button": "Voir les tarifs"
+        },
+        "Upgrade": {
+            "Title": "Besoin de plus de places ?",
+            "Description": "Passez à Pro pour ajouter un nombre illimité de membres d'équipe et accéder à des fonctionnalités de collaboration avancées.",
+            "Button": "Mettre à niveau le plan"
+        },
+        "PersonalSpace": {
+            "Title": "Espace personnel",
+            "Description": "Vous êtes actuellement dans votre espace personnel. Pour gérer une équipe, veuillez basculer vers un espace de travail ou en créer un nouveau."
         }
     },
     "Settings": {
