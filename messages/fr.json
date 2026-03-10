@@ -316,6 +316,15 @@
             "micConsentDescription": "Je comprends que cette enquête utilise l'enregistrement vocal. J'autorise l'utilisation de mon microphone pour la durée de l'entretien."
         },
         "Detail": {
+            "NotFound": "Sondage introuvable",
+            "BackToSurveys": "Retour aux sondages",
+            "Status": {
+                "Active": "Actif",
+                "Draft": "Brouillon",
+                "Completed": "Terminé",
+                "Paused": "En pause",
+                "SampleReview": "En révision"
+            },
             "Header": {
                 "Copied": "Copié",
                 "CopyLink": "Copier le lien",
@@ -384,8 +393,15 @@
                     },
                     "Summary": "Aucun résumé disponible"
                 },
+                "Card": {
+                    "NoSummary": "Aucun résumé généré pour l'instant."
+                },
                 "Pagination": {
-                    "Page": "Page {current} sur {total}"
+                    "Page": "Page {current} sur {total}",
+                    "FirstPage": "Première page",
+                    "PreviousPage": "Page précédente",
+                    "NextPage": "Page suivante",
+                    "LastPage": "Dernière page"
                 }
             },
             "Settings": {
@@ -414,13 +430,26 @@
                     "Generating": "Génération..."
                 },
                 "Options": {
-                    "Iframe": "Option 1 : Intégration iframe",
+                    "Inline": "En ligne",
+                    "Popover": "Popover",
+                    "SideTab": "Onglet latéral",
+                    "Iframe": "Iframe",
+                    "Iframe2": "Option 1 : Intégration iframe",
                     "Script": "Option 2 : Script en ligne",
                     "Copy": "Copier",
-                    "Copied": "Copié !"
+                    "Copied": "Copié !",
+                    "Color": "Couleur du bouton",
+                    "TabText": "Étiquette de l'onglet",
+                    "ScriptLabel": "Code d'intégration {type}",
+                    "Position": {
+                        "Label": "Position",
+                        "Left": "Gauche",
+                        "Right": "Droite"
+                    }
                 },
                 "Instructions": {
                     "Title": "Comment utiliser",
+                    "IframeTitle": "Instructions Iframe",
                     "Step1": "Copiez l'un des extraits de code ci-dessus",
                     "Step2": "Collez-le dans le HTML de votre site web là où vous souhaitez que le sondage apparaisse",
                     "Step3": "Le sondage se chargera comme une iframe interactive sur votre page",
@@ -638,6 +667,10 @@
             "Upgrade": "Mettre à niveau",
             "Free": "Gratuit"
         },
+        "Roles": {
+            "Owner": "Propriétaire",
+            "Member": "Membre"
+        },
         "Permissions": {
             "Title": "Autorisations de Rôle",
             "Owner": {
@@ -649,39 +682,28 @@
                 "Description": "Peut créer et gérer des sondages, voir les analyses et collaborer avec d'autres membres."
             }
         },
-        "Upgrade": {
-            "Title": "Besoin de plus de places ?",
-            "Description": "Passez à Pro pour ajouter un nombre illimité de membres d'équipe et accéder à des fonctionnalités de collaboration avancées.",
-            "Button": "Mettre à niveau le plan"
-        },
-        "DangerZone": {
+        "Danger": {
             "Title": "Zone de Danger",
+            "DeleteDesc": "La suppression d'un espace de travail est permanente et irréversible. Tous les sondages et données seront perdus.",
+            "DeleteWorkspace": "Supprimer l'Espace",
+            "LeaveDesc": "Quitter cet espace de travail révoquera votre accès à tous les sondages et données.",
+            "LeaveWorkspace": "Quitter l'Espace"
+        },
+        "Modals": {
             "Delete": {
-                "Description": "La suppression d'un espace de travail est permanente et irréversible. Tous les sondages et données seront perdus.",
-                "Button": "Supprimer l'Espace"
+                "Title": "Supprimer l'Espace",
+                "Description": "Êtes-vous sûr de vouloir supprimer \"{name}\" ? Cette action est permanente et supprimera tous les sondages, réponses et membres.",
+                "Cancel": "Annuler",
+                "Confirm": "Supprimer l'Espace",
+                "Deleting": "Suppression..."
             },
             "Leave": {
-                "Description": "Quitter cet espace de travail révoquera votre accès à tous les sondages et données.",
-                "Button": "Quitter l'Espace"
+                "Title": "Quitter l'Espace",
+                "Description": "Êtes-vous sûr de vouloir quitter \"{name}\" ? Vous perdrez l'accès à tous les sondages et données de cet espace de travail.",
+                "Cancel": "Annuler",
+                "Confirm": "Quitter l'Espace",
+                "Leaving": "Départ..."
             }
-        },
-        "DeleteModal": {
-            "Title": "Supprimer l'Espace",
-            "Description": "Êtes-vous sûr de vouloir supprimer \"{name}\" ? Cette action est permanente et supprimera tous les sondages, réponses et membres.",
-            "Cancel": "Annuler",
-            "Confirm": "Supprimer l'Espace",
-            "Deleting": "Suppression..."
-        },
-        "LeaveModal": {
-            "Title": "Quitter l'Espace",
-            "Description": "Êtes-vous sûr de vouloir quitter \"{name}\" ? Vous perdrez l'accès à tous les sondages et données de cet espace de travail.",
-            "Cancel": "Annuler",
-            "Confirm": "Quitter l'Espace",
-            "Leaving": "Départ..."
-        },
-        "PersonalSpace": {
-            "Title": "Espace personnel",
-            "Description": "Vous êtes actuellement dans votre espace personnel. Pour gérer une équipe, veuillez basculer vers un espace de travail ou en créer un nouveau."
         },
         "Toasts": {
             "MemberRemoved": "Membre supprimé",
@@ -689,7 +711,8 @@
             "WorkspaceDeleted": "Espace de travail supprimé",
             "DeleteFailed": "Échec de la suppression de l'espace de travail",
             "LeftWorkspace": "Espace de travail quitté",
-            "LeaveFailed": "Échec du départ de l'espace de travail"
+            "LeaveFailed": "Échec du départ de l'espace de travail",
+            "RemoveFailed": "Échec de la suppression du membre"
         },
         "MemberList": {
             "Header": "Membres de l'équipe",
@@ -714,12 +737,6 @@
                 "EmailLabel": "Adresse e-mail",
                 "EmailPlaceholder": "collegue@entreprise.com",
                 "RoleLabel": "Rôle",
-                "Roles": {
-                    "Member": "Membre",
-                    "MemberDesc": "Peut voir les sondages et les analyses",
-                    "Owner": "Propriétaire",
-                    "OwnerDesc": "Accès complet à l'espace de travail"
-                },
                 "Cancel": "Annuler",
                 "Submit": "Envoyer l'invitation",
                 "Submitting": "Envoi...",
@@ -731,6 +748,15 @@
             "Title": "Prêt à passer à l'échelle ?",
             "Description": "Obtenez des analyses avancées, des limites de réponse plus élevées et un support prioritaire.",
             "Button": "Voir les tarifs"
+        },
+        "Upgrade": {
+            "Title": "Besoin de plus de places ?",
+            "Description": "Passez à Pro pour ajouter un nombre illimité de membres d'équipe et accéder à des fonctionnalités de collaboration avancées.",
+            "Button": "Mettre à niveau le plan"
+        },
+        "PersonalSpace": {
+            "Title": "Espace personnel",
+            "Description": "Vous êtes actuellement dans votre espace personnel. Pour gérer une équipe, veuillez basculer vers un espace de travail ou en créer un nouveau."
         }
     },
     "Settings": {
@@ -821,23 +847,23 @@
         },
         "Hero": {
             "Badge": "Formulaires 2.0",
-            "Title": "La couche de discussion <br />dont vos formulaires avaient besoin.",
-            "Description": "Convy remplace les formulaires rigides par des flux de discussion dynamiques qui bougent comme une vraie conversation.",
-            "CTA": "Commencer gratuitement",
+            "Title": "Sondes natives en IA <br /> pour chaque domaine.",
+            "Description": "Nous aidons le CX, les éducateurs et les chercheurs à obtenir de meilleures informations en remplaçant les formulaires rigides par des discussions IA.",
+            "CTA": "Commencez votre sondage gratuit",
             "NoCreditCard": "pas de carte de crédit requise"
         },
         "Insights": {
             "Badge": "Écoutez",
-            "Title": "Des conversations qui marchent vraiment",
-            "Description": "Les vieux formulaires semblent morts et confus, mais les chats IA transforment les interactions en idées claires.",
+            "Title": "Découvrez le 'Pourquoi' derrière les données",
+            "Description": "De l'engagement des employés aux retours produits, les chats IA transforment les interactions en insights de qualité.",
             "Cards": {
                 "AI": {
-                    "Title": "Conversations alimentées par l'IA, pas des questions",
-                    "Description": "Les questions statiques piègent les utilisateurs, tandis que les vraies conversations révèlent leurs priorités et pensées réelles."
+                    "Title": "Des conversations, pas des interrogatoires",
+                    "Description": "Les questions statiques piègent les utilisateurs. Les vraies conversations révèlent leurs priorités et ressentis réels."
                 },
                 "Alive": {
-                    "Title": "De rigide à vivant",
-                    "Description": "Les formulaires morts traitent chaque utilisateur de la même manière, tandis que de petits changements rendent chaque interaction humaine."
+                    "Title": "Adaptable à tout domaine",
+                    "Description": "Que vous sondiez un citoyen ou un client, notre IA adapte son ton naturellement."
                 },
                 "Flow": {
                     "Title": "Des formulaires qui coulent vraiment",
@@ -852,11 +878,11 @@
         "Features": {
             "Badge": "Fonctionnalités",
             "Title": "Tout ce dont vous avez besoin pour parler aux utilisateurs",
-            "Description": "Convy transforme les listes de questions statiques en conversations vivantes pour capturer des signaux plus riches.",
+            "Description": "Convy transforme les listes de questions statiques en conversations vivantes pour capturer des signaux plus riches dans tous les domaines.",
             "Cards": {
                 "Builder": {
                     "Title": "Constructeur de formulaires IA",
-                    "Description": "Générez automatiquement des flux conversationnels à partir de simples invites textuelles."
+                    "Description": "Générez automatiquement des flux conversationnels spécifiques au domaine via un texte simple."
                 },
                 "ChatData": {
                     "Title": "Discuter avec les données",
@@ -883,7 +909,7 @@
             "Button": "Commencer gratuitement"
         },
         "Footer": {
-            "Message": "Commencez à améliorer votre produit aujourd'hui avec <br /> des données en temps réel de Convy.",
+            "Message": "Commencez à découvrir des idées plus profondes aujourd'hui avec <br /> les données en temps réel de Convy.",
             "Contact": "Contactez-nous sur X",
             "Rights": "© {year} convy. Tous droits réservés.",
             "Privacy": "Politique de confidentialité",

@@ -114,11 +114,18 @@ export class ConductingSpecialist extends BaseSpecialistAgent {
     let subjectIntelSection = "";
     if (this.context.subjectIntelligence) {
       const si = this.context.subjectIntelligence;
+      const findingsEntries = Object.entries(si.findings || {})
+        .map(
+          ([key, value]) =>
+            `• ${key}: ${Array.isArray(value) ? value.join(", ") : value}`,
+        )
+        .join("\n");
+
       subjectIntelSection = `
 <subject_intelligence>
-Vocabulary: ${si.userVocabulary.join(", ")}
-Known Pain Points: ${si.knownPainPoints.join(", ")}
-Intelligent Probes: ${si.intelligentProbes.join(", ")}
+${findingsEntries}
+INTENT: Use these findings to conduct a deeper, more specialized interview.
+${si.intelligentProbes?.length ? `PROBES: ${si.intelligentProbes.join(", ")}` : ""}
 </subject_intelligence>`;
     }
 

@@ -248,6 +248,15 @@
             "micConsentDescription": "I understand that this survey uses voice recording. I grant permission to use my microphone for the duration of the interview."
         },
         "Detail": {
+            "NotFound": "Survey not found",
+            "BackToSurveys": "Back to Surveys",
+            "Status": {
+                "Active": "Active",
+                "Draft": "Draft",
+                "Completed": "Completed",
+                "Paused": "Paused",
+                "SampleReview": "In Review"
+            },
             "Header": {
                 "Copied": "Copied",
                 "CopyLink": "Copy Link",
@@ -316,8 +325,15 @@
                     },
                     "Summary": "No summary available"
                 },
+                "Card": {
+                    "NoSummary": "No summary generated yet."
+                },
                 "Pagination": {
-                    "Page": "Page {current} of {total}"
+                    "Page": "Page {current} of {total}",
+                    "FirstPage": "First Page",
+                    "PreviousPage": "Previous Page",
+                    "NextPage": "Next Page",
+                    "LastPage": "Last Page"
                 }
             },
             "Settings": {
@@ -346,13 +362,26 @@
                     "Generating": "Generating..."
                 },
                 "Options": {
-                    "Iframe": "Option 1: iframe Embed",
+                    "Inline": "Inline",
+                    "Popover": "Popover",
+                    "SideTab": "Side Tab",
+                    "Iframe": "Iframe",
+                    "Iframe2": "Option 1: iframe Embed",
                     "Script": "Option 2: Inline Script",
                     "Copy": "Copy",
-                    "Copied": "Copied!"
+                    "Copied": "Copied!",
+                    "Color": "Button Color",
+                    "TabText": "Tab Label",
+                    "ScriptLabel": "{type} embed code",
+                    "Position": {
+                        "Label": "Position",
+                        "Left": "Left",
+                        "Right": "Right"
+                    }
                 },
                 "Instructions": {
                     "Title": "How to use",
+                    "IframeTitle": "Iframe Instructions",
                     "Step1": "Copy one of the code snippets above",
                     "Step2": "Paste it into your website's HTML where you want the survey to appear",
                     "Step3": "The survey will load as an interactive iframe on your page",
@@ -622,7 +651,6 @@
     },
     "TeamPage": {
         "Header": {
-
             "Title": "Team & Workspace",
             "Description": "Manage your organization members and settings for {name}."
         },
@@ -632,6 +660,10 @@
             "WorkspacePlan": "Workspace Plan",
             "Upgrade": "Upgrade",
             "Free": "Free"
+        },
+        "Roles": {
+            "Owner": "Owner",
+            "Member": "Member"
         },
         "Permissions": {
             "Title": "Role Permissions",
@@ -644,39 +676,28 @@
                 "Description": "Can create and manage surveys, view analytics, and collaborate with other members."
             }
         },
-        "Upgrade": {
-            "Title": "Need more seats?",
-            "Description": "Upgrade to Pro to add unlimited team members and access advanced collaboration features.",
-            "Button": "Upgrade Plan"
-        },
-        "DangerZone": {
+        "Danger": {
             "Title": "Danger Zone",
+            "DeleteDesc": "Deleting a workspace is permanent and cannot be undone. All surveys and data will be lost.",
+            "DeleteWorkspace": "Delete Workspace",
+            "LeaveDesc": "Leaving this workspace will revoke your access to all surveys and data.",
+            "LeaveWorkspace": "Leave Workspace"
+        },
+        "Modals": {
             "Delete": {
-                "Description": "Deleting a workspace is permanent and cannot be undone. All surveys and data will be lost.",
-                "Button": "Delete Workspace"
+                "Title": "Delete Workspace",
+                "Description": "Are you sure you want to delete \"{name}\"? This action is permanent and will delete all surveys, responses, and members.",
+                "Cancel": "Cancel",
+                "Confirm": "Delete Workspace",
+                "Deleting": "Deleting..."
             },
             "Leave": {
-                "Description": "Leaving this workspace will revoke your access to all surveys and data.",
-                "Button": "Leave Workspace"
+                "Title": "Leave Workspace",
+                "Description": "Are you sure you want to leave \"{name}\"? You will lose access to all surveys and data in this workspace.",
+                "Cancel": "Cancel",
+                "Confirm": "Leave Workspace",
+                "Leaving": "Leaving..."
             }
-        },
-        "DeleteModal": {
-            "Title": "Delete Workspace",
-            "Description": "Are you sure you want to delete \"{name}\"? This action is permanent and will delete all surveys, responses, and members.",
-            "Cancel": "Cancel",
-            "Confirm": "Delete Workspace",
-            "Deleting": "Deleting..."
-        },
-        "LeaveModal": {
-            "Title": "Leave Workspace",
-            "Description": "Are you sure you want to leave \"{name}\"? You will lose access to all surveys and data in this workspace.",
-            "Cancel": "Cancel",
-            "Confirm": "Leave Workspace",
-            "Leaving": "Leaving..."
-        },
-        "PersonalSpace": {
-            "Title": "Personal Space",
-            "Description": "You are currently in your personal space. To manage a team, please switch to a workspace or create a new one."
         },
         "Toasts": {
             "MemberRemoved": "Member removed",
@@ -684,7 +705,8 @@
             "WorkspaceDeleted": "Workspace deleted",
             "DeleteFailed": "Failed to delete workspace",
             "LeftWorkspace": "Left workspace",
-            "LeaveFailed": "Failed to leave workspace"
+            "LeaveFailed": "Failed to leave workspace",
+            "RemoveFailed": "Failed to remove member"
         },
         "MemberList": {
             "Header": "Team Members",
@@ -709,12 +731,6 @@
                 "EmailLabel": "Email Address",
                 "EmailPlaceholder": "colleague@company.com",
                 "RoleLabel": "Role",
-                "Roles": {
-                    "Member": "Member",
-                    "MemberDesc": "Can view surveys and analytics",
-                    "Owner": "Owner",
-                    "OwnerDesc": "Full access to workspace"
-                },
                 "Cancel": "Cancel",
                 "Submit": "Send Invitation",
                 "Submitting": "Sending...",
@@ -726,6 +742,15 @@
             "Title": "Ready to scale?",
             "Description": "Get advanced analytics, higher response limits, and priority support.",
             "Button": "See Pricing"
+        },
+        "Upgrade": {
+            "Title": "Need more seats?",
+            "Description": "Upgrade to Pro to add unlimited team members and access advanced collaboration features.",
+            "Button": "Upgrade Plan"
+        },
+        "PersonalSpace": {
+            "Title": "Personal Space",
+            "Description": "You are currently in your personal space. To manage a team, please switch to a workspace or create a new one."
         }
     },
     "Settings": {
@@ -816,22 +841,22 @@
         },
         "Hero": {
             "Badge": "Forms 2.0",
-            "Title": "The chat layer <br />your forms always needed.",
-            "Description": "Convy replaces rigid forms with dynamic chat flows that move like a real convo and feel built just for you.",
-            "CTA": "Get started free"
+            "Title": "AI-Native Surveys <br /> for Every Domain.",
+            "Description": "We help CX, educators, and researchers collect better insights by replacing rigid forms with dynamic, human-like AI chats.",
+            "CTA": "Start Your Free Survey"
         },
         "Insights": {
             "Badge": "Hear it out",
-            "Title": "Convos That Actually Work",
-            "Description": "Old forms feel dead and confusing, but AI chats turn interactions into clear insights.",
+            "Title": "Uncover The 'Why' Behind Data",
+            "Description": "From workforce engagement to product feedback, AI chats turn standard interactions into deep, quality insights.",
             "Cards": {
                 "AI": {
-                    "Title": "AI-Powered Conversations, Not Questions",
-                    "Description": "Static questions trap users in a box, while real conversations reveal their priorities, pain points, and true thoughts."
+                    "Title": "Conversations, Not Questions",
+                    "Description": "Static questions trap users in a box. Real conversations reveal their true priorities and pain points."
                 },
                 "Alive": {
-                    "Title": "From Rigid to Alive",
-                    "Description": "Dead forms treat every user the same and kill engagement, while small changes can make every interaction feel human."
+                    "Title": "Adaptable to Any Field",
+                    "Description": "Whether surveying a citizen or customer, our AI adapts its tone and probes naturally."
                 },
                 "Flow": {
                     "Title": "Forms That Actually Flow",
@@ -846,11 +871,11 @@
         "Features": {
             "Badge": "Features",
             "Title": "Everything you need to talk to users",
-            "Description": "Convy turns static question lists into living conversations, so you can capture richer signals without adding more work.",
+            "Description": "Convy turns static question lists into living conversations, capturing richer signals across all research domains.",
             "Cards": {
                 "Builder": {
                     "Title": "AI Form Builder",
-                    "Description": "Auto-generate conversational flows from plain text prompts."
+                    "Description": "Auto-generate domain-specific conversational flows from plain text prompts."
                 },
                 "ChatData": {
                     "Title": "Chat with Data",
@@ -873,7 +898,7 @@
             "Button": "Start For Free"
         },
         "Footer": {
-            "Message": "Start improving your product today with <br /> real-time data from Convy.",
+            "Message": "Start uncovering deeper insights today with <br /> real-time convos from Convy.",
             "Contact": "Contact us on X",
             "Rights": "© {year} convy. All rights reserved.",
             "Privacy": "Privacy Policy",

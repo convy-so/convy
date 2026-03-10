@@ -22,7 +22,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, UIMessage } from "ai";
 import { MediaDisplay } from "@/components/surveys/media-display";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
-import { VoiceSurveyStartOverlay } from "@/components/surveys/voice-survey-start-overlay";
+import { SurveyStartOverlay } from "@/components/surveys/survey-start-overlay";
 
 import { useQuery } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
@@ -137,7 +137,7 @@ function SurveyContent() {
   // State declarations - must be before hooks that reference them
   const [input, setInput] = useState("");
   const [isCompleted, setIsCompleted] = useState(false);
-  const [hasStarted, setHasStarted] = useState(false);
+  const [hasStarted, setHasStarted] = useState(searchParams.get("started") === "true");
 
   // Sync completion state from API
   useEffect(() => {
@@ -145,6 +145,13 @@ function SurveyContent() {
       setIsCompleted(true);
     }
   }, [initiallyCompleted]);
+
+  // Auto-resume if the user has already started interacting (has more than just the initial greeting)
+  useEffect(() => {
+    if (resumedMessages && resumedMessages.length > 1) {
+      setHasStarted(true);
+    }
+  }, [resumedMessages]);
 
   // Redirect to survey language if different from current locale on first load
   useEffect(() => {
@@ -175,9 +182,16 @@ function SurveyContent() {
       ? resumedMessages.map((msg: any, i) => {
         // Ensure we handle the transition from 'content' (old) to 'parts' (v6) robustly
         const hasTextPart = msg.parts?.some((p: any) => p.type === 'text' && p.text);
-        const parts = msg.parts && msg.parts.length > 0
-          ? msg.parts
-          : (msg.content ? [{ type: "text", text: msg.content }] : []);
+        let parts = msg.parts && msg.parts.length > 0 ? msg.parts : [];
+        let contentStr = msg.content || "";
+
+        // If old DB records saved content as an array of parts
+        if (Array.isArray(msg.content)) {
+          parts = msg.content;
+          contentStr = msg.content.find((p: any) => p.type === 'text')?.text || "";
+        } else if (parts.length === 0 && contentStr) {
+          parts = [{ type: "text", text: contentStr }];
+        }
 
         console.log(`[SurveyPage] Mapping resumed message ${i}:`, {
           role: msg.role,
@@ -190,7 +204,7 @@ function SurveyContent() {
         return {
           id: msg.id || `msg-${i}`,
           role: msg.role as "system" | "user" | "assistant" | "data",
-          content: msg.content || "", // Keep content for fallback renderer
+          content: contentStr, // Always send as string for fallback renderer
           parts
         };
       })
@@ -270,32 +284,6 @@ function SurveyContent() {
   const setMessages = originalSetMessages;
   const isChatLoading = status === "streaming" || status === "submitted";
 
-  // Auto-start or Resume for text mode is now handled SERVER-SIDE
-  // The frontend no longer injects fake "user" messages like "Start the conversation..."
-  // This prevents LLM confusion and corrupting the database chat history.
-  // The backend's GET endpoint already initializes the conversation with a greeting.
-  useEffect(() => {
-    if (
-      !isInitializing &&
-      !initError &&
-      survey &&
-      !survey.isVoice &&
-      !isCompleted &&
-      !hasStarted &&
-      conversationId
-    ) {
-      // Just mark it as started, the backend already provided the initial messages
-      setHasStarted(true);
-    }
-  }, [
-    isInitializing,
-    initError,
-    survey,
-    isVoiceMode,
-    isCompleted,
-    hasStarted,
-    conversationId,
-  ]);
 
   // Voice WebSocket Integration
   const wsUrl = survey?.isVoice
@@ -436,7 +424,7 @@ function SurveyContent() {
   }, [locale]);
 
   const handleLanguageChange = (newLocale: string) => {
-    router.replace({ pathname, query: { shareableLink } } as any, {
+    router.replace({ pathname, query: { shareableLink, started: "true" } } as any, {
       locale: newLocale,
     });
   };
@@ -630,17 +618,18 @@ function SurveyContent() {
   // Main UI Render
   return (
     <div className="min-h-[100dvh] bg-gray-50 flex items-center justify-center p-0 sm:p-4 font-sans selection:bg-gray-900 selection:text-white">
-      {/* Start Survey Overlay for Voice Mode */}
-      {survey?.isVoice && !hasStarted && !isCompleted && !isInitializing && (
-        <VoiceSurveyStartOverlay
+      {/* Start Survey Overlay for All Modes */}
+      {!hasStarted && !isCompleted && !isInitializing && (
+        <SurveyStartOverlay
           onStart={handleStartSurvey}
           initialLanguage={(locale as any) || "en"}
           title={survey?.title || t("voiceSurveyTitle")}
           description={
             survey?.objective?.description ||
             t("voiceSurveyIntro") ||
-            "Join our voice-powered interview. Choose your preferred language and start speaking naturally."
+            "Join our interview. Choose your preferred language to begin."
           }
+          isVoice={survey?.isVoice}
           t={t as any}
         />
       )}
@@ -650,7 +639,7 @@ function SurveyContent() {
         className={cn(
           "w-full max-w-5xl h-[100dvh] sm:h-[85vh] bg-white rounded-none shadow-sm flex flex-col overflow-hidden relative transition-opacity duration-500",
           !isEmbed && "sm:rounded-3xl sm:border border-gray-200",
-          survey?.isVoice && !hasStarted ? "opacity-0" : "opacity-100",
+          !hasStarted ? "opacity-0" : "opacity-100",
         )}
       >
         {!isEmbed && (
@@ -950,7 +939,7 @@ function SurveyContent() {
                           }}
                           placeholder={t("typeAnswer")}
                           rows={1}
-                          disabled={isChatLoading || isCompleted}
+                          disabled={!hasStarted || isChatLoading || isCompleted}
                           className="flex-1 py-4 px-4 bg-transparent outline-none resize-none text-base text-gray-800 placeholder:text-gray-400 min-h-[60px] sm:min-h-[96px] max-h-60 disabled:opacity-50 disabled:cursor-not-allowed"
                         />
 
@@ -958,7 +947,7 @@ function SurveyContent() {
                           <button
                             type="submit"
                             disabled={
-                              !input.trim() || isChatLoading || isCompleted
+                              !hasStarted || !input.trim() || isChatLoading || isCompleted
                             }
                             className={cn(
                               "p-2.5 rounded-xl transition-all",

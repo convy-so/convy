@@ -1,10 +1,13 @@
-import {
-  type ToneProfile,
-} from "./surveys";
-import type {
-  SurveyMedia,
-} from "@/db/schema";
+import { type ToneProfile } from "./surveys";
+import type { SurveyMedia } from "@/db/schema";
 
+export interface SubjectIntelligence {
+  domainId?: number;
+  findings: Record<string, any>;
+  intelligentProbes: string[];
+  confidence: "high" | "medium" | "low";
+  confidenceReason?: string;
+}
 
 export interface SurveyConfig {
   id: string;
@@ -19,6 +22,7 @@ export interface SurveyConfig {
   personalInfo?: string[];
   domainId?: number;
   improvementFeedback?: string;
+  subjectIntelligence?: SubjectIntelligence;
   subjectModelComplete?: boolean;
 }
 
