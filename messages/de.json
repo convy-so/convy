@@ -316,6 +316,15 @@
             "micConsentDescription": "Ich verstehe, dass diese Umfrage Sprachaufzeichnungen verwendet. Ich erteile die Erlaubnis, mein Mikrofon für die Dauer des Interviews zu verwenden."
         },
         "Detail": {
+            "NotFound": "Umfrage nicht gefunden",
+            "BackToSurveys": "Zurück zu Umfragen",
+            "Status": {
+                "Active": "Aktiv",
+                "Draft": "Entwurf",
+                "Completed": "Abgeschlossen",
+                "Paused": "Pausiert",
+                "SampleReview": "In Überprüfung"
+            },
             "Header": {
                 "Copied": "Kopiert",
                 "CopyLink": "Link kopieren",
@@ -384,8 +393,15 @@
                     },
                     "Summary": "Keine Zusammenfassung verfügbar"
                 },
+                "Card": {
+                    "NoSummary": "Noch keine Zusammenfassung generiert."
+                },
                 "Pagination": {
-                    "Page": "Seite {current} von {total}"
+                    "Page": "Seite {current} von {total}",
+                    "FirstPage": "Erste Seite",
+                    "PreviousPage": "Vorherige Seite",
+                    "NextPage": "Nächste Seite",
+                    "LastPage": "Letzte Seite"
                 }
             },
             "Settings": {
@@ -414,13 +430,26 @@
                     "Generating": "Wird generiert..."
                 },
                 "Options": {
-                    "Iframe": "Option 1: Iframe-Einbettung",
+                    "Inline": "Inline",
+                    "Popover": "Popover",
+                    "SideTab": "Seitenreiter",
+                    "Iframe": "Iframe",
+                    "Iframe2": "Option 1: Iframe-Einbettung",
                     "Script": "Option 2: Inline-Skript",
                     "Copy": "Kopieren",
-                    "Copied": "Kopiert!"
+                    "Copied": "Kopiert!",
+                    "Color": "Schaltflächenfarbe",
+                    "TabText": "Reiter-Bezeichnung",
+                    "ScriptLabel": "{type} Einbettungscode",
+                    "Position": {
+                        "Label": "Position",
+                        "Left": "Links",
+                        "Right": "Rechts"
+                    }
                 },
                 "Instructions": {
                     "Title": "Anwendung",
+                    "IframeTitle": "Iframe-Anleitung",
                     "Step1": "Kopieren Sie eines der obigen Code-Snippets",
                     "Step2": "Fügen Sie es in den HTML-Code Ihrer Website ein, wo die Umfrage erscheinen soll",
                     "Step3": "Die Umfrage wird als interaktiver Iframe auf Ihrer Seite geladen",
@@ -888,23 +917,23 @@
         },
         "Hero": {
             "Badge": "Formulare 2.0",
-            "Title": "Die Chat-Ebene, <br />die Ihre Formulare immer brauchten.",
-            "Description": "Convy ersetzt starre Formulare durch dynamische Chat-Flows, die sich wie echte Gespräche anfühlen.",
-            "CTA": "Kostenlos starten",
+            "Title": "KI-native Umfragen <br /> für jeden Bereich.",
+            "Description": "Wir helfen CX, Forschern und im Bildungswesen, bessere Erkenntnisse zu gewinnen, indem wir starre Formulare durch dynamische KI-Chats ersetzen.",
+            "CTA": "Kostenlose Umfrage erstellen",
             "NoCreditCard": "keine Kreditkarte erforderlich"
         },
         "Insights": {
             "Badge": "Hören Sie zu",
-            "Title": "Gespräche, die wirklich funktionieren",
-            "Description": "Alte Formulare fühlen sich tot und verwirrend an, aber KI-Chats verwandeln Interaktionen in klare Erkenntnisse.",
+            "Title": "Entdecken Sie das 'Warum' hinter den Daten",
+            "Description": "Vom Mitarbeiter-Engagement bis zum Produkt-Feedback verwandeln KI-Chats Interaktionen in tiefe, hochwertige Erkenntnisse.",
             "Cards": {
                 "AI": {
-                    "Title": "KI-gestützte Gespräche, keine Fragen",
-                    "Description": "Statische Fragen sperren Nutzer in eine Box, während echte Gespräche ihre Prioritäten und wahren Gedanken offenbaren."
+                    "Title": "Gespräche, keine Verhöre",
+                    "Description": "Statische Fragen sperren Nutzer ein. Echte Gespräche offenbaren ihre wahren Prioritäten und Probleme."
                 },
                 "Alive": {
-                    "Title": "Von starr zu lebendig",
-                    "Description": "Tote Formulare behandeln jeden Nutzer gleich, während kleine Änderungen jede Interaktion menschlich machen."
+                    "Title": "Anpassbar an jedes Feld",
+                    "Description": "Ob bei der Befragung eines Bürgers oder eines Kunden, unsere KI passt ihren Ton natürlich an."
                 },
                 "Flow": {
                     "Title": "Formulare, die wirklich fließen",
@@ -919,11 +948,11 @@
         "Features": {
             "Badge": "Funktionen",
             "Title": "Alles, was Sie brauchen, um mit Nutzern zu sprechen",
-            "Description": "Convy verwandelt statische Fragenlisten in lebendige Gespräche, um reichhaltigere Signale zu erfassen.",
+            "Description": "Convy verwandelt statische Fragenlisten in lebendige Gespräche, um in allen Forschungsbereichen reichhaltigere Signale zu erfassen.",
             "Cards": {
                 "Builder": {
                     "Title": "KI-Formular-Builder",
-                    "Description": "Erstellen Sie automatisch Gesprächsabläufe aus einfachen Texteingaben."
+                    "Description": "Erstellen Sie automatisch domänenspezifische Gesprächsabläufe aus einfachem Text."
                 },
                 "Integrations": {
                     "Title": "Integrationen",
@@ -950,7 +979,7 @@
             "Button": "Kostenlos starten"
         },
         "Footer": {
-            "Message": "Beginnen Sie noch heute mit der Verbesserung Ihres Produkts mit <br /> Echtzeitdaten von Convy.",
+            "Message": "Beginnen Sie noch heute mit dem Entdecken tieferer Erkenntnisse mit <br /> Echtzeitdaten von Convy.",
             "Contact": "Kontaktieren Sie uns auf X",
             "Rights": "© {year} convy. Alle Rechte vorbehalten.",
             "Privacy": "Datenschutzrichtlinie",

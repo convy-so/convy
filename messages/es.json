@@ -316,6 +316,15 @@
             "micConsentDescription": "Entiendo que esta encuesta utiliza grabación de voz. Concedo permiso para usar mi micrófono durante la entrevista."
         },
         "Detail": {
+            "NotFound": "Encuesta no encontrada",
+            "BackToSurveys": "Volver a encuestas",
+            "Status": {
+                "Active": "Activa",
+                "Draft": "Borrador",
+                "Completed": "Completada",
+                "Paused": "Pausada",
+                "SampleReview": "En revisión"
+            },
             "Header": {
                 "Copied": "Copiado",
                 "CopyLink": "Copiar enlace",
@@ -384,8 +393,15 @@
                     },
                     "Summary": "Sin resumen disponible"
                 },
+                "Card": {
+                    "NoSummary": "Aún no se ha generado ningún resumen."
+                },
                 "Pagination": {
-                    "Page": "Página {current} de {total}"
+                    "Page": "Página {current} de {total}",
+                    "FirstPage": "Primera página",
+                    "PreviousPage": "Página anterior",
+                    "NextPage": "Página siguiente",
+                    "LastPage": "Última página"
                 }
             },
             "Settings": {
@@ -414,13 +430,26 @@
                     "Generating": "Generando..."
                 },
                 "Options": {
-                    "Iframe": "Opción 1: Integración por iframe",
+                    "Inline": "En línea",
+                    "Popover": "Ventana emergente",
+                    "SideTab": "Pestaña lateral",
+                    "Iframe": "Iframe",
+                    "Iframe2": "Opción 1: Integración por iframe",
                     "Script": "Opción 2: Script en línea",
                     "Copy": "Copiar",
-                    "Copied": "¡Copiado!"
+                    "Copied": "¡Copiado!",
+                    "Color": "Color del botón",
+                    "TabText": "Etiqueta de pestaña",
+                    "ScriptLabel": "Código de integración {type}",
+                    "Position": {
+                        "Label": "Posición",
+                        "Left": "Izquierda",
+                        "Right": "Derecha"
+                    }
                 },
                 "Instructions": {
                     "Title": "Cómo usar",
+                    "IframeTitle": "Instrucciones Iframe",
                     "Step1": "Copia uno de los fragmentos de código anteriores",
                     "Step2": "Pégalo en el HTML de tu sitio web donde quieras que aparezca la encuesta",
                     "Step3": "La encuesta se cargará como un iframe interactivo en tu página",
@@ -888,23 +917,23 @@
         },
         "Hero": {
             "Badge": "Formularios 2.0",
-            "Title": "La capa de chat <br />que tus formularios siempre necesitaron.",
-            "Description": "Convy reemplaza los formularios rígidos con flujos de chat dinámicos que se mueven como una conversación real.",
-            "CTA": "Empezar gratis",
+            "Title": "Encuestas nativas de IA <br /> para cada dominio.",
+            "Description": "Ayudamos a la experiencia del cliente (CX), investigadores y educadores a obtener mejores conocimientos reemplazando encuestas rígidas con chats dinámicos.",
+            "CTA": "Crea tu encuesta gratuita",
             "NoCreditCard": "no se requiere tarjeta de crédito"
         },
         "Insights": {
             "Badge": "Escúchalo",
-            "Title": "Conversaciones que realmente funcionan",
-            "Description": "Los formularios antiguos se sienten muertos y confusos, pero los chats de IA convierten las interacciones en ideas claras.",
+            "Title": "Descubre el 'Por Qué' detrás de los datos",
+            "Description": "Desde el compromiso laboral hasta los comentarios de productos, los chats de IA convierten interacciones en información de alta calidad.",
             "Cards": {
                 "AI": {
-                    "Title": "Conversaciones impulsadas por IA, no preguntas",
-                    "Description": "Las preguntas estáticas atrapan a los usuarios, mientras que las conversaciones reales revelan sus prioridades y pensamientos reales."
+                    "Title": "Conversaciones, no interrogatorios",
+                    "Description": "Las preguntas estáticas atrapan a los usuarios. Las conversaciones reales revelan sus verdaderas prioridades y dolores."
                 },
                 "Alive": {
-                    "Title": "De rígido a vivo",
-                    "Description": "Los formularios muertos tratan a cada usuario igual, mientras que pequeños cambios hacen que cada interacción se sienta humana."
+                    "Title": "Adaptable a cualquier campo",
+                    "Description": "Ya sea encuestando a un ciudadano o a un cliente, nuestra IA adapta su tono y explora de manera natural."
                 },
                 "Flow": {
                     "Title": "Formularios que realmente fluyen",
@@ -919,11 +948,11 @@
         "Features": {
             "Badge": "Características",
             "Title": "Todo lo que necesitas para hablar con los usuarios",
-            "Description": "Convy convierte listas de preguntas estáticas en conversaciones vivas para capturar señales más ricas.",
+            "Description": "Convy convierte listas de encuestas estáticas en conversaciones vivas para capturar señales más ricas en todos los dominios de investigación.",
             "Cards": {
                 "Builder": {
                     "Title": "Constructor de formularios IA",
-                    "Description": "Genera automáticamente flujos conversacionales a partir de indicaciones de texto simples."
+                    "Description": "Genera automáticamente flujos conversacionales específicos de tu dominio a partir de texto."
                 },
                 "ChatData": {
                     "Title": "Chat con datos",
@@ -950,7 +979,7 @@
             "Button": "Empieza gratis"
         },
         "Footer": {
-            "Message": "Empieza a mejorar tu producto hoy con <br /> datos en tiempo real de Convy.",
+            "Message": "Comienza a descubrir conocimientos más profundos hoy con <br /> los datos en tiempo real de Convy.",
             "Contact": "Contáctanos en X",
             "Rights": "© {year} convy. Todos los derechos reservados.",
             "Privacy": "Política de privacidad",

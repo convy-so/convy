@@ -115,42 +115,6 @@ export async function POST(
         subjectModelComplete: false,
       };
 
-    // SAVE CONVERSATION STATE (Important for extraction to work)
-    const messagesWithTimestamp = messages.map((msg) => {
-      let textContent = msg.content;
-      if (!textContent && Array.isArray(msg.parts)) {
-        textContent = msg.parts
-          .filter((p: any) => p.type === "text")
-          .map((p: any) => p.text)
-          .join("");
-      }
-      return {
-        id: msg.id,
-        role: msg.role,
-        content: textContent || "",
-        parts: msg.parts,
-        timestamp: msg.timestamp || new Date().toISOString(),
-      };
-    });
-
-    if (creationConversation) {
-      await getDb()
-        .update(surveyCreationConversations)
-        .set({
-          messages: messagesWithTimestamp,
-        })
-        .where(eq(surveyCreationConversations.surveyId, surveyId));
-    } else {
-      await getDb().insert(surveyCreationConversations).values({
-        id: crypto.randomUUID(),
-        surveyId,
-        messages: messagesWithTimestamp,
-        status: "in_progress",
-        collectedInfo: collectedInfo,
-        extractedData: {},
-      });
-    }
-
     // --- AGENT INTEGRATION START ---
 
     // 1. Build Agent Context
@@ -175,6 +139,42 @@ export async function POST(
 
     const outputMessages = await normalizeMessages(messages);
 
+    // SAVE CONVERSATION STATE — fire non-blocking so it runs while agent initializes
+    const messagesWithTimestamp = messages.map((msg) => {
+      let textContent = msg.content;
+      if (!textContent && Array.isArray(msg.parts)) {
+        textContent = msg.parts
+          .filter((p: any) => p.type === "text")
+          .map((p: any) => p.text)
+          .join("");
+      }
+      return {
+        id: msg.id,
+        role: msg.role,
+        content: textContent || "",
+        parts: msg.parts,
+        timestamp: msg.timestamp || new Date().toISOString(),
+      };
+    });
+
+    const dbSavePromise = (
+      creationConversation
+        ? getDb()
+            .update(surveyCreationConversations)
+            .set({ messages: messagesWithTimestamp })
+            .where(eq(surveyCreationConversations.surveyId, surveyId))
+        : getDb().insert(surveyCreationConversations).values({
+            id: crypto.randomUUID(),
+            surveyId,
+            messages: messagesWithTimestamp,
+            status: "in_progress",
+            collectedInfo: collectedInfo,
+            extractedData: {},
+          })
+    ).catch((err) =>
+      console.error("[CreateAPI] Non-blocking DB save failed:", err),
+    );
+
     const agentContext: AgentContext = {
       surveyConfig: currentConfig,
       language: survey.language,
@@ -183,14 +183,15 @@ export async function POST(
       organizationId: (session.user as any).organizationId,
     };
 
-    // 2. Instantiate Creation Specialist
+    // 2. Instantiate Creation Specialist — initialize while DB save is in-flight
     const agent = new CreationSpecialist(agentContext);
     console.log(`[CreateAPI:Agent] Initializing...`);
     await agent.initialize();
     console.log(`[CreateAPI:Agent] Initialized.`);
 
-    // Preload capabilities
+    // Preload capabilities in parallel; also wait for DB save to complete
     await Promise.all([
+      dbSavePromise,
       agent.preloadSkills(),
       agent.preloadPatternLearnings(["creation", "general"], 2),
     ]).catch((error) =>

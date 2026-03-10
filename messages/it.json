@@ -316,6 +316,15 @@
             "micConsentDescription": "Comprendo che questo sondaggio utilizza la registrazione vocale. Concedo il permesso di utilizzare il mio microfono per la durata dell'intervista."
         },
         "Detail": {
+            "NotFound": "Sondaggio non trovato",
+            "BackToSurveys": "Torna ai sondaggi",
+            "Status": {
+                "Active": "Attivo",
+                "Draft": "Bozza",
+                "Completed": "Completato",
+                "Paused": "In pausa",
+                "SampleReview": "In revisione"
+            },
             "Header": {
                 "Copied": "Copiato",
                 "CopyLink": "Copia link",
@@ -384,8 +393,15 @@
                     },
                     "Summary": "Nessun riepilogo disponibile"
                 },
+                "Card": {
+                    "NoSummary": "Nessun riepilogo ancora generato."
+                },
                 "Pagination": {
-                    "Page": "Pagina {current} di {total}"
+                    "Page": "Pagina {current} di {total}",
+                    "FirstPage": "Prima pagina",
+                    "PreviousPage": "Pagina precedente",
+                    "NextPage": "Pagina successiva",
+                    "LastPage": "Ultima pagina"
                 }
             },
             "Settings": {
@@ -414,13 +430,26 @@
                     "Generating": "Generazione in corso..."
                 },
                 "Options": {
-                    "Iframe": "Opzione 1: Iframe incorporato",
+                    "Inline": "In linea",
+                    "Popover": "Popup",
+                    "SideTab": "Scheda laterale",
+                    "Iframe": "Iframe",
+                    "Iframe2": "Opzione 1: Iframe incorporato",
                     "Script": "Opzione 2: Script in linea",
                     "Copy": "Copia",
-                    "Copied": "Copiato!"
+                    "Copied": "Copiato!",
+                    "Color": "Colore pulsante",
+                    "TabText": "Etichetta scheda",
+                    "ScriptLabel": "Codice incorporato {type}",
+                    "Position": {
+                        "Label": "Posizione",
+                        "Left": "Sinistra",
+                        "Right": "Destra"
+                    }
                 },
                 "Instructions": {
                     "Title": "Come usare",
+                    "IframeTitle": "Istruzioni Iframe",
                     "Step1": "Copia uno dei frammenti di codice sopra",
                     "Step2": "Incollalo nel codice HTML del tuo sito web dove vuoi che appaia il sondaggio",
                     "Step3": "Il sondaggio verrà caricato come iframe interattivo sulla tua pagina",
@@ -886,22 +915,22 @@
         },
         "Hero": {
             "Badge": "Moduli 2.0",
-            "Title": "Il livello di chat <br />di cui i tuoi moduli avevano sempre bisogno.",
-            "Description": "Convy sostituisce i moduli rigidi con flussi di chat dinamici che si muovono come una vera conversazione.",
-            "CTA": "Inizia gratis"
+            "Title": "Sondaggi AI per <br /> ogni settore.",
+            "Description": "Aiutiamo CX, educatori e ricercatori a ottenere insight migliori sostituendo moduli rigidi con chat dinamiche.",
+            "CTA": "Crea il tuo sondaggio gratis"
         },
         "Insights": {
             "Badge": "Ascolta",
-            "Title": "Conversazioni che funzionano davvero",
-            "Description": "I vecchi moduli sembrano morti e confusi, ma le chat IA trasformano le interazioni in idee chiare.",
+            "Title": "Scopri il 'Perché' dietro i dati",
+            "Description": "Dal coinvolgimento dei dipendenti ai feedback dei prodotti, le chat AI trasformano le interazioni in insight di alta qualità.",
             "Cards": {
                 "AI": {
-                    "Title": "Conversazioni basate sull'IA, non domande",
-                    "Description": "Le domande statiche intrappolano gli utenti in una scatola, mentre le vere conversazioni rivelano le loro priorità e i loro veri pensieri."
+                    "Title": "Conversazioni, non interrogatori",
+                    "Description": "Le domande statiche intrappolano gli utenti. Le vere conversazioni rivelano priorità e pensieri reali."
                 },
                 "Alive": {
-                    "Title": "Da rigido a vivo",
-                    "Description": "I moduli morti trattano ogni utente allo stesso modo, mentre piccoli cambiamenti rendono ogni interazione umana."
+                    "Title": "Adattabile a qualsiasi campo",
+                    "Description": "Sia che tu stia sondando un cittadino o un cliente, la nostra AI adatta il tono ed esplora in modo naturale."
                 },
                 "Flow": {
                     "Title": "Moduli che scorrono davvero",
@@ -916,11 +945,11 @@
         "Features": {
             "Badge": "Funzionalità",
             "Title": "Tutto ciò di cui hai bisogno per parlare con gli utenti",
-            "Description": "Convy trasforma elenchi di domande statiche in conversazioni vive per catturare segnali più ricchi.",
+            "Description": "Convy trasforma elenchi di domande statiche in conversazioni vive per catturare segnali più ricchi in ogni ambito di ricerca.",
             "Cards": {
                 "Builder": {
                     "Title": "Costruttore di moduli IA",
-                    "Description": "Genera automaticamente flussi conversazionali da semplici richieste di testo."
+                    "Description": "Genera automaticamente flussi conversazionali specifici per dominio a partire dal testo."
                 },
                 "ChatData": {
                     "Title": "Chat con i dati",
@@ -943,7 +972,7 @@
             "Button": "Inizia gratis"
         },
         "Footer": {
-            "Message": "Inizia a migliorare il tuo prodotto oggi con <br /> dati in tempo reale da Convy.",
+            "Message": "Inizia a scoprire insight più profondi oggi con <br /> dati in tempo reale da Convy.",
             "Contact": "Contattaci su X",
             "Rights": "© {year} convy. Tutti i diritti riservati.",
             "Privacy": "Informativa sulla privacy",

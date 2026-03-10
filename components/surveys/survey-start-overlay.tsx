@@ -1,14 +1,15 @@
 "use client";
 
 import React, { useState } from "react";
-import { Mic, Globe, ArrowRight, ShieldCheck, Check, Loader2 } from "lucide-react";
+import { Mic, Globe, ArrowRight, ShieldCheck, Check, Loader2, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface VoiceSurveyStartOverlayProps {
+interface SurveyStartOverlayProps {
     onStart: (language: string) => Promise<void>;
     initialLanguage: string;
     title: string;
     description: string;
+    isVoice?: boolean;
     t: (key: string) => string;
 }
 
@@ -20,13 +21,14 @@ const LANGUAGES = [
     { code: "it", name: "Italiano", flag: "🇮🇹" },
 ];
 
-export function VoiceSurveyStartOverlay({
+export function SurveyStartOverlay({
     onStart,
     initialLanguage,
     title,
     description,
+    isVoice = false,
     t,
-}: VoiceSurveyStartOverlayProps) {
+}: SurveyStartOverlayProps) {
     const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage);
     const [isRequestingPermission, setIsRequestingPermission] = useState(false);
     const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -36,22 +38,32 @@ export function VoiceSurveyStartOverlay({
         setIsRequestingPermission(true);
         setPermissionError(null);
 
-        try {
-            // Request microphone permission explicitly before starting
-            // This ensures we have access before the WebSocket connection initiates
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            // Stop the stream immediately, it was just for the permission check
-            stream.getTracks().forEach((track) => track.stop());
+        if (isVoice) {
+            try {
+                // Request microphone permission explicitly before starting
+                // This ensures we have access before the WebSocket connection initiates
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                // Stop the stream immediately, it was just for the permission check
+                stream.getTracks().forEach((track) => track.stop());
 
-            // Permission granted, proceed to start
-            await onStart(selectedLanguage);
-        } catch (err: any) {
-            console.error("Microphone permission denied:", err);
-            setPermissionError(
-                t("micPermissionDenied") ||
-                "Microphone access is required for this survey. Please enable it in your browser settings to continue.",
-            );
-            setIsRequestingPermission(false);
+                // Permission granted, proceed to start
+                await onStart(selectedLanguage);
+            } catch (err: any) {
+                console.error("Microphone permission denied:", err);
+                setPermissionError(
+                    t("micPermissionDenied") ||
+                    "Microphone access is required for this survey. Please enable it in your browser settings to continue.",
+                );
+                setIsRequestingPermission(false);
+            }
+        } else {
+            // Text survey - no permission needed, start directly
+            try {
+                await onStart(selectedLanguage);
+            } catch (e) {
+                console.error("Failed to start text survey:", e);
+                setIsRequestingPermission(false);
+            }
         }
     };
 
@@ -61,7 +73,11 @@ export function VoiceSurveyStartOverlay({
                 {/* Header */}
                 <div className="text-center space-y-4">
                     <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-slate-50 border border-slate-100 mb-2">
-                        <Mic className="w-10 h-10 text-slate-900" />
+                        {isVoice ? (
+                            <Mic className="w-10 h-10 text-slate-900" />
+                        ) : (
+                            <MessageSquare className="w-10 h-10 text-slate-900" />
+                        )}
                     </div>
                     <div className="space-y-1">
                         <h2 className="text-3xl font-bold tracking-tight text-slate-900">
@@ -106,32 +122,34 @@ export function VoiceSurveyStartOverlay({
 
                 {/* Mic Consent & Action Area */}
                 <div className="space-y-6 pt-4">
-                    <div
-                        onClick={() => setMicConsent(!micConsent)}
-                        className="flex items-start gap-3 p-4 rounded-2xl bg-slate-50 border border-slate-100 cursor-pointer hover:bg-slate-100/50 transition-colors group"
-                    >
-                        <div className={cn(
-                            "w-5 h-5 rounded border-2 flex-shrink-0 mt-0.5 transition-all flex items-center justify-center",
-                            micConsent ? "bg-slate-900 border-slate-900" : "bg-white border-slate-200 group-hover:border-slate-300"
-                        )}>
-                            {micConsent && <Check className="w-3 h-3 text-white" />}
+                    {isVoice && (
+                        <div
+                            onClick={() => setMicConsent(!micConsent)}
+                            className="flex items-start gap-3 p-4 rounded-2xl bg-slate-50 border border-slate-100 cursor-pointer hover:bg-slate-100/50 transition-colors group"
+                        >
+                            <div className={cn(
+                                "w-5 h-5 rounded border-2 flex-shrink-0 mt-0.5 transition-all flex items-center justify-center",
+                                micConsent ? "bg-slate-900 border-slate-900" : "bg-white border-slate-200 group-hover:border-slate-300"
+                            )}>
+                                {micConsent && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-sm font-semibold text-slate-900">
+                                    {t("micConsentTitle") || "Microphone Access"}
+                                </p>
+                                <p className="text-xs text-slate-500 leading-relaxed">
+                                    {t("micConsentDescription") || "I understand that this survey uses voice recording. I grant permission to use my microphone for the duration of the interview."}
+                                </p>
+                            </div>
                         </div>
-                        <div className="space-y-1">
-                            <p className="text-sm font-semibold text-slate-900">
-                                {t("micConsentTitle") || "Microphone Access"}
-                            </p>
-                            <p className="text-xs text-slate-500 leading-relaxed">
-                                {t("micConsentDescription") || "I understand that this survey uses voice recording. I grant permission to use my microphone for the duration of the interview."}
-                            </p>
-                        </div>
-                    </div>
+                    )}
 
                     <button
                         onClick={handleStart}
-                        disabled={isRequestingPermission || !micConsent}
+                        disabled={isRequestingPermission || (isVoice && !micConsent)}
                         className={cn(
                             "w-full py-5 px-8 rounded-3xl font-bold text-lg transition-all duration-500 flex items-center justify-center gap-3 group shadow-sm",
-                            (isRequestingPermission || !micConsent)
+                            (isRequestingPermission || (isVoice && !micConsent))
                                 ? "bg-slate-50 text-slate-300 cursor-not-allowed border border-slate-100"
                                 : "bg-slate-900 text-white hover:bg-black hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-900/10 active:scale-95"
                         )}
@@ -143,7 +161,7 @@ export function VoiceSurveyStartOverlay({
                             </>
                         ) : (
                             <>
-                                {t("startInterview") || "Start Interview"}
+                                {t("startInterview") || "Start Survey"}
                                 <ArrowRight className="w-5 h-5 opacity-50 group-hover:translate-x-1.5 transition-transform duration-300" />
                             </>
                         )}
@@ -158,20 +176,22 @@ export function VoiceSurveyStartOverlay({
                         </div>
                     )}
 
-                    <div className="flex items-center justify-center gap-4 text-[10px] text-slate-300 uppercase tracking-widest font-bold">
-                        <span className="flex items-center gap-1.5">
-                            <div className="w-1 h-1 rounded-full bg-slate-300" />
-                            Secure Voice
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                            <div className="w-1 h-1 rounded-full bg-slate-300" />
-                            Encrypted
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                            <div className="w-1 h-1 rounded-full bg-slate-300" />
-                            Privacy First
-                        </span>
-                    </div>
+                    {isVoice && (
+                        <div className="flex items-center justify-center gap-4 text-[10px] text-slate-300 uppercase tracking-widest font-bold">
+                            <span className="flex items-center gap-1.5">
+                                <div className="w-1 h-1 rounded-full bg-slate-300" />
+                                Secure Voice
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                                <div className="w-1 h-1 rounded-full bg-slate-300" />
+                                Encrypted
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                                <div className="w-1 h-1 rounded-full bg-slate-300" />
+                                Privacy First
+                            </span>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

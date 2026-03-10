@@ -116,15 +116,17 @@ export async function GET(
     };
 
     // Create new conversation record with greeting
-    await getDb().insert(surveyConversations).values({
-      id: conversationId,
-      surveyId: survey.id,
-      participantId,
-      rawConversation: [greetingMessage],
-      completed: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    await getDb()
+      .insert(surveyConversations)
+      .values({
+        id: conversationId,
+        surveyId: survey.id,
+        participantId,
+        rawConversation: [greetingMessage],
+        completed: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
 
     return NextResponse.json({
       survey: {
@@ -218,8 +220,15 @@ export async function POST(
     const agentContext: AgentContext = {
       conversationId,
       surveyConfig,
-      language: survey.language as "en" | "fr" | "de" | "es" | "it" | undefined,
+      language: (language || survey.language) as
+        | "en"
+        | "fr"
+        | "de"
+        | "es"
+        | "it"
+        | undefined,
       rollingContext,
+      subjectIntelligence: surveyConfig.subjectIntelligence,
     };
     const agent = new ConductingSpecialist(agentContext);
     console.log(`[RespondAPI:POST] Initializing agent...`);
@@ -362,12 +371,24 @@ export async function POST(
                 userMessages.length >= minQuestions;
 
               if (conversationId) {
-                const dbMessages = updatedMessages.map((m: any) => ({
-                  role: m.role,
-                  content: m.content,
-                  parts: m.parts,
-                  timestamp: m.timestamp || new Date().toISOString(),
-                }));
+                const dbMessages = updatedMessages.map((m: any) => {
+                  let contentStr = m.content;
+                  let partsArr = m.parts;
+
+                  // If content is an array (AI SDK ModelMessage), extract the string and map the parts
+                  if (Array.isArray(m.content)) {
+                    partsArr = m.content;
+                    contentStr =
+                      m.content.find((p: any) => p.type === "text")?.text || "";
+                  }
+
+                  return {
+                    role: m.role,
+                    content: contentStr,
+                    parts: partsArr,
+                    timestamp: m.timestamp || new Date().toISOString(),
+                  };
+                });
 
                 const [currentConv] = await getDb()
                   .select({
