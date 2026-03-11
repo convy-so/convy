@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/routing";
 import { AuthCard } from "@/components/auth/auth-card";
@@ -24,8 +24,25 @@ function AcceptInvitationContent() {
   const [error, setError] = useState<string | null>(null);
   const invitationId = params.id as string;
   const queryClient = useQueryClient();
+  const hasAttemptedAccept = useRef(false);
 
-  const handleAccept = async () => {
+  const finalizeSuccess = useCallback(() => {
+    setIsSuccess(true);
+    toast.success(t("ToastSuccess"));
+    queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
+    queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.active });
+    queryClient.invalidateQueries({
+      predicate: (query) => query.queryKey?.[0] === "workspaceMembers",
+    });
+    queryClient.invalidateQueries({
+      predicate: (query) => query.queryKey?.[0] === "workspaceInvitations",
+    });
+    setTimeout(() => {
+      router.push("/dashboard");
+    }, 2000);
+  }, [queryClient, router, t]);
+
+  const handleAccept = useCallback(async () => {
     if (!invitationId) return;
     setIsLoading(true);
     setError(null);
@@ -35,19 +52,18 @@ function AcceptInvitationContent() {
         invitationId,
         fetchOptions: {
           onSuccess: () => {
-            setIsSuccess(true);
-            toast.success(t("ToastSuccess"));
-            queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
-            queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.active });
-            setTimeout(() => {
-              router.push("/dashboard");
-            }, 2000);
+            finalizeSuccess();
           },
           onError: (ctx) => {
-            setError(ctx.error.message);
-            toast.error(ctx.error.message);
-          }
-        }
+            const message = ctx.error.message || t("GenericError");
+            if (/already|accepted|member/i.test(message)) {
+              finalizeSuccess();
+              return;
+            }
+            setError(message);
+            toast.error(message);
+          },
+        },
       });
     } catch (err) {
       setError(t("GenericError"));
@@ -55,7 +71,14 @@ function AcceptInvitationContent() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [finalizeSuccess, invitationId, t]);
+
+  useEffect(() => {
+    if (authLoading || !session || !invitationId || isSuccess) return;
+    if (hasAttemptedAccept.current) return;
+    hasAttemptedAccept.current = true;
+    handleAccept();
+  }, [authLoading, handleAccept, invitationId, isSuccess, session]);
 
   if (authLoading) {
     return (
@@ -90,7 +113,10 @@ function AcceptInvitationContent() {
             </SubmitButton>
           </Link>
           <div className="text-center">
-            <Link href="/sign-up" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">
+            <Link
+              href={`/sign-up?callbackUrl=/workspace/accept-invitation/${invitationId}`}
+              className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
+            >
               {t("NoAccount")} {t("SignUp")}
             </Link>
           </div>
