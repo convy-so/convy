@@ -2,7 +2,7 @@ import { T } from "@/components/i18n/t";
 import { getTranslations, getLocale } from "next-intl/server";
 
 export default async function CookiesPage() {
-    const t = await getTranslations("Legal");
+    const t = await getTranslations({locale: 'en', namespace: "Legal"});
     const locale = await getLocale();
 
     return (
