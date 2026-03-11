@@ -75,6 +75,14 @@ export default function TeamPage() {
   });
 
   const members = membersData;
+  const memberEmails = new Set(
+    members.map((member) => member.user.email.toLowerCase()),
+  );
+  const filteredInvites = pendingInvites.filter(
+    (invite) =>
+      invite.status === "pending" &&
+      !memberEmails.has(invite.email.toLowerCase()),
+  );
   const isLoading = isLoadingWorkspace || isLoadingMembers || isLoadingInvites;
 
   // Function for refreshing team data (for backwards compatibility)
@@ -217,7 +225,7 @@ export default function TeamPage() {
           <div className="flex-1">
             <TeamMemberList
               members={members}
-              pendingInvites={pendingInvites}
+              pendingInvites={filteredInvites}
               currentUserId={user?.id || ""}
               isOwner={activeWorkspace.role === "owner"}
               workspaceId={activeWorkspace.id}
