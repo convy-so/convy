@@ -1,29 +1,39 @@
-export default function CookiesPage() {
+import { getTranslations, getLocale } from "next-intl/server";
+
+export default async function CookiesPage() {
+    const t = await getTranslations("Legal");
+    const locale = await getLocale();
+
     return (
         <div className="max-w-none">
-            <h1 className="text-4xl font-bold mb-8 text-[#232323]">Cookie Policy</h1>
-            <p className="text-[#666] mb-8">Last updated: March 10, 2026</p>
+            {locale !== 'en' && (
+                <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-8">
+                    <p className="text-sm text-yellow-700">{t("Disclaimer")}</p>
+                </div>
+            )}
+            <h1 className="text-4xl font-bold mb-8 text-[#232323]">{t("Cookies.Title")}</h1>
+            <p className="text-[#666] mb-8">{t("Cookies.LastUpdated")}</p>
 
-            <h2 className="text-2xl font-semibold mt-10 mb-4 text-[#232323]">Why We Use Cookies</h2>
+            <h2 className="text-2xl font-semibold mt-10 mb-4 text-[#232323]">{t("Cookies.WhyUse")}</h2>
             <p className="mb-6 text-[#444] leading-relaxed text-lg">
-                We use cookies to ensure you get the best possible experience when using our application. Cookies are simply small pieces of data saved on your device that help our website remember important information about your visit.
+                {t("Cookies.WhyUseText")}
             </p>
 
-            <h2 className="text-2xl font-semibold mt-10 mb-4 text-[#232323]">Necessary Cookies</h2>
+            <h2 className="text-2xl font-semibold mt-10 mb-4 text-[#232323]">{t("Cookies.Necessary")}</h2>
             <div className="mb-6 bg-[#F0F4F8] p-6 rounded-2xl border border-[#D9E2EC] shadow-sm">
                 <p className="text-[#232323] leading-relaxed text-lg">
-                    Some cookies are essential for our app to work. For example, when you take a survey, we use a necessary cookie to ensure you only answer it once. This helps keep our survey results accurate and fair for everyone. Without these cookies, the core features of our website simply wouldn't be able to function properly.
+                    {t("Cookies.NecessaryText")}
                 </p>
             </div>
 
-            <h2 className="text-2xl font-semibold mt-10 mb-4 text-[#232323]">Cookies to Improve Your Experience</h2>
+            <h2 className="text-2xl font-semibold mt-10 mb-4 text-[#232323]">{t("Cookies.Improve")}</h2>
             <p className="mb-6 text-[#444] leading-relaxed text-lg">
-                We also use cookies to make your visits smoother. These cookies help us remember your language preferences and understand how people are using our platform. This information allows us to continually improve our design and figure out which features you find most helpful.
+                {t("Cookies.ImproveText")}
             </p>
 
-            <h2 className="text-2xl font-semibold mt-10 mb-4 text-[#232323]">Your Choices</h2>
+            <h2 className="text-2xl font-semibold mt-10 mb-4 text-[#232323]">{t("Cookies.Choices")}</h2>
             <p className="mb-6 text-[#444] leading-relaxed text-lg">
-                You are in control of your data. When you first visit, our cookie banner allows you to choose to accept all cookies or only the necessary ones. You can also clear or manage your cookies anytime directly from your browser settings.
+                {t("Cookies.ChoicesText")}
             </p>
         </div>
     );

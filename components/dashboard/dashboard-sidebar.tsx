@@ -99,14 +99,14 @@ export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-gray-900 to-gray-700 flex items-center justify-center">
             <Image
               src="/logo.svg"
-              alt="Convy Logo"
+              alt="Convyy Logo"
               width={20}
               height={20}
               className="w-5 h-5 object-contain invert"
             />
           </div>
           <Link href="/dashboard" className="flex items-center">
-            <h1 className="text-xl font-bold text-gray-900 tracking-tight">Convy</h1>
+            <h1 className="text-xl font-bold text-gray-900 tracking-tight">Convyy</h1>
           </Link>
         </div>
 

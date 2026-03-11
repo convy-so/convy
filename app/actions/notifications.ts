@@ -22,7 +22,7 @@ export async function getNotifications(): Promise<ActionResult<any[]>> {
         if (userNotifications.length === 0) {
             await createNotification(
                 session.user.id,
-                "Welcome to Convy!",
+                "Welcome to Convyy!",
                 "We're glad to have you here. Explore your dashboard to get started.",
                 "success"
             );

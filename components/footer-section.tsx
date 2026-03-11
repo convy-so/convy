@@ -14,7 +14,7 @@ export default function FooterSection() {
           <div className="w-14 h-14 rounded-[18px] border border-white/20 flex items-center justify-center">
             <Image
               src="/logo.svg"
-              alt="Convy logo"
+              alt="Convyy logo"
               width={40}
               height={40}
               className="h-8 w-8"

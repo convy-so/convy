@@ -67,7 +67,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
   return (
     <header className="h-16 border-b border-[#EAEAEA] bg-white pl-16 pr-6 lg:px-6 flex items-center justify-between sticky top-0 z-10 transition-all duration-300">
       <div className="flex items-center gap-4 lg:hidden">
-        <span className="font-semibold text-[#292929]">Convy</span>
+        <span className="font-semibold text-[#292929]">Convyy</span>
       </div>
 
       <div className="flex-1 max-w-md hidden lg:block">
