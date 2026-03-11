@@ -35,7 +35,7 @@ async function ReviewContent({
     return (
         <div className="space-y-8">
             <Link
-                href="/admin/surveys"
+                href="/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/surveys"
                 className="inline-flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
             >
                 <ArrowLeft className="w-4 h-4" />
