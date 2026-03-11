@@ -204,7 +204,17 @@ export default function SurveyDetailPage() {
         // Invalidate survey query to refetch updated data
         queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
       } else {
-        toast.error(t("Toasts.SettingsFailed") || "Failed to save settings", { id: loadingToast });
+        const contentType = response.headers.get("content-type");
+        let errorMsg = "";
+
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json();
+          errorMsg = errorData.error || errorData.message || t("Toasts.SettingsFailed");
+        } else {
+          errorMsg = await response.text() || t("Toasts.SettingsFailed");
+        }
+
+        toast.error(errorMsg, { id: loadingToast });
       }
     } catch (_) {
       toast.error(t("Toasts.Error") || "An unexpected error occurred", { id: loadingToast });

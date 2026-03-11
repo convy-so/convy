@@ -682,13 +682,30 @@ function CreateSurveyContent() {
       }
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Client] ensureDraftExists FAILED: ${response.status} ${errorText}`);
-        if (errorText === "EMAIL_NOT_VERIFIED") {
+        const contentType = response.headers.get("content-type");
+        let errorMsg = "";
+
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json();
+          errorMsg = errorData.error || errorData.message || `Error: ${response.status}`;
+        } else {
+          errorMsg = await response.text();
+        }
+
+        console.error(`[Client] ensureDraftExists FAILED: ${response.status} ${errorMsg}`);
+
+        if (errorMsg === "EMAIL_NOT_VERIFIED") {
           setAuthError(await getClientTranslation("Please verify your email to continue."));
           return null;
         }
-        throw new Error(`Failed to create draft: ${response.status}`);
+
+        if (response.status === 403) {
+          toast.error(errorMsg);
+          setAuthError(errorMsg);
+          return null;
+        }
+
+        throw new Error(errorMsg);
       }
 
       const survey = await response.json();
