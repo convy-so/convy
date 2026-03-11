@@ -63,6 +63,8 @@ ENV UPSTASH_REDIS_REST_TOKEN="placeholder_token"
 ENV NEXT_PUBLIC_SUPABASE_URL="https://placeholder.supabase.co"
 ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="pk_placeholder"
 ENV convy_supabase_secret_key="placeholder_key"
+ENV ADMIN_PASSWORD="placeholder_password"
+
 
 RUN pnpm build
 
@@ -101,6 +103,8 @@ ENV UPSTASH_REDIS_REST_TOKEN="placeholder_token"
 ENV NEXT_PUBLIC_SUPABASE_URL="https://placeholder.supabase.co"
 ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="pk_placeholder"
 ENV convy_supabase_secret_key="placeholder_key"
+ENV ADMIN_PASSWORD="placeholder_password"
+
 ENV REDIS_URL="redis://localhost:6379"
 ENV APP_BASE_URL="http://localhost:3000"
 ENV ADMIN_EMAILS=""
