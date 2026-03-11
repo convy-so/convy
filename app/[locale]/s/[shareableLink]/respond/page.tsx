@@ -500,7 +500,8 @@ function SurveyContent() {
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-3">
             {initError instanceof Error &&
-              initError.message === "This survey is no longer accepting responses"
+            (initError.message === "This survey is no longer accepting responses" ||
+              initError.message === "Survey has reached its participant limit")
               ? t("closed")
               : initError instanceof Error &&
                 initError.message === "Failed to load survey"

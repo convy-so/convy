@@ -23,7 +23,12 @@ type ActionResult<T> =
 const updateSurveySchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1).optional(),
-  participantLimit: z.number().int().positive().max(10000).optional(),
+  participantLimit: z
+    .number()
+    .int()
+    .positive()
+    .max(50, "Maximum participant limit is 50")
+    .optional(),
   language: z.enum(["en", "fr", "de"]).optional(),
   // Note: goal, type, information, requiredQuestions, metrics are auto-generated
   // and should not be manually edited after creation

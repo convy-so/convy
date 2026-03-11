@@ -90,6 +90,48 @@ export async function POST(request: Request) {
         : (session.user as any).preferredLanguage || "en";
 
     const domainId = typeof body.domainId === "number" ? body.domainId : null;
+    const activeOrgId = session.session.activeOrganizationId;
+
+    // --- USAGE LIMITS CHECK ---
+    const existingSurveys = await getDb()
+      .select({
+        id: surveys.id,
+        isVoice: surveys.isVoice,
+      })
+      .from(surveys)
+      .where(
+        and(
+          eq(surveys.userId, session.user.id),
+          activeOrgId
+            ? eq(surveys.organizationId, activeOrgId)
+            : isNull(surveys.organizationId),
+        ),
+      );
+
+    const isVoice = typeof body.isVoice === "boolean" ? body.isVoice : false;
+
+    if (existingSurveys.length >= 5) {
+      return NextResponse.json(
+        {
+          error:
+            "Limit reached: You can only have 5 surveys per " +
+            (activeOrgId ? "workspace" : "personal account"),
+        },
+        { status: 403 },
+      );
+    }
+
+    if (isVoice && existingSurveys.filter((s) => s.isVoice).length >= 2) {
+      return NextResponse.json(
+        {
+          error:
+            "Limit reached: You can only have 2 voice surveys per " +
+            (activeOrgId ? "workspace" : "personal account"),
+        },
+        { status: 403 },
+      );
+    }
+    // --- END USAGE LIMITS CHECK ---
 
     let survey;
     await getDb().transaction(async (tx) => {
@@ -98,11 +140,12 @@ export async function POST(request: Request) {
         .values({
           id: surveyId,
           userId: session.user.id,
-          organizationId: session.session.activeOrganizationId,
+          organizationId: activeOrgId,
           title: "Untitled Survey",
           status: "creating",
           language: language,
-          isVoice: typeof body.isVoice === "boolean" ? body.isVoice : false,
+          isVoice: isVoice,
+          participantLimit: 50, // Force 50 respondent limit
           domainId: domainId,
           createdAt: now,
           updatedAt: now,
