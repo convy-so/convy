@@ -1,0 +1,33 @@
+{
+  "family": "convy-staging-workers",
+  "networkMode": "awsvpc",
+  "executionRoleArn": "arn:aws:iam::290368114395:role/convy-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::290368114395:role/convy-ecs-task-role",
+  "containerDefinitions": [{
+    "name": "workers",
+    "image": "290368114395.dkr.ecr.eu-north-1.amazonaws.com/convy/workers:staging",
+    "essential": true,
+    "environment": [{ "name": "NODE_ENV", "value": "production" }],
+    "secrets": [
+      { "name": "DATABASE_URL",                 "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/DATABASE_URL" },
+      { "name": "GOOGLE_GENERATIVE_AI_API_KEY", "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/GOOGLE_GENERATIVE_AI_API_KEY" },
+      { "name": "REDIS_URL",                    "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/REDIS_URL" },
+      { "name": "UPSTASH_REDIS_REST_URL",       "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/UPSTASH_REDIS_REST_URL" },
+      { "name": "UPSTASH_REDIS_REST_TOKEN",     "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/UPSTASH_REDIS_REST_TOKEN" },
+      { "name": "RESEND_API_KEY",               "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/RESEND_API_KEY" },
+      { "name": "RESEND_FROM_EMAIL",            "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/RESEND_FROM_EMAIL" },
+      { "name": "OPENAI_API_KEY",               "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/OPENAI_API_KEY" }
+    ],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "/ecs/staging-workers",
+        "awslogs-region": "eu-north-1",
+        "awslogs-stream-prefix": "ecs"
+      }
+    }
+  }],
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024"
+}

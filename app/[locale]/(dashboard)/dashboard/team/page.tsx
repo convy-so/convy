@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { 
-  Users, 
-  Shield, 
-  Globe, 
+import {
+  Users,
+  Shield,
+  Globe,
   Settings,
   AlertCircle,
   AlertTriangle,
@@ -20,6 +20,8 @@ import { fetchActiveWorkspace, fetchWorkspaceMembers, fetchWorkspaceInvitations 
 import { deleteWorkspace, leaveWorkspace } from "@/app/actions/workspace";
 import { queryKeys } from "@/lib/query-keys";
 import { useTranslations } from "next-intl";
+import { SupportedLanguage } from "@/lib/i18n/ai-translator";
+import { ClientT } from "@/components/i18n/client-t";
 
 type TeamMember = {
   id: string;
@@ -34,12 +36,12 @@ type TeamMember = {
 };
 
 export default function TeamPage() {
-  const t = useTranslations('TeamPage');
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const t = useTranslations("TeamPage");
 
   // Fetch active workspace first
   const { data: activeWorkspace, isLoading: isLoadingWorkspace } = useQuery({
@@ -52,7 +54,7 @@ export default function TeamPage() {
     queryKey: queryKeys.workspaces.members(activeWorkspace?.id || ''),
     queryFn: () => fetchWorkspaceMembers(activeWorkspace!.id),
     enabled: !!activeWorkspace?.id,
-    select: (data) => data.map((m: any) => ({
+    select: (data: { id: string; userId: string; role: string; user: { id: string; name: string; email: string; image?: string | null } }[]) => data.map((m) => ({
       ...m,
       role: m.role as "owner" | "member"
     })),
@@ -63,16 +65,24 @@ export default function TeamPage() {
     queryKey: queryKeys.workspaces.invitations(activeWorkspace?.id || ''),
     queryFn: () => fetchWorkspaceInvitations(activeWorkspace!.id),
     enabled: !!activeWorkspace?.id,
-    select: (data) => data.map((i: any) => ({
+    select: (data: { id: string; email: string; role: string; status: string; createdAt: string | number | Date }[]) => data.map((i) => ({
       id: i.id,
       email: i.email,
-      role: i.role,
+      role: i.role as "owner" | "member",
       status: (i.status === "pending" ? "pending" : "expired") as "pending" | "expired",
       createdAt: new Date(i.createdAt).toLocaleDateString()
     })),
   });
 
   const members = membersData;
+  const memberEmails = new Set(
+    members.map((member) => member.user.email.toLowerCase()),
+  );
+  const filteredInvites = pendingInvites.filter(
+    (invite) =>
+      invite.status === "pending" &&
+      !memberEmails.has(invite.email.toLowerCase()),
+  );
   const isLoading = isLoadingWorkspace || isLoadingMembers || isLoadingInvites;
 
   // Function for refreshing team data (for backwards compatibility)
@@ -84,13 +94,12 @@ export default function TeamPage() {
     }
   };
 
-  const handleMemberRemoved = (id: string) => {
-    // Invalidate queries to refresh data
+  const handleMemberRemoved = async (id: string) => {
     if (activeWorkspace?.id) {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.members(activeWorkspace.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.invitations(activeWorkspace.id) });
     }
-    toast.success(t('Toasts.MemberRemoved'));
+    toast.success(t("Toasts.MemberRemoved"));
   };
 
   const handleWorkspaceDelete = async () => {
@@ -99,15 +108,15 @@ export default function TeamPage() {
     try {
       const result = await deleteWorkspace(activeWorkspace.id);
       if (result.success) {
-        toast.success(t('Toasts.WorkspaceDeleted'));
+        toast.success(t("Toasts.WorkspaceDeleted"));
         window.location.href = "/dashboard";
       } else {
-        toast.error(result.error || t('Toasts.DeleteFailed'));
+        toast.error(t("Toasts.DeleteFailed"));
         setIsProcessing(false);
         setShowDeleteModal(false);
       }
     } catch (error) {
-      toast.error(t('Toasts.DeleteFailed'));
+      toast.error(t("Toasts.DeleteFailed"));
       setIsProcessing(false);
       setShowDeleteModal(false);
     }
@@ -119,15 +128,15 @@ export default function TeamPage() {
     try {
       const result = await leaveWorkspace(activeWorkspace.id);
       if (result.success) {
-        toast.success(t('Toasts.LeftWorkspace'));
+        toast.success(t("Toasts.LeftWorkspace"));
         window.location.href = "/dashboard";
       } else {
-        toast.error(result.error || t('Toasts.LeaveFailed'));
+        toast.error(t("Toasts.LeaveFailed"));
         setIsProcessing(false);
         setShowLeaveModal(false);
       }
     } catch (error) {
-      toast.error(t('Toasts.LeaveFailed'));
+      toast.error(t("Toasts.LeaveFailed"));
       setIsProcessing(false);
       setShowLeaveModal(false);
     }
@@ -148,11 +157,10 @@ export default function TeamPage() {
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto">
             <Users className="w-8 h-8 text-gray-400" />
           </div>
-          <h2 className="text-2xl font-semibold text-gray-900">{t('PersonalSpace.Title')}</h2>
+          <h2 className="text-2xl font-semibold text-gray-900">{t("PersonalSpace.Title")}</h2>
           <p className="text-gray-500 max-w-md mx-auto">
-            {t('PersonalSpace.Description')}
+            {t("PersonalSpace.Description")}
           </p>
-          {/* We could add a create workspace button here */}
         </div>
       </div>
     );
@@ -164,10 +172,10 @@ export default function TeamPage() {
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight mb-2">
-            {t('Header.Title')}
+            {t("Header.Title")}
           </h1>
           <p className="text-gray-500">
-            {t('Header.Description', { name: activeWorkspace.name })}
+            {t("Header.Description", { name: activeWorkspace.name })}
           </p>
         </div>
 
@@ -175,7 +183,7 @@ export default function TeamPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="exclude-from-layout bg-white rounded-xl border border-gray-100 p-4 flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500 mb-1">{t('Stats.TotalMembers')}</p>
+              <p className="text-sm font-medium text-gray-500 mb-1">{t("Stats.TotalMembers")}</p>
               <p className="text-2xl font-bold text-gray-900">{members.length}</p>
             </div>
             <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
@@ -185,8 +193,8 @@ export default function TeamPage() {
 
           <div className="exclude-from-layout bg-white rounded-xl border border-gray-100 p-4 flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500 mb-1">{t('Stats.YourRole')}</p>
-              <p className="text-2xl font-bold text-gray-900 capitalize">{activeWorkspace.role}</p>
+              <p className="text-sm font-medium text-gray-500 mb-1">{t("Stats.YourRole")}</p>
+              <p className="text-2xl font-bold text-gray-900 capitalize">{t(`Roles.${activeWorkspace.role === 'owner' ? 'Owner' : 'Member'}`)}</p>
             </div>
             <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
               <Shield className="w-5 h-5" />
@@ -195,12 +203,12 @@ export default function TeamPage() {
 
           <div className="exclude-from-layout bg-white rounded-xl border border-gray-100 p-4 flex items-start justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500 mb-1">{t('Stats.WorkspacePlan')}</p>
+              <p className="text-sm font-medium text-gray-500 mb-1">{t("Stats.WorkspacePlan")}</p>
               <div className="flex items-center gap-2">
-                <p className="text-2xl font-bold text-gray-900">{activeWorkspace.plan || "Free"}</p>
+                <p className="text-2xl font-bold text-gray-900">{activeWorkspace.plan || t("Stats.Free")}</p>
                 {(activeWorkspace.plan === "Free" || !activeWorkspace.plan) && (
                   <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium cursor-pointer hover:bg-gray-200 transition-colors">
-                    {t('Stats.Upgrade')}
+                    {t("Stats.Upgrade")}
                   </span>
                 )}
               </div>
@@ -215,15 +223,15 @@ export default function TeamPage() {
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Members List - Main Area */}
           <div className="flex-1">
-            <TeamMemberList 
+            <TeamMemberList
               members={members}
-              pendingInvites={pendingInvites}
+              pendingInvites={filteredInvites}
               currentUserId={user?.id || ""}
               isOwner={activeWorkspace.role === "owner"}
               workspaceId={activeWorkspace.id}
               onMemberRemoved={handleMemberRemoved}
               onInviteSent={() => {
-                toast.success(t('Toasts.InvitationSent'));
+                toast.success(t("Toasts.InvitationSent"));
                 loadTeamData();
               }}
             />
@@ -235,31 +243,31 @@ export default function TeamPage() {
             <div className="bg-white rounded-xl border border-gray-100 p-5">
               <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <Settings className="w-4 h-4 text-gray-500" />
-                {t('Permissions.Title')}
+                {t("Permissions.Title")}
               </h3>
-              
+
               <div className="space-y-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 uppercase tracking-wide">
-                      {t('Permissions.Owner.Title')}
+                      {t("Permissions.Owner.Title")}
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 leading-relaxed">
-                    {t('Permissions.Owner.Description')}
+                    {t("Permissions.Owner.Description")}
                   </p>
                 </div>
-                
+
                 <div className="w-full h-px bg-gray-50" />
 
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-gray-50 text-gray-600 border border-gray-200 uppercase tracking-wide">
-                      {t('Permissions.Member.Title')}
+                      {t("Permissions.Member.Title")}
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 leading-relaxed">
-                    {t('Permissions.Member.Description')}
+                    {t("Permissions.Member.Description")}
                   </p>
                 </div>
               </div>
@@ -271,12 +279,12 @@ export default function TeamPage() {
                 <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center mb-4">
                   <Users className="w-5 h-5 text-white" />
                 </div>
-                <h3 className="font-semibold mb-1">{t('Upgrade.Title')}</h3>
+                <h3 className="font-semibold mb-1">{t("ReadyToScale.Title")}</h3>
                 <p className="text-sm text-gray-300 mb-4">
-                  {t('Upgrade.Description')}
+                  {t("ReadyToScale.Description")}
                 </p>
                 <button className="w-full py-2 bg-white text-gray-900 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-                  {t('Upgrade.Button')}
+                  {t("ReadyToScale.Button")}
                 </button>
               </div>
             )}
@@ -285,31 +293,31 @@ export default function TeamPage() {
             <div className="bg-red-50 rounded-xl border border-red-100 p-5">
               <h3 className="font-semibold text-red-900 mb-4 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4" />
-                {t('DangerZone.Title')}
+                {t("Danger.Title")}
               </h3>
-              
+
               {activeWorkspace.role === "owner" ? (
                 <div>
                   <p className="text-xs text-red-700 mb-3">
-                    {t('DangerZone.Delete.Description')}
+                    {t("Danger.DeleteDesc")}
                   </p>
-                  <button 
+                  <button
                     onClick={() => setShowDeleteModal(true)}
                     className="w-full py-2 bg-white border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 hover:border-red-300 transition-colors"
                   >
-                    {t('DangerZone.Delete.Button')}
+                    {t("Danger.DeleteWorkspace")}
                   </button>
                 </div>
               ) : (
                 <div>
                   <p className="text-xs text-red-700 mb-3">
-                    {t('DangerZone.Leave.Description')}
+                    {t("Danger.LeaveDesc")}
                   </p>
-                  <button 
+                  <button
                     onClick={() => setShowLeaveModal(true)}
                     className="w-full py-2 bg-white border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 hover:border-red-300 transition-colors"
                   >
-                    {t('DangerZone.Leave.Button')}
+                    {t("Danger.LeaveWorkspace")}
                   </button>
                 </div>
               )}
@@ -331,9 +339,9 @@ export default function TeamPage() {
               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <AlertTriangle className="w-8 h-8 text-red-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">{t('DeleteModal.Title')}</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">{t("Modals.Delete.Title")}</h3>
               <p className="text-gray-500">
-                {t('DeleteModal.Description', { name: activeWorkspace.name })}
+                {t("Modals.Delete.Description", { name: activeWorkspace.name })}
               </p>
             </div>
 
@@ -343,7 +351,7 @@ export default function TeamPage() {
                 className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
                 disabled={isProcessing}
               >
-                {t('DeleteModal.Cancel')}
+                {t("Modals.Delete.Cancel")}
               </button>
               <button
                 onClick={handleWorkspaceDelete}
@@ -353,12 +361,12 @@ export default function TeamPage() {
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    {t('DeleteModal.Deleting')}
+                    {t("Modals.Delete.Deleting")}
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4" />
-                    {t('DeleteModal.Confirm')}
+                    {t("Modals.Delete.Confirm")}
                   </>
                 )}
               </button>
@@ -380,9 +388,9 @@ export default function TeamPage() {
               <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <LogOut className="w-8 h-8 text-orange-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">{t('LeaveModal.Title')}</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">{t("Modals.Leave.Title")}</h3>
               <p className="text-gray-500">
-                {t('LeaveModal.Description', { name: activeWorkspace.name })}
+                {t("Modals.Leave.Description", { name: activeWorkspace.name })}
               </p>
             </div>
 
@@ -392,7 +400,7 @@ export default function TeamPage() {
                 className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
                 disabled={isProcessing}
               >
-                {t('LeaveModal.Cancel')}
+                {t("Modals.Leave.Cancel")}
               </button>
               <button
                 onClick={handleWorkspaceLeave}
@@ -402,12 +410,12 @@ export default function TeamPage() {
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    {t('LeaveModal.Leaving')}
+                    {t("Modals.Leave.Leaving")}
                   </>
                 ) : (
                   <>
                     <LogOut className="w-4 h-4" />
-                    {t('LeaveModal.Confirm')}
+                    {t("Modals.Leave.Confirm")}
                   </>
                 )}
               </button>

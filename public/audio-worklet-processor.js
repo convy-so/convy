@@ -1,15 +1,15 @@
 /**
  * PCM Audio Worklet Processor with 80ms Buffering
- * 
+ *
  * DEEPGRAM FLUX OPTIMIZATIONS:
  * 1. Receives 16kHz audio directly (Native Browser Resampling)
  * 2. Buffers audio to send in ~80ms chunks (2560 bytes at 16kHz)
- * 
+ *
  * Why 16kHz?
  * - Deepgram Flux is optimized for 16kHz audio
  * - Reduces bandwidth significantly
  * - Browser handles high-quality resampling from hardware rate (44.1/48kHz)
- * 
+ *
  * Why 80ms chunks?
  * - Deepgram Flux requires ~80ms chunks for optimal turn detection
  * - At 16kHz: 16000 samples/sec * 0.08 sec = 1280 samples = 2560 bytes
@@ -18,18 +18,26 @@
 class PCMProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    
+
     // Target 80ms at 16kHz = 1280 samples
     this.targetSamples16k = 1280;
     this.buffer16k = new Int16Array(this.targetSamples16k);
     this.bufferIndex = 0;
-    
+
+    // Chain of Trust: Track initialization
+    console.log(
+      `[ChainOfTrust] [Worklet] Initialized. TargetSamples: ${this.targetSamples16k} (80ms @ 16kHz)`,
+    );
+
     this.port.onmessage = (event) => {
-      if (event.data.command === 'stop') {
+      if (event.data.command === "stop") {
+        console.log("[ChainOfTrust] [Worklet] Stop command received.");
         this.stopped = true;
       }
     };
     this.stopped = false;
+    this.processCount = 0;
+    this.hasStarted = false;
   }
 
   /**
@@ -37,7 +45,7 @@ class PCMProcessor extends AudioWorkletProcessor {
    */
   floatTo16Bit(sample) {
     const s = Math.max(-1, Math.min(1, sample));
-    return s < 0 ? s * 0x8000 : s * 0x7FFF;
+    return s < 0 ? s * 0x8000 : s * 0x7fff;
   }
 
   /**
@@ -47,6 +55,21 @@ class PCMProcessor extends AudioWorkletProcessor {
   process(inputs, outputs, parameters) {
     if (this.stopped) return false;
 
+    if (!this.hasStarted) {
+      console.log(
+        "[ChainOfTrust] [Worklet] First process() call received. Audio flow started.",
+      );
+      this.hasStarted = true;
+    }
+
+    this.processCount++;
+    if (this.processCount % 500 === 0) {
+      // Log every ~4 seconds (128 samples * 500 / 16000 = 4s)
+      console.log(
+        `[ChainOfTrust] [Worklet] Heartbeat: Processed ${this.processCount} blocks (~${Math.round((this.processCount * 128) / 16) / 1000}s)`,
+      );
+    }
+
     const input = inputs[0];
     if (!input || input.length === 0) return true;
 
@@ -55,16 +78,16 @@ class PCMProcessor extends AudioWorkletProcessor {
 
     // Process each sample
     for (let i = 0; i < inputChannel.length; i++) {
-        // Input is already 16kHz, so we process every sample
-        // Convert to 16-bit PCM and store
-        const pcmSample = this.floatTo16Bit(inputChannel[i]);
-        this.buffer16k[this.bufferIndex] = pcmSample;
-        this.bufferIndex++;
+      // Input is already 16kHz, so we process every sample
+      // Convert to 16-bit PCM and store
+      const pcmSample = this.floatTo16Bit(inputChannel[i]);
+      this.buffer16k[this.bufferIndex] = pcmSample;
+      this.bufferIndex++;
 
-        // Send buffer when we reach 80ms worth of data
-        if (this.bufferIndex >= this.targetSamples16k) {
-          this.sendBuffer();
-        }
+      // Send buffer when we reach 80ms worth of data
+      if (this.bufferIndex >= this.targetSamples16k) {
+        this.sendBuffer();
+      }
     }
 
     return true;
@@ -73,17 +96,29 @@ class PCMProcessor extends AudioWorkletProcessor {
   sendBuffer() {
     // Create a copy of the buffer to send
     const dataToSend = new Int16Array(this.buffer16k);
-    
+
+    // Chain of Trust: Track buffer dispatch
+    // Log every 10th buffer (~800ms) to avoid spam but prove flow
+    if (
+      Math.floor(this.processCount / 10) % 10 === 0 &&
+      this.bufferIndex === 0
+    ) {
+      // Only log once per window
+    }
+
     // Post data back to main thread
-    this.port.postMessage({
-      type: 'audio',
-      buffer: dataToSend.buffer,
-      sampleRate: 16000 
-    }, [dataToSend.buffer]); 
-    
+    this.port.postMessage(
+      {
+        type: "audio",
+        buffer: dataToSend.buffer,
+        sampleRate: 16000,
+      },
+      [dataToSend.buffer],
+    );
+
     // Reset buffer index
     this.bufferIndex = 0;
   }
 }
 
-registerProcessor('pcm-processor', PCMProcessor);
+registerProcessor("pcm-processor", PCMProcessor);

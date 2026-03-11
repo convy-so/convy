@@ -9,13 +9,13 @@ export default function Navbar() {
         <nav className="w-full bg-[#FAFAFA] pt-4 sm:pt-6">
             <div className="mx-auto max-w-[1824px] grid h-14 sm:h-16 grid-cols-3 items-center px-4 sm:px-[30px]">
                 <Link href="/" className="flex items-center">
-                    <span className="text-lg sm:text-xl font-bold text-foreground">convy</span>
+                    <span className="text-lg sm:text-xl font-bold text-foreground">convyy</span>
                 </Link>
 
                 <div className="flex items-center justify-center">
                     <Image
                         src="/logo.svg"
-                        alt="Convy Logo"
+                        alt="Convyy Logo"
                         width={32}
                         height={32}
                         className="max-h-6 sm:max-h-8 w-auto object-contain"

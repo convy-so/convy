@@ -16,7 +16,7 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import { eq, and, sql } from "drizzle-orm";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveyConversations} from "@/db/schema";
 import { participantFeedback } from "@/db/schema/learning";
 import { knowledgeBase } from "@/db/schema/vectors";
@@ -36,7 +36,7 @@ export async function POST(
     const { surveyId, conversationId } = await params;
 
     // Verify conversation belongs to the survey
-    const [conv] = await db
+    const [conv] = await getDb()
       .select({ id: surveyConversations.id, surveyId: surveyConversations.surveyId })
       .from(surveyConversations)
       .where(
@@ -61,7 +61,7 @@ export async function POST(
     const { rating, feltNatural, uncomfortableTopics, freeText } = parsed.data;
 
     // Insert feedback record
-    await db.insert(participantFeedback).values({
+    await getDb().insert(participantFeedback).values({
       id: nanoid(),
       conversationId,
       surveyId,
@@ -75,7 +75,7 @@ export async function POST(
     // If participant reported uncomfortable topics, deprecate any patterns
     // that were extracted from this conversation (prevents bad patterns reaching ACTIVE).
     if (uncomfortableTopics) {
-      const deprecated = await db
+      const deprecated = await getDb()
         .update(knowledgeBase)
         .set({ status: "DEPRECATED" })
         .where(

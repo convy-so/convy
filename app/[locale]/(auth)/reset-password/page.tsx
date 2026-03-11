@@ -5,7 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
 import { Eye, EyeOff, Lock, Check } from "lucide-react";
+import { Suspense } from "react";
 import { AuthCard } from "@/components/auth/auth-card";
+
 import { StatusCard } from "@/components/auth/status-card";
 import { InputField } from "@/components/auth/input-field";
 import { PasswordStrength } from "@/components/auth/password-strength";
@@ -13,7 +15,7 @@ import { SubmitButton } from "@/components/auth/submit-button";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
   const router = useRouter();
@@ -180,5 +182,13 @@ export default function ResetPasswordPage() {
         </Link>
       </div>
     </AuthCard>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense>
+      <ResetPasswordContent />
+    </Suspense>
   );
 }

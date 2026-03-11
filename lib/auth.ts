@@ -3,7 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { organization } from "better-auth/plugins";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { authSchema } from "@/db/schema";
 import { env } from "@/lib/env";
 import {
@@ -13,10 +13,10 @@ import {
 } from "@/lib/email";
 
 export const auth = betterAuth({
-  appName: "Convy",
+  appName: "Convyy",
   baseURL: env.BETTER_AUTH_URL,
   secret: env.BETTER_AUTH_SECRET,
-  database: drizzleAdapter(db, {
+  database: drizzleAdapter(getDb(), {
     schema: authSchema,
     provider: "pg",
   }),
@@ -32,7 +32,7 @@ export const auth = betterAuth({
       invitationExpiresIn: 60 * 60 * 24 * 7,
       creatorRole: "owner",
       async sendInvitationEmail(data) {
-        const inviteLink = `${env.BETTER_AUTH_URL}/workspace/accept-invitation/${data.id}`;
+        const inviteLink = `${env.BETTER_AUTH_URL}/en/workspace/accept-invitation/${data.id}`;
         await sendWorkspaceInvitationEmail({
           email: data.email,
           invitedBy: data.inviter.user.name || data.inviter.user.email,
@@ -85,8 +85,25 @@ export const auth = betterAuth({
         required: true,
         input: false,
       },
+      preferredLanguage: {
+        type: "string",
+        defaultValue: "en",
+        required: false,
+      },
     },
   },
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user: any) => {
+          if (user.email && env.ADMIN_EMAILS.includes(user.email.toLowerCase())) {
+            throw new Error("Admin emails cannot be registered as normal users.");
+          }
+          return { data: user };
+        }
+      }
+    }
+  }
 });
 
 export type AuthUser = InferUser<typeof auth>;

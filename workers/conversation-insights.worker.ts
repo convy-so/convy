@@ -2,7 +2,7 @@ import { Worker, Job } from "bullmq";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import {
   conversationInsights,
   surveyConversations,
@@ -168,7 +168,7 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
     );
 
     // Fetch conversation
-    const [conversation] = await db
+    const [conversation] = await getDb()
       .select()
       .from(surveyConversations)
       .where(eq(surveyConversations.id, conversationId));
@@ -178,7 +178,7 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
     }
 
     // Fetch survey config
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -274,7 +274,7 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
 
     // Step 5: Save to database
     // Update conversation with summary and translated conversation
-    await db
+    await getDb()
       .update(surveyConversations)
       .set({
         summary: structuredInsights.summary,
@@ -285,7 +285,7 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
     await job.updateProgress(90);
 
     // Upsert conversation insights
-    const [existingInsight] = await db
+    const [existingInsight] = await getDb()
       .select()
       .from(conversationInsights)
       .where(eq(conversationInsights.conversationId, conversationId));
@@ -325,7 +325,7 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
     const keyFindingsText = structuredInsights.keyFindings.join("\n\n");
 
     if (existingInsight) {
-      await db
+      await getDb()
         .update(conversationInsights)
         .set({
           insights: insightsData,
@@ -333,7 +333,7 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
         })
         .where(eq(conversationInsights.conversationId, conversationId));
     } else {
-      await db.insert(conversationInsights).values({
+      await getDb().insert(conversationInsights).values({
         id: crypto.randomUUID(),
         conversationId,
         insights: insightsData,

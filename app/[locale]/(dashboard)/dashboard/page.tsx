@@ -1,161 +1,201 @@
-
 import { Link } from "@/i18n/routing";
 import {
   MessageSquare,
-  Users,
   BarChart3,
   TrendingUp,
   Plus,
   ArrowUpRight,
   Sparkles,
   FolderOpen,
-  Plug,
 } from "lucide-react";
+import { SupportedLanguage } from "@/lib/i18n/ai-translator";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { SurveyCard } from "@/components/dashboard/survey-card";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema/surveys";
 import { eq, desc, count, and, sql, isNull } from "drizzle-orm";
+import { Suspense } from "react";
+import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
+import { Loader2 } from "lucide-react";
+import { cache, cacheKeys } from "@/lib/cache";
 
-export default async function DashboardPage() {
-  const session = await getVerifiedSession();
+async function DashboardContent({ authHeaders }: { authHeaders: Headers | string | null }) {
+  const session = await getVerifiedSession(authHeaders);
+  const t = await getTranslations("Dashboard");
+
   const userId = session.user.id;
   const activeOrgId = session.session.activeOrganizationId;
-  const t = await getTranslations('Dashboard');
+  const language = (session.user as any).preferredLanguage as SupportedLanguage || "en";
 
   const quickActions = [
     {
-      title: t('QuickActions.CreateSurvey.Title'),
-      description: t('QuickActions.CreateSurvey.Description'),
+      title: t("QuickActions.CreateSurvey.Title"),
+      description: t("QuickActions.CreateSurvey.Description"),
       icon: Sparkles,
       href: "/dashboard/create",
       color: "from-blue-500 to-cyan-500",
     },
     {
-      title: t('QuickActions.ViewAnalytics.Title'),
-      description: t('QuickActions.ViewAnalytics.Description'),
+      title: t("QuickActions.ViewAnalytics.Title"),
+      description: t("QuickActions.ViewAnalytics.Description"),
       icon: BarChart3,
       href: "/dashboard/analytics",
       color: "from-purple-500 to-pink-500",
     },
     {
-      title: t('QuickActions.ManageProjects.Title'),
-      description: t('QuickActions.ManageProjects.Description'),
+      title: t("QuickActions.ManageProjects.Title"),
+      description: t("QuickActions.ManageProjects.Description"),
       icon: FolderOpen,
       href: "/dashboard/projects",
       color: "from-amber-500 to-orange-500",
     },
   ];
 
-  // 1. Fetch Stats
-  // Total Surveys
-  const [surveysCountRes] = await db
-    .select({ count: count() })
-    .from(surveys)
-    .where(
-      and(
-        eq(surveys.userId, userId),
-        activeOrgId
-          ? eq(surveys.organizationId, activeOrgId)
-          : isNull(surveys.organizationId)
-      )
-    );
-  const totalSurveys = surveysCountRes?.count || 0;
+  // Parallelize data fetching and use Redis caching
+  const [stats, recentSurveys, activities] = await Promise.all([
+    // 1 & 2. Stats
+    cache.wrap(
+      cacheKeys.dashboardStats(userId, activeOrgId),
+      async () => {
+        const [surveysCountRes, durationStats] = await Promise.all([
+          getDb()
+            .select({ count: count() })
+            .from(surveys)
+            .where(
+              and(
+                eq(surveys.userId, userId),
+                activeOrgId
+                  ? eq(surveys.organizationId, activeOrgId)
+                  : isNull(surveys.organizationId)
+              )
+            ),
+          getDb()
+            .select({
+              avgDuration: sql<number>`avg(extract(epoch from ${surveyConversations.updatedAt} - ${surveyConversations.createdAt}))`
+            })
+            .from(surveyConversations)
+            .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
+            .where(
+              and(
+                eq(surveys.userId, userId),
+                eq(surveyConversations.completed, true),
+                activeOrgId
+                  ? eq(surveys.organizationId, activeOrgId)
+                  : isNull(surveys.organizationId)
+              )
+            )
+        ]);
 
+        const totalSurveys = surveysCountRes[0]?.count || 0;
+        const avgSeconds = Math.round(durationStats[0]?.avgDuration || 0);
+        const avgMinutes = Math.floor(avgSeconds / 60);
+        const remainingSeconds = avgSeconds % 60;
+        const durationDisplay = avgSeconds > 0
+          ? `${avgMinutes}m ${remainingSeconds}s`
+          : "N/A";
 
-
-  // 2. Fetch Average Duration
-  const [durationStats] = await db
-    .select({
-      avgDuration: sql<number>`avg(extract(epoch from ${surveyConversations.updatedAt} - ${surveyConversations.createdAt}))`
-    })
-    .from(surveyConversations)
-    .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
-    .where(
-      and(
-        eq(surveys.userId, userId),
-        eq(surveyConversations.completed, true),
-        activeOrgId
-          ? eq(surveys.organizationId, activeOrgId)
-          : isNull(surveys.organizationId)
-      )
-    );
-
-  const avgSeconds = Math.round(durationStats?.avgDuration || 0);
-  const avgMinutes = Math.floor(avgSeconds / 60);
-  const remainingSeconds = avgSeconds % 60;
-  const durationDisplay = avgSeconds > 0
-    ? `${avgMinutes}m ${remainingSeconds}s`
-    : "N/A";
-
-  // 3. Fetch Recent Surveys
-  const recentSurveysData = await db.query.surveys.findMany({
-    where: and(
-      eq(surveys.userId, userId),
-      activeOrgId
-        ? eq(surveys.organizationId, activeOrgId)
-        : isNull(surveys.organizationId)
+        return { totalSurveys, durationDisplay, avgSeconds };
+      },
+      60 * 5 // Cache for 5 minutes
     ),
-    orderBy: [desc(surveys.updatedAt)],
-    limit: 3,
-  });
 
-  const recentSurveys = recentSurveysData.map(survey => ({
-    id: survey.id,
-    title: survey.title,
-    status: survey.status as any, // Cast to match component type
-    responses: survey.currentParticipants,
-    maxResponses: survey.participantLimit,
-    lastActivity: new Date(survey.updatedAt).toLocaleDateString(), // simplified
-    createdAt: new Date(survey.createdAt).toLocaleDateString(),
-    isVoice: survey.isVoice,
-    projectName: "Default Project", // Placeholder if project relation not fetched
-  }));
+    // 3. Recent Surveys
+    cache.wrap(
+      cacheKeys.dashboardRecentSurveys(userId, activeOrgId),
+      async () => {
+        const surveysData = await getDb().query.surveys.findMany({
+          where: and(
+            eq(surveys.userId, userId),
+            activeOrgId
+              ? eq(surveys.organizationId, activeOrgId)
+              : isNull(surveys.organizationId)
+          ),
+          orderBy: [desc(surveys.updatedAt)],
+          limit: 3,
+        });
 
-  // 4. Fetch Recent Activity (Responses)
-  const recentActivitiesRaw = await db
-    .select({
-      id: surveyConversations.id,
-      title: sql<string>`'New response'`,
-      surveyTitle: surveys.title,
-      createdAt: surveyConversations.createdAt,
-    })
-    .from(surveyConversations)
-    .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
-    .where(
-      and(
-        eq(surveys.userId, userId),
-        activeOrgId
-          ? eq(surveys.organizationId, activeOrgId)
-          : isNull(surveys.organizationId)
-      )
+        return surveysData.map(survey => ({
+          id: survey.id,
+          title: survey.title,
+          status: survey.status,
+          responses: survey.currentParticipants,
+          maxResponses: survey.participantLimit,
+          updatedAt: survey.updatedAt,
+          createdAt: survey.createdAt,
+          isVoice: survey.isVoice,
+          projectId: survey.projectId,
+        }));
+      },
+      60 * 2 // Cache for 2 minutes
+    ),
+
+    // 4. Recent Activity
+    cache.wrap(
+      cacheKeys.dashboardActivity(userId, activeOrgId),
+      async () => {
+        const recentActivitiesRaw = await getDb()
+          .select({
+            id: surveyConversations.id,
+            surveyTitle: surveys.title,
+            createdAt: surveyConversations.createdAt,
+          })
+          .from(surveyConversations)
+          .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
+          .where(
+            and(
+              eq(surveys.userId, userId),
+              activeOrgId
+                ? eq(surveys.organizationId, activeOrgId)
+                : isNull(surveys.organizationId)
+            )
+          )
+          .orderBy(desc(surveyConversations.createdAt))
+          .limit(5);
+
+        return recentActivitiesRaw.map(activity => ({
+          id: activity.id,
+          type: "new_response" as const,
+          description: activity.surveyTitle,
+          createdAt: activity.createdAt!,
+        }));
+      },
+      60 * 1 // Cache for 1 minute
     )
-    .orderBy(desc(surveyConversations.createdAt))
-    .limit(5);
+  ]);
 
-  const activities = recentActivitiesRaw.map(activity => ({
-    id: activity.id,
-    type: "new_response" as const,
-    title: t('Activity.NewResponse'),
-    description: activity.surveyTitle,
-    time: new Date(activity.createdAt!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }),
+  // Format data for display using the request locale
+  const formattedRecentSurveys = recentSurveys.map(survey => ({
+    ...survey,
+    status: survey.status as any,
+    lastActivity: new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(survey.updatedAt)),
+    createdAtFormatted: new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(survey.createdAt)),
+    projectName: survey.projectId ? "Project" : "Default Project",
   }));
 
-
+  const formattedActivities = activities.map(activity => ({
+    ...activity,
+    title: t("Activity.NewResponse"),
+    time: new Intl.DateTimeFormat(language, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(activity.createdAt)),
+  }));
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       {/* Welcome Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
-            {t('Welcome.Title')}
+          <h1 className="text-2xl lg:text-3xl font-bold text-[#111111] tracking-tight">
+            {t("Welcome.Title")}
           </h1>
-          <p className="text-gray-500 mt-1">
-            {t('Welcome.Subtitle')}
+          <p className="text-[#666666] mt-1 lg:mt-2 text-sm lg:text-base">
+            {t("Welcome.Subtitle")}
           </p>
         </div>
         <Link
@@ -163,7 +203,7 @@ export default async function DashboardPage() {
           className="flex items-center justify-center gap-2 px-5 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors group w-full sm:w-auto"
         >
           <Plus className="w-5 h-5" />
-          {t('CreateSurvey')}
+          {t("CreateSurvey")}
           <ArrowUpRight className="w-4 h-4 opacity-50 group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
         </Link>
       </div>
@@ -171,18 +211,18 @@ export default async function DashboardPage() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <StatsCard
-          title={t('Stats.TotalSurveys')}
-          value={totalSurveys.toString()}
-          change={t('Stats.AllTime')}
+          title={t("Stats.TotalSurveys")}
+          value={stats.totalSurveys.toString()}
+          change={t("Stats.AllTime")}
           changeType="neutral"
           icon={<MessageSquare className="w-6 h-6" />}
           iconColor="bg-blue-50 text-blue-600"
         />
 
         <StatsCard
-          title={t('Stats.AvgDuration')}
-          value={durationDisplay}
-          change={avgSeconds > 0 ? t('Stats.PerCompleted') : t('Stats.NoCompletions')}
+          title={t("Stats.AvgDuration")}
+          value={stats.durationDisplay}
+          change={stats.avgSeconds > 0 ? t("Stats.PerCompleted") : t("Stats.NoCompletions")}
           changeType="neutral"
           icon={<TrendingUp className="w-6 h-6" />}
           iconColor="bg-amber-50 text-amber-600"
@@ -210,50 +250,64 @@ export default async function DashboardPage() {
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Surveys - Takes 2 columns */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">{t('RecentSurveys.Title')}</h2>
+            <h2 className="text-lg font-semibold text-gray-900">{t("RecentSurveys.Title")}</h2>
             <Link
               href="/dashboard/surveys"
               className="text-sm font-medium text-gray-500 hover:text-gray-900 flex items-center gap-1 transition-colors"
             >
-              {t('RecentSurveys.ViewAll')}
+              {t("RecentSurveys.ViewAll")}
               <ArrowUpRight className="w-4 h-4" />
             </Link>
           </div>
           <div className="grid grid-cols-1 gap-4">
-            {recentSurveys.map((survey) => (
-              <SurveyCard key={survey.id} {...survey} />
+            {formattedRecentSurveys.map((survey) => (
+              <SurveyCard key={survey.id} {...survey} createdAt={survey.createdAtFormatted} />
             ))}
           </div>
 
-          {/* Empty state for when there are no surveys */}
-          {recentSurveys.length === 0 && (
+          {formattedRecentSurveys.length === 0 && (
             <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
               <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-4">
                 <MessageSquare className="w-8 h-8 text-gray-400" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('RecentSurveys.NoSurveys')}</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">{t("RecentSurveys.NoSurveys")}</h3>
               <p className="text-gray-500 mb-6 max-w-sm mx-auto">
-                {t('RecentSurveys.GetStarted')}
+                {t("RecentSurveys.GetStarted")}
               </p>
               <Link
                 href="/dashboard/create"
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                {t('RecentSurveys.CreateFirst')}
+                {t("RecentSurveys.CreateFirst")}
               </Link>
             </div>
           )}
         </div>
 
-        {/* Sidebar Column - Activity Feed Only */}
         <div className="lg:col-span-1 space-y-6">
-          <ActivityFeed activities={activities} />
+          <ActivityFeed activities={formattedActivities} />
         </div>
       </div>
     </div>
   );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      </div>
+    }>
+      <DashboardContentWrapper />
+    </Suspense>
+  );
+}
+
+async function DashboardContentWrapper() {
+  const authHeaders = await headers();
+  return <DashboardContent authHeaders={authHeaders} />;
 }

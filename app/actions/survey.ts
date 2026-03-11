@@ -4,10 +4,11 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { and, eq, ne, or, sql, isNull } from "drizzle-orm";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys, users, organizations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getSurveyAccessLevel } from "@/lib/workspace-access";
+import { cache, cacheKeys } from "@/lib/cache";
 import { env } from "@/lib/env";
 
 type ActionResult<T> =
@@ -22,7 +23,12 @@ type ActionResult<T> =
 const updateSurveySchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1).optional(),
-  participantLimit: z.number().int().positive().max(10000).optional(),
+  participantLimit: z
+    .number()
+    .int()
+    .positive()
+    .max(50, "Maximum participant limit is 50")
+    .optional(),
   language: z.enum(["en", "fr", "de"]).optional(),
   // Note: goal, type, information, requiredQuestions, metrics are auto-generated
   // and should not be manually edited after creation
@@ -42,7 +48,7 @@ export async function updateSurveyAction(
     const body = updateSurveySchema.parse(input);
 
     // Check if survey exists and belongs to user
-    const [existingSurvey] = await db
+    const [existingSurvey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, body.id));
@@ -77,7 +83,18 @@ export async function updateSurveyAction(
       updateData.participantLimit = body.participantLimit;
     if (body.language !== undefined) updateData.language = body.language;
 
-    await db.update(surveys).set(updateData).where(eq(surveys.id, body.id));
+    await getDb()
+      .update(surveys)
+      .set(updateData)
+      .where(eq(surveys.id, body.id));
+
+    // Invalidate dashboard cache
+    await cache.delete(
+      cacheKeys.dashboardRecentSurveys(
+        session.user.id,
+        existingSurvey.organizationId,
+      ),
+    );
 
     return { success: true, data: { id: body.id } };
   } catch (error) {
@@ -126,7 +143,7 @@ export async function getSurveysAction(): Promise<
 
     if (activeOrgId) {
       // Workspace context: Get all surveys in the workspace
-      const workspaceSurveys = await db
+      const workspaceSurveys = await getDb()
         .select({
           id: surveys.id,
           title: surveys.title,
@@ -148,7 +165,7 @@ export async function getSurveysAction(): Promise<
       return { success: true, data: workspaceSurveys };
     } else {
       // Personal context: Get only user's personal surveys (no organizationId)
-      const personalSurveys = await db
+      const personalSurveys = await getDb()
         .select({
           id: surveys.id,
           title: surveys.title,
@@ -197,7 +214,7 @@ export async function getSurveyAction(
   try {
     const session = await getVerifiedSession();
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -240,7 +257,7 @@ export async function confirmSurveyAction(
   try {
     const session = await getVerifiedSession();
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -288,13 +305,21 @@ export async function confirmSurveyAction(
       shareableLink = `survey-${nanoid(12)}`;
     }
 
-    await db
+    await getDb()
       .update(surveys)
       .set({
         status: "active",
         shareableLink,
       })
       .where(eq(surveys.id, surveyId));
+
+    // Invalidate dashboard cache
+    await cache.delete(
+      cacheKeys.dashboardStats(session.user.id, survey.organizationId),
+    );
+    await cache.delete(
+      cacheKeys.dashboardRecentSurveys(session.user.id, survey.organizationId),
+    );
 
     const publicUrl = `/s/${shareableLink}`;
 
@@ -331,7 +356,7 @@ export async function getShareableLinkAction(
   try {
     const session = await getVerifiedSession();
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -401,7 +426,7 @@ export async function setSurveyCustomSlugAction(input: {
 
     const body = schema.parse(input);
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, body.surveyId));
@@ -416,7 +441,7 @@ export async function setSurveyCustomSlugAction(input: {
     }
 
     // Check uniqueness against other surveys' customSlug and shareableLink
-    const [conflict] = await db
+    const [conflict] = await getDb()
       .select({ id: surveys.id })
       .from(surveys)
       .where(
@@ -436,7 +461,7 @@ export async function setSurveyCustomSlugAction(input: {
       };
     }
 
-    await db
+    await getDb()
       .update(surveys)
       .set({ customSlug: body.slug })
       .where(eq(surveys.id, survey.id));
@@ -481,7 +506,7 @@ export async function clearSurveyCustomSlugAction(
   try {
     const session = await getVerifiedSession();
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -495,7 +520,7 @@ export async function clearSurveyCustomSlugAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    await db
+    await getDb()
       .update(surveys)
       .set({ customSlug: null })
       .where(eq(surveys.id, survey.id));
@@ -529,7 +554,7 @@ export async function getSurveyPublicUrlsAction(surveyId: string): Promise<
   try {
     const session = await getVerifiedSession();
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -593,7 +618,7 @@ export async function getSurveyEmbedCodeAction(surveyId: string): Promise<
   try {
     const session = await getVerifiedSession();
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -625,7 +650,7 @@ export async function getSurveyEmbedCodeAction(surveyId: string): Promise<
       };
     }
 
-    const url = `${baseUrl}/s/${identifier}`;
+    const url = `${baseUrl}/s/${identifier}?embed=true`;
 
     // Standard Iframe
     const iframeCode = `<iframe src="${url}" width="100%" height="600" frameborder="0" style="border:0;" allow="microphone; camera; autoplay; encrypted-media"></iframe>`;
@@ -675,7 +700,7 @@ export async function deactivateSurveyAction(
   try {
     const session = await getVerifiedSession();
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -693,10 +718,18 @@ export async function deactivateSurveyAction(
       return { success: false, error: "Survey is not active" };
     }
 
-    await db
+    await getDb()
       .update(surveys)
       .set({ status: "completed" })
       .where(eq(surveys.id, surveyId));
+
+    // Invalidate dashboard cache
+    await cache.delete(
+      cacheKeys.dashboardStats(session.user.id, survey.organizationId),
+    );
+    await cache.delete(
+      cacheKeys.dashboardRecentSurveys(session.user.id, survey.organizationId),
+    );
 
     return { success: true, data: { id: surveyId } };
   } catch (error) {
@@ -722,7 +755,7 @@ export async function reactivateSurveyAction(
   try {
     const session = await getVerifiedSession();
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -748,10 +781,18 @@ export async function reactivateSurveyAction(
       };
     }
 
-    await db
+    await getDb()
       .update(surveys)
       .set({ status: "active" })
       .where(eq(surveys.id, surveyId));
+
+    // Invalidate dashboard cache
+    await cache.delete(
+      cacheKeys.dashboardStats(session.user.id, survey.organizationId),
+    );
+    await cache.delete(
+      cacheKeys.dashboardRecentSurveys(session.user.id, survey.organizationId),
+    );
 
     return { success: true, data: { id: surveyId } };
   } catch (error) {
@@ -778,7 +819,7 @@ export async function deleteSurveyAction(
   try {
     const session = await getVerifiedSession();
 
-    const [survey] = await db
+    const [survey] = await getDb()
       .select({
         id: surveys.id,
         title: surveys.title,
@@ -814,8 +855,19 @@ export async function deleteSurveyAction(
     const surveyTitle = survey.title;
     const organizationId = survey.organizationId;
 
-    // Delete survey (Waterfall cascade deletes everything else)
-    await db.delete(surveys).where(eq(surveys.id, surveyId));
+    // Cascade delete will handle related table rows
+    await getDb().delete(surveys).where(eq(surveys.id, surveyId));
+
+    // Invalidate dashboard cache
+    await cache.delete(
+      cacheKeys.dashboardStats(session.user.id, survey.organizationId),
+    );
+    await cache.delete(
+      cacheKeys.dashboardRecentSurveys(session.user.id, survey.organizationId),
+    );
+    await cache.delete(
+      cacheKeys.dashboardActivity(session.user.id, survey.organizationId),
+    );
 
     // Send Notifications if in a workspace
     if (organizationId) {
@@ -828,7 +880,7 @@ export async function deleteSurveyAction(
 
           const membersResult = await getWorkspaceMembers({ organizationId });
 
-          const [org] = await db
+          const [org] = await getDb()
             .select({ name: organizations.name })
             .from(organizations)
             .where(eq(organizations.id, organizationId));
@@ -877,7 +929,7 @@ export async function duplicateSurveyAction(
   try {
     const session = await getVerifiedSession();
 
-    const [existingSurvey] = await db
+    const [existingSurvey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -901,7 +953,7 @@ export async function duplicateSurveyAction(
     const now = new Date();
 
     // Copy survey data
-    const [newSurvey] = await db
+    const [newSurvey] = await getDb()
       .insert(surveys)
       .values({
         ...existingSurvey,

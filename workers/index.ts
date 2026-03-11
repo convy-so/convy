@@ -12,15 +12,16 @@ loadEnvConfig(process.cwd());
 
 import * as Sentry from "@sentry/node";
 
-/*
 // Initialize Sentry for the standalone Node.js Project (Workers)
 Sentry.init({
-  dsn: process.env.SENTRY_NODE_DSN || process.env.SENTRY_DSN,
+  dsn: process.env.SENTRY_DSN,
   tracesSampleRate: 1.0,
   environment: process.env.NODE_ENV || "development",
   serverName: "worker-process",
 });
-*/
+
+process.env.IS_WORKER = "true";
+
 
 import { env } from "@/lib/env";
 
@@ -31,7 +32,9 @@ import surveyAnalyticsWorker from "./survey-analytics.worker";
 import sampleConversationInsightsWorker from "./sample-conversation-insights.worker";
 import emailWorker from "./email.worker";
 import patternExtractionWorker from "./pattern-extraction.worker";
+import surveyCreationExtractionWorker from "./survey-creation-extraction.worker";
 import experimentEvaluationWorker from "./experiment-evaluation.worker";
+import generativeSummaryWorker from "./generative-summary.worker";
 import { scheduleExperimentEvaluation } from "@/lib/queue";
 
 // Collect all workers for coordinated shutdown
@@ -44,7 +47,12 @@ const workers = [
   },
   { name: "Email", worker: emailWorker },
   { name: "Pattern Extraction", worker: patternExtractionWorker },
+  {
+    name: "Survey Creation Extraction",
+    worker: surveyCreationExtractionWorker,
+  },
   { name: "Experiment Evaluation", worker: experimentEvaluationWorker },
+  { name: "Generative Summary", worker: generativeSummaryWorker },
 ];
 
 console.log("🚀 Starting all workers...");
@@ -74,6 +82,12 @@ console.log("🚀 Starting all workers...");
   }
 
   console.log("\n📊 Workers are now processing jobs...");
+
+  if (process.env.SENTRY_TEST_TRIGGER === "true") {
+    console.log("⚠️ Sentry Test Trigger enabled. Throwing test error in worker...");
+    throw new Error("Sentry Test Worker Error: This is a test error from the Worker process.");
+  }
+
   console.log("Press Ctrl+C to gracefully shutdown\n");
 })();
 
@@ -126,14 +140,3 @@ async function gracefulShutdown(signal: string) {
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
-// Handle uncaught errors
-process.on("uncaughtException", (error) => {
-  console.error("❌ Uncaught exception:", error);
-  Sentry.captureException(error, { tags: { type: "uncaughtException" } });
-  gracefulShutdown("uncaughtException").catch(() => process.exit(1));
-});
-
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("❌ Unhandled rejection at:", promise, "reason:", reason);
-  Sentry.captureException(reason, { tags: { type: "unhandledRejection" } });
-});

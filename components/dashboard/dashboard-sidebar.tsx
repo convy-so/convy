@@ -21,7 +21,6 @@ import { cn } from "@/lib/utils";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
 import { useTranslations } from "next-intl";
-
 import { useAuth } from "@/components/providers/auth-provider";
 
 import { authClient } from "@/lib/auth-client";
@@ -35,29 +34,29 @@ export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
   const { user, session } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const t = useTranslations("Sidebar");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const t = useTranslations('Sidebar');
 
   const activeOrgId = session?.activeOrganizationId || null;
 
   const navigation = [
-    { name: t('Dashboard'), href: "/dashboard", icon: LayoutDashboard },
-    { name: t('Surveys'), href: "/dashboard/surveys", icon: MessageSquare },
-    { name: t('Projects'), href: "/dashboard/projects", icon: FolderOpen },
-    { name: t('Analytics'), href: "/dashboard/analytics", icon: BarChart3 },
-    ...(activeOrgId ? [{ name: t('Team'), href: "/dashboard/team", icon: Users }] : []),
+    { name: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard },
+    { name: t("Surveys"), href: "/dashboard/surveys", icon: MessageSquare },
+    { name: t("Projects"), href: "/dashboard/projects", icon: FolderOpen },
+    { name: t("Analytics"), href: "/dashboard/analytics", icon: BarChart3 },
+    ...(activeOrgId ? [{ name: t("Team"), href: "/dashboard/team", icon: Users }] : []),
   ];
 
   const bottomNavigation = [
-    { name: t('Profile'), href: "/dashboard/profile", icon: UserIcon },
-    { name: t('Settings'), href: "/dashboard/settings", icon: Settings },
+    { name: t("Profile"), href: "/dashboard/profile", icon: UserIcon },
+    { name: t("Settings"), href: "/dashboard/settings", icon: Settings },
   ];
 
   const handleSignOut = async () => {
     await authClient.signOut({
       fetchOptions: {
         onSuccess: () => {
-          toast.success("Signed out successfully");
+          toast.success(t("SignOut") + "...");
           router.replace("/sign-in");
         },
       },
@@ -100,14 +99,14 @@ export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-gray-900 to-gray-700 flex items-center justify-center">
             <Image
               src="/logo.svg"
-              alt="Convy Logo"
+              alt="Convyy Logo"
               width={20}
               height={20}
               className="w-5 h-5 object-contain invert"
             />
           </div>
           <Link href="/dashboard" className="flex items-center">
-            <h1 className="text-xl font-bold text-gray-900 tracking-tight">Convy</h1>
+            <h1 className="text-xl font-bold text-gray-900 tracking-tight">Convyy</h1>
           </Link>
         </div>
 
@@ -123,7 +122,7 @@ export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
 
             return (
               <Link
-                key={item.name}
+                key={item.href}
                 href={item.href}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
@@ -140,7 +139,7 @@ export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
                   isActive && "scale-110",
                   isCreateSurvey && !isActive && "text-purple-500"
                 )} />
-                {item.name}
+                <span className="truncate">{item.name}</span>
               </Link>
             );
           })}
@@ -153,7 +152,7 @@ export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
               pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <Link
-                key={item.name}
+                key={item.href}
                 href={item.href}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
@@ -164,7 +163,7 @@ export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 <item.icon className="w-5 h-5" />
-                {item.name}
+                <span className="truncate">{item.name}</span>
               </Link>
             );
           })}
@@ -178,14 +177,14 @@ export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
               className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 transition-all duration-200 border border-transparent hover:border-red-100 group shadow-sm bg-white"
             >
               <LogOut className="w-5 h-5 group-hover:scale-110 transition-transform" />
-              {t('SignOut')}
+              {t("SignOut")}
             </button>
           ) : (
             <Link
               href="/sign-in"
               className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-all duration-200"
             >
-              {t('SignIn')}
+              {t("SignIn")}
             </Link>
           )}
         </div>

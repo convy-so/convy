@@ -2,7 +2,7 @@
 "use client"
 import { User } from "better-auth/types";
 import { Search, LogOut, Settings, User as UserIcon, Bell } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
 import { useRouter, Link } from "@/i18n/routing";
@@ -11,9 +11,9 @@ import { fetchNotifications as fetchNotificationsAPI } from "@/lib/api/notificat
 import { queryKeys } from "@/lib/query-keys";
 import toast from "react-hot-toast";
 
-import { useAuth } from "@/components/providers/auth-provider";
-
 import { useTranslations } from "next-intl";
+import { useAuth } from "@/components/providers/auth-provider";
+import { ClientT } from "@/components/i18n/client-t";
 
 interface DashboardHeaderProps {
   user?: User | null;
@@ -23,9 +23,11 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
+  const t = useTranslations("Header");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const t = useTranslations('Header');
+  const [searchPlaceholder, setSearchPlaceholder] = useState("Search");
+  const [unreadCountText, setUnreadCountText] = useState("");
 
   // Fetch notifications using React Query
   const { data: notifications = [], isLoading, refetch: refetchNotifications } = useQuery({
@@ -40,6 +42,8 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
+  // Replaced manual getClientTranslation with static keys
+
   const handleMarkAsRead = async (id: string) => {
     const result = await markNotificationAsRead(id);
     if (result.success) {
@@ -53,7 +57,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
     await authClient.signOut({
       fetchOptions: {
         onSuccess: () => {
-          toast.success("Signed out successfully");
+          toast.success(t("LogOut") + "...");
           router.replace("/sign-in");
         },
       },
@@ -63,7 +67,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
   return (
     <header className="h-16 border-b border-[#EAEAEA] bg-white pl-16 pr-6 lg:px-6 flex items-center justify-between sticky top-0 z-10 transition-all duration-300">
       <div className="flex items-center gap-4 lg:hidden">
-        <span className="font-semibold text-[#292929]">Convy</span>
+        <span className="font-semibold text-[#292929]">Convyy</span>
       </div>
 
       <div className="flex-1 max-w-md hidden lg:block">
@@ -71,7 +75,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder={t('Search')}
+            placeholder={t("Search")}
             className="w-full pl-10 pr-4 py-2 rounded-xl bg-gray-50 border-none text-sm focus:ring-2 focus:ring-gray-200 transition-all outline-none"
           />
         </div>
@@ -98,10 +102,10 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
               />
               <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl border border-gray-100 shadow-xl z-20 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                 <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
-                  <h3 className="font-semibold text-gray-900">{t('Notifications')}</h3>
+                  <h3 className="font-semibold text-gray-900">{t("Notifications")}</h3>
                   {unreadCount > 0 && (
                     <span className="px-2 py-0.5 bg-red-50 text-red-600 text-xs font-medium rounded-full">
-                      {t('NewNotifications', { count: unreadCount })}
+                      {t("NewNotifications", { count: unreadCount })}
                     </span>
                   )}
                 </div>
@@ -109,7 +113,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
                   {isLoading ? (
                     <div className="p-8 text-center">
                       <div className="w-6 h-6 border-2 border-gray-900 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                      <p className="text-sm text-gray-500">Loading notifications...</p>
+                      <p className="text-sm text-gray-500">{t("Notifications")}...</p>
                     </div>
                   ) : notifications.length > 0 ? (
                     notifications.map((notification) => (
@@ -130,13 +134,13 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
                     ))
                   ) : (
                     <div className="p-8 text-center">
-                      <p className="text-sm text-gray-500">{t('NoNotifications')}</p>
+                      <p className="text-sm text-gray-500">{t("NoNotifications")}</p>
                     </div>
                   )}
                 </div>
                 <div className="px-4 py-2 bg-gray-50 border-t border-gray-100">
                   <button className="text-xs text-gray-600 hover:text-gray-900 font-medium w-full text-center py-1">
-                    {t('ViewAll')}
+                    {t("ViewAll")}
                   </button>
                 </div>
               </div>
@@ -187,7 +191,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
                     className="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                   >
                     <UserIcon className="w-4 h-4 text-gray-400" />
-                    {t('Profile')}
+                    {t("Profile")}
                   </Link>
                   <Link
                     href="/dashboard/settings"
@@ -195,7 +199,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
                     className="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                   >
                     <Settings className="w-4 h-4 text-gray-400" />
-                    {t('Settings')}
+                    {t("Settings")}
                   </Link>
 
                   <div className="h-px bg-gray-100 my-1" />
@@ -205,7 +209,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
                     className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                   >
                     <LogOut className="w-4 h-4" />
-                    {t('LogOut')}
+                    {t("LogOut")}
                   </button>
                 </div>
               </>
