@@ -186,7 +186,7 @@ export default function TeamPage() {
           <div className="exclude-from-layout bg-white rounded-xl border border-gray-100 p-4 flex items-start justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500 mb-1">{t("Stats.YourRole")}</p>
-              <p className="text-2xl font-bold text-gray-900 capitalize">{t(`Permissions.${activeWorkspace.role === 'owner' ? 'Owner' : 'Member'}`)}</p>
+              <p className="text-2xl font-bold text-gray-900 capitalize">{t(`Roles.${activeWorkspace.role === 'owner' ? 'Owner' : 'Member'}`)}</p>
             </div>
             <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
               <Shield className="w-5 h-5" />
@@ -242,11 +242,11 @@ export default function TeamPage() {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 uppercase tracking-wide">
-                      {t("Permissions.Owner")}
+                      {t("Permissions.Owner.Title")}
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 leading-relaxed">
-                    {t("Permissions.OwnerDesc")}
+                    {t("Permissions.Owner.Description")}
                   </p>
                 </div>
 
@@ -255,11 +255,11 @@ export default function TeamPage() {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-gray-50 text-gray-600 border border-gray-200 uppercase tracking-wide">
-                      {t("Permissions.Member")}
+                      {t("Permissions.Member.Title")}
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 leading-relaxed">
-                    {t("Permissions.MemberDesc")}
+                    {t("Permissions.Member.Description")}
                   </p>
                 </div>
               </div>
@@ -402,12 +402,12 @@ export default function TeamPage() {
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <ClientT>Leaving...</ClientT>
+                    {t("Modals.Leave.Leaving")}
                   </>
                 ) : (
                   <>
                     <LogOut className="w-4 h-4" />
-                    <ClientT>Confirm Leave</ClientT>
+                    {t("Modals.Leave.Confirm")}
                   </>
                 )}
               </button>
