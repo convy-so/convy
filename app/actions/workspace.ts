@@ -563,8 +563,26 @@ export async function getWorkspaceInvitations(organizationId: string): Promise<
   try {
     await getVerifiedSession();
 
+    const workspaceMembers = await getDb().query.members.findMany({
+      where: eq(members.organizationId, organizationId),
+      with: {
+        user: {
+          columns: {
+            email: true,
+          },
+        },
+      },
+    });
+
+    const memberEmails = new Set(
+      workspaceMembers.map((member) => member.user.email.toLowerCase()),
+    );
+
     const invites = await getDb().query.invitations.findMany({
-      where: eq(invitations.organizationId, organizationId),
+      where: and(
+        eq(invitations.organizationId, organizationId),
+        eq(invitations.status, "pending"),
+      ),
       orderBy: [desc(invitations.createdAt)],
       with: {
         inviter: {
@@ -578,14 +596,16 @@ export async function getWorkspaceInvitations(organizationId: string): Promise<
 
     return {
       success: true,
-      data: invites.map((invite) => ({
-        id: invite.id,
-        email: invite.email,
-        role: invite.role,
-        status: invite.status,
-        createdAt: invite.createdAt,
-        inviterName: invite.inviter.name || invite.inviter.email,
-      })),
+      data: invites
+        .filter((invite) => !memberEmails.has(invite.email.toLowerCase()))
+        .map((invite) => ({
+          id: invite.id,
+          email: invite.email,
+          role: invite.role,
+          status: invite.status,
+          createdAt: invite.createdAt,
+          inviterName: invite.inviter.name || invite.inviter.email,
+        })),
     };
   } catch (error) {
     console.error("Error getting workspace invitations:", error);
