@@ -10,6 +10,9 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
+import { getRedisClient } from "@/lib/redis";
+import { env } from "@/lib/env";
+
 /**
  * Helper to check admin access in server actions.
  * Throws an error if the user is not an admin.
@@ -23,20 +26,24 @@ async function checkAdmin(authHeaders?: Headers | string | null) {
     finalHeaders = new Headers();
     finalHeaders.append("cookie", authHeaders);
   } else {
-    // If called from a client action, we might have no headers provided manually,
-    // so we get them from the current request context.
     finalHeaders = await headers();
   }
 
-  const session = await auth.api.getSession({
-    headers: finalHeaders,
-  });
-
-  if (!session || !isAdmin(session.user)) {
+  const cookieStr = finalHeaders.get("cookie") || "";
+  const match = cookieStr.match(/admin_session=([^;]+)/);
+  if (!match) {
     throw new Error("Unauthorized: Admin access required");
   }
 
-  return session;
+  const token = match[1];
+  const redis = getRedisClient();
+  const email = await redis.get(`admin_session:${token}`);
+
+  if (!email || !env.ADMIN_EMAILS.includes(email)) {
+    throw new Error("Unauthorized: Admin access required");
+  }
+
+  return { email };
 }
 
 /**
@@ -202,8 +209,8 @@ export async function submitSurveyFeedback(
     })
     .where(eq(surveys.id, surveyId));
 
-  revalidatePath(`/admin/surveys/${surveyId}`);
-  revalidatePath("/admin/surveys");
+  revalidatePath(`/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/surveys/${surveyId}`);
+  revalidatePath("/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/surveys");
 
   return { success: true };
 }

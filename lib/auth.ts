@@ -92,6 +92,18 @@ export const auth = betterAuth({
       },
     },
   },
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user: any) => {
+          if (user.email && env.ADMIN_EMAILS.includes(user.email.toLowerCase())) {
+            throw new Error("Admin emails cannot be registered as normal users.");
+          }
+          return { data: user };
+        }
+      }
+    }
+  }
 });
 
 export type AuthUser = InferUser<typeof auth>;

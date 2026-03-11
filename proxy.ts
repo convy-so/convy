@@ -30,11 +30,14 @@ export default async function middleware(request: NextRequest) {
 
     if (!hasSessionCookie) {
       // If no session cookie, redirect to sign-in immediately
+      // Use the detected locale or default to 'en'
+      const redirectLocale = urlLocale || routing.defaultLocale;
+      
       // Detect Server Action
       if (request.headers.has("Next-Action")) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
-      return NextResponse.redirect(new URL("/sign-in", request.url));
+      return NextResponse.redirect(new URL(`/${redirectLocale}/sign-in`, request.url));
     }
 
     // 2. Optimistic Locale Sync (Fast Cache)

@@ -23,10 +23,10 @@ export function AdminSidebar({ locale }: AdminSidebarProps) {
     const router = useRouter();
 
     const navigation = [
-        { name: "Overview", href: "/admin", icon: LayoutDashboard },
-        { name: "Surveys & Feedback", href: "/admin/surveys", icon: MessageSquare },
-        { name: "Usage & Costs", href: "/admin/usage", icon: Database },
-        { name: "User Growth", href: "/admin/users", icon: Users },
+        { name: "Overview", href: "/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI", icon: LayoutDashboard },
+        { name: "Surveys & Feedback", href: "/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/surveys", icon: MessageSquare },
+        { name: "Usage & Costs", href: "/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/usage", icon: Database },
+        { name: "User Growth", href: "/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/users", icon: Users },
     ];
 
     const handleSignOut = async () => {

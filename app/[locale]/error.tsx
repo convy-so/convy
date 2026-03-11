@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import { Link } from "@/i18n/routing";
-import { RobotIllustration } from "@/components/ui/robot-illustration";
 import { ClientT } from "@/components/i18n/client-t";
 import { RefreshCw, LogIn, AlertCircle } from "lucide-react";
 
@@ -34,22 +33,21 @@ export default function Error({
 
                     <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
                         {isUnauthorized ? (
-                            <ClientT>You're a stranger here!</ClientT>
+                            <ClientT>Unauthorized Access</ClientT>
                         ) : (
-                            <ClientT>Oops! Our agent tripped.</ClientT>
+                            <ClientT>Something went wrong</ClientT>
                         )}
                     </h1>
 
                     <p className="text-gray-500 text-lg">
                         {isUnauthorized ? (
-                            <ClientT>Please sign in to meet our agent and access your dashboard.</ClientT>
+                            <ClientT>Please sign in to access this page.</ClientT>
                         ) : (
-                            <ClientT>Something went wrong on our end. We're looking into it, but our agent might need a quick reboot.</ClientT>
+                            <ClientT>An unexpected error occurred. Please try again or contact support if the issue persists.</ClientT>
                         )}
                     </p>
                 </div>
 
-                <RobotIllustration />
 
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
                     {isUnauthorized ? (
