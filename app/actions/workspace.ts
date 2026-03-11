@@ -9,8 +9,8 @@
 import { auth } from "@/lib/auth";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
-import { organizations, members, invitations } from "@/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { organizations, members, invitations, users } from "@/db/schema";
+import { eq, and, desc, sql } from "drizzle-orm";
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -221,6 +221,17 @@ export async function inviteToWorkspace(data: {
 }): Promise<ActionResult<{ invitationId: string }>> {
   try {
     const session = await getVerifiedSession();
+    const normalizedEmail = data.email.trim().toLowerCase();
+    const organizationId =
+      data.organizationId ||
+      ((session.session as any).activeOrganizationId as string | undefined);
+
+    if (!organizationId) {
+      return {
+        success: false,
+        error: "No active workspace selected",
+      };
+    }
 
     if (data.organizationId) {
       const { isWorkspaceOwner } = await import("@/lib/workspace-access");
@@ -236,12 +247,48 @@ export async function inviteToWorkspace(data: {
       }
     }
 
+    const existingPendingInvite =
+      await getDb().query.invitations.findFirst({
+        where: and(
+          eq(invitations.organizationId, organizationId),
+          eq(invitations.status, "pending"),
+          sql`lower(${invitations.email}) = ${normalizedEmail}`,
+        ),
+      });
+
+    if (existingPendingInvite) {
+      return {
+        success: false,
+        error: "An invitation has already been sent to this email",
+      };
+    }
+
+    const existingUser = await getDb().query.users.findFirst({
+      where: sql`lower(${users.email}) = ${normalizedEmail}`,
+    });
+
+    if (existingUser) {
+      const existingMember = await getDb().query.members.findFirst({
+        where: and(
+          eq(members.organizationId, organizationId),
+          eq(members.userId, existingUser.id),
+        ),
+      });
+
+      if (existingMember) {
+        return {
+          success: false,
+          error: "This user is already a member of the workspace",
+        };
+      }
+    }
+
     // Use Better Auth API to invite member
     const result = await auth.api.createInvitation({
       body: {
-        email: data.email,
+        email: normalizedEmail,
         role: data.role || "member",
-        organizationId: data.organizationId,
+        organizationId,
       },
       headers: await getSessionHeaders(),
     });

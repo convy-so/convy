@@ -11,6 +11,8 @@ import toast from "react-hot-toast";
 import { Suspense } from "react";
 import { CheckCircle2, XCircle, Users, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
 
 function AcceptInvitationContent() {
   const t = useTranslations("Auth.Invitation");
@@ -21,6 +23,7 @@ function AcceptInvitationContent() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const invitationId = params.id as string;
+  const queryClient = useQueryClient();
 
   const handleAccept = async () => {
     if (!invitationId) return;
@@ -34,6 +37,8 @@ function AcceptInvitationContent() {
           onSuccess: () => {
             setIsSuccess(true);
             toast.success(t("ToastSuccess"));
+            queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.active });
             setTimeout(() => {
               router.push("/dashboard");
             }, 2000);

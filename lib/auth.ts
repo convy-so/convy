@@ -32,7 +32,7 @@ export const auth = betterAuth({
       invitationExpiresIn: 60 * 60 * 24 * 7,
       creatorRole: "owner",
       async sendInvitationEmail(data) {
-        const inviteLink = `${env.BETTER_AUTH_URL}/workspace/accept-invitation/${data.id}`;
+        const inviteLink = `${env.BETTER_AUTH_URL}/en/workspace/accept-invitation/${data.id}`;
         await sendWorkspaceInvitationEmail({
           email: data.email,
           invitedBy: data.inviter.user.name || data.inviter.user.email,
