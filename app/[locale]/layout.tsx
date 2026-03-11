@@ -38,23 +38,23 @@ import { translateUIString, SupportedLanguage } from "@/lib/i18n/ai-translator";
 
 const METADATA_CONFIG: Record<SupportedLanguage, { title: string; description: string }> = {
   en: {
-    title: "Convy — Turn Forms into AI Conversations",
+    title: "Convyy — Turn Forms into AI Conversations",
     description: "Boring forms are dead. Meet modern, AI-native conversations.",
   },
   fr: {
-    title: "Convy — Transformez vos formulaires en conversations IA",
+    title: "Convyy — Transformez vos formulaires en conversations IA",
     description: "Les formulaires ennuyeux, c'est fini. Découvrez les conversations natives IA.",
   },
   de: {
-    title: "Convy — Verwandeln Sie Formulare in KI-Gespräche",
+    title: "Convyy — Verwandeln Sie Formulare in KI-Gespräche",
     description: "Langweilige Formulare sind passée. Erleben Sie moderne KI-Gespräche.",
   },
   es: {
-    title: "Convy — Convierta formularios en conversaciones de IA",
+    title: "Convyy — Convierta formularios en conversaciones de IA",
     description: "Los formularios aburridos han muerto. Conozca las conversaciones nativas de IA.",
   },
   it: {
-    title: "Convy — Trasforma i moduli in conversazioni AI",
+    title: "Convyy — Trasforma i moduli in conversazioni AI",
     description: "I moduli noiosi sono finiti. Scopri le conversazioni native AI.",
   },
 };
@@ -87,7 +87,7 @@ export async function generateMetadata({
       description,
       type: "website",
       url: `/${locale}`,
-      siteName: "Convy",
+      siteName: "Convyy",
     },
     twitter: {
       card: "summary_large_image",
@@ -134,14 +134,14 @@ export default async function LocaleLayout({
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "WebApplication",
-    "name": "Convy",
+    "name": "Convyy",
     "url": BASE_URL,
     "description": "AI-native survey platform",
     "applicationCategory": "BusinessApplication",
     "operatingSystem": "Web",
     "publisher": {
       "@type": "Organization",
-      "name": "Convy AI",
+      "name": "Convyy AI",
       "logo": {
         "@type": "ImageObject",
         "url": `${BASE_URL}/logo.png`,

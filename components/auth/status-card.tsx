@@ -42,7 +42,7 @@ export function StatusCard({
       <div className="text-center">
         {showLogo && (
           <Link href="/" className="inline-block mb-6">
-            <h1 className="text-2xl font-bold text-[#080808]">Convy</h1>
+            <h1 className="text-2xl font-bold text-[#080808]">Convyy</h1>
           </Link>
         )}
         

@@ -13,7 +13,7 @@ import {
 } from "@/lib/email";
 
 export const auth = betterAuth({
-  appName: "Convy",
+  appName: "Convyy",
   baseURL: env.BETTER_AUTH_URL,
   secret: env.BETTER_AUTH_SECRET,
   database: drizzleAdapter(getDb(), {
