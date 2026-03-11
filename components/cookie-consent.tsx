@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
 import { ClientT } from "@/components/i18n/client-t";
@@ -13,8 +13,11 @@ export function CookieConsent() {
         const consent = localStorage.getItem("convy_cookie_consent");
         if (!consent) {
             setIsVisible(true);
+
         }
-    }, []);
+        const consent = localStorage.getItem("convy_cookie_consent");
+        return !consent;
+    });
 
     const handleAcceptAll = () => {
         localStorage.setItem("convy_cookie_consent", "all");
