@@ -24,7 +24,21 @@ export async function createWorkspace(data: {
   slug: string;
 }): Promise<ActionResult<{ id: string; name: string; slug: string }>> {
   try {
-    await getVerifiedSession();
+    const session = await getVerifiedSession();
+
+    // --- WORKSPACE LIMIT CHECK ---
+    const userOwnedWorkspaces = await getDb()
+      .select({ id: members.id })
+      .from(members)
+      .where(and(eq(members.userId, session.user.id), eq(members.role, "owner")));
+
+    if (userOwnedWorkspaces.length >= 2) {
+      return {
+        success: false,
+        error: "Limit reached: You can only create up to 2 workspaces per person.",
+      };
+    }
+    // --- END WORKSPACE LIMIT CHECK ---
 
     // Use Better Auth API to create organization
     const result = await auth.api.createOrganization({
