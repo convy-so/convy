@@ -2,8 +2,8 @@ import { T } from "@/components/i18n/t";
 import { getTranslations, getLocale } from "next-intl/server";
 
 export default async function TermsPage() {
-    const t = await getTranslations("Legal.Terms");
-    const tGeneral = await getTranslations("Legal");
+    const t = await getTranslations({locale: 'en', namespace: "Legal.Terms"});
+    const tGeneral = await getTranslations({locale: 'en', namespace: "Legal"});
     const locale = await getLocale();
 
     return (
