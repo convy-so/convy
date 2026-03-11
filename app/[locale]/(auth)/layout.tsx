@@ -5,8 +5,8 @@ import { Loader2 } from "lucide-react";
 import { AuthProvider } from "@/components/providers/auth-provider";
 
 export const metadata: Metadata = {
-  title: "Authentication — Convy",
-  description: "Sign in to your Convy account",
+  title: "Authentication — Convyy",
+  description: "Sign in to your Convyy account",
 };
 
 export default function AuthLayout({
