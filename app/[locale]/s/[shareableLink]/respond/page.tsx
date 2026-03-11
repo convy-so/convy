@@ -14,7 +14,6 @@ import {
   User,
   Sparkles,
   Paperclip,
-  ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
