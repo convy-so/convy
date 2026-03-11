@@ -649,13 +649,13 @@ function SurveyContent() {
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <img
                   src="/logo.svg"
-                  alt="Convy Logo"
+                  alt="Convyy Logo"
                   width={32}
                   height={32}
                   className="w-8 h-8 flex-shrink-0"
                 />
                 <span className="font-bold text-gray-900 text-lg hidden sm:block">
-                  Convy
+                  Convyy
                 </span>
               </div>
 

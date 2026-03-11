@@ -183,7 +183,7 @@ export default function ResponseDetailPage() {
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 mb-1.5">
                                                     <span className="font-semibold text-sm text-gray-900">
-                                                        {message.role === "assistant" ? <ClientT>Convy AI</ClientT> : <ClientT>Participant</ClientT>}
+                                                        {message.role === "assistant" ? <ClientT>Convyy AI</ClientT> : <ClientT>Participant</ClientT>}
                                                     </span>
                                                     <span className="text-xs text-gray-400">
                                                         {message.timestamp ? new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
