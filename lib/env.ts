@@ -63,6 +63,7 @@ export const env = {
         .split(",")
         .map((e) => e.trim().toLowerCase())
     : [],
+  ADMIN_PASSWORD: required("ADMIN_PASSWORD"),
 };
 
 export type Env = typeof env;

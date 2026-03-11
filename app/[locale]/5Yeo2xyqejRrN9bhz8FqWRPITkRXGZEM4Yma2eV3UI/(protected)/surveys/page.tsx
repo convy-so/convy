@@ -119,7 +119,7 @@ async function SurveysList({ cookieHeader }: { cookieHeader: string | null }) {
                                 </td>
                                 <td className="px-6 py-4 text-right">
                                     <Link
-                                        href={`/admin/surveys/${survey.id}`}
+                                        href={`/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/surveys/${survey.id}`}
                                         className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors"
                                     >
                                         Review
