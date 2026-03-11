@@ -1,4 +1,4 @@
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { usageLogs } from "@/db/schema/billing";
 import { nanoid } from "nanoid";
 
@@ -81,7 +81,7 @@ export async function logUsage(input: UsageLogInput) {
   try {
     const cost = calculateCost(input);
 
-    await db.insert(usageLogs).values({
+    await getDb().insert(usageLogs).values({
       id: nanoid(),
       ...input,
       cost,

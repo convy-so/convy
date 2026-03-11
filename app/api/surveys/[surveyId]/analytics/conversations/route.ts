@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import {
   surveys,
   surveyConversations,
@@ -42,7 +42,7 @@ export async function GET(
     const engagementFilter = searchParams.get("engagementFilter") || "all";
 
     // Verify survey ownership
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -56,7 +56,7 @@ export async function GET(
     }
 
     // Fetch all conversations with insights
-    const allConversations = await db
+    const allConversations = await getDb()
       .select({
         id: surveyConversations.id,
         createdAt: surveyConversations.createdAt,
@@ -250,7 +250,7 @@ export async function getConversationDetail(
   userId: string,
 ): Promise<ConversationInsightData | null> {
   // Verify survey ownership
-  const [survey] = await db
+  const [survey] = await getDb()
     .select()
     .from(surveys)
     .where(eq(surveys.id, surveyId));
@@ -260,7 +260,7 @@ export async function getConversationDetail(
   }
 
   // Fetch specific conversation
-  const [conversation] = await db
+  const [conversation] = await getDb()
     .select({
       id: surveyConversations.id,
       summary: surveyConversations.summary,

@@ -1,24 +1,23 @@
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
-import {
-  createUIMessageStream,
-  createUIMessageStreamResponse,
-} from "ai";
+import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema";
 import { ConversationManager } from "@/lib/conversation-manager";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
-import {
-  selectModelForConversation,
-  normalizeMessages,
-} from "@/lib/ai";
+import { defaultModel, normalizeMessages } from "@/lib/ai";
 import { getTimeBasedGreeting } from "@/lib/greetings";
 import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
 import type { AgentContext } from "@/lib/agents/types";
 import { getRedisClient } from "@/lib/redis";
 import { logUsage } from "@/lib/billing/logger";
+import {
+  withGeminiLimit,
+  GeminiCapacityError,
+  geminiCapacityResponse,
+} from "@/lib/gemini-limiter";
 
 /**
  * GET - Initialize a survey response conversation and generate AI greeting
@@ -35,11 +34,11 @@ export async function GET(
     const language = ["en", "fr", "de", "es", "it"].includes(
       languageParam || "",
     )
-      ? (languageParam as any)
+      ? (languageParam as "en" | "fr" | "de" | "es" | "it")
       : undefined;
 
     // Get survey by shareable link (fetch full record for config building)
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.shareableLink, shareableLink));
@@ -57,7 +56,7 @@ export async function GET(
 
     // Handle resumption if conversationId is provided
     if (existingConversationId) {
-      const [existingConversation] = await db
+      const [existingConversation] = await getDb()
         .select()
         .from(surveyConversations)
         .where(eq(surveyConversations.id, existingConversationId));
@@ -79,8 +78,9 @@ export async function GET(
           survey: {
             id: survey.id,
             title: survey.title,
-            objective: (survey.expertState as any)?.objective,
-            targetAudience: (survey.expertState as any)?.targetAudience,
+            objective: (survey.expertState as Record<string, any>)?.objective,
+            targetAudience: (survey.expertState as Record<string, any>)
+              ?.targetAudience,
             tone: survey.tone,
             requiredQuestions: survey.requiredQuestions || [],
             isVoice: survey.isVoice,
@@ -116,22 +116,25 @@ export async function GET(
     };
 
     // Create new conversation record with greeting
-    await db.insert(surveyConversations).values({
-      id: conversationId,
-      surveyId: survey.id,
-      participantId,
-      rawConversation: [greetingMessage],
-      completed: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    await getDb()
+      .insert(surveyConversations)
+      .values({
+        id: conversationId,
+        surveyId: survey.id,
+        participantId,
+        rawConversation: [greetingMessage],
+        completed: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
 
     return NextResponse.json({
       survey: {
         id: survey.id,
         title: survey.title,
-        objective: (survey.expertState as any)?.objective,
-        targetAudience: (survey.expertState as any)?.targetAudience,
+        objective: (survey.expertState as Record<string, any>)?.objective,
+        targetAudience: (survey.expertState as Record<string, any>)
+          ?.targetAudience,
         tone: survey.tone,
         requiredQuestions: survey.requiredQuestions || [],
         isVoice: survey.isVoice,
@@ -150,11 +153,6 @@ export async function GET(
   }
 }
 
-import {
-  createUIMessageFilter,
-  stripScratchpadFromText,
-} from "@/lib/agents/scratchpad-filter";
-
 /**
  * POST - Handle survey conversation messages
  */
@@ -172,7 +170,7 @@ export async function POST(
     const { shareableLink } = await params;
 
     // Fetch survey by shareable link
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.shareableLink, shareableLink))
@@ -203,7 +201,10 @@ export async function POST(
     const surveyConfig = buildCompleteSurveyConfig(survey);
 
     // AI SDK v6: Normalize UI messages to ModelMessages for proper handling
-    const modelMessages = normalizeMessages(messages);
+    const modelMessages = await normalizeMessages(messages);
+    console.log(
+      `[RespondAPI:POST] Normalized messages: ${modelMessages.length}. Last role: ${modelMessages[modelMessages.length - 1]?.role}`,
+    );
 
     // Load conversation context (handling hydration, compression, signals)
     const rollingContext = await ConversationManager.loadOrCreateContext(
@@ -211,15 +212,26 @@ export async function POST(
       modelMessages,
       surveyConfig,
     );
+    console.log(
+      `[RespondAPI:POST] Context loaded. State: ${rollingContext.stateContext.currentState}. Topics: ${rollingContext.memory.topicsCovered.length}`,
+    );
 
     // ── Build system prompt via ConductingSpecialist ────────────────────
     const agentContext: AgentContext = {
       conversationId,
       surveyConfig,
-      language: survey.language as "en" | "fr" | "de" | "es" | "it" | undefined,
+      language: (language || survey.language) as
+        | "en"
+        | "fr"
+        | "de"
+        | "es"
+        | "it"
+        | undefined,
       rollingContext,
+      subjectIntelligence: surveyConfig.subjectIntelligence,
     };
     const agent = new ConductingSpecialist(agentContext);
+    console.log(`[RespondAPI:POST] Initializing agent...`);
     await agent.initialize();
     await Promise.all([
       agent.preloadSkills(),
@@ -228,8 +240,9 @@ export async function POST(
         2,
       ),
     ]).catch((err) =>
-      console.warn("[Respond Route] Agent preload warning:", err),
+      console.warn("[RespondAPI:POST] Agent preload warning:", err),
     );
+    console.log(`[RespondAPI:POST] Agent initialized. Building prompt...`);
     const systemPrompt = agent.buildSystemPrompt();
 
     // ── Redis attribution: log which pattern was injected this turn ──────
@@ -257,18 +270,21 @@ export async function POST(
     }
 
     // Intelligent model selection
-    const userMessages = modelMessages.filter((m: any) => m.role === "user");
+    const userMessages = modelMessages.filter((m) => m.role === "user");
     const minQuestions = Math.max(
-      (survey.requiredQuestions as any[])?.length || 0,
+      (survey.requiredQuestions as unknown[])?.length || 0,
       3,
     );
-    const hasMedia = (survey.media as any[])?.length > 0;
-    const selectedModel = selectModelForConversation(
-      rollingContext,
-      userMessages.length,
-      minQuestions,
-      hasMedia,
-    );
+
+    // Dynamic Resume Logic
+    let dynamicDirective = undefined;
+    if (modelMessages.length > 0) {
+      const lastMessage = modelMessages[modelMessages.length - 1];
+      if (lastMessage.role === "user") {
+        dynamicDirective =
+          "The participant has returned to this survey after a pause. The last message in the history is exactly what they said before they left or just now upon returning. Respond directly to their last input and continue the interview naturally.";
+      }
+    }
 
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
@@ -280,125 +296,189 @@ export async function POST(
         };
 
         // Stream the AI response with scratchpad filtering via agent.stream()
-        const result = agent.stream(
-          modelMessages,
-          onMediaDisplay,
-          async (params) => {
-            const { text, usage, response } = params;
+        console.log(`[RespondAPI:Stream] Starting agent.stream() call...`);
+        const result = await withGeminiLimit(async () => {
+          return agent.stream(
+            modelMessages,
+            onMediaDisplay,
+            async (params) => {
+              const { text, usage, response } = params;
+              console.log(
+                `[RespondAPI:Stream] onFinish triggered. Text length: ${text?.length}. Tool calls: ${response.messages?.find((m: any) => m.role === "assistant")?.toolInvocations?.length || 0}`,
+              );
 
-            // Log usage for survey response
-            logUsage({
-              surveyId: survey.id,
-              type: "llm_text",
-              provider: "google",
-              modelName: (selectedModel as any).modelId ?? "gemini-2.5-flash",
-              promptTokens: usage.inputTokens,
-              completionTokens: usage.outputTokens,
-              totalTokens: usage.totalTokens,
-            });
+              // Log usage for survey response
+              logUsage({
+                surveyId: survey.id,
+                type: "llm_text",
+                provider: (
+                  defaultModel as { modelId?: string }
+                ).modelId?.includes("gpt")
+                  ? "openai"
+                  : "google",
+                modelName:
+                  (defaultModel as { modelId?: string }).modelId ??
+                  "gpt-4.1-mini",
+                promptTokens: usage.inputTokens,
+                completionTokens: usage.outputTokens,
+                totalTokens: usage.totalTokens,
+              });
 
-            // Clean the final text for storage
-            const cleanText = stripScratchpadFromText(text);
+              // Under Unified Tools, text is just text now
+              const cleanText = text;
 
-            // Save conversation to database
-            const assistantMessage = response.messages?.find(
-              (m: any) => m.role === "assistant",
-            );
+              // Save conversation to database
+              const assistantMessage = response.messages?.find(
+                (m: any) => m.role === "assistant",
+              );
 
-            const updatedMessages = [
-              ...modelMessages,
-              {
-                role: "assistant" as const,
-                content: cleanText,
-                parts:
-                  (assistantMessage as any)?.content &&
-                  Array.isArray((assistantMessage as any).content)
-                    ? (assistantMessage as any).content
-                    : undefined,
-                timestamp: new Date().toISOString(),
-              },
-            ];
+              const updatedMessages = [
+                ...modelMessages,
+                {
+                  role: "assistant" as const,
+                  content: cleanText,
+                  parts:
+                    assistantMessage?.content &&
+                    Array.isArray(assistantMessage.content)
+                      ? assistantMessage.content
+                      : undefined,
+                  timestamp: new Date().toISOString(),
+                },
+              ];
 
-            // Update memory in background (learning)
-            ConversationManager.updateMemoryAsync(
-              conversationId,
-              updatedMessages,
-              surveyConfig,
-              rollingContext,
-            ).catch((err) =>
-              console.error("Background memory update failed:", err),
-            );
+              // Update memory in background (learning)
+              ConversationManager.updateMemoryAsync(
+                conversationId,
+                updatedMessages,
+                surveyConfig,
+                rollingContext,
+              ).catch((err) =>
+                console.error("Background memory update failed:", err),
+              );
 
-            // Check for survey completion
-            const toolInvocations = assistantMessage?.toolInvocations || [];
-            const finishSurveyCall = toolInvocations.find(
-              (call: any) => call.toolName === "finishSurvey",
-            );
+              // Check for survey completion
+              const toolInvocations = assistantMessage?.toolInvocations || [];
+              const finishSurveyCall = toolInvocations.find(
+                (call: any) => call.toolName === "finishSurvey",
+              );
 
-            const isCompletionPhrase =
-              cleanText.toLowerCase().includes("thank you for completing") ||
-              cleanText.toLowerCase().includes("survey is now complete");
+              const isCompletionPhrase =
+                cleanText.toLowerCase().includes("thank you for completing") ||
+                cleanText.toLowerCase().includes("survey is now complete");
 
-            const isCompleted =
-              (!!finishSurveyCall || isCompletionPhrase) &&
-              userMessages.length >= minQuestions;
+              const isCompleted =
+                (!!finishSurveyCall || isCompletionPhrase) &&
+                userMessages.length >= minQuestions;
 
-            if (conversationId) {
-              const dbMessages = updatedMessages.map((m: any) => ({
-                role: m.role,
-                content: m.content,
-                parts: m.parts,
-                timestamp: m.timestamp || new Date().toISOString(),
-              }));
+              if (conversationId) {
+                const dbMessages = updatedMessages.map((m: any) => {
+                  let contentStr = m.content;
+                  let partsArr = m.parts;
 
-              await db
-                .update(surveyConversations)
-                .set({
-                  rawConversation: dbMessages,
-                  completed: isCompleted,
-                  updatedAt: new Date(),
-                })
-                .where(eq(surveyConversations.id, conversationId));
-            }
+                  // If content is an array (AI SDK ModelMessage), extract the string and map the parts
+                  if (Array.isArray(m.content)) {
+                    partsArr = m.content;
+                    contentStr =
+                      m.content.find((p: any) => p.type === "text")?.text || "";
+                  }
 
-            if (isCompleted) {
-              await db
-                .update(surveys)
-                .set({
-                  currentParticipants: (survey.currentParticipants || 0) + 1,
-                  updatedAt: new Date(),
-                })
-                .where(eq(surveys.id, survey.id));
-
-              try {
-                const { enqueueConversationInsights } =
-                  await import("@/lib/queue");
-                await enqueueConversationInsights({
-                  conversationId,
-                  surveyId: survey.id,
-                  userId: survey.userId,
+                  return {
+                    role: m.role,
+                    content: contentStr,
+                    parts: partsArr,
+                    timestamp: m.timestamp || new Date().toISOString(),
+                  };
                 });
-              } catch (error) {
-                console.error("[HTTP Chat] Failed to enqueue insights:", error);
+
+                const [currentConv] = await getDb()
+                  .select({
+                    rawConversation: surveyConversations.rawConversation,
+                  })
+                  .from(surveyConversations)
+                  .where(eq(surveyConversations.id, conversationId));
+
+                const prevMessages =
+                  (currentConv?.rawConversation as any[]) || [];
+                const prevUserMessages = prevMessages.filter(
+                  (m) => m.role === "user",
+                );
+
+                // Increment participant count ONLY on the very first user message (participation)
+                if (prevUserMessages.length === 0 && userMessages.length > 0) {
+                  await getDb()
+                    .update(surveys)
+                    .set({
+                      currentParticipants:
+                        (survey.currentParticipants || 0) + 1,
+                      updatedAt: new Date(),
+                    })
+                    .where(eq(surveys.id, survey.id));
+                }
+
+                await getDb()
+                  .update(surveyConversations)
+                  .set({
+                    rawConversation: dbMessages,
+                    completed: isCompleted,
+                    updatedAt: new Date(),
+                  })
+                  .where(eq(surveyConversations.id, conversationId));
               }
 
-              writer.write({
-                type: "data",
-                data: { isCompleted: true },
-              } as any);
-            }
-          },
-        );
+              if (isCompleted) {
+                try {
+                  const {
+                    enqueueConversationInsights,
+                    enqueueGenerativeSummary,
+                  } = await import("@/lib/queue");
+                  await enqueueConversationInsights({
+                    conversationId,
+                    surveyId: survey.id,
+                    userId: survey.userId,
+                  });
+                  // Debounced: 2-min delay, 15-min max-wait, deduplication per surveyId
+                  await enqueueGenerativeSummary({
+                    surveyId: survey.id,
+                    userId: survey.userId,
+                  });
+                } catch (error) {
+                  console.error(
+                    "[HTTP Chat] Failed to enqueue insights:",
+                    error,
+                  );
+                }
 
-        // Apply the UI Message Filter to strip <scratchpad> blocks from the stream
-        writer.merge(
-          result.toUIMessageStream().pipeThrough(createUIMessageFilter()),
-        );
+                writer.write({
+                  type: "data",
+                  data: { isCompleted: true },
+                } as any);
+              }
+            },
+            dynamicDirective,
+          );
+        });
+
+        // AI SDK v6: Stream the results correctly using protocol translation.
+        // This converts raw TextStreamParts into UIMessageChunks, stripping
+        // problematic metadata (like request/warnings in 'start-step').
+        const uiStream = result.toUIMessageStream();
+
+        for await (const chunk of uiStream) {
+          const chunkType = (chunk as { type: string }).type;
+          console.log(`[RespondAPI:StreamPart] Chunk type: ${chunkType}`);
+
+          // Passthrough sanitized chunks.
+          writer.write(chunk as any);
+        }
+        console.log(`[RespondAPI:Stream] Stream loop finished.`);
       },
     });
 
     return createUIMessageStreamResponse({ stream });
   } catch (error) {
+    if (error instanceof GeminiCapacityError) {
+      return geminiCapacityResponse();
+    }
     console.error("Error in survey response:", error);
     return NextResponse.json(
       { error: "Internal server error" },

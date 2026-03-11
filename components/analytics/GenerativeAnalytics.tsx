@@ -1,153 +1,97 @@
 "use client";
 
 import {
-    PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+    BarChart,
+    Bar,
+    PieChart,
+    Pie,
+    Cell,
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    Tooltip,
+    ResponsiveContainer,
 } from "recharts";
-import {
-    Lightbulb, Car, MapPin, BarChart2, Laptop, Cloud,
-    Smile, Frown, Phone, Activity, ShoppingCart, Users,
-    Clock, DollarSign, Calendar, MessageCircle, Star, Target,
-    Heart, Home, Briefcase, Zap, Globe, Shield, HelpCircle
-} from "lucide-react";
+import { ClientT } from "@/components/i18n/client-t";
 
 const COLORS = ["#111827", "#374151", "#6B7280", "#9CA3AF", "#D1D5DB"];
 
-interface ChartProps {
-    data: any[];
-    title: string;
-    description?: string;
-    config?: any;
+interface ChartDataPoint {
+    label: string;
+    value: number;
+    color?: string;
 }
 
-export function GenerativeBarChart({ data, title, description, config }: ChartProps) {
-    const INFOGRAPHIC_COLORS = [
-        "#F4AF5F", // Orange
-        "#E25552", // Red
-        "#5C5350", // Brown
-        "#94A6A0", // Greenish Gray
-        "#4BACBA", // Cyan
-        "#BCBCBB"  // Light Gray
-    ];
-
-    const getInfographicIcon = (label: string, fallbackIndex: number) => {
-        const lowerLabel = (label || "").toLowerCase();
-
-        // Emotion / Sentiment
-        if (lowerLabel.includes("satisf") || lowerLabel.includes("happy") || lowerLabel.includes("good") || lowerLabel.includes("great") || lowerLabel.includes("positive") || lowerLabel.includes("love")) return <Smile className="w-5 h-5 text-black" />;
-        if (lowerLabel.includes("frustrat") || lowerLabel.includes("sad") || lowerLabel.includes("bad") || lowerLabel.includes("poor") || lowerLabel.includes("negative") || lowerLabel.includes("hate")) return <Frown className="w-5 h-5 text-black" />;
-
-        // Devices / Tech
-        if (lowerLabel.includes("app") || lowerLabel.includes("mobile") || lowerLabel.includes("phone")) return <Phone className="w-5 h-5 text-black" />;
-        if (lowerLabel.includes("web") || lowerLabel.includes("site") || lowerLabel.includes("desktop") || lowerLabel.includes("computer") || lowerLabel.includes("laptop")) return <Laptop className="w-5 h-5 text-black" />;
-        if (lowerLabel.includes("cloud") || lowerLabel.includes("sync") || lowerLabel.includes("online")) return <Cloud className="w-5 h-5 text-black" />;
-
-        // Commerce / Value
-        if (lowerLabel.includes("buy") || lowerLabel.includes("purchas") || lowerLabel.includes("cart") || lowerLabel.includes("shop")) return <ShoppingCart className="w-5 h-5 text-black" />;
-        if (lowerLabel.includes("price") || lowerLabel.includes("cost") || lowerLabel.includes("money") || lowerLabel.includes("pay") || lowerLabel.includes("budget") || lowerLabel.includes("dollar")) return <DollarSign className="w-5 h-5 text-black" />;
-
-        // People / Users
-        if (lowerLabel.includes("user") || lowerLabel.includes("people") || lowerLabel.includes("team") || lowerLabel.includes("customer") || lowerLabel.includes("client") || lowerLabel.includes("employee") || lowerLabel.includes("staff")) return <Users className="w-5 h-5 text-black" />;
-
-        // Time / Process
-        if (lowerLabel.includes("time") || lowerLabel.includes("slow") || lowerLabel.includes("fast") || lowerLabel.includes("quick") || lowerLabel.includes("wait") || lowerLabel.includes("hour") || lowerLabel.includes("minute")) return <Clock className="w-5 h-5 text-black" />;
-        if (lowerLabel.includes("day") || lowerLabel.includes("week") || lowerLabel.includes("month") || lowerLabel.includes("year") || lowerLabel.includes("date")) return <Calendar className="w-5 h-5 text-black" />;
-
-        // Communication
-        if (lowerLabel.includes("support") || lowerLabel.includes("help") || lowerLabel.includes("service") || lowerLabel.includes("contact") || lowerLabel.includes("question") || lowerLabel.includes("issue")) return <HelpCircle className="w-5 h-5 text-black" />;
-        if (lowerLabel.includes("chat") || lowerLabel.includes("message") || lowerLabel.includes("talk") || lowerLabel.includes("speak") || lowerLabel.includes("tell")) return <MessageCircle className="w-5 h-5 text-black" />;
-
-        // Geography / Location
-        if (lowerLabel.includes("location") || lowerLabel.includes("place") || lowerLabel.includes("city") || lowerLabel.includes("country") || lowerLabel.includes("map") || lowerLabel.includes("address")) return <MapPin className="w-5 h-5 text-black" />;
-        if (lowerLabel.includes("global") || lowerLabel.includes("world") || lowerLabel.includes("international")) return <Globe className="w-5 h-5 text-black" />;
-
-        // Performance / Metrics
-        if (lowerLabel.includes("score") || lowerLabel.includes("rate") || lowerLabel.includes("rating") || lowerLabel.includes("star")) return <Star className="w-5 h-5 text-black" />;
-        if (lowerLabel.includes("goal") || lowerLabel.includes("target") || lowerLabel.includes("objective")) return <Target className="w-5 h-5 text-black" />;
-        if (lowerLabel.includes("performance") || lowerLabel.includes("metric") || lowerLabel.includes("data") || lowerLabel.includes("analytics") || lowerLabel.includes("stat")) return <BarChart2 className="w-5 h-5 text-black" />;
-        if (lowerLabel.includes("active") || lowerLabel.includes("activity") || lowerLabel.includes("health")) return <Activity className="w-5 h-5 text-black" />;
-        if (lowerLabel.includes("fast") || lowerLabel.includes("speed") || lowerLabel.includes("quick") || lowerLabel.includes("instant")) return <Zap className="w-5 h-5 text-black" />;
-        if (lowerLabel.includes("safe") || lowerLabel.includes("secure") || lowerLabel.includes("protect") || lowerLabel.includes("privacy")) return <Shield className="w-5 h-5 text-black" />;
-
-        // Generic concepts
-        if (lowerLabel.includes("work") || lowerLabel.includes("job") || lowerLabel.includes("office") || lowerLabel.includes("business") || lowerLabel.includes("company")) return <Briefcase className="w-5 h-5 text-black" />;
-        if (lowerLabel.includes("home") || lowerLabel.includes("house")) return <Home className="w-5 h-5 text-black" />;
-        if (lowerLabel.includes("car") || lowerLabel.includes("drive") || lowerLabel.includes("vehicle") || lowerLabel.includes("transport")) return <Car className="w-5 h-5 text-black" />;
-        if (lowerLabel.includes("idea") || lowerLabel.includes("think") || lowerLabel.includes("thought") || lowerLabel.includes("brain") || lowerLabel.includes("creative") || lowerLabel.includes("innovation") || lowerLabel.includes("feature")) return <Lightbulb className="w-5 h-5 text-black" />;
-
-        // Fallback sequence if nothing matches
-        switch (fallbackIndex % 6) {
-            case 0: return <Lightbulb className="w-5 h-5 text-black" />;
-            case 1: return <BarChart2 className="w-5 h-5 text-black" />;
-            case 2: return <Users className="w-5 h-5 text-black" />;
-            case 3: return <Target className="w-5 h-5 text-black" />;
-            case 4: return <MessageCircle className="w-5 h-5 text-black" />;
-            case 5: return <Activity className="w-5 h-5 text-black" />;
-            default: return <Lightbulb className="w-5 h-5 text-black" />;
-        }
+interface ChartProps {
+    data: ChartDataPoint[];
+    title: string;
+    description?: string;
+    config?: {
+        dataKey?: string;
+        xAxisKey?: string;
     };
+}
 
-    const maxVal = Math.max(...(data || []).map((d: any) => d.value ?? 0), 1);
+interface CustomTooltipProps {
+    active?: boolean;
+    payload?: any[];
+    label?: string;
+}
 
-    return (
-        <div className="w-full flex flex-col bg-white rounded-3xl border border-gray-100 p-4 shadow-sm my-2">
-            <div className="mb-4">
-                <h4 className="text-sm font-bold text-gray-900 leading-tight">{title}</h4>
-                {description && <p className="text-[10px] text-gray-500 mt-0.5">{description}</p>}
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
+    if (active && payload && payload.length) {
+        return (
+            <div className="bg-white p-3 shadow-lg rounded-xl border border-gray-100 text-[11px]">
+                <p className="font-bold text-gray-900 mb-1">{label}</p>
+                <p className="text-gray-600">
+                    <ClientT>Value</ClientT>: <span className="font-semibold text-gray-900">{payload[0].value}</span>
+                </p>
             </div>
+        );
+    }
+    return null;
+};
 
-            <div className="w-[calc(100%+16px)] bg-[#F2F5F8] rounded-2xl py-6 -mx-2 px-2 flex-grow overflow-x-hidden min-h-[200px]">
-                <div className="flex flex-col w-full h-full justify-center relative gap-0.5">
-                    {data.map((item: any, i: number) => {
-                        const color = item.color || INFOGRAPHIC_COLORS[i % INFOGRAPHIC_COLORS.length];
-                        const widthPercent = Math.max(30, Math.min(70, ((item.value || 0) / maxVal) * 70));
+const axisStyle = {
+    fontSize: 11,
+    fill: "#9ca3af",
+};
 
-                        return (
-                            <div key={i} className="relative flex items-center h-[50px] w-full group">
-                                {/* Colored Bar */}
-                                <div
-                                    className="absolute left-0 h-full flex flex-col justify-center px-4 transition-all duration-700 ease-in-out z-0 overflow-hidden"
-                                    style={{
-                                        width: `${widthPercent}%`,
-                                        backgroundColor: color,
-                                        borderTopRightRadius: '9999px',
-                                        borderBottomRightRadius: '9999px'
-                                    }}
-                                >
-                                    <div className="text-white/95 font-bold text-[11px] sm:text-[12px] uppercase tracking-wider truncate max-w-[calc(100%-20px)] leading-tight">
-                                        {item.label}
-                                    </div>
-                                    {item.value !== undefined && (
-                                        <div className="text-white/70 text-[9px] sm:text-[10px] truncate max-w-[calc(100%-20px)] leading-none mt-1">
-                                            {item.description || item.value}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* White Circle Base */}
-                                <div
-                                    className="absolute h-10 w-10 bg-[#F2F5F8] rounded-full z-[5] transition-all duration-700 ease-in-out"
-                                    style={{ left: `calc(${widthPercent}% - 22px)` }}
+export function GenerativeBarChart({ data, title, description }: ChartProps) {
+    return (
+        <div className="w-full my-6">
+            <div className="mb-4">
+                <h4 className="text-sm font-bold text-gray-900 tracking-tight">{title}</h4>
+                {description && <p className="text-xs text-gray-500 mt-1">{description}</p>}
+            </div>
+            <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                        data={data}
+                        layout="vertical"
+                        margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
+                    >
+                        <XAxis type="number" hide />
+                        <YAxis
+                            dataKey="label"
+                            type="category"
+                            axisLine={false}
+                            tickLine={false}
+                            width={100}
+                            style={axisStyle}
+                        />
+                        <Tooltip content={<CustomTooltip />} cursor={{ fill: "transparent" }} />
+                        <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={24}>
+                            {data.map((entry, index) => (
+                                <Cell
+                                    key={`cell-${index}`}
+                                    fill={entry.color || COLORS[index % COLORS.length]}
                                 />
-
-                                {/* White Circle Top */}
-                                <div
-                                    className="absolute h-11 w-11 bg-white rounded-full flex items-center justify-center z-10 transition-all duration-700 ease-in-out shadow-sm"
-                                    style={{ left: `calc(${widthPercent}% - 22px)` }}
-                                >
-                                    {getInfographicIcon(item.label, i)}
-                                </div>
-
-                                {/* Number */}
-                                <div
-                                    className="absolute font-bold text-2xl transition-all duration-700 ease-in-out z-0 flex items-center"
-                                    style={{ left: `calc(${widthPercent}% + 36px)`, color: color }}
-                                >
-                                    {(i + 1).toString().padStart(2, '0')}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
+                            ))}
+                        </Bar>
+                    </BarChart>
+                </ResponsiveContainer>
             </div>
         </div>
     );
@@ -155,29 +99,31 @@ export function GenerativeBarChart({ data, title, description, config }: ChartPr
 
 export function GenerativePieChart({ data, title, description }: ChartProps) {
     return (
-        <div className="w-full h-64 bg-white rounded-3xl border border-gray-100 p-4 shadow-sm my-2">
-            <div className="mb-2">
-                <h4 className="text-sm font-bold text-gray-900 leading-tight">{title}</h4>
-                {description && <p className="text-[10px] text-gray-500 mt-0.5">{description}</p>}
+        <div className="w-full my-6">
+            <div className="mb-4">
+                <h4 className="text-sm font-bold text-gray-900 tracking-tight">{title}</h4>
+                {description && <p className="text-xs text-gray-500 mt-1">{description}</p>}
             </div>
-            <div className="h-44 w-full">
+            <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                         <Pie
                             data={data}
-                            innerRadius={40}
-                            outerRadius={60}
-                            paddingAngle={5}
+                            innerRadius={60}
+                            outerRadius={80}
+                            paddingAngle={4}
                             dataKey="value"
                             nameKey="label"
                             stroke="none"
-                            cornerRadius={4}
                         >
                             {data.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
+                                <Cell
+                                    key={`cell-${index}`}
+                                    fill={entry.color || COLORS[index % COLORS.length]}
+                                />
                             ))}
                         </Pie>
-                        <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', fontSize: '10px' }} />
+                        <Tooltip content={<CustomTooltip />} />
                     </PieChart>
                 </ResponsiveContainer>
             </div>
@@ -186,29 +132,34 @@ export function GenerativePieChart({ data, title, description }: ChartProps) {
 }
 
 export function GenerativeLineChart({ data, title, description, config }: ChartProps) {
-    const dataKey = config?.dataKey || "y";
-    const xAxisKey = config?.xAxisKey || "x";
+    const dataKey = config?.dataKey || "value";
+    const xAxisKey = config?.xAxisKey || "label";
 
     return (
-        <div className="w-full h-64 bg-white rounded-3xl border border-gray-100 p-4 shadow-sm my-2">
-            <div className="mb-2">
-                <h4 className="text-sm font-bold text-gray-900 leading-tight">{title}</h4>
-                {description && <p className="text-[10px] text-gray-500 mt-0.5">{description}</p>}
+        <div className="w-full my-6">
+            <div className="mb-4">
+                <h4 className="text-sm font-bold text-gray-900 tracking-tight">{title}</h4>
+                {description && <p className="text-xs text-gray-500 mt-1">{description}</p>}
             </div>
-            <div className="h-44 w-full">
+            <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                        <XAxis dataKey={xAxisKey} fontSize={10} tickLine={false} axisLine={false} stroke="#9ca3af" />
-                        <YAxis fontSize={10} tickLine={false} axisLine={false} stroke="#9ca3af" />
-                        <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', fontSize: '10px' }} />
+                    <LineChart data={data} margin={{ top: 10, right: 20, left: -20, bottom: 0 }}>
+                        <XAxis
+                            dataKey={xAxisKey}
+                            axisLine={false}
+                            tickLine={false}
+                            style={axisStyle}
+                            dy={10}
+                        />
+                        <YAxis axisLine={false} tickLine={false} style={axisStyle} />
+                        <Tooltip content={<CustomTooltip />} />
                         <Line
                             type="monotone"
                             dataKey={dataKey}
                             stroke="#111827"
-                            strokeWidth={2}
-                            dot={{ r: 3, fill: '#111827', strokeWidth: 0 }}
-                            activeDot={{ r: 5, fill: '#111827' }}
+                            strokeWidth={2.5}
+                            dot={{ r: 4, fill: "#111827", strokeWidth: 0 }}
+                            activeDot={{ r: 6, fill: "#111827" }}
                         />
                     </LineChart>
                 </ResponsiveContainer>
@@ -217,19 +168,96 @@ export function GenerativeLineChart({ data, title, description, config }: ChartP
     );
 }
 
-export function GenerativeAnalyticsRenderer({ toolName, result }: { toolName: string; result: any }) {
-    if (toolName !== 'renderChart') return null;
+interface TableProps {
+    title: string;
+    description?: string;
+    columns: string[];
+    rows: string[][];
+}
 
-    const { type, title, description, data, config } = result;
+export function GenerativeTable({ title, description, columns, rows }: TableProps) {
+    return (
+        <div className="w-full my-6">
+            <div className="mb-4">
+                <h4 className="text-sm font-bold text-gray-900 tracking-tight">{title}</h4>
+                {description && <p className="text-xs text-gray-500 mt-1">{description}</p>}
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                    <thead>
+                        <tr className="border-b border-gray-100">
+                            {columns.map((col, i) => (
+                                <th
+                                    key={i}
+                                    className="py-3 px-4 text-[11px] font-bold text-gray-400 uppercase tracking-wider"
+                                >
+                                    {col}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                        {rows.map((row, rowIndex) => (
+                            <tr key={rowIndex} className="hover:bg-gray-50/50 transition-colors">
+                                {row.map((cell, cellIndex) => (
+                                    <td key={cellIndex} className="py-3 px-4 text-sm text-gray-700 font-medium">
+                                        {cell}
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}
 
-    switch (type) {
-        case 'bar':
-            return <GenerativeBarChart data={data} title={title} description={description} config={config} />;
-        case 'pie':
-            return <GenerativePieChart data={data} title={title} description={description} config={config} />;
-        case 'line':
-            return <GenerativeLineChart data={data} title={title} description={description} config={config} />;
-        default:
-            return null;
+export interface RenderChartResult {
+    type: "bar" | "pie" | "line";
+    title: string;
+    description?: string;
+    data: ChartDataPoint[];
+    config?: {
+        dataKey?: string;
+        xAxisKey?: string;
+    };
+}
+
+export interface RenderTableResult {
+    title: string;
+    description?: string;
+    columns: string[];
+    rows: string[][];
+}
+
+export function GenerativeAnalyticsRenderer({
+    toolName,
+    result,
+}: {
+    toolName: string;
+    result: RenderChartResult | RenderTableResult;
+}) {
+    if (toolName === "renderChart") {
+        const chartResult = result as RenderChartResult;
+        const { type, title, description, data, config } = chartResult;
+        switch (type) {
+            case "bar":
+                return <GenerativeBarChart data={data} title={title} description={description} config={config} />;
+            case "pie":
+                return <GenerativePieChart data={data} title={title} description={description} config={config} />;
+            case "line":
+                return <GenerativeLineChart data={data} title={title} description={description} config={config} />;
+            default:
+                return null;
+        }
     }
+
+    if (toolName === "renderTable") {
+        const tableResult = result as RenderTableResult;
+        const { title, description, columns, rows } = tableResult;
+        return <GenerativeTable title={title} description={description} columns={columns} rows={rows} />;
+    }
+
+    return null;
 }

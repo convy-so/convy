@@ -1,0 +1,32 @@
+{
+  "family": "convy-production-websocket",
+  "networkMode": "awsvpc",
+  "executionRoleArn": "arn:aws:iam::290368114395:role/convy-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::290368114395:role/convy-ecs-task-role",
+  "containerDefinitions": [{
+    "name": "websocket",
+    "image": "290368114395.dkr.ecr.eu-north-1.amazonaws.com/convy/websocket:production",
+    "portMappings": [{ "containerPort": 3001, "hostPort": 3001, "protocol": "tcp" }],
+    "essential": true,
+    "environment": [{ "name": "NODE_ENV", "value": "production" }],
+    "secrets": [
+      { "name": "DATABASE_URL",              "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/production/DATABASE_URL" },
+      { "name": "BETTER_AUTH_SECRET",        "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/production/BETTER_AUTH_SECRET" },
+      { "name": "REDIS_URL",                 "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/production/REDIS_URL" },
+      { "name": "UPSTASH_REDIS_REST_URL",    "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/production/UPSTASH_REDIS_REST_URL" },
+      { "name": "UPSTASH_REDIS_REST_TOKEN",  "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/production/UPSTASH_REDIS_REST_TOKEN" },
+      { "name": "DEEPGRAM_API_KEY",          "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/production/DEEPGRAM_API_KEY" }
+    ],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "/ecs/production-websocket",
+        "awslogs-region": "eu-north-1",
+        "awslogs-stream-prefix": "ecs"
+      }
+    }
+  }],
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024"
+}

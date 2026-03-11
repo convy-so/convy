@@ -1,7 +1,7 @@
-import { eq } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import {
   surveys,
   surveyCreationConversations,
@@ -31,7 +31,7 @@ export async function DELETE(
     }
 
     // Delete survey (cascades to related records)
-    await db.delete(surveys).where(eq(surveys.id, surveyId));
+    await getDb().delete(surveys).where(eq(surveys.id, surveyId));
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -75,7 +75,7 @@ export async function PATCH(
     }
 
     // Fetch survey for updates
-    const [survey] = await db
+    const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -91,12 +91,40 @@ export async function PATCH(
       typeof body.participantLimit === "number" ||
       typeof body.participantLimit === "string"
     ) {
-      updates.participantLimit = Number(body.participantLimit);
+      updates.participantLimit = Math.min(Number(body.participantLimit), 50);
     }
     if (["en", "fr", "de", "es", "it"].includes(body.language)) {
       updates.language = body.language;
     }
+
     if (typeof body.isVoice === "boolean") {
+      // If turning on voice, check limit
+      if (body.isVoice && !survey.isVoice) {
+        const activeOrgId = (session.session as any).activeOrganizationId;
+        const existingVoiceSurveys = await getDb()
+          .select({ id: surveys.id })
+          .from(surveys)
+          .where(
+            and(
+              eq(surveys.userId, session.user.id),
+              eq(surveys.isVoice, true),
+              activeOrgId
+                ? eq(surveys.organizationId, activeOrgId)
+                : isNull(surveys.organizationId),
+            ),
+          );
+
+        if (existingVoiceSurveys.length >= 2) {
+          return NextResponse.json(
+            {
+              error:
+                "Limit reached: You can only have 2 voice surveys per " +
+                (activeOrgId ? "workspace" : "personal account"),
+            },
+            { status: 403 },
+          );
+        }
+      }
       updates.isVoice = body.isVoice;
     }
 
@@ -108,7 +136,7 @@ export async function PATCH(
     }
 
     // Update survey
-    await db
+    await getDb()
       .update(surveys)
       .set({
         ...updates,

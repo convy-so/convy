@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { ClientT } from "@/components/i18n/client-t";
+import { getClientTranslation } from "@/app/actions/translate";
 
 interface ResponseData {
     id: string;
@@ -95,13 +97,13 @@ export default function ResponseDetailPage() {
     if (error || !response) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-                <p className="text-gray-500">{error || "Response not found"}</p>
+                <p className="text-gray-500">{error ? <ClientT>{error}</ClientT> : <ClientT>Response not found</ClientT>}</p>
                 <Link
                     href={`/dashboard/surveys/${surveyId}`}
                     className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
                 >
                     <ArrowLeft className="w-4 h-4" />
-                    Back to Survey
+                    <ClientT>Back to Survey</ClientT>
                 </Link>
             </div>
         );
@@ -122,17 +124,17 @@ export default function ResponseDetailPage() {
                         <div>
                             <div className="flex flex-wrap items-center gap-3">
                                 <h1 className="text-xl font-bold text-gray-900">
-                                    {response.participantId === 'Anonymous' ? `Participant ${response.id.slice(0, 4)}` : response.participantId}
+                                    {response.participantId === 'Anonymous' ? <ClientT>{`Participant ${response.id.slice(0, 4)}`}</ClientT> : response.participantId}
                                 </h1>
                                 <span className={cn(
                                     "px-2.5 py-1 rounded-full text-xs font-medium capitalize",
                                     response.status === "completed" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-amber-50 text-amber-700 border border-amber-200"
                                 )}>
-                                    {response.status === "completed" ? "Completed" : "In Progress"}
+                                    {response.status === "completed" ? <ClientT>Completed</ClientT> : <ClientT>In Progress</ClientT>}
                                 </span>
                             </div>
                             <p className="text-sm text-gray-500 mt-1">
-                                Response for <span className="font-medium text-gray-700">{response.surveyTitle}</span>
+                                <ClientT>Response for</ClientT> <span className="font-medium text-gray-700">{response.surveyTitle}</span>
                             </p>
                         </div>
                     </div>
@@ -145,13 +147,13 @@ export default function ResponseDetailPage() {
                 <div className="lg:col-span-2 space-y-4 order-2 lg:order-1">
                     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
                         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-                            <h2 className="font-semibold text-gray-900">Conversation Transcript</h2>
-                            <span className="text-xs font-medium text-gray-500 bg-white px-2 py-1 rounded border border-gray-200 shadow-sm">{response.conversation.length} messages</span>
+                            <h2 className="font-semibold text-gray-900"><ClientT>Conversation Transcript</ClientT></h2>
+                            <span className="text-xs font-medium text-gray-500 bg-white px-2 py-1 rounded border border-gray-200 shadow-sm">{response.conversation.length} <ClientT>messages</ClientT></span>
                         </div>
                         <div className="max-h-[800px] overflow-y-auto">
                             {response.conversation.length === 0 ? (
                                 <div className="p-8 text-center text-gray-400 italic">
-                                    No transcript available.
+                                    <ClientT>No transcript available.</ClientT>
                                 </div>
                             ) : (
                                 response.conversation.map((message, index) => (
@@ -181,7 +183,7 @@ export default function ResponseDetailPage() {
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 mb-1.5">
                                                     <span className="font-semibold text-sm text-gray-900">
-                                                        {message.role === "assistant" ? "Convy AI" : "Participant"}
+                                                        {message.role === "assistant" ? <ClientT>Convyy AI</ClientT> : <ClientT>Participant</ClientT>}
                                                     </span>
                                                     <span className="text-xs text-gray-400">
                                                         {message.timestamp ? new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
@@ -208,26 +210,26 @@ export default function ResponseDetailPage() {
                 <div className="space-y-4 order-1 lg:order-2">
                     {/* Response Info */}
                     <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                        <h3 className="font-semibold text-gray-900 mb-4">Response Details</h3>
+                        <h3 className="font-semibold text-gray-900 mb-4"><ClientT>Response Details</ClientT></h3>
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
-                                <span className="text-sm text-gray-500 flex items-center gap-2">Status</span>
+                                <span className="text-sm text-gray-500 flex items-center gap-2"><ClientT>Status</ClientT></span>
                                 <span className={cn(
                                     "px-2.5 py-1 rounded-full text-xs font-semibold capitalize",
                                     response.status === "completed" ? "bg-emerald-50 text-emerald-700 border border-emerald-100" : "bg-amber-50 text-amber-700 border border-amber-100"
                                 )}>
-                                    {response.status === "completed" ? "Completed" : "In Progress"}
+                                    {response.status === "completed" ? <ClientT>Completed</ClientT> : <ClientT>In Progress</ClientT>}
                                 </span>
                             </div>
                             <div className="flex items-center justify-between">
                                 <span className="text-sm text-gray-500 flex items-center gap-2">
-                                    <Clock className="w-3.5 h-3.5" /> Duration
+                                    <Clock className="w-3.5 h-3.5" /> <ClientT>Duration</ClientT>
                                 </span>
                                 <span className="text-sm font-medium text-gray-900 bg-gray-50 px-2 py-1 rounded">{response.duration}</span>
                             </div>
                             <div className="flex items-center justify-between">
                                 <span className="text-sm text-gray-500 flex items-center gap-2">
-                                    <Calendar className="w-3.5 h-3.5" /> Started
+                                    <Calendar className="w-3.5 h-3.5" /> <ClientT>Started</ClientT>
                                 </span>
                                 <div className="text-right">
                                     <span className="text-sm text-gray-900 block">{format(new Date(response.startedAt), "MMM d, yyyy")}</span>
@@ -236,7 +238,7 @@ export default function ResponseDetailPage() {
                             </div>
                             {response.completedAt && (
                                 <div className="flex items-center justify-between">
-                                    <span className="text-sm text-gray-500">Completed</span>
+                                    <span className="text-sm text-gray-500"><ClientT>Completed</ClientT></span>
                                     <div className="text-right">
                                         <span className="text-sm text-gray-900 block">{format(new Date(response.completedAt), "MMM d, yyyy")}</span>
                                         <span className="text-xs text-gray-500 block">{format(new Date(response.completedAt), "h:mm a")}</span>
@@ -249,7 +251,7 @@ export default function ResponseDetailPage() {
                     {/* Sentiment Analysis */}
                     {response.sentiment && (
                         <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                            <h3 className="font-semibold text-gray-900 mb-4">Sentiment Analysis</h3>
+                            <h3 className="font-semibold text-gray-900 mb-4"><ClientT>Sentiment Analysis</ClientT></h3>
                             <div className="text-center mb-4">
                                 <div className={cn(
                                     "inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold capitalize shadow-sm",
@@ -258,7 +260,7 @@ export default function ResponseDetailPage() {
                                     response.sentiment === "negative" && "bg-red-50 text-red-700 border border-red-100"
                                 )}>
                                     {getSentimentIcon(response.sentiment)}
-                                    {response.sentiment}
+                                    <ClientT>{response.sentiment}</ClientT>
                                 </div>
                                 <p className="text-xs font-medium text-gray-400 mt-2 uppercase tracking-wide">Confidence Score: {(response.sentimentScore * 100).toFixed(0)}%</p>
                             </div>
@@ -279,7 +281,7 @@ export default function ResponseDetailPage() {
                     {/* Key Insights */}
                     {response.keyInsights.length > 0 && (
                         <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                            <h3 className="font-semibold text-gray-900 mb-4">Key Insights</h3>
+                            <h3 className="font-semibold text-gray-900 mb-4"><ClientT>Key Insights</ClientT></h3>
                             <ul className="space-y-3">
                                 {response.keyInsights.map((insight, index) => (
                                     <li key={index} className="flex items-start gap-3 text-sm group">
@@ -295,7 +297,7 @@ export default function ResponseDetailPage() {
                     {response.summary && (
                         <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-100 p-5 shadow-sm">
                             <h3 className="font-semibold text-indigo-900 mb-2 flex items-center gap-2">
-                                <Bot className="w-4 h-4" /> AI Summary
+                                <Bot className="w-4 h-4" /> <ClientT>AI Summary</ClientT>
                             </h3>
                             <p className="text-sm text-indigo-800 leading-relaxed">{response.summary}</p>
                         </div>
@@ -304,9 +306,9 @@ export default function ResponseDetailPage() {
                     {/* Empty State for Incomplete */}
                     {response.status !== "completed" && (
                         <div className="bg-amber-50 rounded-xl border border-amber-100 p-5">
-                            <h3 className="font-semibold text-amber-900 mb-2">Analysis Pending</h3>
+                            <h3 className="font-semibold text-amber-900 mb-2"><ClientT>Analysis Pending</ClientT></h3>
                             <p className="text-sm text-amber-800">
-                                This conversation is still in progress. Detailed analysis and insights will be generated once it is completed.
+                                <ClientT>This conversation is still in progress. Detailed analysis and insights will be generated once it is completed.</ClientT>
                             </p>
                         </div>
                     )}

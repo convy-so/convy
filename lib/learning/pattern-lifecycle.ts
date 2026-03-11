@@ -7,7 +7,7 @@
  * 3. Re-evaluate ACTIVE patterns for performance degradation → DEPRECATED
  */
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { knowledgeBase } from "@/db/schema/vectors";
 import { conversationSignals, experiments } from "@/db/schema/learning";
 import { eq, sql, and, lt, isNull, not } from "drizzle-orm";
@@ -35,7 +35,7 @@ export async function runLifecycleEvaluator(): Promise<LifecycleReport> {
   let deprecatedActive = 0;
 
   // ── Step 1: Promote CANDIDATE → SHADOW ────────────────────────────────────
-  const candidates = await db
+  const candidates = await getDb()
     .select({
       id: knowledgeBase.id,
       title: knowledgeBase.title,
@@ -52,7 +52,7 @@ export async function runLifecycleEvaluator(): Promise<LifecycleReport> {
     );
 
   for (const candidate of candidates) {
-    await db
+    await getDb()
       .update(knowledgeBase)
       .set({ status: "SHADOW" })
       .where(eq(knowledgeBase.id, candidate.id));
@@ -63,7 +63,7 @@ export async function runLifecycleEvaluator(): Promise<LifecycleReport> {
   }
 
   // ── Step 2: Promote SHADOW → IN_EXPERIMENT ────────────────────────────────
-  const shadowPatterns = await db
+  const shadowPatterns = await getDb()
     .select({
       id: knowledgeBase.id,
       title: knowledgeBase.title,
@@ -82,7 +82,7 @@ export async function runLifecycleEvaluator(): Promise<LifecycleReport> {
 
   for (const shadow of shadowPatterns) {
     // Find an ACTIVE incumbent in the same situation to compete against
-    const [incumbent] = await db
+    const [incumbent] = await getDb()
       .select({ id: knowledgeBase.id })
       .from(knowledgeBase)
       .where(
@@ -100,7 +100,7 @@ export async function runLifecycleEvaluator(): Promise<LifecycleReport> {
 
     if (!incumbent) {
       // No incumbent — fast-track to ACTIVE (no one to compete against)
-      await db
+      await getDb()
         .update(knowledgeBase)
         .set({
           status: "ACTIVE",
@@ -115,7 +115,7 @@ export async function runLifecycleEvaluator(): Promise<LifecycleReport> {
     }
 
     // Check no live experiment already exists for this situation
-    const [existingExperiment] = await db
+    const [existingExperiment] = await getDb()
       .select({ id: experiments.id })
       .from(experiments)
       .where(
@@ -129,7 +129,7 @@ export async function runLifecycleEvaluator(): Promise<LifecycleReport> {
     if (existingExperiment) continue; // already in an experiment
 
     // Create the experiment
-    await db.insert(experiments).values({
+    await getDb().insert(experiments).values({
       id: nanoid(),
       name: `${shadow.title} vs. incumbent`,
       status: "active",
@@ -142,7 +142,7 @@ export async function runLifecycleEvaluator(): Promise<LifecycleReport> {
       minSampleSize: 30,
     });
 
-    await db
+    await getDb()
       .update(knowledgeBase)
       .set({ status: "IN_EXPERIMENT" })
       .where(eq(knowledgeBase.id, shadow.id));
@@ -152,7 +152,7 @@ export async function runLifecycleEvaluator(): Promise<LifecycleReport> {
   }
 
   // ── Step 3: Re-evaluate ACTIVE patterns ───────────────────────────────────
-  const activePatterns = await db
+  const activePatterns = await getDb()
     .select({
       id: knowledgeBase.id,
       title: knowledgeBase.title,
@@ -168,7 +168,7 @@ export async function runLifecycleEvaluator(): Promise<LifecycleReport> {
     );
 
   for (const active of activePatterns) {
-    await db
+    await getDb()
       .update(knowledgeBase)
       .set({ status: "DEPRECATED" })
       .where(eq(knowledgeBase.id, active.id));
@@ -199,7 +199,7 @@ export async function refreshPatternPerformanceScore(
 ): Promise<void> {
   // We look at moves tagged with this technique
   // and compute the ratio of high-richness responses
-  const result = await db.execute(
+  const result = await getDb().execute(
     sql`
       SELECT
         AVG(response_richness_score)::float AS avg_richness,
@@ -217,7 +217,7 @@ export async function refreshPatternPerformanceScore(
 
   const newScore = Math.min(1, Math.max(0, stats.avg_richness));
 
-  await db
+  await getDb()
     .update(knowledgeBase)
     .set({ performanceScore: newScore })
     .where(eq(knowledgeBase.id, patternId));

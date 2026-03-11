@@ -1,6 +1,6 @@
 import { IncomingMessage } from "http";
 import { WebSocket } from "ws";
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { sessions, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -15,7 +15,7 @@ export interface AuthenticatedConnection {
   sessionId: string;
   userEmail: string;
   emailVerified: boolean;
-  role: "user" | "admin" | "org_admin" | "org_member"; 
+  role: "user" | "admin" | "org_admin" | "org_member";
 }
 
 export interface AuthError {
@@ -71,10 +71,12 @@ async function verifySessionToken(token: string): Promise<{
   role: "user" | "admin" | "org_admin" | "org_member";
 } | null> {
   try {
-    console.log(`[WS Auth] Verifying token: ${token.substring(0, 5)}...${token.substring(token.length - 5)}`);
-    
+    console.log(
+      `[WS Auth] Verifying token: ${token.substring(0, 5)}...${token.substring(token.length - 5)}`,
+    );
+
     // Query session from database - check both token and id
-    const [session] = await db
+    const [session] = await getDb()
       .select({
         id: sessions.id,
         userId: sessions.userId,
@@ -88,7 +90,7 @@ async function verifySessionToken(token: string): Promise<{
     if (!session) {
       console.log(`[WS Auth] No session found for token.`);
       // Try fallback to ID just in case the cookie contains the ID
-      const [sessionById] = await db
+      const [sessionById] = await getDb()
         .select({
           id: sessions.id,
           userId: sessions.userId,
@@ -98,13 +100,13 @@ async function verifySessionToken(token: string): Promise<{
         .from(sessions)
         .where(eq(sessions.id, token))
         .limit(1);
-        
+
       if (sessionById) {
         console.log(`[WS Auth] Found session by ID fallback.`);
         // Continue with sessionById
         return processSession(sessionById);
       }
-      
+
       return null;
     }
 
@@ -114,12 +116,14 @@ async function verifySessionToken(token: string): Promise<{
       // Check if session is expired
       const now = new Date();
       if (session.expiresAt && session.expiresAt < now) {
-        console.log(`[WS Auth] Session expired. Expires at: ${session.expiresAt}, Now: ${now}`);
+        console.log(
+          `[WS Auth] Session expired. Expires at: ${session.expiresAt}, Now: ${now}`,
+        );
         return null;
       }
 
       // Get user details
-      const [user] = await db
+      const [user] = await getDb()
         .select({
           email: users.email,
           emailVerified: users.emailVerified,
@@ -150,13 +154,12 @@ async function verifySessionToken(token: string): Promise<{
   }
 }
 
-
 /**
  * Authenticate WebSocket connection
  */
 export async function authenticateWebSocket(
   ws: WebSocket,
-  request: IncomingMessage
+  request: IncomingMessage,
 ): Promise<AuthenticatedConnection | AuthError> {
   // Extract session token
   const token = extractSessionToken(request);
@@ -200,7 +203,7 @@ export async function authenticateWebSocket(
  * Verify public survey access (no authentication required)
  */
 export async function verifyPublicAccess(
-  request: IncomingMessage
+  request: IncomingMessage,
 ): Promise<{ surveyId: string } | AuthError> {
   const url = new URL(request.url || "", `http://${request.headers.host}`);
   const surveyId = url.searchParams.get("surveyId");
@@ -240,7 +243,7 @@ export function sendAuthError(ws: WebSocket, error: AuthError): void {
 export function createAuthMiddleware(requireAuth: boolean = true) {
   return async (
     ws: WebSocket,
-    request: IncomingMessage
+    request: IncomingMessage,
   ): Promise<AuthenticatedConnection | { surveyId: string } | null> => {
     if (requireAuth) {
       const result = await authenticateWebSocket(ws, request);

@@ -448,6 +448,7 @@ export type WidgetType =
   | "hypothesis_card"
   | "recommendation_card"
   | "metric_breakdown"
+  | "metric_list"
   | "sentiment_gauge"
   | "coverage_matrix"
   | "media_effectiveness"
@@ -751,48 +752,6 @@ export function createDashboardWidgets(
     } as StatCardData,
   });
 
-  widgets.push({
-    id: "insight_quality",
-    type: "stat_card",
-    title: "Insight Quality",
-    priority: priority++,
-    size: "small",
-    data: {
-      value: `${analytics.coreMetrics.insightQualityScore}/10`,
-      label: "quality score",
-      icon: "star",
-    } as StatCardData,
-  });
-
-  widgets.push({
-    id: "goal_achievement",
-    type: "stat_card",
-    title: "Goal Achievement",
-    priority: priority++,
-    size: "small",
-    data: {
-      value: `${analytics.goalAssessment.achievementScore}/10`,
-      label: analytics.goalAssessment.achievementLevel.replace("_", " "),
-      trend:
-        analytics.goalAssessment.achievementScore >= 7
-          ? "up"
-          : analytics.goalAssessment.achievementScore >= 5
-            ? "stable"
-            : "down",
-      icon: "target",
-    } as StatCardData,
-  });
-
-  // 2. Sentiment Gauge
-  widgets.push({
-    id: "overall_sentiment",
-    type: "sentiment_gauge",
-    title: "Overall Sentiment",
-    priority: priority++,
-    size: "medium",
-    data: analytics.executiveSummary.overallSentiment,
-  });
-
   // 3. Engagement Distribution
   widgets.push({
     id: "engagement_distribution",
@@ -939,37 +898,6 @@ export function createDashboardWidgets(
       data: analytics.discoveredInsights.recommendations,
     });
   }
-
-  // 11. Insight Types Collected (for goal assessment)
-  widgets.push({
-    id: "insight_types",
-    type: "bar_chart",
-    title: "Insight Types Collected",
-    description: "Breakdown of emotional, behavioral, and rational insights",
-    priority: priority++,
-    size: "medium",
-    data: {
-      bars: [
-        {
-          label: "Emotional",
-          value: analytics.goalAssessment.insightTypesCollected.emotional.count,
-          color: "#ec4899",
-        },
-        {
-          label: "Behavioral",
-          value:
-            analytics.goalAssessment.insightTypesCollected.behavioral.count,
-          color: "#8b5cf6",
-        },
-        {
-          label: "Rational",
-          value: analytics.goalAssessment.insightTypesCollected.rational.count,
-          color: "#3b82f6",
-        },
-      ],
-      yAxisLabel: "Count",
-    } as BarChartData,
-  });
 
   // 12. Media Analytics (if survey has media)
   if (

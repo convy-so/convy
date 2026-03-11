@@ -38,10 +38,13 @@ COPY . .
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ARG NEXT_PUBLIC_WEBSOCKET_URL
+ARG NEXT_PUBLIC_BETTER_AUTH_URL
 
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_WEBSOCKET_URL=$NEXT_PUBLIC_WEBSOCKET_URL
+ENV NEXT_PUBLIC_BETTER_AUTH_URL=$NEXT_PUBLIC_BETTER_AUTH_URL
+
 
 # Disable Next.js telemetry in CI.
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -60,6 +63,8 @@ ENV UPSTASH_REDIS_REST_TOKEN="placeholder_token"
 ENV NEXT_PUBLIC_SUPABASE_URL="https://placeholder.supabase.co"
 ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="pk_placeholder"
 ENV convy_supabase_secret_key="placeholder_key"
+ENV ADMIN_PASSWORD="placeholder_password"
+
 
 RUN pnpm build
 
@@ -76,6 +81,33 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+
+# ── Runtime placeholders ──────────────────────────────────────
+# These are FALLBACK values only. In production/staging, AWS ECS
+# injects the real secrets from SSM Parameter Store, which override
+# these values. They exist here because Next.js standalone mode reads
+# process.env at runtime (not build time), and lib/env.ts throws if
+# a required variable is completely absent from the environment.
+# Multi-stage builds do NOT carry ENV vars from builder → runner.
+ENV DATABASE_URL="postgresql://placeholder:5432/db"
+ENV BETTER_AUTH_SECRET="placeholder_secret"
+ENV BETTER_AUTH_URL="http://localhost:3000"
+ENV GOOGLE_CLIENT_ID="placeholder_id"
+ENV GOOGLE_CLIENT_SECRET="placeholder_secret"
+ENV RESEND_API_KEY="re_placeholder"
+ENV RESEND_FROM_EMAIL="onboarding@resend.dev"
+ENV GOOGLE_GENERATIVE_AI_API_KEY="placeholder_key"
+ENV OPENAI_API_KEY="placeholder_key"
+ENV UPSTASH_REDIS_REST_URL="https://placeholder.upstash.io"
+ENV UPSTASH_REDIS_REST_TOKEN="placeholder_token"
+ENV NEXT_PUBLIC_SUPABASE_URL="https://placeholder.supabase.co"
+ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="pk_placeholder"
+ENV convy_supabase_secret_key="placeholder_key"
+ENV ADMIN_PASSWORD="placeholder_password"
+
+ENV REDIS_URL="redis://localhost:6379"
+ENV APP_BASE_URL="http://localhost:3000"
+ENV ADMIN_EMAILS=""
 
 # Security: run as non-root user.
 RUN addgroup --system --gid 1001 nodejs

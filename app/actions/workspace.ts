@@ -8,9 +8,9 @@
 
 import { auth } from "@/lib/auth";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { db } from "@/db";
-import { organizations, members, invitations } from "@/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { getDb } from "@/db";
+import { organizations, members, invitations, users } from "@/db/schema";
+import { eq, and, desc, sql } from "drizzle-orm";
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -24,7 +24,21 @@ export async function createWorkspace(data: {
   slug: string;
 }): Promise<ActionResult<{ id: string; name: string; slug: string }>> {
   try {
-    await getVerifiedSession();
+    const session = await getVerifiedSession();
+
+    // --- WORKSPACE LIMIT CHECK ---
+    const userOwnedWorkspaces = await getDb()
+      .select({ id: members.id })
+      .from(members)
+      .where(and(eq(members.userId, session.user.id), eq(members.role, "owner")));
+
+    if (userOwnedWorkspaces.length >= 2) {
+      return {
+        success: false,
+        error: "Limit reached: You can only create up to 2 workspaces per person.",
+      };
+    }
+    // --- END WORKSPACE LIMIT CHECK ---
 
     // Use Better Auth API to create organization
     const result = await auth.api.createOrganization({
@@ -137,7 +151,7 @@ export async function getActiveWorkspace(): Promise<
       };
     }
 
-    const org = await db.query.organizations.findFirst({
+    const org = await getDb().query.organizations.findFirst({
       where: eq(organizations.id, activeOrganizationId),
     });
 
@@ -148,7 +162,7 @@ export async function getActiveWorkspace(): Promise<
       };
     }
 
-    const member = await db.query.members.findFirst({
+    const member = await getDb().query.members.findFirst({
       where: and(
         eq(members.organizationId, activeOrganizationId),
         eq(members.userId, session.user.id),
@@ -221,6 +235,17 @@ export async function inviteToWorkspace(data: {
 }): Promise<ActionResult<{ invitationId: string }>> {
   try {
     const session = await getVerifiedSession();
+    const normalizedEmail = data.email.trim().toLowerCase();
+    const organizationId =
+      data.organizationId ||
+      ((session.session as any).activeOrganizationId as string | undefined);
+
+    if (!organizationId) {
+      return {
+        success: false,
+        error: "No active workspace selected",
+      };
+    }
 
     if (data.organizationId) {
       const { isWorkspaceOwner } = await import("@/lib/workspace-access");
@@ -236,12 +261,48 @@ export async function inviteToWorkspace(data: {
       }
     }
 
+    const existingPendingInvite =
+      await getDb().query.invitations.findFirst({
+        where: and(
+          eq(invitations.organizationId, organizationId),
+          eq(invitations.status, "pending"),
+          sql`lower(${invitations.email}) = ${normalizedEmail}`,
+        ),
+      });
+
+    if (existingPendingInvite) {
+      return {
+        success: false,
+        error: "An invitation has already been sent to this email",
+      };
+    }
+
+    const existingUser = await getDb().query.users.findFirst({
+      where: sql`lower(${users.email}) = ${normalizedEmail}`,
+    });
+
+    if (existingUser) {
+      const existingMember = await getDb().query.members.findFirst({
+        where: and(
+          eq(members.organizationId, organizationId),
+          eq(members.userId, existingUser.id),
+        ),
+      });
+
+      if (existingMember) {
+        return {
+          success: false,
+          error: "This user is already a member of the workspace",
+        };
+      }
+    }
+
     // Use Better Auth API to invite member
     const result = await auth.api.createInvitation({
       body: {
-        email: data.email,
+        email: normalizedEmail,
         role: data.role || "member",
-        organizationId: data.organizationId,
+        organizationId,
       },
       headers: await getSessionHeaders(),
     });
@@ -516,8 +577,26 @@ export async function getWorkspaceInvitations(organizationId: string): Promise<
   try {
     await getVerifiedSession();
 
-    const invites = await db.query.invitations.findMany({
-      where: eq(invitations.organizationId, organizationId),
+    const workspaceMembers = await getDb().query.members.findMany({
+      where: eq(members.organizationId, organizationId),
+      with: {
+        user: {
+          columns: {
+            email: true,
+          },
+        },
+      },
+    });
+
+    const memberEmails = new Set(
+      workspaceMembers.map((member) => member.user.email.toLowerCase()),
+    );
+
+    const invites = await getDb().query.invitations.findMany({
+      where: and(
+        eq(invitations.organizationId, organizationId),
+        eq(invitations.status, "pending"),
+      ),
       orderBy: [desc(invitations.createdAt)],
       with: {
         inviter: {
@@ -531,14 +610,16 @@ export async function getWorkspaceInvitations(organizationId: string): Promise<
 
     return {
       success: true,
-      data: invites.map((invite) => ({
-        id: invite.id,
-        email: invite.email,
-        role: invite.role,
-        status: invite.status,
-        createdAt: invite.createdAt,
-        inviterName: invite.inviter.name || invite.inviter.email,
-      })),
+      data: invites
+        .filter((invite) => !memberEmails.has(invite.email.toLowerCase()))
+        .map((invite) => ({
+          id: invite.id,
+          email: invite.email,
+          role: invite.role,
+          status: invite.status,
+          createdAt: invite.createdAt,
+          inviterName: invite.inviter.name || invite.inviter.email,
+        })),
     };
   } catch (error) {
     console.error("Error getting workspace invitations:", error);

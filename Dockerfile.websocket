@@ -42,16 +42,35 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# ── Runtime placeholders ──────────────────────────────────────
+# ECS injects real values from SSM at runtime, overriding these.
+# They exist so lib/env.ts doesn't throw 'Missing required env var'
+# since multi-stage builds don't carry ENV vars from builder to runner.
+ENV DATABASE_URL="postgresql://placeholder:5432/db"
+ENV BETTER_AUTH_SECRET="placeholder_secret"
+ENV BETTER_AUTH_URL="http://localhost:3000"
+ENV GOOGLE_CLIENT_ID="placeholder_id"
+ENV GOOGLE_CLIENT_SECRET="placeholder_secret"
+ENV RESEND_API_KEY="re_placeholder"
+ENV RESEND_FROM_EMAIL="onboarding@resend.dev"
+ENV GOOGLE_GENERATIVE_AI_API_KEY="placeholder_key"
+ENV OPENAI_API_KEY="placeholder_key"
+ENV UPSTASH_REDIS_REST_URL="https://placeholder.upstash.io"
+ENV UPSTASH_REDIS_REST_TOKEN="placeholder_token"
+ENV NEXT_PUBLIC_SUPABASE_URL="https://placeholder.supabase.co"
+ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="pk_placeholder"
+ENV convy_supabase_secret_key="placeholder_key"
+ENV REDIS_URL="redis://localhost:6379"
+ENV APP_BASE_URL="http://localhost:3000"
+ENV ADMIN_EMAILS=""
+
 # Security: run as non-root.
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 wsuser
 
-# Only copy what the compiled server needs at runtime.
-COPY --from=builder --chown=wsuser:nodejs /app/dist ./dist
-COPY --from=builder --chown=wsuser:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=wsuser:nodejs /app/package.json ./
-# Agent instructions (skills)
-COPY --from=builder --chown=wsuser:nodejs /app/.agent/skills ./.agent/skills
+# Only copy what the server needs at runtime.
+# We copy the entire app so `tsx` can run the source files directly.
+COPY --from=builder --chown=wsuser:nodejs /app ./
 
 USER wsuser
 
@@ -61,4 +80,4 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD wget -qO- http://localhost:3001/health || exit 1
 
-CMD ["node", "dist/websocket/server.js"]
+CMD ["./node_modules/.bin/tsx", "websocket/server.ts"]

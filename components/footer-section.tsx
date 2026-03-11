@@ -14,7 +14,7 @@ export default function FooterSection() {
           <div className="w-14 h-14 rounded-[18px] border border-white/20 flex items-center justify-center">
             <Image
               src="/logo.svg"
-              alt="Convy logo"
+              alt="Convyy logo"
               width={40}
               height={40}
               className="h-8 w-8"
@@ -30,12 +30,12 @@ export default function FooterSection() {
           <div className="space-y-2">
             <p className="text-sm text-[#B2B2B2]">{t('Contact')}</p>
             <a
-              href="https://x.com/convy"
+              href="https://x.com/getConvy"
               target="_blank"
               rel="noreferrer"
               className="text-[18px] font-medium text-white underline underline-offset-4"
             >
-              @convy
+              @getConvy
             </a>
           </div>
         </div>
@@ -50,6 +50,9 @@ export default function FooterSection() {
 
             {/* Right links */}
             <div className="order-1 sm:order-2 flex flex-wrap items-center gap-x-6 gap-y-2">
+              <Link href="/terms" className="hover:text-white transition-colors">
+                Terms
+              </Link>
               <Link href="/privacy" className="hover:text-white transition-colors">
                 {t('Privacy')}
               </Link>
@@ -62,7 +65,7 @@ export default function FooterSection() {
               <div className="h-5 w-px bg-white/20" />
               <div className="flex items-center gap-3">
                 <a
-                  href="https://x.com/convy"
+                  href="https://x.com/getConvy"
                   target="_blank"
                   rel="noreferrer"
                   className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20 hover:border-white transition-colors"

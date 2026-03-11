@@ -11,19 +11,20 @@ export interface VoiceError {
   technicalDetails?: string;
 }
 
-
 export const VOICE_ERRORS = {
   // Audio Format Errors
   AUDIO_FORMAT_INVALID: {
     code: "AUDIO_FORMAT_INVALID",
     description: "Invalid audio format",
-    userMessage: "Your browser sent an unsupported audio format. Please try refreshing the page.",
+    userMessage:
+      "Your browser sent an unsupported audio format. Please try refreshing the page.",
     retryable: true,
   },
   AUDIO_TRANSCODING_FAILED: {
     code: "AUDIO_TRANSCODING_FAILED",
     description: "Failed to convert audio format",
-    userMessage: "We couldn't process your audio. Please check your microphone and try again.",
+    userMessage:
+      "We couldn't process your audio. Please check your microphone and try again.",
     retryable: true,
   },
   AUDIO_TOO_LARGE: {
@@ -37,19 +38,22 @@ export const VOICE_ERRORS = {
   MICROPHONE_PERMISSION_DENIED: {
     code: "MICROPHONE_PERMISSION_DENIED",
     description: "Microphone permission denied",
-    userMessage: "Please allow microphone access in your browser settings to use voice features.",
+    userMessage:
+      "Please allow microphone access in your browser settings to use voice features.",
     retryable: false,
   },
   MICROPHONE_NOT_FOUND: {
     code: "MICROPHONE_NOT_FOUND",
     description: "No microphone detected",
-    userMessage: "No microphone was found. Please connect a microphone and try again.",
+    userMessage:
+      "No microphone was found. Please connect a microphone and try again.",
     retryable: false,
   },
   MICROPHONE_IN_USE: {
     code: "MICROPHONE_IN_USE",
     description: "Microphone is in use by another application",
-    userMessage: "Your microphone is being used by another application. Please close other apps and try again.",
+    userMessage:
+      "Your microphone is being used by another application. Please close other apps and try again.",
     retryable: true,
   },
 
@@ -57,25 +61,29 @@ export const VOICE_ERRORS = {
   STT_SERVICE_DISABLED: {
     code: "STT_SERVICE_DISABLED",
     description: "Speech-to-Text API is disabled",
-    userMessage: "Voice recognition is temporarily unavailable. Please contact support.",
+    userMessage:
+      "Voice recognition is temporarily unavailable. Please contact support.",
     retryable: false,
   },
   STT_QUOTA_EXCEEDED: {
     code: "STT_QUOTA_EXCEEDED",
     description: "Speech-to-Text quota exceeded",
-    userMessage: "Voice recognition quota exceeded. Please try again later or contact support.",
+    userMessage:
+      "Voice recognition quota exceeded. Please try again later or contact support.",
     retryable: true,
   },
   STT_NETWORK_ERROR: {
     code: "STT_NETWORK_ERROR",
     description: "Network error during speech recognition",
-    userMessage: "Network connection issue. Please check your internet and try again.",
+    userMessage:
+      "Network connection issue. Please check your internet and try again.",
     retryable: true,
   },
   STT_STREAM_ERROR: {
     code: "STT_STREAM_ERROR",
     description: "Speech recognition stream error",
-    userMessage: "Voice recognition encountered an error. Please try speaking again.",
+    userMessage:
+      "Voice recognition encountered an error. Please try speaking again.",
     retryable: true,
   },
 
@@ -83,19 +91,22 @@ export const VOICE_ERRORS = {
   TTS_SERVICE_DISABLED: {
     code: "TTS_SERVICE_DISABLED",
     description: "Text-to-Speech API is disabled",
-    userMessage: "Voice playback is temporarily unavailable. Please contact support.",
+    userMessage:
+      "Voice playback is temporarily unavailable. Please contact support.",
     retryable: false,
   },
   TTS_QUOTA_EXCEEDED: {
     code: "TTS_QUOTA_EXCEEDED",
     description: "Text-to-Speech quota exceeded",
-    userMessage: "Voice synthesis quota exceeded. You'll see text responses instead.",
+    userMessage:
+      "Voice synthesis quota exceeded. You'll see text responses instead.",
     retryable: false,
   },
   TTS_SYNTHESIS_FAILED: {
     code: "TTS_SYNTHESIS_FAILED",
     description: "Failed to synthesize speech",
-    userMessage: "Couldn't generate voice response. You'll see the text instead.",
+    userMessage:
+      "Couldn't generate voice response. You'll see the text instead.",
     retryable: true,
   },
 
@@ -137,7 +148,8 @@ export const VOICE_ERRORS = {
   SESSION_LIMIT_REACHED: {
     code: "SESSION_LIMIT_REACHED",
     description: "Concurrent session limit reached",
-    userMessage: "Maximum number of active voice sessions reached. Please try again later.",
+    userMessage:
+      "Maximum number of active voice sessions reached. Please try again later.",
     retryable: true,
   },
 
@@ -145,7 +157,8 @@ export const VOICE_ERRORS = {
   INVALID_CONFIGURATION: {
     code: "INVALID_CONFIGURATION",
     description: "Invalid voice configuration",
-    userMessage: "Voice feature is not properly configured. Please contact support.",
+    userMessage:
+      "Voice feature is not properly configured. Please contact support.",
     retryable: false,
   },
 
@@ -162,12 +175,18 @@ export const VOICE_ERRORS = {
  * Create a voice error with technical details
  */
 export function createVoiceError(
-  errorCode: keyof typeof VOICE_ERRORS,
-  technicalDetails?: string
+  errorCode: keyof typeof VOICE_ERRORS | string,
+  technicalDetails?: string,
 ): VoiceError {
-  const errorDef = VOICE_ERRORS[errorCode];
+  const errorDef =
+    VOICE_ERRORS[errorCode as keyof typeof VOICE_ERRORS] ||
+    VOICE_ERRORS.UNKNOWN_ERROR;
   return {
     ...errorDef,
+    code:
+      errorDef === VOICE_ERRORS.UNKNOWN_ERROR && typeof errorCode === "string"
+        ? errorCode
+        : errorDef.code,
     technicalDetails,
   } as VoiceError;
 }
@@ -210,7 +229,7 @@ export function mapBrowserErrorToVoiceError(error: Error): VoiceError {
  */
 export function sendVoiceError(
   send: (data: unknown) => void,
-  error: VoiceError
+  error: VoiceError,
 ): void {
   send({
     type: "error",

@@ -1,4 +1,5 @@
 import type { SurveyConfig } from "./prompts";
+import type { SupportedLanguage } from "./translation-service";
 
 // ============================================================================
 // CONVERSATION-LEVEL INSIGHTS PROMPT
@@ -152,7 +153,15 @@ export function getSurveyAnalyticsPrompt(
   }>,
   config: SurveyConfig,
   totalConversations: number,
+  targetLanguage: SupportedLanguage = "en",
 ): string {
+  const languageNames: Record<SupportedLanguage, string> = {
+    en: "English",
+    fr: "French",
+    de: "German",
+    es: "Spanish",
+    it: "Italian",
+  };
   const insightsText = conversationInsights
     .map(
       (insight, i) => `
@@ -462,6 +471,7 @@ CRITICAL INSTRUCTIONS:
 4.  **For executiveSummary.keyInsights**: Provide 5 distinct, high-impact findings. Each finding must be a full sentence explaining WHAT, WHY, and WHO.
 5.  **For discoveredInsights.trends**: Look for subtle patterns. Explain the trend with depth.
 6.  **Avoid Vague Language**: Words like "some", "many", "interesting" are banned unless followed by specific numbers or reasons.
+7.  **MULTI-LINGUAL SYNTHESIS**: You will receive insights from conversations in various languages. You MUST synthesize them and return the entire JSON output in ${languageNames[targetLanguage]}. All descriptive text, headlines, insights, and summaries must be in ${languageNames[targetLanguage]} correctly.
 
 Return ONLY the JSON object, no additional text.`;
 }

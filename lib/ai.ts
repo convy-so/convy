@@ -1,157 +1,47 @@
 import { google } from "@ai-sdk/google";
-import { generateText, streamText, type ModelMessage } from "ai";
-import type { RollingContext } from "./conversation-memory";
+import { openai } from "@ai-sdk/openai";
+import {
+  generateText,
+  streamText,
+  type ModelMessage,
+  type LanguageModel,
+  convertToModelMessages,
+} from "ai";
+import { RollingContext } from "./conversation-memory";
 import { logUsage } from "./billing/logger";
 
-/**
- * Normalizes messages from the client (which may use UI-centric 'parts')
- * into the ModelMessage format expected by the Vercel AI SDK.
- *
- * IMPORTANT: Must preserve tool call and tool result parts so the AI
- * receives the complete conversation history including resolved tool calls.
- * Without this, the AI will re-invoke tools it has already called.
- */
-export function normalizeMessages(messages: any[]): ModelMessage[] {
-  const result: ModelMessage[] = [];
-
-  for (const msg of messages) {
-    const { role, content, parts } = msg;
-
-    // --- Assistant messages ---
-    if (role === "assistant") {
-      // If content is already a proper array (multi-part: text + tool-call), use as-is
-      if (Array.isArray(content)) {
-        result.push({ role, content } as ModelMessage);
-        continue;
-      }
-
-      // Build assistant content from parts (AI SDK v6 format)
-      if (Array.isArray(parts) && parts.length > 0) {
-        const contentParts: any[] = [];
-
-        for (const p of parts) {
-          if (p.type === "text" && p.text) {
-            contentParts.push({ type: "text", text: p.text });
-          } else if (p.type?.startsWith("tool-") && p.toolCallId) {
-            // This is a tool-call part: type = 'tool-{toolName}'
-            const toolName = p.type.replace(/^tool-/, "");
-            if (p.state === "output-available" || p.output !== undefined) {
-              // Skip — tool results are represented as separate 'tool' role messages below
-            } else {
-              // Tool call (pending/input-available)
-              contentParts.push({
-                type: "tool-call",
-                toolCallId: p.toolCallId,
-                toolName,
-                input: p.input ?? p.args ?? {},
-              });
-            }
-          }
-        }
-
-        if (contentParts.length > 0) {
-          result.push({ role, content: contentParts } as ModelMessage);
-
-          // After the assistant message, emit tool-result messages for resolved tools
-          for (const p of parts) {
-            if (
-              p.type?.startsWith("tool-") &&
-              p.toolCallId &&
-              (p.state === "output-available" || p.output !== undefined)
-            ) {
-              const toolName = p.type.replace(/^tool-/, "");
-              result.push({
-                role: "tool",
-                content: [
-                  {
-                    type: "tool-result",
-                    toolCallId: p.toolCallId,
-                    toolName,
-                    output: p.output ?? p.result ?? {},
-                  },
-                ],
-              } as ModelMessage);
-            }
-          }
-          continue;
-        }
-      }
-
-      // Plain string content
-      const text = typeof content === "string" ? content : "";
-      result.push({ role, content: text } as ModelMessage);
-      continue;
-    }
-
-    // --- User messages ---
-    if (role === "user") {
-      if (typeof content === "string" && content.length > 0) {
-        result.push({ role, content } as ModelMessage);
-        continue;
-      }
-      if (Array.isArray(parts)) {
-        const textContent = parts
-          .filter((p: any) => p.type === "text")
-          .map((p: any) => p.text)
-          .join("\n");
-        result.push({ role, content: textContent || "" } as ModelMessage);
-        continue;
-      }
-      result.push({ role, content: content || "" } as ModelMessage);
-      continue;
-    }
-
-    // Fallback for any other role
-    result.push({ role, content: content || "" } as ModelMessage);
-  }
-
+export async function normalizeMessages(
+  messages: any[],
+): Promise<ModelMessage[]> {
+  console.log(
+    `[AI:normalizeMessages] Normalizing ${messages.length} messages...`,
+  );
+  const result = await convertToModelMessages(messages);
+  console.log(`[AI:normalizeMessages] Done. Result count: ${result.length}`);
   return result;
 }
 
 export const GEMINI_FLASH_LITE_ID = "gemini-2.5-flash-lite";
 export const GEMINI_FLASH_ID = "gemini-2.5-flash";
+export const GEMINI_FLASH_STABLE_ID = "gemini-2.0-flash";
+export const GPT_4_1_MINI_ID = "gpt-4.1-mini";
 
 export const flashLiteModel = google(GEMINI_FLASH_LITE_ID);
 export const flashModel = google(GEMINI_FLASH_ID);
+// Stable production model with high quota — used for background extraction
+export const flashStableModel = google(GEMINI_FLASH_STABLE_ID);
+export const gpt41MiniModel = openai(GPT_4_1_MINI_ID);
 
-// Use flash for analysis to ensure tool calling reliability
-export const analysisModel = flashModel;
+// Use stable flash for analysis (high-volume background calls)
+export const analysisModel = flashStableModel;
 
-/**
- * Determine which model to use based on conversation state
- *
- * Strategy: Always use Flash model for all surveys.
- * This ensures reliable tool calling (showMedia, finishSurvey) throughout.
- *
- * @param context Rolling context with progress and state information
- * @param userMessageCount Number of user messages in the conversation
- * @param minQuestions Minimum number of questions required
- * @param hasMedia Whether the survey has media that may need to be displayed
- * @returns The appropriate Gemini model to use
- */
-export function selectModelForConversation(
-  context: RollingContext | undefined,
-  userMessageCount: number,
-  minQuestions: number,
-  hasMedia: boolean = false,
-): ReturnType<typeof google> {
-  // Always use Flash for reliable tool calling and consistent behavior
-  return flashModel;
-}
+export const defaultModel = gpt41MiniModel;
 
-/**
- * Get the default model (flash for reliable tool calling)
- */
-export const defaultModel = flashModel;
-
-/**
- * Generate text using AI (for non-streaming tasks like summaries, insights)
- */
 export async function generateAIResponse(
   prompt: string,
   systemPrompt?: string,
   options?: {
-    model?: ReturnType<typeof google>;
+    model?: LanguageModel;
     temperature?: number;
     maxTokens?: number;
     userId?: string;
@@ -169,16 +59,17 @@ export async function generateAIResponse(
     maxOutputTokens: options?.maxTokens ?? 2000,
   });
 
-  // Log usage
   logUsage({
     userId: options?.userId,
     organizationId: options?.organizationId,
     surveyId: options?.surveyId,
     type: "llm_text",
-    provider: "google",
+    provider: (model as any).modelId?.includes("gpt") ? "openai" : "google",
     modelName: (model as any).modelId ?? GEMINI_FLASH_ID,
-    promptTokens: result.usage.inputTokens,
-    completionTokens: result.usage.outputTokens,
+    promptTokens:
+      result.usage.inputTokens ?? (result.usage as any).promptTokens,
+    completionTokens:
+      result.usage.outputTokens ?? (result.usage as any).completionTokens,
     totalTokens: result.usage.totalTokens,
   });
 
@@ -192,7 +83,7 @@ export function streamAIResponse(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
   systemPrompt: string,
   options?: {
-    model?: ReturnType<typeof google>;
+    model?: LanguageModel;
     temperature?: number;
     maxTokens?: number;
     userId?: string;
@@ -214,10 +105,12 @@ export function streamAIResponse(
         organizationId: options?.organizationId,
         surveyId: options?.surveyId,
         type: "llm_text",
-        provider: "google",
+        provider: (model as any).modelId?.includes("gpt") ? "openai" : "google",
         modelName: (model as any).modelId ?? GEMINI_FLASH_ID,
-        promptTokens: result.usage.inputTokens,
-        completionTokens: result.usage.outputTokens,
+        promptTokens:
+          result.usage.inputTokens ?? (result.usage as any).promptTokens,
+        completionTokens:
+          result.usage.outputTokens ?? (result.usage as any).completionTokens,
         totalTokens: result.usage.totalTokens,
       });
     },

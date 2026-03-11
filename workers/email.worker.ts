@@ -42,21 +42,21 @@ const emailWorker = new Worker<EmailJobData>(
     let text: string;
 
     if (type === "verification") {
-      subject = "Verify your Convy account";
+      subject = "Verify your Convyy account";
       text = [
         `Hi ${name ?? "there"},`,
         "",
-        "Please confirm your email address to start using Convy.",
+        "Please confirm your email address to start using Convyy.",
         url,
         "",
         "If you didn't request this, you can ignore this email.",
       ].join("\n");
     } else if (type === "password-reset") {
-      subject = "Reset your Convy password";
+      subject = "Reset your Convyy password";
       text = [
         `Hi ${name ?? "there"},`,
         "",
-        "You recently requested to reset your Convy password.",
+        "You recently requested to reset your Convyy password.",
         "Click the link below to choose a new one:",
         url,
         "",
@@ -67,11 +67,11 @@ const emailWorker = new Worker<EmailJobData>(
         (validatedData.metadata?.workspaceName as string) || "a workspace";
       const invitedBy =
         (validatedData.metadata?.invitedBy as string) || "someone";
-      subject = `You've been invited to join ${workspaceName} on Convy`;
+      subject = `You've been invited to join ${workspaceName} on Convyy`;
       text = [
         `Hi ${name ?? "there"},`,
         "",
-        `${invitedBy} has invited you to join ${workspaceName} on Convy.`,
+        `${invitedBy} has invited you to join ${workspaceName} on Convyy.`,
         "",
         "Click the link below to accept the invitation:",
         url,
@@ -81,11 +81,11 @@ const emailWorker = new Worker<EmailJobData>(
     } else if (type === "workspace-welcome") {
       const workspaceName =
         (validatedData.metadata?.workspaceName as string) || "the workspace";
-      subject = `Welcome to ${workspaceName} on Convy`;
+      subject = `Welcome to ${workspaceName} on Convyy`;
       text = [
         `Hi ${name ?? "there"},`,
         "",
-        `You have been added to ${workspaceName} on Convy.`,
+        `You have been added to ${workspaceName} on Convyy.`,
         "",
         "Click the link below to access the workspace:",
         url,
@@ -97,7 +97,7 @@ const emailWorker = new Worker<EmailJobData>(
       text = [
         `Hi ${name ?? "there"},`,
         "",
-        "Please confirm this email address to add it to your Convy account.",
+        "Please confirm this email address to add it to your Convyy account.",
         url,
         "",
         "If you didn't request this, you can ignore this email.",

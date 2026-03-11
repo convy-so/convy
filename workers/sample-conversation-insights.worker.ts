@@ -2,7 +2,7 @@ import { Worker, Job } from "bullmq";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
 import { analysisModel, generateAIResponse } from "@/lib/ai";
 import {
@@ -49,7 +49,7 @@ const sampleConversationInsightsWorker =
         `[Sample Conversation Insights Worker] Processing job ${job.id} for survey ${surveyId}, conversation ${conversationNumber}`,
       );
 
-      const [survey] = await db
+      const [survey] = await getDb()
         .select()
         .from(surveys)
         .where(eq(surveys.id, surveyId));
@@ -112,7 +112,7 @@ const sampleConversationInsightsWorker =
 
       await job.updateProgress(90);
 
-      await db
+      await getDb()
         .update(sampleConversations)
         .set({ insights })
         .where(
@@ -127,7 +127,7 @@ const sampleConversationInsightsWorker =
       // Trigger pattern extraction for self-improvement
       try {
         const { enqueuePatternExtraction } = await import("@/lib/queue");
-        const [sampleConv] = await db
+        const [sampleConv] = await getDb()
           .select({ id: sampleConversations.id })
           .from(sampleConversations)
           .where(

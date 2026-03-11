@@ -9,7 +9,22 @@ import toast from "react-hot-toast";
 import { StatusCard } from "@/components/auth/status-card";
 import { LoadingOverlay } from "@/components/auth/loading-overlay";
 
+import { Suspense } from "react";
+
 export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={
+      <LoadingOverlay
+        message="Loading..."
+        subtitle="Please wait while we prepare the verification page."
+      />
+    }>
+      <VerifyEmailContent />
+    </Suspense>
+  );
+}
+
+function VerifyEmailContent() {
   const router = useRouter();
   const params = useParams();
   const locale = params.locale as string;

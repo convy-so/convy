@@ -6,6 +6,8 @@ import { getCreationCommentsAction, postCreationCommentAction, updatePresenceAct
 import { getWorkspaceMembers } from "@/app/actions/workspace";
 import { Users, MessageSquare, Send, ShieldPlus, Loader2, X, Plus } from "lucide-react";
 import toast from "react-hot-toast";
+import { ClientT } from "@/components/i18n/client-t";
+import { getClientTranslation } from "@/app/actions/translate";
 
 type Comment = {
     id: string;
@@ -97,7 +99,7 @@ export function CollaborationSidebar({ surveyId, isOwner, collaborators = [] }: 
 
         const res = await postCreationCommentAction({ surveyId, text });
         if (!res.success) {
-            toast.error("Failed to post comment");
+            getClientTranslation("Failed to post comment").then(msg => toast.error(msg));
             setNewComment(text); // revert
         } else {
             // Optimistically fetch again to update list
@@ -143,7 +145,7 @@ export function CollaborationSidebar({ surveyId, isOwner, collaborators = [] }: 
                 <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
                     <div className="flex items-center gap-2">
                         <Users className="w-5 h-5 text-indigo-600" />
-                        <h3 className="font-semibold text-gray-900">Team Collab</h3>
+                        <h3 className="font-semibold text-gray-900"><ClientT>Team Collaboration</ClientT></h3>
                     </div>
                     <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600">
                         <X className="w-5 h-5" />
@@ -168,7 +170,7 @@ export function CollaborationSidebar({ surveyId, isOwner, collaborators = [] }: 
                             className="text-xs font-medium text-indigo-600 bg-indigo-100 hover:bg-indigo-200 px-2.5 py-1.5 rounded-md flex items-center gap-1 transition"
                         >
                             <ShieldPlus className="w-3.5 h-3.5" />
-                            Access
+                            <ClientT>Access</ClientT>
                         </button>
                     )}
                 </div>
@@ -187,7 +189,7 @@ export function CollaborationSidebar({ surveyId, isOwner, collaborators = [] }: 
                         </div>
                     ))}
                     <div ref={commentsEndRef} />
-                    {comments.length === 0 && <p className="text-center text-gray-400 mt-10 italic">No comments yet</p>}
+                    {comments.length === 0 && <p className="text-center text-gray-400 mt-10 italic"><ClientT>No comments yet</ClientT></p>}
                 </div>
 
                 {/* Input Area */}
@@ -216,12 +218,12 @@ export function CollaborationSidebar({ surveyId, isOwner, collaborators = [] }: 
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
                     <div className="bg-white rounded-2xl shadow-xl w-[400px] max-w-[90%] p-6 space-y-6">
                         <div className="flex items-center justify-between">
-                            <h3 className="font-bold text-lg text-gray-900">Manage Edit Access</h3>
+                            <h3 className="font-bold text-lg text-gray-900"><ClientT>Manage Edit Access</ClientT></h3>
                             <button onClick={() => setShowAccessModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
                         </div>
 
                         <p className="text-sm text-gray-500">
-                            Select workspace members who can edit this survey alongside you. Viewers can only leave comments.
+                            <ClientT>Select workspace members who can edit this survey alongside you. Viewers can only leave comments.</ClientT>
                         </p>
 
                         <div className="space-y-3 max-h-60 overflow-y-auto">
@@ -246,7 +248,7 @@ export function CollaborationSidebar({ surveyId, isOwner, collaborators = [] }: 
                                                 onClick={() => handleManageAccess(member.userId, hasAccess ? "revoke" : "grant")}
                                                 className={`text-xs font-semibold px-3 py-1.5 rounded-md transition ${hasAccess ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
                                             >
-                                                {hasAccess ? "Revoke" : "Grant Edit"}
+                                                {hasAccess ? <ClientT>Revoke Access</ClientT> : <ClientT>Grant Edit Access</ClientT>}
                                             </button>
                                         </div>
                                     );
@@ -255,7 +257,7 @@ export function CollaborationSidebar({ surveyId, isOwner, collaborators = [] }: 
                         </div>
 
                         <button onClick={() => setShowAccessModal(false)} className="w-full py-2 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition">
-                            Done
+                            <ClientT>Done</ClientT>
                         </button>
                     </div>
                 </div>

@@ -2,8 +2,8 @@
 
 import { clientEnv } from "@/lib/env.client";
 
-import { useState, useRef, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useState, useRef, useEffect, useMemo, Suspense } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   Mic,
   MicOff,
@@ -14,7 +14,6 @@ import {
   User,
   Sparkles,
   Paperclip,
-  ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
@@ -22,6 +21,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, UIMessage } from "ai";
 import { MediaDisplay } from "@/components/surveys/media-display";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
+import { SurveyStartOverlay } from "@/components/surveys/survey-start-overlay";
 
 import { useQuery } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
@@ -78,8 +78,10 @@ async function initializeSurvey(
   return response.json();
 }
 
-export default function SurveyRespondPage() {
+function SurveyContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
+  const isEmbed = searchParams.get("embed") === "true" || (typeof window !== "undefined" && window.parent !== window);
   const shareableLink = params.shareableLink as string;
   const locale = useLocale();
   const router = useRouter();
@@ -134,7 +136,7 @@ export default function SurveyRespondPage() {
   // State declarations - must be before hooks that reference them
   const [input, setInput] = useState("");
   const [isCompleted, setIsCompleted] = useState(false);
-  const [hasStarted, setHasStarted] = useState(false);
+  const [hasStarted, setHasStarted] = useState(searchParams.get("started") === "true");
 
   // Sync completion state from API
   useEffect(() => {
@@ -142,6 +144,13 @@ export default function SurveyRespondPage() {
       setIsCompleted(true);
     }
   }, [initiallyCompleted]);
+
+  // Auto-resume if the user has already started interacting (has more than just the initial greeting)
+  useEffect(() => {
+    if (resumedMessages && resumedMessages.length > 1) {
+      setHasStarted(true);
+    }
+  }, [resumedMessages]);
 
   // Redirect to survey language if different from current locale on first load
   useEffect(() => {
@@ -160,24 +169,52 @@ export default function SurveyRespondPage() {
   }, [survey, locale, shareableLink, pathname, router]);
 
   const [isVoiceMode, setIsVoiceMode] = useState(false);
-  const [showTranscript, setShowTranscript] = useState(true);
   const [selectedLanguage, setSelectedLanguage] = useState<
     "en" | "fr" | "de" | "es" | "it"
   >((locale as any) || "en");
 
   // Prepare initial messages for useChat
+  // Sync Greeting: If voice survey and only 1 message exists (the initial greeting), 
+  // clear it so the Voice Agent can initiate the conversation naturally.
   const initialChatMessages =
-    resumedMessages.length > 0
-      ? resumedMessages.map((msg: any, i) => ({
-        id: msg.id || `msg-${i}`,
-        role: msg.role as "system" | "user" | "assistant" | "data",
-        parts:
-          msg.parts ||
-          (msg.content ? [{ type: "text", text: msg.content }] : []),
-      }))
+    resumedMessages.length > 1 || (!survey?.isVoice && resumedMessages.length > 0)
+      ? resumedMessages.map((msg: any, i) => {
+        // Ensure we handle the transition from 'content' (old) to 'parts' (v6) robustly
+        const hasTextPart = msg.parts?.some((p: any) => p.type === 'text' && p.text);
+        let parts = msg.parts && msg.parts.length > 0 ? msg.parts : [];
+        let contentStr = msg.content || "";
+
+        // If old DB records saved content as an array of parts
+        if (Array.isArray(msg.content)) {
+          parts = msg.content;
+          contentStr = msg.content.find((p: any) => p.type === 'text')?.text || "";
+        } else if (parts.length === 0 && contentStr) {
+          parts = [{ type: "text", text: contentStr }];
+        }
+
+        console.log(`[SurveyPage] Mapping resumed message ${i}:`, {
+          role: msg.role,
+          hasParts: !!msg.parts,
+          partsCount: msg.parts?.length,
+          hasContent: !!msg.content,
+          finalPartsCount: parts.length
+        });
+
+        return {
+          id: msg.id || `msg-${i}`,
+          role: msg.role as "system" | "user" | "assistant" | "data",
+          content: contentStr, // Always send as string for fallback renderer
+          parts
+        };
+      })
       : [];
 
   // useChat hook - only meaningful after initialization (AI SDK v6)
+  const transport = useMemo(() => new DefaultChatTransport({
+    api: apiEndpoint,
+    body: { conversationId, language: locale },
+  }), [apiEndpoint, conversationId, locale]);
+
   const {
     messages,
     setMessages: originalSetMessages,
@@ -185,10 +222,7 @@ export default function SurveyRespondPage() {
     sendMessage,
   } = useChat({
     id: conversationId ?? "pending",
-    transport: new DefaultChatTransport({
-      api: apiEndpoint,
-      body: { conversationId, language: locale },
-    }),
+    transport,
     messages: initialChatMessages as any, // Cast to avoid strict type issues with mapped messages
     onFinish: ({ message }: { message: UIMessage }) => {
       // Check for explicit tool calls (robust detection)
@@ -249,76 +283,93 @@ export default function SurveyRespondPage() {
   const setMessages = originalSetMessages;
   const isChatLoading = status === "streaming" || status === "submitted";
 
-  // Auto-start for text mode
-  useEffect(() => {
-    if (
-      !isInitializing &&
-      !initError &&
-      survey &&
-      !isVoiceMode &&
-      messages.length === 0 &&
-      !hasStarted &&
-      conversationId
-    ) {
-      sendMessage({
-        id: "init_ping_hidden",
-        role: "user",
-        content:
-          "Start the conversation by introducing yourself as the expert on this domain and asking the first question.",
-      } as any);
-      setHasStarted(true);
-    }
-  }, [
-    isInitializing,
-    initError,
-    survey,
-    isVoiceMode,
-    messages.length,
-    hasStarted,
-    conversationId,
-    sendMessage,
-  ]);
 
   // Voice WebSocket Integration
-  const wsUrl = `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-response?surveyId=${shareableLink}&language=${selectedLanguage}`;
-  console.log("[Survey Page] WS URL:", wsUrl);
-  console.log("[Survey Page] Survey State:", {
-    isVoice: survey?.isVoice,
-    isVoiceMode,
-    isCompleted,
-  });
+  const wsUrl = survey?.isVoice
+    ? `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-response?surveyId=${shareableLink}&language=${selectedLanguage}`
+    : "";
+
+  if (survey?.isVoice) {
+    console.log("[Survey Page] WS URL:", wsUrl);
+    console.log("[Survey Page] Survey State:", {
+      isVoice: survey?.isVoice,
+      isVoiceMode,
+      isCompleted,
+    });
+  }
 
   const voiceWs = useVoiceWebSocket({
     url: wsUrl,
     onMessage: (data) => {
-      // ... (keep existing handler)
-      if (data.type === "audio_sent" || data.type === "text_response") {
+      console.log("[SurveyPage] Voice WS Message:", data.type);
+
+      // Chain of Trust: Unified message handling via Voice Agent events
+      if (data.type === "conversation_text") {
+        const { role, content } = data;
+
+        // Filter out internal thinking/directives
+        if (content.includes("<thinking>") || content.includes("Internal instructions:")) {
+          console.log("[SurveyPage] Filtering internal directive from UI:", content.substring(0, 30));
+          return;
+        }
+
         const assistantMessage = {
-          id: Date.now().toString(),
+          id: `voice-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          role: role as "assistant" | "user",
+          parts: [{ type: "text" as const, text: content }],
+        };
+
+        setMessages((prev) => {
+          // Avoid duplicate messages if the same text was already transcribed or sent
+          const lastMsg = prev[prev.length - 1];
+          const lastText = lastMsg?.parts?.find(p => p.type === 'text')?.text;
+          if (lastText === content && lastMsg?.role === role) return prev;
+
+          return [...prev, assistantMessage];
+        });
+
+        if (role === "assistant") {
+          const lowerText = content.toLowerCase();
+          if (
+            lowerText.includes("thank you for completing") ||
+            lowerText.includes("survey is now complete")
+          ) {
+            setIsCompleted(true);
+          }
+        }
+      } else if (data.type === "audio_sent" || data.type === "text_response") {
+        // AI started speaking (legacy or fallback)
+        // We handle this for backward compatibility but prefer conversation_text
+        if (!data.text) return;
+
+        const assistantMessage = {
+          id: `legacy-${Date.now()}`,
           role: "assistant" as const,
           parts: [{ type: "text" as const, text: data.text }],
         };
         setMessages((prev) => [...prev, assistantMessage]);
 
+        const lowerText = data.text.toLowerCase();
         if (
-          data.text.toLowerCase().includes("thank you for completing") ||
-          data.text.toLowerCase().includes("survey is now complete")
+          lowerText.includes("thank you for completing") ||
+          lowerText.includes("survey is now complete")
         ) {
           setIsCompleted(true);
         }
       } else if (data.type === "transcription" && data.isFinal) {
         if (isCompleted) return;
-
-        if (data.text && data.text.trim()) {
-          sendMessage({ role: "user", content: data.text } as any);
-        }
+        // DUAL-AGENT BUG FIX: 
+        // We NO LONGER call sendMessage() here because the Voice Agent 
+        // back-end already receives the audio and generates the response.
+        // Calling sendMessage() triggers a redundant Text AI response.
+        console.log("[SurveyPage] Final transcription received (Voice Mode):", data.text);
       } else if (data.type === "display_media" && survey?.media) {
         const fullMedia = survey.media.find((m: any) => m.id === data.media.id);
         if (fullMedia) {
           setMessages((prev) => [
             ...prev,
             {
-              id: Date.now().toString(),
+              id: `media-${Date.now()}`,
               role: "assistant" as const,
               parts: [{ type: "text" as const, text: t("sharedMedia") }],
               media: fullMedia,
@@ -338,12 +389,17 @@ export default function SurveyRespondPage() {
   useEffect(() => {
     if (survey?.isVoice) {
       setIsVoiceMode(true);
-      setShowTranscript(false);
+    } else {
+      setIsVoiceMode(false);
     }
   }, [survey?.isVoice]);
 
   // Handle initial start (User Gesture)
-  const handleStartSurvey = async () => {
+  const handleStartSurvey = async (lang?: string) => {
+    if (lang && lang !== locale) {
+      handleLanguageChange(lang);
+    }
+
     setHasStarted(true);
     if (isVoiceMode) {
       try {
@@ -367,7 +423,7 @@ export default function SurveyRespondPage() {
   }, [locale]);
 
   const handleLanguageChange = (newLocale: string) => {
-    router.replace({ pathname, query: { shareableLink } } as any, {
+    router.replace({ pathname, query: { shareableLink, started: "true" } } as any, {
       locale: newLocale,
     });
   };
@@ -408,7 +464,10 @@ export default function SurveyRespondPage() {
     setInput("");
 
     try {
-      await sendMessage({ role: "user", content: currentInput } as any);
+      await sendMessage({
+        role: "user",
+        parts: [{ type: 'text', text: currentInput }]
+      } as any);
     } catch (error) {
       console.error("Failed to send message:", error);
     }
@@ -441,7 +500,8 @@ export default function SurveyRespondPage() {
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-3">
             {initError instanceof Error &&
-              initError.message === "This survey is no longer accepting responses"
+            (initError.message === "This survey is no longer accepting responses" ||
+              initError.message === "Survey has reached its participant limit")
               ? t("closed")
               : initError instanceof Error &&
                 initError.message === "Failed to load survey"
@@ -483,24 +543,28 @@ export default function SurveyRespondPage() {
   // Premium UI Components
   const VisualizerRing = ({
     isRecording,
+    isAgentSpeaking,
     size = "normal",
   }: {
     isRecording: boolean;
+    isAgentSpeaking: boolean;
     size?: "normal" | "large";
   }) => (
     <div className="relative flex items-center justify-center">
-      {isRecording && (
+      {(isRecording || isAgentSpeaking) && (
         <>
           <div
             className={cn(
               "absolute inset-0 rounded-full border-4 border-indigo-500/20 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite]",
               size === "large" ? "border-8" : "border-4",
+              isAgentSpeaking ? "border-emerald-500/20" : "border-indigo-500/20"
             )}
           />
           <div
             className={cn(
               "absolute inset-0 rounded-full border-4 border-indigo-500/10 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]",
               size === "large" ? "border-8" : "border-4",
+              isAgentSpeaking ? "border-emerald-500/10" : "border-indigo-500/10"
             )}
           />
         </>
@@ -510,9 +574,11 @@ export default function SurveyRespondPage() {
           "relative z-10 rounded-full flex items-center justify-center transition-all duration-500 shadow-xl backdrop-blur-sm border border-white/10",
           voiceWs.status === "error"
             ? "bg-red-500 shadow-red-500/50"
-            : isRecording
-              ? "bg-gradient-to-br from-indigo-600 to-violet-600 scale-110 shadow-indigo-500/30"
-              : "bg-gray-900 shadow-md hover:scale-105",
+            : isAgentSpeaking
+              ? "bg-gradient-to-br from-emerald-500 to-teal-600 scale-110 shadow-emerald-500/30"
+              : isRecording
+                ? "bg-gradient-to-br from-indigo-600 to-violet-600 scale-110 shadow-indigo-500/30"
+                : "bg-gray-900 shadow-md hover:scale-105",
           size === "large" ? "w-32 h-32" : "w-20 h-20",
         )}
       >
@@ -520,6 +586,13 @@ export default function SurveyRespondPage() {
           <AlertCircle
             className={cn(
               "text-white",
+              size === "large" ? "w-12 h-12" : "w-8 h-8",
+            )}
+          />
+        ) : isAgentSpeaking ? (
+          <Sparkles
+            className={cn(
+              "text-white animate-pulse",
               size === "large" ? "w-12 h-12" : "w-8 h-8",
             )}
           />
@@ -545,182 +618,128 @@ export default function SurveyRespondPage() {
   // Main UI Render
   return (
     <div className="min-h-[100dvh] bg-gray-50 flex items-center justify-center p-0 sm:p-4 font-sans selection:bg-gray-900 selection:text-white">
-      {/* Start Survey Overlay for Voice Mode */}
-      {survey?.isVoice && !hasStarted && !isCompleted && !isInitializing && (
-        <div className="fixed inset-0 z-50 bg-white/95 backdrop-blur-md flex items-center justify-center p-4 transition-all duration-700">
-          <div className="flex flex-col items-center max-w-md w-full animate-in fade-in zoom-in-95 duration-700 slide-in-from-bottom-4">
-            {/* Minimalist Pulse Icon */}
-            <div className="relative mb-6 group">
-              <div className="absolute inset-0 bg-indigo-500/20 rounded-full animate-ping opacity-20 duration-3000" />
-              <div className="relative w-20 h-20 bg-gradient-to-tr from-indigo-50 to-white rounded-full flex items-center justify-center shadow-lg shadow-indigo-500/5 ring-1 ring-indigo-50 transition-transform duration-500">
-                <Mic className="w-7 h-7 text-indigo-600/80" />
-              </div>
-            </div>
-
-            {/* Typography */}
-            <h2 className="text-2xl font-bold text-gray-900 mb-2 tracking-tight text-center">
-              {t("voiceSurveyTitle") || "Voice Survey"}
-            </h2>
-            <p className="text-gray-500 mb-6 text-center leading-relaxed font-light text-base max-w-xs mx-auto">
-              {t("voiceSurveyIntro") ||
-                "Choose your language and start speaking."}
-            </p>
-
-            {/* Language Selection */}
-            <div className="w-full mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-3 text-center">
-                <Globe className="w-4 h-4 inline mr-2" />
-                {t("selectLanguage") || "Select Language"}
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { code: "en", name: "English", flag: "🇺🇸" },
-                  { code: "fr", name: "Français", flag: "🇫🇷" },
-                  { code: "de", name: "Deutsch", flag: "🇩🇪" },
-                  { code: "es", name: "Español", flag: "🇪🇸" },
-                  { code: "it", name: "Italiano", flag: "🇮🇹" },
-                ].map((lang) => (
-                  <button
-                    key={lang.code}
-                    onClick={() => setSelectedLanguage(lang.code as any)}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all text-left text-sm",
-                      selectedLanguage === lang.code
-                        ? "border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600/20"
-                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50",
-                    )}
-                  >
-                    <span className="text-lg">{lang.flag}</span>
-                    <span
-                      className={cn(
-                        "font-medium",
-                        selectedLanguage === lang.code
-                          ? "text-indigo-900"
-                          : "text-gray-700",
-                      )}
-                    >
-                      {lang.name}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Premium Button */}
-            <button
-              onClick={handleStartSurvey}
-              className="group relative px-8 py-4 bg-gray-900 text-white rounded-full font-medium text-base hover:bg-black transition-all duration-300 hover:shadow-xl hover:shadow-gray-900/10 hover:-translate-y-0.5 active:scale-95 w-full max-w-[240px] overflow-hidden"
-            >
-              <span className="relative z-10 flex items-center justify-center gap-2">
-                {t("startConversation") || "Start Survey"}
-                <ArrowRight className="w-4 h-4 opacity-70 group-hover:translate-x-1 transition-transform" />
-              </span>
-            </button>
-          </div>
-        </div>
+      {/* Start Survey Overlay for All Modes */}
+      {!hasStarted && !isCompleted && !isInitializing && (
+        <SurveyStartOverlay
+          onStart={handleStartSurvey}
+          initialLanguage={(locale as any) || "en"}
+          title={survey?.title || t("voiceSurveyTitle")}
+          description={
+            survey?.objective?.description ||
+            t("voiceSurveyIntro") ||
+            "Join our interview. Choose your preferred language to begin."
+          }
+          isVoice={survey?.isVoice}
+          t={t as any}
+        />
       )}
 
       {/* Main Card */}
       <div
         className={cn(
-          "w-full max-w-5xl h-[100dvh] sm:h-[85vh] bg-white rounded-none sm:rounded-3xl border-0 sm:border border-gray-200 shadow-sm flex flex-col overflow-hidden relative transition-opacity duration-500",
-          survey?.isVoice && !hasStarted ? "opacity-0" : "opacity-100",
+          "w-full max-w-5xl h-[100dvh] sm:h-[85vh] bg-white rounded-none shadow-sm flex flex-col overflow-hidden relative transition-opacity duration-500",
+          !isEmbed && "sm:rounded-3xl sm:border border-gray-200",
+          !hasStarted ? "opacity-0" : "opacity-100",
         )}
       >
-        {/* Header */}
-        <header className="bg-white border-b border-gray-100 px-6 py-4 z-10 flex-shrink-0">
-          <div className="relative flex items-center justify-between h-14">
-            {/* Left Spacer for Balance */}
-            <div className="w-[100px]" />
+        {!isEmbed && (
+          <header className="bg-white border-b border-gray-100 px-4 sm:px-6 py-3 z-10 flex-shrink-0">
+            <div className="flex items-center justify-between gap-4 h-14">
+              {/* Brand - Left */}
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <img
+                  src="/logo.svg"
+                  alt="Convyy Logo"
+                  width={32}
+                  height={32}
+                  className="w-8 h-8 flex-shrink-0"
+                />
+                <span className="font-bold text-gray-900 text-lg hidden sm:block">
+                  Convyy
+                </span>
+              </div>
 
-            {/* Centered Logo & Title */}
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-3">
-              <img
-                src="/logo.svg"
-                alt="Convy Logo"
-                width={32}
-                height={32}
-                className="w-8 h-8 object-contain"
-              />
-              <h1 className="font-bold text-gray-900 tracking-tight text-lg">
-                {survey?.title}
-              </h1>
-            </div>
-            <div className="flex items-center gap-2">
-              {survey?.isVoice && (
-                <>
-                  {isVoiceMode && (
+              {/* Title - Center */}
+              <div className="flex-[2] flex justify-center min-w-0">
+                <h1 className="font-bold text-gray-900 tracking-tight text-base sm:text-lg truncate px-2 text-center">
+                  {survey?.title}
+                </h1>
+              </div>
+
+              <div className="flex-1 flex items-center justify-end gap-2 sm:gap-4">
+                {survey?.isVoice && (
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setShowTranscript(!showTranscript)}
-                      className="px-4 py-2.5 rounded-full text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+                      onClick={toggleVoiceMode}
+                      className={cn(
+                        "flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-300 whitespace-nowrap",
+                        isVoiceMode
+                          ? "bg-gray-900 text-white shadow-md scale-105"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200",
+                      )}
                     >
-                      {showTranscript ? t("hideText") : t("showText")}
+                      {isVoiceMode ? (
+                        <>
+                          <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                          <span className="hidden xs:inline">{t("voiceMode")}</span>
+                          <span className="xs:hidden">Live</span>
+                        </>
+                      ) : (
+                        <>
+                          <Mic className="w-3.5 h-3.5" />
+                          <span className="hidden xs:inline">{t("tryVoice")}</span>
+                          <span className="xs:hidden">IA</span>
+                        </>
+                      )}
                     </button>
-                  )}
-                  <button
-                    onClick={toggleVoiceMode}
-                    className={cn(
-                      "flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300",
-                      isVoiceMode
-                        ? "bg-gray-900 text-white shadow-md scale-105"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200",
-                    )}
-                  >
-                    {isVoiceMode ? (
-                      <>
-                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                        {t("voiceMode")}
-                      </>
-                    ) : (
-                      <>
-                        <Mic className="w-4 h-4" />
-                        {t("tryVoice")}
-                      </>
-                    )}
-                  </button>
-                </>
-              )}
-            </div>
-
-            {/* Language Switcher */}
-            <div className="ml-4 border-l border-gray-200 pl-4 flex items-center">
-              <div className="relative group">
-                <button
-                  disabled={messages.length > 0 || hasStarted}
-                  className={cn(
-                    "flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors text-sm font-medium",
-                    (messages.length > 0 || hasStarted) &&
-                    "opacity-50 cursor-not-allowed hover:text-gray-500",
-                  )}
-                >
-                  <Globe className="w-4 h-4" />
-                  <span className="uppercase">{locale}</span>
-                </button>
-                {messages.length === 0 && !hasStarted && (
-                  <div className="absolute top-full right-0 mt-2 w-32 bg-white rounded-xl shadow-lg border border-gray-100 py-1 hidden group-hover:block z-50 animate-in fade-in zoom-in-95 duration-200">
-                    {["en", "fr", "de", "es", "it"].map((l) => (
-                      <button
-                        key={l}
-                        onClick={() => handleLanguageChange(l)}
-                        className={cn(
-                          "w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors flex items-center justify-between",
-                          locale === l
-                            ? "text-indigo-600 font-medium"
-                            : "text-gray-600",
-                        )}
-                      >
-                        <span className="uppercase">{l}</span>
-                        {locale === l && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
-                        )}
-                      </button>
-                    ))}
                   </div>
                 )}
+
+                {/* Language Switcher */}
+                <div className="flex items-center border-l border-gray-100 pl-2 sm:pl-4">
+                  <div className="relative group">
+                    <button
+                      disabled={messages.length > 0 || hasStarted}
+                      className={cn(
+                        "flex items-center gap-1.5 sm:gap-2 text-gray-500 hover:text-gray-900 transition-colors text-xs sm:text-sm font-medium disabled:opacity-50",
+                      )}
+                    >
+                      <Globe className="w-3.5 h-3.5 sm:w-4 h-4" />
+                      <span className="uppercase hidden xs:inline">
+                        {locale}
+                      </span>
+                    </button>
+                    {(!hasStarted && messages.length === 0) && (
+                      <div className="absolute right-0 top-full pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-2 min-w-[140px]">
+                          {(["en", "fr", "de", "es", "it"] as const).map((lang) => (
+                            <button
+                              key={lang}
+                              onClick={() => handleLanguageChange(lang)}
+                              className={cn(
+                                "w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-colors",
+                                locale === lang
+                                  ? "bg-gray-50 text-gray-900 font-semibold"
+                                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-900",
+                              )}
+                            >
+                              <span className="capitalize">
+                                {new Intl.DisplayNames([lang], { type: "language" }).of(lang)}
+                              </span>
+                              {locale === lang && (
+                                <div className="w-1 h-1 rounded-full bg-gray-900" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </header>
+          </header>
+        )}
 
         {/* Chat Area */}
         <main className="flex-1 overflow-y-auto scroll-smooth bg-slate-50/30 relative">
@@ -760,14 +779,16 @@ export default function SurveyRespondPage() {
                   >
                     <div className="whitespace-pre-wrap">
                       {/* AI SDK v6 recommended: use parts for rendering */}
-                      {message.parts?.map((part: any, index: number) =>
-                        part.type === "text" ? (
-                          <MarkdownMessage key={index} content={part.text} />
-                        ) : null,
+                      {message.parts && message.parts.length > 0 ? (
+                        message.parts.map((part: any, index: number) =>
+                          part.type === "text" ? (
+                            <MarkdownMessage key={index} content={part.text} />
+                          ) : null,
+                        )
+                      ) : (
+                        /* Fallback if parts are missing or empty but content exists */
+                        message.content && <MarkdownMessage content={message.content} />
                       )}
-
-                      {/* Fallback for backwards compatibility */}
-                      {!message.parts && message.content}
 
                       {/* Handle direct media attachment */}
                       {message.media && <MediaDisplay media={message.media} />}
@@ -831,107 +852,70 @@ export default function SurveyRespondPage() {
             <div className="max-w-3xl mx-auto">
               {isVoiceMode ? (
                 <div className="flex flex-col items-center gap-6 animate-in slide-in-from-bottom-4 duration-500">
-                  {showTranscript ? (
-                    <>
-                      <button
-                        onClick={() => {
-                          if (isCompleted) return; // Prevent recording after completion
-                          if (
-                            voiceWs.status === "error" ||
-                            voiceWs.status === "disconnected"
-                          ) {
-                            voiceWs.connect();
-                            return;
-                          }
-                          if (voiceWs.isRecording) voiceWs.stopRecording();
-                          else voiceWs.startRecording();
-                        }}
-                        disabled={
-                          isCompleted || voiceWs.status === "connecting"
-                        }
-                        className="group focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <VisualizerRing
-                          isRecording={voiceWs.isRecording}
-                          size={voiceWs.status === "error" ? "large" : "normal"}
-                        />
-                      </button>
+                  <button
+                    onClick={() => {
+                      if (isCompleted) return; // Prevent recording after completion
+                      if (
+                        voiceWs.status === "error" ||
+                        voiceWs.status === "disconnected"
+                      ) {
+                        voiceWs.connect();
+                        return;
+                      }
+                      if (voiceWs.isRecording) voiceWs.stopRecording();
+                      else voiceWs.startRecording();
+                    }}
+                    disabled={
+                      isCompleted || voiceWs.status === "connecting"
+                    }
+                    className="group focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <VisualizerRing
+                      isRecording={voiceWs.isRecording}
+                      isAgentSpeaking={voiceWs.isPlaying}
+                      size={voiceWs.status === "error" ? "large" : "normal"}
+                    />
+                  </button>
 
-                      <div className="text-center space-y-2 w-full max-w-lg">
-                        <p className="text-gray-900 font-semibold text-lg tracking-tight">
-                          {voiceWs.status === "error" ? (
-                            <span className="text-red-600">
-                              {t("connectionFailed")}
-                            </span>
-                          ) : voiceWs.status === "connecting" ? (
-                            t("connecting")
-                          ) : voiceWs.isRecording ? (
-                            t("listening")
-                          ) : voiceWs.isPlaying ? (
-                            t("aiSpeaking")
-                          ) : (
-                            t("tapToSpeak")
-                          )}
+                  <div className="text-center space-y-2 w-full max-w-lg">
+                    <p className="text-gray-900 font-semibold text-lg tracking-tight">
+                      {voiceWs.status === "error" ? (
+                        <span className="text-red-600">
+                          {t("connectionFailed")}
+                        </span>
+                      ) : voiceWs.status === "connecting" ? (
+                        t("connecting")
+                      ) : voiceWs.isRecording ? (
+                        t("listening")
+                      ) : voiceWs.isPlaying ? (
+                        t("aiSpeaking")
+                      ) : (
+                        t("tapToSpeak")
+                      )}
+                    </p>
+
+                    {voiceWs.status === "error" ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <p className="text-sm text-red-500 font-medium px-4 py-2 bg-red-50 rounded-lg border border-red-100">
+                          {voiceWs.error || t("connectionFailed")}
                         </p>
-
-                        {voiceWs.status === "error" ? (
-                          <div className="flex flex-col items-center gap-2">
-                            <p className="text-sm text-red-500 font-medium px-4 py-2 bg-red-50 rounded-lg border border-red-100">
-                              {voiceWs.error || t("connectionFailed")}
-                            </p>
-                            <button
-                              onClick={() => voiceWs.connect()}
-                              className="text-xs text-gray-500 underline hover:text-gray-800"
-                            >
-                              {t("tapToRetry")}
-                            </button>
-                          </div>
-                        ) : (
-                          <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">
-                            {voiceWs.status === "connected"
-                              ? t("aiReady")
-                              : t("initializing")}
-                          </p>
-                        )}
-
-                        {/* Live Transcription Display */}
-                        {voiceWs.isRecording &&
-                          (voiceWs.transcription ||
-                            voiceWs.interimTranscription) && (
-                            <div className="mt-4 bg-gray-50 border border-gray-200 rounded-2xl p-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                                {t("liveTranscription")}
-                              </p>
-                              <p className="text-sm text-gray-900 leading-relaxed text-left">
-                                {voiceWs.transcription}
-                                <span className="text-gray-400 italic">
-                                  {voiceWs.interimTranscription}
-                                </span>
-                              </p>
-                            </div>
-                          )}
+                        <button
+                          onClick={() => voiceWs.connect()}
+                          className="text-xs text-gray-500 underline hover:text-gray-800"
+                        >
+                          {t("tapToRetry")}
+                        </button>
                       </div>
-                    </>
-                  ) : (
-                    // Minimal Footer for Focused Mode
-                    <div className="w-full">
-                      {voiceWs.isRecording &&
-                        (voiceWs.transcription ||
-                          voiceWs.interimTranscription) && (
-                          <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 animate-in fade-in slide-in-from-bottom-2 duration-200 max-w-lg mx-auto">
-                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 text-center">
-                              {t("liveTranscription")}
-                            </p>
-                            <p className="text-sm text-gray-900 leading-relaxed text-center">
-                              {voiceWs.transcription}
-                              <span className="text-gray-400 italic">
-                                {voiceWs.interimTranscription}
-                              </span>
-                            </p>
-                          </div>
-                        )}
-                    </div>
-                  )}
+                    ) : (
+                      <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">
+                        {voiceWs.status === "connected"
+                          ? t("aiReady")
+                          : t("initializing")}
+                      </p>
+                    )}
+
+                    {/* Transcription now unified in message history */}
+                  </div>
                 </div>
               ) : (
                 !isCompleted && (
@@ -955,7 +939,7 @@ export default function SurveyRespondPage() {
                           }}
                           placeholder={t("typeAnswer")}
                           rows={1}
-                          disabled={isChatLoading || isCompleted}
+                          disabled={!hasStarted || isChatLoading || isCompleted}
                           className="flex-1 py-4 px-4 bg-transparent outline-none resize-none text-base text-gray-800 placeholder:text-gray-400 min-h-[60px] sm:min-h-[96px] max-h-60 disabled:opacity-50 disabled:cursor-not-allowed"
                         />
 
@@ -963,7 +947,7 @@ export default function SurveyRespondPage() {
                           <button
                             type="submit"
                             disabled={
-                              !input.trim() || isChatLoading || isCompleted
+                              !hasStarted || !input.trim() || isChatLoading || isCompleted
                             }
                             className={cn(
                               "p-2.5 rounded-xl transition-all",
@@ -1004,5 +988,22 @@ export default function SurveyRespondPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SurveyRespondPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="w-12 h-12 rounded-full border-4 border-gray-100" />
+            <div className="absolute inset-0 rounded-full border-4 border-gray-900 border-t-transparent animate-spin" />
+          </div>
+        </div>
+      </div>
+    }>
+      <SurveyContent />
+    </Suspense>
   );
 }

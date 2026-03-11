@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo, Suspense, useId } from "react";
+import { useState, useRef, useEffect, useMemo, Suspense, useId } from "react";
 import { useSearchParams, useParams } from "next/navigation";
 import { useRouter, Link } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
+import { ClientT } from "@/components/i18n/client-t";
+import { getClientTranslation } from "@/app/actions/translate";
 import { useChat } from "@ai-sdk/react";
-import { UIMessage as SDKMessage, DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
+import { UIMessage as SDKMessage, DefaultChatTransport } from "ai";
 import {
   Sparkles,
   Send,
@@ -17,18 +19,8 @@ import {
   Paperclip,
   Play,
   CheckCircle2,
-  Globe,
-  ChevronDown,
   Keyboard,
-  Plus,
-  Smile,
-  Target,
   Users,
-  GraduationCap,
-  Flag,
-  Beaker,
-  Fingerprint,
-  Server,
   Upload,
   FileAudio,
   FileVideo,
@@ -42,20 +34,10 @@ import { PublishSurveyModal } from "@/components/surveys/publish-survey-modal";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
 import { clientEnv } from "@/lib/env.client";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
-import { SURVEY_DOMAINS, type SurveyDomainId } from "@/lib/domains/domain-registry";
 import { uploadSurveyMediaAction } from "@/app/actions/survey-media";
 import { CollaborationSidebar } from "@/components/surveys/collaboration-sidebar";
 
-const DOMAIN_UI_METADATA: Record<number, { icon: any; color: string; bgColor: string }> = {
-  1: { icon: Smile, color: "text-emerald-600", bgColor: "bg-emerald-100" },          // CX
-  2: { icon: Target, color: "text-blue-600", bgColor: "bg-blue-100" },              // Market Research
-  3: { icon: Users, color: "text-purple-600", bgColor: "bg-purple-100" },           // Workforce
-  5: { icon: GraduationCap, color: "text-orange-600", bgColor: "bg-orange-100" },   // Education
-  6: { icon: Flag, color: "text-red-600", bgColor: "bg-red-100" },                  // Civic
-  7: { icon: Beaker, color: "text-cyan-600", bgColor: "bg-cyan-100" },              // Scientific
-  9: { icon: Fingerprint, color: "text-pink-600", bgColor: "bg-pink-100" },         // Demographic
-  10: { icon: Server, color: "text-slate-600", bgColor: "bg-slate-100" },          // Infrastructure
-};
+
 
 
 type CreationStep = "objective" | "audience" | "questions" | "tone" | "review";
@@ -65,13 +47,14 @@ type UIMessage = SDKMessage & {
   isTyping?: boolean;
   timestamp?: number;
   toolInvocations?: Array<any>;
+  parts: SDKMessage['parts']; // Explicitly include parts
 };
 
 const MERGE_THRESHOLD_MS = 3000;
 
 function CreateSurveyContent() {
-  const router = useRouter();
   const t = useTranslations("Survey.Create");
+  const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
   const searchParams = useSearchParams();
   const idFromUrl = searchParams.get("id");
@@ -82,11 +65,7 @@ function CreateSurveyContent() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [wasStartedWithVoice, setWasStartedWithVoice] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false); // Track when user is actively speaking
-
-  // Domain Selection
-  const [selectedDomainId, setSelectedDomainId] = useState<SurveyDomainId | null>(null);
-  const [shouldStartAi, setShouldStartAi] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
 
   const [showPublishModal, setShowPublishModal] = useState(false);
@@ -103,44 +82,50 @@ function CreateSurveyContent() {
   const [collaborators, setCollaborators] = useState<string[]>([]);
   const [orgId, setOrgId] = useState<string | null>(null);
 
-  const handleDomainSelect = async (domainId: SurveyDomainId) => {
-    // 1. Optimistic UI: Immediately show the chat view
-    setSelectedDomainId(domainId);
+  const handleStart = async () => {
+    // 1. Optimistic UI: Immediately show loading state
+    setIsConnecting(true);
 
-    // 2. Set the survey mode based on the respondent format choice
-    updateSurveyMode(isVoiceSurvey);
-
-    // Track if started with voice for this survey
+    // Track if started with voice for this builder session
     if (isVoiceMode) {
       setWasStartedWithVoice(true);
+      console.log("[Client] 🎤 Pre-emptive mic request for voice mode...");
+      voiceWs.startRecording().catch(err => {
+        console.error("[Client] Failed to get early mic access:", err);
+      });
     }
 
-    // 3. Ensure draft exists (Background Process)
+    // 2. Ensure draft exists
     let currentSurveyId = surveyId;
     if (!currentSurveyId) {
       try {
-        currentSurveyId = await ensureDraftExists(domainId);
+        currentSurveyId = await ensureDraftExists();
       } catch (e) {
         console.error("Failed to create draft", e);
-        toast.error(t("Toasts.InitFailed"));
-        setSelectedDomainId(null);
+        getClientTranslation("Failed to initialize survey draft.").then(msg => toast.error(msg));
+        setIsConnecting(false);
+        voiceWs.stopRecording(); // Cleanup if failed
         return;
       }
     }
 
-    if (!currentSurveyId) return;
+    if (!currentSurveyId) {
+      setIsConnecting(false);
+      voiceWs.stopRecording();
+      return;
+    }
+
+    // 3. Set the survey respondent mode once ID is known
+    await updateSurveyMode(currentSurveyId, isVoiceSurvey);
 
     try {
-      // 4. Update Domain in Backend
+      // 4. Update Backend - NOTE: We do NOT send messages here to avoid clobbering the pre-cached greeting
       await fetch(`/api/surveys/${currentSurveyId}/create`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...(messages.length === 0 ? { messages: [] } : {}),
-          extractedData: { domainId }
-        })
+        body: JSON.stringify({}) // Intentionally empty — greeting is stored server-side at draft creation
       });
-      console.log(`[Client] Domain ${domainId} saved for survey ${currentSurveyId}`);
+      console.log(`[Client] Prepared discovery for survey ${currentSurveyId}`);
 
       // Persist creation modality if voice was chosen
       if (isVoiceMode) {
@@ -148,34 +133,64 @@ function CreateSurveyContent() {
       }
 
       // 5. Trigger Interaction based on Mode
-      if (messages.length === 0) {
-        if (isVoiceMode) {
-          // VOICE MODE: Start recording (or signal readyness)
-        } else {
-          // TEXT MODE: Trigger AI Text Greeting
-          setShouldStartAi(true);
+      if (isVoiceMode) {
+        // VOICE MODE: Connection is triggered via useEffect monitoring (isVoiceMode && surveyId)
+        // or we can call connect() explicitly here now that we have surveyId
+        console.log("[Client] Voice mode active, initiating connection...");
+        await voiceWs.connect();
+      } else {
+        // TEXT MODE: Load the cached greeting from server into the messages state
+        console.log("[Client] Text mode active, loading cached greeting from server...");
+        try {
+          const greetingRes = await fetch(`/api/surveys/${currentSurveyId}/create`);
+          if (greetingRes.ok) {
+            const greetingData = await greetingRes.json();
+            if (greetingData.messages && greetingData.messages.length > 0) {
+              setMessages(greetingData.messages.map((m: any, idx: number) => ({
+                id: m.id || `msg-${idx}-${Date.now()}`,
+                role: m.role,
+                displayedContent: (m as any).content || m.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join(''),
+                isTyping: false,
+                parts: m.parts || ((m as any).content ? [{ type: 'text', text: (m as any).content }] : [])
+              })));
+              console.log(`[Client] Loaded ${greetingData.messages.length} message(s) incl. greeting.`);
+            }
+            if (greetingData.collectedInfo) setCollectedInfo(greetingData.collectedInfo);
+            if (greetingData.extractedData) setExtractedData(greetingData.extractedData);
+          }
+        } catch (greetingErr) {
+          console.error("[Client] Failed to load cached greeting:", greetingErr);
         }
       }
+
+      if (!isVoiceMode) {
+        setIsConnecting(false);
+      }
+
     } catch (error) {
-      console.error("Failed to save domain selection:", error);
-      toast.error(t("Toasts.SaveTopicFailed"));
-      setSelectedDomainId(null); // Revert on failure
+      console.error("Failed to start discovery:", error);
+      getClientTranslation("Failed to save topic. Please try again.").then(msg => toast.error(msg));
+      setIsConnecting(false);
+      voiceWs.stopRecording();
     }
   };
 
-  const updateSurveyMode = async (isVoice: boolean) => {
-    setIsVoiceSurvey(isVoice);
 
-    if (surveyId) {
+  const updateSurveyMode = async (id: string | null, isVoice: boolean) => {
+    setIsVoiceSurvey(isVoice);
+    console.log(`[Client] updateSurveyMode: ${isVoice ? 'voice' : 'text'}. SID: ${id}`);
+
+    if (id) {
       try {
-        await fetch(`/api/surveys/${surveyId}`, {
+        const res = await fetch(`/api/surveys/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ isVoice })
         });
+        console.log(`[Client] updateSurveyMode PATCH result: ${res.status}`);
       } catch (error) {
-        console.error("Failed to update survey mode:", error);
-        toast.error(t("Toasts.ModeUpdateFailed"));
+        console.error("[Client] updateSurveyMode ERROR:", error);
+        getClientTranslation("Failed to update survey mode.").then(msg => toast.error(msg));
       }
     }
   };
@@ -191,7 +206,13 @@ function CreateSurveyContent() {
   // Local input state for the chat (AI SDK v6 migration)
   const [input, setInput] = useState("");
 
-  // Chat state managed by useChat
+  // Refs to track the latest surveyId and extractedData without causing useChat to reinitialize
+  const surveyIdRef = useRef<string | null>(surveyId);
+  const extractedDataRef = useRef<any>(extractedData);
+
+  useEffect(() => { surveyIdRef.current = surveyId; }, [surveyId]);
+  useEffect(() => { extractedDataRef.current = extractedData; }, [extractedData]);
+
   const {
     messages,
     setMessages,
@@ -199,29 +220,57 @@ function CreateSurveyContent() {
     sendMessage,
     addToolOutput,
   } = useChat({
-    id: surveyId || "new-survey",
+    id: "survey-creation-session",
     transport: new DefaultChatTransport({
-      api: surveyId ? `/api/surveys/${surveyId}/create` : "/api/surveys/create-draft",
-      body: {
-        extractedData: extractedData
-      }
+      api: "/api/surveys/create-draft", // base default — overridden per-request via prepareSendMessagesRequest
+      fetch: (async (url: RequestInfo | URL, init?: RequestInit) => {
+        const response = await fetch(url, init);
+        console.log("[useChat:onResponse] Received response from server:", response.status, response.statusText);
+        return response;
+      }) as any,
+      prepareSendMessagesRequest: async ({ api, body, id, messages: msgs, trigger, messageId }) => {
+        const sid = surveyIdRef.current;
+        const targetApi = sid ? `/api/surveys/${sid}/create` : api;
+
+        console.log(`[useChat:Prepare] Triggered by ${trigger}. SID: ${sid}. Target API: ${targetApi}`);
+        console.log(`[useChat:Prepare] Body length: ${JSON.stringify(body).length}. Messages count: ${msgs.length}`);
+
+        return {
+          api: targetApi,
+          body: {
+            id,
+            messages: msgs,
+            trigger,
+            messageId,
+            ...(body || {}),
+            extractedData: extractedDataRef.current,
+          },
+        };
+      },
     }),
     messages: [],
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onToolCall: async ({ toolCall }) => {
-      console.log("[Client] Tool call received:", toolCall);
+      console.log("[Client] Tool call received:", toolCall.toolName, toolCall);
       if (toolCall.toolName === 'researchBestPractices') {
-        // Show research animation — the tool runs server-side, we just signal UI
         setIsResearching(true);
-        // Tool resolves on its own via server-side execution; hide banner when done
-        // (handled by detecting the tool-result part in messages via useEffect)
       }
       // NOTE: finishSurvey is server-executed — no client resolution needed here.
       // NOTE: requestMediaUpload is client-side — the MediaUploadFlow component resolves it.
     },
+    onFinish: ({ message }) => {
+      const content = (message as any).content || message.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('') || "";
+      console.log("[useChat:onFinish] AI finished responding:", content.substring(0, 50) + "...");
+    },
+    onError: (error) => {
+      console.error("[useChat:onError] Chat encountered an error:", error);
+    }
   });
 
   const isLoading = status === "streaming" || status === "submitted";
+
+  useEffect(() => {
+    console.log(`[useChat:Status] ${status}`);
+  }, [status]);
 
   const [surveyStateLoaded, setSurveyStateLoaded] = useState(false);
   const [isServerReady, setIsServerReady] = useState(false);
@@ -229,24 +278,29 @@ function CreateSurveyContent() {
   const voiceWs = useVoiceWebSocket({
     url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-creation`,
     onReady: () => {
-      console.log("[Client] WebSocket open, waiting for server ready signal...");
+      console.log("[ChainOfTrust] [Hook] WebSocket connection established. Waiting for server 'ready'...");
     },
     onMessage: (data) => {
+      console.log(`[ChainOfTrust] [Hook] Received message type: ${data.type}`, data);
       // Handle speech activity events from Deepgram
       if (data.type === "ready") {
-        console.log("[Client] Server sent READY signal");
+        console.log("[ChainOfTrust] [Server] Server is READY to accept commands.");
         setIsServerReady(true);
+      } else if (data.type === "agent_ready") {
+        console.log("[ChainOfTrust] [Deepgram] 🤖 Agent initialized and ready. Clearing UI connection state.");
+        setIsConnecting(false);
       } else if (data.type === "speech_start") {
-        console.log("[Client] 🗣️ Speech started (from Deepgram)");
+        console.log("[ChainOfTrust] [Deepgram] 🗣️ User speech started (VAD).");
         setIsSpeaking(true);
       } else if (data.type === "speech_end") {
-        console.log("[Client] 🤐 Speech ended (from Deepgram)");
+        console.log("[ChainOfTrust] [Deepgram] 🤐 User speech ended (VAD).");
         setIsSpeaking(false);
       } else if (data.type === "survey_state_loaded") {
-        console.log("[Client] Server state loaded, ready to start conversation");
+        console.log("[ChainOfTrust] [Server] Previous survey state successfully restored into handler.");
         setSurveyStateLoaded(true);
       } else if (data.type === "conversation_text") {
         const { role, content } = data;
+        console.log(`[ChainOfTrust] [Server] Appending ${role} message to UI: ${content.substring(0, 30)}...`);
         const now = Date.now();
         setMessages((prev: UIMessage[]) => {
           const lastMessage = prev[prev.length - 1];
@@ -264,7 +318,7 @@ function CreateSurveyContent() {
               ...lastMessage,
               displayedContent: (lastMessage.displayedContent || "") + " " + content,
               timestamp: now,
-              parts: [{ type: 'text', text: updatedContent }] // Keep parts in sync
+              parts: [{ type: 'text', text: updatedContent }]
             } as UIMessage;
             return updated;
           }
@@ -275,12 +329,12 @@ function CreateSurveyContent() {
             displayedContent: content,
             isTyping: false,
             timestamp: now,
-            parts: [{ type: 'text', text: content }] // Satisfy mandatory SDK property
+            parts: [{ type: 'text', text: content }]
           };
           return [...prev, newMessage];
         });
       } else if (data.type === "request_media_upload") {
-        console.log("[Client] Voice Agent requested media upload:", data.allowedTypes);
+        console.log("[ChainOfTrust] [Server] AI requested media upload tool UI:", data.allowedTypes);
         const { allowedTypes } = data;
         const toolId = `voice-tool-${Date.now()}`;
 
@@ -300,15 +354,13 @@ function CreateSurveyContent() {
           }
         ]);
       } else if (data.type === "update_extracted_data") {
+        console.log("[ChainOfTrust] [Server] Extracted data update received.");
         setExtractedData(data.extractedData);
         setCollectedInfo(data.collectedInfo);
       } else if (data.type === "transcription_interim") {
-        console.log("[Client] 💬 Interim transcription:", data.text);
-      } else if (data.type === "survey_state_loaded") {
-        console.log("[Client] Survey state loaded on server — safe to start conversation");
-        setSurveyStateLoaded(true);
+        // Reduced noise logging
       } else if (data.type === "survey_completed") {
-        console.log("[Client] ✅ Survey completed signal received from Voice Agent");
+        console.log("[ChainOfTrust] [Server] ✅ Survey completion signal received.");
         // Refresh survey data to ensure we have the latest status/extracted info
         // This will trigger the 'isReadyForSample' check in the main effect
         router.refresh();
@@ -335,11 +387,11 @@ function CreateSurveyContent() {
     if (!isVoiceMode) return;
 
     // New Logic: We trust 'voiceWs.hasAudioPlayed' to tell us if the greeting actually started
-    console.log("[Voice UI] Effect Check -> isConnecting:", isConnecting, "isPlaying:", voiceWs.isPlaying, "hasRecordedAudio:", voiceWs.hasAudioPlayed, "hasGreetingPlayed:", hasGreetingPlayed, "MicMuted:", voiceWs.isMicMuted, "isRecording:", voiceWs.isRecording);
+    console.log("[ChainOfTrust] [UI] Playback Monitor -> isConnecting:", isConnecting, "isPlaying:", voiceWs.isPlaying, "hasRecordedAudio:", voiceWs.hasAudioPlayed, "hasGreetingPlayed:", hasGreetingPlayed);
 
     if (isVoiceMode && isConnecting && voiceWs.hasAudioPlayed) {
       // Audio started playing (The greeting arrived!)
-      console.log("[Voice UI] 🟣 Audio started (Greeting detected) - Transitioning to Speaking State");
+      console.log("[ChainOfTrust] [UI] 🟣 Audio playback detected (Greeting likely starting) - Ending connection state.");
       setIsConnecting(false);
       setHasGreetingPlayed(true);
     }
@@ -353,7 +405,7 @@ function CreateSurveyContent() {
   // Effect to sync surveyId with WebSocket - ONLY when server is ready
   useEffect(() => {
     if (surveyId && voiceWs.status === "connected" && isServerReady) {
-      console.log("[Client] Server ready, sending survey ID:", surveyId);
+      console.log("[ChainOfTrust] [UI] Server ready. Sending survey ID initialization:", surveyId);
       voiceWs.sendJson({ type: "set_survey_id", surveyId });
     }
   }, [surveyId, voiceWs.status, isServerReady]);
@@ -367,21 +419,18 @@ function CreateSurveyContent() {
 
 
 
-  // Auto-connect for Voice Mode when Survey ID becomes available
-  useEffect(() => {
-    if (isVoiceMode && surveyId && voiceWs.status === "disconnected" && messages.length === 0) {
-      console.log("[Client] Auto-connecting voice for new survey...");
-      voiceWs.connect();
-    }
-  }, [isVoiceMode, surveyId, voiceWs.status, messages.length, voiceWs]);
+  // NOTE: Auto-connect for voice runs via handleStart → voiceWs.connect().
+  // The useEffect below is intentionally removed to prevent a double-connect race
+  // when handleStart is the entry point. Reconnection on page reload (surveyId from URL)
+  // is handled by the useEffect at the bottom of the component.
 
   // Trigger conversation start once server state is loaded
   useEffect(() => {
     if (isVoiceMode && surveyStateLoaded && voiceWs.status === "connected") {
-      console.log("[Client] Server state loaded, sending start_conversation signal...");
+      console.log("[ChainOfTrust] [UI] State loaded on server. Sending 'start_conversation' request...");
       voiceWs.sendJson({ type: "start_conversation" });
     }
-  }, [isVoiceMode, surveyStateLoaded, voiceWs.status, voiceWs]);
+  }, [isVoiceMode, surveyStateLoaded, voiceWs.status]);
 
   // Detect if all required info has been collected for sample conversations
   const isReadyForSample = useMemo(() => {
@@ -461,13 +510,13 @@ function CreateSurveyContent() {
     if (authLoading) return;
 
     if (!user) {
-      setAuthError(t("Authentication.Required"));
+      getClientTranslation("Authentication Required").then(msg => setAuthError(msg));
       setIsInitializing(false);
       return;
     }
 
     if (!user.emailVerified) {
-      setAuthError(t("Authentication.VerifyEmail"));
+      getClientTranslation("Please verify your email to continue.").then(msg => setAuthError(msg));
       setIsInitializing(false);
       return;
     }
@@ -540,9 +589,9 @@ function CreateSurveyContent() {
               setMessages(data.messages.map((m: any, idx: number) => ({
                 id: m.id || `msg-${idx}-${Date.now()}`,
                 role: m.role,
-                displayedContent: m.content || m.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join(''),
+                displayedContent: (m as any).content || m.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join(''),
                 isTyping: false,
-                parts: m.parts || (m.content ? [{ type: 'text', text: m.content }] : [])
+                parts: m.parts || ((m as any).content ? [{ type: 'text', text: (m as any).content }] : [])
               })));
             }
 
@@ -550,9 +599,6 @@ function CreateSurveyContent() {
 
             if (data.extractedData) {
               setExtractedData(data.extractedData);
-              if (data.extractedData.domainId) {
-                setSelectedDomainId(data.extractedData.domainId as SurveyDomainId);
-              }
             }
           }
 
@@ -598,7 +644,7 @@ function CreateSurveyContent() {
           }
         } catch (error) {
           console.error("Failed to load survey data:", error);
-          toast.error(t("Toasts.LoadFailed"));
+          getClientTranslation("Failed to load conversation.").then(msg => toast.error(msg));
         } finally {
           setIsInitializing(false);
         }
@@ -612,33 +658,58 @@ function CreateSurveyContent() {
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
 
   // Helper to ensure draft exists before sending message
-  const ensureDraftExists = async (domainId: SurveyDomainId): Promise<string | null> => {
+  const ensureDraftExists = async (): Promise<string | null> => {
     if (surveyId) return surveyId;
-    if (isCreatingDraft) return null;
+    if (isCreatingDraft) {
+      console.warn("[Client] ensureDraftExists skipped: already creating...");
+      return null;
+    }
 
+    console.log("[Client] ensureDraftExists: starting...");
     setIsCreatingDraft(true);
     try {
       const response = await fetch("/api/surveys", {
         method: "POST",
         credentials: "include",
-        body: JSON.stringify({ language, isVoice: isVoiceSurvey, domainId }),
+        body: JSON.stringify({ language, isVoice: isVoiceSurvey, domainId: null }),
       });
 
+      console.log(`[Client] ensureDraftExists POST result: ${response.status}`);
+
       if (response.status === 401) {
-        setAuthError(t("Authentication.Required"));
+        setAuthError(await getClientTranslation("Authentication Required"));
         return null;
       }
 
       if (!response.ok) {
-        const errorText = await response.text();
-        if (errorText === "EMAIL_NOT_VERIFIED") {
-          setAuthError(t("Authentication.VerifyEmail"));
+        const contentType = response.headers.get("content-type");
+        let errorMsg = "";
+
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json();
+          errorMsg = errorData.error || errorData.message || `Error: ${response.status}`;
+        } else {
+          errorMsg = await response.text();
+        }
+
+        console.error(`[Client] ensureDraftExists FAILED: ${response.status} ${errorMsg}`);
+
+        if (errorMsg === "EMAIL_NOT_VERIFIED") {
+          setAuthError(await getClientTranslation("Please verify your email to continue."));
           return null;
         }
-        throw new Error(`Failed to create draft: ${response.status}`);
+
+        if (response.status === 403) {
+          toast.error(errorMsg);
+          setAuthError(errorMsg);
+          return null;
+        }
+
+        throw new Error(errorMsg);
       }
 
       const survey = await response.json();
+      console.log("[Client] ensureDraftExists SUCCESS. New SID:", survey.id);
       setSurveyId(survey.id);
 
       // Update URL to include the survey ID to prevent reload issues
@@ -646,9 +717,11 @@ function CreateSurveyContent() {
 
       return survey.id;
     } catch (error) {
-      toast.error(t("Toasts.InitFailed"));
-      console.error(error);
-      setAuthError(t("Toasts.InitFailed"));
+      getClientTranslation("Failed to initialize draft.").then(msg => {
+        toast.error(msg);
+        setAuthError(msg);
+      });
+      console.error("[Client] ensureDraftExists UNCAUGHT ERROR:", error);
       return null;
     } finally {
       setIsCreatingDraft(false);
@@ -659,27 +732,7 @@ function CreateSurveyContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const triggerAIInitialResponse = async () => {
-    if (authError || messages.length > 0) return;
 
-    try {
-      await sendMessage({
-        id: "init_ping_hidden",
-        role: "user",
-        parts: [{ type: 'text', text: "Start the conversation by introducing yourself as the expert on this domain and asking the first question." }],
-      } as any);
-    } catch (error) {
-      console.error("Failed to trigger AI response:", error);
-      toast.error(t("Toasts.InitFailed"));
-    }
-  };
-
-  useEffect(() => {
-    if (shouldStartAi && surveyId) {
-      triggerAIInitialResponse();
-      setShouldStartAi(false);
-    }
-  }, [shouldStartAi, surveyId]);
 
   // Poll for extracted data to update preview
   const fetchUpdatedData = async () => {
@@ -688,25 +741,27 @@ function CreateSurveyContent() {
       const res = await fetch(`/api/surveys/${encodeURIComponent(surveyId)}/create`);
       if (res.ok) {
         const data = await res.json();
-        // Only update if we get valid data
-        if (data.extractedData && Object.keys(data.extractedData).length > 0) {
-          setExtractedData(data.extractedData);
-          if (data.extractedData.domainId) {
-            setSelectedDomainId(prev => prev || data.extractedData.domainId);
-          }
-        }
+        console.log(`[Client] fetchUpdatedData: OK. Msgs: ${data.messages?.length}. Extracted: ${Object.keys(data.extractedData || {}).length}`);
+        // Always update collectedInfo if present — do NOT gate it on extractedData being non-empty
         if (data.collectedInfo) {
           setCollectedInfo(data.collectedInfo);
         }
+        // Only update extractedData if there's meaningful data to avoid unnecessary re-renders
+        if (data.extractedData && Object.keys(data.extractedData).length > 0) {
+          setExtractedData(data.extractedData);
+        }
+      } else {
+        console.warn(`[Client] fetchUpdatedData non-OK: ${res.status}`);
       }
     } catch (err) {
       // Suppress "Failed to fetch" (network error) which is common during dev/HMR
       if (err instanceof TypeError && err.message === "Failed to fetch") {
         return;
       }
-      console.error("Failed to fetch extraction data", err);
+      console.error("[Client] fetchUpdatedData ERROR:", err);
     }
   };
+
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
@@ -714,10 +769,23 @@ function CreateSurveyContent() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input?.trim() || isLoading || authError) return;
+    console.log("[handleSubmit] Attempting to send message. Input:", input?.trim());
+    if (!input?.trim()) {
+      console.warn("[handleSubmit] Aborting: Input is empty");
+      return;
+    }
+    if (isLoading) {
+      console.warn("[handleSubmit] Aborting: Already loading/streaming");
+      return;
+    }
+    if (authError) {
+      console.warn("[handleSubmit] Aborting: Auth error active:", authError);
+      return;
+    }
 
     const currentInput = input;
     setInput(""); // Clear input locally
+    console.log("[handleSubmit] Calling sendMessage...");
     sendMessage({
       role: "user",
       parts: [{ type: 'text', text: currentInput }],
@@ -773,65 +841,21 @@ function CreateSurveyContent() {
     }
   };
 
-
-
   const toggleVoiceMode = () => {
     const newMode = !isVoiceMode;
     setIsVoiceMode(newMode);
     if (newMode) {
       setSurveyStateLoaded(false);
+      // 🔥 Also initiate recording here as this is triggered by a user click
+      voiceWs.startRecording().catch(err => {
+        console.error("[Client] Failed to start recording on mode toggle:", err);
+      });
       voiceWs.connect();
     } else {
       voiceWs.disconnect();
     }
   };
 
-  const [hasSentStartSignal, setHasSentStartSignal] = useState(false);
-
-  const toggleRecording = async () => {
-    // Voice-activated mode with AI-First flow
-    // 1. Start recording (get permissions) - NO MUTING
-    // 2. Connect critical WebSocket
-    // 3. Wait for WS connected
-    // 4. Send start signal
-    if (!voiceWs.isRecording) {
-      console.log("[Client] 🎤 Starting recording sequence...");
-      setIsConnecting(true);
-      setHasGreetingPlayed(false);
-      setHasSentStartSignal(false);
-
-      try {
-        // 1. Start Microphone
-        await voiceWs.startRecording();
-        console.log("[Client] ✅ Recording started");
-
-        // 2. Connect WebSocket explicitly
-        console.log("[Client] 🔌 Establishing WebSocket connection...");
-        await voiceWs.connect();
-
-        // 3. Wait for connection to be ready (Polling with timeout)
-        let attempts = 0;
-        const maxAttempts = 50;
-
-        while (voiceWs.statusRef.current !== "connected" && attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-          attempts++;
-        }
-
-        if (voiceWs.statusRef.current !== "connected") {
-          throw new Error("WebSocket connection timed out based on statusRef");
-        }
-
-        console.log("[Client] 🟢 WebSocket connected. Sending start signal...");
-
-      } catch (err) {
-        console.error("[Client] ❌ Failed to start voice session:", err);
-        setIsConnecting(false);
-        voiceWs.stopRecording(); // Cleanup
-        toast.error("Failed to connect. Please try again.");
-      }
-    }
-  };
 
   const handleGoToSampleConversations = async () => {
     if (!surveyId) return;
@@ -848,25 +872,23 @@ function CreateSurveyContent() {
       if (!response.ok) {
         const error = await response.text();
         console.error("Failed to finalize survey:", error);
-        toast.error(t("Toasts.FinalizeFailed"));
+        getClientTranslation("Failed to finalize survey.", "Creation finalization error toast").then(msg => toast.error(msg));
         setIsFinalizing(false);
         return;
       }
 
       const data = await response.json();
       console.log("Survey finalized:", data);
-      toast.success(t("Toasts.Finalized"));
+      getClientTranslation("Survey finalized successfully!").then(msg => toast.success(msg));
 
       // Navigate to sample review page
       router.push(`/dashboard/surveys/${surveyId}/sample-review`);
     } catch (error) {
       console.error("Error finalizing survey:", error);
-      toast.error(t("Toasts.GenericError"));
+      getClientTranslation("An error occurred. Please try again.").then(msg => toast.error(msg));
       setIsFinalizing(false);
     }
   };
-
-  // `isInitializing` no longer unmounts the whole page
 
   if (authError) {
     return (
@@ -875,7 +897,7 @@ function CreateSurveyContent() {
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
             <User className="w-8 h-8 text-red-600" />
           </div>
-          <h2 className="text-xl font-semibold text-gray-900">{t("Authentication.Required")}</h2>
+          <h2 className="text-xl font-semibold text-gray-900"><ClientT>Authentication Required</ClientT></h2>
           <p className="text-gray-600 max-w-md">{authError}</p>
           <div className="flex gap-3 justify-center">
             {authError.includes("verify") ? (
@@ -884,13 +906,13 @@ function CreateSurveyContent() {
                   href="/verify-email"
                   className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
                 >
-                  {t("Authentication.VerifyEmail")}
+                  <ClientT>Verify Email</ClientT>
                 </Link>
                 <Link
                   href="/dashboard"
                   className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  {t("Authentication.GoBack")}
+                  <ClientT>Go Back</ClientT>
                 </Link>
               </>
             ) : (
@@ -899,13 +921,13 @@ function CreateSurveyContent() {
                   href="/sign-in"
                   className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
                 >
-                  {t("Authentication.SignIn")}
+                  <ClientT>Sign In</ClientT>
                 </Link>
                 <Link
                   href="/"
                   className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  {t("Authentication.GoHome")}
+                  <ClientT>Go Home</ClientT>
                 </Link>
               </>
             )}
@@ -920,19 +942,19 @@ function CreateSurveyContent() {
       <div className="h-[calc(100vh-2rem)] md:h-[calc(100vh-4rem)] flex flex-col md:flex-row gap-6 max-w-7xl w-full mx-auto p-4 overflow-hidden">
         <div className={cn(
           "flex-1 flex flex-col overflow-hidden relative transition-all duration-500",
-          (selectedDomainId || surveyId) ? "bg-white rounded-3xl border border-gray-200 shadow-sm" : ""
+          surveyId ? "bg-white rounded-3xl border border-gray-200 shadow-sm" : ""
         )}>
 
           {/* Integrated Header */}
           <div className={cn(
             "flex flex-col sm:flex-row items-center justify-between gap-4 p-6 transition-all duration-500",
-            (selectedDomainId || surveyId) ? "bg-white border-b border-gray-200" : "bg-transparent"
+            surveyId ? "bg-white border-b border-gray-200" : "bg-transparent"
           )}>
-            {!selectedDomainId && !surveyId ? (
+            {!surveyId ? (
               <div className="w-full text-center py-4">
                 <h1 className="text-2xl font-bold text-gray-900 flex items-center justify-center gap-2">
                   <Sparkles className="w-6 h-6 text-indigo-600" />
-                  {t("Title.Create")}
+                  <ClientT>Create New Survey</ClientT>
                 </h1>
               </div>
             ) : (
@@ -943,13 +965,13 @@ function CreateSurveyContent() {
                   </Link>
                   <div>
                     <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                      {surveyId ? (isReadOnly ? t("Title.View") : t("Title.Create")) : t("Title.Create")}
+                      {surveyId ? (isReadOnly ? <ClientT>View Survey</ClientT> : <ClientT>Build Survey</ClientT>) : <ClientT>Create Survey</ClientT>}
                       {isCreatingDraft && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
                     </h1>
                     <div className="flex items-center gap-2 mt-1">
                       {(isReadOnly || surveyStatus === 'completed') && (
                         <span className="px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                          {t("Badges.ReadOnly")}
+                          <ClientT>Read Only</ClientT>
                         </span>
                       )}
                     </div>
@@ -966,9 +988,9 @@ function CreateSurveyContent() {
           {isReadOnly && (
             <div className="bg-blue-50/50 border-b border-blue-100 px-4 py-2 flex items-center justify-center gap-2 text-sm text-blue-800">
               <Sparkles className="w-4 h-4 text-blue-600" />
-              <span>{t("ReadOnlyBanner.Message")}</span>
+              <span><ClientT>This survey is finalized and cannot be edited.</ClientT></span>
               <Link href={`/dashboard/surveys/${surveyId}`} className="font-medium hover:underline">
-                {t("ReadOnlyBanner.Link")}
+                <ClientT>View Dashboard</ClientT>
               </Link>
             </div>
           )}
@@ -978,14 +1000,14 @@ function CreateSurveyContent() {
           {/* Chat Area / Domain Selection */}
           <div className={cn(
             "flex-1 overflow-hidden relative flex flex-col",
-            (selectedDomainId || surveyId) ? "bg-slate-50/30" : "bg-transparent"
+            surveyId ? "bg-slate-50/30" : "bg-transparent"
           )}>
             {isInitializing && (
               <div className="absolute inset-0 z-50 bg-white/50 backdrop-blur-sm flex items-center justify-center">
                 <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
               </div>
             )}
-            {!selectedDomainId ? (
+            {!surveyId ? (
 
               <div className="flex-1 overflow-y-auto p-4 md:p-8">
                 <div className="max-w-5xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500 py-10">
@@ -993,131 +1015,145 @@ function CreateSurveyContent() {
                   {/* Hero Section */}
                   <div className="text-center space-y-6">
                     <h2 className="text-4xl font-bold text-gray-900 tracking-tight">
-                      {t("Title.ChooseTopic")}
+                      <ClientT>Choose Your Survey Topic</ClientT>
                     </h2>
                     <p className="text-xl text-gray-500 max-w-2xl mx-auto leading-relaxed">
-                      {t("Subtitle")}
+                      <ClientT>Our AI expert will guide you through the research design process to create a high-impact survey.</ClientT>
                     </p>
 
                     {/* Section: Configuration */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
-                      {/* Creation Mode Choice */}
-                      <div className="bg-white/50 backdrop-blur-sm p-6 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 -rotate-45 translate-x-12 -translate-y-12 group-hover:bg-indigo-500/10 transition-colors" />
-                        <div className="flex items-start gap-4 mb-6">
-                          <div className="p-3 bg-indigo-100 rounded-2xl shrink-0">
-                            <Sparkles className="w-6 h-6 text-indigo-600" />
+                    <div className="mt-8">
+                      {/* Configuration Container - Framer Style */}
+                      <div className="max-w-4xl mx-auto w-full bg-white rounded-2xl p-8 lg:p-12 border border-gray-200">
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 lg:gap-16">
+
+                          {/* 1. AI Designer Experience */}
+                          <div className="space-y-6">
+                            <div className="flex items-start gap-4">
+                              <div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center shrink-0 border border-gray-100">
+                                <Sparkles className="w-6 h-6 text-black" />
+                              </div>
+                              <div>
+                                <h3 className="text-xl font-medium text-black"><ClientT>AI Designer Experience</ClientT></h3>
+                                <p className="text-sm text-gray-500 mt-1"><ClientT>How would you like to build your survey with our AI?</ClientT></p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4">
+                              <button
+                                onClick={() => setIsVoiceMode(false)}
+                                className={cn(
+                                  "flex items-center gap-4 p-5 rounded-xl text-left transition-all duration-200 border",
+                                  !isVoiceMode
+                                    ? "bg-gray-50 text-black border-black shadow-none ring-1 ring-black"
+                                    : "bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-900 shadow-sm"
+                                )}
+                              >
+                                <div className="shrink-0 w-10 h-10 rounded-full bg-white/80 border border-gray-100 flex items-center justify-center text-current">
+                                  <Send className="w-5 h-5" />
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="block font-bold text-sm lg:text-base"><ClientT>Chat Interface</ClientT></span>
+                                  <span className="text-[11px] lg:text-xs opacity-70 leading-tight block"><ClientT>Classic text-based conversation with the AI.</ClientT></span>
+                                </div>
+                              </button>
+
+                              <button
+                                onClick={() => setIsVoiceMode(true)}
+                                className={cn(
+                                  "flex items-center gap-4 p-5 rounded-xl text-left transition-all duration-200 border",
+                                  isVoiceMode
+                                    ? "bg-gray-50 text-black border-black shadow-none ring-1 ring-black"
+                                    : "bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-900 shadow-sm"
+                                )}
+                              >
+                                <div className="shrink-0 w-10 h-10 rounded-full bg-white/80 border border-gray-100 flex items-center justify-center text-current">
+                                  <Mic className="w-5 h-5" />
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="block font-bold text-sm lg:text-base"><ClientT>Voice Interface</ClientT></span>
+                                  <span className="text-[11px] lg:text-xs opacity-70 leading-tight block"><ClientT>Speak naturally with the AI for a faster experience.</ClientT></span>
+                                </div>
+                              </button>
+                            </div>
                           </div>
-                          <div>
-                            <h3 className="text-lg font-bold text-gray-900">{t("CreationMode.Title")}</h3>
-                            <p className="text-sm text-gray-500 mt-1">{t("CreationMode.Description")}</p>
+
+                          {/* 2. Participant Experience */}
+                          <div className="space-y-6">
+                            <div className="flex items-start gap-4">
+                              <div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center shrink-0 border border-gray-100">
+                                <Users className="w-6 h-6 text-black" />
+                              </div>
+                              <div>
+                                <h3 className="text-xl font-medium text-black"><ClientT>Respondent Format</ClientT></h3>
+                                <p className="text-sm text-gray-500 mt-1"><ClientT>Choose the medium for your respondents.</ClientT></p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4">
+                              <button
+                                onClick={() => setIsVoiceSurvey(false)}
+                                className={cn(
+                                  "flex items-center gap-4 p-5 rounded-xl text-left transition-all duration-200 border",
+                                  !isVoiceSurvey
+                                    ? "bg-gray-50 text-black border-black shadow-none ring-1 ring-black"
+                                    : "bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-900 shadow-sm"
+                                )}
+                              >
+                                <div className="shrink-0 w-10 h-10 rounded-full bg-white/80 border border-gray-100 flex items-center justify-center text-current">
+                                  <Keyboard className="w-5 h-5" />
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="block font-bold text-sm lg:text-base"><ClientT>Chat Survey</ClientT></span>
+                                  <span className="text-[11px] lg:text-xs opacity-70 leading-tight block"><ClientT>Respondents answer via a text chat interface.</ClientT></span>
+                                </div>
+                              </button>
+
+                              <button
+                                onClick={() => setIsVoiceSurvey(true)}
+                                className={cn(
+                                  "flex items-center gap-4 p-5 rounded-xl text-left transition-all duration-200 border",
+                                  isVoiceSurvey
+                                    ? "bg-gray-50 text-black border-black shadow-none ring-1 ring-black"
+                                    : "bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-900 shadow-sm"
+                                )}
+                              >
+                                <div className="shrink-0 w-10 h-10 rounded-full bg-white/80 border border-gray-100 flex items-center justify-center text-current">
+                                  <Mic className="w-5 h-5" />
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="block font-bold text-sm lg:text-base"><ClientT>Voice Survey</ClientT></span>
+                                  <span className="text-[11px] lg:text-xs opacity-70 leading-tight block"><ClientT>Real-time conversational voice interviews.</ClientT></span>
+                                </div>
+                              </button>
+                            </div>
                           </div>
+
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3 p-1.5 bg-gray-100/80 rounded-2xl relative z-10">
+                        <div className="mt-12 pt-12 border-t border-gray-100 max-w-md mx-auto">
                           <button
-                            onClick={() => setIsVoiceMode(false)}
-                            className={cn(
-                              "flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all duration-300",
-                              !isVoiceMode
-                                ? "bg-white text-indigo-600 shadow-xl scale-100 ring-1 ring-black/[0.05]"
-                                : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
-                            )}
+                            onClick={handleStart}
+                            disabled={isConnecting}
+                            className="w-full py-4 px-6 rounded-xl flex items-center justify-center gap-2 text-white bg-black hover:bg-gray-800 transition-colors font-bold border border-black shadow-lg disabled:opacity-50 text-lg"
                           >
-                            <Keyboard className="w-4 h-4" />
-                            {t("CreationMode.Text")}
-                          </button>
-                          <button
-                            onClick={() => setIsVoiceMode(true)}
-                            className={cn(
-                              "flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all duration-300",
-                              isVoiceMode
-                                ? "bg-white text-indigo-600 shadow-xl scale-100 ring-1 ring-black/[0.05]"
-                                : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
+                            {isConnecting ? (
+                              <>
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                <ClientT>Starting...</ClientT>
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="w-5 h-5" />
+                                <ClientT>Start Building</ClientT>
+                              </>
                             )}
-                          >
-                            <Mic className="w-4 h-4" />
-                            {t("CreationMode.Voice")}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Respondent Format Choice */}
-                      <div className="bg-white/50 backdrop-blur-sm p-6 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 -rotate-45 translate-x-12 -translate-y-12 group-hover:bg-purple-500/10 transition-colors" />
-                        <div className="flex items-start gap-4 mb-6">
-                          <div className="p-3 bg-purple-100 rounded-2xl shrink-0">
-                            <Users className="w-6 h-6 text-purple-600" />
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-bold text-gray-900">{t("RespondentFormat.Title")}</h3>
-                            <p className="text-sm text-gray-500 mt-1">{t("RespondentFormat.Description")}</p>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 p-1.5 bg-gray-100/80 rounded-2xl relative z-10">
-                          <button
-                            onClick={() => setIsVoiceSurvey(false)}
-                            className={cn(
-                              "flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all duration-300",
-                              !isVoiceSurvey
-                                ? "bg-white text-purple-600 shadow-xl scale-100 ring-1 ring-black/[0.05]"
-                                : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
-                            )}
-                          >
-                            <Send className="w-4 h-4" />
-                            {t("RespondentFormat.Text")}
-                          </button>
-                          <button
-                            onClick={() => setIsVoiceSurvey(true)}
-                            className={cn(
-                              "flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all duration-300",
-                              isVoiceSurvey
-                                ? "bg-white text-purple-600 shadow-xl scale-100 ring-1 ring-black/[0.05]"
-                                : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
-                            )}
-                          >
-                            <Mic className="w-4 h-4" />
-                            {t("RespondentFormat.Voice")}
                           </button>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Domain Cards (Masonry/Grid) */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {Object.values(SURVEY_DOMAINS).map((domain) => {
-                      const ui = DOMAIN_UI_METADATA[domain.id];
-                      const Icon = ui?.icon || Sparkles;
-                      const color = ui?.color || "text-gray-600";
-                      const bgColor = ui?.bgColor || "bg-gray-100";
-
-                      return (
-                        <button
-                          key={domain.id}
-                          onClick={() => handleDomainSelect(domain.id)}
-                          className="group relative flex flex-col text-left p-8 rounded-3xl border border-gray-200 bg-white hover:border-indigo-500/30 hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-300 hover:-translate-y-1 overflow-hidden"
-                        >
-                          <div className={cn(
-                            "w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-transform duration-300 group-hover:scale-110",
-                            bgColor
-                          )}>
-                            <Icon className={cn("w-7 h-7", color)} />
-                          </div>
-
-                          <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-indigo-600 transition-colors">
-                            {t(`Domains.${domain.id}.Title`)}
-                          </h3>
-                          <p className="text-base text-gray-500 leading-relaxed group-hover:text-gray-600">
-                            {t(`Domains.${domain.id}.Description`)}
-                          </p>
-
-                          {/* Hover Decoration */}
-                          <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-500" />
-                        </button>
-                      );
-                    })}
                   </div>
                 </div>
               </div>
@@ -1127,7 +1163,7 @@ function CreateSurveyContent() {
                   {isCreatingDraft && (
                     <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center rounded-3xl animate-in fade-in duration-300">
                       <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mb-4" />
-                      <p className="text-gray-500 font-medium">{t("Feedback.Preparing")}</p>
+                      <p className="text-gray-500 font-medium"><ClientT>Preparing your designer session...</ClientT></p>
                     </div>
                   )}
 
@@ -1139,8 +1175,8 @@ function CreateSurveyContent() {
                         <div className="flex flex-col space-y-4 max-w-3xl mx-auto pb-20">
                           {/* Welcome / Context */}
                           <div className="text-center py-8 text-gray-400 text-sm">
-                            <p>{t("Chat.Started")}</p>
-                            <p className="text-xs mt-1">{t("Chat.Instruction")}</p>
+                            <p><ClientT>Voice session started</ClientT></p>
+                            <p className="text-xs mt-1"><ClientT>Speak naturally to design your survey</ClientT></p>
                           </div>
 
                           {/* Message History */}
@@ -1184,7 +1220,7 @@ function CreateSurveyContent() {
                                   ? "bg-slate-800/80 text-white backdrop-blur-sm"
                                   : "bg-gray-100 text-gray-400 italic"
                               )}>
-                                {voiceWs.interimTranscription || t("Chat.Listening")}
+                                {voiceWs.interimTranscription || <ClientT>Listening...</ClientT>}
                                 {voiceWs.isRecording && <span className="inline-block w-1.5 h-1.5 bg-current rounded-full ml-1 animate-pulse" />}
                               </div>
                               <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 animate-pulse">
@@ -1200,7 +1236,7 @@ function CreateSurveyContent() {
                                 <Sparkles className="w-4 h-4 text-indigo-600" />
                               </div>
                               <div className="px-4 py-3 bg-white/50 border border-gray-100 rounded-2xl rounded-tl-none text-gray-400 text-sm italic">
-                                {t("Chat.Speaking")}
+                                <ClientT>AI Speaking...</ClientT>
                                 <div className="flex gap-1 mt-1 h-3 items-end">
                                   <div className="w-1 bg-indigo-400 rounded-full animate-[music-bar_0.5s_ease-in-out_infinite]" style={{ height: '40%' }} />
                                   <div className="w-1 bg-indigo-400 rounded-full animate-[music-bar_0.5s_ease-in-out_infinite_0.1s]" style={{ height: '80%' }} />
@@ -1252,11 +1288,11 @@ function CreateSurveyContent() {
                                   voiceWs.isRecording ? "bg-emerald-100 text-emerald-700" :
                                     "bg-gray-100 text-gray-500"
                           )}>
-                            {isConnecting ? t("Status.Connecting") :
-                              voiceWs.isPlaying ? t("Status.AISpeaking") :
-                                isSpeaking ? t("Status.SpeakingUser") :
-                                  voiceWs.isRecording ? t("Status.Listening") :
-                                    t("Status.Ready")}
+                            {isConnecting ? <ClientT>Connecting...</ClientT> :
+                              voiceWs.isPlaying ? <ClientT>AI Speaking</ClientT> :
+                                isSpeaking ? <ClientT>You are speaking</ClientT> :
+                                  voiceWs.isRecording ? <ClientT>Listening</ClientT> :
+                                    <ClientT>Ready</ClientT>}
                           </div>
 
                           {/* Main Interaction Button */}
@@ -1277,9 +1313,7 @@ function CreateSurveyContent() {
                               </>
                             )}
 
-                            <button
-                              onClick={toggleRecording}
-                              disabled={voiceWs.isRecording || isConnecting || !selectedDomainId} // Disable if recording, connecting, or no domain selected
+                            <div
                               className={cn(
                                 "relative w-32 h-32 rounded-full flex flex-col items-center justify-center transition-all duration-300 border-4 shadow-2xl z-20",
                                 isSpeaking
@@ -1290,7 +1324,7 @@ function CreateSurveyContent() {
                                       ? "bg-indigo-50 border-indigo-300 text-indigo-600 scale-105"
                                       : voiceWs.isRecording
                                         ? "bg-emerald-50 border-emerald-400 text-emerald-600 scale-105"
-                                        : "bg-white border-gray-200 text-slate-600 hover:scale-105 hover:bg-slate-50 hover:border-slate-300 cursor-pointer"
+                                        : "bg-white border-gray-200 text-slate-600"
                               )}
                             >
                               <div className="flex flex-col items-center gap-2">
@@ -1306,57 +1340,53 @@ function CreateSurveyContent() {
                                         />
                                       ))}
                                     </div>
-                                    <span className="text-xs font-medium text-red-500">{t("Status.SpeakingUser")}</span>
+                                    <span className="text-xs font-medium text-red-500"><ClientT>You are speaking</ClientT></span>
                                   </>
                                 ) : isConnecting ? (
                                   <>
                                     <Loader2 className="h-10 w-10 animate-spin text-amber-500" />
                                   </>
-                                ) : !selectedDomainId ? (
-                                  <>
-                                    <span className="text-xs font-medium text-gray-400 text-center px-2">{t("Status.SelectTopicFirst")}</span>
-                                  </>
                                 ) : voiceWs.isPlaying ? (
                                   <>
                                     <Sparkles className="w-10 h-10 animate-spin-slow" />
-                                    <span className="text-xs font-medium">{t("Status.Listening")}...</span>
+                                    <span className="text-xs font-medium text-indigo-600"><ClientT>AI Speaking...</ClientT></span>
+                                  </>
+                                ) : voiceWs.isRecording ? (
+                                  <>
+                                    <div className="flex gap-1.5 items-center h-6">
+                                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
+                                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+                                    </div>
+                                    <span className="text-xs font-medium text-emerald-600"><ClientT>Listening</ClientT></span>
                                   </>
                                 ) : (
                                   <>
-                                    <Mic className="w-10 h-10 opacity-80" />
-                                    <span className="text-xs font-medium text-gray-400">{t("Status.TapToSpeak")}</span>
+                                    <MicOff className="w-10 h-10 opacity-30" />
+                                    <span className="text-xs font-medium text-gray-400"><ClientT>Ready</ClientT></span>
                                   </>
                                 )}
                               </div>
-                            </button>
+                            </div>
                           </div>
 
                           {/* Text Hint */}
                           <div className="text-center space-y-2 max-w-[200px]">
                             <h3 className="font-bold text-gray-900">
-                              {voiceWs.isRecording ? t("Chat.Listening") :
-                                voiceWs.isPlaying ? t("Chat.Speaking") :
-                                  t("Chat.VoiceActive")}
+                              {voiceWs.isRecording ? <ClientT>Listening...</ClientT> :
+                                voiceWs.isPlaying ? <ClientT>AI Speaking...</ClientT> :
+                                  <ClientT>Voice Active</ClientT>}
                             </h3>
                             <p className="text-sm text-gray-500 leading-relaxed">
-                              {voiceWs.isRecording ? t("Chat.VoiceInstruction") :
-                                voiceWs.isPlaying ? t("Chat.VoiceListening") :
-                                  t("Chat.VoiceStart")}
+                              {voiceWs.isRecording ? <ClientT>I am listening to your thoughts.</ClientT> :
+                                voiceWs.isPlaying ? <ClientT>I am responding to your last input.</ClientT> :
+                                  <ClientT>Start speaking to design your survey.</ClientT>}
                             </p>
                           </div>
                         </div>
                       </div>
-
-                      {/* Footer Exit Button */}
-                      <div className="absolute top-6 right-6">
-                        <button
-                          onClick={toggleVoiceMode}
-                          className="px-4 py-2 rounded-xl bg-white/50 border border-gray-200 hover:bg-white text-gray-500 font-medium transition-colors text-sm backdrop-blur-sm"
-                        >
-                          {t("Chat.ExitVoice")}
-                        </button>
-                      </div>
                     </div>
+
                   )}
 
                   {/* Voice Completion Overlay */}
@@ -1365,22 +1395,22 @@ function CreateSurveyContent() {
                       <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mb-6 animate-in zoom-in duration-300">
                         <CheckCircle2 className="w-12 h-12 text-emerald-600" />
                       </div>
-                      <h2 className="text-2xl font-bold text-gray-900 mb-2">{t("Completion.Title")}</h2>
+                      <h2 className="text-2xl font-bold text-gray-900 mb-2"><ClientT>Design Complete!</ClientT></h2>
                       <p className="text-gray-500 max-w-md text-center mb-8">
-                        {t("Completion.Message")}
+                        <ClientT>Your survey research design is ready. You can now review the sample conversations and finalize the survey.</ClientT>
                       </p>
                       <button
                         onClick={toggleVoiceMode}
                         className="px-8 py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 transition-all hover:-translate-y-0.5"
                       >
-                        {t("Completion.Button")}
+                        <ClientT>Return to Chat</ClientT>
                       </button>
                     </div>
                   )}
 
                   {/* Messages Scroll Area */}
                   <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
-                    {messages.filter(m => m.id !== "init_ping_hidden").map((message) => (
+                    {messages.map((message) => (
                       <div
                         key={message.id}
                         className={cn(
@@ -1414,7 +1444,13 @@ function CreateSurveyContent() {
                           {message.role === "assistant" ? (
                             <div className="text-[15px] leading-7">
                               <MarkdownMessage
-                                content={(message as any).content || (message.parts?.filter(p => p.type === 'text').map((p: any) => p.text).join('') || "")}
+                                content={
+                                  // Priority 1: standard content field (set after streaming completes)
+                                  (message as any).content ||
+                                  // Priority 2: text parts (when model writes text-deltas directly — standard AI SDK pattern)
+                                  (message.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('')) ||
+                                  ""
+                                }
                                 className="text-gray-800 prose-sm"
                               />
                               {/* Single unified path — AI SDK uses type 'tool-{toolName}' for tool parts */}
@@ -1426,6 +1462,9 @@ function CreateSurveyContent() {
                                 if (!part.type?.startsWith('tool-')) return null;
 
                                 const toolName = part.type.replace(/^tool-/, '');
+
+                                // think_and_respond is an internal reasoning tool — its output is never shown to the user
+                                if (toolName === 'think_and_respond') return null;
 
                                 const toolCallId = part.toolCallId;
 
@@ -1553,8 +1592,8 @@ function CreateSurveyContent() {
                             <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                           </div>
                           <div>
-                            <h3 className="font-bold text-gray-900">{t("ReadyCard.Title")}</h3>
-                            <p className="text-sm text-gray-500">{t("ReadyCard.Description")}</p>
+                            <h3 className="font-bold text-gray-900"><ClientT>Ready for Review</ClientT></h3>
+                            <p className="text-sm text-gray-500"><ClientT>Our AI expert has finalized the research design. You can now review sample conversations.</ClientT></p>
                           </div>
                         </div>
                         <button
@@ -1563,15 +1602,15 @@ function CreateSurveyContent() {
                           className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold transition-all hover:-translate-y-0.5"
                         >
                           {isFinalizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
-                          {isFinalizing ? t("ReadyCard.Finalizing") : t("ReadyCard.Button")}
+                          {isFinalizing ? <ClientT>Finalizing...</ClientT> : <ClientT>Review Sample Conversations</ClientT>}
                         </button>
                       </div>
                     </div>
                   )}
 
                   {/* Main Input */}
-                  {/* Main Input - Only shown when domain is selected */}
-                  {(selectedDomainId && !isReadyForSample && !isReadOnly && !isVoiceMode) && (
+                  {/* Main Input - Shown when survey is active and not finished */}
+                  {(!isReadyForSample && !isReadOnly && !isVoiceMode && surveyId) && (
                     <div className="max-w-3xl mx-auto space-y-4">
 
 
@@ -1584,7 +1623,7 @@ function CreateSurveyContent() {
                             onChange={handleInputChange}
                             onKeyDown={handleKeyDown}
                             disabled={isLoading}
-                            placeholder={t("Input.Placeholder")}
+                            placeholder="Type your message..."
                             rows={1}
                             className="flex-1 py-4 px-4 bg-transparent outline-none resize-none text-base text-gray-800 placeholder:text-gray-400 min-h-[96px] max-h-60 my-auto"
                             style={{ minHeight: "96px" }}
@@ -1625,78 +1664,78 @@ function CreateSurveyContent() {
 
                   {isReadOnly && (
                     <div className="max-w-3xl mx-auto text-center py-4">
-                      <p className="text-sm text-gray-400 italic">{t("ReadOnlyBanner.Message")}</p>
+                      <p className="text-sm text-gray-400 italic"><ClientT>This survey is finalized and cannot be edited.</ClientT></p>
                     </div>
                   )}
 
                 </div>
               </>
             )}
+              </div>
           </div>
-        </div>
 
-        {/* Publish Survey Modal */}
-        <PublishSurveyModal
-          isOpen={showPublishModal}
-          onClose={() => setShowPublishModal(false)}
-          surveyId={surveyId || ""}
-          initialTitle=""
-          initialIsVoice={isVoiceSurvey}
-          onPublished={(shareUrl) => {
-            console.log("Survey published:", shareUrl);
-          }}
-        />
-
-        {/* Real-time Collaboration Sidebar - Only for Org surveys or if there are collaborators */}
-        {(surveyId && (orgId || collaborators.length > 0)) && (
-          <CollaborationSidebar
-            surveyId={surveyId}
-            isOwner={isOwner}
-            collaborators={collaborators}
+          {/* Publish Survey Modal */}
+          <PublishSurveyModal
+            isOpen={showPublishModal}
+            onClose={() => setShowPublishModal(false)}
+            surveyId={surveyId || ""}
+            initialTitle=""
+            initialIsVoice={isVoiceSurvey}
+            onPublished={(shareUrl) => {
+              console.log("Survey published:", shareUrl);
+            }}
           />
-        )}
-      </div>
-    </>
-  );
+
+          {/* Real-time Collaboration Sidebar - Only for Org surveys or if there are collaborators */}
+          {(surveyId && (orgId || collaborators.length > 0)) && (
+            <CollaborationSidebar
+              surveyId={surveyId}
+              isOwner={isOwner}
+              collaborators={collaborators}
+            />
+          )}
+        </div>
+      </>
+      );
 }
 
-// ---------------------------------------------------------------------------
-// Types for the multi-file upload queue
-// ---------------------------------------------------------------------------
-type QueuedFile = {
-  id: string;
-  file: File;
-  description: string;
-  learningGoal: string;
-  status: 'pending' | 'uploading' | 'done' | 'error';
-  errorMsg?: string;
+      // ---------------------------------------------------------------------------
+      // Types for the multi-file upload queue
+      // ---------------------------------------------------------------------------
+      type QueuedFile = {
+        id: string;
+      file: File;
+      description: string;
+      learningGoal: string;
+      status: 'pending' | 'uploading' | 'done' | 'error';
+      errorMsg?: string;
 };
 
-/**
- * Full-screen minimalist media upload modal
- * Black & white / Framer-template aesthetic
- * Supports multiple files, each with its own description and learning goal
- */
-function MediaUploadFlow({
-  surveyId,
-  onAllUploaded,
-  onSkip,
-  allowedTypes,
-  aiDescription,
-  aiLearningGoal,
+      /**
+       * Full-screen minimalist media upload modal
+       * Black & white / Framer-template aesthetic
+       * Supports multiple files, each with its own description and learning goal
+       */
+      function MediaUploadFlow({
+        surveyId,
+        onAllUploaded,
+        onSkip,
+        allowedTypes,
+        aiDescription,
+        aiLearningGoal,
 }: {
-  surveyId: string;
+        surveyId: string;
   onAllUploaded: (media: any[]) => void;
   onSkip: () => void;
-  allowedTypes: string[];
-  aiDescription?: string;
-  aiLearningGoal?: string;
+      allowedTypes: string[];
+      aiDescription?: string;
+      aiLearningGoal?: string;
 }) {
   const [queue, setQueue] = useState<QueuedFile[]>([]);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isUploadingAll, setIsUploadingAll] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const uid = useId();
+      const [isDragging, setIsDragging] = useState(false);
+      const [isUploadingAll, setIsUploadingAll] = useState(false);
+      const fileInputRef = useRef<HTMLInputElement>(null);
+        const uid = useId();
 
   const makeId = () => `${uid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -1705,47 +1744,47 @@ function MediaUploadFlow({
   const addFiles = (incoming: FileList | null) => {
     if (!incoming) return;
     const newItems: QueuedFile[] = Array.from(incoming).map((f) => ({
-      id: makeId(),
-      file: f,
-      description: aiDescription ?? '',
-      learningGoal: aiLearningGoal ?? '',
-      status: 'pending',
+          id: makeId(),
+        file: f,
+        description: aiDescription ?? '',
+        learningGoal: aiLearningGoal ?? '',
+        status: 'pending',
     }));
     setQueue((prev) => [...prev, ...newItems]);
-    // reset so same file can be added again if needed
-    if (fileInputRef.current) fileInputRef.current.value = '';
+        // reset so same file can be added again if needed
+        if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const removeFile = (id: string) => setQueue((prev) => prev.filter((q) => q.id !== id));
 
   const updateField = (id: string, field: 'description' | 'learningGoal', value: string) =>
-    setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, [field]: value } : q)));
+    setQueue((prev) => prev.map((q) => (q.id === id ? {...q, [field]: value } : q)));
 
   const getFileTypeIcon = (file: File) => {
     if (file.type.startsWith('image')) return <ImageIcon className="w-4 h-4 text-gray-500" />;
-    if (file.type.startsWith('audio')) return <FileAudio className="w-4 h-4 text-gray-500" />;
-    if (file.type.startsWith('video')) return <FileVideo className="w-4 h-4 text-gray-500" />;
-    return <Upload className="w-4 h-4 text-gray-500" />;
+        if (file.type.startsWith('audio')) return <FileAudio className="w-4 h-4 text-gray-500" />;
+        if (file.type.startsWith('video')) return <FileVideo className="w-4 h-4 text-gray-500" />;
+        return <Upload className="w-4 h-4 text-gray-500" />;
   };
 
   const formatBytes = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const canUpload = queue.length > 0 && queue.every((q) => q.description.trim().length >= 10 && q.learningGoal.trim().length >= 10);
 
   const handleUploadAll = async () => {
     if (!canUpload) {
-      toast.error('Each file needs a description and learning goal (min 10 characters each).');
-      return;
+          toast.error(await getClientTranslation("Each file needs a description and learning goal (min 10 characters each).", "Media upload validation error"));
+        return;
     }
-    setIsUploadingAll(true);
-    const uploadedMedia: any[] = [];
-    for (const item of queue) {
-      setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'uploading' } : q));
-      try {
+        setIsUploadingAll(true);
+        const uploadedMedia: any[] = [];
+        for (const item of queue) {
+          setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'uploading' } : q));
+        try {
         const formData = new FormData();
         formData.append('surveyId', surveyId);
         formData.append('file', item.file);
@@ -1758,208 +1797,209 @@ function MediaUploadFlow({
         const result = await uploadSurveyMediaAction(formData);
         if (result.success) {
           setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'done' } : q));
-          uploadedMedia.push(result.data.media);
+        uploadedMedia.push(result.data.media);
         } else {
           setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'error', errorMsg: result.error } : q));
-          toast.error(`Failed: ${result.error}`);
+        getClientTranslation(`Failed: ${result.error}`, "Media upload failure toast").then(msg => toast.error(msg));
         }
       } catch (err) {
-        setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'error', errorMsg: 'Unexpected error' } : q));
-        toast.error('Upload failed. Please try again.');
+          setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'error', errorMsg: 'Unexpected error' } : q));
+        getClientTranslation("Upload failed. Please try again.", "Media upload error toast").then(msg => toast.error(msg));
       }
     }
-    setIsUploadingAll(false);
+        setIsUploadingAll(false);
     if (uploadedMedia.length > 0) {
-      toast.success(`${uploadedMedia.length} file${uploadedMedia.length > 1 ? 's' : ''} uploaded!`);
-      onAllUploaded(uploadedMedia);
+          getClientTranslation(`${uploadedMedia.length} file${uploadedMedia.length > 1 ? 's' : ''} uploaded!`, "Media upload success toast").then(msg => toast.success(msg));
+        onAllUploaded(uploadedMedia);
     }
   };
 
   // Drag-and-drop handlers
-  const onDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
+  const onDragOver = (e: React.DragEvent) => {e.preventDefault(); setIsDragging(true); };
   const onDragLeave = () => setIsDragging(false);
   const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    addFiles(e.dataTransfer.files);
+          e.preventDefault();
+        setIsDragging(false);
+        addFiles(e.dataTransfer.files);
   };
 
-  return (
-    // Fixed full-viewport overlay
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}>
-      {/* Modal card */}
-      <div
-        className="relative w-full max-w-2xl max-h-[90vh] bg-white flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-300"
-        style={{ borderRadius: '2px', boxShadow: '0 32px 80px rgba(0,0,0,0.35)' }}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-8 py-6 border-b border-gray-100">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-medium mb-1">Survey Media</p>
-            <h2 className="text-xl font-semibold text-gray-900 tracking-tight">Upload Files</h2>
-          </div>
-          <button
-            onClick={onSkip}
-            disabled={isUploadingAll}
-            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-900 disabled:opacity-40"
-          >
-            <span className="text-lg leading-none select-none">✕</span>
-          </button>
-        </div>
-
-        {/* AI context hint – only show if AI provided suggestion */}
-        {(aiDescription || aiLearningGoal) && (
-          <div className="mx-8 mt-5 px-4 py-3 bg-gray-50 border border-gray-200" style={{ borderRadius: '2px' }}>
-            <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-medium mb-1.5">From our conversation</p>
-            {aiDescription && <p className="text-sm text-gray-600"><span className="font-medium text-gray-800">What it is:</span> {aiDescription}</p>}
-            {aiLearningGoal && <p className="text-sm text-gray-600 mt-0.5"><span className="font-medium text-gray-800">Goal:</span> {aiLearningGoal}</p>}
-          </div>
-        )}
-
-        {/* Drop Zone */}
-        <div className="px-8 pt-5">
+        return (
+        // Fixed full-viewport overlay
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}>
+          {/* Modal card */}
           <div
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            onDrop={onDrop}
-            onClick={() => !isUploadingAll && fileInputRef.current?.click()}
-            className={cn(
-              'border-2 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center py-8 gap-3 select-none',
-              isDragging
-                ? 'border-black bg-gray-50'
-                : 'border-gray-200 hover:border-gray-400 hover:bg-gray-50',
-              isUploadingAll && 'opacity-40 cursor-not-allowed'
-            )}
-            style={{ borderRadius: '2px' }}
+            className="relative w-full max-w-2xl max-h-[90vh] bg-white flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-300"
+            style={{ borderRadius: '2px', boxShadow: '0 32px 80px rgba(0,0,0,0.35)' }}
           >
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept={acceptAttr}
-              className="hidden"
-              onChange={(e) => addFiles(e.target.files)}
-              disabled={isUploadingAll}
-            />
-            <Upload className="w-7 h-7 text-gray-300" />
-            <div className="text-center">
-              <p className="text-sm font-medium text-gray-800">{isDragging ? 'Drop files here' : 'Click or drag files here'}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{allowedTypes.join(', ')} — up to 100 MB each</p>
+            {/* Header */}
+            <div className="flex items-center justify-between px-8 py-6 border-b border-gray-100">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-medium mb-1">Survey Media</p>
+                <h2 className="text-xl font-semibold text-gray-900 tracking-tight"><ClientT>Upload Files</ClientT></h2>
+              </div>
+              <button
+                onClick={onSkip}
+                disabled={isUploadingAll}
+                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-900 disabled:opacity-40"
+              >
+                <span className="text-lg leading-none select-none">✕</span>
+              </button>
+            </div>
+
+            {/* AI context hint – only show if AI provided suggestion */}
+            {(aiDescription || aiLearningGoal) && (
+              <div className="mx-8 mt-5 px-4 py-3 bg-gray-50 border border-gray-200" style={{ borderRadius: '2px' }}>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-medium mb-1.5">From our conversation</p>
+                {aiDescription && <p className="text-sm text-gray-600"><span className="font-medium text-gray-800"><ClientT>What it is:</ClientT></span> {aiDescription}</p>}
+                {aiLearningGoal && <p className="text-sm text-gray-600 mt-0.5"><span className="font-medium text-gray-800"><ClientT>Goal:</ClientT></span> {aiLearningGoal}</p>}
+              </div>
+            )}
+
+            {/* Drop Zone */}
+            <div className="px-8 pt-5">
+              <div
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+                onClick={() => !isUploadingAll && fileInputRef.current?.click()}
+                className={cn(
+                  'border-2 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center py-8 gap-3 select-none',
+                  isDragging
+                    ? 'border-black bg-gray-50'
+                    : 'border-gray-200 hover:border-gray-400 hover:bg-gray-50',
+                  isUploadingAll && 'opacity-40 cursor-not-allowed'
+                )}
+                style={{ borderRadius: '2px' }}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={acceptAttr}
+                  className="hidden"
+                  onChange={(e) => addFiles(e.target.files)}
+                  disabled={isUploadingAll}
+                />
+                <Upload className="w-7 h-7 text-gray-300" />
+                <div className="text-center">
+                  <p className="text-sm font-medium text-gray-800"><ClientT>{isDragging ? 'Drop files here' : 'Click or drag files here'}</ClientT></p>
+                  <p className="text-xs text-gray-400 mt-0.5">{allowedTypes.join(', ')} — up to 100 MB each</p>
+                </div>
+              </div>
+            </div>
+
+            {/* File Queue */}
+            {queue.length > 0 && (
+              <div className="flex-1 overflow-y-auto px-8 mt-5 space-y-4 pb-4">
+                {queue.map((item, idx) => (
+                  <div key={item.id} className="border border-gray-100 bg-white" style={{ borderRadius: '2px' }}>
+                    {/* File row */}
+                    <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                      <div className="w-8 h-8 bg-gray-100 flex items-center justify-center flex-shrink-0" style={{ borderRadius: '2px' }}>
+                        {item.status === 'uploading' ? <Loader2 className="w-4 h-4 animate-spin text-gray-600" /> :
+                          item.status === 'done' ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> :
+                            item.status === 'error' ? <span className="text-red-500 text-xs font-bold">!</span> :
+                              getFileTypeIcon(item.file)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{item.file.name}</p>
+                        <p className="text-xs text-gray-400">{formatBytes(item.file.size)}</p>
+                        {item.errorMsg && <p className="text-xs text-red-500 mt-0.5">{item.errorMsg}</p>}
+                      </div>
+                      {item.status === 'pending' && (
+                        <button
+                          onClick={() => removeFile(item.id)}
+                          className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-300 hover:text-gray-600 transition-colors flex-shrink-0"
+                        >
+                          <span className="text-sm leading-none">✕</span>
+                        </button>
+                      )}
+                    </div>
+                    {/* Per-file fields */}
+                    {item.status === 'pending' && (
+                      <div className="px-4 py-3 space-y-2">
+                        <div>
+                          <label className="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-medium block mb-1"><ClientT>Description</ClientT></label>
+                          <input
+                            type="text"
+                            value={item.description}
+                            onChange={(e) => updateField(item.id, 'description', e.target.value)}
+                            placeholder={aiDescription || 'What is this file? (min 10 chars)'}
+                            className="w-full px-3 py-2 border border-gray-200 text-sm text-gray-800 outline-none focus:border-gray-900 transition-colors bg-transparent placeholder-gray-300"
+                            style={{ borderRadius: '2px' }}
+                            disabled={isUploadingAll}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-medium block mb-1"><ClientT>Learning Goal</ClientT></label>
+                          <input
+                            type="text"
+                            value={item.learningGoal}
+                            onChange={(e) => updateField(item.id, 'learningGoal', e.target.value)}
+                            placeholder={aiLearningGoal || 'What should respondents reflect on? (min 10 chars)'}
+                            className="w-full px-3 py-2 border border-gray-200 text-sm text-gray-800 outline-none focus:border-gray-900 transition-colors bg-transparent placeholder-gray-300"
+                            style={{ borderRadius: '2px' }}
+                            disabled={isUploadingAll}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Footer actions */}
+            <div className="flex items-center justify-between px-8 py-5 border-t border-gray-100 mt-auto">
+              <button
+                onClick={onSkip}
+                disabled={isUploadingAll}
+                className="text-sm text-gray-400 hover:text-gray-700 transition-colors disabled:opacity-40"
+              >
+                <ClientT>Skip</ClientT>
+              </button>
+              <div className="flex items-center gap-3">
+                {queue.length > 0 && !isUploadingAll && (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
+                  >
+                    <ClientT>+ Add more</ClientT>
+                  </button>
+                )}
+                <button
+                  onClick={handleUploadAll}
+                  disabled={!canUpload || isUploadingAll}
+                  className={cn(
+                    'px-6 py-2.5 text-sm font-medium transition-all',
+                    canUpload && !isUploadingAll
+                      ? 'bg-black text-white hover:bg-gray-800'
+                      : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                  )}
+                  style={{ borderRadius: '2px' }}
+                >
+                  {isUploadingAll ? (
+                    <span className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…</span>
+                  ) : (
+                    `Upload ${queue.length > 0 ? queue.length + ` file${queue.length > 1 ? 's' : ''}` : ''}`
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
+        );
 
-        {/* File Queue */}
-        {queue.length > 0 && (
-          <div className="flex-1 overflow-y-auto px-8 mt-5 space-y-4 pb-4">
-            {queue.map((item, idx) => (
-              <div key={item.id} className="border border-gray-100 bg-white" style={{ borderRadius: '2px' }}>
-                {/* File row */}
-                <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
-                  <div className="w-8 h-8 bg-gray-100 flex items-center justify-center flex-shrink-0" style={{ borderRadius: '2px' }}>
-                    {item.status === 'uploading' ? <Loader2 className="w-4 h-4 animate-spin text-gray-600" /> :
-                      item.status === 'done' ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> :
-                        item.status === 'error' ? <span className="text-red-500 text-xs font-bold">!</span> :
-                          getFileTypeIcon(item.file)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{item.file.name}</p>
-                    <p className="text-xs text-gray-400">{formatBytes(item.file.size)}</p>
-                    {item.errorMsg && <p className="text-xs text-red-500 mt-0.5">{item.errorMsg}</p>}
-                  </div>
-                  {item.status === 'pending' && (
-                    <button
-                      onClick={() => removeFile(item.id)}
-                      className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-300 hover:text-gray-600 transition-colors flex-shrink-0"
-                    >
-                      <span className="text-sm leading-none">✕</span>
-                    </button>
-                  )}
-                </div>
-                {/* Per-file fields */}
-                {item.status === 'pending' && (
-                  <div className="px-4 py-3 space-y-2">
-                    <div>
-                      <label className="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-medium block mb-1">Description</label>
-                      <input
-                        type="text"
-                        value={item.description}
-                        onChange={(e) => updateField(item.id, 'description', e.target.value)}
-                        placeholder={aiDescription || 'What is this file? (min 10 chars)'}
-                        className="w-full px-3 py-2 border border-gray-200 text-sm text-gray-800 outline-none focus:border-gray-900 transition-colors bg-transparent placeholder-gray-300"
-                        style={{ borderRadius: '2px' }}
-                        disabled={isUploadingAll}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-medium block mb-1">Learning Goal</label>
-                      <input
-                        type="text"
-                        value={item.learningGoal}
-                        onChange={(e) => updateField(item.id, 'learningGoal', e.target.value)}
-                        placeholder={aiLearningGoal || 'What should respondents reflect on? (min 10 chars)'}
-                        className="w-full px-3 py-2 border border-gray-200 text-sm text-gray-800 outline-none focus:border-gray-900 transition-colors bg-transparent placeholder-gray-300"
-                        style={{ borderRadius: '2px' }}
-                        disabled={isUploadingAll}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Footer actions */}
-        <div className="flex items-center justify-between px-8 py-5 border-t border-gray-100 mt-auto">
-          <button
-            onClick={onSkip}
-            disabled={isUploadingAll}
-            className="text-sm text-gray-400 hover:text-gray-700 transition-colors disabled:opacity-40"
-          >
-            Skip
-          </button>
-          <div className="flex items-center gap-3">
-            {queue.length > 0 && !isUploadingAll && (
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
-              >
-                + Add more
-              </button>
-            )}
-            <button
-              onClick={handleUploadAll}
-              disabled={!canUpload || isUploadingAll}
-              className={cn(
-                'px-6 py-2.5 text-sm font-medium transition-all',
-                canUpload && !isUploadingAll
-                  ? 'bg-black text-white hover:bg-gray-800'
-                  : 'bg-gray-100 text-gray-300 cursor-not-allowed'
-              )}
-              style={{ borderRadius: '2px' }}
-            >
-              {isUploadingAll ? (
-                <span className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…</span>
-              ) : (
-                `Upload ${queue.length > 0 ? queue.length + ` file${queue.length > 1 ? 's' : ''}` : ''}`
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
-export default function CreateSurveyPage() {
+        export default function CreateSurveyPage() {
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-      </div>
-    }>
-      <CreateSurveyContent />
-    </Suspense>
-  );
+        <Suspense fallback={
+          <div className="flex items-center justify-center min-h-screen bg-gray-50">
+            <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+          </div>
+        }>
+          <CreateSurveyContent />
+        </Suspense>
+        );
 }

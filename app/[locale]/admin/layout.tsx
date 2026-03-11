@@ -2,8 +2,26 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { isAdmin } from "@/lib/auth/admin";
 import { redirect } from "next/navigation";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
+import { Suspense } from "react";
+import { Loader2 } from "lucide-react";
+import { headers } from "next/headers";
 
-export default async function AdminLayout({
+export default function AdminLayout(props: {
+    children: React.ReactNode;
+    params: Promise<{ locale: string }>;
+}) {
+    return (
+        <Suspense fallback={
+            <div className="flex items-center justify-center min-h-screen">
+                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+            </div>
+        }>
+            <AdminLayoutContent {...props} />
+        </Suspense>
+    );
+}
+
+async function AdminLayoutContent({
     children,
     params,
 }: {
@@ -11,9 +29,10 @@ export default async function AdminLayout({
     params: Promise<{ locale: string }>;
 }) {
     const { locale } = await params;
+    const cookieHeader = (await headers()).get("cookie");
 
     // Strict admin check
-    const session = await getVerifiedSession().catch(() => null);
+    const session = await getVerifiedSession(cookieHeader).catch(() => null);
 
     if (!session || !isAdmin(session.user)) {
         // Redirect non-admins to the main dashboard or home
@@ -32,7 +51,13 @@ export default async function AdminLayout({
                 </header>
 
                 <main className="p-8 max-w-7xl mx-auto w-full">
-                    {children}
+                    <Suspense fallback={
+                        <div className="flex items-center justify-center min-h-[50vh]">
+                            <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+                        </div>
+                    }>
+                        {children}
+                    </Suspense>
                 </main>
             </div>
         </div>
