@@ -1,5 +1,9 @@
 import IORedis, { Redis, RedisOptions } from "ioredis";
+import dns from "node:dns";
 import { env } from "@/lib/env";
+
+// Configure DNS resolution to prefer IPv4.
+dns.setDefaultResultOrder("ipv4first");
 
 const redisOptions: RedisOptions = {
   maxRetriesPerRequest: null,
