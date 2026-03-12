@@ -910,7 +910,8 @@
     "Landing": {
         "Navbar": {
             "SignIn": "Anmelden",
-            "GetStarted": "Loslegen"
+            "GetStarted": "Loslegen",
+            "Dashboard": "Dashboard"
         },
         "Hero": {
             "Badge": "Formulare 2.0",

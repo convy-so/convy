@@ -25,7 +25,7 @@ export default function SignInPage() {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
-    rememberMe: false,
+    rememberMe: true,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -44,7 +44,22 @@ export default function SignInPage() {
             router.push("/dashboard");
           },
           onError: (ctx) => {
-            toast.error(ctx.error.message);
+            const msg = ctx.error.message || "";
+            const isUnverified =
+              ctx.error.status === 403 ||
+              msg.toLowerCase().includes("not verified") ||
+              msg.toLowerCase().includes("verify");
+
+            if (isUnverified) {
+              // Save the email so the verify-email page can show the resend button
+              if (typeof window !== 'undefined') {
+                sessionStorage.setItem('verification_email', formData.email);
+              }
+              toast.error(msg || "Please verify your email first.");
+              router.push("/verify-email");
+            } else {
+              toast.error(msg);
+            }
           }
         }
       });
