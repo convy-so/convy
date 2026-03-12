@@ -842,7 +842,8 @@
     "Landing": {
         "Navbar": {
             "SignIn": "Se connecter",
-            "GetStarted": "Commencer"
+            "GetStarted": "Commencer",
+            "Dashboard": "Tableau de bord"
         },
         "Hero": {
             "Badge": "Formulaires 2.0",
