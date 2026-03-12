@@ -301,8 +301,8 @@ function SurveysContent() {
             
             {isPageSizeOpen && (
               <>
-                <div className="fixed inset-0 z-[60]" onClick={() => setIsPageSizeOpen(false)} />
-                <div className="absolute top-full right-0 mt-2 w-40 bg-white rounded-xl border border-gray-100 shadow-xl z-[70] py-1.5 animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden">
+                <div className="fixed inset-0 z-[80]" onClick={() => setIsPageSizeOpen(false)} />
+                <div className="absolute top-full right-0 mt-2 w-40 bg-white rounded-xl border border-gray-100 shadow-xl z-[90] py-1.5 animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden">
                   {[10, 20, 50, 100].map((size) => (
                     <button
                       key={size}
@@ -333,15 +333,15 @@ function SurveysContent() {
       ) : (
         <>
 
-          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-gray-100">
             {paginatedSurveys.map((survey, index) => (
-              <div
-                key={survey.id}
-                className={cn(
-                  "group flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-gray-50/50 transition-colors",
-                  index !== paginatedSurveys.length - 1 ? "border-b border-gray-100" : ""
-                )}
-              >
+                <div
+                  key={survey.id}
+                  className={cn(
+                    "group flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-gray-50/50 transition-colors first:rounded-t-2xl last:rounded-b-2xl",
+                    index !== paginatedSurveys.length - 1 ? "border-b border-gray-100" : ""
+                  )}
+                >
                 <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">
                   <div className={cn(
                     "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105",
@@ -406,8 +406,8 @@ function SurveysContent() {
 
                     {showMenuFor === survey.id && (
                       <>
-                        <div className="fixed inset-0 z-[60]" onClick={() => setShowMenuFor(null)} />
-                        <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl border border-gray-100 shadow-xl z-[70] py-1.5 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="fixed inset-0 z-[80]" onClick={() => setShowMenuFor(null)} />
+                        <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl border border-gray-100 shadow-xl z-[90] py-1.5 animate-in fade-in zoom-in-95 duration-200">
                           {survey.status === "creating" && (
                             <>
                               <button
