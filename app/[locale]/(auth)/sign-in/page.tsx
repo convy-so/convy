@@ -25,7 +25,7 @@ export default function SignInPage() {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
-    rememberMe: false,
+    rememberMe: true,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
