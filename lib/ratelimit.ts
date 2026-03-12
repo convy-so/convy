@@ -26,19 +26,21 @@ export const apiRateLimiter = new Ratelimit({
  * Get client IP address from request headers
  */
 export function getClientIP(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0].trim();
+  // 1. Check X-Forwarded-For (Standard for ALB)
+  // AWS ALB appends the client IP to the list: client, proxy1, proxy2...
+  const xForwardedFor = request.headers.get("x-forwarded-for");
+  if (xForwardedFor) {
+    const ips = xForwardedFor.split(",").map((ip) => ip.trim());
+    if (ips.length > 0 && ips[0]) return ips[0];
   }
 
-  const realIP = request.headers.get("x-real-ip");
-  if (realIP) {
-    return realIP;
-  }
+  // 2. Check X-Real-IP (Sometimes set by Nginx or other ingress)
+  const xRealIp = request.headers.get("x-real-ip");
+  if (xRealIp) return xRealIp;
 
+  // 3. Fallback to common CDN headers if applicable
   const cfConnectingIP = request.headers.get("cf-connecting-ip");
-  if (cfConnectingIP) {
-    return cfConnectingIP;
-  }
+  if (cfConnectingIP) return cfConnectingIP;
+
   return "unknown";
-}
+}
