@@ -148,7 +148,7 @@ export default function ProjectsPage() {
           {filteredProjects.map((project) => (
             <div
               key={project.id}
-              className="bg-white rounded-2xl border border-gray-100 hover:border-gray-200 transition-all duration-300"
+              className="bg-white rounded-2xl border border-gray-100 hover:border-gray-200 transition-all duration-300 first:rounded-t-2xl last:rounded-b-2xl"
             >
               {/* Project Header */}
               <div
@@ -200,8 +200,8 @@ export default function ProjectsPage() {
 
                       {showMenuFor === project.id && (
                         <>
-                          <div className="fixed inset-0 z-[60]" onClick={() => setShowMenuFor(null)} />
-                          <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl border border-gray-200 shadow-xl z-[70] py-1">
+                          <div className="fixed inset-0 z-[80]" onClick={() => setShowMenuFor(null)} />
+                          <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl border border-gray-200 shadow-xl z-[90] py-1">
                             <Link
                               href={`/dashboard/projects/${project.id}`}
                               className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
