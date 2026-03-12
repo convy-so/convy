@@ -1,8 +1,16 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import dns from "node:dns";
 
 import { env } from "@/lib/env";
 import * as schema from "./schema";
+
+/**
+ * Configure DNS resolution to prefer IPv4.
+ * This prevents ENETUNREACH errors when connecting to databases (like Supabase)
+ * that have IPv6 records in environments that only support IPv4 (like standard ECS/Fargate).
+ */
+dns.setDefaultResultOrder("ipv4first");
 
 /**
  * Database client management
