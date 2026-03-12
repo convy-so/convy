@@ -28,7 +28,7 @@
     "logConfiguration": {
       "logDriver": "awslogs",
       "options": {
-        "awslogs-group": "/ecs/production-workers",
+        "awslogs-group": "/ecs/convy-workers",
         "awslogs-region": "eu-north-1",
         "awslogs-stream-prefix": "ecs"
       }
