@@ -29,7 +29,7 @@
     "logConfiguration": {
       "logDriver": "awslogs",
       "options": {
-        "awslogs-group": "/ecs/production-websocket",
+        "awslogs-group": "/ecs/convy-websocket",
         "awslogs-region": "eu-north-1",
         "awslogs-stream-prefix": "ecs"
       }
