@@ -1,9 +1,19 @@
 import { Worker, Job } from "bullmq";
 import { Resend } from "resend";
 import { z } from "zod";
+import { render } from "@react-email/render";
+import * as React from "react";
 
 import type { EmailJobData } from "@/lib/queue";
 import { getRedisClient } from "@/lib/redis";
+
+// Email Templates
+import { VerificationEmail } from "@/components/emails/verification";
+import { PasswordResetEmail } from "@/components/emails/password-reset";
+import { WorkspaceInvitationEmail } from "@/components/emails/workspace-invitation";
+import { WorkspaceWelcomeEmail } from "@/components/emails/workspace-welcome";
+import { SecondaryVerificationEmail } from "@/components/emails/secondary-verification";
+import { SurveyDeletedEmail } from "@/components/emails/survey-deleted";
 
 const resend = new Resend(process.env.RESEND_API_KEY!);
 
@@ -39,80 +49,60 @@ const emailWorker = new Worker<EmailJobData>(
     await job.updateProgress(30);
 
     let subject: string;
-    let text: string;
+    let html: string;
 
     if (type === "verification") {
       subject = "Verify your Convyy account";
-      text = [
-        `Hi ${name ?? "there"},`,
-        "",
-        "Please confirm your email address to start using Convyy.",
-        url,
-        "",
-        "If you didn't request this, you can ignore this email.",
-      ].join("\n");
+      html = await render(
+        React.createElement(VerificationEmail, { url, name })
+      );
     } else if (type === "password-reset") {
       subject = "Reset your Convyy password";
-      text = [
-        `Hi ${name ?? "there"},`,
-        "",
-        "You recently requested to reset your Convyy password.",
-        "Click the link below to choose a new one:",
-        url,
-        "",
-        "This link will expire soon. If you didn't request a reset, you can ignore this email.",
-      ].join("\n");
+      html = await render(
+        React.createElement(PasswordResetEmail, { url, name })
+      );
     } else if (type === "workspace-invitation") {
-      const workspaceName =
-        (validatedData.metadata?.workspaceName as string) || "a workspace";
-      const invitedBy =
-        (validatedData.metadata?.invitedBy as string) || "someone";
+      const workspaceName = (validatedData.metadata?.workspaceName as string) || "a workspace";
+      const invitedBy = (validatedData.metadata?.invitedBy as string) || "someone";
       subject = `You've been invited to join ${workspaceName} on Convyy`;
-      text = [
-        `Hi ${name ?? "there"},`,
-        "",
-        `${invitedBy} has invited you to join ${workspaceName} on Convyy.`,
-        "",
-        "Click the link below to accept the invitation:",
-        url,
-        "",
-        "If you didn't expect this invitation, you can ignore this email.",
-      ].join("\n");
+      html = await render(
+        React.createElement(WorkspaceInvitationEmail, {
+          invitedBy,
+          workspaceName,
+          inviteLink: url,
+          name
+        })
+      );
     } else if (type === "workspace-welcome") {
-      const workspaceName =
-        (validatedData.metadata?.workspaceName as string) || "the workspace";
+      const workspaceName = (validatedData.metadata?.workspaceName as string) || "the workspace";
       subject = `Welcome to ${workspaceName} on Convyy`;
-      text = [
-        `Hi ${name ?? "there"},`,
-        "",
-        `You have been added to ${workspaceName} on Convyy.`,
-        "",
-        "Click the link below to access the workspace:",
-        url,
-        "",
-        "We're excited to have you on board!",
-      ].join("\n");
+      html = await render(
+        React.createElement(WorkspaceWelcomeEmail, {
+          workspaceName,
+          url,
+          name
+        })
+      );
     } else if (type === "secondary-verification") {
       subject = "Verify your secondary email address";
-      text = [
-        `Hi ${name ?? "there"},`,
-        "",
-        "Please confirm this email address to add it to your Convyy account.",
-        url,
-        "",
-        "If you didn't request this, you can ignore this email.",
-      ].join("\n");
+      html = await render(
+        React.createElement(SecondaryVerificationEmail, { url, name })
+      );
     } else if (type === "survey-deleted") {
-      const surveyTitle =
-        (validatedData.metadata?.surveyTitle as string) || "your survey";
+      const surveyTitle = (validatedData.metadata?.surveyTitle as string) || "your survey";
+      const deletedBy = (validatedData.metadata?.deletedBy as string) || "someone";
+      const workspaceName = (validatedData.metadata?.workspaceName as string) || "the workspace";
       subject = "Your survey has been deleted";
-      text = [
-        `Hi ${name ?? "there"},`,
-        "",
-        `The survey "${surveyTitle}" has been successfully deleted from your account.`,
-        "",
-        "If you have any questions, feel free to reach out to our support team.",
-      ].join("\n");
+      
+      html = await render(
+        React.createElement(SurveyDeletedEmail, {
+          surveyTitle,
+          deletedBy,
+          workspaceName,
+          url,
+          name
+        })
+      );
     } else {
       throw new Error(`Unknown email type: ${type}`);
     }
@@ -120,10 +110,10 @@ const emailWorker = new Worker<EmailJobData>(
     await job.updateProgress(50);
 
     const result = await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL!,
+      from: process.env.RESEND_FROM_EMAIL || "Convyy <noreply@getconvy.pro>",
       to: email,
       subject,
-      text,
+      html,
     });
 
     if (result.error) {

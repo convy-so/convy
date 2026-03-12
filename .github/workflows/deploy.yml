@@ -32,6 +32,15 @@ on:
       - production
 
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment to deploy'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
 
 # Prevent overlapping deployments on the same branch
 concurrency:
@@ -53,7 +62,7 @@ jobs:
     timeout-minutes: 20
 
     environment:
-      name: ${{ github.ref_name == 'production' && 'Production' || 'Staging' }}
+      name: ${{ (github.ref_name == 'production' || github.event.inputs.environment == 'production') && 'Production' || 'Staging' }}
 
     outputs:
       image_tag: ${{ steps.vars.outputs.IMAGE_TAG }}
@@ -78,11 +87,15 @@ jobs:
         id: vars
         run: |
           SHORT_SHA=$(echo "$GITHUB_SHA" | head -c7)
-          BRANCH="${{ github.ref_name }}"
 
-          # Tag images with commit SHA + environment-specific "latest" tag
-          if [ "$BRANCH" = "production" ]; then
-            ENV_TAG="latest"
+          # Determine environment: branch push OR manual dispatch input
+          BRANCH="${{ github.ref_name }}"
+          MANUAL_ENV="${{ github.event.inputs.environment }}"
+          TARGET_ENV=${MANUAL_ENV:-$BRANCH}
+
+          # Tag images with commit SHA + environment-specific tag
+          if [ "$TARGET_ENV" = "production" ]; then
+            ENV_TAG="production"
             ENV_NAME="Production"
           else
             ENV_TAG="staging"
@@ -155,16 +168,16 @@ jobs:
     # Needs environment secrets (DATABASE_URL) — but no deployment URL
     # so this won't create a noisy "Deployed" entry in the GitHub UI.
     environment:
-      name: ${{ github.ref_name == 'production' && 'Production' || 'Staging' }}
+      name: ${{ (github.ref_name == 'production' || github.event.inputs.environment == 'production') && 'Production' || 'Staging' }}
 
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 22
+      - name: Setup Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -200,10 +213,13 @@ jobs:
     needs: [build-and-push, migrate]
 
     environment:
-      name: ${{ github.ref_name == 'production' && 'Production' || 'Staging' }}
-      url: ${{ github.ref_name == 'production' && 'https://getconvy.pro' || 'https://staging.getconvy.pro' }}
+      name: ${{ (github.ref_name == 'production' || github.event.inputs.environment == 'production') && 'Production' || 'Staging' }}
+      url: ${{ (github.ref_name == 'production' || github.event.inputs.environment == 'production') && 'https://getconvy.pro' || 'https://staging.getconvy.pro' }}
 
     steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -211,12 +227,73 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      - name: Set environment slug
+        id: env
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          MANUAL_ENV="${{ github.event.inputs.environment }}"
+          TARGET_ENV=${MANUAL_ENV:-$BRANCH}
+          if [ "$TARGET_ENV" = "production" ]; then
+            echo "SLUG=production" >> $GITHUB_OUTPUT
+          else
+            echo "SLUG=staging" >> $GITHUB_OUTPUT
+          fi
+
+      # ── Patch image tag in task definitions to use exact commit SHA ──
+      - name: Patch image tag in task definitions
+        run: |
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+          SLUG="${{ steps.env.outputs.SLUG }}"
+          ECR="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com"
+
+          for SERVICE in nextjs websocket workers; do
+            FILE="task-def-${SLUG}-${SERVICE}.json"
+            # Replace the floating :staging/:production tag with the exact SHA tag
+            sed -i "s|${ECR}/convy/${SERVICE}:${SLUG}|${ECR}/convy/${SERVICE}:${IMAGE_TAG}|g" "$FILE"
+            echo "✅ Patched ${FILE} → image tag: ${IMAGE_TAG}"
+          done
+
+      # ── Register task definitions from JSON files ──────────────
+      - name: Register Next.js task definition
+        id: register-nextjs
+        run: |
+          REVISION=$(aws ecs register-task-definition \
+            --cli-input-json file://task-def-${{ steps.env.outputs.SLUG }}-nextjs.json \
+            --region ${{ secrets.AWS_REGION }} \
+            --query "taskDefinition.taskDefinitionArn" \
+            --output text)
+          echo "ARN=${REVISION}" >> $GITHUB_OUTPUT
+          echo "✅ Next.js task definition registered: ${REVISION}"
+
+      - name: Register WebSocket task definition
+        id: register-websocket
+        run: |
+          REVISION=$(aws ecs register-task-definition \
+            --cli-input-json file://task-def-${{ steps.env.outputs.SLUG }}-websocket.json \
+            --region ${{ secrets.AWS_REGION }} \
+            --query "taskDefinition.taskDefinitionArn" \
+            --output text)
+          echo "ARN=${REVISION}" >> $GITHUB_OUTPUT
+          echo "✅ WebSocket task definition registered: ${REVISION}"
+
+      - name: Register Workers task definition
+        id: register-workers
+        run: |
+          REVISION=$(aws ecs register-task-definition \
+            --cli-input-json file://task-def-${{ steps.env.outputs.SLUG }}-workers.json \
+            --region ${{ secrets.AWS_REGION }} \
+            --query "taskDefinition.taskDefinitionArn" \
+            --output text)
+          echo "ARN=${REVISION}" >> $GITHUB_OUTPUT
+          echo "✅ Workers task definition registered: ${REVISION}"
+
+      # ── Deploy each service with its new task definition ───────
       - name: Deploy Next.js service
         run: |
           aws ecs update-service \
             --cluster ${{ secrets.ECS_CLUSTER }} \
             --service ${{ secrets.ECS_SERVICE_NEXTJS }} \
-            --force-new-deployment \
+            --task-definition ${{ steps.register-nextjs.outputs.ARN }} \
             --region ${{ secrets.AWS_REGION }}
           echo "✅ Next.js deployment triggered"
 
@@ -225,7 +302,7 @@ jobs:
           aws ecs update-service \
             --cluster ${{ secrets.ECS_CLUSTER }} \
             --service ${{ secrets.ECS_SERVICE_WEBSOCKET }} \
-            --force-new-deployment \
+            --task-definition ${{ steps.register-websocket.outputs.ARN }} \
             --region ${{ secrets.AWS_REGION }}
           echo "✅ WebSocket deployment triggered"
 
@@ -234,7 +311,7 @@ jobs:
           aws ecs update-service \
             --cluster ${{ secrets.ECS_CLUSTER }} \
             --service ${{ secrets.ECS_SERVICE_WORKERS }} \
-            --force-new-deployment \
+            --task-definition ${{ steps.register-workers.outputs.ARN }} \
             --region ${{ secrets.AWS_REGION }}
           echo "✅ Workers deployment triggered"
 

@@ -908,7 +908,8 @@
     "Landing": {
         "Navbar": {
             "SignIn": "Accedi",
-            "GetStarted": "Inizia"
+            "GetStarted": "Inizia",
+            "Dashboard": "Dashboard"
         },
         "Hero": {
             "Badge": "Moduli 2.0",
