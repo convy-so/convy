@@ -837,7 +837,8 @@
     "Landing": {
         "Navbar": {
             "SignIn": "Sign in",
-            "GetStarted": "Get started"
+            "GetStarted": "Get started",
+            "Dashboard": "Dashboard"
         },
         "Hero": {
             "Badge": "Forms 2.0",
