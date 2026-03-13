@@ -20,6 +20,7 @@
       { "name": "GOOGLE_CLIENT_SECRET",         "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/GOOGLE_CLIENT_SECRET" },
       { "name": "RESEND_API_KEY",               "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/RESEND_API_KEY" },
       { "name": "RESEND_FROM_EMAIL",            "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/RESEND_FROM_EMAIL" },
+      { "name": "OPENAI_API_KEY",               "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/OPENAI_API_KEY" },
       { "name": "GOOGLE_GENERATIVE_AI_API_KEY", "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/GOOGLE_GENERATIVE_AI_AI_API_KEY" },
       { "name": "NEXT_PUBLIC_SUPABASE_URL",     "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/NEXT_PUBLIC_SUPABASE_URL" },
       { "name": "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" },
