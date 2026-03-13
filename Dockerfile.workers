@@ -43,6 +43,7 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="--dns-result-order=ipv4first"
 
 # ── Runtime placeholders ──────────────────────────────────────
 # ECS injects real values from SSM at runtime, overriding these.
