@@ -59,24 +59,24 @@ export async function POST(
 
     if (title) {
       updateData.title = title;
-    } else if (extractedData.title) {
-      updateData.title = extractedData.title;
+    } else if (typeof extractedData.title === "string" && extractedData.title.trim() !== "") {
+      updateData.title = extractedData.title.trim();
     }
 
     if (description !== undefined) {
       updateData.description = description;
-    } else if (extractedData.description) {
-      updateData.description = extractedData.description;
+    } else if (typeof extractedData.description === "string" && extractedData.description.trim() !== "") {
+      updateData.description = extractedData.description.trim();
     }
 
-    if (extractedData.objective?.goal) {
-      updateData.coreObjective = extractedData.objective.goal;
+    if (extractedData.objective && typeof extractedData.objective.goal === "string") {
+      updateData.coreObjective = extractedData.objective.goal.trim();
     }
 
     if (typeof isVoice === "boolean") {
       updateData.isVoice = isVoice;
-    } else if (extractedData.isVoice !== undefined) {
-      updateData.isVoice = extractedData.isVoice;
+    } else if (extractedData.isVoice !== undefined && extractedData.isVoice !== null) {
+      updateData.isVoice = Boolean(extractedData.isVoice);
     }
 
     // Domain nuance and other fields go into expertState
@@ -97,7 +97,11 @@ export async function POST(
     const expertState = (survey.expertState || {}) as Record<string, any>;
 
     for (const field of expertStateFields) {
-      if (extractedData[field] !== undefined) {
+      if (
+        extractedData[field] !== undefined &&
+        extractedData[field] !== null &&
+        typeof extractedData[field] !== "boolean"
+      ) {
         expertState[field] = extractedData[field];
       }
     }
@@ -105,10 +109,36 @@ export async function POST(
     updateData.expertState = expertState;
 
     // Also copy top-level non-expert fields if they exist in extractedData
-    if (extractedData.tone) updateData.tone = extractedData.tone;
-    if (extractedData.requiredQuestions)
-      updateData.requiredQuestions = extractedData.requiredQuestions;
-    if (extractedData.metrics) updateData.metrics = extractedData.metrics;
+    if (typeof extractedData.tone === "string") {
+      const toneLower = extractedData.tone.toLowerCase();
+      if (["formal", "casual", "playful", "empathetic"].includes(toneLower)) {
+        updateData.tone = toneLower;
+      }
+    }
+
+    if (Array.isArray(extractedData.requiredQuestions)) {
+      updateData.requiredQuestions = extractedData.requiredQuestions.filter(
+        (q: any) => typeof q === "string"
+      );
+    } else if (typeof extractedData.requiredQuestions === "string") {
+      updateData.requiredQuestions = [extractedData.requiredQuestions];
+    }
+
+    if (Array.isArray(extractedData.metrics)) {
+      updateData.metrics = extractedData.metrics.filter(
+        (m: any) => typeof m === "string"
+      );
+    } else if (typeof extractedData.metrics === "string") {
+      updateData.metrics = [extractedData.metrics];
+    }
+
+    if (Array.isArray(extractedData.personalInfo)) {
+      updateData.personalInfo = extractedData.personalInfo.filter(
+        (p: any) => typeof p === "string"
+      );
+    } else if (typeof extractedData.personalInfo === "string") {
+      updateData.personalInfo = [extractedData.personalInfo];
+    }
 
     // Update survey with all data
     const [updatedSurvey] = await getDb()
