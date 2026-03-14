@@ -294,15 +294,9 @@ export async function POST(
                 if (Object.keys(newCollectedFlags).length > 0) {
                   const existingCollected = (latestConv.collectedInfo ||
                     {}) as Record<string, boolean>;
-                  const existingExtracted = (latestConv.extractedData ||
-                    {}) as Record<string, any>;
                   dbUpdate.collectedInfo = {
                     ...existingCollected,
                     ...newCollectedFlags,
-                  };
-                  dbUpdate.extractedData = {
-                    ...existingExtracted,
-                    ...stateUpdates,
                   };
                   console.log(
                     "[Create Route] Persisting state_updates:",
