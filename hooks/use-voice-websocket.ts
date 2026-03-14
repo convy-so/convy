@@ -44,6 +44,7 @@ export function useVoiceWebSocket({
   const isPlayingRef = useRef(false);
   const isPlayingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isAgentSpeakingRef = useRef(false); // Gate for local mic gating
+  const lastPlaybackEndTimeRef = useRef<number>(0); // Sync gate for physical playback
 
   // Keep latest callback in ref to avoid stale closures in ws.onmessage
   const onMessageRef = useRef(onMessage);
@@ -346,8 +347,8 @@ export function useVoiceWebSocket({
     // Schedule playback
     const currentTime = audioCtx.currentTime;
     if (nextStartTimeRef.current < currentTime) {
-      // INCREASED JITTER BUFFER: 150ms (0.15) to prevent interruptions/chunks
-      nextStartTimeRef.current = currentTime + 0.15;
+      // INCREASED JITTER BUFFER: 400ms (0.40) to prevent dropping out between network chunks
+      nextStartTimeRef.current = currentTime + 0.40;
     }
 
     if (Math.random() < 0.05) {
@@ -372,6 +373,7 @@ export function useVoiceWebSocket({
         if (audioCtx.currentTime >= nextStartTimeRef.current - 0.1) {
           setIsPlaying(false);
           isPlayingRef.current = false;
+          lastPlaybackEndTimeRef.current = Date.now();
         }
       }, 250);
     };
@@ -439,8 +441,13 @@ export function useVoiceWebSocket({
           wsRef.current?.readyState === WebSocket.OPEN
         ) {
           // Chain of Trust: Audio Egress
-          // Echo Protection: Gate mic audio if AI is actively speaking
-          if (isAgentSpeakingRef.current) {
+          // Echo Protection: Gate mic audio if AI is actively speaking physically OUT of speakers
+          const timeSincePlayback = Date.now() - (lastPlaybackEndTimeRef.current || 0);
+          if (
+            isAgentSpeakingRef.current || 
+            isPlayingRef.current || 
+            (lastPlaybackEndTimeRef.current > 0 && timeSincePlayback < 500)
+          ) {
             return;
           }
 
