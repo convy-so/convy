@@ -17,7 +17,7 @@ import { logUsage } from "@/lib/billing/logger";
 // Configuration constants
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const IDLE_WARNING_MS = 30 * 1000;
-const VAD_INTERRUPT_COOLDOWN_MS = 800; // Ignore VAD immediately after agent starts speaking (echo protection)
+const VAD_INTERRUPT_COOLDOWN_MS = 2500; // Ignore VAD after agent starts speaking (echo protection — prevents AI's own TTS from triggering false interrupts)
 
 /**
  * Base handler for voice sessions using Deepgram's Voice Agent API.
