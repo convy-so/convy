@@ -347,8 +347,9 @@ export function useVoiceWebSocket({
     // Schedule playback
     const currentTime = audioCtx.currentTime;
     if (nextStartTimeRef.current < currentTime) {
-      // INCREASED JITTER BUFFER: 400ms (0.40) to prevent dropping out between network chunks
-      nextStartTimeRef.current = currentTime + 0.40;
+      // Jitter buffer: 150ms (0.15) — enough to smooth WebSocket delivery variance
+      // without adding perceptible latency to AI speech start
+      nextStartTimeRef.current = currentTime + 0.15;
     }
 
     if (Math.random() < 0.05) {
@@ -375,7 +376,7 @@ export function useVoiceWebSocket({
           isPlayingRef.current = false;
           lastPlaybackEndTimeRef.current = Date.now();
         }
-      }, 250);
+      }, 100);
     };
   };
 
@@ -446,7 +447,7 @@ export function useVoiceWebSocket({
           if (
             isAgentSpeakingRef.current || 
             isPlayingRef.current || 
-            (lastPlaybackEndTimeRef.current > 0 && timeSincePlayback < 500)
+            (lastPlaybackEndTimeRef.current > 0 && timeSincePlayback < 150)
           ) {
             return;
           }

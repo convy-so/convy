@@ -514,7 +514,7 @@ export function buildVoiceAgentSettings(options: {
           version: "v1",
           language: "multi",
           smart_format: true,
-          endpointing: 300, // Wait 300ms of silence before endpointing user speech
+          endpointing: 500, // Wait 500ms of silence before endpointing user speech (300ms was too aggressive — caused fragmented transcriptions)
         },
       },
       think: {
