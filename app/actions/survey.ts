@@ -10,6 +10,7 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { getSurveyAccessLevel } from "@/lib/workspace-access";
 import { cache, cacheKeys } from "@/lib/cache";
 import { env } from "@/lib/env";
+import { publishWorkspaceEvent } from "@/lib/redis-events";
 
 type ActionResult<T> =
   | { success: true; data: T }
@@ -95,6 +96,23 @@ export async function updateSurveyAction(
         existingSurvey.organizationId,
       ),
     );
+
+    // Publish event for real-time synchronization
+    if (existingSurvey.organizationId) {
+      publishWorkspaceEvent({
+        type: "SURVEY_UPDATED",
+        workspaceId: existingSurvey.organizationId,
+        userId: session.user.id,
+        userName: session.user.name,
+        data: {
+          id: body.id,
+          title: body.title,
+          language: body.language,
+          participantLimit: body.participantLimit,
+        },
+        timestamp: new Date().toISOString(),
+      }).catch((err) => console.error("Failed to publish survey update event:", err));
+    }
 
     return { success: true, data: { id: body.id } };
   } catch (error) {
@@ -313,13 +331,25 @@ export async function confirmSurveyAction(
       })
       .where(eq(surveys.id, surveyId));
 
-    // Invalidate dashboard cache
-    await cache.delete(
-      cacheKeys.dashboardStats(session.user.id, survey.organizationId),
-    );
     await cache.delete(
       cacheKeys.dashboardRecentSurveys(session.user.id, survey.organizationId),
     );
+
+    // Publish event for real-time synchronization
+    if (survey.organizationId) {
+      publishWorkspaceEvent({
+        type: "SURVEY_UPDATED",
+        workspaceId: survey.organizationId,
+        userId: session.user.id,
+        userName: session.user.name,
+        data: {
+          id: surveyId,
+          status: "active",
+          shareableLink,
+        },
+        timestamp: new Date().toISOString(),
+      }).catch((err) => console.error("Failed to publish survey confirmation event:", err));
+    }
 
     const publicUrl = `/s/${shareableLink}`;
 
@@ -858,16 +888,24 @@ export async function deleteSurveyAction(
     // Cascade delete will handle related table rows
     await getDb().delete(surveys).where(eq(surveys.id, surveyId));
 
-    // Invalidate dashboard cache
-    await cache.delete(
-      cacheKeys.dashboardStats(session.user.id, survey.organizationId),
-    );
-    await cache.delete(
-      cacheKeys.dashboardRecentSurveys(session.user.id, survey.organizationId),
-    );
     await cache.delete(
       cacheKeys.dashboardActivity(session.user.id, survey.organizationId),
     );
+
+    // Publish event for real-time synchronization
+    if (organizationId) {
+      publishWorkspaceEvent({
+        type: "SURVEY_DELETED",
+        workspaceId: organizationId,
+        userId: session.user.id,
+        userName: session.user.name,
+        data: {
+          id: surveyId,
+          title: surveyTitle,
+        },
+        timestamp: new Date().toISOString(),
+      }).catch((err) => console.error("Failed to publish survey deletion event:", err));
+    }
 
     // Send Notifications if in a workspace
     if (organizationId) {
@@ -987,6 +1025,18 @@ export async function duplicateSurveyAction(
       isOwner: true,
       isVoice: newSurvey.isVoice || false,
     };
+
+    // Publish event for real-time synchronization
+    if (existingSurvey.organizationId) {
+      publishWorkspaceEvent({
+        type: "SURVEY_CREATED",
+        workspaceId: existingSurvey.organizationId,
+        userId: session.user.id,
+        userName: session.user.name,
+        data: formattedSurvey,
+        timestamp: now.toISOString(),
+      }).catch((err) => console.error("Failed to publish survey duplication event:", err));
+    }
 
     return {
       success: true,

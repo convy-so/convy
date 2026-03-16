@@ -34,8 +34,8 @@ export abstract class BaseVoiceAgentHandler {
   protected initialDirective: string | null = null;
 
   // Attribution for billing
-  protected surveyId?: string;
-  protected organizationId?: string | null;
+  public surveyId: string | null | undefined;
+  protected organizationId: string | null | undefined;
 
   // Voice Agent connection
   protected voiceAgent: DeepgramVoiceAgentConnection | null = null;
@@ -388,7 +388,7 @@ export abstract class BaseVoiceAgentHandler {
 
   // ── Helpers ────────────────────────────────────────────────────────────
 
-  protected send(data: any): void {
+  public send(data: any): void {
     if (this.ws.readyState === WebSocket.OPEN) {
       if (data.type !== "audio" && data.type !== "pong") {
         if (data.type === "error") {
@@ -461,7 +461,7 @@ export abstract class BaseVoiceAgentHandler {
         logUsage({
           userId: this.userId,
           organizationId: this.organizationId || undefined,
-          surveyId: this.surveyId,
+          surveyId: this.surveyId || undefined,
           type: "voice_session",
           provider: "deepgram",
           modelName: "voice-agent-v1",

@@ -110,6 +110,17 @@ const surveyCreationExtractionWorker =
         .set({ extractedData, collectedInfo })
         .where(eq(surveyCreationConversations.surveyId, surveyId));
 
+      // Publish event to notify active voice handlers for real-time state sync
+      const redis = getRedisClient();
+      await redis.publish(
+        `survey:creation:events:${surveyId}`,
+        JSON.stringify({
+          type: "state_updated",
+          collectedInfo,
+          extractedData,
+        }),
+      );
+
       await job.updateProgress(100);
 
       console.log(

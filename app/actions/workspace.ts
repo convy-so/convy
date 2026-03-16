@@ -11,6 +11,9 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
 import { organizations, members, invitations, users } from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
+import { isWorkspaceOwner, isWorkspaceMember } from "@/lib/workspace-access";
+import { cache, cacheKeys } from "@/lib/cache";
+import { publishWorkspaceEvent } from "@/lib/redis-events";
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -452,7 +455,16 @@ export async function updateWorkspace(data: {
   logo?: string;
 }): Promise<ActionResult<void>> {
   try {
-    await getVerifiedSession();
+    const session = await getVerifiedSession();
+
+    // Enforce owner-only access
+    const isOwner = await isWorkspaceOwner(
+      session.user.id,
+      data.organizationId,
+    );
+    if (!isOwner) {
+      return { success: false, error: "Unauthorized: Owner access required" };
+    }
 
     // Use Better Auth API to update organization
     await auth.api.updateOrganization({
@@ -466,6 +478,20 @@ export async function updateWorkspace(data: {
       },
       headers: await getSessionHeaders(),
     });
+
+    // Publish event for real-time synchronization
+    publishWorkspaceEvent({
+      type: "WORKSPACE_UPDATED",
+      workspaceId: data.organizationId,
+      userId: session.user.id,
+      userName: session.user.name,
+      data: {
+        name: data.name,
+        slug: data.slug,
+        logo: data.logo,
+      },
+      timestamp: new Date().toISOString(),
+    }).catch((err: unknown) => console.error("Failed to publish workspace update event:", err));
 
     return {
       success: true,

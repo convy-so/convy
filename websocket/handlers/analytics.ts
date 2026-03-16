@@ -214,7 +214,7 @@ export class AnalyticsHandler {
   /**
    * Send message to WebSocket client
    */
-  private send(message: AnalyticsMessage): void {
+  public send(message: AnalyticsMessage): void {
     if (this.isActive && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(JSON.stringify(message));

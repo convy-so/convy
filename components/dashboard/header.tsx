@@ -16,6 +16,7 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { ClientT } from "@/components/i18n/client-t";
 import { ActiveUsers } from "./active-users";
 import { fetchActiveWorkspace } from "@/lib/api/workspace";
+import { WorkspaceNotifications } from "./workspace-notifications";
 
 interface DashboardHeaderProps {
   user?: User | null;
@@ -74,6 +75,7 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
 
   return (
     <header className="h-16 border-b border-[#EAEAEA] bg-white pl-16 pr-6 lg:px-6 flex items-center justify-between sticky top-0 z-10 transition-all duration-300">
+      {activeWorkspace && <WorkspaceNotifications workspaceId={activeWorkspace.id} />}
       <div className="flex items-center gap-4 lg:hidden">
         <span className="font-semibold text-[#292929]">Convyy</span>
       </div>
