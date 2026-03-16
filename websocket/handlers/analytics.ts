@@ -65,7 +65,10 @@ export class AnalyticsHandler {
         return;
       }
 
-      if (survey.userId !== this.userId && this.userRole !== "admin") {
+      const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
+      const accessLevel = await getSurveyAccessLevel(this.userId, this.surveyId);
+
+      if (accessLevel === "none") {
         this.send({
           type: "error",
           error: "Unauthorized access to survey",

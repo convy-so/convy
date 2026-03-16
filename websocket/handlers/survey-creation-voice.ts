@@ -22,6 +22,7 @@ import {
   type FunctionCallRequestEvent,
   type ConversationTextEvent,
 } from "@/lib/voice/deepgram-voice-agent";
+import { RedisStreamManager } from "@/lib/redis-stream-manager";
 
 interface CreationState {
   surveyId: string | null;
@@ -40,11 +41,14 @@ interface CreationState {
 }
 
 export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
+  public surveyId: string | null = null;
   private state: CreationState;
   private sessionStartTime: number = Date.now();
+  private streamManager: RedisStreamManager;
 
   constructor(connection: AuthenticatedConnection) {
     super(connection.ws, `creation-${connection.userId}`, connection.userId);
+    this.streamManager = new RedisStreamManager();
 
     this.state = {
       surveyId: null,
@@ -397,6 +401,39 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
     );
     await this.saveConversation();
 
+    // Zero-Loss Broadcast: Append to Redis Stream for collaborators
+    if (this.state.surveyId) {
+      this.surveyId = this.state.surveyId; // Sync public surveyId
+      const streamKey = `stream:survey_creation:${this.state.surveyId}`;
+      const eventData = {
+        type: "conversation_text",
+        role: event.role,
+        content: event.content,
+        userId: this.userId,
+        timestamp: now.toISOString(),
+        connectionId: this.identifier, // Use identifier to ignore echo on sender side
+      };
+
+      const messageId = await this.streamManager.appendEvent(
+        streamKey,
+        eventData,
+      );
+      console.log(
+        `[ChainOfTrust] [Server:Creation] 📡 Event appended to stream: ${streamKey} (ID: ${messageId})`,
+      );
+
+      // Hybrid Broadcast: Publish to Pub/Sub for immediate notification across servers
+      const pubsubChannel = `survey:creation:events:${this.state.surveyId}`;
+      const redis = this.streamManager.client;
+      await redis.publish(
+        pubsubChannel,
+        JSON.stringify({
+          ...eventData,
+          streamId: messageId,
+        }),
+      );
+    }
+
     // Trigger extraction after assistant messages
     if (event.role === "assistant") {
       this.performExtraction().catch(console.error);
@@ -415,6 +452,32 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
             `[ChainOfTrust] [Server:Creation] 📂 Loading existing state from DB...`,
           );
           await this.loadExistingState();
+
+          // Catch-up: Replay missed events from stream if client provides lastEventId
+          if (message.lastEventId && this.state.surveyId) {
+            const streamKey = `stream:survey_creation:${this.state.surveyId}`;
+            console.log(
+              `[ChainOfTrust] [Server:Creation] 🔄 Catching up from event ID: ${message.lastEventId}`,
+            );
+            const missedEvents = await this.streamManager.readEvents(
+              streamKey,
+              message.lastEventId,
+            );
+            if (missedEvents.length > 0) {
+              console.log(
+                `[ChainOfTrust] [Server:Creation] 🕒 Found ${missedEvents.length} missed events. Replaying...`,
+              );
+              for (const event of missedEvents) {
+                // Only send to this specific connection
+                this.send({
+                  ...event.data,
+                  streamId: event.id,
+                  isReplay: true,
+                });
+              }
+            }
+          }
+
           console.log(
             `[ChainOfTrust] [Server:Creation] 📤 State loaded. History: ${this.state.messages.length} msgs. Sending 'survey_state_loaded'.`,
           );
@@ -422,7 +485,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
           this.send({ type: "survey_state_loaded" });
         } catch (error) {
           console.error(
-            `[ChainOfTrust] [Server:Creation] ❌ Error loading state:`,
+            `[ChainOfTrust] [Server:Creation] ❌ Error loading state/catch-up:`,
             error,
           );
           this.sendError("Failed to load survey state");

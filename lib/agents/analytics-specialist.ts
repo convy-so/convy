@@ -11,6 +11,7 @@ import type { AgentContext, SpecialistChecklist } from "./types";
 import type { SurveyConfig } from "@/lib/prompts";
 import { analysisModel, defaultModel } from "@/lib/ai";
 import { logUsage } from "@/lib/billing/logger";
+import { evaluateResponse } from "@/lib/rag/evaluate";
 
 export class AnalyticsSpecialist extends BaseSpecialistAgent {
   constructor(context: AgentContext) {
@@ -110,6 +111,13 @@ ${this.getKnowledgeSection()}
 4. THE "WHY" FACTOR: Don't just report numbers. Use the qualitative responses to explain WHY a metric is high or low.
 </proactive_insight_rules>
 
+<grounding_rules>
+1. SOURCE CONSTRAINT: You may ONLY base your claims on the specific survey response excerpts provided in the context blocks from your tools. You may not supplement with general knowledge.
+2. STRICT CITATION: EVERY analytical claim must end with a citation to the specific source chunk used, formatted exactly as [Source ID: <id>]. Vague references like "several respondents mentioned" without source IDs are FORBIDDEN.
+3. UNCERTAINTY ACKNOWLEDGMENT: If the retrieved data is insufficient to answer a metric or question, you MUST explicitly state: "The provided survey responses do not contain sufficient evidence to address this." Do not guess or generate plausible text.
+4. SCOPE AWARENESS: Do not generalize findings beyond the evidence. If only a specific sub-group reported something, specify that sub-group.
+</grounding_rules>
+
 <completion_protocol>
 1. Final output must be professional, structured, and free of conversational filler. 
 2. Ensure every REQUIRED checklist item is addressed in the final report.
@@ -123,20 +131,53 @@ ${this.getKnowledgeSection()}
   // --------------------------------------------------------------------------
 
   async generate(prompt: string): Promise<string> {
-    const { text } = await generateText({
+    const result = await generateText({
       model: analysisModel,
       system: this.buildSystemPrompt(),
       prompt,
       temperature: 0.1, // Lower temperature for more consistent analysis
+      tools: this.getTools(),
+      stopWhen: stepCountIs(3),
     });
-    return text;
+    
+    // LAYER 6: Evaluation Triad (Synchronous Gate)
+    // Extract retrieved context from tool results
+    let retrievedContexts: string[] = [];
+    
+    // Define schema for tool output validation - flexible but type-safe
+    const searchResultsSchema = z.object({
+      results: z.array(z.object({
+        content: z.string(),
+      }).passthrough()),
+    }).passthrough();
+
+    if (result.toolResults) {
+      for (const res of result.toolResults) {
+        if (res.toolName === "searchSurveyData") {
+          const parsed = searchResultsSchema.safeParse(res.output);
+          if (parsed.success) {
+            retrievedContexts.push(...parsed.data.results.map((r) => r.content));
+          }
+        }
+      }
+    }
+    
+    // If we used RAG, evaluate the response
+    if (retrievedContexts.length > 0) {
+      const evaluation = await evaluateResponse(prompt, retrievedContexts, result.text);
+      if (!evaluation.isGrounded) {
+        return "I'm sorry, but I do not have sufficient evidence in the retrieved survey results to provide a fully grounded answer to this objective. Please adjust your query or review the raw responses directly.";
+      }
+    }
+
+    return result.text;
   }
 
   // --------------------------------------------------------------------------
   // Agent Tools
   // --------------------------------------------------------------------------
 
-  getTools(): Record<string, any> {
+  getTools() {
     const config = this.context.surveyConfig;
     const surveyId = config?.id;
 
@@ -161,10 +202,10 @@ ${this.getKnowledgeSection()}
         inputSchema: z.object({ query: z.string().describe("Search query.") }),
         execute: async ({ query }) => {
           if (!surveyId) return { error: "No survey ID available" };
-          const { hybridSearch } = await import("@/lib/rag/search");
-          const results = await hybridSearch(
+          const { executeRAGQuery } = await import("@/lib/rag/search");
+          const results = await executeRAGQuery(
             query,
-            { surveyId, limit: 10 },
+            { surveyId, organizationId: this.context.organizationId, limit: 20 },
             (this.context.language as any) || "en",
           );
           return {

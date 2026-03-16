@@ -36,6 +36,7 @@ import { clientEnv } from "@/lib/env.client";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { uploadSurveyMediaAction } from "@/app/actions/survey-media";
 import { CollaborationSidebar } from "@/components/surveys/collaboration-sidebar";
+import { ActiveUsers } from "@/components/dashboard/active-users";
 
 
 
@@ -81,6 +82,7 @@ function CreateSurveyContent() {
   const [isOwner, setIsOwner] = useState(false);
   const [collaborators, setCollaborators] = useState<string[]>([]);
   const [orgId, setOrgId] = useState<string | null>(null);
+  const [isCollaborationOpen, setIsCollaborationOpen] = useState(false);
 
   const handleStart = async () => {
     // 1. Optimistic UI: Immediately show loading state
@@ -299,10 +301,16 @@ function CreateSurveyContent() {
         console.log("[ChainOfTrust] [Server] Previous survey state successfully restored into handler.");
         setSurveyStateLoaded(true);
       } else if (data.type === "conversation_text") {
-        const { role, content } = data;
-        console.log(`[ChainOfTrust] [Server] Appending ${role} message to UI: ${content.substring(0, 30)}...`);
+        const { role, content, streamId } = data;
+        console.log(`[ChainOfTrust] [Server] Appending ${role} message to UI: ${content.substring(0, 30)}... (StreamID: ${streamId})`);
         const now = Date.now();
         setMessages((prev: UIMessage[]) => {
+          // Prevention of duplicates using streamId
+          if (streamId && prev.some(m => m.id === streamId)) {
+            console.log(`[ChainOfTrust] [UI] 🛡️ Ignored duplicate message with StreamID: ${streamId}`);
+            return prev;
+          }
+
           const lastMessage = prev[prev.length - 1];
           // Use a smaller threshold or no threshold for Voice Agent unified events to ensure clarity
           // but reuse the merge logic for consistency
@@ -324,7 +332,7 @@ function CreateSurveyContent() {
           }
 
           const newMessage: UIMessage = {
-            id: Date.now().toString(),
+            id: streamId || Date.now().toString(),
             role: role as "user" | "assistant",
             displayedContent: content,
             isTyping: false,
@@ -405,8 +413,12 @@ function CreateSurveyContent() {
   // Effect to sync surveyId with WebSocket - ONLY when server is ready
   useEffect(() => {
     if (surveyId && voiceWs.status === "connected" && isServerReady) {
-      console.log("[ChainOfTrust] [UI] Server ready. Sending survey ID initialization:", surveyId);
-      voiceWs.sendJson({ type: "set_survey_id", surveyId });
+      console.log("[ChainOfTrust] [UI] Server ready. Sending survey ID initialization:", surveyId, "LastEventID:", voiceWs.lastEventId);
+      voiceWs.sendJson({ 
+        type: "set_survey_id", 
+        surveyId,
+        lastEventId: voiceWs.lastEventId 
+      });
     }
   }, [surveyId, voiceWs.status, isServerReady]);
 
@@ -980,7 +992,21 @@ function CreateSurveyContent() {
               </>
             )}
 
-            <div className="flex items-center gap-2 w-full sm:w-auto mt-4 sm:mt-0" />
+            <div className="flex items-center gap-4 w-full sm:w-auto mt-4 sm:mt-0">
+              {surveyId && orgId && (
+                <div 
+                  className="flex items-center gap-3 bg-gray-50 hover:bg-gray-100 border border-gray-100 rounded-2xl px-3 py-1.5 transition-all cursor-pointer group"
+                  onClick={() => setIsCollaborationOpen(true)}
+                >
+                  <ActiveUsers workspaceId={orgId} surveyId={surveyId} className="scale-90" />
+                  <div className="h-4 w-px bg-gray-200" />
+                  <button className="flex items-center gap-2 text-sm font-semibold text-gray-600 group-hover:text-indigo-600 transition-colors">
+                    <Users className="w-4 h-4" />
+                    <ClientT>Collaborate</ClientT>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
 
@@ -1692,6 +1718,8 @@ function CreateSurveyContent() {
               surveyId={surveyId}
               isOwner={isOwner}
               collaborators={collaborators}
+              isOpen={isCollaborationOpen}
+              onClose={() => setIsCollaborationOpen(false)}
             />
           )}
         </div>

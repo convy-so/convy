@@ -31,6 +31,9 @@ export function useVoiceWebSocket({
   const micEnabledRef = useRef(false);
   const [isMicEnabled, setIsMicEnabled] = useState(false);
 
+  const [lastEventId, setLastEventId] = useState<string | null>(null);
+  const lastEventIdRef = useRef<string | null>(null);
+
   const [error, setError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -45,6 +48,11 @@ export function useVoiceWebSocket({
   const isPlayingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isAgentSpeakingRef = useRef(false); // Gate for local mic gating
   const lastPlaybackEndTimeRef = useRef<number>(0); // Sync gate for physical playback
+
+  // Update refs
+  useEffect(() => {
+    lastEventIdRef.current = lastEventId;
+  }, [lastEventId]);
 
   // Keep latest callback in ref to avoid stale closures in ws.onmessage
   const onMessageRef = useRef(onMessage);
@@ -145,6 +153,20 @@ export function useVoiceWebSocket({
       } else {
         try {
           const data = JSON.parse(event.data);
+
+          // Zero-Loss: Track latest event ID for catch-up
+          if (data.streamId) {
+            setLastEventId(data.streamId);
+          }
+
+          // Suppress echoes from our own connection
+          if (data.connectionId === `creation-${wsRef.current?.url.split("token=")[0]}`) {
+            // Identifier logic in handler is `creation-${connection.userId}`
+            // We don't have direct access to userId here easily, but handler uses it.
+            // Actually, we can check if it's a replay or a new event.
+            // For now, let's just log and process, as page logic should handle duplicates.
+          }
+
           console.log(
             `[ChainOfTrust] [Hook] 📥 Received JSON (${data.type})`,
             data,
@@ -572,5 +594,6 @@ export function useVoiceWebSocket({
     enableMic,
     disableMic,
     hasAudioPlayed,
+    lastEventId,
   };
 }
