@@ -5,6 +5,7 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
 import { getTimeBasedGreeting } from "@/lib/greetings";
+import { publishWorkspaceEvent } from "@/lib/redis-events";
 
 /**
  * Get all surveys for the authenticated user
@@ -187,6 +188,24 @@ export async function POST(request: Request) {
         },
       });
     });
+
+    // Publish event for real-time synchronization if in a workspace
+    if (activeOrgId && survey) {
+      publishWorkspaceEvent({
+        type: "SURVEY_CREATED",
+        workspaceId: activeOrgId,
+        userId: session.user.id,
+        userName: session.user.name,
+        data: {
+          id: survey.id,
+          title: survey.title,
+          status: survey.status,
+          isVoice: survey.isVoice,
+          createdAt: survey.createdAt,
+        },
+        timestamp: now.toISOString(),
+      }).catch((err) => console.error("Failed to publish survey creation event:", err));
+    }
 
     return NextResponse.json(survey);
   } catch (error) {

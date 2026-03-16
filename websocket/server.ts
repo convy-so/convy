@@ -593,6 +593,7 @@ function initializeRedisSubscriber(): void {
     redisSubscriber.psubscribe("analytics:complete:*:*");
     redisSubscriber.psubscribe("pubsub:presence:*");
     redisSubscriber.psubscribe("survey:creation:events:*");
+    redisSubscriber.psubscribe("pubsub:workspace:*");
 
     redisSubscriber.on("pmessage", async (pattern, channel, message) => {
       try {
@@ -610,18 +611,37 @@ function initializeRedisSubscriber(): void {
           const data = JSON.parse(message);
 
           for (const [key, handler] of presenceConnections.entries()) {
-            if (key.includes(`:${workspaceId}`)) {
-              (handler as any).send(data);
+            const parts = key.split(":");
+            if (parts[1] === workspaceId) {
+              handler.send(data);
+            }
+          }
+        } else if (channel.startsWith("pubsub:workspace:")) {
+          const workspaceId = channel.split(":")[2];
+          const data = JSON.parse(message);
+
+          // Forward workspace events (survey created, etc.) to all presence connections in that workspace
+          for (const [key, handler] of presenceConnections.entries()) {
+            const parts = key.split(":");
+            if (parts[1] === workspaceId) {
+              handler.send(data);
             }
           }
         } else if (channel.startsWith("survey:creation:events:")) {
           const surveyId = channel.split(":")[3];
           const data = JSON.parse(message);
 
-          for (const [id, connection] of activeConnections.entries()) {
+          for (const connection of activeConnections.values()) {
             const handler = connection.handler;
-            if (handler && (handler as any).surveyId === surveyId) {
-              (handler as any).send(data);
+            // Type-safe check: AnalyticsHandler and voice handlers have surveyId and send()
+            if (
+              handler &&
+              "surveyId" in handler &&
+              handler.surveyId === surveyId &&
+              "send" in handler &&
+              typeof handler.send === "function"
+            ) {
+              handler.send(data);
             }
           }
         }

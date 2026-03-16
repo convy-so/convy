@@ -23,6 +23,33 @@ import {
   type ConversationTextEvent,
 } from "@/lib/voice/deepgram-voice-agent";
 import { RedisStreamManager } from "@/lib/redis-stream-manager";
+import { getSurveyAccessLevel } from "@/lib/workspace-access";
+
+interface ExtractedSurveyData {
+  information?: string;
+  requiredQuestions?: string[];
+  metrics?: string[];
+  domainId?: string | number;
+  summaryOfWhatWeKnow?: string;
+  objective?: {
+    goal: string;
+    context: string | null;
+    decision: string | null;
+    subjectDomain?: string | null;
+    subjectDescription?: string;
+  };
+  targetAudience?: {
+    description: string;
+    relationship: string;
+    knowledgeLevel: string;
+  };
+  scope?: {
+    breadthVsDepth: "broad" | "deep" | "balanced";
+    mainTopics: string[];
+    boundaries: string;
+  };
+  [key: string]: any; // Allow for other fields from extraction schema
+}
 
 interface CreationState {
   surveyId: string | null;
@@ -35,13 +62,12 @@ interface CreationState {
   collectedInfo: CollectedInfo;
   isProcessing: boolean;
   language: SupportedLanguage;
-  extractedData: any;
+  extractedData: ExtractedSurveyData | null;
   /** Timestamp of the last extraction call — used to enforce cooldown */
   lastExtractionAt: number;
 }
 
 export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
-  public surveyId: string | null = null;
   private state: CreationState;
   private sessionStartTime: number = Date.now();
   private streamManager: RedisStreamManager;
@@ -72,7 +98,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       },
       isProcessing: false,
       language: "en",
-      extractedData: null as any,
+      extractedData: null as ExtractedSurveyData | null,
       lastExtractionAt: 0,
     };
   }
@@ -154,7 +180,9 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       requiredQuestions: this.state.extractedData?.requiredQuestions || [],
       metrics: this.state.extractedData?.metrics || [],
       language: this.state.language,
-      domainId: this.state.extractedData?.domainId,
+      domainId: this.state.extractedData?.domainId
+        ? Number(this.state.extractedData.domainId)
+        : undefined,
       expertState: {
         objective: this.state.extractedData?.objective,
         targetAudience: this.state.extractedData?.targetAudience,
@@ -403,7 +431,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
 
     // Zero-Loss Broadcast: Append to Redis Stream for collaborators
     if (this.state.surveyId) {
-      this.surveyId = this.state.surveyId; // Sync public surveyId
+      this.surveyId = this.state.surveyId; // Sync public surveyId for billing/base class
       const streamKey = `stream:survey_creation:${this.state.surveyId}`;
       const eventData = {
         type: "conversation_text",
@@ -446,8 +474,18 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
         console.log(
           `[ChainOfTrust] [Server:Creation] 📥 Received 'set_survey_id': ${message.surveyId}`,
         );
-        this.state.surveyId = message.surveyId;
+        
         try {
+          // Check permissions
+          const access = await getSurveyAccessLevel(this.userId!, message.surveyId);
+          if (access !== "owner" && access !== "editor") {
+            console.error(`[SurveyCreationVoiceHandler] Unauthorized access for user ${this.userId} to survey ${message.surveyId}`);
+            this.send({ type: "error", error: "Unauthorized: Editor access required" });
+            return;
+          }
+
+          this.state.surveyId = message.surveyId;
+
           console.log(
             `[ChainOfTrust] [Server:Creation] 📂 Loading existing state from DB...`,
           );

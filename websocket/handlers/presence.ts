@@ -1,6 +1,9 @@
 import { WebSocket } from "ws";
 import { AuthenticatedConnection } from "../middleware/auth";
 import { getRedisClient, getRedisSubscriber } from "@/lib/redis";
+import { getDb } from "@/db";
+import { users } from "@/db/schema/auth";
+import { eq } from "drizzle-orm";
 
 /**
  * WebSocket Handler for Real-Time Presence
@@ -30,7 +33,7 @@ export class PresenceHandler {
   private ws: WebSocket;
   private userId: string;
   private workspaceId: string;
-  private surveyId?: string;
+  public surveyId?: string;
   private isActive: boolean = true;
   private redisClient = getRedisClient();
   private redisSubscriber = getRedisSubscriber();
@@ -50,27 +53,45 @@ export class PresenceHandler {
 
   async initialize(): Promise<void> {
     try {
-      // 1. Join the presence set in Redis
+      // 1. Fetch user data
+      const [userData] = await getDb()
+        .select({ name: users.name, image: users.image })
+        .from(users)
+        .where(eq(users.id, this.userId));
+
+      const name = userData?.name || "User";
+      const image = userData?.image || null;
+
+      // 2. Store metadata in Redis for other members to see
+      await this.redisClient.hset(
+        `user:metadata:${this.userId}`,
+        "name", name,
+        "image", image || ""
+      );
+      await this.redisClient.expire(`user:metadata:${this.userId}`, 3600); // 1 hour cache
+
+      // 3. Join the presence set in Redis
       await this.updatePresence();
 
-      // 2. Broadcast "joined" event to others
+      // 4. Broadcast "joined" event to others
       await this.broadcast({
         type: "user_joined",
         workspaceId: this.workspaceId,
         surveyId: this.surveyId,
         user: {
           userId: this.userId,
-          name: "User", // Ideally fetch from DB or session
+          name,
+          image,
         }
       });
 
       // 3. Send initial state to the user
-      const users = await this.getActiveUsers();
+      const activeUsers = await this.getActiveUsers();
       this.send({
         type: "connected",
         workspaceId: this.workspaceId,
         surveyId: this.surveyId,
-        users
+        users: activeUsers
       });
 
       console.log(`[Presence Handler] User ${this.userId} joined ${this.workspaceId}${this.surveyId ? ` / ${this.surveyId}` : ""}`);
@@ -98,12 +119,20 @@ export class PresenceHandler {
 
     const userIds = await this.redisClient.zrange(key, 0, -1);
     
-    // In a real app, we'd fetch user details from DB or cache
-    return userIds.map(id => ({
-      userId: id,
-      name: id === this.userId ? "You" : `User ${id.substring(0, 4)}`,
-      lastActive: now
-    }));
+    // Fetch metadata for all active users
+    const usersWithMeta = await Promise.all(
+      userIds.map(async (id) => {
+        const meta = await this.redisClient.hgetall(`user:metadata:${id}`);
+        return {
+          userId: id,
+          name: meta.name || `User ${id.substring(0, 4)}`,
+          image: meta.image || null,
+          lastActive: now
+        };
+      })
+    );
+
+    return usersWithMeta;
   }
 
   private getPresenceKey(): string {
@@ -145,7 +174,7 @@ export class PresenceHandler {
     await this.redisClient.publish(channel, JSON.stringify(message));
   }
 
-  private send(message: PresenceMessage): void {
+  public send(message: PresenceMessage): void {
     if (this.isActive && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
     }
