@@ -23,7 +23,7 @@ export async function normalizeMessages(
 
 export const GEMINI_FLASH_LITE_ID = "gemini-2.5-flash-lite";
 export const GEMINI_FLASH_ID = "gemini-2.5-flash";
-export const GEMINI_FLASH_STABLE_ID = "gemini-2.0-flash";
+export const GEMINI_FLASH_STABLE_ID = "gemini-2.5-flash"; // Migrated from 2.0
 export const GPT_4_1_MINI_ID = "gpt-4.1-mini";
 
 export const flashLiteModel = google(GEMINI_FLASH_LITE_ID);

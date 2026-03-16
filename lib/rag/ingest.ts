@@ -4,6 +4,8 @@ import { surveyConversations, surveyAnalytics } from "@/db/schema/surveys";
 import { eq } from "drizzle-orm";
 import { generateEmbedding, chunkText } from "./embeddings";
 import { nanoid } from "nanoid";
+import { generateText } from "ai";
+import { flashLiteModel } from "@/lib/ai";
 
 export interface KnowledgeEntry {
   domainId?: number;
@@ -27,19 +29,28 @@ export async function ingestConversation(
 
   if (!conversation || !conversation.insights) return;
 
-  // 1. Chunk and embed the conversation transcript
-  // We'll format it as a dialogue
+  const organizationId = conversation.survey.organizationId;
+  if (!organizationId) {
+    console.warn(`[Ingestion] Rejecting conversation ${conversation.id}: Missing organizationId for strict metadata filtering.`);
+    return; // Strict metadata validation per spec
+  }
+
   const transcript = (conversation.rawConversation as any[])
     .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
     .join("\n\n");
 
-  const chunks = chunkText(transcript, { maxTokens: 512, overlap: 50 });
+  const surveyInfo = `Survey Title: ${conversation.survey.title}\nSurvey Objective: ${conversation.survey.coreObjective || conversation.survey.description || "N/A"}\nParticipant ID: ${conversation.participantId || "Anonymous"}`;
 
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    const embedding = await generateEmbedding(chunk, {
+  // 1. Generate and embed Respondent Summary
+  try {
+    const { text: respondentSummary } = await generateText({
+      model: flashLiteModel,
+      prompt: `Based on the following survey interview transcript, write a concise summary (3-5 sentences) of this specific respondent's overall perspective, experience, and key feedback.\n\nSurvey Context:\n${surveyInfo}\n\nTranscript:\n${transcript}`,
+    });
+
+    const summaryEmbedding = await generateEmbedding(respondentSummary, {
       surveyId: conversation.surveyId,
-      organizationId: conversation.survey.organizationId || undefined,
+      organizationId,
     });
 
     await getDb().insert(documentEmbeddings).values({
@@ -47,16 +58,69 @@ export async function ingestConversation(
       surveyId: conversation.surveyId,
       sourceType: "response",
       sourceId: conversation.id,
-      chunkIndex: i,
-      content: chunk,
+      chunkIndex: -1, 
+      content: respondentSummary,
       metadata: {
+        chunkType: "respondent_summary",
+        organizationId,
         participantId: conversation.participantId,
         date: conversation.createdAt.toISOString(),
-        language:
-          conversation.originalLanguage || conversation.survey.language || "en",
+        language: conversation.originalLanguage || conversation.survey.language || "en",
       },
-      embedding,
+      embedding: summaryEmbedding,
     });
+  } catch (error) {
+    console.error("Failed to generate respondent summary chunk:", error);
+  }
+
+  // 2. Process Contextualized QA Pairs
+  let lastQuestion = "";
+  let chunkIndex = 0;
+  for (const msg of conversation.rawConversation as any[]) {
+    if (msg.role === "assistant") {
+      lastQuestion = msg.content;
+    } else if (msg.role === "user") {
+      const answer = msg.content;
+      
+      try {
+        const { text: contextPrefix } = await generateText({
+          model: flashLiteModel,
+          prompt: `Write 1-2 sentences of context to prepend to the respondent's answer so it makes sense in isolation.
+Survey: ${conversation.survey.title}
+Question asked: "${lastQuestion}"
+Respondent's Answer: "${answer}"
+
+Just write the contextual prefix (e.g., "In response to a question about X in the Y survey, the respondent stated that..."). Do not include the actual answer itself, just the prefix.`,
+        });
+
+        const contextualizedChunk = `${contextPrefix}\n\nRespondent's Answer: ${answer}`;
+        
+        const embedding = await generateEmbedding(contextualizedChunk, {
+          surveyId: conversation.surveyId,
+          organizationId,
+        });
+
+        await getDb().insert(documentEmbeddings).values({
+          id: nanoid(),
+          surveyId: conversation.surveyId,
+          sourceType: "response",
+          sourceId: conversation.id,
+          chunkIndex: chunkIndex++,
+          content: contextualizedChunk,
+          metadata: {
+            chunkType: "qa_pair",
+            organizationId,
+            question: lastQuestion,
+            participantId: conversation.participantId,
+            date: conversation.createdAt.toISOString(),
+            language: conversation.originalLanguage || conversation.survey.language || "en",
+          },
+          embedding,
+        });
+      } catch (error) {
+        console.error("Failed to process QA chunk:", error);
+      }
+    }
   }
 
   // 2. Embed the insights
@@ -78,6 +142,7 @@ export async function ingestConversation(
       chunkIndex: i,
       content: chunk,
       metadata: {
+        organizationId,
         conversationId: conversation.id,
         language:
           conversation.originalLanguage || conversation.survey.language || "en",

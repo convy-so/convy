@@ -3,8 +3,13 @@ import { documentEmbeddings, knowledgeBase } from "@/db/schema/vectors";
 import { generateEmbedding } from "./embeddings";
 import { and, desc, eq, gt, sql, inArray } from "drizzle-orm";
 import { SupportedLanguage } from "../translation-service";
+import { generateText, Output } from "ai";
+import { flashLiteModel } from "../ai";
+import { z } from "zod";
+import { rerank } from "./reranker";
 
 export interface SearchFilters {
+  organizationId?: string;
   surveyId?: string;
   sourceType?: (
     | "response"
@@ -67,6 +72,9 @@ export async function vectorSearch(
         sql`${documentEmbeddings.embedding} IS NOT NULL`,
         filters.language
           ? sql`${documentEmbeddings.metadata}->>'language' = ${filters.language}`
+          : undefined,
+        filters.organizationId
+          ? sql`${documentEmbeddings.metadata}->>'organizationId' = ${filters.organizationId}`
           : undefined,
       ),
     )
@@ -172,6 +180,9 @@ export async function fullTextSearch(
         sql`to_tsvector(${tsConfig}, ${documentEmbeddings.content}) @@ ${tsQuery}`,
         filters.language || language
           ? sql`${documentEmbeddings.metadata}->>'language' = ${filters.language || language}`
+          : undefined,
+        filters.organizationId
+          ? sql`${documentEmbeddings.metadata}->>'organizationId' = ${filters.organizationId}`
           : undefined,
       ),
     )
@@ -301,4 +312,92 @@ export async function searchKnowledgeBase(
     },
     language,
   );
+}
+
+export async function executeRAGQuery(
+  rawQuery: string,
+  filters: SearchFilters,
+  language: SupportedLanguage = "en",
+): Promise<SearchResult[]> {
+  if (!filters.organizationId) {
+    console.warn("[RAG] Query executed without strict organizationId. This is a security risk. Proceeding but logged flagged.");
+  }
+  
+  // 1. Query Expansion (HyDE + Multi-Query variants)
+  let queriesToRun = [rawQuery];
+  
+  try {
+    const { output: object } = await generateText({
+      model: flashLiteModel,
+      output: Output.object({
+        schema: z.object({
+          hydeAnswer: z.string().describe("Write a hypothetical first-person respondent answer to the query constraint."),
+          variants: z.array(z.string()).describe("Write 3 semantically distinct variations or alternative vocabulary phrasings of the raw user query."),
+        }),
+      }),
+      prompt: `Original Query: "${rawQuery}"\nLanguage: ${language}\nGenerate a hypothetical answer and query variants for better RAG retrieval.`,
+    });
+    
+    if (object.hydeAnswer) queriesToRun.push(object.hydeAnswer);
+    if (object.variants && object.variants.length > 0) {
+      queriesToRun.push(...object.variants.slice(0, 3));
+    }
+  } catch (error) {
+    console.error("Query expansion failed, falling back to raw query.", error);
+  }
+
+  // 2. Parallel hybrid retrieval for all queries
+  const fetchLimit = filters.limit || 20;
+  const k = 60;
+  const scores = new Map<string, number>();
+  const resultsMap = new Map<string, SearchResult>();
+
+  await Promise.all(
+    queriesToRun.map(async (q) => {
+      // Pull 40 items per variant search to get a wide candidate field
+      const [vectorResults, textResults] = await Promise.all([
+        vectorSearch(q, { ...filters, limit: fetchLimit * 2 }, language),
+        fullTextSearch(q, { ...filters, limit: fetchLimit * 2 }, language),
+      ]);
+
+      // RRF for vector results
+      vectorResults.forEach((result, index) => {
+        scores.set(result.id, (scores.get(result.id) || 0) + 1 / (k + index + 1));
+        resultsMap.set(result.id, result);
+      });
+
+      // RRF for text results
+      textResults.forEach((result, index) => {
+        scores.set(result.id, (scores.get(result.id) || 0) + 1 / (k + index + 1));
+        if (!resultsMap.has(result.id)) {
+          resultsMap.set(result.id, result);
+        }
+      });
+    })
+  );
+
+  // 3. Select top 150 candidates and format precise context blocks before reranking
+  const candidatePool = Array.from(scores.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 150) // Wide Top 150 candidates for precise reranking
+    .map(([id, score]) => {
+      const result = resultsMap.get(id)!;
+      return { ...result, score };
+    });
+
+  // 4. Cross-Encoder Reranking (Using Gemini pointwise prompt as fallback)
+  // Re-rank 150 candidates down to Top 20 context window
+  const finalContextLimit = fetchLimit;
+  const reranked = await rerank(rawQuery, candidatePool, finalContextLimit);
+  
+  // Format the outputs to have strict provenance headers
+  return reranked.map(r => {
+    let rawAnswer = r.content;
+    
+    // Attempt to strip LLM prefix context safely for a cleaner block, or keep it verbatim
+    // But importantly add strong block citation prefix
+    r.content = `[Source ID: ${r.id}] Context chunk:\n${rawAnswer}`;
+    
+    return r;
+  });
 }

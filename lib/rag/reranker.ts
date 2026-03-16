@@ -1,10 +1,10 @@
-import { generateText, Output } from "ai";
-import { google } from "@ai-sdk/google";
-import { z } from "zod";
 import { SearchResult } from "./search";
 import { logUsage } from "../billing/logger";
+import { generateText, Output } from "ai";
+import { flashLiteModel } from "../ai";
+import { z } from "zod";
 
-const rerankModel = google("gemini-1.5-flash-8b");
+const VOYAGE_API_URL = "https://api.voyageai.com/v1/rerank";
 
 export async function rerank(
   query: string,
@@ -18,16 +18,89 @@ export async function rerank(
 ): Promise<SearchResult[]> {
   if (candidates.length === 0) return [];
 
+  // Protect against edge cases where the key is missing
+  const apiKey = process.env.VOYAGE_API_KEY;
+  if (apiKey) {
+    try {
+      const documents = candidates.map((c) => c.content);
+
+      const response = await fetch(VOYAGE_API_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query,
+          documents,
+          model: "rerank-2",
+          top_k: topK,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Voyage API error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+
+      // Log the usage
+      if (data.usage?.total_tokens) {
+        logUsage({
+          userId: metadata?.userId,
+          organizationId: metadata?.organizationId,
+          surveyId: metadata?.surveyId,
+          type: "llm_text",
+          provider: "voyage",
+          modelName: "rerank-2",
+          promptTokens: data.usage.total_tokens, // Voyage bills primarily on total tokens for reranking
+          completionTokens: 0,
+          totalTokens: data.usage.total_tokens,
+        });
+      }
+
+      const rankedResults: SearchResult[] = [];
+      const seenIndices = new Set<number>();
+
+      // Voyage returns data array sorted by relevance_score
+      for (const item of data.data) {
+        const index = item.index;
+        if (index >= 0 && index < candidates.length) {
+          rankedResults.push({
+            ...candidates[index],
+            score: item.relevance_score ?? candidates[index].score // Update the score with the new rerank score if available
+          });
+          seenIndices.add(index);
+        }
+      }
+
+      // Fallback fill just in case
+      if (rankedResults.length < topK) {
+        for (let i = 0; i < candidates.length; i++) {
+          if (!seenIndices.has(i)) {
+            rankedResults.push(candidates[i]);
+            if (rankedResults.length >= topK) break;
+          }
+        }
+      }
+
+      return rankedResults;
+    } catch (error) {
+      console.warn("Voyage AI reranking failed, falling back to Gemini:", error);
+    }
+  } else {
+    console.warn("VOYAGE_API_KEY is missing. Falling back to Gemini for reranking.");
+  }
+
   try {
-    const { output, usage } = await generateText({
-      model: rerankModel,
+    const { output: object, usage } = await generateText({
+      model: flashLiteModel,
       output: Output.object({
         schema: z.object({
           rankedIndices: z
             .array(z.number())
-            .describe(
-              "Indices of the candidates in order of relevance (0-based)",
-            ),
+            .describe("Indices of the candidates in order of relevance (0-based)"),
         }),
       }),
       system: `You are a search quality rater. Your task is to rank the following search results based on their relevance to the user's query.
@@ -41,23 +114,24 @@ ${candidates.map((c, i) => `[${i}] ${c.content.substring(0, 300)}...`).join("\n"
 Rank the top ${topK} results.`,
     });
 
-    // Log usage for reranking
-    logUsage({
-      userId: metadata?.userId,
-      organizationId: metadata?.organizationId,
-      surveyId: metadata?.surveyId,
-      type: "llm_text",
-      provider: "google",
-      modelName: (rerankModel as any).modelId,
-      promptTokens: (usage as any).inputTokens,
-      completionTokens: (usage as any).outputTokens,
-      totalTokens: (usage as any).totalTokens,
-    });
+    if (usage) {
+      logUsage({
+        userId: metadata?.userId,
+        organizationId: metadata?.organizationId,
+        surveyId: metadata?.surveyId,
+        type: "llm_text",
+        provider: "google",
+        modelName: "gemini-2.5-flash-lite",
+        promptTokens: usage.inputTokens,
+        completionTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
+      });
+    }
 
     const rankedResults: SearchResult[] = [];
     const seenIndices = new Set<number>();
 
-    for (const index of output.rankedIndices) {
+    for (const index of object.rankedIndices) {
       if (index >= 0 && index < candidates.length && !seenIndices.has(index)) {
         rankedResults.push(candidates[index]);
         seenIndices.add(index);
@@ -65,7 +139,6 @@ Rank the top ${topK} results.`,
       if (rankedResults.length >= topK) break;
     }
 
-    // If we have fewer than topK, fill with original order (excluding already picked)
     if (rankedResults.length < topK) {
       for (let i = 0; i < candidates.length; i++) {
         if (!seenIndices.has(i)) {
@@ -76,9 +149,8 @@ Rank the top ${topK} results.`,
     }
 
     return rankedResults;
-  } catch (error) {
-    console.error("Reranking failed:", error);
-    // Fallback: return original top K
+  } catch (fallbackError) {
+    console.error("Gemini fallback reranking failed:", fallbackError);
     return candidates.slice(0, topK);
   }
 }
@@ -94,10 +166,6 @@ export async function rerankResults(
 ): Promise<{ item: string; score?: number }[]> {
   if (items.length === 0) return [];
 
-  // Convert strings to a format compatible with the internal rerank logic if needed,
-  // or just implement a simpler version here.
-  // For consistency, let's use the core rerank logic by wrapping.
-
   const tempCandidates: SearchResult[] = items.map((content, i) => ({
     id: `temp-${i}`,
     content,
@@ -111,5 +179,6 @@ export async function rerankResults(
 
   return ranked.map((r) => ({
     item: r.content,
+    score: r.score
   }));
 }

@@ -14,6 +14,8 @@ import toast from "react-hot-toast";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/providers/auth-provider";
 import { ClientT } from "@/components/i18n/client-t";
+import { ActiveUsers } from "./active-users";
+import { fetchActiveWorkspace } from "@/lib/api/workspace";
 
 interface DashboardHeaderProps {
   user?: User | null;
@@ -28,6 +30,12 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [searchPlaceholder, setSearchPlaceholder] = useState("Search");
   const [unreadCountText, setUnreadCountText] = useState("");
+
+  // Fetch active workspace using React Query
+  const { data: activeWorkspace = null } = useQuery({
+    queryKey: queryKeys.workspaces.active,
+    queryFn: fetchActiveWorkspace,
+  });
 
   // Fetch notifications using React Query
   const { data: notifications = [], isLoading, refetch: refetchNotifications } = useQuery({
@@ -82,6 +90,14 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
       </div>
 
       <div className="flex items-center gap-2">
+        {/* Active Collaboration */}
+        {activeWorkspace && (
+          <ActiveUsers 
+            workspaceId={activeWorkspace.id} 
+            className="mr-2"
+          />
+        )}
+
         {/* Notifications */}
         <div className="relative">
           <button
