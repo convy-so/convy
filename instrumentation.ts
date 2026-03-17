@@ -1,9 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
-import dns from "node:dns";
-
-// Configure DNS resolution to prefer IPv4.
-// This prevents ENETUNREACH errors on IPv4-only networks like ECS/Fargate.
 if (process.env.NEXT_RUNTIME === "nodejs") {
+  const dns = await import("node:dns");
   dns.setDefaultResultOrder("ipv4first");
 }
 
