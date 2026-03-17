@@ -105,7 +105,7 @@ export async function getUserGrowthData(authHeaders?: Headers | string | null) {
     ORDER BY date ASC
   `);
 
-  return results as unknown as Array<{ date: string; count: number }>;
+  return results.rows as unknown as Array<{ date: string; count: number }>;
 }
 
 /**
@@ -127,7 +127,7 @@ export async function getUsageCostData(authHeaders?: Headers | string | null) {
     ORDER BY date ASC
   `);
 
-  return results as unknown as Array<{ date: string; cost: number }>;
+  return results.rows as unknown as Array<{ date: string; cost: number }>;
 }
 
 /**

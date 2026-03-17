@@ -1,6 +1,5 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import dns from "node:dns";
 
 import { env } from "@/lib/env";
 import * as schema from "./schema";
@@ -10,7 +9,9 @@ import * as schema from "./schema";
  * This prevents ENETUNREACH errors when connecting to databases (like Supabase)
  * that have IPv6 records in environments that only support IPv4 (like standard ECS/Fargate).
  */
-dns.setDefaultResultOrder("ipv4first");
+if (process.env.NEXT_RUNTIME === "nodejs") {
+  require("node:dns").setDefaultResultOrder("ipv4first");
+}
 
 /**
  * Database client management
