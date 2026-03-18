@@ -166,9 +166,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
       });
 
       this.ws.on("open", () => {
-        console.log(
-          "[ChainOfTrust] [External:Deepgram] ✅ WebSocket connected to Deepgram. Handshake successful.",
-        );
         this.isConnected = true;
         resolve();
       });
@@ -186,9 +183,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
       });
 
       this.ws.on("close", (code, reason) => {
-        console.log(
-          `[ChainOfTrust] [External:Deepgram] 🔴 WebSocket closed: Code=${code} Reason=${reason.toString()}`,
-        );
         this.isConnected = false;
         this.isWelcomeReceived = false;
         this.isSettingsApplied = false;
@@ -207,18 +201,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
       ...this.settings,
     };
 
-    console.log(
-      "[ChainOfTrust] [External:Deepgram] 📤 Sending 'Settings' payload to Deepgram.",
-    );
-    console.log(
-      `[ChainOfTrust] [External:Deepgram] Agent Config: Lang=${this.settings.agent.listen?.provider?.language} Model=${this.settings.agent.listen?.provider?.model}`,
-    );
-
-    console.log(
-      "[ChainOfTrust] [External:Deepgram] 🔍 RAW SETTINGS JSON:\n",
-      JSON.stringify(settingsMessage, null, 2),
-    );
-
     this.sendJson(settingsMessage);
   }
 
@@ -228,19 +210,9 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
   sendAudio(audioData: Buffer): void {
     // v1 doc: "Do not send audio until you receive SettingsApplied."
     if (!this.isSettingsApplied) {
-      if (Math.random() < 0.01) {
-        console.warn(
-          "[ChainOfTrust] [External:Deepgram] ⚠️ Dropping audio: Settings not yet applied.",
-        );
-      }
       return;
     }
     if (this.ws?.readyState === WebSocket.OPEN) {
-      if (Math.random() < 0.05) {
-        console.log(
-          `[ChainOfTrust] [External:Deepgram] 📤 Forwarding audio to Deepgram: ${audioData.length} bytes`,
-        );
-      }
       this.ws.send(audioData);
     }
   }
@@ -273,9 +245,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
     name: string,
     output: string,
   ): void {
-    console.log(
-      `[ChainOfTrust] [External:Deepgram] 📤 Sending FunctionCallResponse for ${name} (ID: ${functionCallId})`,
-    );
     this.sendJson({
       type: "FunctionCallResponse",
       id: functionCallId,
@@ -334,17 +303,11 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
     // String data = JSON event
     try {
       const message = JSON.parse(data.toString());
-      if (message.type !== "KeepAliveResponse") {
-        console.log(
-          `[ChainOfTrust] [External:Deepgram] 📥 Received JSON message: ${message.type}`,
-        );
-      }
       this.handleJsonMessage(message);
     } catch (error) {
       console.error(
-        "[ChainOfTrust] [External:Deepgram] ❌ Failed to parse JSON from Deepgram:",
+        "[VoiceAgent] Failed to parse JSON from Deepgram:",
         error,
-        data.toString().substring(0, 100),
       );
     }
   }
@@ -361,9 +324,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         break;
 
       case "SettingsApplied":
-        console.log(
-          "[ChainOfTrust] [External:Deepgram] ✅ Settings applied successfully. Audio streaming enabled.",
-        );
         this.isSettingsApplied = true;
         // v1 doc: audio streaming is now safe
         this.emit("settingsApplied", message);
@@ -441,16 +401,9 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
 
   private sendJson(data: any): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      if (data.type !== "Settings" && data.type !== "KeepAlive") {
-        console.log(
-          `[ChainOfTrust] [External:Deepgram] 📤 Sending JSON message: ${data.type}`,
-        );
-      }
       this.ws.send(JSON.stringify(data));
     } else {
-      console.warn(
-        `[ChainOfTrust] [External:Deepgram] ⚠️ Cannot send JSON (WS not open): ${data.type}`,
-      );
+      // Swallowed to reduce noise
     }
   }
 

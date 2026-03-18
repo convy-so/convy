@@ -105,19 +105,12 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
 
   async initialize(): Promise<void> {
     try {
-      console.log(
-        `[Survey Creation Voice] Initializing session: ${this.state.voiceSessionId} for user: ${this.userId}`,
-      );
-
       // Fetch user's preferred language
       try {
         const { getUserPreferredLanguage } =
           await import("@/lib/translation-service");
         const userLanguage = await getUserPreferredLanguage(this.userId!);
         this.state.language = userLanguage;
-        console.log(
-          `[Survey Creation Voice] User preferred language: ${userLanguage}`,
-        );
       } catch (error) {
         console.error(
           "[Survey Creation Voice] Failed to fetch user language, defaulting to 'en':",
@@ -140,14 +133,8 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
         type: "ready",
         voiceSessionId: this.state.voiceSessionId,
       });
-      console.log(
-        "[ChainOfTrust] [Server:Creation] 🟢 Sent 'ready' signal to client.",
-      );
 
       await dbInsertPromise;
-      console.log(
-        "[ChainOfTrust] [Server:Creation] ✅ Session record persisted in DB.",
-      );
     } catch (error) {
       console.error("[Survey Creation Voice] Initialization error:", error);
       this.sendError("Failed to initialize voice session");
@@ -212,9 +199,6 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
 
     // Use the agent's system prompt (includes domain expertise, checklist)
     const systemPrompt = creationAgent.buildSystemPrompt();
-    console.log(
-      `[Survey Creation Voice] System Prompt Length: ${systemPrompt.length}`,
-    );
 
     // Use the agent's function definitions (converted to Deepgram format)
     const functions = creationAgent.getDeepgramFunctions();
@@ -270,12 +254,6 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       if (event.function_name === "think_and_respond") {
         // 1. Extract the state updates for background processing/saving
         const stateUpdates = event.input.state_updates;
-        if (stateUpdates && Object.keys(stateUpdates).length > 0) {
-          console.log(
-            `[ChainOfTrust] [Server:Creation] 🧠 [think_and_respond] State updates received:`,
-            stateUpdates,
-          );
-        }
 
         // 2. Extract the text we actually want the TTS to speak
         const messageToUser =
@@ -283,24 +261,13 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
           "I'm sorry, I'm processing your request.";
 
         // 3. Complete the function call by giving Deepgram the text to say
-        console.log(
-          `[ChainOfTrust] [Server:Creation] 📤 [think_and_respond] Responding to Deepgram with text: "${messageToUser.substring(0, 50)}..."`,
-        );
         this.voiceAgent?.sendFunctionCallResponse(
           event.function_call_id,
           event.function_name,
           JSON.stringify(messageToUser),
         );
 
-        // 4. (DELETED) Manual push removed to prevent double messages.
-        // Deepgram's ConversationText for the tool response will handle this via BaseVoiceAgentHandler.onConversationText.
-        // Asynchronously fire extraction logic since state changed
-        this.performExtraction().catch((err) =>
-          console.error(
-            "[ChainOfTrust] [Server:Creation] ❌ Extraction error during tool call:",
-            err,
-          ),
-        );
+        this.performExtraction().catch(console.error);
       } else if (event.function_name === "finishSurvey") {
         const { summary } = event.input;
         console.log(
@@ -320,9 +287,6 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
         );
       } else if (event.function_name === "requestMediaUpload") {
         const { allowedTypes } = event.input;
-        console.log(
-          `[ChainOfTrust] [Server:Creation] 🛠️ requestMediaUpload tool triggered. Types: ${allowedTypes}`,
-        );
 
         // Notify client to show upload UI
         this.send({
@@ -340,9 +304,6 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
         );
       } else if (event.function_name === "setSurveyDomain") {
         const { domainId, summaryOfWhatWeKnow } = event.input;
-        console.log(
-          `[SurveyCreationVoiceHandler] setSurveyDomain called. Domain: ${domainId}`,
-        );
 
         // Store domain in state's extractedData (persisted via next performExtraction call
         // or immediately via extractedData update below)
@@ -354,9 +315,6 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
 
         // Persist domain to surveys table (has domainId column) and extractedData to conversation
         if (this.state.surveyId) {
-          console.log(
-            `[ChainOfTrust] [Server:Creation] 💾 Persisting domain ${domainId} to DB for survey ${this.state.surveyId}`,
-          );
           await Promise.all([
             getDb()
               .update(surveys)
@@ -410,9 +368,6 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       lastMessage.timestamp &&
       now.getTime() - new Date(lastMessage.timestamp).getTime() < 3000
     ) {
-      console.log(
-        `[SurveyCreationVoiceHandler] 🔄 Aggregating ${event.role} message in DB`,
-      );
       lastMessage.content += " " + event.content;
       lastMessage.timestamp = now.toISOString(); // Refresh timestamp for consecutive merges
     } else {
@@ -424,9 +379,6 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       });
     }
 
-    console.log(
-      `[ChainOfTrust] [Server:Creation] 💾 Saving conversation history to DB. Total messages: ${this.state.messages.length}`,
-    );
     await this.saveConversation();
 
     // Zero-Loss Broadcast: Append to Redis Stream for collaborators
@@ -445,9 +397,6 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       const messageId = await this.streamManager.appendEvent(
         streamKey,
         eventData,
-      );
-      console.log(
-        `[ChainOfTrust] [Server:Creation] 📡 Event appended to stream: ${streamKey} (ID: ${messageId})`,
       );
 
       // Hybrid Broadcast: Publish to Pub/Sub for immediate notification across servers
@@ -471,10 +420,6 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
   protected async handleControlMessage(message: any): Promise<void> {
     switch (message.type) {
       case "set_survey_id":
-        console.log(
-          `[ChainOfTrust] [Server:Creation] 📥 Received 'set_survey_id': ${message.surveyId}`,
-        );
-        
         try {
           // Check permissions
           const access = await getSurveyAccessLevel(this.userId!, message.surveyId);
@@ -486,25 +431,16 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
 
           this.state.surveyId = message.surveyId;
 
-          console.log(
-            `[ChainOfTrust] [Server:Creation] 📂 Loading existing state from DB...`,
-          );
           await this.loadExistingState();
 
           // Catch-up: Replay missed events from stream if client provides lastEventId
           if (message.lastEventId && this.state.surveyId) {
             const streamKey = `stream:survey_creation:${this.state.surveyId}`;
-            console.log(
-              `[ChainOfTrust] [Server:Creation] 🔄 Catching up from event ID: ${message.lastEventId}`,
-            );
             const missedEvents = await this.streamManager.readEvents(
               streamKey,
               message.lastEventId,
             );
             if (missedEvents.length > 0) {
-              console.log(
-                `[ChainOfTrust] [Server:Creation] 🕒 Found ${missedEvents.length} missed events. Replaying...`,
-              );
               for (const event of missedEvents) {
                 // Only send to this specific connection
                 this.send({
@@ -516,14 +452,11 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
             }
           }
 
-          console.log(
-            `[ChainOfTrust] [Server:Creation] 📤 State loaded. History: ${this.state.messages.length} msgs. Sending 'survey_state_loaded'.`,
-          );
           // Notify client that state is loaded so it can safely start conversation
           this.send({ type: "survey_state_loaded" });
         } catch (error) {
           console.error(
-            `[ChainOfTrust] [Server:Creation] ❌ Error loading state/catch-up:`,
+            `[SurveyCreationVoiceHandler] Error loading state/catch-up:`,
             error,
           );
           this.sendError("Failed to load survey state");
@@ -540,20 +473,11 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
         break;
 
       case "start_conversation":
-        console.log(
-          `[ChainOfTrust] [Server:Creation] 🚀 Received 'start_conversation'.`,
-        );
         // Reload state to get latest domain/messages from DB (e.g. if updated via REST API or text chat)
         await this.loadExistingState();
 
-        console.log(
-          `[ChainOfTrust] [Server:Creation] 🔄 Connecting Voice Agent (Deepgram)...`,
-        );
         // Connect the Voice Agent (with greeting if new session)
         await this.connectVoiceAgent();
-        console.log(
-          "[ChainOfTrust] [Server:Creation] ✅ Voice Agent connection request dispatched.",
-        );
         break;
 
       case "text_message":
@@ -643,17 +567,11 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
     const EXTRACTION_COOLDOWN_MS = 15_000;
     const now = Date.now();
     if (now - this.state.lastExtractionAt < EXTRACTION_COOLDOWN_MS) {
-      console.log(
-        `[Survey Creation Voice] Extraction skipped — cooldown active (${Math.round((EXTRACTION_COOLDOWN_MS - (now - this.state.lastExtractionAt)) / 1000)}s remaining)`,
-      );
       return;
     }
     this.state.lastExtractionAt = now;
 
     try {
-      console.log(
-        `[Survey Creation Voice] Enqueueing extraction for survey ${this.state.surveyId} (${this.state.messages.length} messages)`,
-      );
       await enqueueCreationExtraction({
         surveyId: this.state.surveyId,
         messages: this.state.messages.map((m) => ({

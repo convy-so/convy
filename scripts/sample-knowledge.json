@@ -1,0 +1,16 @@
+[
+  {
+    "title": "Archetype: The Skeptical Stakeholder",
+    "content": "CHARACTERISTICS: High authority, doubts the AI's neutrality, focused on 'control' and 'data ownership'.\nHANDLING: Explicitly state the methodology. Use technical, precise vocabulary. Avoid flowery or over-empathetic language. Focus on 'findings' and 'accuracy'.",
+    "category": "pattern",
+    "domainId": 13,
+    "metadata": { "family": "Financial & Legal", "type": "archetype" }
+  },
+  {
+    "title": "Glossary: Legal Terms (Sample)",
+    "content": "Due Diligence: Investigation of a business or person prior to signing a contract. Liability: Legal responsibility for one's actions or omissions. Statute: A written law passed by a legislative body.",
+    "category": "general",
+    "domainId": 13,
+    "metadata": { "family": "Financial & Legal", "type": "glossary" }
+  }
+]

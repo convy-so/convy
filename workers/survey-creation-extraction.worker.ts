@@ -40,14 +40,7 @@ const surveyCreationExtractionWorker =
     async (job: Job<SurveyCreationExtractionJobData>) => {
       const { surveyId, messages } = jobDataSchema.parse(job.data);
 
-      console.log(
-        `[CreationExtractionWorker] Starting extraction for survey ${surveyId} (${messages.length} messages)`,
-      );
-
       if (messages.length < 2) {
-        console.log(
-          `[CreationExtractionWorker] Skipping — insufficient messages (${messages.length})`,
-        );
         return { skipped: true, reason: "insufficient_messages" };
       }
 
@@ -123,10 +116,6 @@ const surveyCreationExtractionWorker =
 
       await job.updateProgress(100);
 
-      console.log(
-        `[CreationExtractionWorker] Extraction complete for survey ${surveyId}`,
-      );
-
       return { success: true };
     },
     {
@@ -137,9 +126,7 @@ const surveyCreationExtractionWorker =
     },
   );
 
-surveyCreationExtractionWorker.on("completed", (job) =>
-  console.log(`[CreationExtractionWorker] Job ${job.id} completed`),
-);
+surveyCreationExtractionWorker.on("completed", (job) => {});
 surveyCreationExtractionWorker.on("failed", (job, err) =>
   console.error(
     `[CreationExtractionWorker] Job ${job?.id} failed:`,

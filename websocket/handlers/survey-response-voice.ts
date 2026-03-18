@@ -223,6 +223,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       surveyConfig: this.state.surveyConfig!,
       rollingContext: this.state.context!,
       language: this.state.language,
+      modality: "voice",
     };
 
     const conductingAgent = new ConductingSpecialist(agentContext);

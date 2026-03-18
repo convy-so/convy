@@ -1,10 +1,8 @@
-import { surveys } from "@/db/schema";
 import { WebSocket } from "ws";
 import {
   checkMessageAllowed,
   checkAudioChunkAllowed,
 } from "../middleware/rate-limit";
-import { createVoiceError, sendVoiceError } from "@/lib/voice/errors";
 import {
   DeepgramVoiceAgentConnection,
   type VoiceAgentSettings,
@@ -103,33 +101,17 @@ export abstract class BaseVoiceAgentHandler {
     this.voiceAgent.on("audio", (audioData: Buffer) => {
       // Relay agent audio to browser
       if (this.ws.readyState === WebSocket.OPEN) {
-        // Chain of Trust: Audio Egress
-        if (Math.random() < 0.05) {
-          console.log(
-            `[ChainOfTrust] [Server] 🔊 Relaying agent audio to browser: ${audioData.length} bytes`,
-          );
-        }
         this.ws.send(audioData);
-      } else {
-        console.warn(
-          "[ChainOfTrust] [Server] ⚠️ Cannot relay audio: Browser WS not open",
-        );
       }
     });
 
     this.voiceAgent.on(
       "conversationText",
       async (event: ConversationTextEvent) => {
-        console.log(
-          `[ChainOfTrust] [Server] 🤖 Received conversation text from agent (${event.role}): "${event.content.substring(0, 50)}..."`,
-        );
         this.resetIdleTimeout();
 
         // Chain of Trust: Filter out internal directives
         if (event.role === "user" && event.content === this.initialDirective) {
-          console.log(
-            `[ChainOfTrust] [Server] 🛡️ Filtered internal directive from browser relay: "${event.content.substring(0, 30)}..."`,
-          );
           return;
         }
 
@@ -144,10 +126,7 @@ export abstract class BaseVoiceAgentHandler {
         try {
           await this.onConversationText(event);
         } catch (error) {
-          console.error(
-            `[ChainOfTrust] [Server] ❌ Error in onConversationText:`,
-            error,
-          );
+          console.error(`[BaseVoiceAgentHandler] Error in onConversationText:`, error);
         }
       },
     );
@@ -155,10 +134,6 @@ export abstract class BaseVoiceAgentHandler {
     this.voiceAgent.on(
       "functionCallRequest",
       async (event: FunctionCallRequestEvent) => {
-        console.log(
-          `[ChainOfTrust] [Server] 🛠️ AI requested function call: ${event.function_name}`,
-          event.input,
-        );
         try {
           await this.onFunctionCall(event);
         } catch (error) {
@@ -178,15 +153,9 @@ export abstract class BaseVoiceAgentHandler {
       const timeSinceAgentStarted = now - this.lastAgentSpeechStartTime;
 
       if (timeSinceAgentStarted < VAD_INTERRUPT_COOLDOWN_MS) {
-        console.log(
-          `[ChainOfTrust] [Server] 🛡️ Ignoring VAD interruption (cooldown: ${timeSinceAgentStarted}ms < ${VAD_INTERRUPT_COOLDOWN_MS}ms)`,
-        );
         return;
       }
 
-      console.log(
-        "[ChainOfTrust] [Server] 🗣️ Deepgram detected user speech start (VAD). Interrupting agent.",
-      );
       this.resetIdleTimeout();
       // Track active duration
       const gap = now - this.lastInteractionEndTime;
@@ -199,28 +168,20 @@ export abstract class BaseVoiceAgentHandler {
     });
 
     this.voiceAgent.on("agentThinking", () => {
-      console.log("[ChainOfTrust] [Server] 🧠 Agent is thinking...");
       this.send({ type: "agent_thinking" });
     });
 
     this.voiceAgent.on("agentStartedSpeaking", () => {
-      console.log(
-        "[ChainOfTrust] [Server] 🗣️ Agent started speaking (TTS generation).",
-      );
       this.lastAgentSpeechStartTime = Date.now();
       this.send({ type: "agent_started_speaking" });
     });
 
     this.voiceAgent.on("agentAudioDone", () => {
-      console.log("[ChainOfTrust] [Server] 🤐 Agent finished speaking.");
       this.lastInteractionEndTime = Date.now();
       this.send({ type: "agent_audio_done" });
     });
 
     this.voiceAgent.on("settingsApplied", () => {
-      console.log(
-        `[ChainOfTrust] [Server] ✅ Voice Agent settings applied. Agent is ready for ${this.identifier}`,
-      );
       this.send({ type: "agent_ready" });
 
       // Proactively trigger initial greeting if it's a new session
@@ -228,9 +189,6 @@ export abstract class BaseVoiceAgentHandler {
         const initialInput = this.getInitialUserInput();
         if (initialInput) {
           this.initialDirective = initialInput;
-          console.log(
-            `[BaseVoiceAgent] Brand new session detected. Injecting initial directive: "${initialInput}"`,
-          );
           // We use InjectUserMessage so the AI "hears" the instruction and responds naturally
           // based on its system prompt (e.g. greeting the user).
           // sendInjectAgentMessage would cause the AI to literally say the directive.
@@ -282,9 +240,6 @@ export abstract class BaseVoiceAgentHandler {
 
   private setupBrowserConnectionHandlers(): void {
     this.ws.on("close", async () => {
-      console.log(
-        `[BaseVoiceAgent] Browser WebSocket closed for ${this.identifier}`,
-      );
       await this.cleanup();
     });
 
@@ -330,9 +285,6 @@ export abstract class BaseVoiceAgentHandler {
           // Rate limit checks for JSON messages
           const messageCheck = await checkMessageAllowed(this.identifier);
           if (!messageCheck.allowed) {
-            console.warn(
-              `[BaseVoiceAgent] Rate limit exceeded for ${this.identifier}`,
-            );
             this.send({
               type: "rate_limit",
               error: messageCheck.reason,
@@ -371,18 +323,7 @@ export abstract class BaseVoiceAgentHandler {
 
     // Relay to Voice Agent
     if (this.voiceAgent?.connected) {
-      if (Math.random() < 0.02) {
-        console.log(
-          `[ChainOfTrust] [Server] 🎤 Relaying browser audio to Deepgram: ${audioData.length} bytes`,
-        );
-      }
       this.voiceAgent.sendAudio(audioData);
-    } else {
-      if (Math.random() < 0.01) {
-        console.warn(
-          `[ChainOfTrust] [Server] ⚠️ Cannot relay audio: Deepgram agent NOT connected`,
-        );
-      }
     }
   }
 
@@ -393,12 +334,8 @@ export abstract class BaseVoiceAgentHandler {
       if (data.type !== "audio" && data.type !== "pong") {
         if (data.type === "error") {
           console.error(
-            `[ChainOfTrust] [Server] 📤 Sending ERROR to browser:`,
+            `[VoiceAgent] 📤 Error sent to browser:`,
             JSON.stringify(data, null, 2),
-          );
-        } else {
-          console.log(
-            `[ChainOfTrust] [Server] 📤 Sending to browser: ${data.type}`,
           );
         }
       }

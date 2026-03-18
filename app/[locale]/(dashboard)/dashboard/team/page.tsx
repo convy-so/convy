@@ -20,20 +20,7 @@ import { fetchActiveWorkspace, fetchWorkspaceMembers, fetchWorkspaceInvitations 
 import { deleteWorkspace, leaveWorkspace } from "@/app/actions/workspace";
 import { queryKeys } from "@/lib/query-keys";
 import { useTranslations } from "next-intl";
-import { SupportedLanguage } from "@/lib/i18n/ai-translator";
-import { ClientT } from "@/components/i18n/client-t";
 
-type TeamMember = {
-  id: string;
-  userId: string;
-  role: "owner" | "member";
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    image?: string | null;
-  };
-};
 
 export default function TeamPage() {
   const { user } = useAuth();

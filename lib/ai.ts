@@ -7,18 +7,12 @@ import {
   type LanguageModel,
   convertToModelMessages,
 } from "ai";
-import { RollingContext } from "./conversation-memory";
 import { logUsage } from "./billing/logger";
 
 export async function normalizeMessages(
   messages: any[],
 ): Promise<ModelMessage[]> {
-  console.log(
-    `[AI:normalizeMessages] Normalizing ${messages.length} messages...`,
-  );
-  const result = await convertToModelMessages(messages);
-  console.log(`[AI:normalizeMessages] Done. Result count: ${result.length}`);
-  return result;
+  return await convertToModelMessages(messages);
 }
 
 export const GEMINI_FLASH_LITE_ID = "gemini-2.5-flash-lite";

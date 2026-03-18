@@ -356,7 +356,7 @@ export async function executeRAGQuery(
     queriesToRun.map(async (q) => {
       // Pull 40 items per variant search to get a wide candidate field
       const [vectorResults, textResults] = await Promise.all([
-        vectorSearch(q, { ...filters, limit: fetchLimit * 2 }, language),
+        vectorSearch(q, { ...filters, limit: fetchLimit * 2, language }),
         fullTextSearch(q, { ...filters, limit: fetchLimit * 2 }, language),
       ]);
 

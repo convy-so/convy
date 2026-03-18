@@ -1,0 +1,3 @@
+app/[locale]/(dashboard)/dashboard/surveys/[surveyId]/sample-review/page.tsx(197,22): error TS7031: Binding element 'message' implicitly has an 'any' type.
+app/[locale]/(dashboard)/dashboard/surveys/[surveyId]/sample-review/page.tsx(199,26): error TS7006: Parameter 'part' implicitly has an 'any' type.
+app/[locale]/(dashboard)/dashboard/surveys/[surveyId]/sample-review/page.tsx(200,22): error TS7006: Parameter 'part' implicitly has an 'any' type.

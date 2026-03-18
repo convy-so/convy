@@ -1,6 +1,7 @@
 import { LanguageModel, ModelMessage } from "ai";
 import { SurveyConfig, SubjectIntelligence } from "@/lib/prompts";
 import { RollingContext } from "@/lib/conversation-memory";
+import { ExpertState } from "../schemas/expert-state";
 
 // SubjectIntelligence relocated to prompts.ts to avoid circular deps
 
@@ -29,9 +30,11 @@ export interface AgentContext {
   messages?: ModelMessage[];
   surveyConfig?: SurveyConfig;
   rollingContext?: RollingContext; // For stateful agents like conducting
+  expertState?: ExpertState; // V2 Architecture: The source of truth
   ragContext?: string; // Retrieved context from RAG
-  knowledgeContext?: string; // Additional context passed from orchestrator
+  knowledgeContext?: string; // Additional context passed from previous turns
   language?: "en" | "fr" | "de" | "es" | "it"; // Language for the conversation
+  modality?: "voice" | "text"; // Current modality (V2 Architecture)
   userId?: string;
   organizationId?: string;
 
@@ -46,25 +49,17 @@ export interface AgentContext {
     surveyTypeContent: string;
     matchedSurveyType: string | null;
     domainName: string;
+    hybridDomains?: { id: string; weight: number }[];
   };
   // Subject intelligence from background research (set on ConductingSpecialist only)
   subjectIntelligence?: SubjectIntelligence | null;
 
-  // Self-learning: preloaded at each turn (see base-agent.ts)
-  patternLearnings?: string; // Compressed bullet hints from broad search
-  skillsMetadata?: string; // Available skills list
-  situationalPattern?: {
-    // Best-fit single pattern from ContextEngine
-    id: string;
-    title: string;
-    content: string;
-    status: string;
-    source: "experiment" | "situational" | "vector"; // matches context-engine.ts RetrievedPattern
-    experimentVariant?: "control" | "variant";
-    experimentId?: string;
-    performanceScore?: number | null;
-  };
+  // Metadata for available skills
+  skillsMetadata?: string;
+
 }
+
+export type { UnifiedSkill } from "./skill-system/types";
 
 export interface AgentResult {
   output: string; // The text response
@@ -72,7 +67,7 @@ export interface AgentResult {
   metadata?: Record<string, any>; // Extra info like confidence, thoughts
   nextAgent?: string; // For handing off to another agent
   specialist?: string; // Name of specialist that handled it
-  response?: string; // Compatibility with Orchestrator tool return
+  response?: string; // Compatibility field
 }
 
 export interface Agent {

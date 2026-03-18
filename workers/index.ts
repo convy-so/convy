@@ -31,11 +31,8 @@ import conversationInsightsWorker from "./conversation-insights.worker";
 import surveyAnalyticsWorker from "./survey-analytics.worker";
 import sampleConversationInsightsWorker from "./sample-conversation-insights.worker";
 import emailWorker from "./email.worker";
-import patternExtractionWorker from "./pattern-extraction.worker";
 import surveyCreationExtractionWorker from "./survey-creation-extraction.worker";
-import experimentEvaluationWorker from "./experiment-evaluation.worker";
 import generativeSummaryWorker from "./generative-summary.worker";
-import { scheduleExperimentEvaluation } from "@/lib/queue";
 
 // Collect all workers for coordinated shutdown
 const workers = [
@@ -46,12 +43,10 @@ const workers = [
     worker: sampleConversationInsightsWorker,
   },
   { name: "Email", worker: emailWorker },
-  { name: "Pattern Extraction", worker: patternExtractionWorker },
   {
     name: "Survey Creation Extraction",
     worker: surveyCreationExtractionWorker,
   },
-  { name: "Experiment Evaluation", worker: experimentEvaluationWorker },
   { name: "Generative Summary", worker: generativeSummaryWorker },
 ];
 
@@ -73,8 +68,7 @@ console.log("🚀 Starting all workers...");
 
   console.log("✅ Redis connection successful\n");
 
-  // Schedule recurring jobs
-  await scheduleExperimentEvaluation();
+  // Schedule recurring jobs (none currently)
 
   // Log all workers that are now running
   for (const { name } of workers) {

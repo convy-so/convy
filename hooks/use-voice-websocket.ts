@@ -142,22 +142,10 @@ export function useVoiceWebSocket({
 
     ws.onmessage = async (event) => {
       if (event.data instanceof Blob) {
-        // Chain of Trust: Audio Ingress
-        if (Math.random() < 0.1) {
-          // Reduced noise
-          console.log(
-            `[ChainOfTrust] [Hook] 📥 Received audio chunk: ${event.data.size} bytes`,
-          );
-        }
         handleIncomingAudio(event.data);
       } else {
         try {
           const data = JSON.parse(event.data);
-
-          // Zero-Loss: Track latest event ID for catch-up
-          if (data.streamId) {
-            setLastEventId(data.streamId);
-          }
 
           // Suppress echoes from our own connection
           if (data.connectionId === `creation-${wsRef.current?.url.split("token=")[0]}`) {
@@ -167,14 +155,10 @@ export function useVoiceWebSocket({
             // For now, let's just log and process, as page logic should handle duplicates.
           }
 
-          console.log(
-            `[ChainOfTrust] [Hook] 📥 Received JSON (${data.type})`,
-            data,
-          );
           handleJsonMessage(data);
         } catch (e) {
           console.error(
-            "[ChainOfTrust] [Hook] Failed to parse JSON message",
+            "[Voice WS] Failed to parse JSON message",
             e,
             event.data,
           );
@@ -283,7 +267,7 @@ export function useVoiceWebSocket({
         break;
       case "error":
         console.error(
-          "[ChainOfTrust] [Hook] ❌ Server-reported error:",
+          "[Voice WS] ❌ Server-reported error:",
           JSON.stringify(data, null, 2),
         );
         // Extract a string representation of the error to show in UI
@@ -300,7 +284,7 @@ export function useVoiceWebSocket({
         }
 
         console.error(
-          "[ChainOfTrust] [Hook] Calculated error message:",
+          "[Voice WS] Calculated error message:",
           errorMessage,
         );
         setStatus("error");
@@ -308,9 +292,6 @@ export function useVoiceWebSocket({
         if (onError) onError(errorMessage);
         break;
       default:
-        console.log(
-          `[ChainOfTrust] [Hook] Unhandled message type: ${data.type}`,
-        );
         break;
     }
     onMessageRef.current?.(data);
@@ -337,12 +318,6 @@ export function useVoiceWebSocket({
       }
 
       const totalDuration = float32Data.length / sampleRate;
-      if (Math.random() < 0.05) {
-        console.log(
-          `[ChainOfTrust] [Hook] 📥 Received audio chunk: ${arrayBuffer.byteLength} bytes (${(totalDuration * 1000).toFixed(1)}ms)`,
-        );
-      }
-
       const audioBuffer = audioCtx.createBuffer(
         1,
         float32Data.length,
@@ -371,12 +346,6 @@ export function useVoiceWebSocket({
     if (nextStartTimeRef.current < currentTime) {
       // INCREASED JITTER BUFFER: 400ms (0.40) to prevent dropping out between network chunks
       nextStartTimeRef.current = currentTime + 0.40;
-    }
-
-    if (Math.random() < 0.05) {
-      console.log(
-        `[ChainOfTrust] [Hook] 🔈 Scheduling audio chunk at ${nextStartTimeRef.current.toFixed(3)}s (Context time: ${currentTime.toFixed(3)}s)`,
-      );
     }
 
     source.start(nextStartTimeRef.current);
@@ -420,9 +389,6 @@ export function useVoiceWebSocket({
    */
   const startRecording = async () => {
     if (isRecording) return;
-    console.log(
-      "[ChainOfTrust] [Hook] 🎤 startRecording requested. Checking permissions...",
-    );
     setError(null);
 
     try {
@@ -433,19 +399,13 @@ export function useVoiceWebSocket({
           autoGainControl: true,
         },
       });
-      console.log("[ChainOfTrust] [Hook] ✅ Microphone stream acquired.");
       streamRef.current = stream;
 
       const recordingContext = new AudioContext({ sampleRate: 16000 });
-      console.log(
-        `[ChainOfTrust] [Hook] Created AudioContext at ${recordingContext.sampleRate}Hz`,
-      );
       recordingContextRef.current = recordingContext;
-
       await recordingContext.audioWorklet.addModule(
         "/audio-worklet-processor.js",
       );
-      console.log("[ChainOfTrust] [Hook] AudioWorklet module loaded.");
 
       const source = recordingContext.createMediaStreamSource(stream);
       sourceNodeRef.current = source;
@@ -475,9 +435,6 @@ export function useVoiceWebSocket({
 
           if (Math.random() < 0.01) {
             // Very throttled
-            console.log(
-              `[ChainOfTrust] [Hook] 📤 Forwarding PCM chunk to server (${event.data.buffer.byteLength} bytes)`,
-            );
           }
           wsRef.current.send(event.data.buffer);
         }
@@ -486,7 +443,6 @@ export function useVoiceWebSocket({
       source.connect(workletNode);
       setIsRecording(true);
     } catch (e) {
-      console.error("[ChainOfTrust] [Hook] ❌ startRecording failed:", e);
       setError("Microphone access failed. Please check permissions.");
       onError?.(e);
     }
