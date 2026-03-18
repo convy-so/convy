@@ -12,6 +12,7 @@ import {
 import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
 import { normalizeMessages } from "@/lib/ai";
 import { ConversationManager } from "@/lib/conversation-manager";
+import { applyMemoryUpdate } from "@/lib/conversation-memory";
 import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
 import type { AgentContext } from "@/lib/agents/types";
 import {
@@ -21,6 +22,50 @@ import {
 } from "@/lib/gemini-limiter";
 
 export const maxDuration = 300;
+
+/**
+ * GET - Retrieve historical messages for a sample conversation
+ */
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ surveyId: string }> },
+) {
+  try {
+    const session = await getVerifiedSession();
+    const { surveyId } = await params;
+    const { searchParams } = new URL(request.url);
+    const conversationNumber = Number(searchParams.get("conversationNumber") || 1);
+
+    const [survey] = await getDb()
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+
+    if (!survey) {
+      return new Response("Survey not found", { status: 404 });
+    }
+
+    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access === "none") {
+      return new Response("Unauthorized", { status: 403 });
+    }
+
+    const sampleId = `sample-${surveyId}-${conversationNumber}`;
+    const [sample] = await getDb()
+      .select()
+      .from(sampleConversations)
+      .where(eq(sampleConversations.id, sampleId));
+
+    return new Response(JSON.stringify({ messages: sample?.messages || [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error) {
+    console.error("[Sample GET] Error:", error);
+    return new Response("Internal server error", { status: 500 });
+  }
+}
 
 /**
  * Stream a sample conversation for the survey maker to review
@@ -183,6 +228,7 @@ export async function POST(
       surveyConfig,
       rollingContext: context,
       language: survey.language as "en" | "fr" | "de" | "es" | "it" | undefined,
+      modality: "text",
       isSample: true,
       sampleFeedback: combinedFeedback,
       conversationNumber,
@@ -219,7 +265,6 @@ export async function POST(
     }
 
     // Use the agent's stream method which includes domain expertise, checklist, and tools
-    // No onFinish callback needed for DB persistence as sample routes are ephemeral
     const streamResult = await withGeminiLimit(async () => {
       return conductingAgent.stream(
         messagesToLLM as any,
@@ -227,21 +272,49 @@ export async function POST(
         async (params) => {
           const { text, usage, response } = params;
 
-          // ... (existing logging / db / queue logic internally handled by stream wrapper)
           const assistantMessage = response.messages?.find(
             (m: any) => m.role === "assistant",
           );
 
+          const toolInvocations = assistantMessage?.toolInvocations || [];
+
+          // 1. Extract state updates and message_to_user from the 'think_and_respond' tool
+          let messageToUser = "";
+          const thinkTool = toolInvocations.find(
+            (inv: any) => inv.toolName === "think_and_respond",
+          );
+
+          if (thinkTool) {
+            const { state_updates, message_to_user } = thinkTool.args || {};
+            messageToUser = message_to_user;
+
+            // 2. Persist state updates to the rolling context so the AI "remembers" its progress
+            if (state_updates && Object.keys(state_updates).length > 0) {
+              context.memory = applyMemoryUpdate(
+                context.memory,
+                state_updates,
+                surveyConfig,
+              );
+              console.log(
+                `[Sample Route] Applied ${Object.keys(state_updates).length} state updates to context`,
+              );
+            }
+          }
+
+          // Use message_to_user as fallback if top-level text is empty (AI SDK tool call behavior)
+          const contentForStorage = text || messageToUser || "";
+
           const updatedMessages = [
-            ...messagesToLLM, // Use messagesToLLM as the base for updated messages
+            ...messagesToLLM,
             {
               role: "assistant" as const,
-              content: text,
+              content: contentForStorage,
               parts:
                 (assistantMessage as any)?.content &&
                 Array.isArray((assistantMessage as any).content)
                   ? (assistantMessage as any).content
                   : undefined,
+              toolInvocations, // Carry over tool invocations for the UI to render
               timestamp: new Date().toISOString(),
             },
           ];
@@ -251,12 +324,12 @@ export async function POST(
               role: m.role,
               content: m.content,
               parts: m.parts,
+              toolInvocations: (m as any).toolInvocations,
               timestamp: m.timestamp || new Date().toISOString(),
             }));
 
             // Check if AI completed survey
-            const toolInvocations = assistantMessage?.toolInvocations || [];
-            let isCompleted = !!toolInvocations.find(
+            const isCompleted = !!toolInvocations.find(
               (call: any) => call.toolName === "finishSurvey",
             );
 
@@ -278,18 +351,23 @@ export async function POST(
                 userId: session.user.id,
               });
             }
+
+            // Trigger memory update with the FINAL history including this AI turn
+            ConversationManager.updateMemoryAsync(
+              conversationId,
+              dbMessages,
+              surveyConfig,
+              context,
+            ).catch((err) =>
+              console.error("[Sample Route] Async memory update failed:", err),
+            );
           }
         },
         undefined,
       );
     });
 
-    ConversationManager.updateMemoryAsync(
-      conversationId,
-      normalizedMessages,
-      surveyConfig,
-      context,
-    ).catch(console.error);
+    // Context saving moved to Redis save below
 
     // Save updated context to Redis using Manager
     await ConversationManager.saveContext(conversationId, context);

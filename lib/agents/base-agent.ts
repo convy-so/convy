@@ -1,13 +1,18 @@
-import { tool } from "ai";
 import { AgentContext, ChecklistItem, SpecialistChecklist } from "./types";
 import { searchKnowledgeBase } from "@/lib/rag/search";
 import { rerankResults } from "@/lib/rag/reranker";
 import { SurveyConfig } from "@/lib/prompts";
-import { retrieveRelevantPatterns } from "@/lib/learning/knowledge-storage";
-import { retrievePatternForSituation } from "@/lib/learning/context-engine";
-import { SkillRegistry } from "./skill-registry";
-import { loadDomainSkills } from "./domain-skill-loader";
+import { SkillEngine } from "./skill-system/engine";
+import { SUB_DOMAINS } from "./skill-system/registry";
+import { ExpertStateStore } from "@/lib/expert-state-store";
+import { ExpertState } from "@/lib/schemas/expert-state";
 import { getRedisClient } from "@/lib/redis";
+
+// Intelligence Engines (V2 Architecture)
+import { psychologicalEngine } from "@/lib/psychology";
+import { domainBrain } from "@/lib/domain-brain";
+import { probeEngine } from "@/lib/probe-engine";
+import { MemoryBridge } from "@/lib/memory-bridge";
 
 const PRELOAD_CACHE_TTL_SECONDS = 300; // 5 minutes
 
@@ -25,36 +30,58 @@ export abstract class BaseSpecialistAgent {
       `[BaseAgent] initialize: Role=${this.role}. SID=${this.context.surveyConfig?.id || "none"}. Domain=${this.context.surveyConfig?.domainId || "none"}`,
     );
     if (this.context.surveyConfig?.domainId) {
+      // Find subdomain by ID (e.g., 'cx-nps-loyalty')
+      // Note: surveyConfig.domainId currently stores a number (Family ID).
+      // We need to resolve which subdomain within that family was selected.
+      // For now, if it's a number, we'll use it as a hint for matching.
+      
       const surveyDescription = [
         this.context.surveyConfig.coreObjective,
         this.context.surveyConfig.expertState?.objective?.goal,
         this.context.surveyConfig.expertState?.objective?.subjectDescription,
-        this.context.surveyConfig.expertState?.scope?.mainTopics?.join(" "),
-      ]
-        .filter(Boolean)
-        .join(" ");
+      ].filter(Boolean).join(" ");
 
-      const phaseMap: Record<string, "creation" | "conducting" | "analytics"> =
-        {
-          creation: "creation",
-          conducting: "conducting",
-          analytics: "analytics",
-        };
-
+      const phaseMap: Record<string, "creation" | "conducting" | "analytics"> = {
+        creation: "creation",
+        conducting: "conducting",
+        analytics: "analytics",
+      };
       const phase = phaseMap[this.role] || "creation";
 
-      this.context.loadedDomainSkills =
-        (await loadDomainSkills(
-          this.context.surveyConfig.domainId,
-          phase,
-          surveyDescription,
-        )) || undefined;
+      // V2 GENIUS: Semantic Hybrid Matching
+      const matchedSubDomains = await SkillEngine.semanticMatch(surveyDescription);
+      
+      if (matchedSubDomains.length > 0) {
+        // Load all skills for synthesis
+        const skillEntries: { skill: import("./skill-system/types").UnifiedSkill; weight: number }[] = [];
+        for (const match of matchedSubDomains) {
+          const skill = await SkillEngine.loadSkill(match.subDomain.id, phase);
+          if (skill) {
+            skillEntries.push({ skill, weight: match.weight });
+          }
+        }
+
+        if (skillEntries.length > 0) {
+          // Synthesize hybrid protocol
+          const synthesizedContent = await SkillEngine.synthesizeProtocol(skillEntries, this.role);
+          
+          this.context.loadedDomainSkills = {
+            domainName: matchedSubDomains.map(m => m.subDomain.name).join(" + "),
+            coreContent: synthesizedContent,
+            surveyTypeContent: "",
+            matchedSurveyType: matchedSubDomains[0].subDomain.id,
+            hybridDomains: matchedSubDomains.map(m => ({ id: m.subDomain.id, weight: m.weight }))
+          };
+          
+          console.log(`[BaseAgent] Hybrid Protocol Synthesized: ${this.context.loadedDomainSkills.domainName}`);
+        }
+      }
     }
   }
 
   abstract buildSystemPrompt(): string;
 
-  abstract getTools(): Record<string, any>;
+  abstract getTools(): any;
 
   protected abstract buildChecklist(config: SurveyConfig): SpecialistChecklist;
 
@@ -88,7 +115,8 @@ ${checklist.aspirational.map((i) => `• [${i.status.toUpperCase()}] ID: ${i.id}
 CRITICAL OPERATIONAL RULES:
 1. Every turn MUST begin with a 'think_and_respond' call.
 2. Use 'internal_reasoning' to audit your progress against the REQUIRED IDs above.
-3. Once a REQUIRED item is fully met, mark it as 'met' in your next state_update.
+3. Put your conversational response in 'message_to_user'. This is the ONLY text that will be shown to the participant.
+4. Once a REQUIRED item is fully met, mark it as 'met' in your next state_update.
 </success_criteria>
     `.trim();
   }
@@ -136,13 +164,52 @@ Always prioritize Objective > Identity > Constraints. If a domain skill suggests
     `.trim();
   }
 
+  // ── V2 Intelligence Helpers ──────────────────────────────────────────────
+
+  protected getPrunedStateSection(): string {
+    const state = this.context.expertState;
+    if (!state) return "";
+
+    const prunedState = MemoryBridge.pruneExpertState(state);
+    const omittedSummary = MemoryBridge.summarizeOmittedNodes(state);
+
+    return `
+<expert_state_pruned>
+${JSON.stringify(prunedState, null, 2)}
+</expert_state_pruned>
+
+<omitted_topics_summary>
+${omittedSummary}
+</omitted_topics_summary>
+    `.trim();
+  }
+
+  protected getAdaptationHintsSection(): string {
+    const state = this.context.expertState;
+    if (!state) return "";
+
+    const strategy = probeEngine.selectStrategy(state);
+    const nextTopic = domainBrain.getNextPriorityTopic(state);
+    const hint = probeEngine.generateAdaptationHint(strategy, nextTopic?.label || "the research objective");
+
+    return `
+<adaptation_hints>
+1. PSYCHOLOGICAL: ${psychologicalEngine.getEngagementSummary(state)}
+2. PENDING_TOPICS: ${domainBrain.getPendingTopics(state).map((t) => t.label).join(", ") || "None"}
+3. NEXT_PRIORITY: ${nextTopic?.label ?? "Wrap up"}
+4. PROBE_STRATEGY: ${strategy.toUpperCase()}
+5. ADAPTATION_HINT: ${hint}
+</adaptation_hints>
+    `.trim();
+  }
+
   // ── RAG: General knowledge context ─────────────────────────────────────────
 
   protected getKnowledgeSection(): string {
     if (!this.context.knowledgeContext && !this.context.ragContext) return "";
     let section = "<knowledge_context>\n";
     if (this.context.knowledgeContext) {
-      section += `Context provided by orchestrator:\n${this.context.knowledgeContext}\n\n`;
+      section += `Context provided by previous turns:\n${this.context.knowledgeContext}\n\n`;
     }
     if (this.context.ragContext) {
       section += `Retrieved knowledge:\n${this.context.ragContext}\n`;
@@ -177,217 +244,17 @@ Always prioritize Objective > Identity > Constraints. If a domain skill suggests
     }
   }
 
-  // ── Self-Learning: Situational pattern (high-precision, full detail) ────────
+  // ── Expert State Persistence ─────────────────────────────────────────────
 
-  /**
-   * Formats the single best-fit situational pattern as a <target_technique> block.
-   * This gets full detail because it's the ONE pattern most relevant to the current moment.
-   */
-  protected getSituationalPatternSection(): string {
-    const p = this.context.situationalPattern;
-    if (!p) return "";
+  protected async saveExpertState(update: Partial<ExpertState>): Promise<void> {
+    const surveyId = this.context.surveyConfig?.id;
+    if (!surveyId) return;
 
-    const lines = p.content.split("\n");
-    const descStart = lines.findIndex((l) => l.startsWith("DESCRIPTION:"));
-    const contextStart = lines.findIndex((l) => l.startsWith("CONTEXT:"));
-    const exampleStart = lines.findIndex((l) =>
-      l.startsWith("EXAMPLE FROM CONVERSATION:"),
-    );
-
-    const description =
-      descStart >= 0
-        ? lines
-            .slice(
-              descStart + 1,
-              contextStart > 0 ? contextStart : descStart + 4,
-            )
-            .join(" ")
-            .trim()
-        : "";
-    const example =
-      exampleStart >= 0
-        ? lines[exampleStart + 1]?.trim().replace(/^"|"$/g, "") || ""
-        : "";
-
-    return `
-<target_technique source="${p.source}"${p.experimentId ? ` experiment_id="${p.experimentId}" variant="${p.experimentVariant}"` : ""}>
-Technique: ${p.title}
-Instruction: ${description}
-${example ? `Example: "${example}"` : ""}
-</target_technique>`.trim();
-  }
-
-  // ── Self-Learning: Broad pattern hints (compressed bullets) ────────────────
-
-  /**
-   * Fetches patterns by category and formats them as compressed 1-line bullets.
-   * Each bullet: • "Title" — trigger: action
-   * ~15 tokens/pattern vs ~120 tokens with the verbose format.
-   */
-  protected async loadPatternLearnings(
-    category:
-      | "questioning"
-      | "probing"
-      | "transition"
-      | "engagement"
-      | "creation"
-      | "general",
-    limit: number = 3,
-  ): Promise<string> {
     try {
-      const domainId = this.context.surveyConfig?.domainId ?? null;
-      const patterns = await retrieveRelevantPatterns(
-        domainId,
-        category,
-        limit,
-      );
-      if (patterns.length === 0) return "";
-
-      const bullets = patterns.map((pattern) => {
-        const lines = pattern.content.split("\n");
-
-        // Extract trigger from CONTEXT line (first sentence only)
-        const contextIdx = lines.findIndex((l) => l.startsWith("CONTEXT:"));
-        const contextFull =
-          contextIdx >= 0 ? lines[contextIdx + 1]?.trim() || "" : "";
-        const trigger = contextFull
-          .split(/\.|,/)[0]
-          .trim()
-          .toLowerCase()
-          .slice(0, 70);
-
-        // Extract action from DESCRIPTION (first sentence only)
-        const descIdx = lines.findIndex((l) => l.startsWith("DESCRIPTION:"));
-        const descFull = descIdx >= 0 ? lines[descIdx + 1]?.trim() || "" : "";
-        const action = descFull.split(".")[0].trim().slice(0, 90);
-
-        return `• "${pattern.title}" — ${trigger || "relevant moment"}: ${action || "apply technique"}`;
-      });
-
-      return bullets.join("\n");
+      await ExpertStateStore.update(surveyId, update);
+      console.log(`[BaseSpecialistAgent] ExpertState saved for survey ${surveyId}`);
     } catch (error) {
-      console.warn(
-        `[BaseSpecialistAgent] Failed to load pattern learnings:`,
-        error,
-      );
-      return "";
-    }
-  }
-
-  /**
-   * Returns the full self-learning section for the system prompt.
-   * - <target_technique>: one full-detail situational pattern (high precision)
-   * - <learned_techniques>: compressed bullet hints from broad semantic search
-   */
-  protected getPatternLearningsSection(): string {
-    const situational = this.getSituationalPatternSection();
-    const broad = this.context.patternLearnings;
-
-    if (!situational && !broad) return "";
-
-    const parts: string[] = [];
-    if (situational) parts.push(situational);
-    if (broad)
-      parts.push(`<learned_techniques>\n${broad}\n</learned_techniques>`);
-
-    return parts.join("\n\n");
-  }
-
-  /**
-   * Preloads pattern learnings into context. Call this BEFORE buildSystemPrompt().
-   *
-   * Step 1 (Conducting only): Situational retrieval from ContextEngine.
-   *   → Checks active A/B experiments, then exact phase+style match, then phase-only,
-   *     then vector fallback. Returns the single best-fit pattern in full detail.
-   *
-   * Step 2: Broad semantic search across categories.
-   *   → Returns compressed 1-line bullets for ambient technique awareness.
-   */
-  public async preloadPatternLearnings(
-    categories: Array<
-      | "questioning"
-      | "probing"
-      | "transition"
-      | "engagement"
-      | "creation"
-      | "general"
-    > = ["general"],
-    limitPerCategory: number = 2,
-    query?: string,
-  ): Promise<void> {
-    console.log(
-      `[BaseAgent] preloadPatternLearnings: Cats=${categories.join(",")}`,
-    );
-    try {
-      // ── Step 1: Situational (conducting only, requires rolling context) ──────
-      if (this.role === "conducting" && this.context.rollingContext) {
-        const { stateContext, memory } = this.context.rollingContext;
-
-        const phaseMap: Record<
-          string,
-          "opening" | "exploration" | "deepdive" | "closing"
-        > = {
-          GREETING: "opening",
-          EXPLORING_INITIAL: "exploration",
-          DRILLING_DEEPER: "deepdive",
-          COVERING_TOPIC: "exploration",
-          TRANSITIONING: "exploration",
-          CHECKING_COVERAGE: "deepdive",
-          WRAPPING_UP: "closing",
-          CONCLUDING: "closing",
-        };
-
-        const situation = {
-          phase: phaseMap[stateContext?.currentState ?? ""] || "exploration",
-          style: memory?.participantStyle || "neutral",
-        };
-
-        const retrieved = await retrievePatternForSituation(
-          situation,
-          query || "effective engagement technique",
-          this.context.conversationId ?? "unknown",
-          this.context.surveyConfig?.domainId,
-        );
-
-        if (retrieved) {
-          this.context.situationalPattern = retrieved;
-        }
-      }
-
-      // ── Step 2: Broad semantic search (Redis-cached) ──────────────────────────
-      const cacheKey = `agent:patterns:${categories.join(",")}:${limitPerCategory}`;
-      const redis = getRedisClient();
-      const cachedBullets = await redis.get(cacheKey).catch(() => null);
-
-      if (cachedBullets) {
-        console.log(
-          `[BaseSpecialistAgent] preloadPatternLearnings: cache hit (${cacheKey})`,
-        );
-        this.context.patternLearnings = cachedBullets;
-        return;
-      }
-
-      const bullets: string[] = [];
-      for (const category of categories) {
-        const categoryBullets = await this.loadPatternLearnings(
-          category,
-          limitPerCategory,
-        );
-        if (categoryBullets) bullets.push(categoryBullets);
-      }
-
-      if (bullets.length > 0) {
-        const joined = bullets.join("\n");
-        this.context.patternLearnings = joined;
-        redis
-          .set(cacheKey, joined, "EX", PRELOAD_CACHE_TTL_SECONDS)
-          .catch(() => {});
-      }
-    } catch (error) {
-      console.warn(
-        `[BaseSpecialistAgent] Failed to preload pattern learnings:`,
-        error,
-      );
+      console.error(`[BaseSpecialistAgent] Failed to save ExpertState:`, error);
     }
   }
 
@@ -411,16 +278,12 @@ ${example ? `Example: "${example}"` : ""}
         return;
       }
 
-      const skills = await SkillRegistry.listSkills();
+      const skills = SUB_DOMAINS;
       if (skills.length === 0) return;
 
-      const callableSkills = skills.filter((s) => !s.id.endsWith("-core"));
-
-      if (callableSkills.length === 0) return;
-
-      const formatted = callableSkills
+      const formatted = skills
         .map(
-          (s) =>
+          (s: any) =>
             `• ID: ${s.id} | Name: ${s.name} | Description: ${s.description}`,
         )
         .join("\n");
@@ -447,5 +310,18 @@ Rules for Skills:
     } catch (error) {
       console.warn(`[BaseSpecialistAgent] Failed to preload skills:`, error);
     }
+  }
+
+  /**
+   * Stub for preloading specialized pattern learnings.
+   * Specializations can override this to fetch domain-specific intelligence.
+   */
+  public async preloadPatternLearnings(
+    _patterns: string[],
+    _depth: number = 2
+  ): Promise<void> {
+    // Default implementation is a no-op.
+    // This allows the route.ts to call it even if the specialist hasn't overridden it.
+    return Promise.resolve();
   }
 }

@@ -6,7 +6,7 @@ import { getDb } from "@/db";
 import { surveys, users } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
-import { AgentOrchestrator } from "@/lib/agents/orchestrator";
+import { AnalyticsSpecialist } from "@/lib/agents/analytics-specialist";
 import type { AgentContext } from "@/lib/agents/types";
 
 export const maxDuration = 300;
@@ -80,9 +80,9 @@ export async function POST(
         (user?.preferredLanguage as "en" | "fr" | "de" | "es" | "it") || "en",
     };
 
-    // 4. Initialize Orchestrator and get Analytics Specialist
-    const orchestrator = new AgentOrchestrator(agentContext);
-    const analyticsSpecialist = orchestrator.getAnalyticsSpecialist();
+    // 4. Initialize Analytics Specialist directly
+    const analyticsSpecialist = new AnalyticsSpecialist(agentContext);
+    await analyticsSpecialist.initialize();
 
     // 5. Stream response using correctly typed ModelMessages
     const result = analyticsSpecialist.stream(modelMessages);

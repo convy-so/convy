@@ -6,8 +6,9 @@ import type { SurveyConfig } from "@/lib/prompts";
 import { defaultModel } from "@/lib/ai";
 import { logUsage } from "@/lib/billing/logger";
 import { TONE_PROFILES } from "@/lib/surveys";
-import { SkillRegistry } from "./skill-registry";
+import { SkillEngine } from "./skill-system/engine";
 import type { VoiceAgentFunction } from "@/lib/voice/deepgram-voice-agent";
+import { KnowledgeService } from "@/lib/knowledge-service";
 
 export class ConductingSpecialist extends BaseSpecialistAgent {
   constructor(context: AgentContext) {
@@ -110,6 +111,14 @@ export class ConductingSpecialist extends BaseSpecialistAgent {
     const { domainName, coreContent, surveyTypeContent } =
       this.context.loadedDomainSkills || {};
 
+    const state = this.context.expertState;
+    let adaptationSection = "";
+
+    if (state) {
+      // Logic for adaptation guidance is now centralized in BaseSpecialistAgent.getAdaptationHintsSection()
+      adaptationSection = this.getAdaptationHintsSection();
+    }
+
     // Build Subject Intelligence Section
     let subjectIntelSection = "";
     if (this.context.subjectIntelligence) {
@@ -143,6 +152,15 @@ Topics Covered: ${context.memory.topicsCovered.join(", ") || "None"}
 </conversation_context>`
       : "";
 
+    const effectiveFeedback = this.context.sampleFeedback || config.improvementFeedback;
+    const feedbackSection = effectiveFeedback
+      ? `
+<creator_feedback>
+The following feedback was provided by the survey creator during previous rehearsals. YOU MUST apply these improvements precisely to your behavior and questioning strategy:
+${effectiveFeedback}
+</creator_feedback>`
+      : "";
+
     return `
 <role>
 IDENTITY: You are a professional ${domainName || "Survey"} Conducting Specialist.
@@ -164,17 +182,19 @@ ${surveyTypeContent || ""}
 ${this.buildQuestioningStrategy(config.expertState?.successCriteria?.insightTypes ?? [])}
 </expert_protocols>
 
+${feedbackSection}
+
 ${subjectIntelSection}
 
 ${contextSection}
 
 ${mediaSection}
 
+${this.getPrunedStateSection()}
+      
 ${this.getSkillsSection()}
 
 ${this.getKnowledgeSection()}
-
-${this.getPatternLearningsSection()}
 
 <completion_protocol>
 Once the REQUIRED checklist IDs are marked 'met':
@@ -184,7 +204,11 @@ Once the REQUIRED checklist IDs are marked 'met':
 </completion_protocol>
 
 <final_directive>
-Use 'think_and_respond' to plan your next move. Capture qualitative evidence for a DIFFERENT required ID in each turn if possible.
+You MUST call 'think_and_respond' in EVERY turn.
+1. Use 'internal_reasoning' to audit your progress against the REQUIRED IDs.
+2. Formulate your conversational response in 'message_to_user'.
+3. Update collected data in 'state_updates'.
+Your 'message_to_user' is what the participant will actually see. Never leave it empty.
 </final_directive>
 `.trim();
   }
@@ -275,14 +299,17 @@ ${strategies.join("\n")}
             description:
               "Deep context analysis. Think step-by-step about what the user just said, what you still need to ask based on your checklist, and what approach/tone to use.",
           },
-          state_updates: {
-            type: "object",
-            description:
-              "Key-value pairs of any checklist items or data points you have successfully collected from this specific turn.",
-            additionalProperties: { type: "string" },
-          },
+          expert_state_updates: z.object({
+            metNodes: z.array(z.string()).optional().describe("IDs of research nodes (topics) that were adequately covered in this turn"),
+            respondentSentiment: z.string().optional().describe("Brief label for participant's current sentiment"),
+            observedBiases: z.array(z.string()).optional().describe("Any social or cognitive biases detected in this turn"),
+            keyVerbatims: z.array(z.object({
+              nodeId: z.string(),
+              quote: z.string()
+            })).optional().describe("Structured quotes to attach to specific research nodes")
+          }).optional().describe("V2 Architecture: Structured updates for the ExpertState"),
         },
-        required: ["message_to_user", "internal_reasoning", "state_updates"],
+        required: ["message_to_user", "internal_reasoning"],
       },
     });
 
@@ -330,87 +357,61 @@ ${strategies.join("\n")}
 
   getTools(onMediaDisplay?: (media: any) => void): Record<string, any> {
     const config = this.context.surveyConfig;
+    
     return {
       think_and_respond: tool({
-        description:
-          "Use this tool to plan your response, update the survey checklist state based on the user's input, and formulate the exact text you want to say to the user. You MUST call this tool.",
+        description: "Analyze the respondent's input, update the expert state, and generate a conversational response.",
         inputSchema: z.object({
-          message_to_user: z
-            .string()
-            .describe(
-              "The FINAL message to speak aloud. Must be conversational and natural. No internal thoughts.",
-            ),
-          internal_reasoning: z
-            .string()
-            .describe(
-              "Deep context analysis. Think step-by-step about what the user just said, what you still need to ask based on your checklist, and what approach/tone to use.",
-            ),
-          state_updates: z
-            .record(z.string())
-            .describe(
-              "Key-value pairs of any checklist items or data points you have successfully collected from this specific turn.",
-            ),
+          message_to_user: z.string().describe("The actual text shown to the participant."),
+          internal_reasoning: z.string().describe("Your logic for the current turn."),
+          expert_state_updates: z.record(z.any()).optional().describe("V2 ExpertState updates (Zod-compatible)."),
         }),
-        execute: async ({
-          message_to_user,
-          internal_reasoning,
-          state_updates,
-        }) => {
-          console.log(
-            `[ConductingAgent:Tool:think_and_respond] Message: ${message_to_user.slice(0, 50)}...`,
-          );
-          console.log(
-            `[ConductingAgent:Tool:think_and_respond] Reasoning: ${internal_reasoning.slice(0, 100)}...`,
-          );
-          console.log(
-            `[ConductingAgent:Tool:think_and_respond] State updates: ${Object.keys(state_updates).join(", ")}`,
-          );
-          return { success: true, message: "State logged." };
+        execute: async ({ message_to_user, internal_reasoning, expert_state_updates }) => {
+          if (expert_state_updates && this.context.expertState) {
+            // Apply updates to local context
+            Object.assign(this.context.expertState, expert_state_updates);
+            
+            // Persist to Redis
+            await this.saveExpertState(expert_state_updates);
+
+            // Index insights if any nodes were marked as 'met'
+            if (expert_state_updates.coverageTracker?.nodes) {
+              await KnowledgeService.indexSurveyInsights(
+                this.context.surveyConfig?.id || "unknown",
+                expert_state_updates.coverageTracker.nodes
+              );
+            }
+          }
+          return { success: true };
         },
       }),
       loadSkill: tool({
-        description:
-          "Load detailed instructions for a specific specialized skill.",
+        description: "Load detailed instructions for a specific specialized skill.",
         inputSchema: z.object({
-          skillId: z
-            .string()
-            .describe("The ID of the skill to load (e.g., 'STARProber')"),
+          skillId: z.string().describe("The ID of the skill to load."),
         }),
         execute: async ({ skillId }) => {
-          const skill = await SkillRegistry.getSkill(skillId);
-          if (!skill) return { error: "Skill not found" };
-          return { instructions: skill.content };
+          const skill = await SkillEngine.loadSkill(skillId, "conducting");
+          return skill ? { instructions: skill.content } : { error: "Skill not found" };
         },
       }),
       showMedia: tool({
-        description:
-          "Display a media item (image, audio, or video) to the participant",
+        description: "Show a piece of media (image/video) to the respondent.",
         inputSchema: z.object({
-          mediaId: z
-            .string()
-            .describe("The unique ID of the media item to display"),
+          mediaId: z.string().describe("The ID of the media to show."),
         }),
         execute: async ({ mediaId }) => {
           const media = config?.media?.find((m: any) => m.id === mediaId);
-          if (!media) return { error: "Media not found" };
-          if (onMediaDisplay) onMediaDisplay(media);
-          return { success: true, media };
+          if (media && onMediaDisplay) onMediaDisplay(media);
+          return media ? { success: true } : { error: "Media not found" };
         },
       }),
-      finishSurvey: tool({
-        description:
-          "Signal that the survey conversation is complete. Call when all required topics are covered.",
+      handoffToHuman: tool({
+        description: "Escalate the conversation to a human moderator.",
         inputSchema: z.object({
-          reason: z
-            .string()
-            .optional()
-            .describe("Brief reason for ending the conversation"),
+          reason: z.string().optional().describe("Why is this being escalated?"),
         }),
-        execute: async ({ reason }) => ({
-          success: true,
-          message: "Survey complete",
-          reason: reason ?? "all topics covered",
-        }),
+        execute: async ({ reason }) => ({ success: true, reason: reason ?? "complete" }),
       }),
     };
   }

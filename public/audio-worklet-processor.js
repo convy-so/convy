@@ -24,14 +24,8 @@ class PCMProcessor extends AudioWorkletProcessor {
     this.buffer16k = new Int16Array(this.targetSamples16k);
     this.bufferIndex = 0;
 
-    // Chain of Trust: Track initialization
-    console.log(
-      `[ChainOfTrust] [Worklet] Initialized. TargetSamples: ${this.targetSamples16k} (80ms @ 16kHz)`,
-    );
-
     this.port.onmessage = (event) => {
       if (event.data.command === "stop") {
-        console.log("[ChainOfTrust] [Worklet] Stop command received.");
         this.stopped = true;
       }
     };
@@ -56,19 +50,10 @@ class PCMProcessor extends AudioWorkletProcessor {
     if (this.stopped) return false;
 
     if (!this.hasStarted) {
-      console.log(
-        "[ChainOfTrust] [Worklet] First process() call received. Audio flow started.",
-      );
       this.hasStarted = true;
     }
 
     this.processCount++;
-    if (this.processCount % 500 === 0) {
-      // Log every ~4 seconds (128 samples * 500 / 16000 = 4s)
-      console.log(
-        `[ChainOfTrust] [Worklet] Heartbeat: Processed ${this.processCount} blocks (~${Math.round((this.processCount * 128) / 16) / 1000}s)`,
-      );
-    }
 
     const input = inputs[0];
     if (!input || input.length === 0) return true;
@@ -96,15 +81,6 @@ class PCMProcessor extends AudioWorkletProcessor {
   sendBuffer() {
     // Create a copy of the buffer to send
     const dataToSend = new Int16Array(this.buffer16k);
-
-    // Chain of Trust: Track buffer dispatch
-    // Log every 10th buffer (~800ms) to avoid spam but prove flow
-    if (
-      Math.floor(this.processCount / 10) % 10 === 0 &&
-      this.bufferIndex === 0
-    ) {
-      // Only log once per window
-    }
 
     // Post data back to main thread
     this.port.postMessage(

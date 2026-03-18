@@ -7,7 +7,6 @@ export * from "./voice";
 export * from "./collaboration";
 export * from "./notifications";
 export * from "./surveys";
-export * from "./learning";
 export * from "./relations";
 export * from "./billing";
 

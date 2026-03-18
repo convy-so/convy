@@ -228,6 +228,7 @@ export async function POST(
         | "it"
         | undefined,
       rollingContext,
+      modality: "text",
       subjectIntelligence: surveyConfig.subjectIntelligence,
     };
     const agent = new ConductingSpecialist(agentContext);

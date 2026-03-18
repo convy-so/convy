@@ -227,6 +227,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       surveyConfig: this.state.surveyConfig,
       rollingContext: this.state.context,
       language: this.state.language,
+      modality: "voice",
       knowledgeContext: combinedFeedback || undefined, // Pass feedback as knowledge context
     };
 

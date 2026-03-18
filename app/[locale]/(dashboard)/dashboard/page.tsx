@@ -21,6 +21,7 @@ import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import { Loader2 } from "lucide-react";
 import { cache, cacheKeys } from "@/lib/cache";
+import { RealTimeRefresh } from "@/components/dashboard/real-time-refresh";
 
 async function DashboardContent({ authHeaders }: { authHeaders: Headers | string | null }) {
   const session = await getVerifiedSession(authHeaders);
@@ -65,12 +66,9 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
             .select({ count: count() })
             .from(surveys)
             .where(
-              and(
-                eq(surveys.userId, userId),
-                activeOrgId
-                  ? eq(surveys.organizationId, activeOrgId)
-                  : isNull(surveys.organizationId)
-              )
+              activeOrgId
+                ? eq(surveys.organizationId, activeOrgId)
+                : and(eq(surveys.userId, userId), isNull(surveys.organizationId))
             ),
           getDb()
             .select({
@@ -79,13 +77,12 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
             .from(surveyConversations)
             .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
             .where(
-              and(
-                eq(surveys.userId, userId),
-                eq(surveyConversations.completed, true),
-                activeOrgId
-                  ? eq(surveys.organizationId, activeOrgId)
-                  : isNull(surveys.organizationId)
-              )
+                and(
+                  eq(surveyConversations.completed, true),
+                  activeOrgId
+                    ? eq(surveys.organizationId, activeOrgId)
+                    : and(eq(surveys.userId, userId), isNull(surveys.organizationId))
+                )
             )
         ]);
 
@@ -107,12 +104,9 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
       cacheKeys.dashboardRecentSurveys(userId, activeOrgId),
       async () => {
         const surveysData = await getDb().query.surveys.findMany({
-          where: and(
-            eq(surveys.userId, userId),
-            activeOrgId
-              ? eq(surveys.organizationId, activeOrgId)
-              : isNull(surveys.organizationId)
-          ),
+          where: activeOrgId
+            ? eq(surveys.organizationId, activeOrgId)
+            : and(eq(surveys.userId, userId), isNull(surveys.organizationId)),
           orderBy: [desc(surveys.updatedAt)],
           limit: 3,
         });
@@ -145,12 +139,9 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
           .from(surveyConversations)
           .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
           .where(
-            and(
-              eq(surveys.userId, userId),
-              activeOrgId
-                ? eq(surveys.organizationId, activeOrgId)
-                : isNull(surveys.organizationId)
-            )
+            activeOrgId
+              ? eq(surveys.organizationId, activeOrgId)
+              : and(eq(surveys.userId, userId), isNull(surveys.organizationId))
           )
           .orderBy(desc(surveyConversations.createdAt))
           .limit(5);

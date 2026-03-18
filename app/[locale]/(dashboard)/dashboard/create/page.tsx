@@ -279,35 +279,25 @@ function CreateSurveyContent() {
 
   const voiceWs = useVoiceWebSocket({
     url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-creation`,
-    onReady: () => {
-      console.log("[ChainOfTrust] [Hook] WebSocket connection established. Waiting for server 'ready'...");
-    },
+    onReady: () => {},
     onMessage: (data) => {
-      console.log(`[ChainOfTrust] [Hook] Received message type: ${data.type}`, data);
       // Handle speech activity events from Deepgram
       if (data.type === "ready") {
-        console.log("[ChainOfTrust] [Server] Server is READY to accept commands.");
         setIsServerReady(true);
       } else if (data.type === "agent_ready") {
-        console.log("[ChainOfTrust] [Deepgram] 🤖 Agent initialized and ready. Clearing UI connection state.");
         setIsConnecting(false);
       } else if (data.type === "speech_start") {
-        console.log("[ChainOfTrust] [Deepgram] 🗣️ User speech started (VAD).");
         setIsSpeaking(true);
       } else if (data.type === "speech_end") {
-        console.log("[ChainOfTrust] [Deepgram] 🤐 User speech ended (VAD).");
         setIsSpeaking(false);
       } else if (data.type === "survey_state_loaded") {
-        console.log("[ChainOfTrust] [Server] Previous survey state successfully restored into handler.");
         setSurveyStateLoaded(true);
       } else if (data.type === "conversation_text") {
         const { role, content, streamId } = data;
-        console.log(`[ChainOfTrust] [Server] Appending ${role} message to UI: ${content.substring(0, 30)}... (StreamID: ${streamId})`);
         const now = Date.now();
         setMessages((prev: UIMessage[]) => {
           // Prevention of duplicates using streamId
           if (streamId && prev.some(m => m.id === streamId)) {
-            console.log(`[ChainOfTrust] [UI] 🛡️ Ignored duplicate message with StreamID: ${streamId}`);
             return prev;
           }
 
@@ -342,7 +332,6 @@ function CreateSurveyContent() {
           return [...prev, newMessage];
         });
       } else if (data.type === "request_media_upload") {
-        console.log("[ChainOfTrust] [Server] AI requested media upload tool UI:", data.allowedTypes);
         const { allowedTypes } = data;
         const toolId = `voice-tool-${Date.now()}`;
 
@@ -362,13 +351,9 @@ function CreateSurveyContent() {
           }
         ]);
       } else if (data.type === "update_extracted_data") {
-        console.log("[ChainOfTrust] [Server] Extracted data update received.");
         setExtractedData(data.extractedData);
         setCollectedInfo(data.collectedInfo);
-      } else if (data.type === "transcription_interim") {
-        // Reduced noise logging
       } else if (data.type === "survey_completed") {
-        console.log("[ChainOfTrust] [Server] ✅ Survey completion signal received.");
         // Refresh survey data to ensure we have the latest status/extracted info
         // This will trigger the 'isReadyForSample' check in the main effect
         router.refresh();
@@ -394,12 +379,8 @@ function CreateSurveyContent() {
   useEffect(() => {
     if (!isVoiceMode) return;
 
-    // New Logic: We trust 'voiceWs.hasAudioPlayed' to tell us if the greeting actually started
-    console.log("[ChainOfTrust] [UI] Playback Monitor -> isConnecting:", isConnecting, "isPlaying:", voiceWs.isPlaying, "hasRecordedAudio:", voiceWs.hasAudioPlayed, "hasGreetingPlayed:", hasGreetingPlayed);
-
     if (isVoiceMode && isConnecting && voiceWs.hasAudioPlayed) {
       // Audio started playing (The greeting arrived!)
-      console.log("[ChainOfTrust] [UI] 🟣 Audio playback detected (Greeting likely starting) - Ending connection state.");
       setIsConnecting(false);
       setHasGreetingPlayed(true);
     }
@@ -413,7 +394,6 @@ function CreateSurveyContent() {
   // Effect to sync surveyId with WebSocket - ONLY when server is ready
   useEffect(() => {
     if (surveyId && voiceWs.status === "connected" && isServerReady) {
-      console.log("[ChainOfTrust] [UI] Server ready. Sending survey ID initialization:", surveyId, "LastEventID:", voiceWs.lastEventId);
       voiceWs.sendJson({ 
         type: "set_survey_id", 
         surveyId,
@@ -431,7 +411,7 @@ function CreateSurveyContent() {
 
 
 
-  // NOTE: Auto-connect for voice runs via handleStart → voiceWs.connect().
+  // NOTE: Auto-connect for voice runs via handleStart -> voiceWs.connect().
   // The useEffect below is intentionally removed to prevent a double-connect race
   // when handleStart is the entry point. Reconnection on page reload (surveyId from URL)
   // is handled by the useEffect at the bottom of the component.
@@ -439,7 +419,6 @@ function CreateSurveyContent() {
   // Trigger conversation start once server state is loaded
   useEffect(() => {
     if (isVoiceMode && surveyStateLoaded && voiceWs.status === "connected") {
-      console.log("[ChainOfTrust] [UI] State loaded on server. Sending 'start_conversation' request...");
       voiceWs.sendJson({ type: "start_conversation" });
     }
   }, [isVoiceMode, surveyStateLoaded, voiceWs.status]);

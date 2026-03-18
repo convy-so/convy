@@ -12,6 +12,7 @@ import type { SurveyConfig } from "@/lib/prompts";
 import { analysisModel, defaultModel } from "@/lib/ai";
 import { logUsage } from "@/lib/billing/logger";
 import { evaluateResponse } from "@/lib/rag/evaluate";
+import { SkillEngine } from "./skill-system/engine";
 
 export class AnalyticsSpecialist extends BaseSpecialistAgent {
   constructor(context: AgentContext) {
@@ -23,50 +24,19 @@ export class AnalyticsSpecialist extends BaseSpecialistAgent {
   // --------------------------------------------------------------------------
 
   protected buildChecklist(config: SurveyConfig): SpecialistChecklist {
-    const metrics = config.metrics ?? [];
-    const insightTypes =
-      config.expertState?.successCriteria?.insightTypes ?? [];
+    const state = this.context.expertState;
+    if (!state) return { required: [], aspirational: [] };
 
     return {
       required: [
-        this.makeChecklistItem(
-          "objective_answer",
-          `Directly answered the survey objective: "${config.coreObjective || config.expertState?.objective?.goal || config.information}"`,
-        ),
-        this.makeChecklistItem(
-          "metrics_comprehensive",
-          `Reported on ALL defined metrics: ${metrics.join(", ") || "No explicit metrics defined"}`,
-        ),
-        this.makeChecklistItem(
-          "media_performance",
-          "Analyzed the effectiveness and reactions to any media shown in the survey",
-        ),
-        this.makeChecklistItem(
-          "pattern_identification",
-          "Identified the top 3-5 patterns across all conversations with supporting evidence",
-        ),
-        this.makeChecklistItem(
-          "actionable_recommendations",
-          "Provided specific, actionable recommendations (not just observations)",
-        ),
+        this.makeChecklistItem("objective_answered", "Directly addressed the survey goal", !!state.brief.objectives.length),
+        this.makeChecklistItem("metrics_validated", "Rendered verdicts on all success metrics", !!state.brief.successMetrics),
+        this.makeChecklistItem("pattern_detection", "Identified latent behavioral patterns", true),
+        this.makeChecklistItem("grounded_evidence", "All claims cited with [Source ID]", true),
       ],
       aspirational: [
-        this.makeChecklistItem(
-          "hypotheses_verdict",
-          "Rendered a clear 'Confirmed' or 'Refuted' verdict on all creator assumptions",
-        ),
-        ...(insightTypes.includes("emotional")
-          ? [
-              this.makeChecklistItem(
-                "emotional_arc",
-                "Mapped the emotional sentiment arc of the participant pool",
-              ),
-            ]
-          : []),
-        this.makeChecklistItem(
-          "segmentation",
-          "Identified meaningful behavior differences between participant segments",
-        ),
+        this.makeChecklistItem("longitudinal_insight", "Detected changes in sentiment over time", !!state.sessionMeta.modality),
+        this.makeChecklistItem("audience_validation", "Verified psychographic assumptions", !!state.audienceModel.psychographicProfile),
       ],
     };
   }
@@ -100,29 +70,20 @@ ${coreContent || ""}
 ${surveyTypeContent || ""}
 </expert_analytical_protocols>
 
+${this.getAdaptationHintsSection()}
+
+${this.getPrunedStateSection()}
+
 ${this.getSkillsSection()}
 
 ${this.getKnowledgeSection()}
 
 <proactive_insight_rules>
-1. METRICS FIRST: You MUST include a specific section evaluating every metric defined in the survey. If data is sparse, state "Inconclusive due to [Reason]".
-2. MEDIA ANALYTICS: If media was included in the survey, explicitly report on participant reactions to specific Media IDs.
-3. VISUALIZE: Use 'renderChart' for any distribution data (e.g., Sentiment, NPS, Frequency).
-4. THE "WHY" FACTOR: Don't just report numbers. Use the qualitative responses to explain WHY a metric is high or low.
+1. COGNITIVE ANALYST: Don't just summarize; identify why participants behaved a certain way.
+2. CITATION MANDATORY: Every claim MUST end with [Source ID: <id>].
+3. QUALITY-WEIGHTED: Prioritize high-reliability turns; discount or explicitly flag claims from turns with Evasion or Social Desirability flags.
+4. DECISION-MAP ALIGNMENT: Structure your report to directly address the Creator's decision threshold and research topic hierarchy.
 </proactive_insight_rules>
-
-<grounding_rules>
-1. SOURCE CONSTRAINT: You may ONLY base your claims on the specific survey response excerpts provided in the context blocks from your tools. You may not supplement with general knowledge.
-2. STRICT CITATION: EVERY analytical claim must end with a citation to the specific source chunk used, formatted exactly as [Source ID: <id>]. Vague references like "several respondents mentioned" without source IDs are FORBIDDEN.
-3. UNCERTAINTY ACKNOWLEDGMENT: If the retrieved data is insufficient to answer a metric or question, you MUST explicitly state: "The provided survey responses do not contain sufficient evidence to address this." Do not guess or generate plausible text.
-4. SCOPE AWARENESS: Do not generalize findings beyond the evidence. If only a specific sub-group reported something, specify that sub-group.
-</grounding_rules>
-
-<completion_protocol>
-1. Final output must be professional, structured, and free of conversational filler. 
-2. Ensure every REQUIRED checklist item is addressed in the final report.
-3. LANGUAGE: You MUST synthesize all findings and write the final report in ${this.context.language === "de" ? "German" : this.context.language === "fr" ? "French" : this.context.language === "es" ? "Spanish" : this.context.language === "it" ? "Italian" : "English"}.
-</completion_protocol>
 `.trim();
   }
 
@@ -183,14 +144,12 @@ ${this.getKnowledgeSection()}
 
     return {
       loadSkill: tool({
-        description:
-          "Load detailed instructions for a specific specialized skill.",
+        description: "Load detailed instructions for a specific specialized skill.",
         inputSchema: z.object({
           skillId: z.string().describe("The ID of the skill to load."),
         }),
         execute: async ({ skillId }) => {
-          const { SkillRegistry } = await import("./skill-registry");
-          const skill = await SkillRegistry.getSkill(skillId);
+          const skill = await SkillEngine.loadSkill(skillId, "analytics");
           return skill
             ? { instructions: skill.content }
             : { error: "Skill not found" };

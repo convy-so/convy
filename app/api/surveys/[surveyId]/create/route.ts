@@ -490,7 +490,7 @@ export async function PUT(
             expertState: {
               ...currentExpertState,
               ...extractedData,
-            },
+            } as any,
           })
           .where(eq(surveys.id, surveyId));
       }

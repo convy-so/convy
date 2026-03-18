@@ -92,7 +92,7 @@ const surveys = pgTable(
     title: text("title").notNull(),
     description: text("description"),
     coreObjective: text("core_objective"),
-    expertState: jsonb("expert_state").$type<Record<string, any>>().default({}),
+    expertState: jsonb("expert_state").$type<import("@/lib/schemas/expert-state").ExpertState>().default({} as any),
     tone: toneEnum("tone").default("casual"),
     requiredQuestions: text("required_questions").array().default([]),
     metrics: text("metrics").array().default([]),
@@ -109,6 +109,7 @@ const surveys = pgTable(
     confirmed: boolean("confirmed").default(false).notNull(),
     language: languageEnum("language").default("en").notNull(),
     domainId: integer("domain_id"), // 1-10 based on the framework
+    hybridDomains: jsonb("hybrid_domains").$type<{ id: string; weight: number }[]>().default([]),
     isVoice: boolean("is_voice").default(false).notNull(),
     improvementFeedback: text("improvement_feedback"),
     collaborators: text("collaborators").array().default([]), // Array of user IDs with edit access
@@ -209,6 +210,7 @@ const sampleConversations = pgTable(
         }>
       >()
       .default([]),
+    expertState: jsonb("expert_state").$type<import("@/lib/schemas/expert-state").ExpertState>().default({} as any),
   },
   (table) => [
     index("sample_conversations_survey_id_idx").on(table.surveyId),
@@ -253,6 +255,7 @@ const surveyConversations = pgTable(
         timestamp: string;
       }>
     >(),
+    expertState: jsonb("expert_state").$type<import("@/lib/schemas/expert-state").ExpertState>().default({} as any),
   },
   (table) => [
     index("survey_conversations_survey_id_idx").on(table.surveyId),
