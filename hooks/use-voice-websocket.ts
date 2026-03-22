@@ -62,17 +62,20 @@ export function useVoiceWebSocket({
 
   // Initialize WebSocket
   const connect = useCallback(async () => {
+    /*
     console.log("[Voice WS] connect() called", { url });
     if (wsRef.current) {
       console.log("[Voice WS] Already have connection, skipping");
       return;
     }
+    */
+    if (wsRef.current) return;
 
-    console.log("[Voice WS] Setting status to connecting");
+    // console.log("[Voice WS] Setting status to connecting");
     setStatus("connecting");
     setHasAudioPlayed(false);
     setError(null);
-    console.log("[Voice WS] Connection state reset. hasAudioPlayed=false");
+    // console.log("[Voice WS] Connection state reset. hasAudioPlayed=false");
 
     let connectionUrl = url;
 
@@ -84,9 +87,9 @@ export function useVoiceWebSocket({
       url.includes("/analytics")
     ) {
       try {
-        console.log("[Voice WS] Fetching auth token...");
+        // console.log("[Voice WS] Fetching auth token...");
         const res = await fetch("/api/auth/token");
-        console.log("[Voice WS] Token fetch response:", res.status, res.ok);
+        // console.log("[Voice WS] Token fetch response:", res.status, res.ok);
         if (res.ok) {
           const { token } = await res.json();
           console.log(
@@ -97,7 +100,7 @@ export function useVoiceWebSocket({
             const urlObj = new URL(url);
             urlObj.searchParams.set("token", token);
             connectionUrl = urlObj.toString();
-            console.log("[Voice WS] Updated connection URL with token");
+            // console.log("[Voice WS] Updated connection URL with token");
           }
         } else {
           console.warn(
@@ -112,16 +115,20 @@ export function useVoiceWebSocket({
 
     let ws: WebSocket;
     try {
+      /*
       console.log(
         "[Voice WS] Creating WebSocket connection to:",
         connectionUrl,
       );
+      */
       ws = new WebSocket(connectionUrl);
       wsRef.current = ws;
+      /*
       console.log(
         "[Voice WS] WebSocket object created, readyState:",
         ws.readyState,
       );
+      */
     } catch (e) {
       console.error("[Voice WS] Failed to create WebSocket instance:", e);
       setStatus("error");
@@ -135,7 +142,7 @@ export function useVoiceWebSocket({
     }
 
     ws.onopen = () => {
-      console.log("[Voice WS] ✅ WebSocket OPENED successfully!");
+      // console.log("[Voice WS] ✅ WebSocket OPENED successfully!");
       setStatus("connected");
       onReady?.();
     };
@@ -179,11 +186,13 @@ export function useVoiceWebSocket({
     };
 
     ws.onclose = (event) => {
+      /*
       console.log("[Voice WS] WebSocket CLOSED:", {
         code: event.code,
         reason: event.reason,
         wasClean: event.wasClean,
       });
+      */
       setStatus((prev) => (prev !== "error" ? "disconnected" : prev));
       if (event.reason) {
         setError(event.reason);
@@ -232,9 +241,11 @@ export function useVoiceWebSocket({
         // Deepgram settings applied: agent is ready to listen
         // We open the gate NOW so user can barge-in and interrupt greetings!
         if (!micEnabledRef.current) {
+          /*
           console.log(
             "[Voice WS] 🤖 Agent Ready: un-gating mic for user input",
           );
+          */
           micEnabledRef.current = true;
           setIsMicEnabled(true);
 
@@ -253,7 +264,7 @@ export function useVoiceWebSocket({
         // User started speaking
         break;
       case "interrupt":
-        console.log("[Voice WS] Interruption signal received");
+        // console.log("[Voice WS] Interruption signal received");
         // Clear queue
         audioQueueRef.current = [];
         // Stop current playback
@@ -488,7 +499,7 @@ export function useVoiceWebSocket({
 
   const sendJson = (data: any) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      console.log("[Voice WS] 📤 Sending JSON:", data.type);
+      // console.log("[Voice WS] 📤 Sending JSON:", data.type);
       wsRef.current.send(JSON.stringify(data));
     } else {
       console.warn(
@@ -499,13 +510,13 @@ export function useVoiceWebSocket({
   };
 
   const enableMic = useCallback(() => {
-    console.log("[Voice WS] enableMic() called");
+    // console.log("[Voice WS] enableMic() called");
     micEnabledRef.current = true;
     setIsMicEnabled(true);
   }, []);
 
   const disableMic = useCallback(() => {
-    console.log("[Voice WS] disableMic() called");
+    // console.log("[Voice WS] disableMic() called");
     micEnabledRef.current = false;
     setIsMicEnabled(false);
   }, []);

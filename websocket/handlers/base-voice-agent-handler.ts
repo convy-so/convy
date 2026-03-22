@@ -205,20 +205,26 @@ export abstract class BaseVoiceAgentHandler {
       this.sendError(error, error?.code);
     });
 
+    /*
     this.voiceAgent.on("close", () => {
       console.log(
         `[VoiceAgentHandler] Voice Agent connection closed for ${this.identifier}`,
       );
     });
+    */
 
     // Connect
+    /*
     console.log(
       `[BaseVoiceAgent] Connecting Voice Agent for ${this.identifier}...`,
     );
+    */
     await this.voiceAgent.connect();
+    /*
     console.log(
       `[VoiceAgentHandler] Voice Agent connected for ${this.identifier}`,
     );
+    */
   }
 
   /**
@@ -265,11 +271,13 @@ export abstract class BaseVoiceAgentHandler {
           const strData = data.toString();
 
           const message = JSON.parse(strData);
+          /*
           if (message.type !== "ping") {
             console.log(
               `[BaseVoiceAgent] Received control message: ${message.type}`,
             );
           }
+          */
 
           // Handle audio configuration (legacy — ignored since Voice Agent handles this)
           if (message.type === "audio_config") {

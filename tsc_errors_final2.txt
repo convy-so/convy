@@ -1,0 +1,5 @@
+.next/types/validator.ts(404,39): error TS2307: Cannot find module '../../app/api/internal/agent-performance/route.js' or its corresponding type declarations.
+app/api/surveys/[surveyId]/sample/route.ts(349,153): error TS2339: Property 'text' does not exist on type 'TextPart | ImagePart | FilePart'.
+  Property 'text' does not exist on type 'ImagePart'.
+websocket/handlers/survey-response-voice.ts(406,11): error TS2322: Type 'string | null | undefined' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.

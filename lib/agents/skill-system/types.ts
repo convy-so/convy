@@ -12,12 +12,72 @@ export interface SubDomain {
   name: string;
   description: string;
   triggerKeywords: string[];
+  /** Natural-language example sentences that real users say for this domain */
+  semanticExamples: string[];
+  /** Minimum feasible session duration (minutes) */
+  defaultDurationMinutes: number;
 }
 
 export interface UnifiedSkill {
   id: string;
   content: string; // Full markdown with XML sections
+  nodes?: { id: string, label: string, priority: number }[]; // Parsed from Coverage Model
 }
+
+// ── Domain Manifest (produced by DIE) ────────────────────────────────────────
+
+export type RecommendationType = "single-survey" | "advisory-required" | "decompose";
+
+export type WarningType =
+  | "scope-overload"
+  | "persona-mismatch"
+  | "respondent-mismatch"
+  | "insufficient-intent";
+
+export interface DomainRef {
+  id: string;
+  name: string;
+  familyId: number;
+  involvementScore: number;
+  involvementReason: string;
+  /** Bridging node ID connecting this secondary domain to the primary (only on secondary domains) */
+  bridgingNodeId?: string;
+}
+
+export interface DomainManifest {
+  primaryDomain: DomainRef;
+  secondaryDomains: DomainRef[];
+  coherenceScore: number;
+  estimatedSessionMinutes: number;
+  recommendation: RecommendationType;
+  warnings: WarningType[];
+  advisoryMessage: string | null;
+  /** Low confidence flag — set when DIE fell back to Stage 1 only */
+  confidence: "high" | "low";
+}
+
+// ── Compatibility Matrix ──────────────────────────────────────────────────────
+
+export type CompatibilityClassification =
+  | "compatible"
+  | "compatible-with-warning"
+  | "incompatible";
+
+export interface CompatibilityEntry {
+  classification: CompatibilityClassification;
+  reason: string;
+}
+
+// ── Skill Bundle (produced by Skill Assembler) ───────────────────────────────
+
+export interface SkillBundle {
+  domainManifest: DomainManifest;
+  creationBundle: string;
+  conductingBundle: string;
+  analyticsBundle: string;
+}
+
+// ── Domain Families ───────────────────────────────────────────────────────────
 
 export const DOMAIN_FAMILIES: DomainFamily[] = [
   { id: 1, name: "Customer Experience", description: "Relationship and experience evaluation.", familyFolder: "family1-customer-experience" },

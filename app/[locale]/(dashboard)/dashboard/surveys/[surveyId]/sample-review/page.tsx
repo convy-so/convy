@@ -16,8 +16,7 @@ import {
     RefreshCcw,
     Bot,
     Send,
-    Keyboard,
-    Volume2,
+
 } from "lucide-react";
 import { queryKeys } from "@/lib/query-keys";
 import { useQueryClient } from "@tanstack/react-query";
@@ -67,6 +66,7 @@ export default function SampleReviewPage() {
     const [isCommenting, setIsCommenting] = useState(false);
     const [showTranscript, setShowTranscript] = useState(false);
     const [selectedSampleNumber, setSelectedSampleNumber] = useState<number | null>(null);
+    const isHandlingGreetingRef = useRef(false);
 
     // Publish Modal State
     const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
@@ -189,31 +189,51 @@ export default function SampleReviewPage() {
 
     const { messages, setMessages, sendMessage, status } = useChat({
         id: `sample-${activeSampleNumber}`,
-        initialMessages: historyData?.messages || [],
+        messages: historyData?.messages || [],
         transport: new DefaultChatTransport({
             api: `/api/surveys/${surveyId}/sample`,
             body: { conversationNumber: activeSampleNumber },
         }),
-        onFinish: ({ message }: { message: any }) => {
+        onFinish: ({ message, isError, finishReason }: { message: any; isError: boolean; finishReason?: string }) => {
             const messageText = message.parts
                 ?.filter((part: any) => part.type === "text")
                 .map((part: any) => part.text)
                 .join("") || "";
-            if (messageText.includes("[[SURVEY_COMPLETED]]")) {
+            if (messageText.includes("[[SURVEY_COMPLETED]]") || finishReason === 'tool-calls') {
                 getClientTranslation("Your survey is complete!").then(toast.success);
             }
         }
-    } as any);
+    });
+
+    // Sync historyData with useChat messages when it finishes loading
+    useEffect(() => {
+        if (!isHistoryLoading && historyData?.messages) {
+            console.log("[Sample Review] History loaded:", historyData.messages.length, "messages");
+            if (messages.length === 0 && historyData.messages.length > 0) {
+                console.log("[Sample Review] Syncing historyData to useChat");
+                setMessages(historyData.messages.map((m: any, idx: number) => ({
+                    id: m.id || `hist-${idx}-${Date.now()}`,
+                    role: m.role,
+                    parts: m.parts || [{ type: 'text', text: m.content || "" }],
+                    timestamp: m.timestamp || new Date().toISOString()
+                })));
+            }
+        }
+    }, [isHistoryLoading, historyData, setMessages, messages.length]);
+
+    useEffect(() => {
+        console.log(`[Sample Review] useChat Status: ${status} | Messages: ${messages.length}`);
+    }, [status, messages.length]);
 
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
 
     // Clean up SURVEY_COMPLETED tags and track completion
-    const isCompleted = messages.some(msg => 
+    const isCompleted = messages.some(msg =>
         msg.role === "assistant" && (
             msg.parts?.some(p => p.type === 'text' && p.text.includes("[[SURVEY_COMPLETED]]")) ||
-            (msg as any).toolInvocations?.some((inv: any) => inv.toolName === 'finishSurvey')
+            msg.parts?.some(p => (p.type === 'tool-invocation' || p.type === 'tool-call') && (p as any).toolName === 'finishSurvey')
         )
     );
 
@@ -222,9 +242,8 @@ export default function SampleReviewPage() {
     const visibleMessages = messages.map(msg => {
         const textPart = msg.parts?.find(p => p.type === 'text');
         const hasCompletionTag = msg.role === "assistant" && textPart && textPart.text.includes("[[SURVEY_COMPLETED]]");
-        const hasCompletionTool = msg.role === "assistant" && (
-            (msg as any).toolInvocations?.some((inv: any) => inv.toolName === 'finishSurvey') ||
-            msg.parts?.some(p => (p.type === 'tool-invocation' || p.type === 'tool-call') && (p as any).toolName === 'finishSurvey')
+        const hasCompletionTool = msg.role === "assistant" && msg.parts?.some(p => 
+            (p.type === 'tool-invocation' || p.type === 'tool-call') && (p as any).toolName === 'finishSurvey'
         );
 
         if (hasCompletionTag || hasCompletionTool) {
@@ -239,7 +258,16 @@ export default function SampleReviewPage() {
             };
         }
         return msg;
-    }).filter(m => m.id !== "init_ping_hidden" && (m.parts?.some(p => p.type === 'text' && p.text.trim()) || (m as any).toolInvocations?.length || (m as any).media));
+    }).filter(m => {
+        const text = m.parts?.find(p => p.type === 'text')?.text || "";
+        const isInternalPing = text.includes("Start the conversation now") || text.includes("The user has returned to this sample");
+        const hasVisibleContent = m.parts?.some(p => 
+            (p.type === 'text' && p.text.trim()) || 
+            p.type === 'tool-invocation' || 
+            p.type === 'tool-call'
+        );
+        return !isInternalPing && (hasVisibleContent || (m as any).media);
+    });
 
     // WebSocket Hook for Voice Conversation
     const voiceWs = useVoiceWebSocket({
@@ -299,41 +327,49 @@ export default function SampleReviewPage() {
 
     // Auto-greeting mutation is replaced by useChat use effect
 
-    // Auto-connect voice or trigger text greeting when survey loads
+    // Reset hasAutoGreeted when sample number changes
     useEffect(() => {
-        if (!survey || hasAutoGreeted) return;
+        setHasAutoGreeted(false);
+        isHandlingGreetingRef.current = false;
+    }, [activeSampleNumber]);
+
+    // Auto-greeting trigger
+    useEffect(() => {
+        if (!survey || hasAutoGreeted || isHandlingGreetingRef.current) return;
+        if (isHistoryLoading) return;
 
         // For voice surveys, we wait for hasStarted (user clicked through the overlay)
         if (survey.isVoice && !hasStarted) return;
 
-        // CRITICAL: Wait for history to load before deciding to greet
-        if (isHistoryLoading) return;
-
-        if (inputMode === "voice" && survey.isVoice) {
-            console.log("Connecting voice websocket...");
+        if (survey.isVoice) {
+            console.log("[Sample Review] Connecting voice websocket...");
             voiceWs.connect();
-        } else if (inputMode === "text") {
-            const lastMessage = messages[messages.length - 1];
-            const isNew = messages.length === 0;
+            setHasAutoGreeted(true);
+            isHandlingGreetingRef.current = true;
+        } else if (status === "ready") {
+            const hasExistingHistory = historyData?.messages && historyData.messages.length > 0;
+            const lastMessage = messages[messages.length - 1] || (hasExistingHistory ? historyData.messages[historyData.messages.length - 1] : null);
+            const isNew = !hasExistingHistory && messages.length === 0;
             const userSpokeLast = lastMessage?.role === "user";
 
             if (isNew || userSpokeLast) {
-                console.log("[Sample Review] Triggering AI catch-up/start (Text Mode)...");
+                console.log("[Sample Review] Triggering AI catch-up/start (Text Mode)... API:", `/api/surveys/${surveyId}/sample`);
+                isHandlingGreetingRef.current = true;
+                
                 sendMessage({
-                    id: isNew ? "init_ping_hidden" : `resume_ping_${Date.now()}`,
-                    role: "user",
-                    parts: [{
-                        type: 'text',
-                        text: isNew
-                            ? "Start the conversation now. Greet the participant according to the system prompt instructions."
-                            : "The user has returned to this sample survey review. Respond to their last input and continue the interview naturally."
-                    }]
-                } as any);
+                    text: isNew
+                        ? "Start the conversation now. Greet the participant according to the system prompt instructions."
+                        : "The user has returned to this sample survey review. Respond to their last input and continue the interview naturally."
+                }).then(() => {
+                    console.log("[Sample Review] sendMessage successful");
+                    setHasAutoGreeted(true);
+                }).catch((err) => {
+                    console.error("[Sample Review] sendMessage failed:", err);
+                    isHandlingGreetingRef.current = false;
+                });
             }
         }
-
-        setHasAutoGreeted(true);
-    }, [survey, inputMode, hasAutoGreeted, messages, sendMessage, hasStarted]);
+    }, [survey, hasAutoGreeted, isHistoryLoading, hasStarted, status, sendMessage, voiceWs, messages, historyData]);
 
     // Initialize inputMode based on survey type
     useEffect(() => {
@@ -354,10 +390,9 @@ export default function SampleReviewPage() {
         setTextInput('');
 
         try {
-            await sendMessage({
-                role: "user",
-                parts: [{ type: 'text', text: currentInput }],
-            } as any);
+            sendMessage({
+                text: currentInput
+            });
         } catch (error) {
             getClientTranslation("Failed to send message. Please try again.").then(toast.error);
         }
@@ -641,35 +676,7 @@ export default function SampleReviewPage() {
                                         ? "bg-gray-50 text-gray-800 rounded-tl-sm border border-gray-100"
                                         : "bg-black text-white rounded-tr-sm"
                                 )}>
-                                    {msg.toolInvocations?.map((inv: any, index: number) => {
-                                        if (inv.toolName === 'showMedia' && inv.state === 'result') {
-                                            const media = inv.result?.media || (typeof inv.result === 'string' ? JSON.parse(inv.result).media : null);
-                                            return media ? <MediaDisplay key={inv.toolCallId || index} media={media} /> : null;
-                                        }
-                                        if (inv.toolName === 'think_and_respond') {
-                                            const content = inv.args?.message_to_user;
-                                            if (content && !msg.content) {
-                                                return <MarkdownMessage key={inv.toolCallId || index} content={content} />;
-                                            }
-                                        }
-                                        if (inv.toolName === 'finishSurvey') {
-                                            return (
-                                                <div key={inv.toolCallId || index} className="flex flex-col gap-2 mt-2">
-                                                    <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
-                                                        <CheckCircle className="w-3.5 h-3.5" />
-                                                        <ClientT>Your survey is complete!</ClientT>
-                                                    </div>
-                                                    <p className="text-[11px] text-gray-500 italic pl-1">
-                                                        <ClientT>You can now provide feedback in the sidebar to refine future simulations.</ClientT>
-                                                    </p>
-                                                </div>
-                                            );
-                                        }
-                                        return null;
-                                    })}
-
-                                    {/* Legacy multipart/fallback support */}
-                                    {(!msg.toolInvocations || msg.toolInvocations.length === 0) && msg.parts?.map((part: any, index: number) => {
+                                    {msg.parts?.map((part: any, index: number) => {
                                         if (part.type === 'text') {
                                             return <MarkdownMessage key={index} content={part.text} />;
                                         }
@@ -681,9 +688,14 @@ export default function SampleReviewPage() {
                                             }
                                             if (inv.toolName === 'finishSurvey') {
                                                 return (
-                                                    <div key={inv.toolCallId || index} className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 mt-2">
-                                                        <CheckCircle className="w-3.5 h-3.5" />
-                                                        <ClientT>Your survey is complete!</ClientT>
+                                                    <div key={inv.toolCallId || index} className="flex flex-col gap-2 mt-2">
+                                                        <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
+                                                            <CheckCircle className="w-3.5 h-3.5" />
+                                                            <ClientT>Your survey is complete!</ClientT>
+                                                        </div>
+                                                        <p className="text-[11px] text-gray-500 italic pl-1">
+                                                            <ClientT>You can now provide feedback in the sidebar to refine future simulations.</ClientT>
+                                                        </p>
                                                     </div>
                                                 );
                                             }

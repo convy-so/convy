@@ -56,9 +56,9 @@ const GREETINGS: Record<
   en: {
     morning: {
       creation: [
-        "Good morning! I'm here to help you create an amazing survey.",
-        "Good morning! Ready to design a survey together?",
-        "Good morning! Let's create something great today.",
+        "Good morning! I'm here to help you create an amazing survey. What exactly would you like to collect today?",
+        "Good morning! Ready to design a survey together? What project are we working on?",
+        "Good morning! Let's create something great today. What kind of insights are you looking for?",
       ],
       sample: [
         "Good morning! I'm excited to chat with you today.",
@@ -73,9 +73,9 @@ const GREETINGS: Record<
     },
     afternoon: {
       creation: [
-        "Good afternoon! I'm here to help you create an amazing survey.",
-        "Hello! Ready to design a survey together?",
-        "Good afternoon! Let's create something great.",
+        "Good afternoon! I'm here to help you create an amazing survey. What exactly would you like to collect today?",
+        "Hello! Ready to design a survey together? What project are we working on?",
+        "Good afternoon! Let's create something great. What kind of insights are you looking for?",
       ],
       sample: [
         "Good afternoon! I'm excited to chat with you today.",
@@ -90,9 +90,9 @@ const GREETINGS: Record<
     },
     evening: {
       creation: [
-        "Good evening! I'm here to help you create an amazing survey.",
-        "Good evening! Ready to design a survey together?",
-        "Hello! Let's create something great.",
+        "Good evening! I'm here to help you create an amazing survey. What exactly would you like to collect today?",
+        "Good evening! Ready to design a survey together? What project are we working on?",
+        "Hello! Let's create something great. What kind of insights are you looking for?",
       ],
       sample: [
         "Good evening! I'm excited to chat with you today.",
@@ -109,9 +109,9 @@ const GREETINGS: Record<
   fr: {
     morning: {
       creation: [
-        "Bonjour ! Je suis ici pour vous aider à créer un excellent sondage.",
-        "Bonjour ! Prêt à concevoir un sondage ensemble ?",
-        "Bonjour ! Créons quelque chose de formidable aujourd'hui.",
+        "Bonjour ! Je suis ici pour vous aider à créer un excellent sondage. Que souhaitez-vous collecter exactement aujourd'hui ?",
+        "Bonjour ! Prêt à concevoir un sondage ensemble ? Sur quel projet travaillons-nous ?",
+        "Bonjour ! Créons quelque chose de formidable aujourd'hui. Quel type d'informations recherchez-vous ?",
       ],
       sample: [
         "Bonjour ! Je suis ravi de discuter avec vous aujourd'hui.",
@@ -126,9 +126,9 @@ const GREETINGS: Record<
     },
     afternoon: {
       creation: [
-        "Bon après-midi ! Je suis ici pour vous aider à créer un excellent sondage.",
-        "Bonjour ! Prêt à concevoir un sondage ensemble ?",
-        "Bon après-midi ! Créons quelque chose de formidable.",
+        "Bon après-midi ! Je suis ici pour vous aider à créer un excellent sondage. Que souhaitez-vous collecter exactement aujourd'hui ?",
+        "Bonjour ! Prêt à concevoir un sondage ensemble ? Sur quel projet travaillons-nous ?",
+        "Bon après-midi ! Créons quelque chose de formidable. Quel type d'informations recherchez-vous ?",
       ],
       sample: [
         "Bon après-midi ! Je suis ravi de discuter avec vous aujourd'hui.",
@@ -143,8 +143,8 @@ const GREETINGS: Record<
     },
     evening: {
       creation: [
-        "Bonsoir ! Je suis ici pour vous aider à créer un excellent sondage.",
-        "Bonsoir ! Prêt à concevoir un sondage ensemble ?",
+        "Bonsoir ! Je suis ici pour vous aider à créer un excellent sondage. Que souhaitez-vous collecter exactement aujourd'hui ?",
+        "Bonsoir ! Prêt à concevoir un sondage ensemble ? Sur quel projet travaillons-nous ?",
         "Bonjour ! Créons quelque chose de formidable.",
       ],
       sample: [
@@ -162,9 +162,9 @@ const GREETINGS: Record<
   de: {
     morning: {
       creation: [
-        "Guten Morgen! Ich bin hier, um Ihnen bei der Erstellung einer großartigen Umfrage zu helfen.",
-        "Guten Morgen! Bereit, gemeinsam eine Umfrage zu gestalten?",
-        "Guten Morgen! Lassen Sie uns heute etwas Großartiges schaffen.",
+        "Guten Morgen! Ich bin hier, um Ihnen bei der Erstellung einer großartigen Umfrage zu helfen. Was genau möchten Sie heute erfassen?",
+        "Guten Morgen! Bereit, gemeinsam eine Umfrage zu gestalten? An welchem Projekt arbeiten wir?",
+        "Guten Morgen! Lassen Sie uns heute etwas Großartiges schaffen. Welche Art von Erkenntnissen suchen Sie?",
       ],
       sample: [
         "Guten Morgen! Ich freue mich darauf, heute mit Ihnen zu sprechen.",
@@ -179,9 +179,9 @@ const GREETINGS: Record<
     },
     afternoon: {
       creation: [
-        "Guten Tag! Ich bin hier, um Ihnen bei der Erstellung einer großartigen Umfrage zu helfen.",
-        "Hallo! Bereit, gemeinsam eine Umfrage zu gestalten?",
-        "Guten Tag! Lassen Sie uns etwas Großartiges schaffen.",
+        "Guten Tag! Ich bin hier, um Ihnen bei der Erstellung einer großartigen Umfrage zu helfen. Was genau möchten Sie heute erfassen?",
+        "Hallo! Bereit, gemeinsam eine Umfrage zu gestalten? An welchem Projekt arbeiten wir?",
+        "Guten Tag! Lassen Sie uns etwas Großartiges schaffen. Welche Art von Erkenntnissen suchen Sie?",
       ],
       sample: [
         "Guten Tag! Ich freue mich darauf, heute mit Ihnen zu sprechen.",
@@ -196,8 +196,8 @@ const GREETINGS: Record<
     },
     evening: {
       creation: [
-        "Guten Abend! Ich bin hier, um Ihnen bei der Erstellung einer großartigen Umfrage zu helfen.",
-        "Guten Abend! Bereit, gemeinsam eine Umfrage zu gestalten?",
+        "Guten Abend! Ich bin hier, um Ihnen bei der Erstellung einer großartigen Umfrage zu helfen. Was genau möchten Sie heute erfassen?",
+        "Guten Abend! Bereit, gemeinsam eine Umfrage zu gestalten? An welchem Projekt arbeiten wir?",
         "Hallo! Lassen Sie uns etwas Großartiges schaffen.",
       ],
       sample: [
@@ -215,9 +215,9 @@ const GREETINGS: Record<
   es: {
     morning: {
       creation: [
-        "¡Buenos días! Estoy aquí para ayudarte a crear una encuesta increíble.",
-        "¡Buenos días! ¿Listo para diseñar una encuesta juntos?",
-        "¡Buenos días! Creemos algo genial hoy.",
+        "¡Buenos días! Estoy aquí para ayudarte a crear una encuesta increíble. ¿Qué te gustaría recolectar exactamente hoy?",
+        "¡Buenos días! ¿Listo para diseñar una encuesta juntos? ¿En qué proyecto estamos trabajando?",
+        "¡Buenos días! Creemos algo genial hoy. ¿Qué tipo de información estás buscando?",
       ],
       sample: [
         "¡Buenos días! Estoy emocionado de charlar contigo hoy.",
@@ -232,8 +232,8 @@ const GREETINGS: Record<
     },
     afternoon: {
       creation: [
-        "¡Buenas tardes! Estoy aquí para ayudarte a crear una encuesta increíble.",
-        "¡Hola! ¿Listo para diseñar una encuesta juntos?",
+        "¡Buenas tardes! Estoy aquí para ayudarte a crear una encuesta increíble. ¿Qué te gustaría recolectar exactamente hoy?",
+        "¡Hola! ¿Listo para diseñar una encuesta juntos? ¿En qué proyecto estamos trabajando?",
         "¡Buenas tardes! Creemos algo genial.",
       ],
       sample: [
@@ -249,8 +249,8 @@ const GREETINGS: Record<
     },
     evening: {
       creation: [
-        "¡Buenas noches! Estoy aquí para ayudarte a crear una encuesta increíble.",
-        "¡Buenas noches! ¿Listo para diseñar una encuesta juntos?",
+        "¡Buenas noches! Estoy aquí para ayudarte a crear una encuesta increíble. ¿Qué te gustaría recolectar exactamente hoy?",
+        "¡Buenas noches! ¿Listo para diseñar una encuesta juntos? ¿En qué proyecto estamos trabajando?",
         "¡Hola! Creemos algo genial.",
       ],
       sample: [
@@ -268,9 +268,9 @@ const GREETINGS: Record<
   it: {
     morning: {
       creation: [
-        "Buongiorno! Sono qui per aiutarti a creare un sondaggio straordinario.",
-        "Buongiorno! Pronto a progettare un sondaggio insieme?",
-        "Buongiorno! Creiamo qualcosa di fantastico oggi.",
+        "Buongiorno! Sono qui per aiutarti a creare un sondaggio straordinario. Cosa vorresti raccogliere esattamente oggi?",
+        "Buongiorno! Pronto a progettare un sondaggio insieme? Su quale progetto stiamo lavorando?",
+        "Buongiorno! Creiamo qualcosa di fantastico oggi. Che tipo di informazioni stai cercando?",
       ],
       sample: [
         "Buongiorno! Sono entusiasta di chattare con te oggi.",
@@ -285,8 +285,8 @@ const GREETINGS: Record<
     },
     afternoon: {
       creation: [
-        "Buon pomeriggio! Sono qui per aiutarti a creare un sondaggio straordinario.",
-        "Ciao! Pronto a progettare un sondaggio insieme?",
+        "Buon pomeriggio! Sono qui per aiutarti a creare un sondaggio straordinario. Cosa vorresti raccogliere esattamente oggi?",
+        "Ciao! Pronto a progettare un sondaggio insieme? Su quale progetto stiamo lavorando?",
         "Buon pomeriggio! Creiamo qualcosa di fantastico.",
       ],
       sample: [
@@ -302,8 +302,8 @@ const GREETINGS: Record<
     },
     evening: {
       creation: [
-        "Buonasera! Sono qui per aiutarti a creare un sondaggio straordinario.",
-        "Buonasera! Pronto a progettare un sondaggio insieme?",
+        "Buonasera! Sono qui per aiutarti a creare un sondaggio straordinario. Cosa vorresti raccogliere esattamente oggi?",
+        "Buonasera! Pronto a progettare un sondaggio insieme? Su quale progetto stiamo lavorando?",
         "Ciao! Creiamo qualcosa di fantastico.",
       ],
       sample: [

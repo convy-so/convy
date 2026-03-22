@@ -98,6 +98,40 @@ export class DomainBrain {
     // If no more nodes are pending, or if enough high-priority nodes are met
     return pending.length === 0;
   }
+
+  /**
+   * Calculates the percentage of nodes that are met (0 to 1)
+   */
+  public calculateCoverage(state: ExpertState): number {
+    const totalNodes = this._countNodes(state.coverageTracker.nodes);
+    if (totalNodes === 0) return 0;
+    
+    const metNodes = this._countMetNodes(state.coverageTracker.nodes);
+    return metNodes / totalNodes;
+  }
+
+  private _countNodes(nodes: CoverageNode[]): number {
+    let count = nodes.length;
+    for (const node of nodes) {
+      if (node.children) {
+        count += this._countNodes(node.children);
+      }
+    }
+    return count;
+  }
+
+  private _countMetNodes(nodes: CoverageNode[]): number {
+    let count = 0;
+    for (const node of nodes) {
+      if (node.status === "met") {
+        count++;
+      }
+      if (node.children) {
+        count += this._countMetNodes(node.children);
+      }
+    }
+    return count;
+  }
 }
 
 export const domainBrain = new DomainBrain();

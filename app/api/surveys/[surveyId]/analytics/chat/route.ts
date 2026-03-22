@@ -24,11 +24,39 @@ export async function POST(
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
-    const body = (await request.json()) as { messages?: unknown[] };
-    const rawMessages = body.messages;
+    const body = (await request.json()) as { 
+      messages?: unknown[];
+      audio?: string; // Base64 audio string
+      language?: string;
+    };
+    let rawMessages = body.messages || [];
 
-    if (!rawMessages || !Array.isArray(rawMessages)) {
-      return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
+    // 0. Handle STT if audio is provided
+    if (body.audio) {
+      try {
+        const { transcribeAudioBuffer } = await import("@/lib/voice/analytics-stt");
+        const audioBuffer = Buffer.from(body.audio, "base64");
+        const transcript = await transcribeAudioBuffer(audioBuffer, body.language || "en");
+        
+        // Append the transcribed message as a new user message
+        const userMessage = {
+          id: crypto.randomUUID(),
+          role: "user",
+          content: transcript,
+          createdAt: new Date(),
+        };
+        rawMessages = [...rawMessages, userMessage];
+      } catch (sttError) {
+        console.error("[Analytics Chat STT] Failed:", sttError);
+        // Fallback: if STT fails but we have messages, continue. If only audio was sent, error.
+        if (rawMessages.length === 0) {
+          return NextResponse.json({ error: "Speech-to-text failed" }, { status: 500 });
+        }
+      }
+    }
+
+    if (!rawMessages || !Array.isArray(rawMessages) || rawMessages.length === 0) {
+      return NextResponse.json({ error: "Invalid messages or audio" }, { status: 400 });
     }
 
     // 1. Verify survey ownership

@@ -9,49 +9,48 @@ export class SkillEngine {
   private static readonly SKILLS_DIR = path.join(process.cwd(), ".agent", "skills");
 
   /**
-   * Match subdomains using semantic LLM classification with a keyword fallback
+   * Match subdomains using vector similarity search against the domain registry
    */
   static async semanticMatch(query: string): Promise<{ subDomain: SubDomain; weight: number }[]> {
-    const domains = SUB_DOMAINS.map(sd => ({
-      id: sd.id,
-      name: sd.name,
-      description: sd.description,
-    }));
-
-    const systemPrompt = `You are a research domain classification expert. Identify the most relevant specialized domains for a survey objective.
-    
-    A survey can span multiple domains (Hybrid). Provide a "Weight" (0.0 to 1.0) for each identified domain. 
-    Total weight does NOT need to sum to 1.0; each weight reflects how much that domain's protocols are needed.
-    
-    Available Domains:
-    ${JSON.stringify(domains, null, 2)}
-    
-    Output Format (JSON only):
-    [{ "id": "domain-id", "weight": 0.8, "reasoning": "..." }]`;
-
     try {
-      const { text } = await generateText({
-        model: flashLiteModel,
-        system: systemPrompt,
-        prompt: `Objective: "${query}"`,
-      });
+      const { generateEmbedding } = await import("@/lib/rag/embeddings");
+      const { getDb } = await import("@/db");
+      const db = getDb();
+      const { domainEmbeddings } = await import("@/db/schema/domain-embeddings");
+      const { sql, desc } = await import("drizzle-orm");
 
-      // Clean result (sometimes models add markdown blocks)
-      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-      const raw = JSON.parse(cleaned);
+      const queryEmbedding = await generateEmbedding(query);
+      const embeddingSql = `[${queryEmbedding.join(",")}]`;
+
+      // Perform vector similarity search
+      const matches = await db
+        .select({
+          domainId: domainEmbeddings.domainId,
+          similarity: sql<number>`1 - (${domainEmbeddings.embedding} <=> ${embeddingSql}::vector)`,
+        })
+        .from(domainEmbeddings)
+        .where(sql`${domainEmbeddings.embedding} <=> ${embeddingSql}::vector < 0.4`) // Threshold for relevance
+        .orderBy(t => desc(t.similarity))
+        .limit(3);
+
       const results: { subDomain: SubDomain; weight: number }[] = [];
 
-      for (const item of raw) {
-        const sd = getSubDomainById(item.id);
-        if (sd && item.weight > 0.3) {
-          results.push({ subDomain: sd, weight: item.weight });
+      for (const match of matches) {
+        const sd = getSubDomainById(match.domainId);
+        if (sd) {
+          // Normalize similarity to a weight (e.g., 0.6 to 1.0 range usually for good matches)
+          results.push({ subDomain: sd, weight: Math.min(1.0, match.similarity * 1.2) });
         }
       }
 
-      if (results.length === 0) return matchHybridSubDomains(query);
-      return results.sort((a, b) => b.weight - a.weight);
+      if (results.length === 0) {
+        console.log("[SkillEngine] Vector search returned no matches, falling back to keywords");
+        return matchHybridSubDomains(query);
+      }
+
+      return results;
     } catch (error) {
-      console.warn("[SkillEngine] semanticMatch failed, falling back to keywords:", error);
+      console.warn("[SkillEngine] Vector match failed, falling back to keywords:", error);
       return matchHybridSubDomains(query);
     }
   }
@@ -118,14 +117,66 @@ export class SkillEngine {
 
     try {
       const content = fs.readFileSync(skillPath, "utf-8");
+      const nodes = this.parseCoverageModel(content);
       return {
         id: subDomainId,
         content: content.replace(/---[\s\S]*?---/, "").trim(),
+        nodes,
       };
     } catch (error) {
       console.error(`[SkillEngine] Error loading skill ${subDomainId}:`, error);
       return null;
     }
+  }
+
+  /**
+   * Extract key data structures (Checklist/Nodes) from the skill markdown
+   * Specifically parses Section 4: Coverage Model tables
+   */
+  static parseCoverageModel(markdown: string): { id: string, label: string, priority: number }[] {
+    const nodes: { id: string, label: string, priority: number }[] = [];
+    
+    // Flexible match for Coverage Model section (Section 4 or named variations)
+    const sectionMatch = markdown.match(/(?:## (?:Section 4: )?Coverage Model(?: Specifications)?)([\s\S]*?)(?:## Section 5|## Decision Map|## Constitutional|$)/i);
+    if (!sectionMatch) return nodes;
+
+    const lines = sectionMatch[1].split("\n");
+    let isHeader = true;
+    for (const line of lines) {
+      if (line.includes("|") && !line.includes("---")) {
+        const parts = line.split("|").map(p => p.trim()).filter(p => p !== "");
+        if (parts.length < 2) continue;
+
+        const id = parts[0];
+        // Only process if ID looks like a Node ID (e.g., RT-01)
+        if (!/^[A-Z]{2}-\d+$/.test(id)) {
+          if (id.toLowerCase() !== "node id" && id.toLowerCase() !== "node") isHeader = false;
+          continue;
+        }
+
+        // Logic for different table structures:
+        // Conducting: | Node ID | Focus Area | Probes | Priority | Success |
+        // Creation:   | Node | Weight | Threshold | Description |
+        let label = "";
+        let priority = 0.5;
+
+        if (parts.length >= 4 && (parts[3].includes(".") || !isNaN(parseFloat(parts[3])))) {
+          // Likely Conducting structure
+          label = parts[1].replace(/\*\*/g, "");
+          priority = parseFloat(parts[3]) || 0.5;
+        } else if (parts.length >= 4) {
+          // Likely Creation structure or other
+          label = parts[3].replace(/\*\*/g, "").split("(")[0].trim(); // Use description as label
+          const weightStr = parts[1].replace("%", "");
+          priority = (parseFloat(weightStr) / 100) || 0.5;
+        } else {
+          label = parts[1].replace(/\*\*/g, "");
+        }
+
+        nodes.push({ id, label, priority });
+      }
+    }
+    return nodes;
   }
 
   /**

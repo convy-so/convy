@@ -111,7 +111,6 @@ export async function POST(
     const expertState = (survey.expertState || {}) as Record<string, any>;
 
     for (const field of expertStateFields) {
-      // Prevent merging boolean flags from think_and_respond just in case it's in the payload
       if (
         extractedData[field] !== undefined &&
         extractedData[field] !== null &&

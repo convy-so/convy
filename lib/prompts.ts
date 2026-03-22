@@ -2,7 +2,7 @@ import { type ToneProfile } from "./surveys";
 import type { SurveyMedia } from "@/db/schema";
 
 export interface SubjectIntelligence {
-  domainId?: number;
+  domainId?: string;
   findings: Record<string, any>;
   intelligentProbes: string[];
   confidence: "high" | "medium" | "low";
@@ -20,7 +20,8 @@ export interface SurveyConfig {
   tone?: ToneProfile;
   media?: SurveyMedia[];
   personalInfo?: string[];
-  domainId?: number;
+  domainId?: string;
+  hybridDomains?: { id: string; weight: number }[];
   improvementFeedback?: string;
   subjectIntelligence?: SubjectIntelligence;
   subjectModelComplete?: boolean;
@@ -66,7 +67,7 @@ Output: {"objective":{"goal":"Get feedback on service","context":null,"decision"
   "metrics": ["string"],
   "personalInfo": ["string"],
   "title": "string - concise survey title",
-  "domainId": "1-10 based on domain list",
+  "domainId": "Subdomain ID like 'cx-nps-loyalty'",
   "isVoice": "boolean",
   "media": [
     {
@@ -113,7 +114,7 @@ When in doubt, mark FALSE.
 </validation_rules>
 
 <domains>
-1=CX, 2=Market Research, 3=Workforce, 5=Education, 6=Civic, 7=Scientific, 9=Demographic, 10=Infrastructure
+Subdomains like 'cx-nps-loyalty', 'wo-employee-engagement', etc.
 </domains>`;
 }
 
@@ -189,7 +190,7 @@ export const surveyDataExtractionSchema = {
     metrics: { type: ["array", "null"], items: { type: "string" } },
     personalInfo: { type: ["array", "null"], items: { type: "string" } },
     title: { type: "string" },
-    domainId: { type: "number" },
+    domainId: { type: "string" },
     isVoice: { type: "boolean" },
     collectedInfo: {
       type: "object",
@@ -241,7 +242,7 @@ export function getSampleConversationInsightsPrompt(
   return `Analyze this sample survey conversation and provide insights for the survey maker.
  
  SURVEY CONFIGURATION:
- - Goal: ${config.coreObjective || config.expertState?.objective?.goal || config.information}
+ - Goal: ${config.expertState?.objective?.goal || config.coreObjective || config.information}
  - Information to collect: ${config.information}
  - Required questions: ${config.requiredQuestions.length > 0 ? config.requiredQuestions.join(", ") : "None specified"}
  ${config.metrics.length > 0 ? `- Metrics to track: ${config.metrics.join(", ")}` : ""}

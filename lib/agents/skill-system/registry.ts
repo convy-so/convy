@@ -7,36 +7,83 @@ export const SUB_DOMAINS: SubDomain[] = [
     id: "cx-nps-loyalty",
     familyId: 1,
     name: "NPS & Customer Loyalty",
-    description: "Long-term brand relationship and loyalty research.",
-    triggerKeywords: ["nps", "loyalty", "brand advocacy", "recurring", "relationship health"]
+    description: "Long-term brand relationship and loyalty research. Focuses on advocate vs. detractor drivers.",
+    triggerKeywords: ["nps", "loyalty", "brand advocacy", "recurring", "relationship health", "advocacy", "detraction"],
+    semanticExamples: [
+      "I want to understand how loyal our customers really are",
+      "We need to measure NPS and understand why customers stay or leave",
+      "How likely are people to recommend us to friends",
+      "We want to track brand advocacy over time",
+      "Understanding the health of our customer relationships",
+      "Why do repeat customers keep coming back to us",
+      "Distinguishing structural dissatisfaction from situational frustration",
+    ],
+    defaultDurationMinutes: 18,
   },
   {
     id: "cx-post-transaction",
     familyId: 1,
     name: "Post-Transaction Research",
-    description: "Discrete journey mapping for recent purchases or interactions.",
-    triggerKeywords: ["purchase", "checkout", "delivery", "transactional", "order", "visit"]
+    description: "Discrete journey mapping for recent purchases, deliveries, or visits.",
+    triggerKeywords: ["purchase", "checkout", "delivery", "transactional", "order", "visit", "shipping"],
+    semanticExamples: [
+      "We want feedback on a recent purchase experience",
+      "How did the checkout and delivery process feel",
+      "Understanding what happened right after someone placed an order",
+      "We need to know if customers are happy with their most recent visit",
+      "Following up with customers after a transaction to understand their experience",
+      "What did people think of their last interaction with us",
+      "Analyzing the immediate aftermath of a specific service event",
+    ],
+    defaultDurationMinutes: 15,
   },
   {
     id: "cx-service-recovery",
     familyId: 1,
     name: "Service Recovery Research",
-    description: "Psychology of complaint resolution and trust rebuilding.",
-    triggerKeywords: ["complaint", "support ticket", "resolution", "recovery", "problem", "issue"]
+    description: "Psychology of complaint resolution and trust rebuilding after a failure.",
+    triggerKeywords: ["complaint", "support ticket", "resolution", "recovery", "problem", "issue", "failure"],
+    semanticExamples: [
+      "We had a service failure and want to understand how customers feel now",
+      "How well did we handle complaints and issues",
+      "Understanding whether our resolution process rebuilt trust",
+      "Customers had problems and we want to know if we made it right",
+      "Research into how we handle difficult service situations",
+      "Did our support team help customers recover from a bad experience",
+    ],
+    defaultDurationMinutes: 17,
   },
   {
     id: "cx-client-relationship",
     familyId: 1,
     name: "Client Relationship Research",
-    description: "High-value B2B/Personal account relationship quality.",
-    triggerKeywords: ["account manager", "consultancy", "professional services", "partnership"]
+    description: "High-value B2B/Personal account relationship quality and partnership health.",
+    triggerKeywords: ["account manager", "consultancy", "professional services", "partnership", "key client", "strategic"],
+    semanticExamples: [
+      "We want to understand the quality of our key client relationships",
+      "How do our major accounts feel about their account manager",
+      "Understanding relationship depth with our most important clients",
+      "Research into how clients perceive our consultancy partnership",
+      "Are our strategic clients getting the value they expect from us",
+      "Checking in on the health of our professional service relationships",
+    ],
+    defaultDurationMinutes: 22,
   },
   {
     id: "cx-onboarding",
     familyId: 1,
     name: "Onboarding Experience",
-    description: "First 30-90 day adoption and time-to-value analysis.",
-    triggerKeywords: ["onboarding", "new user", "activation", "getting started", "setup"]
+    description: "First 30-90 day adoption, activation, and time-to-value analysis.",
+    triggerKeywords: ["onboarding", "new user", "activation", "getting started", "setup", "first use"],
+    semanticExamples: [
+      "We need to understand why new customers struggle to get started",
+      "Researching the first weeks of using our product",
+      "How quickly do new users reach their first success moment",
+      "What barriers do people face when setting up our service",
+      "Understanding whether new customers feel confident after they sign up",
+      "Why do some new users activate quickly and others don't",
+    ],
+    defaultDurationMinutes: 18,
   },
 
   // Family 2: Physical Product
@@ -44,36 +91,81 @@ export const SUB_DOMAINS: SubDomain[] = [
     id: "pp-sensory-evaluation",
     familyId: 2,
     name: "Sensory & Product Evaluation",
-    description: "Physical sensory research (taste, scent, texture).",
-    triggerKeywords: ["sensory", "taste test", "scent", "fragrance", "texture", "mouthfeel", "unboxing"]
+    description: "Physical sensory research including taste, scent, texture, and mouthfeel.",
+    triggerKeywords: ["sensory", "taste test", "scent", "fragrance", "texture", "mouthfeel", "odor", "flavor"],
+    semanticExamples: [
+      "We need to test how people respond to the taste of our new product",
+      "Understanding consumer reactions to the scent of our fragrance line",
+      "How does the texture feel in consumers' hands or mouths",
+      "Sensory evaluation of our food or beverage product",
+      "Getting feedback on the physical feel and smell of our product",
+      "Understanding how the unboxing experience feels to consumers",
+    ],
+    defaultDurationMinutes: 20,
   },
   {
     id: "pp-usage-performance",
     familyId: 2,
     name: "Usage & Performance Research",
-    description: "Long-term utility and durability research.",
-    triggerKeywords: ["durability", "home use", "wear and tear", "utility", "ergonomics", "long-term use"]
+    description: "Long-term utility, durability, and ergonomic performance in real-world settings.",
+    triggerKeywords: ["durability", "home use", "wear and tear", "utility", "ergonomics", "long-term", "reliability"],
+    semanticExamples: [
+      "We want to know how our product holds up after weeks of real use",
+      "Understanding if the product actually does what people need it to do",
+      "How ergonomic and practical is the product over time",
+      "Durability and performance testing through consumer experience research",
+      "Do customers find our product genuinely useful in their daily life",
+      "Research into long-term satisfaction with the product's performance",
+    ],
+    defaultDurationMinutes: 20,
   },
   {
     id: "pp-packaging-presentation",
     familyId: 2,
     name: "Packaging & Presentation",
-    description: "Physical packaging and shelf perception research.",
-    triggerKeywords: ["packaging", "label", "unboxing", "shelf impact", "branding", "pack design"]
+    description: "Physical packaging, label design, and shelf impact research.",
+    triggerKeywords: ["packaging", "label", "unboxing", "shelf impact", "branding", "pack design", "presentation"],
+    semanticExamples: [
+      "We need to understand how our packaging looks on the shelf",
+      "Does the label design communicate what we want it to",
+      "How does the packaging feel when you pick it up and open it",
+      "Testing if our pack design grabs attention in a retail environment",
+      "We want to know if consumers understand what the product is just from the packaging",
+      "Feedback on the overall presentation and visual brand of our packaging",
+    ],
+    defaultDurationMinutes: 16,
   },
   {
     id: "pp-physical-concept-testing",
     familyId: 2,
     name: "Physical Concept Testing",
-    description: "New physical product concept validation.",
-    triggerKeywords: ["product concept", "new product", "innovation", "prototype", "concept test"]
+    description: "Validation of new physical product concepts, prototypes, and innovations.",
+    triggerKeywords: ["product concept", "new product", "innovation", "prototype", "concept test", "mvp"],
+    semanticExamples: [
+      "We have a new product concept and want to know if people would buy it",
+      "Testing consumer reaction to a prototype before we launch",
+      "Understanding if this new idea solves a real problem for people",
+      "Getting early feedback on our product innovation before development",
+      "Would consumers actually pay for this type of product",
+      "Concept validation for a physical product we are thinking of launching",
+    ],
+    defaultDurationMinutes: 18,
   },
   {
     id: "pp-durability-materials",
     familyId: 2,
     name: "Durability & Materials",
-    description: "Perception of build quality and material longevity.",
-    triggerKeywords: ["build quality", "materials", "robustness", "longevity", "sturdy", "quality feel"]
+    description: "Perception of build quality, material longevity, and craftsmanship.",
+    triggerKeywords: ["build quality", "materials", "robustness", "longevity", "sturdy", "quality feel", "craftsmanship"],
+    semanticExamples: [
+      "Do customers think our product feels premium and well-built",
+      "Understanding perceptions of material quality and sturdiness",
+      "How does the build quality compare to what people expected",
+      "Research into whether customers think our product will last",
+      "We want to know if the quality of materials matches the price point",
+      "Understanding perceptions of robustness and craftsmanship",
+    ],
+    defaultDurationMinutes: 16,
   },
 
   // Family 3: Digital Product
@@ -81,36 +173,179 @@ export const SUB_DOMAINS: SubDomain[] = [
     id: "dp-software-experience",
     familyId: 3,
     name: "Software Experience Research",
-    description: "Daily usage and accumulated experience with a digital product.",
-    triggerKeywords: ["software experience", "daily use", "friction", "jtbd", "jobs to be done", "workflow fit"]
+    description: "Daily usage and workflow fit analysis. Focuses on Jobs-to-be-Done (JTBD).",
+    triggerKeywords: ["software experience", "daily use", "friction", "jtbd", "jobs to be done", "workflow", "productivity"],
+    semanticExamples: [
+      "We want to understand how people actually use our software every day",
+      "How well does our tool fit into users' existing workflows",
+      "Understanding the friction points in daily use of our app",
+      "We need to know what jobs users are trying to get done with our software",
+      "Research into accumulated experience and evolving satisfaction over time",
+      "Do people feel our software genuinely makes their work easier",
+    ],
+    defaultDurationMinutes: 20,
   },
   {
     id: "dp-usability-ux",
     familyId: 3,
     name: "Usability & UX Research",
-    description: "Software usability and interface experience.",
-    triggerKeywords: ["usability", "ux", "ui", "interface", "navigation", "checkout flow", "app experience"]
+    description: "Interface usability, navigation, and cognitive load research.",
+    triggerKeywords: ["usability", "ux", "ui", "interface", "navigation", "checkout flow", "usability test", "cognitive load"],
+    semanticExamples: [
+      "We need usability testing on our app's navigation and interface",
+      "Understanding why users struggle to find certain features",
+      "Is our checkout flow confusing or causing drop-offs",
+      "UX research on how users interact with our digital interface",
+      "We want to know if the app is intuitive and easy to use",
+      "Testing the user experience of a specific flow or screen in our product",
+    ],
+    defaultDurationMinutes: 18,
   },
   {
     id: "dp-adoption-feature",
     familyId: 3,
     name: "Feature Adoption & Value",
-    description: "New feature adoption and problem-solution fit.",
-    triggerKeywords: ["adoption", "feature", "new feature", "activation", "value moment", "aha moment"]
+    description: "New feature discovery, activation, and problem-solution fit.",
+    triggerKeywords: ["adoption", "feature", "new feature", "activation", "value moment", "aha moment", "discovery"],
+    semanticExamples: [
+      "We launched a new feature and want to know why people aren't using it",
+      "Understanding if users see value in a specific capability we built",
+      "When do users first realize our product is solving their problem",
+      "Why are some features being adopted and others ignored",
+      "Research into the aha moment for new capability adoption",
+      "We want to understand whether a specific feature is delivering real value",
+    ],
+    defaultDurationMinutes: 18,
   },
   {
     id: "dp-technology-adoption",
     familyId: 3,
     name: "Technology Adoption",
-    description: "Barriers and drivers for new technology rollout.",
-    triggerKeywords: ["tech adoption", "transformation", "resistance", "learning curve", "migration", "rollout"]
+    description: "Barriers and drivers for enterprise technology rollouts and migrations.",
+    triggerKeywords: ["tech adoption", "transformation", "resistance", "learning curve", "migration", "rollout", "readiness"],
+    semanticExamples: [
+      "We are rolling out new technology and people are resisting it",
+      "Understanding the barriers to adopting our new system internally",
+      "Why is the learning curve so steep for our new platform",
+      "Research into what drives or blocks technology adoption in an organization",
+      "We're doing a digital transformation and want to understand user readiness",
+      "How do employees feel about migrating to our new software",
+    ],
+    defaultDurationMinutes: 20,
   },
   {
     id: "dp-platform-ecosystem",
     familyId: 3,
     name: "Platform & Ecosystem",
-    description: "Developer and partner experience with APIs/platforms.",
-    triggerKeywords: ["api", "developer experience", "ecosystem", "partner", "integration", "platform health"]
+    description: "Developer experience (DX) and partner satisfaction with APIs and integrations.",
+    triggerKeywords: ["api", "developer experience", "ecosystem", "partner", "integration", "platform health", "dx"],
+    semanticExamples: [
+      "We need to understand the developer experience with our API",
+      "How do partners feel about building on our platform",
+      "Research into the health of our ecosystem and integration experience",
+      "Are developers getting the support they need to build on our platform",
+      "Understanding the barriers for third-party integrations with our system",
+      "How do our technical partners perceive the quality and stability of our APIs",
+    ],
+    defaultDurationMinutes: 22,
+  },
+
+  // Family 4: Service Environment
+  {
+    id: "se-dining-restaurant",
+    familyId: 4,
+    name: "Dining & Restaurant Research",
+    description: "Holistic experience covering food quality, service, and physical ambiance.",
+    triggerKeywords: ["dining", "restaurant", "food quality", "server", "menu", "cafe", "ambiance", "atmosphere"],
+    semanticExamples: [
+      "We want to understand the full dining experience at our restaurant",
+      "Research into how guests feel about the food, service, and atmosphere",
+      "Understanding what creates a great or disappointing restaurant visit",
+      "How do diners experience our menu quality and server interactions",
+      "We need to know what keeps customers coming back to our cafe",
+      "Research into the holistic experience of eating at our establishment",
+    ],
+    defaultDurationMinutes: 18,
+  },
+  {
+    id: "se-hospitality-experience",
+    familyId: 4,
+    name: "Hospitality Experience",
+    description: "The complete guest journey at hotels, resorts, and vacation stays.",
+    triggerKeywords: ["hotel", "resort", "stay", "guest", "check-in", "hospitality", "room service", "booking"],
+    semanticExamples: [
+      "We want to understand the complete guest journey at our hotel",
+      "Research into how guests experience check-in, rooms, and service",
+      "Understanding what creates or breaks guest satisfaction at our resort",
+      "How do guests feel about the quality and care during their stay",
+      "We need to know which moments in the guest journey matter most",
+      "Research into the full hospitality experience from booking to checkout",
+    ],
+    defaultDurationMinutes: 20,
+  },
+  {
+    id: "se-retail-instore",
+    familyId: 4,
+    name: "Retail & In-Store Experience",
+    description: "Physical retail journeys, shelf discovery, and staff helpfulness.",
+    triggerKeywords: ["retail", "store", "shopping", "in-store", "shelf", "checkout", "discovery", "staff"],
+    semanticExamples: [
+      "We want to understand how shoppers experience our physical store",
+      "Research into the in-store journey from entry to purchase",
+      "How do customers navigate and discover products in our retail space",
+      "Understanding the checkout experience and staff interactions in our stores",
+      "We need to know what makes people comfortable or frustrated shopping with us",
+      "Research into the holistic physical retail experience for our customers",
+    ],
+    defaultDurationMinutes: 18,
+  },
+  {
+    id: "se-personal-care",
+    familyId: 4,
+    name: "Personal Care & Wellness",
+    description: "Patient/Client experience at salons, spas, gyms, and medical clinics.",
+    triggerKeywords: ["salon", "spa", "gym", "wellness", "fitness", "personal care", "treatment", "clinic"],
+    semanticExamples: [
+      "We want to understand the full experience at our salon or spa",
+      "Research into the gym member experience and what keeps people engaged",
+      "How do clients feel during and after their wellness treatment",
+      "Understanding what makes a personal care experience feel premium or disappointing",
+      "We need to know how practitioners are perceived by clients",
+      "Research into the holistic wellness experience from booking to aftercare",
+    ],
+    defaultDurationMinutes: 18,
+  },
+  {
+    id: "se-transportation-mobility",
+    familyId: 4,
+    name: "Transportation & Mobility",
+    description: "Point-to-point journey satisfaction across airlines, trains, and shuttles.",
+    triggerKeywords: ["transportation", "airline", "train", "bus", "mobility", "shuttle", "journey", "reliability"],
+    semanticExamples: [
+      "We want to understand the full journey experience on our transport service",
+      "Research into passenger satisfaction during flights, train rides, or bus trips",
+      "Understanding reliability perceptions and what causes frustration for travelers",
+      "How do passengers feel about comfort, service, and punctuality on our route",
+      "We need to know what makes a transport experience feel smooth vs stressful",
+      "Research into the end-to-end mobility experience from booking to arrival",
+    ],
+    defaultDurationMinutes: 18,
+  },
+  {
+    id: "se-event-live",
+    familyId: 4,
+    name: "Event & Live Experience",
+    description: "Emotional journey and logistical satisfaction at live shows, sports, and festivals.",
+    triggerKeywords: ["event", "concert", "sports", "festival", "live", "show", "venue", "ticketing"],
+    semanticExamples: [
+      "We want to understand how attendees experienced our event",
+      "Research into the live show or concert experience from arrival to departure",
+      "Understanding what created memorable or frustrating moments at our venue",
+      "How did the ticketing, entry, and in-event experience feel to attendees",
+      "We need feedback on the full experience of attending our festival or sports event",
+      "Research into the emotional journey of being at one of our live events",
+    ],
+    defaultDurationMinutes: 18,
   },
 
   // Family 5: Market Intelligence
@@ -118,43 +353,97 @@ export const SUB_DOMAINS: SubDomain[] = [
     id: "mi-needs-behavior",
     familyId: 5,
     name: "Consumer Needs & Behavior",
-    description: "Motivations, habits, and underlying drivers of consumer choice.",
-    triggerKeywords: ["needs", "behavior", "motivation", "habits", "ritual", "influences"]
+    description: "Underlying motivations, habits, and choice drivers in a category.",
+    triggerKeywords: ["needs", "behavior", "motivation", "habits", "ritual", "influences", "drivers"],
+    semanticExamples: [
+      "We want to understand what drives people to choose products like ours",
+      "Understanding the daily habits and rituals around a specific category",
+      "What are the real motivations behind consumer decisions in this space",
+      "Research into the underlying needs that our market is trying to fulfill",
+      "How do people think and feel when making decisions in this category",
+      "We want to understand behavioral patterns among our target audience",
+    ],
+    defaultDurationMinutes: 22,
   },
   {
     id: "mi-brand-perception",
     familyId: 5,
     name: "Brand Perception Research",
-    description: "Implicit associations and competitive brand positioning.",
-    triggerKeywords: ["brand", "perception", "trust", "associations", "competitor", "consideration"]
+    description: "Implicit brand associations and competitive positioning.",
+    triggerKeywords: ["brand", "perception", "trust", "associations", "competitor", "positioning", "awareness"],
+    semanticExamples: [
+      "We want to understand how people perceive our brand versus competitors",
+      "What words and feelings do consumers associate with our brand",
+      "Understanding our brand position in the market",
+      "Research into brand trust and consideration among our target audience",
+      "How does our brand compare to alternatives in consumers' minds",
+      "We need to understand our brand awareness and the associations it creates",
+    ],
+    defaultDurationMinutes: 20,
   },
   {
     id: "mi-pricing-value",
     familyId: 5,
     name: "Pricing & Value Perception",
-    description: "Psychological price boundaries and value anchors.",
-    triggerKeywords: ["pricing", "value", "willingness to pay", "price signals", "worth", "budget"]
+    description: "Willingness-to-pay and psychological price/value anchors.",
+    triggerKeywords: ["pricing", "value", "willingness to pay", "price signals", "worth", "wtp"],
+    semanticExamples: [
+      "We want to understand if our pricing feels right to customers",
+      "Research into what people are willing to pay for our type of product",
+      "Understanding where the psychological price ceiling is for our category",
+      "Does our pricing communicate the right level of quality and value",
+      "We need to know how people think about value in this market",
+      "Why do some customers say we're too expensive even though the quality is high",
+    ],
+    defaultDurationMinutes: 18,
   },
   {
     id: "mi-proposition-testing",
     familyId: 5,
     name: "Proposition Testing",
-    description: "Validation of new product/service concepts and benefits.",
-    triggerKeywords: ["proposition", "concept", "new idea", "message testing", "resonance"]
+    description: "Validation of new value propositions and early concept resonance.",
+    triggerKeywords: ["proposition", "concept", "new idea", "message testing", "resonance", "claims"],
+    semanticExamples: [
+      "We want to test whether our new value proposition resonates",
+      "Does this messaging land with our target audience",
+      "Understanding if consumers believe our product claims",
+      "Testing the appeal of a new concept or service idea",
+      "We need to know if our go-to-market message is compelling",
+      "Research into which benefits matter most to potential customers",
+    ],
+    defaultDurationMinutes: 18,
   },
   {
     id: "mi-market-segmentation",
     familyId: 5,
     name: "Market Segmentation",
-    description: "Qualitative depth for human-centered audience grouping.",
-    triggerKeywords: ["segmentation", "sub-groups", "profiles", "target audience", "diversity"]
+    description: "Human-centered sub-grouping of audiences based on needs/attitudes.",
+    triggerKeywords: ["segmentation", "sub-groups", "profiles", "target audience", "diversity", "persona"],
+    semanticExamples: [
+      "We want to understand the distinct types of people in our market",
+      "Research into the different audience segments and what drives each one",
+      "Understanding the diversity of needs within our customer base",
+      "We need to build profiles of the different types of people who use our product",
+      "How do the needs and motivations differ across segments",
+      "Qualitative research to map out the human diversity in our target market",
+    ],
+    defaultDurationMinutes: 22,
   },
   {
     id: "mi-trend-behavior",
     familyId: 5,
     name: "Trend & Emerging Behavior",
-    description: "Early signals and leading-edge consumer shifts.",
-    triggerKeywords: ["trend", "emerging", "future", "early adopter", "shifting behavior", "innovation"]
+    description: "Leading-edge shifts and early signals from innovators/adopters.",
+    triggerKeywords: ["trend", "emerging", "future", "early adopter", "shifting behavior", "innovation", "signals"],
+    semanticExamples: [
+      "We want to understand emerging behaviors in our category",
+      "Research into what early adopters are doing differently",
+      "Understanding the signals that point to where the market is heading",
+      "How are consumer habits shifting in our space",
+      "We need insight into future trends affecting our industry",
+      "What are the most forward-thinking people in our market doing that others aren't yet",
+    ],
+    defaultDurationMinutes: 22,
   },
 
   // Family 6: Workforce & Organization
@@ -162,43 +451,97 @@ export const SUB_DOMAINS: SubDomain[] = [
     id: "wo-employee-engagement",
     familyId: 6,
     name: "Employee Engagement",
-    description: "Psychological relationship with work and team.",
-    triggerKeywords: ["engagement", "pulse", "morale", "work culture", "satisfaction", "employee experience"]
+    description: "Psychological relationship with work, morale, and sense of belonging.",
+    triggerKeywords: ["engagement", "pulse", "morale", "culture", "satisfaction", "belonging"],
+    semanticExamples: [
+      "We want to understand how engaged and motivated our employees actually are",
+      "What do employees feel about their work and their team",
+      "Understanding the morale and cultural health of our organization",
+      "Employee pulse research into satisfaction and sense of belonging",
+      "We need to know why some employees are disengaged",
+      "Research into the overall employee experience at our company",
+    ],
+    defaultDurationMinutes: 20,
   },
   {
     id: "wo-360-feedback",
     familyId: 6,
     name: "360-Degree Feedback",
-    description: "Multi-rater feedback for individual growth and performance.",
-    triggerKeywords: ["360 feedback", "peer review", "manager review", "self-assessment", "competency"]
+    description: "Multi-rater assessments for individual growth and professional development.",
+    triggerKeywords: ["360 feedback", "peer review", "manager review", "self-assessment", "competency", "growth"],
+    semanticExamples: [
+      "We want to run 360 feedback for our leadership team",
+      "Gathering peer and manager feedback for individual development",
+      "Understanding how employees perceive their own and others' competencies",
+      "Research to support performance reviews through multi-rater feedback",
+      "We need structured feedback loops for professional growth",
+      "How do colleagues perceive the strengths and gaps of specific individuals",
+    ],
+    defaultDurationMinutes: 20,
   },
   {
     id: "wo-exit-departure",
     familyId: 6,
     name: "Exit & Departure Research",
-    description: "Understanding drivers of attrition and final employee sentiment.",
-    triggerKeywords: ["exit interview", "resignation", "attrition", "turnover", "departure"]
+    description: "Drivers of attrition and capturing final sentiment from leavers.",
+    triggerKeywords: ["exit interview", "resignation", "attrition", "turnover", "departure", "leaver"],
+    semanticExamples: [
+      "We are losing good people and want to understand why they leave",
+      "Research into the real reasons employees resign",
+      "Understanding what drives attrition in our organization",
+      "Exit interview research to capture departing employees' true sentiment",
+      "Why do our best performers keep leaving",
+      "What would make someone who just quit have stayed if we'd done something differently",
+    ],
+    defaultDurationMinutes: 18,
   },
   {
     id: "wo-culture-assessment",
     familyId: 6,
     name: "Culture & Values Assessment",
-    description: "Measuring lived company values and organizational norms.",
-    triggerKeywords: ["company culture", "values", "norms", "alignment", "integrity", "collaboration"]
+    description: "Gap analysis between stated values and lived day-to-day culture.",
+    triggerKeywords: ["company culture", "values", "norms", "alignment", "integrity", "collaboration", "lived values"],
+    semanticExamples: [
+      "We want to know if our stated values are actually lived by employees",
+      "Understanding the gap between company culture as designed and as experienced",
+      "Research into how employees perceive organizational norms and behaviors",
+      "Are people at our company actually collaborative and trustworthy in practice",
+      "We need to assess cultural alignment after a merger or leadership change",
+      "How consistent is the culture experienced across different departments",
+    ],
+    defaultDurationMinutes: 20,
   },
   {
     id: "wo-dei-experience",
     familyId: 6,
     name: "DEI Experience Research",
-    description: "Perception of diversity, equity, and inclusion in the workplace.",
-    triggerKeywords: ["dei", "inclusion", "equity", "diversity", "belonging", "bias"]
+    description: "Inclusion, equity perception, and psychological safety for all groups.",
+    triggerKeywords: ["dei", "inclusion", "equity", "diversity", "belonging", "bias", "fairness"],
+    semanticExamples: [
+      "We want to understand if all employees feel they belong here",
+      "Research into the lived experience of underrepresented groups in our company",
+      "Understanding whether our equity and inclusion efforts are making a difference",
+      "Do people from different backgrounds have equal opportunities here",
+      "Research into perceptions of fairness and bias in our workplace",
+      "How included do employees from minority groups feel in day-to-day work",
+    ],
+    defaultDurationMinutes: 22,
   },
   {
     id: "wo-manager-effectiveness",
     familyId: 6,
     name: "Manager Effectiveness",
-    description: "Direct supervisor impact and leadership quality.",
-    triggerKeywords: ["manager", "leadership", "supervision", "coaching", "direction", "support"]
+    description: "Leadership quality and direct supervisor impact on team health.",
+    triggerKeywords: ["manager", "leadership", "supervision", "coaching", "direction", "support", "effectiveness"],
+    semanticExamples: [
+      "We want to understand how employees experience their direct managers",
+      "Research into whether managers are effective coaches and leaders",
+      "What kind of support do employees get from their supervisors",
+      "Understanding manager quality and its impact on team performance",
+      "Are our managers creating the right conditions for their teams to succeed",
+      "How do employees rate the effectiveness of their direct line manager",
+    ],
+    defaultDurationMinutes: 18,
   },
 
   // Family 7: B2B & Professional Services
@@ -206,36 +549,81 @@ export const SUB_DOMAINS: SubDomain[] = [
     id: "b2b-partnership-health",
     familyId: 7,
     name: "B2B Partnership Health",
-    description: "Long-term business-to-business relationship quality.",
-    triggerKeywords: ["partnership", "account health", "strategic alignment", "b2b", "professional services", "procurement"]
+    description: "Strategic alignment and relationship durability with B2B accounts.",
+    triggerKeywords: ["partnership", "account health", "strategic alignment", "b2b", "procurement", "relationship health"],
+    semanticExamples: [
+      "We want to understand the health of our strategic business partnerships",
+      "Research into how our B2B clients rate the quality of our relationship",
+      "Are our business partners satisfied with how we collaborate and deliver",
+      "Understanding the strength and durability of our key business relationships",
+      "How do our clients feel about the strategic alignment with our team",
+      "We need insight into whether our partnerships are resilient or at risk",
+    ],
+    defaultDurationMinutes: 22,
   },
   {
     id: "b2b-vendor-evaluation",
     familyId: 7,
     name: "Vendor & Supplier Evaluation",
-    description: "Performance and reliability of B2B service providers.",
-    triggerKeywords: ["vendor", "supplier", "rfp", "service provider", "reliability", "contract"]
+    description: "Reliability, performance, and stakeholder satisfaction with vendors.",
+    triggerKeywords: ["vendor", "supplier", "rfp", "service provider", "reliability", "contract", "performance"],
+    semanticExamples: [
+      "We need to evaluate the performance of our key suppliers",
+      "Research into how vendors are perceived by our procurement team",
+      "Understanding whether our service providers are meeting contractual standards",
+      "Are our suppliers reliable and responsive when issues arise",
+      "We are doing a vendor review and need structured feedback from stakeholders",
+      "How satisfied are internal teams with the performance of our external vendors",
+    ],
+    defaultDurationMinutes: 20,
   },
   {
     id: "b2b-buying-process",
     familyId: 7,
     name: "B2B Buying Process",
-    description: "Complex procurement journeys and decision-making units.",
-    triggerKeywords: ["procurement", "buying center", "decision makers", "purchase journey", "b2b sales"]
+    description: "Complex procurement journeys and collective decision-making units (DMUs).",
+    triggerKeywords: ["procurement", "buying center", "decision makers", "purchase journey", "committee", "dmu"],
+    semanticExamples: [
+      "We want to understand how enterprise buyers make purchasing decisions",
+      "Research into the complex buying committee processes in our target market",
+      "Who are the real decision makers and influencers in our sales deals",
+      "Understanding the B2B procurement journey from awareness to purchase",
+      "Why do deals stall or fail in the consideration and evaluation phase",
+      "What does the buying experience feel like from the customer's side",
+    ],
+    defaultDurationMinutes: 22,
   },
   {
     id: "b2b-partnership-reseller",
     familyId: 7,
     name: "Reseller & Partner Research",
-    description: "Relationship with distributors and indirect channel partners.",
-    triggerKeywords: ["reseller", "distributor", "channel partner", "vadr", "indirect sales"]
+    description: "Channel partner enablement and indirect sales team satisfaction.",
+    triggerKeywords: ["reseller", "distributor", "channel partner", "enablement", "indirect sales"],
+    semanticExamples: [
+      "We want to understand how resellers and distributors experience our partnership",
+      "Research into channel partner satisfaction and enablement",
+      "How well are we supporting our indirect sales partners",
+      "Understanding how distributors perceive the quality of our products and support",
+      "We need to know why some channel partners are more engaged than others",
+      "Research into the health of our reseller relationship program",
+    ],
+    defaultDurationMinutes: 20,
   },
   {
     id: "b2b-service-delivery",
     familyId: 7,
     name: "B2B Service Delivery",
-    description: "Customer experience during professional service projects.",
-    triggerKeywords: ["project delivery", "implementation", "consulting", "service quality", "on-time"]
+    description: "Client satisfaction during active professional service project delivery.",
+    triggerKeywords: ["project delivery", "implementation", "consulting", "service quality", "on-time", "responsiveness"],
+    semanticExamples: [
+      "We want to know how clients experience our implementation and delivery process",
+      "Research into how consulting projects are perceived by client teams",
+      "Understanding service quality during active project engagements",
+      "Are our clients satisfied with how we deliver our professional services",
+      "How do clients feel about communication and responsiveness during delivery",
+      "We need to understand gaps between promised and delivered service quality",
+    ],
+    defaultDurationMinutes: 20,
   },
 
   // Family 8: Education & Learning
@@ -243,29 +631,65 @@ export const SUB_DOMAINS: SubDomain[] = [
     id: "el-course-efficacy",
     familyId: 8,
     name: "Course Evaluation & Efficacy",
-    description: "Pedagogical effectiveness and student experience research.",
-    triggerKeywords: ["education", "course", "learning", "student", "mastery", "curriculum", "training"]
+    description: "Pedagogical engagement, material clarity, and instructor quality.",
+    triggerKeywords: ["education", "course", "learning", "student", "curriculum", "instructor", "engagement"],
+    semanticExamples: [
+      "We want to know if our course is actually helping students learn",
+      "Research into the student experience of a training program",
+      "Understanding whether the curriculum is effective and engaging",
+      "Are students mastering the material we designed the course to teach",
+      "We need feedback on the pedagogical quality of our education program",
+      "How do participants feel about the quality and structure of our course",
+    ],
+    defaultDurationMinutes: 18,
   },
   {
     id: "el-learning-outcome",
     familyId: 8,
     name: "Learning Outcome Research",
-    description: "Behavioral change and knowledge retention post-learning.",
-    triggerKeywords: ["knowledge retention", "behavioral change", "skill transfer", "learning outcome", "application"]
+    description: "Knowledge retention and real-world application of skills after training.",
+    triggerKeywords: ["retention", "behavioral change", "skill transfer", "impact", "application", "on-the-job"],
+    semanticExamples: [
+      "We want to know if learning has actually changed what people do on the job",
+      "Research into knowledge retention weeks after training completion",
+      "Are the skills we teach actually being applied in the real world",
+      "Understanding the behavioral change produced by our learning programs",
+      "We need to measure the real-world impact of our training",
+      "How well do participants transfer what they learned into their daily practice",
+    ],
+    defaultDurationMinutes: 18,
   },
   {
     id: "el-institutional-experience",
     familyId: 8,
     name: "Institutional Experience",
-    description: "Broader student environment and support services.",
-    triggerKeywords: ["university", "school", "administration", "student services", "belonging", "campus"]
+    description: "The broader non-classroom student environment, administration, and support.",
+    triggerKeywords: ["university", "school", "administration", "student services", "belonging", "campus", "environment"],
+    semanticExamples: [
+      "We want to understand the overall student experience at our institution",
+      "Research into how students feel about campus life, services, and support",
+      "Do students feel they belong and are supported by the institution",
+      "Understanding satisfaction with administrative services and student experience broadly",
+      "How does the overall environment affect student wellbeing and success",
+      "Research into student perceptions of our school beyond just the classroom",
+    ],
+    defaultDurationMinutes: 20,
   },
   {
     id: "el-professional-development",
     familyId: 8,
     name: "Professional Development",
-    description: "Workplace learning and employer-supported growth.",
-    triggerKeywords: ["mentorship", "career growth", "training program", "l&d", "professional development"]
+    description: "Workplace mentorship and employer-supported long-term career growth.",
+    triggerKeywords: ["mentorship", "career growth", "training", "l&d", "advancement", "development"],
+    semanticExamples: [
+      "We want to understand if employees feel supported in their career growth",
+      "Research into the effectiveness of our mentorship and development programs",
+      "Are employees gaining the skills they need through our L&D initiatives",
+      "How do employees feel about opportunities for professional advancement at our company",
+      "Understanding the perceived value of our workplace learning programs",
+      "Do our training investments translate into employees feeling more capable",
+    ],
+    defaultDurationMinutes: 18,
   },
 
   // Family 9: Civic & Public
@@ -273,29 +697,65 @@ export const SUB_DOMAINS: SubDomain[] = [
     id: "cp-citizen-service",
     familyId: 9,
     name: "Citizen Service Experience",
-    description: "Public service accessibility and satisfaction level research.",
-    triggerKeywords: ["government", "public service", "citizen", "council", "municipality", "accessibility"]
+    description: "Accessibility, clarity, and satisfaction with public service delivery.",
+    triggerKeywords: ["government", "public service", "citizen", "council", "municipality", "accessibility", "delivery"],
+    semanticExamples: [
+      "We want to understand how residents experience our local government services",
+      "Research into citizen satisfaction with public service delivery",
+      "Are public services easy to access and use for all residents",
+      "Understanding how people experience interactions with our municipality",
+      "We need to know if council services are meeting citizen needs",
+      "How do residents feel about the quality and accessibility of public services",
+    ],
+    defaultDurationMinutes: 18,
   },
   {
     id: "cp-community-trust",
     familyId: 9,
     name: "Community Trust & Safety",
-    description: "Trust in local government and institutional safety perception.",
-    triggerKeywords: ["trust", "safety", "policing", "governance", "institutional trust", "transparency"]
+    description: "Perceived safety, institutional trust, and transparency in governance.",
+    triggerKeywords: ["trust", "safety", "policing", "governance", "transparency", "security", "integrity"],
+    semanticExamples: [
+      "We want to understand if residents trust local government institutions",
+      "Research into perceptions of safety and security in our community",
+      "How transparent and accountable does government feel to citizens",
+      "Understanding trust in policing and local governance structures",
+      "Do residents feel safe in their community and trust the systems meant to protect them",
+      "Research into the relationship between institutional transparency and community trust",
+    ],
+    defaultDurationMinutes: 20,
   },
   {
     id: "cp-policy-perception",
     familyId: 9,
     name: "Policy Perception & Impact",
-    description: "Understanding and sentiment toward new policies or regulations.",
-    triggerKeywords: ["policy", "regulation", "law", "compliance", "public opinion", "impact assessment"]
+    description: "Sentiment and understanding of new regulations, laws, or civic changes.",
+    triggerKeywords: ["policy", "regulation", "law", "compliance", "opinion", "impact", "sentiment"],
+    semanticExamples: [
+      "We want to know how residents feel about a new policy or regulation",
+      "Research into public understanding and sentiment about a policy change",
+      "How is this regulation being perceived by affected communities",
+      "Understanding whether people believe the policy will have positive impact",
+      "We need to gauge public opinion on a new law or government initiative",
+      "How are different groups affected by and responding to our new policy",
+    ],
+    defaultDurationMinutes: 18,
   },
   {
     id: "cp-voter-sentiment",
     familyId: 9,
     name: "Voter Sentiment & Participation",
-    description: "Drivers of democratic participation and civic engagement.",
-    triggerKeywords: ["voter", "election", "democracy", "civic engagement", "political sentiment"]
+    description: "Drivers of civic engagement and barriers to democratic participation.",
+    triggerKeywords: ["voter", "election", "democracy", "civic engagement", "participation", "voting"],
+    semanticExamples: [
+      "We want to understand voter sentiment in our district",
+      "Research into what drives or discourages civic and political participation",
+      "Understanding why some groups are disengaged from democratic processes",
+      "What do voters care about most heading into this election cycle",
+      "Research into political sentiment and trust in democratic institutions",
+      "How do citizens feel about their ability to influence political decisions",
+    ],
+    defaultDurationMinutes: 20,
   },
 
   // Family 10: Scientific Research
@@ -303,89 +763,49 @@ export const SUB_DOMAINS: SubDomain[] = [
     id: "sr-formal-methodology",
     familyId: 10,
     name: "Formal Methodology",
-    description: "Academic and scientific research methodology.",
-    triggerKeywords: ["scientific", "academic", "methodology", "research", "study", "experiment", "formal"]
+    description: "Peer-reviewed academic research with strict methodological standards.",
+    triggerKeywords: ["scientific", "academic", "methodology", "formal", "study", "qualitative", "methodical"],
+    semanticExamples: [
+      "We are running a formal academic study and need structured participant interviews",
+      "Research methodology for a scientific investigation",
+      "Understanding participant experience in a structured research study",
+      "We need qualitative data collection for an academic paper",
+      "How do research participants experience and interpret our study protocol",
+      "Formal qualitative research with strict methodological standards",
+    ],
+    defaultDurationMinutes: 25,
   },
   {
     id: "sr-clinical-trial",
     familyId: 10,
     name: "Clinical Trial Experience",
-    description: "Participant experience and ethics in clinical studies.",
-    triggerKeywords: ["clinical trial", "pharma", "patient experience", "ethics", "medical study", "drug trial"]
+    description: "Patient experience, ethics, and protocol adherence in clinical studies.",
+    triggerKeywords: ["clinical trial", "pharma", "patient experience", "ethics", "medical", "drug trial"],
+    semanticExamples: [
+      "We want to understand participant experience in our clinical trial",
+      "Research into how patients feel during a medical study",
+      "Understanding the ethical perception of our research protocol from participants",
+      "How do trial participants experience the process of being in a clinical study",
+      "We need to know if the trial process is comfortable and well-explained for patients",
+      "Research into patient perspectives on participation in pharmaceutical trials",
+    ],
+    defaultDurationMinutes: 25,
   },
   {
     id: "sr-rd-ethics",
     familyId: 10,
     name: "R&D Ethics & Perception",
-    description: "Perception of ethics, safety, and transparency in new innovation.",
-    triggerKeywords: ["ethics", "innovation", "r&d", "safety", "trust in science", "transparency"]
-  },
-
-  // Family 4: Service Environment (Example Seed)
-  {
-    id: "se-dining-restaurant",
-    familyId: 4,
-    name: "Dining & Restaurant Research",
-    description: "Holistic experience across food, service, and ambiance.",
-    triggerKeywords: ["dining", "restaurant", "food quality", "server", "menu", "cafe", "eatery"]
-  },
-  {
-    id: "se-hospitality-experience",
-    familyId: 4,
-    name: "Hospitality Experience",
-    description: "Guest journey at hotels, resorts, and stays.",
-    triggerKeywords: ["hotel", "resort", "stay", "guest", "check-in", "hospitality", "room service", "booking"]
-  },
-  {
-    id: "se-retail-instore",
-    familyId: 4,
-    name: "Retail & In-Store Experience",
-    description: "Physical shopping experience and spatial journey.",
-    triggerKeywords: ["retail", "store", "shopping", "in-store", "shelf", "checkout", "product discovery", "staff"]
-  },
-  {
-    id: "se-personal-care",
-    familyId: 4,
-    name: "Personal Care & Wellness",
-    description: "Experience of salons, spas, gyms, and clinics.",
-    triggerKeywords: ["salon", "spa", "gym", "wellness", "fitness", "personal care", "treatment", "practitioner"]
-  },
-  {
-    id: "se-transportation-mobility",
-    familyId: 4,
-    name: "Transportation & Mobility",
-    description: "Point-to-point journey experience across transport modes.",
-    triggerKeywords: ["transportation", "airline", "train", "bus", "mobility", "shuttle", "journey", "reliability"]
-  },
-  {
-    id: "se-event-live",
-    familyId: 4,
-    name: "Event & Live Experience",
-    description: "Experience of concerts, games, and live shows.",
-    triggerKeywords: ["event", "concert", "sports", "festival", "live", "show", "venue", "ticketing"]
-  },
-
-  // Family 12: Built Environment
-  {
-    id: "be-workplace-utilization",
-    familyId: 12,
-    name: "Workplace & Office Environment",
-    description: "Occupancy, hybrid flow, and office experience research.",
-    triggerKeywords: ["office", "workplace", "desk", "meeting room", "facilities", "hybrid", "utilization"]
-  },
-  {
-    id: "be-residential-tenant",
-    familyId: 12,
-    name: "Residential & Tenant Experience",
-    description: "Apartment living, amenities, and property management quality.",
-    triggerKeywords: ["tenant", "apartment", "residential", "housing", "rent", "property manager", "amenities"]
-  },
-  {
-    id: "be-community-neighborhood",
-    familyId: 12,
-    name: "Community & Neighborhood Research",
-    description: "Urban design, social cohesion, and local amenity perception.",
-    triggerKeywords: ["neighborhood", "community", "public space", "local area", "social cohesion", "safety"]
+    description: "Trust in innovation, safety perceptions, and ethical transparency in new tech.",
+    triggerKeywords: ["ethics", "innovation", "r&d", "safety", "trust in science", "transparency", "implications"],
+    semanticExamples: [
+      "We want to understand public perception of the ethics of our research",
+      "How do people feel about the safety and transparency of our innovation",
+      "Research into trust in science and technology among our target audience",
+      "Understanding how communities perceive the ethics of our R&D activities",
+      "Are people concerned about the implications of our technology",
+      "How do consumers think about the ethical dimensions of scientific innovation",
+    ],
+    defaultDurationMinutes: 22,
   },
 
   // Family 11: Media & Entertainment
@@ -393,29 +813,115 @@ export const SUB_DOMAINS: SubDomain[] = [
     id: "me-content-resonance",
     familyId: 11,
     name: "Content Resonance & Storytelling",
-    description: "Emotional impact and narrative engagement with media content.",
-    triggerKeywords: ["storytelling", "content", "narrative", "emotional impact", "media", "show", "film"]
+    description: "Emotional impact and narrative engagement with creative media content.",
+    triggerKeywords: ["storytelling", "content", "narrative", "emotional impact", "media", "show", "film", "resonance"],
+    semanticExamples: [
+      "We want to understand how audiences respond emotionally to our content",
+      "Research into whether our storytelling resonates and creates impact",
+      "How do viewers or readers engage with the narrative in our media",
+      "Understanding the emotional journey audiences experience with our content",
+      "We need to know if our show, film, or article connects with people",
+      "Research into the resonance and memorability of our media content",
+    ],
+    defaultDurationMinutes: 18,
   },
   {
     id: "me-streaming-experience",
     familyId: 11,
     name: "Streaming & Platform Experience",
-    description: "Usability and value perception of digital media platforms.",
-    triggerKeywords: ["streaming", "platform", "media app", "ott", "subscription", "discovery"]
+    description: "Discovery, usability, and value perception of digital entertainment platforms.",
+    triggerKeywords: ["streaming", "platform", "ott", "subscription", "discovery", "app", "viewing"],
+    semanticExamples: [
+      "We want to understand the full experience of using our streaming platform",
+      "Research into how subscribers discover and consume content on our service",
+      "Understanding why people subscribe, stay, or cancel their membership",
+      "How do users feel about navigating and finding content on our platform",
+      "We need to know if our recommendation system helps or frustrates users",
+      "Research into the overall value perception of our media subscription service",
+    ],
+    defaultDurationMinutes: 18,
   },
   {
     id: "me-gaming-engagement",
     familyId: 11,
     name: "Gaming Engagement & Motivation",
-    description: "Player motivation and satisfaction with gaming loops.",
-    triggerKeywords: ["gaming", "player", "gameplay", "mechanics", "motivation", "game loop"]
+    description: "Player psychology, satisfaction with game loops, and intrinsic motivation.",
+    triggerKeywords: ["gaming", "player", "gameplay", "mechanics", "motivation", "game loop", "engagement", "reward"],
+    semanticExamples: [
+      "We want to understand what keeps players engaged with our game",
+      "Research into player motivation and satisfaction with our game mechanics",
+      "Why do players stop playing after a few sessions",
+      "Understanding the emotional journey of playing through our game",
+      "What makes our game loop rewarding or frustrating for players",
+      "Research into player psychology and engagement patterns in our game",
+    ],
+    defaultDurationMinutes: 20,
   },
   {
     id: "me-audience-fragmentation",
     familyId: 11,
     name: "Audience Segmentation & Habits",
-    description: "Shifting media habits across multiple channels.",
-    triggerKeywords: ["media habits", "multi-channel", "audience", "fragmentation", "consumption"]
+    description: "Shifting multi-channel habits and demographic-specific media rituals.",
+    triggerKeywords: ["habits", "multi-channel", "audience", "fragmentation", "consumption", "demographic"],
+    semanticExamples: [
+      "We want to understand how our audience consumes media across different channels",
+      "Research into shifting media habits among our target demographic",
+      "Understanding why audiences are fragmented across so many platforms",
+      "How do different audience segments consume content differently",
+      "We need insight into the multi-channel media behavior of our consumers",
+      "Research into how media consumption habits are evolving for our audience",
+    ],
+    defaultDurationMinutes: 20,
+  },
+
+  // Family 12: Built Environment
+  {
+    id: "be-workplace-utilization",
+    familyId: 12,
+    name: "Workplace & Office Environment",
+    description: "Hybrid flow, occupancy experience, and facilities satisfaction.",
+    triggerKeywords: ["office", "workplace", "desk", "facilities", "hybrid", "utilization", "environment"],
+    semanticExamples: [
+      "We want to understand how employees experience our office environment",
+      "Research into hybrid work patterns and office space utilization",
+      "How do people feel about coming into the office versus working from home",
+      "Understanding satisfaction with meeting rooms, desks, and workplace facilities",
+      "We need to know what drives people to come to the office or stay home",
+      "Research into how the physical workplace supports or hinders productivity",
+    ],
+    defaultDurationMinutes: 18,
+  },
+  {
+    id: "be-residential-tenant",
+    familyId: 12,
+    name: "Residential & Tenant Experience",
+    description: "Apartment living quality, property management satisfaction, and renewals.",
+    triggerKeywords: ["tenant", "apartment", "residential", "rent", "property management", "amenities", "renewal"],
+    semanticExamples: [
+      "We want to understand why tenants are not renewing their leases",
+      "Research into how residents feel about living in our apartment building",
+      "Understanding tenant satisfaction with property management and amenities",
+      "What makes tenants decide to stay or move out of our rental properties",
+      "We need to know how residents rate the quality of their living experience",
+      "Research into the full residential experience from move-in to renewal decision",
+    ],
+    defaultDurationMinutes: 20,
+  },
+  {
+    id: "be-community-neighborhood",
+    familyId: 12,
+    name: "Community & Neighborhood Research",
+    description: "Urban design, social cohesion, and quality-of-life perceptions.",
+    triggerKeywords: ["neighborhood", "community", "public space", "social cohesion", "safety", "local area"],
+    semanticExamples: [
+      "We want to understand how residents feel about their neighborhood",
+      "Research into community cohesion and social connection in our area",
+      "Understanding perceptions of public spaces, safety, and local amenities",
+      "How do residents rate the quality of life in their local community",
+      "We need to know what residents think is missing or working well in the area",
+      "Research into social belonging and quality of neighborhood experience",
+    ],
+    defaultDurationMinutes: 18,
   },
 
   // Family 13: Financial & Legal
@@ -423,32 +929,66 @@ export const SUB_DOMAINS: SubDomain[] = [
     id: "fn-banking-trust",
     familyId: 13,
     name: "Banking & Financial Trust",
-    description: "Reliability, security, and institutional trust in finance.",
-    triggerKeywords: ["banking", "finance", "trust", "security", "fraud", "reliability", "financial services"]
+    description: "Institutional integrity, perceived security, and reliability in finance.",
+    triggerKeywords: ["banking", "finance", "trust", "security", "reliability", "integrity", "institution"],
+    semanticExamples: [
+      "We want to understand how customers feel about trusting us with their money",
+      "Research into perceptions of security and reliability in our banking service",
+      "Understanding why customers feel anxious or confident using our financial products",
+      "How do customers perceive our institution's integrity and transparency",
+      "We need to know what drives or erodes trust in our financial services brand",
+      "Research into the emotional relationship people have with their financial institution",
+    ],
+    defaultDurationMinutes: 20,
   },
   {
     id: "fn-investment-behavior",
     familyId: 13,
     name: "Investment Behavior & Risk",
-    description: "Drivers of risk-taking, asset allocation, and wealth management.",
-    triggerKeywords: ["investment", "risk", "wealth management", "portfolio", "trading", "financial planning"]
+    description: "Psychology of risk, wealth management drivers, and long-term planning.",
+    triggerKeywords: ["investment", "risk", "wealth", "portfolio", "trading", "planning", "behavior"],
+    semanticExamples: [
+      "We want to understand how investors make decisions about risk and allocation",
+      "Research into the psychology of financial planning and wealth management",
+      "How do investors feel about uncertainty and market volatility",
+      "Understanding the emotional and rational drivers of investment behavior",
+      "We need to know what makes investors confident or anxious about their portfolio",
+      "Research into how people think about long-term financial planning",
+    ],
+    defaultDurationMinutes: 22,
   },
   {
     id: "fn-insurance-claims",
     familyId: 13,
     name: "Insurance & Recovery Experience",
-    description: "Experience of the claims process and recovery satisfaction.",
-    triggerKeywords: ["insurance", "claims", "payout", "recovery", "protection", "policy"]
+    description: "Fairness, speed, and emotional stress during the claims payout process.",
+    triggerKeywords: ["insurance", "claims", "payout", "recovery", "protection", "policy", "settlement"],
+    semanticExamples: [
+      "We want to understand how claimants experience our insurance process",
+      "Research into satisfaction and stress during an insurance claim",
+      "Understanding how people feel about the fairness and speed of claims resolution",
+      "How does the claims experience affect trust in our insurance brand",
+      "We need to know if our claims process is clear and compassionate for policyholders",
+      "Research into the recovery experience after a loss event handled by our insurer",
+    ],
+    defaultDurationMinutes: 18,
   },
   {
     id: "fn-legal-access",
     familyId: 13,
     name: "Legal Service Access",
-    description: "Barriers and experience of legal service delivery and advice.",
-    triggerKeywords: ["legal", "lawyer", "advice", "access to justice", "contracts", "professional advice"]
+    description: "Barriers to advice, accessibility of professional counsel, and clarity.",
+    triggerKeywords: ["legal", "lawyer", "advice", "access", "counsel", "professional", "contracts"],
+    semanticExamples: [
+      "We want to understand how clients experience accessing legal advice",
+      "Research into barriers to engaging with legal services",
+      "How do clients feel about the clarity and approachability of their lawyer",
+      "Understanding the experience of navigating legal processes and documentation",
+      "We need to know if our legal service feels accessible and fair to clients",
+      "Research into the emotional and practical experience of seeking legal help",
+    ],
+    defaultDurationMinutes: 20,
   },
-  
-
 ];
 
 export function getFamilyById(id: number) {
@@ -472,19 +1012,16 @@ export function matchHybridSubDomains(query: string): { subDomain: SubDomain; we
 
   if (matches.length === 0) return [];
 
-  // Sort by score descending
   matches.sort((a, b) => b.score - a.score);
-
   const maxScore = matches[0].score;
-  const result = matches
-    .filter(m => m.score >= maxScore * 0.5) // Only take matches within 50% of the top score
-    .slice(0, 3) // Limit to top 3
+
+  return matches
+    .filter(m => m.score >= maxScore * 0.5)
+    .slice(0, 3)
     .map(m => ({
       subDomain: m.subDomain,
-      weight: m.score / maxScore, // Normalize weight relative to the top match
+      weight: m.score / maxScore,
     }));
-
-  return result;
 }
 
 export function matchSubDomain(query: string): SubDomain | null {
