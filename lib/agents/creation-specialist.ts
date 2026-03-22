@@ -24,50 +24,8 @@ export class CreationSpecialist extends BaseSpecialistAgent {
   // --------------------------------------------------------------------------
 
   protected buildChecklist(config: SurveyConfig): SpecialistChecklist {
-    const state = this.context.expertState;
-    if (!state) return { required: [], aspirational: [] };
-
-    return {
-      required: [
-        this.makeChecklistItem(
-          "subject_defined",
-          "Clearly defined research subject",
-          !!state.brief.productContext?.name,
-        ),
-        this.makeChecklistItem(
-          "objective_refined",
-          "Actionable goal with decision threshold",
-          !!state.brief.objectives.length,
-        ),
-        this.makeChecklistItem(
-          "audience_profiled",
-          "Psychographic and segment modeling complete",
-          !!state.audienceModel.psychographicProfile,
-        ),
-        this.makeChecklistItem(
-          "metric_contract",
-          "Explicit measurement strategy agreed upon",
-          !!state.brief.successMetrics,
-        ),
-        this.makeChecklistItem(
-          "coverage_tree",
-          "Research hierarchy (topics) generated",
-          !!state.coverageTracker.nodes.length,
-        ),
-      ],
-      aspirational: [
-        this.makeChecklistItem(
-          "hypotheses_surfaced",
-          "Creator assumptions captured",
-          !!state.brief.sensitiveTopics.length,
-        ),
-        this.makeChecklistItem(
-          "media_context",
-          "Media artifacts integrated with goals",
-          !!state.sessionMeta.modality,
-        ),
-      ],
-    };
+    // Legacy support: V4 uses getUnifiedNodes() and ExpertState nodes.
+    return { required: [], aspirational: [] };
   }
 
   // --------------------------------------------------------------------------
@@ -79,7 +37,7 @@ export class CreationSpecialist extends BaseSpecialistAgent {
     if (!config) return "Survey configuration is missing.";
 
     const { domainName, coreContent, surveyTypeContent } =
-      this.context.loadedDomainSkills || { domainName: "Survey" };
+      this.context.loadedDomainSkills || { domainName: "Generalist" };
     
     return `
 <role>
@@ -93,7 +51,7 @@ ${this.getChecklistSection()}
 ${this.getConstitutionalConstraints()}
 
 <expert_design_protocols>
-${coreContent || ""}
+${this.getBehavioralProfile()}
 ${surveyTypeContent || ""}
 </expert_design_protocols>
 
@@ -109,6 +67,17 @@ ${this.getKnowledgeSection()}
 2. V2 COMPLIANCE: Every update MUST follow the strict ExpertState schema.
 </proactive_analyst_rules>
 
+<thinking_protocol>
+You are operating in a low-latency STREAMING JSON MODE.
+For every turn, your response MUST be a perfectly formatted, raw JSON object containing:
+1. "reasoning": Concise internal audit of design progress.
+2. "response": Natural conversational text for the creator.
+
+CONVERSATIONAL SILENCE RULES:
+- If you are calling 'setSurveyDomain', your "response" MUST be empty (""). Do not speak until the domain is locked in and you have your specialized skills in Step 2.
+- If you are calling 'finishSurvey', you SHOULD provide a friendly closing message in the "response" field.
+</thinking_protocol>
+
 <completion_protocol>
 When all REQUIRED checklist items are marked 'met': call 'finishSurvey'.
 </completion_protocol>
@@ -122,27 +91,25 @@ When all REQUIRED checklist items are marked 'met': call 'finishSurvey'.
   getDeepgramFunctions(): VoiceAgentFunction[] {
     return [
       {
-        name: "think_and_respond",
-        description: "REQUIRED: Plan response and update state.",
-        parameters: {
-          type: "object",
-          properties: {
-            message_to_user: { type: "string" },
-            internal_reasoning: { type: "string" },
-          },
-          required: ["message_to_user", "internal_reasoning"],
-        },
-      },
-      {
         name: "setSurveyDomain",
         description: "Lock in the survey domain.",
         parameters: {
           type: "object",
           properties: {
-            domainId: { type: "number" },
+            domains: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  weight: { type: "number" },
+                },
+                required: ["id", "weight"],
+              },
+            },
             summaryOfWhatWeKnow: { type: "string" },
           },
-          required: ["domainId", "summaryOfWhatWeKnow"],
+          required: ["domains", "summaryOfWhatWeKnow"],
         },
       },
       {
@@ -164,33 +131,7 @@ When all REQUIRED checklist items are marked 'met': call 'finishSurvey'.
   getTools(): Record<string, any> {
     const ctx = this.context;
     return {
-      think_and_respond: tool({
-        description: "Analyze the creator's input, update the expert state, and generate a conversational response.",
-        inputSchema: z.object({
-          message_to_user: z.string().describe("The actual text shown to the participant."),
-          internal_reasoning: z.string().describe("Your logic for the current turn."),
-          expert_state_updates: z.record(z.any()).optional().describe("V2 ExpertState updates (Zod-compatible)."),
-        }),
-        execute: async ({ message_to_user, internal_reasoning, expert_state_updates }) => {
-          console.log(`[CreationSpecialist] think_and_respond: ${internal_reasoning} | Message: ${message_to_user}`);
-          if (expert_state_updates && this.context.expertState) {
-            // Validate the merge result against ExpertState schema
-            const merged = { ...this.context.expertState, ...expert_state_updates };
-            const validated = expertStateSchema.safeParse(merged);
-
-            if (validated.success) {
-              Object.assign(this.context.expertState, expert_state_updates);
-              await this.saveExpertState(expert_state_updates);
-            } else {
-              console.warn("[CreationSpecialist] State validation failed:", validated.error);
-              // Proactively fix: still update but log the issue
-              Object.assign(this.context.expertState, expert_state_updates);
-              await this.saveExpertState(expert_state_updates);
-            }
-          }
-          return { success: true };
-        },
-      }),
+      // think_and_respond removed in favor of direct JSON streaming
       setSurveyDomain: tool({
         description: "Lock in the research domain(s). Provide a primary domain and any relevant secondary domains.",
         inputSchema: z.object({
@@ -220,7 +161,7 @@ When all REQUIRED checklist items are marked 'met': call 'finishSurvey'.
             await tx
               .update(surveys)
               .set({ 
-                domainId: primarySd?.familyId || 0,
+                domainId: primaryDomain.id,
                 hybridDomains: domains 
               })
               .where(eq(surveys.id, ctx.surveyConfig!.id));
@@ -235,16 +176,40 @@ When all REQUIRED checklist items are marked 'met': call 'finishSurvey'.
 
           if (skillEntries.length > 0) {
             const synthesized = await SkillEngine.synthesizeProtocol(skillEntries, "creation");
+            
+            // NEW: Extract nodes from the primary skill to initialize the research hierarchy
+            const primarySkill = skillEntries[0].skill;
+            const skillNodes = SkillEngine.parseCoverageModel(primarySkill.content);
+
             this.context.loadedDomainSkills = {
-              domainName: domains.map(d => SUB_DOMAINS.find(s => s.id === d.id)?.name || d.id).join(" + "),
-              coreContent: synthesized,
-              surveyTypeContent: "",
-              matchedSurveyType: primaryDomain.id,
-              hybridDomains: domains
+               domainName: domains.map(d => SUB_DOMAINS.find(s => s.id === d.id)?.name || d.id).join(" + "),
+               coreContent: synthesized,
+               surveyTypeContent: "",
+               matchedSurveyType: primaryDomain.id,
+               hybridDomains: domains,
+               activeNodes: skillNodes
             };
+
+            // PERSIST: Save precompiled creation skill and initialize nodes in ExpertState
+            if (this.context.expertState) {
+              // Initialize nodes from unified factory (Skills + Custom Metrics + Goals)
+              const unifiedNodes = this.getUnifiedNodes();
+              
+              this.context.expertState.coverageTracker.nodes = unifiedNodes;
+
+              this.context.expertState.sessionMeta.compiledSkills = {
+                ...this.context.expertState.sessionMeta.compiledSkills,
+                creation: synthesized
+              };
+              
+              await this.saveExpertState({ 
+                sessionMeta: this.context.expertState.sessionMeta,
+                coverageTracker: this.context.expertState.coverageTracker
+              });
+            }
           }
           
-          return { status: "Hybrid domain strategy successfully established." };
+          return { status: "Hybrid domain strategy successfully established and precompiled." };
         },
       }),
       finishSurvey: tool({
@@ -253,14 +218,45 @@ When all REQUIRED checklist items are marked 'met': call 'finishSurvey'.
           summary: z.string(),
         }),
         execute: async ({ summary }) => {
-          if (ctx.surveyConfig?.id) {
-            await getDb()
-              .update(surveyCreationConversations)
-              .set({ status: "completed" })
-              .where(
-                eq(surveyCreationConversations.surveyId, ctx.surveyConfig.id),
-              );
+          if (!ctx.surveyConfig?.id) return { error: "No active survey." };
+
+          const exportState = this.context.expertState;
+          if (exportState) {
+            // ONE-TIME PRECOMPILATION: Generate protocols for next phases
+            const domains = ctx.surveyConfig.hybridDomains || (ctx.surveyConfig.domainId ? [{ id: ctx.surveyConfig.domainId, weight: 1 }] : []);
+            
+            if (domains.length > 0) {
+              // console.log(`[CreationSpecialist] Precompiling final skills for ${ctx.surveyConfig.id}...`);
+              
+              const conductingEntries: { skill: UnifiedSkill; weight: number }[] = [];
+              const analyticsEntries: { skill: UnifiedSkill; weight: number }[] = [];
+
+              for (const d of domains) {
+                const condSkill = await SkillEngine.loadSkill(d.id, "conducting");
+                const analSkill = await SkillEngine.loadSkill(d.id, "analytics");
+                if (condSkill) conductingEntries.push({ skill: condSkill, weight: d.weight });
+                if (analSkill) analyticsEntries.push({ skill: analSkill, weight: d.weight });
+              }
+
+              const conductingSynthesis = await SkillEngine.synthesizeProtocol(conductingEntries, "conducting");
+              const analyticsSynthesis = await SkillEngine.synthesizeProtocol(analyticsEntries, "analytics");
+
+              exportState.sessionMeta.compiledSkills = {
+                ...exportState.sessionMeta.compiledSkills,
+                conducting: conductingSynthesis,
+                analytics: analyticsSynthesis
+              };
+              await this.saveExpertState({ sessionMeta: exportState.sessionMeta });
+            }
           }
+
+          await getDb()
+            .update(surveyCreationConversations)
+            .set({ status: "completed" })
+            .where(
+              eq(surveyCreationConversations.surveyId, ctx.surveyConfig.id),
+            );
+
           return { success: true, summary };
         },
       }),
@@ -295,8 +291,8 @@ When all REQUIRED checklist items are marked 'met': call 'finishSurvey'.
             organizationId: ctx.organizationId,
             surveyId: ctx.surveyConfig.id,
             type: "llm_text",
-            provider: (defaultModel as any).modelId?.includes("gpt") ? "openai" : "google",
-            modelName: (defaultModel as any).modelId ?? "gemini-2.0-flash",
+            provider: (defaultModel).modelId?.includes("gpt") ? "openai" : "google",
+            modelName: (defaultModel).modelId ?? "gemini-2.5-flash",
             promptTokens: result.usage.inputTokens,
             completionTokens: result.usage.outputTokens,
             totalTokens: result.usage.totalTokens,

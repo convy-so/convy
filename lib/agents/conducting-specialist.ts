@@ -6,9 +6,9 @@ import type { SurveyConfig } from "@/lib/prompts";
 import { defaultModel } from "@/lib/ai";
 import { logUsage } from "@/lib/billing/logger";
 import { TONE_PROFILES } from "@/lib/surveys";
-import { SkillEngine } from "./skill-system/engine";
 import type { VoiceAgentFunction } from "@/lib/voice/deepgram-voice-agent";
-import { KnowledgeService } from "@/lib/knowledge-service";
+import { domainBrain } from "@/lib/domain-brain";
+import { assembleTranscriptContext } from "@/lib/memory-bridge";
 
 export class ConductingSpecialist extends BaseSpecialistAgent {
   constructor(context: AgentContext) {
@@ -20,85 +20,8 @@ export class ConductingSpecialist extends BaseSpecialistAgent {
   // --------------------------------------------------------------------------
 
   protected buildChecklist(config: SurveyConfig): SpecialistChecklist {
-    const required: ReturnType<typeof this.makeChecklistItem>[] = [];
-    const aspirational: ReturnType<typeof this.makeChecklistItem>[] = [];
-
-    // REQUIRED 1: Core Goal Alignment
-    required.push(
-      this.makeChecklistItem(
-        "goal_alignment",
-        `Ensure the participant addresses the primary objective: ${config.coreObjective || config.expertState?.objective?.goal || config.information}`,
-      ),
-    );
-
-    // REQUIRED 2: Explicit Metrics (The "Metric Contract")
-    if (config.metrics?.length) {
-      config.metrics.forEach((metric, i) => {
-        required.push(
-          this.makeChecklistItem(
-            `metric_${i}`,
-            `Gathered sufficient data to evaluate Metric: "${metric}"`,
-          ),
-        );
-      });
-    }
-
-    // REQUIRED 3: Mandatory Questions
-    if (config.requiredQuestions?.length) {
-      config.requiredQuestions.forEach((q, i) => {
-        required.push(
-          this.makeChecklistItem(
-            `mandatory_q_${i}`,
-            `Asked required question: "${q.slice(0, 80)}${q.length > 80 ? "..." : ""}"`,
-          ),
-        );
-      });
-    }
-
-    // REQUIRED 4: Personal Information
-    if (config.personalInfo?.length) {
-      required.push(
-        this.makeChecklistItem(
-          "personal_info_captured",
-          `Captured personal info: ${config.personalInfo.join(", ")}`,
-        ),
-      );
-    }
-
-    // ASPIRATIONAL: Hypotheses & Success Criteria
-    if (config.expertState?.hypotheses?.assumptions?.length) {
-      config.expertState.hypotheses.assumptions.forEach(
-        (assumption: string, i: number) => {
-          aspirational.push(
-            this.makeChecklistItem(
-              `hypothesis_${i}`,
-              `Tested creator assumption: "${assumption.slice(0, 80)}..."`,
-            ),
-          );
-        },
-      );
-    }
-
-    const insightTypes =
-      config.expertState?.successCriteria?.insightTypes ?? [];
-    if (insightTypes.includes("emotional")) {
-      aspirational.push(
-        this.makeChecklistItem(
-          "emotional_peak",
-          "Captured emotional peak/valley moments (The 'Feelings' layer)",
-        ),
-      );
-    }
-    if (insightTypes.includes("behavioral")) {
-      aspirational.push(
-        this.makeChecklistItem(
-          "journey_reconstruction",
-          "Reconstructed the specific user journey/behavior (The 'Action' layer)",
-        ),
-      );
-    }
-
-    return { required, aspirational };
+    // Legacy support: Returning empty as V4 uses getUnifiedNodes() and ExpertState nodes.
+    return { required: [], aspirational: [] };
   }
 
   // Reasoning logic is handled by the think_and_respond tool.
@@ -106,10 +29,11 @@ export class ConductingSpecialist extends BaseSpecialistAgent {
   buildSystemPrompt(): string {
     const config = this.context.surveyConfig;
     if (!config) return "Survey configuration is missing.";
-
-    const context = this.context.rollingContext;
     const { domainName, coreContent, surveyTypeContent } =
       this.context.loadedDomainSkills || {};
+
+    const modality = this.context.modality || "text";
+    const behavioralProfile = this.getBehavioralProfile();
 
     const state = this.context.expertState;
     let adaptationSection = "";
@@ -142,15 +66,15 @@ ${si.intelligentProbes?.length ? `PROBES: ${si.intelligentProbes.join(", ")}` : 
       ? `\n<available_media>\n${config.media.map((m) => `• ID: ${m.id} | ${m.description} | Goal: ${m.contextForUse}`).join("\n")}\nPROACITVITY RULE: You MUST show media before the 70% progress mark if it aids feedback. Verbally name the media ID when displayed.\n</available_media>`
       : "";
 
-    const contextSection = context
+    const contextSection = state
       ? `
 <conversation_context>
-Progress: ${Math.round(context.progress.completionPercentage)}%
-Elapsed: ${Math.round(context.progress.elapsedMinutes)} min
-Style: ${context.memory.participantStyle ?? "Neutral"}
-Topics Covered: ${context.memory.topicsCovered.join(", ") || "None"}
+Progress: ${Math.round(domainBrain.calculateCoverage(state) * 100)}%
+Adaptation: ${this.getEngagementSummaryFromState(state)}
+Next Priority: ${domainBrain.getNextPriorityTopic(state)?.label || "Wrap up"}
 </conversation_context>`
       : "";
+
 
     const effectiveFeedback = this.context.sampleFeedback || config.improvementFeedback;
     const feedbackSection = effectiveFeedback
@@ -164,7 +88,7 @@ ${effectiveFeedback}
     return `
 <role>
 IDENTITY: You are a professional ${domainName || "Survey"} Conducting Specialist.
-GOAL: Conduct a master-class interview regarding: "${config.coreObjective || config.expertState?.objective?.goal || config.information}"
+GOAL: Conduct a master-class interview regarding: "${config.expertState?.objective?.goal || config.coreObjective || config.information}"
 AUDIENCE: ${config.expertState?.targetAudience?.description || "Survey Participants"}
 ${this.getToneGuidelines()}
 LANGUAGE: ${this.context.language ?? config.language ?? "en"}
@@ -177,10 +101,23 @@ ${this.getChecklistSection()}
 ${this.getConstitutionalConstraints()}
 
 <expert_protocols>
-${coreContent || ""}
+${behavioralProfile}
 ${surveyTypeContent || ""}
 ${this.buildQuestioningStrategy(config.expertState?.successCriteria?.insightTypes ?? [])}
 </expert_protocols>
+
+<thinking_protocol>
+You are operating in a low-latency STREAMING JSON MODE.
+For every turn, your response MUST be a perfectly formatted, raw JSON object containing exactly two fields:
+1. "reasoning": A brief internal audit of the checklist. Keep this EXTREMELY concise (under 50 words).
+2. "response": The natural, conversational text spoken to the user.
+
+Example Format:
+{
+  "reasoning": "User answered X. This satisfies Node [RT-01]. Next, I must probe for [RT-02] to understand Y.",
+  "response": "That makes perfect sense. What did you think of Z?"
+}
+</thinking_protocol>
 
 ${feedbackSection}
 
@@ -197,20 +134,32 @@ ${this.getSkillsSection()}
 ${this.getKnowledgeSection()}
 
 <completion_protocol>
-Once the REQUIRED checklist IDs are marked 'met':
+Once the REQUIRED checklist IDs are marked 'met', you may conclude:
 1. Express sincere gratitude.
-2. Call 'finishSurvey'.
+2. Call 'finishSurvey' tool if available.
 3. Do NOT ask any further questions.
 </completion_protocol>
 
 <final_directive>
-You MUST call 'think_and_respond' in EVERY turn.
-1. Use 'internal_reasoning' to audit your progress against the REQUIRED IDs.
-2. Formulate your conversational response in 'message_to_user'.
-3. Update collected data in 'state_updates'.
-Your 'message_to_user' is what the participant will actually see. Never leave it empty.
+Do NOT use markdown formatting (like \`\`\`json). Output the raw JSON object starting with '{'.
+Do NOT output any other text before or after the JSON object.
+Never leave the response field empty.
 </final_directive>
 `.trim();
+  }
+
+  // --------------------------------------------------------------------------
+  // Internal helpers
+  // --------------------------------------------------------------------------
+
+  /**
+   * Compute the engagement summary string directly from ExpertState aggregates.
+   * Replaces the old psychologicalEngine.getEngagementSummary() dependency.
+   */
+  private getEngagementSummaryFromState(state: import("@/lib/schemas/expert-state").ExpertState): string {
+    const agg = state.qualitySignals.sessionAggregates;
+    const last = state.qualitySignals.turnRecords.slice(-1)[0];
+    return `Reliability: ${Math.round(agg.overallReliability * 100)}% | Evasion: ${Math.round(agg.evasionIndex * 100)}% | Current Engagement: ${last ? Math.round(last.engagementScore * 100) : 0}%`;
   }
 
   // --------------------------------------------------------------------------
@@ -282,37 +231,8 @@ ${strategies.join("\n")}
     const functions: VoiceAgentFunction[] = [];
     if (!config) return functions;
 
-    functions.push({
-      name: "think_and_respond",
-      description:
-        "Use this tool to plan your response and update the survey checklist state based on the user's input. You MUST call this tool FIRST.",
-      parameters: {
-        type: "object",
-        properties: {
-          message_to_user: {
-            type: "string",
-            description:
-              "The FINAL message to speak aloud. Must be conversational and natural. No internal thoughts.",
-          },
-          internal_reasoning: {
-            type: "string",
-            description:
-              "Deep context analysis. Think step-by-step about what the user just said, what you still need to ask based on your checklist, and what approach/tone to use.",
-          },
-          expert_state_updates: z.object({
-            metNodes: z.array(z.string()).optional().describe("IDs of research nodes (topics) that were adequately covered in this turn"),
-            respondentSentiment: z.string().optional().describe("Brief label for participant's current sentiment"),
-            observedBiases: z.array(z.string()).optional().describe("Any social or cognitive biases detected in this turn"),
-            keyVerbatims: z.array(z.object({
-              nodeId: z.string(),
-              quote: z.string()
-            })).optional().describe("Structured quotes to attach to specific research nodes")
-          }).optional().describe("V2 Architecture: Structured updates for the ExpertState"),
-        },
-        required: ["message_to_user", "internal_reasoning"],
-      },
-    });
-
+    // think_and_respond tool removed in favor of direct JSON streaming response for better performance
+    
     if (config.media && config.media.length > 0) {
       functions.push({
         name: "showMedia",
@@ -359,42 +279,9 @@ ${strategies.join("\n")}
     const config = this.context.surveyConfig;
     
     return {
-      think_and_respond: tool({
-        description: "Analyze the respondent's input, update the expert state, and generate a conversational response.",
-        inputSchema: z.object({
-          message_to_user: z.string().describe("The actual text shown to the participant."),
-          internal_reasoning: z.string().describe("Your logic for the current turn."),
-          expert_state_updates: z.record(z.any()).optional().describe("V2 ExpertState updates (Zod-compatible)."),
-        }),
-        execute: async ({ message_to_user, internal_reasoning, expert_state_updates }) => {
-          if (expert_state_updates && this.context.expertState) {
-            // Apply updates to local context
-            Object.assign(this.context.expertState, expert_state_updates);
-            
-            // Persist to Redis
-            await this.saveExpertState(expert_state_updates);
-
-            // Index insights if any nodes were marked as 'met'
-            if (expert_state_updates.coverageTracker?.nodes) {
-              await KnowledgeService.indexSurveyInsights(
-                this.context.surveyConfig?.id || "unknown",
-                expert_state_updates.coverageTracker.nodes
-              );
-            }
-          }
-          return { success: true };
-        },
-      }),
-      loadSkill: tool({
-        description: "Load detailed instructions for a specific specialized skill.",
-        inputSchema: z.object({
-          skillId: z.string().describe("The ID of the skill to load."),
-        }),
-        execute: async ({ skillId }) => {
-          const skill = await SkillEngine.loadSkill(skillId, "conducting");
-          return skill ? { instructions: skill.content } : { error: "Skill not found" };
-        },
-      }),
+      // think_and_respond has been replaced by the StreamFieldExtractor JSON structural contract.
+      // State updates are now handled asynchronously by ConversationManager.updateMemoryAsync.
+      // loadSkill removed in favor of V2 synthesized protocols pre-loaded from ExpertState.
       showMedia: tool({
         description: "Show a piece of media (image/video) to the respondent.",
         inputSchema: z.object({
@@ -412,6 +299,13 @@ ${strategies.join("\n")}
           reason: z.string().optional().describe("Why is this being escalated?"),
         }),
         execute: async ({ reason }) => ({ success: true, reason: reason ?? "complete" }),
+      }),
+      finishSurvey: tool({
+        description: "Signal that the survey conversation is complete and should end. Call this when you have covered all required topics and gathered sufficient information from the participant.",
+        inputSchema: z.object({
+          reason: z.string().optional().describe("Optional brief reason for ending (e.g., 'all topics covered')"),
+        }),
+        execute: async ({ reason }) => ({ success: true, completed: true, reason }),
       }),
     };
   }
@@ -435,19 +329,35 @@ ${strategies.join("\n")}
       throw new Error("Cannot stream without survey configuration");
     }
 
-    const baseSystem = this.buildSystemPrompt();
+    let baseSystem = this.buildSystemPrompt();
+    let finalMessages = messages;
+
+    // V2 MemoryBridge Integration
+    if (this.context.expertState && this.context.memoryBridge) {
+      // ISSUE-07 FIXED: use top-level ESM import instead of runtime require()
+      const transcriptText = assembleTranscriptContext(
+        this.context.expertState.transcript.turns,
+        this.context.memoryBridge.contextBudget
+      );
+      baseSystem += `\n\n<conversation_history>\n${transcriptText}\n</conversation_history>\n\nReview the conversation history above and respond to the participant's latest message below.`;
+
+      // Preserve only the current user message — history is embedded in the system prompt above
+      const lastMsg = messages[messages.length - 1];
+      finalMessages = lastMsg ? [lastMsg] : messages;
+    }
+
     const finalSystem = dynamicSystemDirective
       ? `${baseSystem}\n\n<dynamic_instruction>\n${dynamicSystemDirective}\n</dynamic_instruction>`
       : baseSystem;
 
     console.log(
-      `[ConductingAgent:Stream] Messages: ${messages.length}. SystemPrompt length: ${finalSystem.length}`,
+      `[ConductingAgent:Stream] Configured SystemPrompt length: ${finalSystem.length}`,
     );
 
     return streamText({
       model: defaultModel,
       system: finalSystem,
-      messages,
+      messages: finalMessages,
       tools: this.getTools(onMediaDisplay),
       maxOutputTokens: 2000,
       stopWhen: stepCountIs(5),

@@ -17,17 +17,14 @@ export async function normalizeMessages(
 
 export const GEMINI_FLASH_LITE_ID = "gemini-2.5-flash-lite";
 export const GEMINI_FLASH_ID = "gemini-2.5-flash";
-export const GEMINI_FLASH_STABLE_ID = "gemini-2.5-flash"; // Migrated from 2.0
 export const GPT_4_1_MINI_ID = "gpt-4.1-mini";
 
 export const flashLiteModel = google(GEMINI_FLASH_LITE_ID);
 export const flashModel = google(GEMINI_FLASH_ID);
-// Stable production model with high quota — used for background extraction
-export const flashStableModel = google(GEMINI_FLASH_STABLE_ID);
 export const gpt41MiniModel = openai(GPT_4_1_MINI_ID);
 
-// Use stable flash for analysis (high-volume background calls)
-export const analysisModel = flashStableModel;
+// Use flash for analysis (high-volume background calls)
+export const analysisModel = flashModel;
 
 export const defaultModel = gpt41MiniModel;
 
@@ -111,4 +108,7 @@ export function streamAIResponse(
   });
 }
 
+import { extractAIGeneratedResponse } from "./ai-utils";
+
+export { extractAIGeneratedResponse };
 export { google };

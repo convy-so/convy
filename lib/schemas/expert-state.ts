@@ -103,20 +103,31 @@ export const expertStateQualitySignalsSchema = z.object({
 });
 
 export const transcriptTurnSchema = z.object({
+  turnIndex: z.number().int().default(0),
   speaker: z.enum(["agent", "respondent"]),
   text: z.string(),
   timestamp: z.string().datetime(),
+  type: z.literal("turn").default("turn"),
   // Agent specific
   probeTypeUsed: z.string().optional(),
   targetNode: z.string().optional(),
+  probeType: z.string().optional(),
+  targetNodeId: z.string().optional(),
+  socialMoveType: z.enum(["normalization", "trust_recovery", "humor", "fatigue_recovery", "consistency_probe"]).optional(),
+  inconsistencyContext: z.object({
+    earlierStatement: z.string(),
+    currentStatement: z.string(),
+    affectedNodeId: z.string().optional()
+  }).optional(),
   // Respondent specific
   nodesAddressed: z.array(z.string()).optional(),
+  coveredNodeIds: z.array(z.string()).optional(),
   detectedSentiment: z.string().optional(),
   lowReliabilityFlag: z.boolean().optional()
 });
 
 export const expertStateTranscriptSchema = z.object({
-  turns: z.array(transcriptTurnSchema).default([])
+  turns: z.array(z.any()).default([])
 });
 
 export const expertStateSessionMetaSchema = z.object({
@@ -134,7 +145,12 @@ export const expertStateSessionMetaSchema = z.object({
   ]).default("brief_pending"),
   modality: z.enum(["voice", "text"]),
   personaId: z.string().optional(),
-  skillFileVersion: z.string().optional()
+  skillFileVersion: z.string().optional(),
+  compiledSkills: z.object({
+    creation: z.string().optional(),
+    conducting: z.string().optional(),
+    analytics: z.string().optional()
+  }).optional()
 });
 
 export const expertStatePendingAdaptationsSchema = z.object({
@@ -169,7 +185,7 @@ export const expertStateSchema = z.object({
   respondentProfile: expertStateRespondentProfileSchema.default({}),
   qualitySignals: expertStateQualitySignalsSchema.default({}),
   transcript: expertStateTranscriptSchema.default({}),
-  sessionMeta: expertStateSessionMetaSchema,
+  sessionMeta: expertStateSessionMetaSchema.default({ status: "brief_pending", modality: "text" }),
   pendingAdaptations: expertStatePendingAdaptationsSchema.default({}),
   dataGovernance: expertStateDataGovernanceSchema.default({}),
   recoveryState: expertStateRecoveryStateSchema.default({}),

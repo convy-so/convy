@@ -18,12 +18,13 @@ import {
   buildVoiceAgentSettings,
   type VoiceAgentSettings,
   type SupportedLanguage,
-  type VoiceAgentFunction,
   type FunctionCallRequestEvent,
   type ConversationTextEvent,
 } from "@/lib/voice/deepgram-voice-agent";
 import { RedisStreamManager } from "@/lib/redis-stream-manager";
 import { getSurveyAccessLevel } from "@/lib/workspace-access";
+import type { ModelMessage } from "ai";
+import { ExpertStateStore } from "@/lib/expert-state-store";
 
 interface ExtractedSurveyData {
   information?: string;
@@ -69,6 +70,7 @@ interface CreationState {
 
 export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
   private state: CreationState;
+  private creationAgent: CreationSpecialist | null = null;
   private sessionStartTime: number = Date.now();
   private streamManager: RedisStreamManager;
 
@@ -168,7 +170,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       metrics: this.state.extractedData?.metrics || [],
       language: this.state.language,
       domainId: this.state.extractedData?.domainId
-        ? Number(this.state.extractedData.domainId)
+        ? String(this.state.extractedData.domainId)
         : undefined,
       expertState: {
         objective: this.state.extractedData?.objective,
@@ -191,17 +193,17 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       language: this.state.language,
     };
 
-    const creationAgent = new CreationSpecialist(agentContext);
-    await creationAgent.initialize();
+    this.creationAgent = new CreationSpecialist(agentContext);
+    await this.creationAgent.initialize();
 
     // Preload pattern learnings for self-improvement
-    await creationAgent.preloadPatternLearnings(["creation", "general"], 2);
+    await this.creationAgent.preloadPatternLearnings(["creation", "general"], 2);
 
     // Use the agent's system prompt (includes domain expertise, checklist)
-    const systemPrompt = creationAgent.buildSystemPrompt();
+    const systemPrompt = this.creationAgent.buildSystemPrompt();
 
     // Use the agent's function definitions (converted to Deepgram format)
-    const functions = creationAgent.getDeepgramFunctions();
+    const functions = this.creationAgent.getDeepgramFunctions();
 
     // - Resume with assistant spoke last: no greeting (user's turn)
     let greeting: string | undefined;
@@ -251,24 +253,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
     );
 
     try {
-      if (event.function_name === "think_and_respond") {
-        // 1. Extract the state updates for background processing/saving
-        const stateUpdates = event.input.state_updates;
-
-        // 2. Extract the text we actually want the TTS to speak
-        const messageToUser =
-          event.input.message_to_user ||
-          "I'm sorry, I'm processing your request.";
-
-        // 3. Complete the function call by giving Deepgram the text to say
-        this.voiceAgent?.sendFunctionCallResponse(
-          event.function_call_id,
-          event.function_name,
-          JSON.stringify(messageToUser),
-        );
-
-        this.performExtraction().catch(console.error);
-      } else if (event.function_name === "finishSurvey") {
+      if (event.function_name === "finishSurvey") {
         const { summary } = event.input;
         console.log(
           `[SurveyCreationVoiceHandler] finishSurvey called. Summary: ${summary}`,
@@ -303,22 +288,26 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
           }),
         );
       } else if (event.function_name === "setSurveyDomain") {
-        const { domainId, summaryOfWhatWeKnow } = event.input;
+        const { domains, summaryOfWhatWeKnow } = event.input;
+        const primaryDomain = domains.sort((a: any, b: any) => b.weight - a.weight)[0];
 
-        // Store domain in state's extractedData (persisted via next performExtraction call
-        // or immediately via extractedData update below)
+        // Store domain in state's extractedData
         this.state.extractedData = {
           ...(this.state.extractedData || {}),
-          domainId,
+          domainId: primaryDomain.id,
           summaryOfWhatWeKnow,
+          hybridDomains: domains,
         };
 
-        // Persist domain to surveys table (has domainId column) and extractedData to conversation
+        // Persist domain and hybrid domains to surveys table
         if (this.state.surveyId) {
           await Promise.all([
             getDb()
               .update(surveys)
-              .set({ domainId: Number(domainId) })
+              .set({ 
+                domainId: String(primaryDomain.id),
+                hybridDomains: domains
+              })
               .where(eq(surveys.id, this.state.surveyId)),
             getDb()
               .update(surveyCreationConversations)
@@ -334,7 +323,7 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
           event.function_name,
           JSON.stringify({
             success: true,
-            message: `Domain ${domainId} locked in. Continue with targeted questions.`,
+            message: `Hybrid domain strategy (${primaryDomain.id}) locked in.`,
           }),
         );
       } else {
@@ -409,6 +398,32 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
           streamId: messageId,
         }),
       );
+    }
+
+    // Push mid-conversation prompt update (V2 Architecture: Proactive Sync)
+    if (this.creationAgent && this.state.surveyId) {
+      // Re-fetch latest expert state if available (it might have been updated by background extraction)
+      const latestExpertState = await ExpertStateStore.get(this.state.surveyId);
+      
+      this.creationAgent.updateContext({
+        expertState: latestExpertState || undefined,
+        messages: this.state.messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })) as ModelMessage[],
+      });
+
+      const newSystemPrompt = this.creationAgent.buildSystemPrompt();
+      const functions = this.creationAgent.getDeepgramFunctions();
+
+      this.voiceAgent?.updateThink({
+        provider: { type: "open_ai", model: "gpt-4o-mini" },
+        prompt: `${newSystemPrompt}\n\nRespond in the language the user is speaking.`,
+        functions: functions.map((f) => {
+          const { client_side, ...rest } = f;
+          return rest;
+        }),
+      });
     }
 
     // Trigger extraction after assistant messages

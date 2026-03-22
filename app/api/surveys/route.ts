@@ -128,6 +128,8 @@ export async function POST(request: Request) {
     }
     // --- END USAGE LIMITS CHECK ---
 
+    const initialGreeting = getTimeBasedGreeting("creation", language as any);
+
     let survey: typeof surveys.$inferSelect | undefined;
     await getDb().transaction(async (tx) => {
       const [insertedSurvey] = await tx
@@ -148,8 +150,6 @@ export async function POST(request: Request) {
         .returning();
 
       survey = insertedSurvey;
-
-      const initialGreeting = getTimeBasedGreeting("creation", language as any);
 
       await tx.insert(surveyCreationConversations).values({
         id: crypto.randomUUID(),
@@ -210,7 +210,19 @@ export async function POST(request: Request) {
       }).catch((err) => console.error("Failed to publish survey creation event:", err));
     }
 
-    return NextResponse.json(survey);
+    const responseData = {
+      ...survey,
+      messages: [
+        {
+          id: nanoid(),
+          role: "assistant",
+          content: initialGreeting,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+
+    return NextResponse.json(responseData);
   } catch (error) {
     if (error instanceof Error) {
       if (

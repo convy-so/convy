@@ -235,79 +235,25 @@ export async function POST(
               .where(eq(surveyCreationConversations.surveyId, surveyId));
 
             if (latestConv) {
-              const currentMessages = latestConv.messages as Array<{
-                role: "user" | "assistant";
-                content: string;
-                timestamp: string;
-              }>;
-
-              // Extract state_updates from think_and_respond tool calls
-              const stateUpdates: Record<string, string> = {};
-
-              if (
-                assistantMessage?.content &&
-                Array.isArray(assistantMessage.content)
-              ) {
-                for (const part of assistantMessage.content) {
-                  if (
-                    part.type === "tool-call" &&
-                    part.toolName === "think_and_respond"
-                  ) {
-                    if (part.args?.state_updates) {
-                      Object.assign(stateUpdates, part.args.state_updates);
-                    }
-                  }
-                }
-              }
-
-              const finalContent = text;
+              const currentMessages = latestConv.messages as Array<any>;
+              
+              const newMessagesToAppend = response.messages.map((m: any) => ({
+                role: m.role,
+                content: typeof m.content === 'string' ? m.content : (m.role === 'assistant' ? text : ""),
+                parts: Array.isArray(m.content) ? m.content : undefined,
+                timestamp: new Date().toISOString(),
+              }));
 
               const updatedMessages = [
                 ...currentMessages,
-                {
-                  role: "assistant" as const,
-                  content: finalContent,
-                  parts:
-                    assistantMessage?.content &&
-                    Array.isArray(assistantMessage.content)
-                      ? assistantMessage.content
-                      : undefined,
-                  timestamp: new Date().toISOString(),
-                },
+                ...newMessagesToAppend
               ];
-
-              const dbUpdate: Record<string, any> = {
-                messages: updatedMessages,
-              };
-
-              if (Object.keys(stateUpdates).length > 0) {
-                const newCollectedFlags = Object.entries(stateUpdates).reduce(
-                  (acc, [k, v]) => {
-                    if (v && v !== "false" && v !== "null" && v !== "no") {
-                      acc[k] = true;
-                    }
-                    return acc;
-                  },
-                  {} as Record<string, boolean>,
-                );
-
-                if (Object.keys(newCollectedFlags).length > 0) {
-                  const existingCollected = (latestConv.collectedInfo ||
-                    {}) as Record<string, boolean>;
-                  dbUpdate.collectedInfo = {
-                    ...existingCollected,
-                    ...newCollectedFlags,
-                  };
-                  console.log(
-                    "[Create Route] Persisting state_updates:",
-                    newCollectedFlags,
-                  );
-                }
-              }
 
               await getDb()
                 .update(surveyCreationConversations)
-                .set(dbUpdate)
+                .set({
+                  messages: updatedMessages,
+                })
                 .where(eq(surveyCreationConversations.surveyId, surveyId));
             }
           } catch (error) {

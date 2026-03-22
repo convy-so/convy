@@ -10,14 +10,18 @@ import {
 import { getDb } from "@/db";
 import { surveyConversations, surveys } from "@/db/schema";
 import { chatRateLimiter, getClientIP } from "@/lib/ratelimit";
-import { normalizeMessages } from "@/lib/ai";
+import { normalizeMessages, extractAIGeneratedResponse } from "@/lib/ai";
 import {
   logPromptInjectionAttempt,
   sanitizeUserInput,
 } from "@/lib/prompt-injection-detection";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import { ConversationManager } from "@/lib/conversation-manager";
+import { TranscriptTurn } from "@/lib/memory-bridge";
+import { ExpertStateStore } from "@/lib/expert-state-store";
 import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
+import { domainBrain } from "@/lib/domain-brain";
+import { StreamFieldExtractor } from "@/lib/agents/streaming/stream-field-extractor";
 
 import type { AgentContext } from "@/lib/agents/types";
 
@@ -129,25 +133,19 @@ export async function POST(
         .where(eq(surveys.id, survey.id));
     }
 
-    // Load or create rolling context for this conversation using Manager
-    const context = await ConversationManager.loadOrCreateContext(
-      convId,
-      sanitizedMessages,
-      surveyConfig,
-    );
+    // Load or create MemoryBridge 
+    const memoryBridge = await ConversationManager.loadOrCreateMemoryBridge(convId);
 
-    // Use the compressed messages for the AI call
-    const messagesForAI =
-      context.recentMessages.length > 0
-        ? context.recentMessages
-        : sanitizedMessages;
+    const messagesForAI = sanitizedMessages;
+    const expertState = await ExpertStateStore.get(survey.id);
 
     // --- AGENT INTEGRATION: Use ConductingSpecialist for agentic behavior ---
     const agentContext: AgentContext = {
       conversationId: convId,
       messages: messagesForAI as ModelMessage[],
       surveyConfig,
-      rollingContext: context,
+      memoryBridge,
+      expertState: expertState || undefined,
       language: survey.language as "en" | "fr" | "de" | "es" | "it" | undefined,
       userId: survey.userId,
       organizationId: survey.organizationId || undefined,
@@ -173,12 +171,9 @@ export async function POST(
       messagesForAI as ModelMessage[],
       undefined, // onMediaDisplay - not needed for text chat
       async ({ text, response }) => {
+        const contentForStorage = extractAIGeneratedResponse(text);
         // Persistence logic for participant chat
         try {
-          const assistantMessage = response.messages.find(
-            (m: any) => m.role === "assistant",
-          );
-
           const [currentConv] = await getDb()
             .select()
             .from(surveyConversations)
@@ -186,18 +181,17 @@ export async function POST(
 
           if (currentConv) {
             const currentMessages = currentConv.rawConversation as Array<any>;
+            
+            const newMessagesToAppend = response.messages.map((m: any) => ({
+              role: m.role,
+              content: typeof m.content === 'string' ? m.content : (m.role === 'assistant' ? contentForStorage : ""),
+              parts: Array.isArray(m.content) ? m.content : undefined,
+              timestamp: new Date().toISOString(),
+            }));
+
             const updatedMessages = [
               ...currentMessages,
-              {
-                role: "assistant" as const,
-                content: text,
-                parts:
-                  assistantMessage?.content &&
-                  Array.isArray(assistantMessage.content)
-                    ? assistantMessage.content
-                    : undefined,
-                timestamp: new Date().toISOString(),
-              },
+              ...newMessagesToAppend
             ];
 
             await getDb()
@@ -206,6 +200,41 @@ export async function POST(
                 rawConversation: updatedMessages,
               })
               .where(eq(surveyConversations.id, convId!));
+              
+            if (expertState) {
+              const newTurnText = contentForStorage || "";
+              const newTurn: TranscriptTurn = {
+                turnIndex: expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 1,
+                speaker: "agent",
+                text: newTurnText,
+                timestamp: new Date().toISOString(),
+                type: "turn"
+              };
+              
+              const respondentMsg = sanitizedMessages[sanitizedMessages.length - 1];
+              if (respondentMsg && respondentMsg.role === "user") {
+                 const resTurn: TranscriptTurn = {
+                   turnIndex: expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 1,
+                   speaker: "respondent",
+                   text: typeof respondentMsg.content === 'string' ? respondentMsg.content : "",
+                   timestamp: new Date().toISOString(),
+                   type: "turn"
+                 };
+                 newTurn.turnIndex = resTurn.turnIndex + 1;
+                 expertState.transcript.turns.push(resTurn);
+              }
+              expertState.transcript.turns.push(newTurn);
+              await ExpertStateStore.update(survey.id, expertState);
+              
+              ConversationManager.updateMemoryAsync(
+                convId!,
+                surveyConfig,
+                expertState,
+                memoryBridge,
+                newTurn,
+                { userId: survey.userId, organizationId: survey.organizationId || undefined }
+              ).catch(console.error);
+            }
           }
         } catch (error) {
           console.error(
@@ -216,33 +245,44 @@ export async function POST(
       },
     );
 
-    // Trigger async memory update (non-blocking) using Manager
-    ConversationManager.updateMemoryAsync(
-      convId,
-      sanitizedMessages,
-      surveyConfig,
-      context,
-      {
-        userId: survey.userId,
-        organizationId: survey.organizationId || undefined,
-      },
-    ).catch(console.error);
-
-    // Save updated context to Redis using Manager
-    await ConversationManager.saveContext(convId, context);
-
     // AI SDK v6 native UIMessage stream conversion
     const uiStream = result.toUIMessageStream();
 
-    const response = createUIMessageStreamResponse({ stream: uiStream });
+    const responseStream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        const extractor = new StreamFieldExtractor();
+        
+        for await (const chunk of uiStream) {
+          const chunkObj = chunk as any;
+          if (chunkObj.type === "text-delta") {
+            const cleanText = extractor.processChunk(chunkObj.textDelta || chunkObj.delta);
+            if (cleanText) {
+              writer.write({ type: "text-delta", textDelta: cleanText } as any);
+            }
+          } else {
+            writer.write(chunkObj);
+          }
+        }
+        const finalCleanText = extractor.flush();
+        if (finalCleanText) {
+          writer.write({ type: "text-delta", textDelta: finalCleanText } as any);
+        }
+      },
+    });
+
+    // Load ExpertState for V2 headers
+    const latestExpertState = await ExpertStateStore.get(survey.id);
+    const coverage = latestExpertState ? domainBrain.calculateCoverage(latestExpertState) : 0;
+
+    const response = createUIMessageStreamResponse({ stream: responseStream });
     response.headers.set("X-Conversation-Id", convId);
     response.headers.set(
       "X-Conversation-Progress",
-      context.progress.completionPercentage.toString(),
+      Math.round(coverage * 100).toString(),
     );
     response.headers.set(
       "X-Conversation-State",
-      context.stateContext.currentState,
+      latestExpertState ? domainBrain.getNextPriorityTopic(latestExpertState)?.label || "Wrap up" : "Greeting",
     );
     response.headers.set("X-RateLimit-Limit", "20");
     response.headers.set(

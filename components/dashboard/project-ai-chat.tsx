@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Sparkles, Send, X,ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { extractAIGeneratedResponse } from "@/lib/ai-utils";
+import { MarkdownMessage } from "@/components/ui/markdown-message";
 
 import { InferSelectModel } from "drizzle-orm";
 import { projects, surveys } from "@/db/schema";
@@ -98,10 +100,14 @@ export function ProjectAIChat({ project }: ProjectAIChatProps) {
                             <div className={cn(
                                 "p-3 rounded-2xl text-sm shadow-sm",
                                 msg.role === 'assistant'
-                                    ? "bg-white text-gray-800 rounded-tl-none border border-gray-100"
+                                    ? "bg-white text-gray-800 rounded-tl-none border border-gray-100 max-w-full overflow-hidden"
                                     : "bg-gray-900 text-white rounded-tr-none"
                             )}>
-                                {msg.content}
+                                {msg.role === 'assistant' ? (
+                                    <MarkdownMessage content={msg.content} />
+                                ) : (
+                                    msg.content
+                                )}
                             </div>
                         </div>
                     ))}

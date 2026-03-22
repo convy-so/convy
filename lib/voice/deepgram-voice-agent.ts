@@ -254,6 +254,51 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
   }
 
   /**
+   * Replace the entire Think provider configuration mid-conversation.
+   * This is preferred for prompt updates as it replaces rather than appends.
+   */
+  updateThink(think: VoiceAgentSettings["agent"]["think"]): void {
+    console.log("[VoiceAgent] Sending UpdateThink...");
+    this.settings.agent.think = think;
+    if (this.isWelcomeReceived) {
+      this.sendJson({
+        type: "UpdateThink",
+        think,
+      });
+    }
+  }
+
+  /**
+   * Add to the existing system prompt mid-conversation.
+   * Note: This appends to the current prompt.
+   */
+  updatePrompt(prompt: string): void {
+    console.log("[VoiceAgent] Sending UpdatePrompt...");
+    if (this.isWelcomeReceived) {
+      this.sendJson({
+        type: "UpdatePrompt",
+        prompt,
+      });
+    }
+  }
+
+  /**
+   * Change the Speak model mid-conversation.
+   */
+  updateSpeak(speak: VoiceAgentSettings["agent"]["speak"]): void {
+    console.log("[VoiceAgent] Sending UpdateSpeak...");
+    if (speak) {
+      this.settings.agent.speak = speak;
+      if (this.isWelcomeReceived) {
+        this.sendJson({
+          type: "UpdateSpeak",
+          speak,
+        });
+      }
+    }
+  }
+
+  /**
    * Send updated settings (e.g., language change)
    */
   updateSettings(settings: VoiceAgentSettings): void {
@@ -363,19 +408,12 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         // V1 schema: { type: "FunctionCallRequest", functions: [{ id, name, arguments, client_side, ... }] }
         if (message.functions && Array.isArray(message.functions)) {
           for (const fn of message.functions) {
-            // Only emit if it's a client-side function
-            if (fn.client_side) {
-              this.emit("functionCallRequest", {
-                function_call_id: fn.id,
-                function_name: fn.name,
-                input: fn.arguments ? JSON.parse(fn.arguments) : {},
-              } as FunctionCallRequestEvent);
-            } else {
-              // Server-side function (handled internally by Deepgram or not relevant to client)
-              console.log(
-                `[VoiceAgent] Server-side function call received (ignoring): ${fn.name}`,
-              );
-            }
+            // Emit event for all function calls (client-side or server-side)
+            this.emit("functionCallRequest", {
+              function_call_id: fn.id,
+              function_name: fn.name,
+              input: fn.arguments ? JSON.parse(fn.arguments) : {},
+            } as FunctionCallRequestEvent);
           }
         }
         break;
@@ -391,6 +429,18 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
       case "Warning":
         console.warn("[VoiceAgent] Warning from Deepgram:", message);
         this.emit("warning", message);
+        break;
+
+      case "ThinkUpdated":
+        this.emit("thinkUpdated");
+        break;
+
+      case "PromptUpdated":
+        this.emit("promptUpdated");
+        break;
+
+      case "SpeakUpdated":
+        this.emit("speakUpdated");
         break;
 
       default:
@@ -437,6 +487,20 @@ export function buildVoiceAgentSettings(options: {
   greeting?: string; // Native Deepgram greeting — spoken before waiting for user
   functions?: VoiceAgentFunction[];
   conversationHistory?: Array<{ role: string; content: string }>;
+  /**
+   * When set, Deepgram's think block routes to our own endpoint instead of
+   * calling the provider (OpenAI) directly. The endpoint must be OpenAI-
+   * compatible (chat completions SSE format).
+   *
+   * This makes voice sessions as intelligent as text sessions — they use
+   * the same ConductingSpecialist + domain skill bundle.
+   */
+  agentTurnEndpoint?: {
+    url: string;
+    sessionId: string;
+    surveyId: string;
+    internalKey: string;
+  };
 }): VoiceAgentSettings {
   const {
     language,
@@ -445,9 +509,38 @@ export function buildVoiceAgentSettings(options: {
     greeting,
     functions,
     conversationHistory,
+    agentTurnEndpoint,
   } = options;
 
   const voiceModel = getVoiceModel(language, tone);
+
+  const thinkBlock: VoiceAgentSettings["agent"]["think"] = {
+    provider: {
+      type: "open_ai",
+      model: "gpt-4o-mini",
+    },
+    prompt: `${systemPrompt}\n\nRespond to the user in the language they are speaking to you in. If the user speaks Spanish, reply in natural Spanish. Match the language of each user message independently to provide seamless multilingual support.`,
+    ...(functions && functions.length > 0
+      ? {
+          functions: functions.map((f) => {
+            const { client_side, ...rest } = f;
+            return rest;
+          }),
+        }
+      : {}),
+  };
+
+  // Wire up our own endpoint when provided
+  if (agentTurnEndpoint) {
+    thinkBlock.endpoint = {
+      url: agentTurnEndpoint.url,
+      headers: {
+        "x-internal-key": agentTurnEndpoint.internalKey,
+        "x-session-id": agentTurnEndpoint.sessionId,
+        "x-survey-id": agentTurnEndpoint.surveyId,
+      },
+    };
+  }
 
   return {
     flags: {
@@ -470,21 +563,7 @@ export function buildVoiceAgentSettings(options: {
           endpointing: 300, // Wait 300ms of silence before endpointing user speech
         },
       },
-      think: {
-        provider: {
-          type: "open_ai",
-          model: "gpt-4o-mini",
-        },
-        prompt: `${systemPrompt}\n\nRespond to the user in the language they are speaking to you in. If the user speaks Spanish, reply in natural Spanish. Match the language of each user message independently to provide seamless multilingual support.`,
-        ...(functions && functions.length > 0
-          ? {
-              functions: functions.map((f) => {
-                const { client_side, ...rest } = f;
-                return rest;
-              }),
-            }
-          : {}),
-      },
+      think: thinkBlock,
       speak: {
         provider: {
           type: "deepgram",

@@ -10,11 +10,13 @@ import {
   buildCompleteSurveyConfig,
 } from "@/lib/surveys";
 import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
-import { normalizeMessages } from "@/lib/ai";
+import { normalizeMessages, extractAIGeneratedResponse } from "@/lib/ai";
 import { ConversationManager } from "@/lib/conversation-manager";
-import { applyMemoryUpdate } from "@/lib/conversation-memory";
-import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
+import { MemoryBridge, TranscriptTurn } from "@/lib/memory-bridge";
+import { ExpertStateStore } from "@/lib/expert-state-store";
 import type { AgentContext } from "@/lib/agents/types";
+import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
+import { StreamFieldExtractor } from "@/lib/agents/streaming/stream-field-extractor";
 import {
   withGeminiLimit,
   GeminiCapacityError,
@@ -103,6 +105,7 @@ export async function POST(
     const session = await getVerifiedSession();
     const { surveyId } = await params;
     const body = await request.json();
+    console.log(`[Sample POST] Incoming request for survey: ${surveyId}. Body:`, JSON.stringify(body, null, 2));
     const { messages, feedback, conversationNumber } = body as {
       messages: any[];
       feedback?: string;
@@ -201,32 +204,23 @@ export async function POST(
         console.error("[Sample Route] Failed to upsert sample row:", err),
       );
 
-    // Load or create rolling context using Manager
-    // If it's the first message, force new context to reset previous runs of this sample number
-    const isStart = normalizedMessages.length <= 1;
-    const [context] = await Promise.all([
-      ConversationManager.loadOrCreateContext(
-        conversationId,
-        normalizedMessages,
-        surveyConfig,
-        isStart, // forceNew
-      ),
-      // Ensure the sample row exists — runs concurrently with context load
+    const [memoryBridge] = await Promise.all([
+      ConversationManager.loadOrCreateMemoryBridge(conversationId),
       upsertSampleRowPromise,
     ]);
+    
+    const expertState = await ExpertStateStore.get(surveyConfig.id);
 
-    // Use the compressed messages for the AI call
-    const messagesForAI =
-      context.recentMessages.length > 0
-        ? context.recentMessages
-        : normalizedMessages;
+    // Use raw messages, conducting agent streams prepends compressed transcript if memoryBridge is provided
+    const messagesForAI = normalizedMessages;
 
     // --- AGENT INTEGRATION: Use ConductingSpecialist for agentic behavior ---
     const agentContext: AgentContext = {
       conversationId,
       messages: messagesForAI as any,
       surveyConfig,
-      rollingContext: context,
+      memoryBridge,
+      expertState: expertState || undefined,
       language: survey.language as "en" | "fr" | "de" | "es" | "it" | undefined,
       modality: "text",
       isSample: true,
@@ -269,68 +263,26 @@ export async function POST(
       return conductingAgent.stream(
         messagesToLLM as any,
         () => {}, // No media display in sample testing right now
-        async (params) => {
+        async (params: { text: string; usage: any; response: any }) => {
           const { text, usage, response } = params;
-
-          const assistantMessage = response.messages?.find(
-            (m: any) => m.role === "assistant",
-          );
-
-          const toolInvocations = assistantMessage?.toolInvocations || [];
-
-          // 1. Extract state updates and message_to_user from the 'think_and_respond' tool
-          let messageToUser = "";
-          const thinkTool = toolInvocations.find(
-            (inv: any) => inv.toolName === "think_and_respond",
-          );
-
-          if (thinkTool) {
-            const { state_updates, message_to_user } = thinkTool.args || {};
-            messageToUser = message_to_user;
-
-            // 2. Persist state updates to the rolling context so the AI "remembers" its progress
-            if (state_updates && Object.keys(state_updates).length > 0) {
-              context.memory = applyMemoryUpdate(
-                context.memory,
-                state_updates,
-                surveyConfig,
-              );
-              console.log(
-                `[Sample Route] Applied ${Object.keys(state_updates).length} state updates to context`,
-              );
-            }
-          }
-
-          // Use message_to_user as fallback if top-level text is empty (AI SDK tool call behavior)
-          const contentForStorage = text || messageToUser || "";
-
-          const updatedMessages = [
-            ...messagesToLLM,
-            {
-              role: "assistant" as const,
-              content: contentForStorage,
-              parts:
-                (assistantMessage as any)?.content &&
-                Array.isArray((assistantMessage as any).content)
-                  ? (assistantMessage as any).content
-                  : undefined,
-              toolInvocations, // Carry over tool invocations for the UI to render
-              timestamp: new Date().toISOString(),
-            },
-          ];
+          const contentForStorage = extractAIGeneratedResponse(text);
 
           if (sampleId) {
-            const dbMessages = updatedMessages.map((m: any) => ({
+            const newMessagesToAppend = response.messages.map((m: any) => ({
               role: m.role,
-              content: m.content,
-              parts: m.parts,
-              toolInvocations: (m as any).toolInvocations,
+              content: typeof m.content === 'string' ? m.content : (m.role === 'assistant' ? contentForStorage : ""),
+              parts: Array.isArray(m.content) ? m.content : undefined,
               timestamp: m.timestamp || new Date().toISOString(),
             }));
 
-            // Check if AI completed survey
-            const isCompleted = !!toolInvocations.find(
-              (call: any) => call.toolName === "finishSurvey",
+            const dbMessages = [
+              ...messagesToLLM,
+              ...newMessagesToAppend
+            ];
+
+            // Check if AI completed survey (look for finishSurvey in any step)
+            const isCompleted = response.messages.some((m: any) => 
+               Array.isArray(m.content) && m.content.some((p: any) => (p.type === 'tool-call' || p.type === 'tool-invocation') && p.toolName === 'finishSurvey')
             );
 
             await getDb()
@@ -352,25 +304,50 @@ export async function POST(
               });
             }
 
-            // Trigger memory update with the FINAL history including this AI turn
-            ConversationManager.updateMemoryAsync(
-              conversationId,
-              dbMessages,
-              surveyConfig,
-              context,
-            ).catch((err) =>
-              console.error("[Sample Route] Async memory update failed:", err),
-            );
+            if (expertState) {
+              const newTurn: TranscriptTurn = {
+                turnIndex: expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 1,
+                speaker: "agent",
+                text: contentForStorage,
+                timestamp: new Date().toISOString(),
+                type: "turn"
+              };
+              
+              const respondentMsg = normalizedMessages[normalizedMessages.length - 1];
+              if (respondentMsg && respondentMsg.role === "user") {
+                 const resTurn: TranscriptTurn = {
+                   turnIndex: expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 2,
+                   speaker: "respondent",
+                   text: typeof respondentMsg.content === 'string' ? respondentMsg.content : (Array.isArray(respondentMsg.content) ? (respondentMsg.content.find((p:any) => p.type === 'text') as any)?.text || "" : ""),
+                   timestamp: new Date().toISOString(),
+                   type: "turn"
+                 };
+                 resTurn.turnIndex = expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 1;
+                 newTurn.turnIndex = resTurn.turnIndex + 1;
+                 
+                 expertState.transcript.turns.push(resTurn);
+              }
+              expertState.transcript.turns.push(newTurn);
+              ExpertStateStore.update(surveyConfig.id, expertState).catch(console.error);
+              
+              ConversationManager.updateMemoryAsync(
+                conversationId,
+                surveyConfig,
+                expertState,
+                memoryBridge,
+                newTurn,
+                { userId: session.user.id }
+              ).catch((err) =>
+                console.error("[Sample Route] Async memory update failed:", err),
+              );
+            }
           }
         },
         undefined,
       );
     });
 
-    // Context saving moved to Redis save below
-
-    // Save updated context to Redis using Manager
-    await ConversationManager.saveContext(conversationId, context);
+    // MemoryBridge state is automatically persisted in updateMemoryAsync
 
     // AI SDK v6 native UIMessage stream conversion
     const uiStream = streamResult.toUIMessageStream();
@@ -380,7 +357,27 @@ export async function POST(
     const response = createUIMessageStreamResponse({
       stream: createUIMessageStream({
         execute: async ({ writer }) => {
-          writer.merge(uiStream);
+          const extractor = new StreamFieldExtractor();
+          
+          for await (const chunk of uiStream) {
+            const chunkObj = chunk as any;
+            if (chunkObj.type === "text-delta") {
+              const delta = chunkObj.textDelta || chunkObj.delta;
+              console.log(`[Sample Stream] Chunk:`, delta);
+              const cleanText = extractor.processChunk(delta);
+              if (cleanText) {
+                console.log(`[Sample Stream] Yielding:`, cleanText);
+                writer.write({ type: "text-delta", textDelta: cleanText } as any);
+              }
+            } else {
+              writer.write(chunkObj);
+            }
+          }
+          const finalCleanText = extractor.flush();
+          if (finalCleanText) {
+            console.log(`[Sample Stream] Final Flush:`, finalCleanText);
+            writer.write({ type: "text-delta", textDelta: finalCleanText } as any);
+          }
         },
       }),
     });

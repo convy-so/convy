@@ -4,11 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { type SurveyConfig } from "@/lib/prompts";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
-import {
-  type RollingContext,
-  getContextKey,
-  getStartTimeKey,
-} from "@/lib/conversation-memory";
+import { MemoryBridge, TranscriptTurn } from "@/lib/memory-bridge";
 import { enqueueConversationInsights } from "@/lib/queue";
 import { getRedisClient } from "@/lib/redis";
 import { WebSocket } from "ws";
@@ -17,6 +13,8 @@ import { ConversationManager } from "@/lib/conversation-manager";
 import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
 import type { AgentContext } from "@/lib/agents/types";
 import type { ModelMessage } from "ai";
+import { ExpertStateStore } from "@/lib/expert-state-store";
+import { domainBrain } from "@/lib/domain-brain";
 import {
   buildVoiceAgentSettings,
   type VoiceAgentSettings,
@@ -40,12 +38,13 @@ interface ResponseState {
   }>;
   survey: typeof surveys.$inferSelect | null;
   language: SupportedLanguage;
-  context: RollingContext | null;
+  memoryBridge: MemoryBridge | null;
   surveyConfig: SurveyConfig | null;
 }
 
 export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
   private state: ResponseState;
+  private conductingAgent: ConductingSpecialist | null = null;
 
   // Specific to response handler
   private participantId: string;
@@ -73,7 +72,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       messages: [],
       survey: null,
       language: (language as SupportedLanguage) || "en",
-      context: null,
+      memoryBridge: null,
       surveyConfig: null,
     };
   }
@@ -125,16 +124,14 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
       this.state.surveyConfig = buildCompleteSurveyConfig(survey);
 
-      // Load or create context using Manager
-      this.state.context = await ConversationManager.loadOrCreateContext(
-        this.identifier,
-        [],
-        this.state.surveyConfig,
+      // Load MemoryBridge
+      this.state.memoryBridge = await ConversationManager.loadOrCreateMemoryBridge(
+        this.identifier
       );
 
       // Restore start time from redis or use current
       const redis = getRedisClient();
-      const startTimeKey = getStartTimeKey(this.identifier);
+      const startTimeKey = `session_start:${this.identifier}`;
       const startTimeStr = await redis.get(startTimeKey);
       this.sessionStartTime = startTimeStr
         ? new Date(startTimeStr).getTime()
@@ -209,8 +206,8 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
   }
 
   protected async getVoiceAgentSettings(): Promise<VoiceAgentSettings> {
-    if (!this.state.surveyConfig || !this.state.context) {
-      throw new Error("Survey config or context not initialized");
+    if (!this.state.surveyConfig || !this.state.memoryBridge) {
+      throw new Error("Survey config or MemoryBridge not initialized");
     }
 
     // --- AGENT INTEGRATION: Use ConductingSpecialist for agentic behavior ---
@@ -221,28 +218,37 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
         content: m.content,
       })) as ModelMessage[],
       surveyConfig: this.state.surveyConfig!,
-      rollingContext: this.state.context!,
+      memoryBridge: this.state.memoryBridge!,
       language: this.state.language,
       modality: "voice",
     };
 
-    const conductingAgent = new ConductingSpecialist(agentContext);
-    await conductingAgent.initialize();
+    this.conductingAgent = new ConductingSpecialist(agentContext);
+    await this.conductingAgent.initialize();
 
     // Preload capabilities
     await Promise.all([
-      conductingAgent.preloadSkills(),
-      conductingAgent.preloadPatternLearnings(
+      this.conductingAgent.preloadSkills(),
+      this.conductingAgent.preloadPatternLearnings(
         ["questioning", "probing", "engagement"],
         2,
       ),
     ]);
 
+    // Cache the assembled conducting bundle in Redis so /api/voice/agent-turn can load it
+    const domainSkills = this.conductingAgent.getLoadedDomainSkills?.();
+    if (domainSkills?.coreContent) {
+      const redis = getRedisClient();
+      const bundleKey = `session:conducting-bundle:${this.identifier}`;
+      // TTL: 4 hours (max voice session length)
+      await redis.set(bundleKey, domainSkills.coreContent, "EX", 4 * 60 * 60);
+    }
+
     // Use the agent's system prompt (includes domain expertise, checklist, questioning strategy)
-    const systemPrompt = conductingAgent.buildSystemPrompt();
+    const systemPrompt = this.conductingAgent.buildSystemPrompt();
 
     // Use the agent's function definitions (converted to Deepgram format)
-    const functions = conductingAgent.getDeepgramFunctions();
+    const functions = this.conductingAgent.getDeepgramFunctions();
 
     const tone = (this.state.survey?.tone || "casual") as
       | "casual"
@@ -250,11 +256,16 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       | "playful"
       | "empathetic";
 
+    // Build the agent turn endpoint config so Deepgram routes LLM calls to us
+    const { env } = await import("@/lib/env");
+    const agentTurnEndpoint = undefined; // REMOVE PROXY: Let Deepgram call OpenAI directly
+
     return buildVoiceAgentSettings({
       language: this.state.language,
       tone,
       systemPrompt,
       functions,
+      agentTurnEndpoint,
       conversationHistory:
         this.state.messages.length > 0
           ? this.state.messages.map((m) => ({
@@ -270,6 +281,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
   ): Promise<void> {
     const now = new Date();
     const lastMessage = this.state.messages[this.state.messages.length - 1];
+    let v2ShouldWrapUp = false;
 
     // Aggregation logic: Same role and within 5 seconds
     if (
@@ -316,41 +328,85 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
         .where(eq(surveyConversations.id, this.state.conversationId));
     }
 
-    // Update context with current messages
-    if (this.state.surveyConfig && this.state.context) {
-      this.state.context = await ConversationManager.loadOrCreateContext(
-        this.identifier,
-        this.state.messages.map((m) => ({ role: m.role, content: m.content })),
-        this.state.surveyConfig,
-      );
+    let newTurn: TranscriptTurn | null = null;
+    let expertState: any = null;
 
-      // Save context to Redis for persistence
-      await ConversationManager.saveContext(
-        this.identifier,
-        this.state.context,
-      );
+    if (this.state.surveyConfig && this.state.memoryBridge) {
+      // Fetch V2 ExpertState for progress tracking
+      expertState = await ExpertStateStore.get(this.state.surveyConfig.id);
+      const completionPercentage = expertState 
+        ? Math.round(domainBrain.calculateCoverage(expertState) * 100)
+        : 0;
+      v2ShouldWrapUp = expertState 
+        ? domainBrain.isCoverageComplete(expertState)
+        : false;
 
       // Send progress update to client
       this.send({
         type: "progress",
-        completionPercentage: this.state.context.progress.completionPercentage,
-        state: this.state.context.stateContext.currentState,
-        shouldWrapUp: this.state.context.progress.shouldWrapUp,
+        completionPercentage,
+        state: "active",
+        shouldWrapUp: v2ShouldWrapUp,
       });
+
+      // Push new uncompressed turn to ExpertState transcript
+      if (expertState) {
+        newTurn = {
+          turnIndex: expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 1,
+          speaker: event.role === "assistant" ? "agent" : "respondent",
+          text: event.content,
+          timestamp: now.toISOString(),
+          type: "turn"
+        };
+        expertState.transcript.turns.push(newTurn);
+        // Persist immediately before background triggers
+        await ExpertStateStore.update(this.state.surveyConfig.id, expertState);
+      }
+
+      // Push mid-conversation prompt update (V2 Architecture: Proactive Sync)
+      if (this.conductingAgent && expertState) {
+        this.conductingAgent.updateContext({
+          expertState,
+          memoryBridge: this.state.memoryBridge,
+          messages: this.state.messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })) as ModelMessage[],
+        });
+
+        const newSystemPrompt = this.conductingAgent.buildSystemPrompt();
+        const functions = this.conductingAgent.getDeepgramFunctions();
+
+        this.voiceAgent?.updateThink({
+          provider: { type: "open_ai", model: "gpt-4o-mini" },
+          prompt: `${newSystemPrompt}\n\nRespond to the user in the language they are speaking to you in. Match the language of each user message independently.`,
+          functions: functions.map((f) => {
+            const { client_side, ...rest } = f;
+            return rest;
+          }),
+        });
+      }
     }
 
     // Trigger async memory update after assistant messages (non-blocking)
     if (
       event.role === "assistant" &&
       this.state.surveyConfig &&
-      this.state.context
+      this.state.memoryBridge &&
+      expertState &&
+      newTurn
     ) {
       ConversationManager.updateMemoryAsync(
         this.identifier,
-        this.state.messages,
-        this.state.surveyConfig,
-        this.state.context,
-      ).catch(console.error);
+        this.state.surveyConfig!,
+        expertState,
+        this.state.memoryBridge,
+        newTurn,
+        {
+          organizationId: this.organizationId ?? undefined,
+          userId: this.ownerId ?? undefined,
+        },
+      ).catch(err => console.error("[SurveyResponseVoiceHandler] Memory update failed:", err));
     }
 
     // Fallback completion detection via phrases
@@ -370,8 +426,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
         event.content.toLowerCase().includes("thank you for your time") ||
         event.content.toLowerCase().includes("have a great day") ||
         event.content.toLowerCase().includes("goodbye") ||
-        (this.state.context?.progress.shouldWrapUp &&
-          event.content.length < 150);
+        (v2ShouldWrapUp && event.content.length < 150);
 
       if (isCompletionPhrase && userMessages.length >= minQuestions) {
         console.log(
@@ -390,59 +445,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
     event: FunctionCallRequestEvent,
   ): Promise<void> {
     switch (event.function_name) {
-      case "think_and_respond": {
-        try {
-          // 1. Extract the state updates for background learning
-          const stateUpdates = event.input.state_updates;
-          if (stateUpdates && Object.keys(stateUpdates).length > 0) {
-            console.log(
-              `[Voice][think_and_respond] State updates logged:`,
-              stateUpdates,
-            );
-            // Optionally, we could immediately append these to the rolling context
-            // or let the standard conversation memory loop catch the whole turn.
-          }
-
-          // 2. Extract the text we actually want the TTS to speak
-          const messageToUser = event.input.message_to_user;
-
-          if (!messageToUser) {
-            console.error(
-              `[Voice][think_and_respond] MISSING message_to_user. Payload:`,
-              JSON.stringify(event.input, null, 2),
-            );
-          }
-
-          const fallbackMessage = "I'm sorry, I encountered an internal error.";
-          const finalMessage = messageToUser || fallbackMessage;
-
-          // 3. Complete the function call by giving Deepgram the text to say
-          this.voiceAgent?.sendFunctionCallResponse(
-            event.function_call_id,
-            event.function_name,
-            JSON.stringify(finalMessage),
-          );
-
-          // 4. (DELETED) Manual push removed to prevent double messages.
-          // Deepgram's ConversationText for the tool response will handle this via BaseVoiceAgentHandler.onConversationText.
-        } catch (e) {
-          console.error(
-            "Failed to parse think_and_respond payload in voice handler:",
-            e,
-            "Raw input:",
-            event.input,
-          );
-          this.voiceAgent?.sendFunctionCallResponse(
-            event.function_call_id,
-            event.function_name,
-            JSON.stringify({
-              error: "Internal error processing state updates.",
-            }),
-          );
-        }
-        break;
-      }
-
       case "showMedia": {
         const mediaId = event.input?.mediaId;
         const media = this.state.surveyConfig?.media?.find(
@@ -583,8 +585,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
         // Cleanup Redis context on successful completion
         const redis = getRedisClient();
-        await redis.del(getContextKey(this.identifier));
-        await redis.del(getStartTimeKey(this.identifier));
+        await redis.del(`session:memory_bridge:voice:${this.state.conversationId}`);
       }
 
       // Calculate final session metrics

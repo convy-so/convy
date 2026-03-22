@@ -46,6 +46,8 @@ export const env = {
   // Voice/WebSocket Configuration
   WEBSOCKET_PORT: optional("WEBSOCKET_PORT") || "3001",
   DEEPGRAM_API_KEY: optional("DEEPGRAM_API_KEY"),
+  /** Shared secret used to authenticate Deepgram → our /api/voice/agent-turn endpoint */
+  VOICE_AGENT_INTERNAL_KEY: optional("VOICE_AGENT_INTERNAL_KEY") || "dev-internal-key",
 
   // Application base URL (for public links & embeds), e.g. https://app.convy.com
   APP_BASE_URL: appBaseUrl,

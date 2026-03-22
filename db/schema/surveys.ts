@@ -108,7 +108,7 @@ const surveys = pgTable(
       .notNull(),
     confirmed: boolean("confirmed").default(false).notNull(),
     language: languageEnum("language").default("en").notNull(),
-    domainId: integer("domain_id"), // 1-10 based on the framework
+    domainId: text("domain_id"), // Subdomain ID like 'cx-nps-loyalty'
     hybridDomains: jsonb("hybrid_domains").$type<{ id: string; weight: number }[]>().default([]),
     isVoice: boolean("is_voice").default(false).notNull(),
     improvementFeedback: text("improvement_feedback"),
@@ -141,7 +141,7 @@ const surveyCreationConversations = pgTable(
       .$type<
         Array<{
           id?: string;
-          role: "user" | "assistant";
+          role: "user" | "assistant" | "tool";
           content: string;
           parts?: any[]; // For AI SDK v6 parts (tool calls, etc.)
           timestamp: string;
@@ -310,6 +310,28 @@ const surveyAnalytics = pgTable(
   (table) => [index("survey_analytics_survey_id_idx").on(table.surveyId)],
 );
 
+export const participantFeedback = pgTable(
+  "participant_feedback",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    surveyId: text("survey_id")
+      .notNull()
+      .references(() => surveys.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => surveyConversations.id, { onDelete: "cascade" }),
+    rating: integer("rating"), // 1-5
+    feltNatural: boolean("felt_natural"),
+    uncomfortableTopics: boolean("uncomfortable_topics").default(false).notNull(),
+    freeText: text("free_text"),
+  },
+  (table) => [
+    index("participant_feedback_survey_id_idx").on(table.surveyId),
+    index("participant_feedback_conversation_id_idx").on(table.conversationId),
+  ],
+);
+
 const surveysRelations = relations(surveys, ({ one, many }) => ({
   user: one(users, {
     fields: [surveys.userId],
@@ -388,7 +410,7 @@ const surveyAnalyticsRelations = relations(surveyAnalytics, ({ one }) => ({
 
 export type ChatSessionMessage = {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "tool";
   content: string;
   parts: Array<
     | { type: "text"; text: string }

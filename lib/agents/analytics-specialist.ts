@@ -31,8 +31,8 @@ export class AnalyticsSpecialist extends BaseSpecialistAgent {
       required: [
         this.makeChecklistItem("objective_answered", "Directly addressed the survey goal", !!state.brief.objectives.length),
         this.makeChecklistItem("metrics_validated", "Rendered verdicts on all success metrics", !!state.brief.successMetrics),
-        this.makeChecklistItem("pattern_detection", "Identified latent behavioral patterns", true),
-        this.makeChecklistItem("grounded_evidence", "All claims cited with [Source ID]", true),
+        this.makeChecklistItem("pattern_detection", "Identified latent behavioral patterns", "pending"),
+        this.makeChecklistItem("grounded_evidence", "All claims cited with [Source ID]", "pending"),
       ],
       aspirational: [
         this.makeChecklistItem("longitudinal_insight", "Detected changes in sentiment over time", !!state.sessionMeta.modality),
@@ -55,7 +55,7 @@ export class AnalyticsSpecialist extends BaseSpecialistAgent {
     return `
 <role>
 IDENTITY: You are a professional ${domainName || "Survey"} Insight Analyst.
-GOAL: Interpret data to answer the core objective: "${config.coreObjective || config.expertState?.objective?.goal || config.information}"
+GOAL: Interpret data to answer the core objective: "${config.expertState?.objective?.goal || config.coreObjective || config.information}"
 AUDIENCE: Survey Creators / Stakeholders seeking actionable insights.
 </role>
 
@@ -79,11 +79,17 @@ ${this.getSkillsSection()}
 ${this.getKnowledgeSection()}
 
 <proactive_insight_rules>
-1. COGNITIVE ANALYST: Don't just summarize; identify why participants behaved a certain way.
+1. COGNITIVE ANALYST: identify why participants behaved a certain way.
 2. CITATION MANDATORY: Every claim MUST end with [Source ID: <id>].
-3. QUALITY-WEIGHTED: Prioritize high-reliability turns; discount or explicitly flag claims from turns with Evasion or Social Desirability flags.
-4. DECISION-MAP ALIGNMENT: Structure your report to directly address the Creator's decision threshold and research topic hierarchy.
+3. DECISION-MAP ALIGNMENT: Structure directly address Creator's threshold.
 </proactive_insight_rules>
+
+<thinking_protocol>
+You are operating in a low-latency STREAMING JSON MODE.
+For every turn, your response MUST be a perfectly formatted, raw JSON object containing:
+1. "reasoning": Concise internal audit of data patterns.
+2. "response": Professional insight report.
+</thinking_protocol>
 `.trim();
   }
 
@@ -143,18 +149,7 @@ ${this.getKnowledgeSection()}
     const surveyId = config?.id;
 
     return {
-      loadSkill: tool({
-        description: "Load detailed instructions for a specific specialized skill.",
-        inputSchema: z.object({
-          skillId: z.string().describe("The ID of the skill to load."),
-        }),
-        execute: async ({ skillId }) => {
-          const skill = await SkillEngine.loadSkill(skillId, "analytics");
-          return skill
-            ? { instructions: skill.content }
-            : { error: "Skill not found" };
-        },
-      }),
+      // loadSkill removed in favor of V2 synthesized protocols pre-loaded from ExpertState.
       searchSurveyData: tool({
         description:
           "Search across all survey responses, insights, and analytics.",

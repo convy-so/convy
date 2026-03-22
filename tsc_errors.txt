@@ -1,0 +1,22 @@
+.next/types/validator.ts(404,39): error TS2307: Cannot find module '../../app/api/internal/agent-performance/route.js' or its corresponding type declarations.
+app/api/surveys/[surveyId]/chat/route.ts(133,47): error TS2339: Property 'loadOrCreateContext' does not exist on type 'typeof ConversationManager'.
+app/api/surveys/[surveyId]/chat/route.ts(150,7): error TS2353: Object literal may only specify known properties, and 'rollingContext' does not exist in type 'AgentContext'.
+app/api/surveys/[surveyId]/chat/route.ts(222,7): error TS2345: Argument of type '(SystemModelMessage | AssistantModelMessage | ToolModelMessage | { content: string; role: "user"; providerOptions?: SharedV3ProviderOptions | undefined; })[]' is not assignable to parameter of type 'SurveyConfig'.
+  Type '(SystemModelMessage | AssistantModelMessage | ToolModelMessage | { content: string; role: "user"; providerOptions?: SharedV3ProviderOptions | undefined; })[]' is missing the following properties from type 'SurveyConfig': id, information, requiredQuestions, metrics
+app/api/surveys/[surveyId]/chat/route.ts(232,31): error TS2339: Property 'saveContext' does not exist on type 'typeof ConversationManager'.
+app/api/surveys/[surveyId]/chat/route.ts(238,31): error TS2552: Cannot find name 'ExpertStateStore'. Did you mean 'expertState'?
+app/api/surveys/[surveyId]/chat/route.ts(239,36): error TS2304: Cannot find name 'domainBrain'.
+app/api/surveys/[surveyId]/chat/route.ts(249,21): error TS2304: Cannot find name 'domainBrain'.
+app/api/surveys/[surveyId]/sample/route.ts(349,20): error TS2322: Type 'UserContent' is not assignable to type 'string'.
+  Type '(TextPart | ImagePart | FilePart)[]' is not assignable to type 'string'.
+app/api/surveys/respond/[shareableLink]/route.ts(212,54): error TS2339: Property 'loadOrCreateContext' does not exist on type 'typeof ConversationManager'.
+app/api/surveys/respond/[shareableLink]/route.ts(235,7): error TS2353: Object literal may only specify known properties, and 'rollingContext' does not exist in type 'AgentContext'.
+app/api/surveys/respond/[shareableLink]/route.ts(356,59): error TS2554: Expected 5-6 arguments, but got 4.
+lib/agents/base-agent.ts(210,38): error TS2339: Property 'pruneExpertState' does not exist on type 'typeof MemoryBridge'.
+lib/agents/base-agent.ts(211,41): error TS2339: Property 'summarizeOmittedNodes' does not exist on type 'typeof MemoryBridge'.
+lib/agents/conducting-specialist.ts(111,34): error TS2339: Property 'rollingContext' does not exist on type 'AgentContext'.
+lib/memory-bridge.ts(614,9): error TS2353: Object literal may only specify known properties, and 'maxTokens' does not exist in type 'CallSettings & { system?: string | SystemModelMessage | SystemModelMessage[] | undefined; } & { messages: ModelMessage[]; prompt?: undefined; } & { ...; }'.
+websocket/handlers/survey-response-voice.ts(406,11): error TS2322: Type 'string | null | undefined' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+websocket/handlers/survey-response-voice.ts(641,25): error TS2304: Cannot find name 'getContextKey'.
+websocket/handlers/survey-response-voice.ts(642,25): error TS2304: Cannot find name 'getStartTimeKey'.

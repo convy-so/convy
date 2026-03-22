@@ -40,7 +40,8 @@ export class SessionLifecycleManager {
       coverageTracker: {
         nodes: [], // Will be populated by the Domain Brain / RAG
         overallCoverage: 0,
-        bookmarkedNodes: []
+        bookmarkedNodes: [],
+        currentTopicId: null,
       },
       respondentProfile: {
         engagementTrajectory: [],

@@ -1,5 +1,5 @@
 import { getDb } from "@/db";
-import { documentEmbeddings, knowledgeBase } from "@/db/schema/vectors";
+import { documentEmbeddings } from "@/db/schema/vectors";
 import { surveyConversations, surveyAnalytics } from "@/db/schema/surveys";
 import { eq } from "drizzle-orm";
 import { generateEmbedding, chunkText } from "./embeddings";
@@ -7,17 +7,9 @@ import { nanoid } from "nanoid";
 import { generateText } from "ai";
 import { flashLiteModel } from "@/lib/ai";
 
-export interface KnowledgeEntry {
-  domainId?: number;
-  category: "technique" | "pattern" | "insight" | "feedback" | "general";
-  title: string;
-  content: string;
-  source?: "system" | "feedback" | "user";
-  metadata?: Record<string, unknown>;
-}
-
 export async function ingestConversation(
   conversationId: string,
+  expertState?: any,
 ): Promise<void> {
   const conversation = await getDb().query.surveyConversations.findFirst({
     where: eq(surveyConversations.id, conversationId),
@@ -123,7 +115,52 @@ Just write the contextual prefix (e.g., "In response to a question about X in th
     }
   }
 
-  // 2. Embed the insights
+  // 3. Ingest ExpertState Findings (Grounded Evidence)
+  if (expertState?.coverageTracker?.nodes) {
+    const flatNodes: any[] = [];
+    const traverse = (nodes: any[]) => {
+      for (const node of nodes) {
+        if (node.status !== "pending" && node.evidence) {
+          flatNodes.push(node);
+        }
+        if (node.children?.length) traverse(node.children);
+      }
+    };
+    traverse(expertState.coverageTracker.nodes);
+
+    for (const node of flatNodes) {
+      try {
+        const findingContent = `Research Finding: ${node.label}\nStatus: ${node.status}\nEvidence: ${node.evidence}\nVerbatim Quotes: ${node.verbatimQuotes?.join(" | ") || "None"}`;
+        
+        const embedding = await generateEmbedding(findingContent, {
+          surveyId: conversation.surveyId,
+          organizationId,
+        });
+
+        await getDb().insert(documentEmbeddings).values({
+          id: nanoid(),
+          surveyId: conversation.surveyId,
+          sourceType: "insight", // Tagged as insight for higher weight in ranking
+          sourceId: conversation.id,
+          chunkIndex: 5000 + chunkIndex++, // Offset to avoid collision with QA pairs
+          content: findingContent,
+          metadata: {
+            chunkType: "expert_finding",
+            nodeId: node.id,
+            organizationId,
+            participantId: conversation.participantId,
+            confidence: node.confidenceScore,
+            language: conversation.originalLanguage || conversation.survey.language || "en",
+          },
+          embedding,
+        });
+      } catch (error) {
+        console.error(`Failed to ingest ExpertState node ${node.id}:`, error);
+      }
+    }
+  }
+
+  // 4. Embed the raw AI-extracted insights
   const insights = JSON.stringify(conversation.insights.insights);
   const insightChunks = chunkText(insights, { maxTokens: 512, overlap: 50 });
 
@@ -139,9 +176,10 @@ Just write the contextual prefix (e.g., "In response to a question about X in th
       surveyId: conversation.surveyId,
       sourceType: "insight",
       sourceId: conversation.insights.id,
-      chunkIndex: i,
+      chunkIndex: 1000 + i, // Offset
       content: chunk,
       metadata: {
+        chunkType: "extracted_insight",
         organizationId,
         conversationId: conversation.id,
         language:
@@ -162,18 +200,10 @@ export async function ingestAnalytics(surveyId: string): Promise<void> {
   const content = `Target Audience: ${analytics.overallSummary}\n\nMetrics: ${JSON.stringify(analytics.metrics)}`;
   const chunks = chunkText(content, { maxTokens: 512, overlap: 50 });
 
-  // Delete existing analytics embeddings for this survey to avoid accumulation
-  // (Since analytics is a snapshot)
-  // Note: drizzle-orm delete
-  // await getDb().delete(documentEmbeddings).where(and(eq(documentEmbeddings.surveyId, surveyId), eq(documentEmbeddings.sourceType, 'analytics')));
-  // But strictly, we should upsert or wipe. Wiping is safer for now.
-  // ... skipping delete for brevity, assuming standard usage pattern
-
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
     const embedding = await generateEmbedding(chunk, {
       surveyId: surveyId,
-      // organizationId should ideally be passed in or fetched
     });
 
     await getDb().insert(documentEmbeddings).values({
@@ -190,23 +220,6 @@ export async function ingestAnalytics(surveyId: string): Promise<void> {
       embedding,
     });
   }
-}
-
-export async function ingestKnowledge(entry: KnowledgeEntry): Promise<void> {
-  const embedding = await generateEmbedding(entry.content, {
-    // knowledge is usually global or domain-bound
-  });
-
-  await getDb().insert(knowledgeBase).values({
-    id: nanoid(),
-    domainId: entry.domainId,
-    category: entry.category,
-    title: entry.title,
-    content: entry.content,
-    embedding,
-    source: entry.source || "system",
-    metadata: entry.metadata || {},
-  });
 }
 
 export async function ingestDocument(

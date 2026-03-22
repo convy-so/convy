@@ -6,6 +6,8 @@ import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { getDb } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema";
 import { ConversationManager } from "@/lib/conversation-manager";
+import { MemoryBridge, TranscriptTurn } from "@/lib/memory-bridge";
+import { ExpertStateStore } from "@/lib/expert-state-store";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
 import { defaultModel, normalizeMessages } from "@/lib/ai";
 import { getTimeBasedGreeting } from "@/lib/greetings";
@@ -13,6 +15,8 @@ import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
 import type { AgentContext } from "@/lib/agents/types";
 import { getRedisClient } from "@/lib/redis";
 import { logUsage } from "@/lib/billing/logger";
+import { TurnGateManager } from "@/lib/agents/streaming/turn-gate";
+import { StreamFieldExtractor } from "@/lib/agents/streaming/stream-field-extractor";
 import {
   withGeminiLimit,
   GeminiCapacityError,
@@ -202,19 +206,20 @@ export async function POST(
 
     // AI SDK v6: Normalize UI messages to ModelMessages for proper handling
     const modelMessages = await normalizeMessages(messages);
+    /*
     console.log(
       `[RespondAPI:POST] Normalized messages: ${modelMessages.length}. Last role: ${modelMessages[modelMessages.length - 1]?.role}`,
     );
+    */
 
     // Load conversation context (handling hydration, compression, signals)
-    const rollingContext = await ConversationManager.loadOrCreateContext(
-      conversationId,
-      modelMessages,
-      surveyConfig,
-    );
-    console.log(
-      `[RespondAPI:POST] Context loaded. State: ${rollingContext.stateContext.currentState}. Topics: ${rollingContext.memory.topicsCovered.length}`,
-    );
+    const memoryBridge = await ConversationManager.loadOrCreateMemoryBridge(conversationId);
+    // console.log(`[RespondAPI:POST] Context loaded.`);
+
+    // ── Pre-Turn: Await any pending background updates from last turn ──────
+    await TurnGateManager.awaitTurn(conversationId);
+    
+    const expertState = await ExpertStateStore.get(survey.id);
 
     // ── Build system prompt via ConductingSpecialist ────────────────────
     const agentContext: AgentContext = {
@@ -227,12 +232,13 @@ export async function POST(
         | "es"
         | "it"
         | undefined,
-      rollingContext,
+      memoryBridge,
+      expertState: expertState || undefined,
       modality: "text",
       subjectIntelligence: surveyConfig.subjectIntelligence,
     };
     const agent = new ConductingSpecialist(agentContext);
-    console.log(`[RespondAPI:POST] Initializing agent...`);
+    // console.log(`[RespondAPI:POST] Initializing agent...`);
     await agent.initialize();
     await Promise.all([
       agent.preloadSkills(),
@@ -243,7 +249,7 @@ export async function POST(
     ]).catch((err) =>
       console.warn("[RespondAPI:POST] Agent preload warning:", err),
     );
-    console.log(`[RespondAPI:POST] Agent initialized. Building prompt...`);
+    // console.log(`[RespondAPI:POST] Agent initialized. Building prompt...`);
     const systemPrompt = agent.buildSystemPrompt();
 
     // ── Redis attribution: log which pattern was injected this turn ──────
@@ -297,16 +303,18 @@ export async function POST(
         };
 
         // Stream the AI response with scratchpad filtering via agent.stream()
-        console.log(`[RespondAPI:Stream] Starting agent.stream() call...`);
+        // console.log(`[RespondAPI:Stream] Starting agent.stream() call...`);
         const result = await withGeminiLimit(async () => {
           return agent.stream(
             modelMessages,
             onMediaDisplay,
             async (params) => {
               const { text, usage, response } = params;
+              /*
               console.log(
                 `[RespondAPI:Stream] onFinish triggered. Text length: ${text?.length}. Tool calls: ${response.messages?.find((m: any) => m.role === "assistant")?.toolInvocations?.length || 0}`,
               );
+              */
 
               // Log usage for survey response
               logUsage({
@@ -347,15 +355,45 @@ export async function POST(
                 },
               ];
 
-              // Update memory in background (learning)
-              ConversationManager.updateMemoryAsync(
-                conversationId,
-                updatedMessages,
-                surveyConfig,
-                rollingContext,
-              ).catch((err) =>
-                console.error("Background memory update failed:", err),
-              );
+              // Update memory in background (learning) and register with TurnGate
+              let bgUpdatePromise = Promise.resolve();
+              if (expertState) {
+                const newTurn: TranscriptTurn = {
+                  turnIndex: expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 1,
+                  speaker: "agent",
+                  text: cleanText || "",
+                  timestamp: new Date().toISOString(),
+                  type: "turn"
+                };
+                
+                const respondentMsg = modelMessages[modelMessages.length - 1];
+                if (respondentMsg && respondentMsg.role === "user") {
+                   const resTurn: TranscriptTurn = {
+                     turnIndex: expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 1,
+                     speaker: "respondent",
+                     text: typeof respondentMsg.content === 'string' ? respondentMsg.content : (Array.isArray(respondentMsg.content) ? (respondentMsg.content.find((p:any) => p.type === 'text') as any)?.text || "" : ""),
+                     timestamp: new Date().toISOString(),
+                     type: "turn"
+                   };
+                   newTurn.turnIndex = resTurn.turnIndex + 1;
+                   expertState.transcript.turns.push(resTurn);
+                }
+                expertState.transcript.turns.push(newTurn);
+                ExpertStateStore.update(survey.id, expertState).catch(console.error);
+
+                bgUpdatePromise = ConversationManager.updateMemoryAsync(
+                  conversationId,
+                  surveyConfig,
+                  expertState,
+                  memoryBridge,
+                  newTurn,
+                  { userId: survey.userId, organizationId: survey.organizationId || undefined }
+                ).catch((err) =>
+                  console.error("Background memory update failed:", err),
+                );
+              }
+              
+              TurnGateManager.registerTurn(conversationId, bgUpdatePromise);
 
               // Check for survey completion
               const toolInvocations = assistantMessage?.toolInvocations || [];
@@ -460,18 +498,36 @@ export async function POST(
         });
 
         // AI SDK v6: Stream the results correctly using protocol translation.
-        // This converts raw TextStreamParts into UIMessageChunks, stripping
-        // problematic metadata (like request/warnings in 'start-step').
         const uiStream = result.toUIMessageStream();
+        
+        // Custom StreamFieldExtractor to drop "reasoning" JSON overhead and stream only "response"
+        const extractor = new StreamFieldExtractor({
+          onSafetyGateTripped: (reason) => {
+            console.error(`[RespondAPI:SafetyGate] ${reason}`);
+          }
+        });
 
         for await (const chunk of uiStream) {
-          const chunkType = (chunk as { type: string }).type;
-          console.log(`[RespondAPI:StreamPart] Chunk type: ${chunkType}`);
-
-          // Passthrough sanitized chunks.
-          writer.write(chunk as any);
+          const chunkObj = chunk as any;
+          
+          if (chunkObj.type === "text-delta") {
+            const cleanText = extractor.processChunk(chunkObj.textDelta || chunkObj.delta);
+            if (cleanText) {
+              writer.write({ type: "text-delta", textDelta: cleanText } as any);
+            }
+          } else {
+            // Passthrough non-text chunks (e.g. tools, errors, start-step)
+            writer.write(chunkObj);
+          }
         }
-        console.log(`[RespondAPI:Stream] Stream loop finished.`);
+        
+        // Flush final extracted text
+        const finalCleanText = extractor.flush();
+        if (finalCleanText) {
+           writer.write({ type: "text-delta", textDelta: finalCleanText } as any);
+        }
+
+        // console.log(`[RespondAPI:Stream] Stream loop finished.`);
       },
     });
 
