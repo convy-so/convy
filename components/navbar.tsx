@@ -11,20 +11,19 @@ export default function Navbar() {
 
     return (
         <nav className="w-full bg-[#FAFAFA] pt-4 sm:pt-6">
-            <div className="mx-auto max-w-[1824px] grid h-14 sm:h-16 grid-cols-3 items-center px-4 sm:px-[30px]">
-                <Link href="/" className="flex items-center">
-                    <span className="text-lg sm:text-xl font-bold text-foreground">convyy</span>
-                </Link>
-
-                <div className="flex items-center justify-center">
+            <div className="mx-auto flex h-14 max-w-[1824px] items-center justify-between px-4 sm:h-16 sm:px-[30px]">
+                <Link href="/" className="flex items-center gap-2">
                     <Image
                         src="/logo.svg"
                         alt="Convyy Logo"
                         width={32}
                         height={32}
-                        className="max-h-6 sm:max-h-8 w-auto object-contain"
+                        className="h-8 w-8 shrink-0 rounded-full bg-white p-1 shadow-sm ring-1 ring-black/10"
                     />
-                </div>
+                    <span className="text-lg sm:text-xl font-semibold tracking-[-0.04em] text-foreground">
+                        Convyy
+                    </span>
+                </Link>
 
                 {/* Navigation Items - Right aligned */}
                 <div className="flex items-center justify-end gap-2 sm:gap-4 md:gap-6">

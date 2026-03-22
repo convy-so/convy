@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { Fasthand } from "next/font/google";
 import "../globals.css";
 import { Toaster } from "react-hot-toast";
 import Providers from "../providers";
@@ -28,9 +27,19 @@ const aspekta = localFont({
   variable: "--font-aspekta",
 });
 
-const fasthand = Fasthand({
-  weight: "400",
-  subsets: ["latin"],
+const fasthand = localFont({
+  src: [
+    {
+      path: "../../assets/fonts/Fasthand-latin.woff2",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../../assets/fonts/Fasthand-latin-ext.woff2",
+      weight: "400",
+      style: "normal",
+    },
+  ],
   variable: "--font-fasthand",
 });
 

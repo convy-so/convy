@@ -23,19 +23,22 @@ export default function FooterSection() {
 
           {/* Main message */}
           <div>
-            <p className="text-[16px] md:text-[22px] font-[500] text-[#E5E5E5] leading-[24px] md:leading-[32px]" dangerouslySetInnerHTML={{ __html: t.raw('Message') }} />
+            <p className="text-[16px] md:text-[22px] font-[500] text-[#E5E5E5] leading-[24px] md:leading-[32px]">
+              Ready to replace rigid forms with human conversations? <br className="hidden md:block" />
+              Join the future of feedback with <strong>Convyy</strong>.
+            </p>
           </div>
 
           {/* Contact on X */}
           <div className="space-y-2">
             <p className="text-sm text-[#B2B2B2]">{t('Contact')}</p>
             <a
-              href="https://x.com/getConvy"
+              href="https://x.com/getConvyy"
               target="_blank"
               rel="noreferrer"
               className="text-[18px] font-medium text-white underline underline-offset-4"
             >
-              @getConvy
+              @getConvyy
             </a>
           </div>
         </div>
@@ -45,7 +48,7 @@ export default function FooterSection() {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-[#B2B2B2]">
             {/* Left */}
             <p className="order-2 sm:order-1">
-              {t('Rights', { year: new Date().getFullYear() })}
+              © {new Date().getFullYear()} Convyy. All rights reserved.
             </p>
 
             {/* Right links */}
@@ -54,18 +57,18 @@ export default function FooterSection() {
                 Terms
               </Link>
               <Link href="/privacy" className="hover:text-white transition-colors">
-                {t('Privacy')}
+                Privacy
               </Link>
               <Link href="/cookies" className="hover:text-white transition-colors">
-                {t('Cookies')}
+                Cookies
               </Link>
               <Link href="/blog" className="hover:text-white transition-colors">
-                {t('Blog')}
+                Blog
               </Link>
-              <div className="h-5 w-px bg-white/20" />
+              <div className="h-5 w-px bg-white/20 hidden sm:block" />
               <div className="flex items-center gap-3">
                 <a
-                  href="https://x.com/getConvy"
+                  href="https://x.com/getConvyy"
                   target="_blank"
                   rel="noreferrer"
                   className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20 hover:border-white transition-colors"
@@ -80,5 +83,3 @@ export default function FooterSection() {
     </section>
   );
 }
-
-

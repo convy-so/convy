@@ -837,71 +837,71 @@
     "Landing": {
         "Navbar": {
             "SignIn": "Sign in",
-            "GetStarted": "Get started",
+            "GetStarted": "Try Convy",
             "Dashboard": "Dashboard"
         },
         "Hero": {
-            "Badge": "Forms 2.0",
-            "Title": "AI-Native Surveys <br /> for Every Domain.",
-            "Description": "We help CX, educators, and researchers collect better insights by replacing rigid forms with dynamic, human-like AI chats.",
-            "CTA": "Start Your Free Survey"
+            "Badge": "Convy",
+            "Title": "Convy turns surveys into conversations people want to finish.",
+            "Description": "Launch a premium, minimal flow that feels human, adapts to each answer, and gives you cleaner takeaways.",
+            "CTA": "Start free"
         },
         "Insights": {
-            "Badge": "Hear it out",
-            "Title": "Uncover The 'Why' Behind Data",
-            "Description": "From workforce engagement to product feedback, AI chats turn standard interactions into deep, quality insights.",
+            "Badge": "Why Convy wins",
+            "Title": "People finish flows that feel clear, quick, and human.",
+            "Description": "Convy keeps the conversation moving with short prompts and smarter follow-ups.",
             "Cards": {
                 "AI": {
-                    "Title": "Conversations, Not Questions",
-                    "Description": "Static questions trap users in a box. Real conversations reveal their true priorities and pain points."
+                    "Title": "Feels human",
+                    "Description": "Short, adaptive prompts keep the experience calm and natural."
                 },
                 "Alive": {
-                    "Title": "Adaptable to Any Field",
-                    "Description": "Whether surveying a citizen or customer, our AI adapts its tone and probes naturally."
+                    "Title": "Adapts instantly",
+                    "Description": "Each follow-up reacts to what the user just said, so the flow stays smart."
                 },
                 "Flow": {
-                    "Title": "Forms That Actually Flow",
-                    "Description": "Users hit dead ends, get frustrated, and drop off, but smooth flows keep them engaged and willing to share more."
+                    "Title": "Fast on mobile",
+                    "Description": "The experience stays sharp on small screens, where most drop-offs happen."
                 },
                 "Data": {
-                    "Title": "Smart Data Chats",
-                    "Description": "Convyy turns messy answers, typos, and slang into clear insights you can actually use."
+                    "Title": "Clear summaries",
+                    "Description": "Responses are easier to scan, summarize, and act on."
                 }
             }
         },
         "Features": {
-            "Badge": "Features",
-            "Title": "Everything you need to talk to users",
-            "Description": "Convyy turns static question lists into living conversations, capturing richer signals across all research domains.",
+            "Badge": "What you get",
+            "Title": "A polished way to launch and review every survey.",
+            "Description": "Write the goal, publish the flow, and scan the results without clutter.",
             "Cards": {
                 "Builder": {
-                    "Title": "AI Form Builder",
-                    "Description": "Auto-generate domain-specific conversational flows from plain text prompts."
+                    "Title": "Write the flow",
+                    "Description": "Describe what you want to learn and Convy shapes the conversation."
                 },
                 "ChatData": {
-                    "Title": "Chat with Data",
-                    "Description": "Talk directly to your collected responses and analytics."
+                    "Title": "Publish with one link",
+                    "Description": "Share a clean experience that feels clear from the first screen."
                 },
                 "Logic": {
-                    "Title": "Smart Logic",
-                    "Description": "AI detects intent and dynamically changes questions mid-chat."
+                    "Title": "Guide every answer",
+                    "Description": "Follow-ups change based on the answer instead of forcing a script."
                 },
                 "Summaries": {
-                    "Title": "Auto Summaries",
-                    "Description": "Get instant structured insights and summaries from every conversation."
+                    "Title": "Review the takeaways",
+                    "Description": "See structured insights without digging through raw noise."
                 }
             }
         },
         "CTA": {
-            "Badge": "Get Started",
-            "Title": "Ready to transform your feedback?",
-            "Description": "Build your first conversational survey in minutes and start capturing richer insights today.",
-            "Button": "Start For Free"
+            "Badge": "Convy",
+            "Title": "Turn more visitors into real conversations.",
+            "Description": "Launch Convy to replace rigid forms with a smoother experience that feels clear, modern, and human.",
+            "Button": "Try Convy free"
         },
         "Footer": {
-            "Message": "Start uncovering deeper insights today with <br /> real-time convos from Convyy.",
-            "Contact": "Contact us on X",
-            "Rights": "© {year} convy. All rights reserved.",
+            "Message": "Convy helps you collect better answers with <br /> less friction and more context.",
+            "Contact": "Follow Convy on X",
+            "Rights": "© {year} Convy. All rights reserved.",
             "Privacy": "Privacy Policy",
             "Cookies": "Cookie Policy",
             "Blog": "Blog"

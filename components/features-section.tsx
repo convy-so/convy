@@ -19,13 +19,13 @@ export default function FeaturesSection() {
               className="text-[#8D8D8D] italic text-[20px] md:text-[32px] font-normal leading-[30px] md:leading-[44px] tracking-[-0.24px] md:tracking-[-0.32px] mb-4"
               style={{ fontFamily: "var(--font-fasthand)" }}
             >
-              {t('Badge')}
+              What you get
             </p>
             <h2 className="text-[28px] md:text-[40px] font-[500] text-[#080808] leading-[36px] md:leading-[50px] tracking-[-0.48px] md:tracking-[-0.64px] mb-4">
-              {t('Title')}
+              Everything you need to build smarter forms.
             </h2>
             <p className="text-[18px] md:text-[22px] font-normal text-[#696969] leading-[26px] md:leading-[32px] tracking-normal max-w-3xl mx-auto">
-              {t('Description')}
+              Design your form, share it in seconds, and get AI-powered insights from every response.
             </p>
           </div>
 
@@ -38,55 +38,55 @@ export default function FeaturesSection() {
               </div>
               <div>
                 <h3 className="text-[20px] font-[500] text-[#080808] leading-[26px] tracking-[-0.24px] mb-1">
-                  {t('Cards.Builder.Title')}
+                  Design with AI
                 </h3>
                 <p className="text-[16px] font-normal text-[#696969] leading-[22px]">
-                  {t('Cards.Builder.Description')}
+                  Describe your form's goal and Convyy builds the conversational flow for you.
                 </p>
               </div>
             </div>
 
-            {/* Card 2 (was 3) */}
+            {/* Card 2 */}
             <div className="bg-[#FAFAFA] border border-gray-200 rounded-[24px] p-6 flex flex-col gap-4 md:col-span-6">
               <div className="w-[44px] h-[44px] rounded-full bg-[#22C55E] flex items-center justify-center">
                 <FaDatabase className="w-5 h-5 text-white" />
               </div>
               <div>
                 <h3 className="text-[20px] font-[500] text-[#080808] leading-[26px] tracking-[-0.24px] mb-1">
-                  {t('Cards.ChatData.Title')}
+                  Share with one link
                 </h3>
                 <p className="text-[16px] font-normal text-[#696969] leading-[22px]">
-                  {t('Cards.ChatData.Description')}
+                  Publish your form and share a clean, branded experience instantly.
                 </p>
               </div>
             </div>
 
-            {/* Card 3 (was 4) */}
+            {/* Card 3 */}
             <div className="bg-[#FAFAFA] border border-gray-200 rounded-[24px] p-6 flex flex-col gap-4 md:col-span-6">
               <div className="w-[44px] h-[44px] rounded-full bg-[#6366F1] flex items-center justify-center">
                 <FaBrain className="w-5 h-5 text-white" />
               </div>
               <div>
                 <h3 className="text-[20px] font-[500] text-[#080808] leading-[26px] tracking-[-0.24px] mb-1">
-                  {t('Cards.Logic.Title')}
+                  Smart follow-ups
                 </h3>
                 <p className="text-[16px] font-normal text-[#696969] leading-[22px]">
-                  {t('Cards.Logic.Description')}
+                  Questions adapt to each answer — no rigid scripts or manual branching logic.
                 </p>
               </div>
             </div>
 
-            {/* Card 4 (was 5) */}
+            {/* Card 4 */}
             <div className="bg-[#FAFAFA] border border-gray-200 rounded-[24px] p-6 flex flex-col gap-4 md:col-span-6">
               <div className="w-[44px] h-[44px] rounded-full bg-[#0EA5E9] flex items-center justify-center">
                 <FaFileAlt className="w-5 h-5 text-white" />
               </div>
               <div>
                 <h3 className="text-[20px] font-[500] text-[#080808] leading-[26px] tracking-[-0.24px] mb-1">
-                  {t('Cards.Summaries.Title')}
+                  AI-powered summaries
                 </h3>
                 <p className="text-[16px] font-normal text-[#696969] leading-[22px]">
-                  {t('Cards.Summaries.Description')}
+                  Get structured insights from every form response without reading through raw data.
                 </p>
               </div>
             </div>

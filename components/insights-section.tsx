@@ -11,13 +11,13 @@ export default function InsightsSection() {
           {/* Header */}
           <div className="text-center mb-12 md:mb-16">
             <p className="text-[#8D8D8D] italic text-[20px] md:text-[32px] font-normal leading-[33px] md:leading-[44px] tracking-[-0.24px] md:tracking-[-0.32px] mb-4" style={{ fontFamily: 'var(--font-fasthand)' }}>
-              {t('Badge')}
+              Why Convyy wins
             </p>
             <h2 className="text-[28px] md:text-[40px] font-[500] text-[#FFFFFF] leading-[36px] md:leading-[50px] tracking-[-0.48px] md:tracking-[-0.64px] mb-4">
-              {t('Title')}
+              Forms that feel clear, quick, and human.
             </h2>
             <p className="text-[16px] md:text-[20px] font-[500] sm:font-[600] text-[#E5E5E5] leading-[22px] md:leading-[28px] tracking-normal max-w-3xl mx-auto">
-              {t('Description')}
+              Convyy replaces boring forms with smart conversations that keep people engaged.
             </p>
           </div>
 
@@ -32,9 +32,9 @@ export default function InsightsSection() {
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-[24px] text-white font-medium leading-[32px] tracking-[-0.24px] mb-[12px]">{t('Cards.AI.Title')}</h3>
+                  <h3 className="text-[24px] text-white font-medium leading-[32px] tracking-[-0.24px] mb-[12px]">Feels like a real chat</h3>
                   <p className="text-[18px] font-normal text-[#B2B2B2] leading-[27px]">
-                    {t('Cards.AI.Description')}
+                    AI-powered prompts make your form feel like a natural conversation, not a checklist.
                   </p>
                 </div>
               </div>
@@ -49,9 +49,9 @@ export default function InsightsSection() {
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-[24px] font-[500] leading-[32px] tracking-[-0.24px] mb-[12px]">{t('Cards.Alive.Title')}</h3>
+                  <h3 className="text-[24px] font-[500] leading-[32px] tracking-[-0.24px] mb-[12px]">Adapts to every answer</h3>
                   <p className="text-[18px] font-normal text-[#B2B2B2] leading-[27px]">
-                    {t('Cards.Alive.Description')}
+                    Follow-up questions change based on what the user just said. No more rigid branching.
                   </p>
                 </div>
               </div>
@@ -66,9 +66,9 @@ export default function InsightsSection() {
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-[24px] font-[500] leading-[32px] tracking-[-0.24px] mb-[12px]">{t('Cards.Flow.Title')}</h3>
+                  <h3 className="text-[24px] font-[500] leading-[32px] tracking-[-0.24px] mb-[12px]">Works everywhere</h3>
                   <p className="text-[18px] font-normal text-[#B2B2B2] leading-[27px]">
-                    {t('Cards.Flow.Description')}
+                    Your conversational form looks great on desktop, tablet, and mobile.
                   </p>
                 </div>
               </div>
@@ -83,9 +83,9 @@ export default function InsightsSection() {
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-[24px] font-[500] leading-[32px] tracking-[-0.24px] mb-[12px]">{t('Cards.Data.Title')}</h3>
+                  <h3 className="text-[24px] font-[500] leading-[32px] tracking-[-0.24px] mb-[12px]">Structured insights</h3>
                   <p className="text-[18px] font-normal text-[#B2B2B2] leading-[27px]">
-                    {t('Cards.Data.Description')}
+                    AI summarizes your form responses so you can act on real patterns, not raw noise.
                   </p>
                 </div>
               </div>

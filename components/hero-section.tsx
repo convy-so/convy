@@ -12,24 +12,26 @@ export default function HeroSection() {
                 <div className="flex flex-col items-center text-center space-y-6 sm:space-y-8 max-w-6xl mx-auto">
                     {/* Listen! heading */}
                     <p className="text-[#8D8D8D] text-xl sm:text-[32px] font-normal leading-normal sm:leading-[44px] tracking-[-0.32px] mb-3 sm:mb-5" style={{ fontFamily: 'var(--font-fasthand)' }}>
-                        {t('Badge')}
+                        Convyy
                     </p>
 
                     {/* Main heading */}
-                    <h1 className="text-4xl sm:text-[56px] font-bold text-[#080808] leading-tight sm:leading-[64px] tracking-[-1.68px] max-w-4xl" dangerouslySetInnerHTML={{ __html: t.raw('Title') }} />
+                    <h1 className="text-4xl sm:text-[56px] font-bold text-[#080808] leading-tight sm:leading-[64px] tracking-[-1.68px] max-w-4xl">
+                        Turn your forms into <br/>conversations people actually finish.
+                    </h1>
 
                     {/* Descriptive paragraph */}
                     <p className="text-[#696969] text-lg sm:text-[24px] font-[500] leading-normal sm:leading-[33.6px] max-w-3xl">
-                        {t('Description')}
+                        Convyy replaces static forms with AI-powered conversations that adapt to every answer and provide deeper, actionable insights.
                     </p>
 
                     {/* Create form button */}
                     <div className="flex flex-col items-center mt-6">
                         <Link
                             href="/sign-up"
-                            className="rounded-full bg-[#292929] px-[16px] py-[10px] text-[18px] font-medium tracking-[-0.28px] text-[#FAFAFA] transition-colors hover:bg-[#3a3a3a] whitespace-nowrap flex items-center gap-2"
+                            className="rounded-full bg-[#292929] px-[32px] py-[14px] text-[18px] font-medium tracking-[-0.28px] text-[#FAFAFA] transition-colors hover:bg-[#3a3a3a] whitespace-nowrap flex items-center gap-2"
                         >
-                            {t('CTA')}
+                            Get Started
                             <ArrowUpRight size={18} />
                         </Link>
                     </div>
