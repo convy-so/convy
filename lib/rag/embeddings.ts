@@ -22,6 +22,12 @@ export async function generateEmbedding(
     surveyId?: string;
   },
 ): Promise<number[]> {
+  // OpenAI Embedding API fails (400) on empty strings.
+  // We return a zero-vector [1536] if input is empty to avoid crashing callers.
+  if (!text.trim()) {
+    return new Array(1536).fill(0);
+  }
+
   const { embedding, usage } = await embed({
     model: embeddingModel,
     value: text,
@@ -46,6 +52,11 @@ export async function generateEmbeddings(
     surveyId?: string;
   },
 ): Promise<number[][]> {
+  // If all texts are empty, return an array of zero-vectors
+  if (texts.every((t) => !t.trim())) {
+    return texts.map(() => new Array(1536).fill(0));
+  }
+
   const { embeddings, usage } = await embedMany({
     model: embeddingModel,
     values: texts,

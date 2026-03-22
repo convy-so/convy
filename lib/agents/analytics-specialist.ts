@@ -11,6 +11,8 @@ import type { AgentContext, SpecialistChecklist } from "./types";
 import type { SurveyConfig } from "@/lib/prompts";
 import { analysisModel, defaultModel } from "@/lib/ai";
 import { logUsage } from "@/lib/billing/logger";
+import { evaluateResponse } from "@/lib/rag/evaluate";
+import { SkillEngine } from "./skill-system/engine";
 
 export class AnalyticsSpecialist extends BaseSpecialistAgent {
   constructor(context: AgentContext) {
@@ -22,50 +24,19 @@ export class AnalyticsSpecialist extends BaseSpecialistAgent {
   // --------------------------------------------------------------------------
 
   protected buildChecklist(config: SurveyConfig): SpecialistChecklist {
-    const metrics = config.metrics ?? [];
-    const insightTypes =
-      config.expertState?.successCriteria?.insightTypes ?? [];
+    const state = this.context.expertState;
+    if (!state) return { required: [], aspirational: [] };
 
     return {
       required: [
-        this.makeChecklistItem(
-          "objective_answer",
-          `Directly answered the survey objective: "${config.coreObjective || config.expertState?.objective?.goal || config.information}"`,
-        ),
-        this.makeChecklistItem(
-          "metrics_comprehensive",
-          `Reported on ALL defined metrics: ${metrics.join(", ") || "No explicit metrics defined"}`,
-        ),
-        this.makeChecklistItem(
-          "media_performance",
-          "Analyzed the effectiveness and reactions to any media shown in the survey",
-        ),
-        this.makeChecklistItem(
-          "pattern_identification",
-          "Identified the top 3-5 patterns across all conversations with supporting evidence",
-        ),
-        this.makeChecklistItem(
-          "actionable_recommendations",
-          "Provided specific, actionable recommendations (not just observations)",
-        ),
+        this.makeChecklistItem("objective_answered", "Directly addressed the survey goal", !!state.brief.objectives.length),
+        this.makeChecklistItem("metrics_validated", "Rendered verdicts on all success metrics", !!state.brief.successMetrics),
+        this.makeChecklistItem("pattern_detection", "Identified latent behavioral patterns", "pending"),
+        this.makeChecklistItem("grounded_evidence", "All claims cited with [Source ID]", "pending"),
       ],
       aspirational: [
-        this.makeChecklistItem(
-          "hypotheses_verdict",
-          "Rendered a clear 'Confirmed' or 'Refuted' verdict on all creator assumptions",
-        ),
-        ...(insightTypes.includes("emotional")
-          ? [
-              this.makeChecklistItem(
-                "emotional_arc",
-                "Mapped the emotional sentiment arc of the participant pool",
-              ),
-            ]
-          : []),
-        this.makeChecklistItem(
-          "segmentation",
-          "Identified meaningful behavior differences between participant segments",
-        ),
+        this.makeChecklistItem("longitudinal_insight", "Detected changes in sentiment over time", !!state.sessionMeta.modality),
+        this.makeChecklistItem("audience_validation", "Verified psychographic assumptions", !!state.audienceModel.psychographicProfile),
       ],
     };
   }
@@ -84,7 +55,7 @@ export class AnalyticsSpecialist extends BaseSpecialistAgent {
     return `
 <role>
 IDENTITY: You are a professional ${domainName || "Survey"} Insight Analyst.
-GOAL: Interpret data to answer the core objective: "${config.coreObjective || config.expertState?.objective?.goal || config.information}"
+GOAL: Interpret data to answer the core objective: "${config.expertState?.objective?.goal || config.coreObjective || config.information}"
 AUDIENCE: Survey Creators / Stakeholders seeking actionable insights.
 </role>
 
@@ -99,22 +70,26 @@ ${coreContent || ""}
 ${surveyTypeContent || ""}
 </expert_analytical_protocols>
 
+${this.getAdaptationHintsSection()}
+
+${this.getPrunedStateSection()}
+
 ${this.getSkillsSection()}
 
 ${this.getKnowledgeSection()}
 
 <proactive_insight_rules>
-1. METRICS FIRST: You MUST include a specific section evaluating every metric defined in the survey. If data is sparse, state "Inconclusive due to [Reason]".
-2. MEDIA ANALYTICS: If media was included in the survey, explicitly report on participant reactions to specific Media IDs.
-3. VISUALIZE: Use 'renderChart' for any distribution data (e.g., Sentiment, NPS, Frequency).
-4. THE "WHY" FACTOR: Don't just report numbers. Use the qualitative responses to explain WHY a metric is high or low.
+1. COGNITIVE ANALYST: identify why participants behaved a certain way.
+2. CITATION MANDATORY: Every claim MUST end with [Source ID: <id>].
+3. DECISION-MAP ALIGNMENT: Structure directly address Creator's threshold.
 </proactive_insight_rules>
 
-<completion_protocol>
-1. Final output must be professional, structured, and free of conversational filler. 
-2. Ensure every REQUIRED checklist item is addressed in the final report.
-3. LANGUAGE: You MUST synthesize all findings and write the final report in ${this.context.language === "de" ? "German" : this.context.language === "fr" ? "French" : this.context.language === "es" ? "Spanish" : this.context.language === "it" ? "Italian" : "English"}.
-</completion_protocol>
+<thinking_protocol>
+You are operating in a low-latency STREAMING JSON MODE.
+For every turn, your response MUST be a perfectly formatted, raw JSON object containing:
+1. "reasoning": Concise internal audit of data patterns.
+2. "response": Professional insight report.
+</thinking_protocol>
 `.trim();
   }
 
@@ -123,48 +98,68 @@ ${this.getKnowledgeSection()}
   // --------------------------------------------------------------------------
 
   async generate(prompt: string): Promise<string> {
-    const { text } = await generateText({
+    const result = await generateText({
       model: analysisModel,
       system: this.buildSystemPrompt(),
       prompt,
       temperature: 0.1, // Lower temperature for more consistent analysis
+      tools: this.getTools(),
+      stopWhen: stepCountIs(3),
     });
-    return text;
+    
+    // LAYER 6: Evaluation Triad (Synchronous Gate)
+    // Extract retrieved context from tool results
+    let retrievedContexts: string[] = [];
+    
+    // Define schema for tool output validation - flexible but type-safe
+    const searchResultsSchema = z.object({
+      results: z.array(z.object({
+        content: z.string(),
+      }).passthrough()),
+    }).passthrough();
+
+    if (result.toolResults) {
+      for (const res of result.toolResults) {
+        if (res.toolName === "searchSurveyData") {
+          const parsed = searchResultsSchema.safeParse(res.output);
+          if (parsed.success) {
+            retrievedContexts.push(...parsed.data.results.map((r) => r.content));
+          }
+        }
+      }
+    }
+    
+    // If we used RAG, evaluate the response
+    if (retrievedContexts.length > 0) {
+      const evaluation = await evaluateResponse(prompt, retrievedContexts, result.text);
+      if (!evaluation.isGrounded) {
+        return "I'm sorry, but I do not have sufficient evidence in the retrieved survey results to provide a fully grounded answer to this objective. Please adjust your query or review the raw responses directly.";
+      }
+    }
+
+    return result.text;
   }
 
   // --------------------------------------------------------------------------
   // Agent Tools
   // --------------------------------------------------------------------------
 
-  getTools(): Record<string, any> {
+  getTools() {
     const config = this.context.surveyConfig;
     const surveyId = config?.id;
 
     return {
-      loadSkill: tool({
-        description:
-          "Load detailed instructions for a specific specialized skill.",
-        inputSchema: z.object({
-          skillId: z.string().describe("The ID of the skill to load."),
-        }),
-        execute: async ({ skillId }) => {
-          const { SkillRegistry } = await import("./skill-registry");
-          const skill = await SkillRegistry.getSkill(skillId);
-          return skill
-            ? { instructions: skill.content }
-            : { error: "Skill not found" };
-        },
-      }),
+      // loadSkill removed in favor of V2 synthesized protocols pre-loaded from ExpertState.
       searchSurveyData: tool({
         description:
           "Search across all survey responses, insights, and analytics.",
         inputSchema: z.object({ query: z.string().describe("Search query.") }),
         execute: async ({ query }) => {
           if (!surveyId) return { error: "No survey ID available" };
-          const { hybridSearch } = await import("@/lib/rag/search");
-          const results = await hybridSearch(
+          const { executeRAGQuery } = await import("@/lib/rag/search");
+          const results = await executeRAGQuery(
             query,
-            { surveyId, limit: 10 },
+            { surveyId, organizationId: this.context.organizationId, limit: 20 },
             (this.context.language as any) || "en",
           );
           return {

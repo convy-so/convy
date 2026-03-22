@@ -36,6 +36,7 @@ import { clientEnv } from "@/lib/env.client";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { uploadSurveyMediaAction } from "@/app/actions/survey-media";
 import { CollaborationSidebar } from "@/components/surveys/collaboration-sidebar";
+import { ActiveUsers } from "@/components/dashboard/active-users";
 
 
 
@@ -81,6 +82,7 @@ function CreateSurveyContent() {
   const [isOwner, setIsOwner] = useState(false);
   const [collaborators, setCollaborators] = useState<string[]>([]);
   const [orgId, setOrgId] = useState<string | null>(null);
+  const [isCollaborationOpen, setIsCollaborationOpen] = useState(false);
 
   const handleStart = async () => {
     // 1. Optimistic UI: Immediately show loading state
@@ -97,9 +99,15 @@ function CreateSurveyContent() {
 
     // 2. Ensure draft exists
     let currentSurveyId = surveyId;
+    let initialGreetingMessages = null;
+
     if (!currentSurveyId) {
       try {
-        currentSurveyId = await ensureDraftExists();
+        const surveyData = await ensureDraftExists() as any;
+        if (surveyData) {
+          currentSurveyId = typeof surveyData === 'string' ? surveyData : surveyData.id;
+          initialGreetingMessages = typeof surveyData === 'string' ? null : surveyData.messages;
+        }
       } catch (e) {
         console.error("Failed to create draft", e);
         getClientTranslation("Failed to initialize survey draft.").then(msg => toast.error(msg));
@@ -116,16 +124,21 @@ function CreateSurveyContent() {
     }
 
     // 3. Set the survey respondent mode once ID is known
-    await updateSurveyMode(currentSurveyId, isVoiceSurvey);
+    // Optimistically skip if we just created it (since POST already set it)
+    if (!initialGreetingMessages) {
+      await updateSurveyMode(currentSurveyId, isVoiceSurvey);
+    }
 
     try {
-      // 4. Update Backend - NOTE: We do NOT send messages here to avoid clobbering the pre-cached greeting
-      await fetch(`/api/surveys/${currentSurveyId}/create`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}) // Intentionally empty — greeting is stored server-side at draft creation
-      });
-      console.log(`[Client] Prepared discovery for survey ${currentSurveyId}`);
+      // 4. Update Backend - NOTE: Skip for new surveys as they are already initialized
+      if (!initialGreetingMessages) {
+        await fetch(`/api/surveys/${currentSurveyId}/create`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({})
+        });
+        console.log(`[Client] Prepared discovery for survey ${currentSurveyId}`);
+      }
 
       // Persist creation modality if voice was chosen
       if (isVoiceMode) {
@@ -134,32 +147,40 @@ function CreateSurveyContent() {
 
       // 5. Trigger Interaction based on Mode
       if (isVoiceMode) {
-        // VOICE MODE: Connection is triggered via useEffect monitoring (isVoiceMode && surveyId)
-        // or we can call connect() explicitly here now that we have surveyId
         console.log("[Client] Voice mode active, initiating connection...");
         await voiceWs.connect();
       } else {
-        // TEXT MODE: Load the cached greeting from server into the messages state
-        console.log("[Client] Text mode active, loading cached greeting from server...");
-        try {
-          const greetingRes = await fetch(`/api/surveys/${currentSurveyId}/create`);
-          if (greetingRes.ok) {
-            const greetingData = await greetingRes.json();
-            if (greetingData.messages && greetingData.messages.length > 0) {
-              setMessages(greetingData.messages.map((m: any, idx: number) => ({
-                id: m.id || `msg-${idx}-${Date.now()}`,
-                role: m.role,
-                displayedContent: (m as any).content || m.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join(''),
-                isTyping: false,
-                parts: m.parts || ((m as any).content ? [{ type: 'text', text: (m as any).content }] : [])
-              })));
-              console.log(`[Client] Loaded ${greetingData.messages.length} message(s) incl. greeting.`);
+        // TEXT MODE: Load the greeting
+        if (initialGreetingMessages) {
+          console.log("[Client] Using optimistic greeting from creation...");
+          setMessages(initialGreetingMessages.map((m: any, idx: number) => ({
+            id: m.id || `msg-${idx}-${Date.now()}`,
+            role: m.role,
+            displayedContent: m.content || m.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join(''),
+            isTyping: false,
+            parts: m.parts || (m.content ? [{ type: 'text', text: m.content }] : [])
+          })));
+        } else {
+          console.log("[Client] Loading cached greeting from server...");
+          try {
+            const greetingRes = await fetch(`/api/surveys/${currentSurveyId}/create`);
+            if (greetingRes.ok) {
+              const greetingData = await greetingRes.json();
+              if (greetingData.messages && greetingData.messages.length > 0) {
+                setMessages(greetingData.messages.map((m: any, idx: number) => ({
+                  id: m.id || `msg-${idx}-${Date.now()}`,
+                  role: m.role,
+                  displayedContent: (m as any).content || m.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join(''),
+                  isTyping: false,
+                  parts: m.parts || ((m as any).content ? [{ type: 'text', text: (m as any).content }] : [])
+                })));
+              }
+              if (greetingData.collectedInfo) setCollectedInfo(greetingData.collectedInfo);
+              if (greetingData.extractedData) setExtractedData(greetingData.extractedData);
             }
-            if (greetingData.collectedInfo) setCollectedInfo(greetingData.collectedInfo);
-            if (greetingData.extractedData) setExtractedData(greetingData.extractedData);
+          } catch (greetingErr) {
+            console.error("[Client] Failed to load cached greeting:", greetingErr);
           }
-        } catch (greetingErr) {
-          console.error("[Client] Failed to load cached greeting:", greetingErr);
         }
       }
 
@@ -196,6 +217,7 @@ function CreateSurveyContent() {
   };
 
   const [isConnecting, setIsConnecting] = useState(false);
+  const [hasAutoGreeted, setHasAutoGreeted] = useState(false);
   const [hasGreetingPlayed, setHasGreetingPlayed] = useState(false);
 
 
@@ -277,32 +299,28 @@ function CreateSurveyContent() {
 
   const voiceWs = useVoiceWebSocket({
     url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/survey-creation`,
-    onReady: () => {
-      console.log("[ChainOfTrust] [Hook] WebSocket connection established. Waiting for server 'ready'...");
-    },
+    onReady: () => { },
     onMessage: (data) => {
-      console.log(`[ChainOfTrust] [Hook] Received message type: ${data.type}`, data);
       // Handle speech activity events from Deepgram
       if (data.type === "ready") {
-        console.log("[ChainOfTrust] [Server] Server is READY to accept commands.");
         setIsServerReady(true);
       } else if (data.type === "agent_ready") {
-        console.log("[ChainOfTrust] [Deepgram] 🤖 Agent initialized and ready. Clearing UI connection state.");
         setIsConnecting(false);
       } else if (data.type === "speech_start") {
-        console.log("[ChainOfTrust] [Deepgram] 🗣️ User speech started (VAD).");
         setIsSpeaking(true);
       } else if (data.type === "speech_end") {
-        console.log("[ChainOfTrust] [Deepgram] 🤐 User speech ended (VAD).");
         setIsSpeaking(false);
       } else if (data.type === "survey_state_loaded") {
-        console.log("[ChainOfTrust] [Server] Previous survey state successfully restored into handler.");
         setSurveyStateLoaded(true);
       } else if (data.type === "conversation_text") {
-        const { role, content } = data;
-        console.log(`[ChainOfTrust] [Server] Appending ${role} message to UI: ${content.substring(0, 30)}...`);
+        const { role, content, streamId } = data;
         const now = Date.now();
         setMessages((prev: UIMessage[]) => {
+          // Prevention of duplicates using streamId
+          if (streamId && prev.some(m => m.id === streamId)) {
+            return prev;
+          }
+
           const lastMessage = prev[prev.length - 1];
           // Use a smaller threshold or no threshold for Voice Agent unified events to ensure clarity
           // but reuse the merge logic for consistency
@@ -324,7 +342,7 @@ function CreateSurveyContent() {
           }
 
           const newMessage: UIMessage = {
-            id: Date.now().toString(),
+            id: streamId || Date.now().toString(),
             role: role as "user" | "assistant",
             displayedContent: content,
             isTyping: false,
@@ -334,7 +352,6 @@ function CreateSurveyContent() {
           return [...prev, newMessage];
         });
       } else if (data.type === "request_media_upload") {
-        console.log("[ChainOfTrust] [Server] AI requested media upload tool UI:", data.allowedTypes);
         const { allowedTypes } = data;
         const toolId = `voice-tool-${Date.now()}`;
 
@@ -354,13 +371,9 @@ function CreateSurveyContent() {
           }
         ]);
       } else if (data.type === "update_extracted_data") {
-        console.log("[ChainOfTrust] [Server] Extracted data update received.");
         setExtractedData(data.extractedData);
         setCollectedInfo(data.collectedInfo);
-      } else if (data.type === "transcription_interim") {
-        // Reduced noise logging
       } else if (data.type === "survey_completed") {
-        console.log("[ChainOfTrust] [Server] ✅ Survey completion signal received.");
         // Refresh survey data to ensure we have the latest status/extracted info
         // This will trigger the 'isReadyForSample' check in the main effect
         router.refresh();
@@ -386,12 +399,8 @@ function CreateSurveyContent() {
   useEffect(() => {
     if (!isVoiceMode) return;
 
-    // New Logic: We trust 'voiceWs.hasAudioPlayed' to tell us if the greeting actually started
-    console.log("[ChainOfTrust] [UI] Playback Monitor -> isConnecting:", isConnecting, "isPlaying:", voiceWs.isPlaying, "hasRecordedAudio:", voiceWs.hasAudioPlayed, "hasGreetingPlayed:", hasGreetingPlayed);
-
     if (isVoiceMode && isConnecting && voiceWs.hasAudioPlayed) {
       // Audio started playing (The greeting arrived!)
-      console.log("[ChainOfTrust] [UI] 🟣 Audio playback detected (Greeting likely starting) - Ending connection state.");
       setIsConnecting(false);
       setHasGreetingPlayed(true);
     }
@@ -405,8 +414,11 @@ function CreateSurveyContent() {
   // Effect to sync surveyId with WebSocket - ONLY when server is ready
   useEffect(() => {
     if (surveyId && voiceWs.status === "connected" && isServerReady) {
-      console.log("[ChainOfTrust] [UI] Server ready. Sending survey ID initialization:", surveyId);
-      voiceWs.sendJson({ type: "set_survey_id", surveyId });
+      voiceWs.sendJson({
+        type: "set_survey_id",
+        surveyId,
+        lastEventId: voiceWs.lastEventId
+      });
     }
   }, [surveyId, voiceWs.status, isServerReady]);
 
@@ -419,7 +431,7 @@ function CreateSurveyContent() {
 
 
 
-  // NOTE: Auto-connect for voice runs via handleStart → voiceWs.connect().
+  // NOTE: Auto-connect for voice runs via handleStart -> voiceWs.connect().
   // The useEffect below is intentionally removed to prevent a double-connect race
   // when handleStart is the entry point. Reconnection on page reload (surveyId from URL)
   // is handled by the useEffect at the bottom of the component.
@@ -427,7 +439,6 @@ function CreateSurveyContent() {
   // Trigger conversation start once server state is loaded
   useEffect(() => {
     if (isVoiceMode && surveyStateLoaded && voiceWs.status === "connected") {
-      console.log("[ChainOfTrust] [UI] State loaded on server. Sending 'start_conversation' request...");
       voiceWs.sendJson({ type: "start_conversation" });
     }
   }, [isVoiceMode, surveyStateLoaded, voiceWs.status]);
@@ -654,11 +665,27 @@ function CreateSurveyContent() {
     }
   }, [idFromUrl, authLoading, user, surveyId, messages.length]);
 
+  // PROACTIVE GREETING: Trigger initial greeting if the draft is empty (e.g. returning to cold draft)
+  useEffect(() => {
+    if (isInitializing || authLoading || !user || !surveyId || isReadOnly) return;
+    if (hasAutoGreeted || isVoiceMode) return;
+
+    // If messages are empty after initialization, trigger the first ping
+    if (status === "idle" && messages.length === 0) {
+      console.log("[CreateSurvey] Triggering proactive initial greeting for empty draft...");
+      sendMessage({
+        role: "user",
+        content: "Start the conversation now. Greet the participant according to the system prompt instructions."
+      } as any);
+      setHasAutoGreeted(true);
+    }
+  }, [isInitializing, authLoading, user, surveyId, messages.length, status, isReadOnly, hasAutoGreeted, isVoiceMode, sendMessage]);
+
   // Lazy creation state
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
 
   // Helper to ensure draft exists before sending message
-  const ensureDraftExists = async (): Promise<string | null> => {
+  const ensureDraftExists = async (): Promise<any | null> => {
     if (surveyId) return surveyId;
     if (isCreatingDraft) {
       console.warn("[Client] ensureDraftExists skipped: already creating...");
@@ -708,14 +735,14 @@ function CreateSurveyContent() {
         throw new Error(errorMsg);
       }
 
-      const survey = await response.json();
-      console.log("[Client] ensureDraftExists SUCCESS. New SID:", survey.id);
-      setSurveyId(survey.id);
+      const surveyData = await response.json();
+      console.log("[Client] ensureDraftExists SUCCESS. New SID:", surveyData.id);
+      setSurveyId(surveyData.id);
 
       // Update URL to include the survey ID to prevent reload issues
-      window.history.replaceState(null, '', `?id=${survey.id}`);
+      window.history.replaceState(null, '', `?id=${surveyData.id}`);
 
-      return survey.id;
+      return surveyData;
     } catch (error) {
       getClientTranslation("Failed to initialize draft.").then(msg => {
         toast.error(msg);
@@ -939,16 +966,16 @@ function CreateSurveyContent() {
 
   return (
     <>
-      <div className="h-[calc(100vh-2rem)] md:h-[calc(100vh-4rem)] flex flex-col md:flex-row gap-6 max-w-7xl w-full mx-auto p-4 overflow-hidden">
+      <div className="h-full flex flex-col w-full mx-auto overflow-hidden">
         <div className={cn(
           "flex-1 flex flex-col overflow-hidden relative transition-all duration-500",
-          surveyId ? "bg-white rounded-3xl border border-gray-200 shadow-sm" : ""
+          surveyId ? "bg-transparent" : ""
         )}>
 
           {/* Integrated Header */}
           <div className={cn(
-            "flex flex-col sm:flex-row items-center justify-between gap-4 p-6 transition-all duration-500",
-            surveyId ? "bg-white border-b border-gray-200" : "bg-transparent"
+            "flex flex-col sm:flex-row items-center justify-between gap-4 py-4 px-2 transition-all duration-500",
+            surveyId ? "bg-transparent border-b border-gray-100" : "bg-transparent"
           )}>
             {!surveyId ? (
               <div className="w-full text-center py-4">
@@ -980,7 +1007,21 @@ function CreateSurveyContent() {
               </>
             )}
 
-            <div className="flex items-center gap-2 w-full sm:w-auto mt-4 sm:mt-0" />
+            <div className="flex items-center gap-4 w-full sm:w-auto mt-4 sm:mt-0">
+              {surveyId && orgId && (
+                <div
+                  className="flex items-center gap-3 bg-gray-50 hover:bg-gray-100 border border-gray-100 rounded-2xl px-3 py-1.5 transition-all cursor-pointer group"
+                  onClick={() => setIsCollaborationOpen(true)}
+                >
+                  <ActiveUsers workspaceId={orgId} surveyId={surveyId} className="scale-90" />
+                  <div className="h-4 w-px bg-gray-200" />
+                  <button className="flex items-center gap-2 text-sm font-semibold text-gray-600 group-hover:text-indigo-600 transition-colors">
+                    <Users className="w-4 h-4" />
+                    <ClientT>Collaborate</ClientT>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
 
@@ -1000,7 +1041,7 @@ function CreateSurveyContent() {
           {/* Chat Area / Domain Selection */}
           <div className={cn(
             "flex-1 overflow-hidden relative flex flex-col",
-            surveyId ? "bg-slate-50/30" : "bg-transparent"
+            surveyId ? "bg-white" : "bg-transparent"
           )}>
             {isInitializing && (
               <div className="absolute inset-0 z-50 bg-white/50 backdrop-blur-sm flex items-center justify-center">
@@ -1195,10 +1236,10 @@ function CreateSurveyContent() {
                               )}
 
                               <div className={cn(
-                                "px-4 py-3 max-w-[80%] rounded-2xl shadow-sm text-sm md:text-base leading-relaxed whitespace-pre-wrap",
+                                "max-w-[85%] text-base md:text-[17px] leading-relaxed whitespace-pre-wrap py-1",
                                 msg.role === 'user'
-                                  ? "bg-slate-900 text-white rounded-tr-none"
-                                  : "bg-white border border-gray-100 text-gray-800 rounded-tl-none"
+                                  ? "bg-slate-900 text-white rounded-2xl px-4 py-3 shadow-sm"
+                                  : "text-gray-800 flex-1"
                               )}>
                                 {((msg as any).content || (msg.parts?.filter(p => p.type === 'text').map((p: any) => p.text).join('') || ""))}
                               </div>
@@ -1435,14 +1476,14 @@ function CreateSurveyContent() {
 
                         <div
                           className={cn(
-                            "max-w-[85%] rounded-2xl px-6 py-4 border",
+                            "max-w-[90%] py-2",
                             message.role === "assistant"
-                              ? "bg-white text-gray-800 border-gray-200"
-                              : "bg-zinc-900 text-gray-100 border-transparent"
+                              ? "text-gray-800 flex-1"
+                              : "bg-zinc-900 text-gray-100 px-6 py-4 rounded-2xl shadow-sm ml-auto"
                           )}
                         >
                           {message.role === "assistant" ? (
-                            <div className="text-[15px] leading-7">
+                            <div className="text-[17px] leading-relaxed">
                               <MarkdownMessage
                                 content={
                                   // Priority 1: standard content field (set after streaming completes)
@@ -1462,9 +1503,6 @@ function CreateSurveyContent() {
                                 if (!part.type?.startsWith('tool-')) return null;
 
                                 const toolName = part.type.replace(/^tool-/, '');
-
-                                // think_and_respond is an internal reasoning tool — its output is never shown to the user
-                                if (toolName === 'think_and_respond') return null;
 
                                 const toolCallId = part.toolCallId;
 
@@ -1555,7 +1593,7 @@ function CreateSurveyContent() {
                               })}
                             </div>
                           ) : (
-                            <p className="text-[15px] leading-7 whitespace-pre-wrap">
+                            <p className="text-[17px] leading-relaxed whitespace-pre-wrap">
                               {(message as any).content || (message.parts?.filter(p => p.type === 'text').map((p: any) => p.text).join('') || "")}
                             </p>
                           )}
@@ -1671,71 +1709,73 @@ function CreateSurveyContent() {
                 </div>
               </>
             )}
-              </div>
           </div>
-
-          {/* Publish Survey Modal */}
-          <PublishSurveyModal
-            isOpen={showPublishModal}
-            onClose={() => setShowPublishModal(false)}
-            surveyId={surveyId || ""}
-            initialTitle=""
-            initialIsVoice={isVoiceSurvey}
-            onPublished={(shareUrl) => {
-              console.log("Survey published:", shareUrl);
-            }}
-          />
-
-          {/* Real-time Collaboration Sidebar - Only for Org surveys or if there are collaborators */}
-          {(surveyId && (orgId || collaborators.length > 0)) && (
-            <CollaborationSidebar
-              surveyId={surveyId}
-              isOwner={isOwner}
-              collaborators={collaborators}
-            />
-          )}
         </div>
-      </>
-      );
+
+        {/* Publish Survey Modal */}
+        <PublishSurveyModal
+          isOpen={showPublishModal}
+          onClose={() => setShowPublishModal(false)}
+          surveyId={surveyId || ""}
+          initialTitle=""
+          initialIsVoice={isVoiceSurvey}
+          onPublished={(shareUrl) => {
+            console.log("Survey published:", shareUrl);
+          }}
+        />
+
+        {/* Real-time Collaboration Sidebar - Only for Org surveys or if there are collaborators */}
+        {(surveyId && (orgId || collaborators.length > 0)) && (
+          <CollaborationSidebar
+            surveyId={surveyId}
+            isOwner={isOwner}
+            collaborators={collaborators}
+            isOpen={isCollaborationOpen}
+            onClose={() => setIsCollaborationOpen(false)}
+          />
+        )}
+      </div>
+    </>
+  );
 }
 
-      // ---------------------------------------------------------------------------
-      // Types for the multi-file upload queue
-      // ---------------------------------------------------------------------------
-      type QueuedFile = {
-        id: string;
-      file: File;
-      description: string;
-      learningGoal: string;
-      status: 'pending' | 'uploading' | 'done' | 'error';
-      errorMsg?: string;
+// ---------------------------------------------------------------------------
+// Types for the multi-file upload queue
+// ---------------------------------------------------------------------------
+type QueuedFile = {
+  id: string;
+  file: File;
+  description: string;
+  learningGoal: string;
+  status: 'pending' | 'uploading' | 'done' | 'error';
+  errorMsg?: string;
 };
 
-      /**
-       * Full-screen minimalist media upload modal
-       * Black & white / Framer-template aesthetic
-       * Supports multiple files, each with its own description and learning goal
-       */
-      function MediaUploadFlow({
-        surveyId,
-        onAllUploaded,
-        onSkip,
-        allowedTypes,
-        aiDescription,
-        aiLearningGoal,
+/**
+ * Full-screen minimalist media upload modal
+ * Black & white / Framer-template aesthetic
+ * Supports multiple files, each with its own description and learning goal
+ */
+function MediaUploadFlow({
+  surveyId,
+  onAllUploaded,
+  onSkip,
+  allowedTypes,
+  aiDescription,
+  aiLearningGoal,
 }: {
-        surveyId: string;
+  surveyId: string;
   onAllUploaded: (media: any[]) => void;
   onSkip: () => void;
-      allowedTypes: string[];
-      aiDescription?: string;
-      aiLearningGoal?: string;
+  allowedTypes: string[];
+  aiDescription?: string;
+  aiLearningGoal?: string;
 }) {
   const [queue, setQueue] = useState<QueuedFile[]>([]);
-      const [isDragging, setIsDragging] = useState(false);
-      const [isUploadingAll, setIsUploadingAll] = useState(false);
-      const fileInputRef = useRef<HTMLInputElement>(null);
-        const uid = useId();
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploadingAll, setIsUploadingAll] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uid = useId();
 
   const makeId = () => `${uid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -1744,47 +1784,47 @@ function CreateSurveyContent() {
   const addFiles = (incoming: FileList | null) => {
     if (!incoming) return;
     const newItems: QueuedFile[] = Array.from(incoming).map((f) => ({
-          id: makeId(),
-        file: f,
-        description: aiDescription ?? '',
-        learningGoal: aiLearningGoal ?? '',
-        status: 'pending',
+      id: makeId(),
+      file: f,
+      description: aiDescription ?? '',
+      learningGoal: aiLearningGoal ?? '',
+      status: 'pending',
     }));
     setQueue((prev) => [...prev, ...newItems]);
-        // reset so same file can be added again if needed
-        if (fileInputRef.current) fileInputRef.current.value = '';
+    // reset so same file can be added again if needed
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const removeFile = (id: string) => setQueue((prev) => prev.filter((q) => q.id !== id));
 
   const updateField = (id: string, field: 'description' | 'learningGoal', value: string) =>
-    setQueue((prev) => prev.map((q) => (q.id === id ? {...q, [field]: value } : q)));
+    setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, [field]: value } : q)));
 
   const getFileTypeIcon = (file: File) => {
     if (file.type.startsWith('image')) return <ImageIcon className="w-4 h-4 text-gray-500" />;
-        if (file.type.startsWith('audio')) return <FileAudio className="w-4 h-4 text-gray-500" />;
-        if (file.type.startsWith('video')) return <FileVideo className="w-4 h-4 text-gray-500" />;
-        return <Upload className="w-4 h-4 text-gray-500" />;
+    if (file.type.startsWith('audio')) return <FileAudio className="w-4 h-4 text-gray-500" />;
+    if (file.type.startsWith('video')) return <FileVideo className="w-4 h-4 text-gray-500" />;
+    return <Upload className="w-4 h-4 text-gray-500" />;
   };
 
   const formatBytes = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const canUpload = queue.length > 0 && queue.every((q) => q.description.trim().length >= 10 && q.learningGoal.trim().length >= 10);
 
   const handleUploadAll = async () => {
     if (!canUpload) {
-          toast.error(await getClientTranslation("Each file needs a description and learning goal (min 10 characters each).", "Media upload validation error"));
-        return;
+      toast.error(await getClientTranslation("Each file needs a description and learning goal (min 10 characters each).", "Media upload validation error"));
+      return;
     }
-        setIsUploadingAll(true);
-        const uploadedMedia: any[] = [];
-        for (const item of queue) {
-          setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'uploading' } : q));
-        try {
+    setIsUploadingAll(true);
+    const uploadedMedia: any[] = [];
+    for (const item of queue) {
+      setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'uploading' } : q));
+      try {
         const formData = new FormData();
         formData.append('surveyId', surveyId);
         formData.append('file', item.file);
@@ -1797,209 +1837,209 @@ function CreateSurveyContent() {
         const result = await uploadSurveyMediaAction(formData);
         if (result.success) {
           setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'done' } : q));
-        uploadedMedia.push(result.data.media);
+          uploadedMedia.push(result.data.media);
         } else {
           setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'error', errorMsg: result.error } : q));
-        getClientTranslation(`Failed: ${result.error}`, "Media upload failure toast").then(msg => toast.error(msg));
+          getClientTranslation(`Failed: ${result.error}`, "Media upload failure toast").then(msg => toast.error(msg));
         }
       } catch (err) {
-          setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'error', errorMsg: 'Unexpected error' } : q));
+        setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: 'error', errorMsg: 'Unexpected error' } : q));
         getClientTranslation("Upload failed. Please try again.", "Media upload error toast").then(msg => toast.error(msg));
       }
     }
-        setIsUploadingAll(false);
+    setIsUploadingAll(false);
     if (uploadedMedia.length > 0) {
-          getClientTranslation(`${uploadedMedia.length} file${uploadedMedia.length > 1 ? 's' : ''} uploaded!`, "Media upload success toast").then(msg => toast.success(msg));
-        onAllUploaded(uploadedMedia);
+      getClientTranslation(`${uploadedMedia.length} file${uploadedMedia.length > 1 ? 's' : ''} uploaded!`, "Media upload success toast").then(msg => toast.success(msg));
+      onAllUploaded(uploadedMedia);
     }
   };
 
   // Drag-and-drop handlers
-  const onDragOver = (e: React.DragEvent) => {e.preventDefault(); setIsDragging(true); };
+  const onDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
   const onDragLeave = () => setIsDragging(false);
   const onDrop = (e: React.DragEvent) => {
-          e.preventDefault();
-        setIsDragging(false);
-        addFiles(e.dataTransfer.files);
+    e.preventDefault();
+    setIsDragging(false);
+    addFiles(e.dataTransfer.files);
   };
 
-        return (
-        // Fixed full-viewport overlay
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}>
-          {/* Modal card */}
-          <div
-            className="relative w-full max-w-2xl max-h-[90vh] bg-white flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-300"
-            style={{ borderRadius: '2px', boxShadow: '0 32px 80px rgba(0,0,0,0.35)' }}
+  return (
+    // Fixed full-viewport overlay
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}>
+      {/* Modal card */}
+      <div
+        className="relative w-full max-w-2xl max-h-[90vh] bg-white flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-300"
+        style={{ borderRadius: '2px', boxShadow: '0 32px 80px rgba(0,0,0,0.35)' }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-8 py-6 border-b border-gray-100">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-medium mb-1">Survey Media</p>
+            <h2 className="text-xl font-semibold text-gray-900 tracking-tight"><ClientT>Upload Files</ClientT></h2>
+          </div>
+          <button
+            onClick={onSkip}
+            disabled={isUploadingAll}
+            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-900 disabled:opacity-40"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between px-8 py-6 border-b border-gray-100">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-medium mb-1">Survey Media</p>
-                <h2 className="text-xl font-semibold text-gray-900 tracking-tight"><ClientT>Upload Files</ClientT></h2>
-              </div>
-              <button
-                onClick={onSkip}
-                disabled={isUploadingAll}
-                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-900 disabled:opacity-40"
-              >
-                <span className="text-lg leading-none select-none">✕</span>
-              </button>
-            </div>
+            <span className="text-lg leading-none select-none">✕</span>
+          </button>
+        </div>
 
-            {/* AI context hint – only show if AI provided suggestion */}
-            {(aiDescription || aiLearningGoal) && (
-              <div className="mx-8 mt-5 px-4 py-3 bg-gray-50 border border-gray-200" style={{ borderRadius: '2px' }}>
-                <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-medium mb-1.5">From our conversation</p>
-                {aiDescription && <p className="text-sm text-gray-600"><span className="font-medium text-gray-800"><ClientT>What it is:</ClientT></span> {aiDescription}</p>}
-                {aiLearningGoal && <p className="text-sm text-gray-600 mt-0.5"><span className="font-medium text-gray-800"><ClientT>Goal:</ClientT></span> {aiLearningGoal}</p>}
-              </div>
+        {/* AI context hint – only show if AI provided suggestion */}
+        {(aiDescription || aiLearningGoal) && (
+          <div className="mx-8 mt-5 px-4 py-3 bg-gray-50 border border-gray-200" style={{ borderRadius: '2px' }}>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-medium mb-1.5">From our conversation</p>
+            {aiDescription && <p className="text-sm text-gray-600"><span className="font-medium text-gray-800"><ClientT>What it is:</ClientT></span> {aiDescription}</p>}
+            {aiLearningGoal && <p className="text-sm text-gray-600 mt-0.5"><span className="font-medium text-gray-800"><ClientT>Goal:</ClientT></span> {aiLearningGoal}</p>}
+          </div>
+        )}
+
+        {/* Drop Zone */}
+        <div className="px-8 pt-5">
+          <div
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            onClick={() => !isUploadingAll && fileInputRef.current?.click()}
+            className={cn(
+              'border-2 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center py-8 gap-3 select-none',
+              isDragging
+                ? 'border-black bg-gray-50'
+                : 'border-gray-200 hover:border-gray-400 hover:bg-gray-50',
+              isUploadingAll && 'opacity-40 cursor-not-allowed'
             )}
-
-            {/* Drop Zone */}
-            <div className="px-8 pt-5">
-              <div
-                onDragOver={onDragOver}
-                onDragLeave={onDragLeave}
-                onDrop={onDrop}
-                onClick={() => !isUploadingAll && fileInputRef.current?.click()}
-                className={cn(
-                  'border-2 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center py-8 gap-3 select-none',
-                  isDragging
-                    ? 'border-black bg-gray-50'
-                    : 'border-gray-200 hover:border-gray-400 hover:bg-gray-50',
-                  isUploadingAll && 'opacity-40 cursor-not-allowed'
-                )}
-                style={{ borderRadius: '2px' }}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept={acceptAttr}
-                  className="hidden"
-                  onChange={(e) => addFiles(e.target.files)}
-                  disabled={isUploadingAll}
-                />
-                <Upload className="w-7 h-7 text-gray-300" />
-                <div className="text-center">
-                  <p className="text-sm font-medium text-gray-800"><ClientT>{isDragging ? 'Drop files here' : 'Click or drag files here'}</ClientT></p>
-                  <p className="text-xs text-gray-400 mt-0.5">{allowedTypes.join(', ')} — up to 100 MB each</p>
-                </div>
-              </div>
-            </div>
-
-            {/* File Queue */}
-            {queue.length > 0 && (
-              <div className="flex-1 overflow-y-auto px-8 mt-5 space-y-4 pb-4">
-                {queue.map((item, idx) => (
-                  <div key={item.id} className="border border-gray-100 bg-white" style={{ borderRadius: '2px' }}>
-                    {/* File row */}
-                    <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
-                      <div className="w-8 h-8 bg-gray-100 flex items-center justify-center flex-shrink-0" style={{ borderRadius: '2px' }}>
-                        {item.status === 'uploading' ? <Loader2 className="w-4 h-4 animate-spin text-gray-600" /> :
-                          item.status === 'done' ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> :
-                            item.status === 'error' ? <span className="text-red-500 text-xs font-bold">!</span> :
-                              getFileTypeIcon(item.file)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{item.file.name}</p>
-                        <p className="text-xs text-gray-400">{formatBytes(item.file.size)}</p>
-                        {item.errorMsg && <p className="text-xs text-red-500 mt-0.5">{item.errorMsg}</p>}
-                      </div>
-                      {item.status === 'pending' && (
-                        <button
-                          onClick={() => removeFile(item.id)}
-                          className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-300 hover:text-gray-600 transition-colors flex-shrink-0"
-                        >
-                          <span className="text-sm leading-none">✕</span>
-                        </button>
-                      )}
-                    </div>
-                    {/* Per-file fields */}
-                    {item.status === 'pending' && (
-                      <div className="px-4 py-3 space-y-2">
-                        <div>
-                          <label className="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-medium block mb-1"><ClientT>Description</ClientT></label>
-                          <input
-                            type="text"
-                            value={item.description}
-                            onChange={(e) => updateField(item.id, 'description', e.target.value)}
-                            placeholder={aiDescription || 'What is this file? (min 10 chars)'}
-                            className="w-full px-3 py-2 border border-gray-200 text-sm text-gray-800 outline-none focus:border-gray-900 transition-colors bg-transparent placeholder-gray-300"
-                            style={{ borderRadius: '2px' }}
-                            disabled={isUploadingAll}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-medium block mb-1"><ClientT>Learning Goal</ClientT></label>
-                          <input
-                            type="text"
-                            value={item.learningGoal}
-                            onChange={(e) => updateField(item.id, 'learningGoal', e.target.value)}
-                            placeholder={aiLearningGoal || 'What should respondents reflect on? (min 10 chars)'}
-                            className="w-full px-3 py-2 border border-gray-200 text-sm text-gray-800 outline-none focus:border-gray-900 transition-colors bg-transparent placeholder-gray-300"
-                            style={{ borderRadius: '2px' }}
-                            disabled={isUploadingAll}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Footer actions */}
-            <div className="flex items-center justify-between px-8 py-5 border-t border-gray-100 mt-auto">
-              <button
-                onClick={onSkip}
-                disabled={isUploadingAll}
-                className="text-sm text-gray-400 hover:text-gray-700 transition-colors disabled:opacity-40"
-              >
-                <ClientT>Skip</ClientT>
-              </button>
-              <div className="flex items-center gap-3">
-                {queue.length > 0 && !isUploadingAll && (
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
-                  >
-                    <ClientT>+ Add more</ClientT>
-                  </button>
-                )}
-                <button
-                  onClick={handleUploadAll}
-                  disabled={!canUpload || isUploadingAll}
-                  className={cn(
-                    'px-6 py-2.5 text-sm font-medium transition-all',
-                    canUpload && !isUploadingAll
-                      ? 'bg-black text-white hover:bg-gray-800'
-                      : 'bg-gray-100 text-gray-300 cursor-not-allowed'
-                  )}
-                  style={{ borderRadius: '2px' }}
-                >
-                  {isUploadingAll ? (
-                    <span className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…</span>
-                  ) : (
-                    `Upload ${queue.length > 0 ? queue.length + ` file${queue.length > 1 ? 's' : ''}` : ''}`
-                  )}
-                </button>
-              </div>
+            style={{ borderRadius: '2px' }}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={acceptAttr}
+              className="hidden"
+              onChange={(e) => addFiles(e.target.files)}
+              disabled={isUploadingAll}
+            />
+            <Upload className="w-7 h-7 text-gray-300" />
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-800"><ClientT>{isDragging ? 'Drop files here' : 'Click or drag files here'}</ClientT></p>
+              <p className="text-xs text-gray-400 mt-0.5">{allowedTypes.join(', ')} — up to 100 MB each</p>
             </div>
           </div>
         </div>
-        );
+
+        {/* File Queue */}
+        {queue.length > 0 && (
+          <div className="flex-1 overflow-y-auto px-8 mt-5 space-y-4 pb-4">
+            {queue.map((item, idx) => (
+              <div key={item.id} className="border border-gray-100 bg-white" style={{ borderRadius: '2px' }}>
+                {/* File row */}
+                <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                  <div className="w-8 h-8 bg-gray-100 flex items-center justify-center flex-shrink-0" style={{ borderRadius: '2px' }}>
+                    {item.status === 'uploading' ? <Loader2 className="w-4 h-4 animate-spin text-gray-600" /> :
+                      item.status === 'done' ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> :
+                        item.status === 'error' ? <span className="text-red-500 text-xs font-bold">!</span> :
+                          getFileTypeIcon(item.file)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{item.file.name}</p>
+                    <p className="text-xs text-gray-400">{formatBytes(item.file.size)}</p>
+                    {item.errorMsg && <p className="text-xs text-red-500 mt-0.5">{item.errorMsg}</p>}
+                  </div>
+                  {item.status === 'pending' && (
+                    <button
+                      onClick={() => removeFile(item.id)}
+                      className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-300 hover:text-gray-600 transition-colors flex-shrink-0"
+                    >
+                      <span className="text-sm leading-none">✕</span>
+                    </button>
+                  )}
+                </div>
+                {/* Per-file fields */}
+                {item.status === 'pending' && (
+                  <div className="px-4 py-3 space-y-2">
+                    <div>
+                      <label className="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-medium block mb-1"><ClientT>Description</ClientT></label>
+                      <input
+                        type="text"
+                        value={item.description}
+                        onChange={(e) => updateField(item.id, 'description', e.target.value)}
+                        placeholder={aiDescription || 'What is this file? (min 10 chars)'}
+                        className="w-full px-3 py-2 border border-gray-200 text-sm text-gray-800 outline-none focus:border-gray-900 transition-colors bg-transparent placeholder-gray-300"
+                        style={{ borderRadius: '2px' }}
+                        disabled={isUploadingAll}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-medium block mb-1"><ClientT>Learning Goal</ClientT></label>
+                      <input
+                        type="text"
+                        value={item.learningGoal}
+                        onChange={(e) => updateField(item.id, 'learningGoal', e.target.value)}
+                        placeholder={aiLearningGoal || 'What should respondents reflect on? (min 10 chars)'}
+                        className="w-full px-3 py-2 border border-gray-200 text-sm text-gray-800 outline-none focus:border-gray-900 transition-colors bg-transparent placeholder-gray-300"
+                        style={{ borderRadius: '2px' }}
+                        disabled={isUploadingAll}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Footer actions */}
+        <div className="flex items-center justify-between px-8 py-5 border-t border-gray-100 mt-auto">
+          <button
+            onClick={onSkip}
+            disabled={isUploadingAll}
+            className="text-sm text-gray-400 hover:text-gray-700 transition-colors disabled:opacity-40"
+          >
+            <ClientT>Skip</ClientT>
+          </button>
+          <div className="flex items-center gap-3">
+            {queue.length > 0 && !isUploadingAll && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
+              >
+                <ClientT>+ Add more</ClientT>
+              </button>
+            )}
+            <button
+              onClick={handleUploadAll}
+              disabled={!canUpload || isUploadingAll}
+              className={cn(
+                'px-6 py-2.5 text-sm font-medium transition-all',
+                canUpload && !isUploadingAll
+                  ? 'bg-black text-white hover:bg-gray-800'
+                  : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+              )}
+              style={{ borderRadius: '2px' }}
+            >
+              {isUploadingAll ? (
+                <span className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…</span>
+              ) : (
+                `Upload ${queue.length > 0 ? queue.length + ` file${queue.length > 1 ? 's' : ''}` : ''}`
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
 }
 
-        export default function CreateSurveyPage() {
+export default function CreateSurveyPage() {
   return (
-        <Suspense fallback={
-          <div className="flex items-center justify-center min-h-screen bg-gray-50">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-          </div>
-        }>
-          <CreateSurveyContent />
-        </Suspense>
-        );
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+      </div>
+    }>
+      <CreateSurveyContent />
+    </Suspense>
+  );
 }

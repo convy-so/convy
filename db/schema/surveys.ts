@@ -92,7 +92,7 @@ const surveys = pgTable(
     title: text("title").notNull(),
     description: text("description"),
     coreObjective: text("core_objective"),
-    expertState: jsonb("expert_state").$type<Record<string, any>>().default({}),
+    expertState: jsonb("expert_state").$type<import("@/lib/schemas/expert-state").ExpertState>().default({} as any),
     tone: toneEnum("tone").default("casual"),
     requiredQuestions: text("required_questions").array().default([]),
     metrics: text("metrics").array().default([]),
@@ -108,7 +108,8 @@ const surveys = pgTable(
       .notNull(),
     confirmed: boolean("confirmed").default(false).notNull(),
     language: languageEnum("language").default("en").notNull(),
-    domainId: integer("domain_id"), // 1-10 based on the framework
+    domainId: text("domain_id"), // Subdomain ID like 'cx-nps-loyalty'
+    hybridDomains: jsonb("hybrid_domains").$type<{ id: string; weight: number }[]>().default([]),
     isVoice: boolean("is_voice").default(false).notNull(),
     improvementFeedback: text("improvement_feedback"),
     collaborators: text("collaborators").array().default([]), // Array of user IDs with edit access
@@ -140,7 +141,7 @@ const surveyCreationConversations = pgTable(
       .$type<
         Array<{
           id?: string;
-          role: "user" | "assistant";
+          role: "user" | "assistant" | "tool";
           content: string;
           parts?: any[]; // For AI SDK v6 parts (tool calls, etc.)
           timestamp: string;
@@ -209,6 +210,7 @@ const sampleConversations = pgTable(
         }>
       >()
       .default([]),
+    expertState: jsonb("expert_state").$type<import("@/lib/schemas/expert-state").ExpertState>().default({} as any),
   },
   (table) => [
     index("sample_conversations_survey_id_idx").on(table.surveyId),
@@ -253,6 +255,7 @@ const surveyConversations = pgTable(
         timestamp: string;
       }>
     >(),
+    expertState: jsonb("expert_state").$type<import("@/lib/schemas/expert-state").ExpertState>().default({} as any),
   },
   (table) => [
     index("survey_conversations_survey_id_idx").on(table.surveyId),
@@ -305,6 +308,28 @@ const surveyAnalytics = pgTable(
     generatedLanguage: text("generated_language").default("en"),
   },
   (table) => [index("survey_analytics_survey_id_idx").on(table.surveyId)],
+);
+
+export const participantFeedback = pgTable(
+  "participant_feedback",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    surveyId: text("survey_id")
+      .notNull()
+      .references(() => surveys.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => surveyConversations.id, { onDelete: "cascade" }),
+    rating: integer("rating"), // 1-5
+    feltNatural: boolean("felt_natural"),
+    uncomfortableTopics: boolean("uncomfortable_topics").default(false).notNull(),
+    freeText: text("free_text"),
+  },
+  (table) => [
+    index("participant_feedback_survey_id_idx").on(table.surveyId),
+    index("participant_feedback_conversation_id_idx").on(table.conversationId),
+  ],
 );
 
 const surveysRelations = relations(surveys, ({ one, many }) => ({
@@ -385,7 +410,7 @@ const surveyAnalyticsRelations = relations(surveyAnalytics, ({ one }) => ({
 
 export type ChatSessionMessage = {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "tool";
   content: string;
   parts: Array<
     | { type: "text"; text: string }

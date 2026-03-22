@@ -14,7 +14,8 @@ import {
     Camera,
     AlertCircle,
     Globe,
-    LogOut
+    LogOut,
+    CreditCard
 } from "lucide-react";
 import { usePathname, useRouter } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
@@ -41,10 +42,25 @@ export default function SettingsPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [profileImage, setProfileImage] = useState<string | null>(null);
 
+    // Workspace state
+    const [activeWorkspace, setActiveWorkspace] = useState<{
+        id: string;
+        name: string;
+        slug: string;
+        role: string;
+        logo?: string | null;
+        plan?: string | null;
+    } | null>(null);
+
+    const isOwner = activeWorkspace?.role === "owner";
+
     const tabs = [
         { id: "profile", name: t("Tabs.Profile"), icon: User },
-        // Workspace tab only shown when in a workspace context
-        ...(isWorkspaceContext ? [{ id: "workspace", name: t("Tabs.Workspace"), icon: Key }] : []),
+        // Workspace and Billing tabs only shown to owners in workspace context
+        ...(isWorkspaceContext && isOwner ? [
+            { id: "workspace", name: t("Tabs.Workspace"), icon: Key },
+            { id: "billing", name: t("Tabs.Billing") || "Billing", icon: CreditCard }
+        ] : []),
         { id: "notifications", name: t("Tabs.Notifications"), icon: Bell },
         { id: "preferences", name: t("Tabs.Preferences"), icon: Globe },
         { id: "security", name: t("Tabs.Security"), icon: Shield },
@@ -56,16 +72,6 @@ export default function SettingsPage() {
         email: user?.email || "",
         image: user?.image || "",
     });
-
-    // Workspace state
-    const [activeWorkspace, setActiveWorkspace] = useState<{
-        id: string;
-        name: string;
-        slug: string;
-        role: string;
-        logo?: string | null;
-        plan?: string | null;
-    } | null>(null);
 
     const [wsName, setWsName] = useState("");
     const [wsSlug, setWsSlug] = useState("");
@@ -107,6 +113,31 @@ export default function SettingsPage() {
         }
         loadWorkspace();
     }, []);
+
+    // Listen for real-time workspace updates
+    useEffect(() => {
+        if (!session?.activeOrganizationId) return;
+
+        const handleWorkspaceUpdate = (event: any) => {
+            const data = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
+            
+            if (data.type === "WORKSPACE_UPDATED" && data.workspaceId === session.activeOrganizationId) {
+                if (data.data.name) setWsName(data.data.name);
+                if (data.data.slug) setWsSlug(data.data.slug);
+                if (data.data.logo !== undefined) setWsLogo(data.data.logo);
+                
+                setActiveWorkspace(prev => prev ? {
+                    ...prev,
+                    name: data.data.name || prev.name,
+                    slug: data.data.slug || prev.slug,
+                    logo: data.data.logo !== undefined ? data.data.logo : prev.logo
+                } : null);
+            }
+        };
+
+        window.addEventListener('convy-workspace-event', handleWorkspaceUpdate);
+        return () => window.removeEventListener('convy-workspace-event', handleWorkspaceUpdate);
+    }, [session?.activeOrganizationId]);
 
     const handleProfileSave = async () => {
         setIsSaving(true);
@@ -619,6 +650,31 @@ export default function SettingsPage() {
                         </div>
                     )}
 
+                    {activeTab === "billing" && (
+                        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                            <div className="px-6 py-4 border-b border-gray-100">
+                                <h2 className="text-lg font-semibold text-gray-900"><ClientT>Billing & Subscription</ClientT></h2>
+                                <p className="text-sm text-gray-500"><ClientT>Manage your workspace plan and payment methods.</ClientT></p>
+                            </div>
+                            <div className="p-12 flex flex-col items-center justify-center text-center">
+                                <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mb-4">
+                                    <CreditCard className="w-8 h-8 text-gray-400" />
+                                </div>
+                                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                                    <ClientT>Current Plan:</ClientT> {activeWorkspace?.plan || "Free"}
+                                </h3>
+                                <p className="text-gray-500 max-w-sm mb-8">
+                                    <ClientT>Billing management is coming soon. You are currently on the Free plan which includes up to 50 participants per survey.</ClientT>
+                                </p>
+                                <button
+                                    disabled
+                                    className="px-6 py-3 bg-gray-100 text-gray-400 rounded-xl font-medium cursor-not-allowed"
+                                >
+                                    <ClientT>Upgrade Plan</ClientT>
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     {/* Security Tab */}
                     {activeTab === "security" && (
                         <div className="space-y-6">

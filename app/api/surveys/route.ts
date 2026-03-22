@@ -5,6 +5,7 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
 import { getTimeBasedGreeting } from "@/lib/greetings";
+import { publishWorkspaceEvent } from "@/lib/redis-events";
 
 /**
  * Get all surveys for the authenticated user
@@ -30,12 +31,9 @@ export async function GET() {
       })
       .from(surveys)
       .where(
-        and(
-          eq(surveys.userId, session.user.id),
-          activeOrgId
-            ? eq(surveys.organizationId, activeOrgId)
-            : isNull(surveys.organizationId),
-        ),
+        activeOrgId
+          ? eq(surveys.organizationId, activeOrgId)
+          : and(eq(surveys.userId, session.user.id), isNull(surveys.organizationId)),
       )
       .orderBy(desc(surveys.createdAt));
 
@@ -50,7 +48,7 @@ export async function GET() {
       lastResponse: "Never",
       isOwner: true,
       isVoice: survey.isVoice || false,
-      expertState: survey.expertState,
+      expertState: survey.expertState as any,
     }));
 
     return NextResponse.json({ surveys: formattedSurveys });
@@ -100,12 +98,9 @@ export async function POST(request: Request) {
       })
       .from(surveys)
       .where(
-        and(
-          eq(surveys.userId, session.user.id),
-          activeOrgId
-            ? eq(surveys.organizationId, activeOrgId)
-            : isNull(surveys.organizationId),
-        ),
+        activeOrgId
+          ? eq(surveys.organizationId, activeOrgId)
+          : and(eq(surveys.userId, session.user.id), isNull(surveys.organizationId)),
       );
 
     const isVoice = typeof body.isVoice === "boolean" ? body.isVoice : false;
@@ -133,7 +128,9 @@ export async function POST(request: Request) {
     }
     // --- END USAGE LIMITS CHECK ---
 
-    let survey;
+    const initialGreeting = getTimeBasedGreeting("creation", language as any);
+
+    let survey: typeof surveys.$inferSelect | undefined;
     await getDb().transaction(async (tx) => {
       const [insertedSurvey] = await tx
         .insert(surveys)
@@ -153,8 +150,6 @@ export async function POST(request: Request) {
         .returning();
 
       survey = insertedSurvey;
-
-      const initialGreeting = getTimeBasedGreeting("creation", language as any);
 
       await tx.insert(surveyCreationConversations).values({
         id: crypto.randomUUID(),
@@ -188,7 +183,46 @@ export async function POST(request: Request) {
       });
     });
 
-    return NextResponse.json(survey);
+    // Invalidate dashboard cache for the workspace/user
+    if (survey) {
+      const { cache, cacheKeys } = await import("@/lib/cache");
+      await Promise.all([
+        cache.delete(cacheKeys.dashboardStats(session.user.id, activeOrgId)),
+        cache.delete(cacheKeys.dashboardRecentSurveys(session.user.id, activeOrgId)),
+      ]).catch(err => console.error("Failed to invalidate dashboard cache:", err));
+    }
+
+    // Publish event for real-time synchronization if in a workspace
+    if (activeOrgId && survey) {
+      publishWorkspaceEvent({
+        type: "SURVEY_CREATED",
+        workspaceId: activeOrgId,
+        userId: session.user.id,
+        userName: session.user.name,
+        data: {
+          id: survey!.id,
+          title: survey!.title as string,
+          status: survey!.status,
+          isVoice: survey!.isVoice as boolean,
+          createdAt: survey!.createdAt,
+        },
+        timestamp: now.toISOString(),
+      }).catch((err) => console.error("Failed to publish survey creation event:", err));
+    }
+
+    const responseData = {
+      ...survey,
+      messages: [
+        {
+          id: nanoid(),
+          role: "assistant",
+          content: initialGreeting,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+
+    return NextResponse.json(responseData);
   } catch (error) {
     if (error instanceof Error) {
       if (

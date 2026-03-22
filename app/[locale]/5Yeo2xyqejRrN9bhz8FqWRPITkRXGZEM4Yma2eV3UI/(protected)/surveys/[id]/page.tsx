@@ -89,10 +89,10 @@ async function ReviewContent({
                             </div>
                             <div className="space-y-3">
                                 <p className="text-sm text-gray-600 leading-relaxed">
-                                    <span className="font-semibold text-gray-900">Goal:</span> {survey.expertState?.objective?.goal || "Not defined"}
+                                    <span className="font-semibold text-gray-900">Goal:</span> {(survey.expertState as any)?.objective?.goal || "Not defined"}
                                 </p>
                                 <p className="text-sm text-gray-600 leading-relaxed">
-                                    <span className="font-semibold text-gray-900">Decision to be made:</span> {survey.expertState?.objective?.decision || "Not defined"}
+                                    <span className="font-semibold text-gray-900">Decision to be made:</span> {(survey.expertState as any)?.objective?.decision || "Not defined"}
                                 </p>
                             </div>
                         </div>
@@ -104,10 +104,10 @@ async function ReviewContent({
                             </div>
                             <div className="space-y-3">
                                 <p className="text-sm text-gray-600 leading-relaxed">
-                                    <span className="font-semibold text-gray-900">Description:</span> {survey.expertState?.targetAudience?.description || "Not defined"}
+                                    <span className="font-semibold text-gray-900">Description:</span> {(survey.expertState as any)?.targetAudience?.description || "Not defined"}
                                 </p>
                                 <p className="text-sm text-gray-600 leading-relaxed">
-                                    <span className="font-semibold text-gray-900">Relationship:</span> {survey.expertState?.targetAudience?.relationship || "Not defined"}
+                                    <span className="font-semibold text-gray-900">Relationship:</span> {(survey.expertState as any)?.targetAudience?.relationship || "Not defined"}
                                 </p>
                             </div>
                         </div>
@@ -119,15 +119,15 @@ async function ReviewContent({
                             </div>
                             <div className="space-y-2">
                                 <p className="text-sm text-gray-600 leading-relaxed capitalize">
-                                    <span className="font-semibold text-gray-900">Breadth vs Depth:</span> {survey.expertState?.scope?.breadthVsDepth || "Not defined"}
+                                    <span className="font-semibold text-gray-900">Breadth vs Depth:</span> {(survey.expertState as any)?.scope?.breadthVsDepth || "Not defined"}
                                 </p>
                                 <div className="flex flex-wrap gap-2 pt-1">
-                                    {survey.expertState?.scope?.mainTopics?.map((topic: string) => (
+                                    {(survey.expertState as any)?.scope?.mainTopics?.map((topic: string) => (
                                         <span key={topic} className="px-2 py-1 bg-amber-50 text-amber-700 text-[10px] font-bold uppercase rounded-md">
                                             {topic}
                                         </span>
                                     ))}
-                                    {!survey.expertState?.scope?.mainTopics?.length && <span className="text-sm text-gray-400">No topics defined</span>}
+                                    {!(survey.expertState as any)?.scope?.mainTopics?.length && <span className="text-sm text-gray-400">No topics defined</span>}
                                 </div>
                             </div>
                         </div>
@@ -139,15 +139,15 @@ async function ReviewContent({
                             </div>
                             <div className="space-y-2">
                                 <p className="text-sm text-gray-600 leading-relaxed">
-                                    <span className="font-semibold text-gray-900">Detail Level:</span> {survey.expertState?.successCriteria?.detailLevel || "Not defined"}
+                                    <span className="font-semibold text-gray-900">Detail Level:</span> {(survey.expertState as any)?.successCriteria?.detailLevel || "Not defined"}
                                 </p>
                                 <div className="flex flex-wrap gap-2 pt-1">
-                                    {survey.expertState?.successCriteria?.insightTypes?.map((type: string) => (
+                                    {(survey.expertState as any)?.successCriteria?.insightTypes?.map((type: string) => (
                                         <span key={type} className="px-2 py-1 bg-purple-50 text-purple-700 text-[10px] font-bold uppercase rounded-md">
                                             {type}
                                         </span>
                                     ))}
-                                    {!survey.expertState?.successCriteria?.insightTypes?.length && <span className="text-sm text-gray-400">No insight types defined</span>}
+                                    {!(survey.expertState as any)?.successCriteria?.insightTypes?.length && <span className="text-sm text-gray-400">No insight types defined</span>}
                                 </div>
                             </div>
                         </div>

@@ -108,11 +108,11 @@ export const cache = {
  */
 export const cacheKeys = {
   dashboardStats: (userId: string, orgId?: string | null) =>
-    `dash:stats:${userId}:${orgId || "pers"}`,
+    orgId ? `dash:stats:org:${orgId}` : `dash:stats:user:${userId}`,
   dashboardRecentSurveys: (userId: string, orgId?: string | null) =>
-    `dash:surveys:${userId}:${orgId || "pers"}`,
+    orgId ? `dash:surveys:org:${orgId}` : `dash:surveys:user:${userId}`,
   dashboardActivity: (userId: string, orgId?: string | null) =>
-    `dash:activity:${userId}:${orgId || "pers"}`,
+    orgId ? `dash:activity:org:${orgId}` : `dash:activity:user:${userId}`,
 
   // Patterns for broad invalidation
   userScope: (userId: string) => `*:${userId}:*`,

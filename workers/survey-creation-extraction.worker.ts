@@ -40,14 +40,7 @@ const surveyCreationExtractionWorker =
     async (job: Job<SurveyCreationExtractionJobData>) => {
       const { surveyId, messages } = jobDataSchema.parse(job.data);
 
-      console.log(
-        `[CreationExtractionWorker] Starting extraction for survey ${surveyId} (${messages.length} messages)`,
-      );
-
       if (messages.length < 2) {
-        console.log(
-          `[CreationExtractionWorker] Skipping — insufficient messages (${messages.length})`,
-        );
         return { skipped: true, reason: "insufficient_messages" };
       }
 
@@ -110,11 +103,18 @@ const surveyCreationExtractionWorker =
         .set({ extractedData, collectedInfo })
         .where(eq(surveyCreationConversations.surveyId, surveyId));
 
-      await job.updateProgress(100);
-
-      console.log(
-        `[CreationExtractionWorker] Extraction complete for survey ${surveyId}`,
+      // Publish event to notify active voice handlers for real-time state sync
+      const redis = getRedisClient();
+      await redis.publish(
+        `survey:creation:events:${surveyId}`,
+        JSON.stringify({
+          type: "state_updated",
+          collectedInfo,
+          extractedData,
+        }),
       );
+
+      await job.updateProgress(100);
 
       return { success: true };
     },
@@ -126,9 +126,7 @@ const surveyCreationExtractionWorker =
     },
   );
 
-surveyCreationExtractionWorker.on("completed", (job) =>
-  console.log(`[CreationExtractionWorker] Job ${job.id} completed`),
-);
+surveyCreationExtractionWorker.on("completed", (job) => {});
 surveyCreationExtractionWorker.on("failed", (job, err) =>
   console.error(
     `[CreationExtractionWorker] Job ${job?.id} failed:`,

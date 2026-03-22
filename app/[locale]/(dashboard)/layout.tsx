@@ -7,6 +7,8 @@ import { Loader2 } from "lucide-react";
 import { headers, cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { type SupportedLanguage } from "@/lib/i18n/ai-translator";
+import { NextIntlClientProvider } from "next-intl";
+import { getMessages } from "next-intl/server";
 
 export default function DashboardLayout({
   children,
@@ -49,8 +51,11 @@ async function DashboardLayoutContent({
     }
   }
 
+  const messages = await getMessages();
+
   return (
-    <AuthProvider initialSession={session}>
+    <NextIntlClientProvider messages={messages} locale={locale}>
+      <AuthProvider initialSession={session}>
       <div className="min-h-screen bg-[#FAFAFA]">
         <DashboardSidebar user={session?.user ?? null} />
         <div className="lg:pl-72 transition-all duration-300 flex flex-col min-h-screen">
@@ -67,5 +72,6 @@ async function DashboardLayoutContent({
         </div>
       </div>
     </AuthProvider>
+    </NextIntlClientProvider>
   );
 }
