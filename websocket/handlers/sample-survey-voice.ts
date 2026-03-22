@@ -3,9 +3,8 @@ import { surveys, sampleConversations, voiceSessions } from "@/db/schema";
 import { eq, and, lt } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { type SurveyConfig } from "@/lib/prompts";
-import { getTimeBasedGreeting } from "@/lib/greetings";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
-import { type RollingContext } from "@/lib/conversation-memory";
+import { MemoryBridge, TranscriptTurn } from "@/lib/memory-bridge";
 import type { AuthenticatedConnection } from "../middleware/auth";
 import { BaseVoiceAgentHandler } from "./base-voice-agent-handler";
 import { ConversationManager } from "@/lib/conversation-manager";
@@ -14,11 +13,12 @@ import type { AgentContext } from "@/lib/agents/types";
 import {
   buildVoiceAgentSettings,
   type VoiceAgentSettings,
-  type VoiceAgentFunction,
   type ConversationTextEvent,
   type FunctionCallRequestEvent,
   type SupportedLanguage,
 } from "@/lib/voice/deepgram-voice-agent";
+import { ExpertStateStore } from "@/lib/expert-state-store";
+import type { ModelMessage } from "ai";
 
 interface SampleState {
   surveyId: string;
@@ -32,12 +32,13 @@ interface SampleState {
   }>;
   survey: typeof surveys.$inferSelect | null;
   language: SupportedLanguage;
-  context: RollingContext | null;
+  memoryBridge: MemoryBridge | null;
   surveyConfig: SurveyConfig | null;
 }
 
 export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
   private state: SampleState;
+  private conductingAgent: ConductingSpecialist | null = null;
   private sessionStartTime: number = Date.now();
 
   constructor(
@@ -55,7 +56,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       messages: [],
       survey: null,
       language: "en",
-      context: null,
+      memoryBridge: null,
       surveyConfig: null,
     };
   }
@@ -94,10 +95,8 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       const contextId = `sample:${this.state.surveyId}:${this.state.conversationNumber}:${this.userId}`;
 
       // Load or create rolling context
-      this.state.context = await ConversationManager.loadOrCreateContext(
-        contextId,
-        [],
-        this.state.surveyConfig,
+      this.state.memoryBridge = await ConversationManager.loadOrCreateMemoryBridge(
+        contextId
       );
 
       // Create voice session in database
@@ -129,8 +128,9 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
 
       if (existingConversation.length > 0) {
         conversationId = existingConversation[0].id;
+        this.state.messages = (existingConversation[0].messages as any[]) || [];
         console.log(
-          `[Sample Survey Voice] Reusing existing conversation ${conversationId}`,
+          `[Sample Survey Voice] Reusing existing conversation ${conversationId} with ${this.state.messages.length} messages`,
         );
       } else {
         conversationId = nanoid();
@@ -141,6 +141,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
           messages: [],
           confirmed: false,
         });
+        this.state.messages = [];
         console.log(
           `[Sample Survey Voice] Created new conversation ${conversationId}`,
         );
@@ -191,8 +192,8 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
   }
 
   protected async getVoiceAgentSettings(): Promise<VoiceAgentSettings> {
-    if (!this.state.surveyConfig || !this.state.context) {
-      throw new Error("Survey config or context not initialized");
+    if (!this.state.surveyConfig || !this.state.memoryBridge) {
+      throw new Error("Survey config or MemoryBridge not initialized");
     }
 
     // Get previous feedback for rehearsal
@@ -225,25 +226,26 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
         content: m.content,
       })) as any[],
       surveyConfig: this.state.surveyConfig,
-      rollingContext: this.state.context,
+      memoryBridge: this.state.memoryBridge,
       language: this.state.language,
+      modality: "voice",
       knowledgeContext: combinedFeedback || undefined, // Pass feedback as knowledge context
     };
 
-    const conductingAgent = new ConductingSpecialist(agentContext);
-    await conductingAgent.initialize();
+    this.conductingAgent = new ConductingSpecialist(agentContext);
+    await this.conductingAgent.initialize();
 
     // Preload capabilities
     await Promise.all([
-      conductingAgent.preloadSkills(),
-      conductingAgent.preloadPatternLearnings(
+      this.conductingAgent.preloadSkills(),
+      this.conductingAgent.preloadPatternLearnings(
         ["questioning", "probing", "engagement"],
         2,
       ),
     ]);
 
     // Use the agent's system prompt (includes domain expertise, checklist, questioning strategy)
-    let systemPrompt = conductingAgent.buildSystemPrompt();
+    let systemPrompt = this.conductingAgent.buildSystemPrompt();
 
     // Add sample-specific instructions
     const sampleInstructions = `
@@ -258,7 +260,7 @@ ${combinedFeedback ? `- Apply the survey creator's latest feedback precisely:\n$
     systemPrompt = systemPrompt + "\n\n" + sampleInstructions;
 
     // Use the agent's function definitions (converted to Deepgram format)
-    const functions = conductingAgent.getDeepgramFunctions();
+    const functions = this.conductingAgent.getDeepgramFunctions();
 
     const tone = (this.state.survey?.tone || "casual") as
       | "casual"
@@ -321,25 +323,66 @@ ${combinedFeedback ? `- Apply the survey creator's latest feedback precisely:\n$
         .where(eq(sampleConversations.id, this.state.conversationId));
     }
 
-    // Update context and memory
-    if (this.state.surveyConfig && this.state.context) {
+    let newTurn: TranscriptTurn | null = null;
+    let expertState: any = null;
+
+    if (this.state.surveyConfig && this.state.memoryBridge) {
       const contextId = `sample:${this.state.surveyId}:${this.state.conversationNumber}:${this.userId}`;
 
-      this.state.context = await ConversationManager.loadOrCreateContext(
-        contextId,
-        this.state.messages.map((m) => ({ role: m.role, content: m.content })),
-        this.state.surveyConfig,
-      );
+      expertState = await ExpertStateStore.get(this.state.surveyConfig.id);
 
-      await ConversationManager.saveContext(contextId, this.state.context);
+      if (expertState) {
+        newTurn = {
+          turnIndex: expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 1,
+          speaker: event.role === "assistant" ? "agent" : "respondent",
+          text: event.content,
+          timestamp: now.toISOString(),
+          type: "turn"
+        };
+        expertState.transcript.turns.push(newTurn);
+        await ExpertStateStore.update(this.state.surveyConfig.id, expertState);
+      }
 
-      // Trigger async memory update (non-blocking)
-      if (event.role === "assistant") {
+      if (this.conductingAgent && expertState) {
+        this.conductingAgent.updateContext({
+          expertState,
+          memoryBridge: this.state.memoryBridge,
+          messages: this.state.messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })) as ModelMessage[],
+        });
+
+        const newSystemPrompt = this.conductingAgent.buildSystemPrompt();
+        const functions = this.conductingAgent.getDeepgramFunctions();
+
+        const tone = (this.state.survey?.tone || "casual") as any;
+        const sampleInstructions = `
+Additional guidance for this rehearsal with the survey creator:
+- Treat the survey creator exactly like a participant so they can experience the real flow
+- After covering every required topic, wrap up politely just as you would with a participant
+- This is sample conversation #${this.state.conversationNumber || 1}.
+- CRITICAL: When the survey is finished and you have said goodbye, output this exact token at the very end: [[SURVEY_COMPLETED]]
+`;
+
+        this.voiceAgent?.updateThink({
+          provider: { type: "open_ai", model: "gpt-4o-mini" },
+          prompt: `${newSystemPrompt}\n\n${sampleInstructions}\n\nRespond in the language the user is speaking.`,
+          functions: functions.map((f) => {
+            const { client_side, ...rest } = f;
+            return rest;
+          }),
+        });
+      }
+
+      if (event.role === "assistant" && expertState && newTurn) {
         ConversationManager.updateMemoryAsync(
           contextId,
-          this.state.messages,
           this.state.surveyConfig,
-          this.state.context,
+          expertState,
+          this.state.memoryBridge,
+          newTurn,
+          { userId: this.userId }
         ).catch(console.error);
       }
     }

@@ -309,7 +309,7 @@ function SurveyContent() {
 
         // Filter out internal thinking/directives
         if (content.includes("<thinking>") || content.includes("Internal instructions:")) {
-          console.log("[SurveyPage] Filtering internal directive from UI:", content.substring(0, 30));
+          // console.log("[SurveyPage] Filtering internal directive from UI:", content.substring(0, 30));
           return;
         }
 

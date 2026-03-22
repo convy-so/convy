@@ -1,4 +1,5 @@
 export * from "./common";
+export * from "./domain-embeddings";
 export * from "./enums";
 export * from "./auth";
 export * from "./organization";
@@ -7,7 +8,6 @@ export * from "./voice";
 export * from "./collaboration";
 export * from "./notifications";
 export * from "./surveys";
-export * from "./learning";
 export * from "./relations";
 export * from "./billing";
 

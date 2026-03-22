@@ -9,6 +9,7 @@ import { projects, surveys, surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { isWorkspaceOwner, isWorkspaceMember } from "@/lib/workspace-access";
 import { cache, cacheKeys } from "@/lib/cache";
+import { publishWorkspaceEvent } from "@/lib/redis-events";
 
 type ActionResult<T> =
   | { success: true; data: T }
@@ -54,6 +55,23 @@ export async function createProjectAction(
     await cache.delete(
       cacheKeys.dashboardRecentSurveys(session.user.id, activeOrgId),
     );
+
+    // Publish event for real-time synchronization
+    if (activeOrgId) {
+      publishWorkspaceEvent({
+        type: "PROJECT_CREATED",
+        workspaceId: activeOrgId,
+        userId: session.user.id,
+        userName: session.user.name,
+        data: {
+          id: projectId,
+          name: body.name,
+          color: body.color,
+          icon: body.icon,
+        },
+        timestamp: new Date().toISOString(),
+      }).catch((err) => console.error("Failed to publish project creation event:", err));
+    }
 
     return { success: true, data: { id: projectId } };
   } catch (error) {
@@ -434,6 +452,23 @@ export async function updateProjectAction(
       cacheKeys.dashboardRecentSurveys(session.user.id, project.organizationId),
     );
 
+    // Publish event for real-time synchronization
+    if (project.organizationId) {
+      publishWorkspaceEvent({
+        type: "PROJECT_UPDATED",
+        workspaceId: project.organizationId,
+        userId: session.user.id,
+        userName: session.user.name,
+        data: {
+          id: body.id,
+          name: body.name,
+          color: body.color,
+          icon: body.icon,
+        },
+        timestamp: new Date().toISOString(),
+      }).catch((err) => console.error("Failed to publish project update event:", err));
+    }
+
     return { success: true, data: { id: body.id } };
   } catch (error) {
     return { success: false, error: "Failed to update project" };
@@ -498,6 +533,20 @@ export async function deleteProjectAction(
     await cache.delete(
       cacheKeys.dashboardRecentSurveys(session.user.id, project.organizationId),
     );
+
+    // Publish event for real-time synchronization
+    if (project.organizationId) {
+      publishWorkspaceEvent({
+        type: "PROJECT_DELETED",
+        workspaceId: project.organizationId,
+        userId: session.user.id,
+        userName: session.user.name,
+        data: {
+          id,
+        },
+        timestamp: new Date().toISOString(),
+      }).catch((err) => console.error("Failed to publish project deletion event:", err));
+    }
 
     return { success: true, data: undefined };
   } catch (error) {

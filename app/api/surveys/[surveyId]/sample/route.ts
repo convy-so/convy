@@ -10,10 +10,13 @@ import {
   buildCompleteSurveyConfig,
 } from "@/lib/surveys";
 import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
-import { normalizeMessages } from "@/lib/ai";
+import { normalizeMessages, extractAIGeneratedResponse } from "@/lib/ai";
 import { ConversationManager } from "@/lib/conversation-manager";
-import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
+import { MemoryBridge, TranscriptTurn } from "@/lib/memory-bridge";
+import { ExpertStateStore } from "@/lib/expert-state-store";
 import type { AgentContext } from "@/lib/agents/types";
+import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
+import { StreamFieldExtractor } from "@/lib/agents/streaming/stream-field-extractor";
 import {
   withGeminiLimit,
   GeminiCapacityError,
@@ -21,6 +24,50 @@ import {
 } from "@/lib/gemini-limiter";
 
 export const maxDuration = 300;
+
+/**
+ * GET - Retrieve historical messages for a sample conversation
+ */
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ surveyId: string }> },
+) {
+  try {
+    const session = await getVerifiedSession();
+    const { surveyId } = await params;
+    const { searchParams } = new URL(request.url);
+    const conversationNumber = Number(searchParams.get("conversationNumber") || 1);
+
+    const [survey] = await getDb()
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+
+    if (!survey) {
+      return new Response("Survey not found", { status: 404 });
+    }
+
+    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
+    const access = await getSurveyAccessLevel(session.user.id, survey.id);
+    if (access === "none") {
+      return new Response("Unauthorized", { status: 403 });
+    }
+
+    const sampleId = `sample-${surveyId}-${conversationNumber}`;
+    const [sample] = await getDb()
+      .select()
+      .from(sampleConversations)
+      .where(eq(sampleConversations.id, sampleId));
+
+    return new Response(JSON.stringify({ messages: sample?.messages || [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error) {
+    console.error("[Sample GET] Error:", error);
+    return new Response("Internal server error", { status: 500 });
+  }
+}
 
 /**
  * Stream a sample conversation for the survey maker to review
@@ -58,6 +105,7 @@ export async function POST(
     const session = await getVerifiedSession();
     const { surveyId } = await params;
     const body = await request.json();
+    console.log(`[Sample POST] Incoming request for survey: ${surveyId}. Body:`, JSON.stringify(body, null, 2));
     const { messages, feedback, conversationNumber } = body as {
       messages: any[];
       feedback?: string;
@@ -156,33 +204,25 @@ export async function POST(
         console.error("[Sample Route] Failed to upsert sample row:", err),
       );
 
-    // Load or create rolling context using Manager
-    // If it's the first message, force new context to reset previous runs of this sample number
-    const isStart = normalizedMessages.length <= 1;
-    const [context] = await Promise.all([
-      ConversationManager.loadOrCreateContext(
-        conversationId,
-        normalizedMessages,
-        surveyConfig,
-        isStart, // forceNew
-      ),
-      // Ensure the sample row exists — runs concurrently with context load
+    const [memoryBridge] = await Promise.all([
+      ConversationManager.loadOrCreateMemoryBridge(conversationId),
       upsertSampleRowPromise,
     ]);
+    
+    const expertState = await ExpertStateStore.get(surveyConfig.id);
 
-    // Use the compressed messages for the AI call
-    const messagesForAI =
-      context.recentMessages.length > 0
-        ? context.recentMessages
-        : normalizedMessages;
+    // Use raw messages, conducting agent streams prepends compressed transcript if memoryBridge is provided
+    const messagesForAI = normalizedMessages;
 
     // --- AGENT INTEGRATION: Use ConductingSpecialist for agentic behavior ---
     const agentContext: AgentContext = {
       conversationId,
       messages: messagesForAI as any,
       surveyConfig,
-      rollingContext: context,
+      memoryBridge,
+      expertState: expertState || undefined,
       language: survey.language as "en" | "fr" | "de" | "es" | "it" | undefined,
+      modality: "text",
       isSample: true,
       sampleFeedback: combinedFeedback,
       conversationNumber,
@@ -219,45 +259,30 @@ export async function POST(
     }
 
     // Use the agent's stream method which includes domain expertise, checklist, and tools
-    // No onFinish callback needed for DB persistence as sample routes are ephemeral
     const streamResult = await withGeminiLimit(async () => {
       return conductingAgent.stream(
         messagesToLLM as any,
         () => {}, // No media display in sample testing right now
-        async (params) => {
+        async (params: { text: string; usage: any; response: any }) => {
           const { text, usage, response } = params;
-
-          // ... (existing logging / db / queue logic internally handled by stream wrapper)
-          const assistantMessage = response.messages?.find(
-            (m: any) => m.role === "assistant",
-          );
-
-          const updatedMessages = [
-            ...messagesToLLM, // Use messagesToLLM as the base for updated messages
-            {
-              role: "assistant" as const,
-              content: text,
-              parts:
-                (assistantMessage as any)?.content &&
-                Array.isArray((assistantMessage as any).content)
-                  ? (assistantMessage as any).content
-                  : undefined,
-              timestamp: new Date().toISOString(),
-            },
-          ];
+          const contentForStorage = extractAIGeneratedResponse(text);
 
           if (sampleId) {
-            const dbMessages = updatedMessages.map((m: any) => ({
+            const newMessagesToAppend = response.messages.map((m: any) => ({
               role: m.role,
-              content: m.content,
-              parts: m.parts,
+              content: typeof m.content === 'string' ? m.content : (m.role === 'assistant' ? contentForStorage : ""),
+              parts: Array.isArray(m.content) ? m.content : undefined,
               timestamp: m.timestamp || new Date().toISOString(),
             }));
 
-            // Check if AI completed survey
-            const toolInvocations = assistantMessage?.toolInvocations || [];
-            let isCompleted = !!toolInvocations.find(
-              (call: any) => call.toolName === "finishSurvey",
+            const dbMessages = [
+              ...messagesToLLM,
+              ...newMessagesToAppend
+            ];
+
+            // Check if AI completed survey (look for finishSurvey in any step)
+            const isCompleted = response.messages.some((m: any) => 
+               Array.isArray(m.content) && m.content.some((p: any) => (p.type === 'tool-call' || p.type === 'tool-invocation') && p.toolName === 'finishSurvey')
             );
 
             await getDb()
@@ -278,21 +303,51 @@ export async function POST(
                 userId: session.user.id,
               });
             }
+
+            if (expertState) {
+              const newTurn: TranscriptTurn = {
+                turnIndex: expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 1,
+                speaker: "agent",
+                text: contentForStorage,
+                timestamp: new Date().toISOString(),
+                type: "turn"
+              };
+              
+              const respondentMsg = normalizedMessages[normalizedMessages.length - 1];
+              if (respondentMsg && respondentMsg.role === "user") {
+                 const resTurn: TranscriptTurn = {
+                   turnIndex: expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 2,
+                   speaker: "respondent",
+                   text: typeof respondentMsg.content === 'string' ? respondentMsg.content : (Array.isArray(respondentMsg.content) ? (respondentMsg.content.find((p:any) => p.type === 'text') as any)?.text || "" : ""),
+                   timestamp: new Date().toISOString(),
+                   type: "turn"
+                 };
+                 resTurn.turnIndex = expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 1;
+                 newTurn.turnIndex = resTurn.turnIndex + 1;
+                 
+                 expertState.transcript.turns.push(resTurn);
+              }
+              expertState.transcript.turns.push(newTurn);
+              ExpertStateStore.update(surveyConfig.id, expertState).catch(console.error);
+              
+              ConversationManager.updateMemoryAsync(
+                conversationId,
+                surveyConfig,
+                expertState,
+                memoryBridge,
+                newTurn,
+                { userId: session.user.id }
+              ).catch((err) =>
+                console.error("[Sample Route] Async memory update failed:", err),
+              );
+            }
           }
         },
         undefined,
       );
     });
 
-    ConversationManager.updateMemoryAsync(
-      conversationId,
-      normalizedMessages,
-      surveyConfig,
-      context,
-    ).catch(console.error);
-
-    // Save updated context to Redis using Manager
-    await ConversationManager.saveContext(conversationId, context);
+    // MemoryBridge state is automatically persisted in updateMemoryAsync
 
     // AI SDK v6 native UIMessage stream conversion
     const uiStream = streamResult.toUIMessageStream();
@@ -302,7 +357,27 @@ export async function POST(
     const response = createUIMessageStreamResponse({
       stream: createUIMessageStream({
         execute: async ({ writer }) => {
-          writer.merge(uiStream);
+          const extractor = new StreamFieldExtractor();
+          
+          for await (const chunk of uiStream) {
+            const chunkObj = chunk as any;
+            if (chunkObj.type === "text-delta") {
+              const delta = chunkObj.textDelta || chunkObj.delta;
+              console.log(`[Sample Stream] Chunk:`, delta);
+              const cleanText = extractor.processChunk(delta);
+              if (cleanText) {
+                console.log(`[Sample Stream] Yielding:`, cleanText);
+                writer.write({ type: "text-delta", textDelta: cleanText } as any);
+              }
+            } else {
+              writer.write(chunkObj);
+            }
+          }
+          const finalCleanText = extractor.flush();
+          if (finalCleanText) {
+            console.log(`[Sample Stream] Final Flush:`, finalCleanText);
+            writer.write({ type: "text-delta", textDelta: finalCleanText } as any);
+          }
         },
       }),
     });

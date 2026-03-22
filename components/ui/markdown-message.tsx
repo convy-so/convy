@@ -1,6 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
+import { extractAIGeneratedResponse } from '@/lib/ai-utils';
 
 interface MarkdownMessageProps {
   content: string;
@@ -13,8 +14,12 @@ interface MarkdownMessageProps {
 const formatMarkdown = (text: any) => {
   if (!text || typeof text !== 'string') return "";
 
-  // 1. Strip scratchpad blocks (AI thinking)
-  let formatted = text.replace(/<scratchpad>[\s\S]*?<\/scratchpad>/g, "").trim();
+  // 1. Extract natural language from AI-generated JSON blocks
+  // This handles reasoning/response structure and streaming partials.
+  let formatted = extractAIGeneratedResponse(text);
+
+  // 2. Strip legacy scratchpad blocks (AI thinking) if any remain
+  formatted = formatted.replace(/<scratchpad>[\s\S]*?<\/scratchpad>/g, "").trim();
 
   // 2. Ensure space after punctuation (. ! ? , ; :) if followed by a letter.
   // Prevents "Hello.World" but allows "3.14" and "v1.0".

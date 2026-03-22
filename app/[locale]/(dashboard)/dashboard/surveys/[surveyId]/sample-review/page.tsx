@@ -16,8 +16,7 @@ import {
     RefreshCcw,
     Bot,
     Send,
-    Keyboard,
-    Volume2,
+
 } from "lucide-react";
 import { queryKeys } from "@/lib/query-keys";
 import { useQueryClient } from "@tanstack/react-query";
@@ -66,6 +65,8 @@ export default function SampleReviewPage() {
     const [commentText, setCommentText] = useState("");
     const [isCommenting, setIsCommenting] = useState(false);
     const [showTranscript, setShowTranscript] = useState(false);
+    const [selectedSampleNumber, setSelectedSampleNumber] = useState<number | null>(null);
+    const isHandlingGreetingRef = useRef(false);
 
     // Publish Modal State
     const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
@@ -157,6 +158,7 @@ export default function SampleReviewPage() {
 
     // Computed values
     const currentSampleNumber = (survey?.sampleConversationCount || 0) + 1;
+    const activeSampleNumber = selectedSampleNumber || currentSampleNumber;
     const samplesRemaining = MAX_SAMPLE_CONVERSATIONS - (survey?.sampleConversationCount || 0);
     const canRetry = samplesRemaining > 0;
 
@@ -175,34 +177,74 @@ export default function SampleReviewPage() {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
+    const { data: historyData, isLoading: isHistoryLoading } = useQuery({
+        queryKey: ['sample-history', surveyId, activeSampleNumber],
+        queryFn: async () => {
+            const response = await fetch(`/api/surveys/${surveyId}/sample?conversationNumber=${activeSampleNumber}`);
+            if (!response.ok) return { messages: [] };
+            return response.json();
+        },
+        enabled: !!surveyId,
+    });
+
     const { messages, setMessages, sendMessage, status } = useChat({
-        id: `sample-${currentSampleNumber}`,
+        id: `sample-${activeSampleNumber}`,
+        messages: historyData?.messages || [],
         transport: new DefaultChatTransport({
             api: `/api/surveys/${surveyId}/sample`,
-            body: { conversationNumber: currentSampleNumber },
+            body: { conversationNumber: activeSampleNumber },
         }),
-        onFinish: ({ message }) => {
+        onFinish: ({ message, isError, finishReason }: { message: any; isError: boolean; finishReason?: string }) => {
             const messageText = message.parts
-                ?.filter(part => part.type === "text")
-                .map(part => part.text)
+                ?.filter((part: any) => part.type === "text")
+                .map((part: any) => part.text)
                 .join("") || "";
-            if (messageText.includes("[[SURVEY_COMPLETED]]")) {
+            if (messageText.includes("[[SURVEY_COMPLETED]]") || finishReason === 'tool-calls') {
                 getClientTranslation("Your survey is complete!").then(toast.success);
             }
         }
     });
 
+    // Sync historyData with useChat messages when it finishes loading
+    useEffect(() => {
+        if (!isHistoryLoading && historyData?.messages) {
+            console.log("[Sample Review] History loaded:", historyData.messages.length, "messages");
+            if (messages.length === 0 && historyData.messages.length > 0) {
+                console.log("[Sample Review] Syncing historyData to useChat");
+                setMessages(historyData.messages.map((m: any, idx: number) => ({
+                    id: m.id || `hist-${idx}-${Date.now()}`,
+                    role: m.role,
+                    parts: m.parts || [{ type: 'text', text: m.content || "" }],
+                    timestamp: m.timestamp || new Date().toISOString()
+                })));
+            }
+        }
+    }, [isHistoryLoading, historyData, setMessages, messages.length]);
+
+    useEffect(() => {
+        console.log(`[Sample Review] useChat Status: ${status} | Messages: ${messages.length}`);
+    }, [status, messages.length]);
+
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
 
-    const isTextLoading = status === "streaming" || status === "submitted";
+    // Clean up SURVEY_COMPLETED tags and track completion
+    const isCompleted = messages.some(msg =>
+        msg.role === "assistant" && (
+            msg.parts?.some(p => p.type === 'text' && p.text.includes("[[SURVEY_COMPLETED]]")) ||
+            msg.parts?.some(p => (p.type === 'tool-invocation' || p.type === 'tool-call') && (p as any).toolName === 'finishSurvey')
+        )
+    );
 
-    // Clean up SURVEY_COMPLETED tags from rendering
+    const isSimulating = status === "streaming" || status === "submitted";
+
     const visibleMessages = messages.map(msg => {
         const textPart = msg.parts?.find(p => p.type === 'text');
         const hasCompletionTag = msg.role === "assistant" && textPart && textPart.text.includes("[[SURVEY_COMPLETED]]");
-        const hasCompletionTool = msg.role === "assistant" && msg.parts?.some(p => (p.type === 'tool-invocation' || p.type === 'tool-call') && (p as any).toolName === 'finishSurvey');
+        const hasCompletionTool = msg.role === "assistant" && msg.parts?.some(p => 
+            (p.type === 'tool-invocation' || p.type === 'tool-call') && (p as any).toolName === 'finishSurvey'
+        );
 
         if (hasCompletionTag || hasCompletionTool) {
             return {
@@ -216,11 +258,20 @@ export default function SampleReviewPage() {
             };
         }
         return msg;
-    }).filter(m => m.id !== "init_ping_hidden");
+    }).filter(m => {
+        const text = m.parts?.find(p => p.type === 'text')?.text || "";
+        const isInternalPing = text.includes("Start the conversation now") || text.includes("The user has returned to this sample");
+        const hasVisibleContent = m.parts?.some(p => 
+            (p.type === 'text' && p.text.trim()) || 
+            p.type === 'tool-invocation' || 
+            p.type === 'tool-call'
+        );
+        return !isInternalPing && (hasVisibleContent || (m as any).media);
+    });
 
     // WebSocket Hook for Voice Conversation
     const voiceWs = useVoiceWebSocket({
-        url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/sample-conversation?surveyId=${surveyId}&conversationNumber=${currentSampleNumber}`,
+        url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/sample-conversation?surveyId=${surveyId}&conversationNumber=${activeSampleNumber}`,
         onReady: () => {
             console.log("Sample conversation WebSocket ready");
         },
@@ -276,38 +327,49 @@ export default function SampleReviewPage() {
 
     // Auto-greeting mutation is replaced by useChat use effect
 
-    // Auto-connect voice or trigger text greeting when survey loads
+    // Reset hasAutoGreeted when sample number changes
     useEffect(() => {
-        if (!survey || hasAutoGreeted) return;
+        setHasAutoGreeted(false);
+        isHandlingGreetingRef.current = false;
+    }, [activeSampleNumber]);
+
+    // Auto-greeting trigger
+    useEffect(() => {
+        if (!survey || hasAutoGreeted || isHandlingGreetingRef.current) return;
+        if (isHistoryLoading) return;
 
         // For voice surveys, we wait for hasStarted (user clicked through the overlay)
         if (survey.isVoice && !hasStarted) return;
 
-        if (inputMode === "voice" && survey.isVoice) {
-            console.log("Connecting voice websocket...");
+        if (survey.isVoice) {
+            console.log("[Sample Review] Connecting voice websocket...");
             voiceWs.connect();
-        } else if (inputMode === "text") {
-            const lastMessage = messages[messages.length - 1];
-            const isNew = messages.length === 0;
+            setHasAutoGreeted(true);
+            isHandlingGreetingRef.current = true;
+        } else if (status === "ready") {
+            const hasExistingHistory = historyData?.messages && historyData.messages.length > 0;
+            const lastMessage = messages[messages.length - 1] || (hasExistingHistory ? historyData.messages[historyData.messages.length - 1] : null);
+            const isNew = !hasExistingHistory && messages.length === 0;
             const userSpokeLast = lastMessage?.role === "user";
 
             if (isNew || userSpokeLast) {
-                console.log("[Sample Review] Triggering AI catch-up/start (Text Mode)...");
+                console.log("[Sample Review] Triggering AI catch-up/start (Text Mode)... API:", `/api/surveys/${surveyId}/sample`);
+                isHandlingGreetingRef.current = true;
+                
                 sendMessage({
-                    id: isNew ? "init_ping_hidden" : `resume_ping_${Date.now()}`,
-                    role: "user",
-                    parts: [{
-                        type: 'text',
-                        text: isNew
-                            ? "Start the conversation now. Greet the participant according to the system prompt instructions."
-                            : "The user has returned to this sample survey review. Respond to their last input and continue the interview naturally."
-                    }]
-                } as any);
+                    text: isNew
+                        ? "Start the conversation now. Greet the participant according to the system prompt instructions."
+                        : "The user has returned to this sample survey review. Respond to their last input and continue the interview naturally."
+                }).then(() => {
+                    console.log("[Sample Review] sendMessage successful");
+                    setHasAutoGreeted(true);
+                }).catch((err) => {
+                    console.error("[Sample Review] sendMessage failed:", err);
+                    isHandlingGreetingRef.current = false;
+                });
             }
         }
-
-        setHasAutoGreeted(true);
-    }, [survey, inputMode, hasAutoGreeted, messages, sendMessage, hasStarted]);
+    }, [survey, hasAutoGreeted, isHistoryLoading, hasStarted, status, sendMessage, voiceWs, messages, historyData]);
 
     // Initialize inputMode based on survey type
     useEffect(() => {
@@ -315,22 +377,22 @@ export default function SampleReviewPage() {
             setInputMode("voice");
             setShowTranscript(false);
         } else {
+            setInputMode("text");
             setShowTranscript(true);
         }
     }, [survey?.isVoice]);
 
     const handleTextSubmit = async (e: FormEvent) => {
         e.preventDefault();
-        if (!textInput.trim() || isTextLoading) return;
+        if (!textInput.trim() || isSimulating || isCompleted) return;
 
         const currentInput = textInput.trim();
         setTextInput('');
 
         try {
-            await sendMessage({
-                role: "user",
-                parts: [{ type: 'text', text: currentInput }],
-            } as any);
+            sendMessage({
+                text: currentInput
+            });
         } catch (error) {
             getClientTranslation("Failed to send message. Please try again.").then(toast.error);
         }
@@ -355,6 +417,7 @@ export default function SampleReviewPage() {
                 getClientTranslation("Feedback applied. Starting new simulation...").then(toast.success);
                 setFeedback("");
                 setMessages([]);
+                setSelectedSampleNumber(null); // Reset to latest
 
                 // Refresh survey data to get new conversation count
                 await refetchSurvey(); // FIX: Using refetch instead of setSurvey
@@ -449,7 +512,7 @@ export default function SampleReviewPage() {
         try {
             const result = await addSampleConversationCommentAction(
                 surveyId,
-                currentSampleNumber,
+                activeSampleNumber,
                 commentText
             );
 
@@ -480,7 +543,7 @@ export default function SampleReviewPage() {
     };
 
     return (
-        <div className="flex flex-row h-[calc(100vh-4rem)] bg-white overflow-hidden relative">
+        <div className="flex flex-row h-[calc(100vh-6.5rem)] lg:h-[calc(100vh-7.5rem)] bg-white overflow-hidden relative rounded-2xl border border-gray-100 shadow-sm">
 
             {/* Start Overlay for Voice Samples */}
             {survey?.isVoice && !hasStarted && !isLoading && (
@@ -498,7 +561,7 @@ export default function SampleReviewPage() {
             <div className="flex-1 flex flex-col min-w-0 bg-white relative">
 
                 {/* Header */}
-                <header className="bg-white border-b border-gray-100 px-4 sm:px-6 py-3 z-10 flex-shrink-0">
+                <header className="bg-white border-b border-gray-100 px-4 sm:px-6 py-3 z-[1] flex-shrink-0">
                     <div className="flex items-center justify-between gap-4 h-14">
                         {/* Left: Back and Title */}
                         <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -512,9 +575,29 @@ export default function SampleReviewPage() {
                                 <h1 className="text-sm font-semibold text-gray-900 tracking-tight truncate">
                                     {survey?.title}
                                 </h1>
-                                <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">
-                                    <ClientT>Sample Review</ClientT>
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">
+                                        <ClientT>Sample Review</ClientT>
+                                    </span>
+                                    {survey?.sampleConversationCount > 0 && (
+                                        <div className="flex items-center gap-1 ml-1 border-l border-gray-200 pl-2">
+                                            {[...Array(survey.sampleConversationCount + (canRetry ? 1 : 0))].map((_, i) => (
+                                                <button
+                                                    key={i}
+                                                    onClick={() => setSelectedSampleNumber(i + 1)}
+                                                    className={cn(
+                                                        "w-5 h-5 rounded-md text-[9px] font-bold transition-all",
+                                                        activeSampleNumber === i + 1
+                                                            ? "bg-gray-900 text-white"
+                                                            : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                                                    )}
+                                                >
+                                                    {i + 1}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
@@ -539,7 +622,7 @@ export default function SampleReviewPage() {
                 {/* Chat Area Container */}
                 <div className="flex-1 flex flex-col min-h-0 bg-white relative">
                     {inputMode === "voice" && (
-                        <div className="flex-shrink-0 flex flex-col items-center justify-center p-4 border-b border-gray-50 bg-slate-50/50 z-20">
+                        <div className="flex-shrink-0 flex flex-col items-center justify-center p-4 border-b border-gray-50 bg-slate-50/50 z-[2]">
                             <button
                                 onClick={() => {
                                     if (voiceWs.status !== "connected") {
@@ -593,24 +676,7 @@ export default function SampleReviewPage() {
                                         ? "bg-gray-50 text-gray-800 rounded-tl-sm border border-gray-100"
                                         : "bg-black text-white rounded-tr-sm"
                                 )}>
-                                    {msg.toolInvocations?.map((inv: any, index: number) => {
-                                        if (inv.toolName === 'showMedia' && inv.state === 'result') {
-                                            const media = inv.result?.media || (typeof inv.result === 'string' ? JSON.parse(inv.result).media : null);
-                                            return media ? <MediaDisplay key={inv.toolCallId || index} media={media} /> : null;
-                                        }
-                                        if (inv.toolName === 'finishSurvey') {
-                                            return (
-                                                <div key={inv.toolCallId || index} className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 mt-2">
-                                                    <CheckCircle className="w-3.5 h-3.5" />
-                                                    <ClientT>Your survey is complete!</ClientT>
-                                                </div>
-                                            );
-                                        }
-                                        return null;
-                                    })}
-
-                                    {/* Legacy multipart/fallback support */}
-                                    {(!msg.toolInvocations || msg.toolInvocations.length === 0) && msg.parts?.map((part: any, index: number) => {
+                                    {msg.parts?.map((part: any, index: number) => {
                                         if (part.type === 'text') {
                                             return <MarkdownMessage key={index} content={part.text} />;
                                         }
@@ -622,9 +688,14 @@ export default function SampleReviewPage() {
                                             }
                                             if (inv.toolName === 'finishSurvey') {
                                                 return (
-                                                    <div key={inv.toolCallId || index} className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 mt-2">
-                                                        <CheckCircle className="w-3.5 h-3.5" />
-                                                        <ClientT>Your survey is complete!</ClientT>
+                                                    <div key={inv.toolCallId || index} className="flex flex-col gap-2 mt-2">
+                                                        <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
+                                                            <CheckCircle className="w-3.5 h-3.5" />
+                                                            <ClientT>Your survey is complete!</ClientT>
+                                                        </div>
+                                                        <p className="text-[11px] text-gray-500 italic pl-1">
+                                                            <ClientT>You can now provide feedback in the sidebar to refine future simulations.</ClientT>
+                                                        </p>
                                                     </div>
                                                 );
                                             }
@@ -636,7 +707,7 @@ export default function SampleReviewPage() {
                             </div>
                         ))}
 
-                        {isTextLoading && (
+                        {isLoading && (
                             <div className="self-start">
                                 <div className="px-4 py-3 bg-gray-50 rounded-2xl rounded-tl-sm border border-gray-100 flex items-center gap-1.5 ">
                                     <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
@@ -651,38 +722,9 @@ export default function SampleReviewPage() {
                     {/* Input Area */}
                     <div className="p-4 bg-white border-t border-gray-50/50">
                         <div className="max-w-2xl mx-auto w-full relative">
-                            {/* Input Mode Toggles */}
-                            <div className="absolute -top-14 left-1/2 -translate-x-1/2 flex items-center gap-1 p-1 bg-white border border-gray-100 shadow-sm rounded-full">
-                                <button
-                                    onClick={() => {
-                                        setInputMode("voice");
-                                        if (survey?.isVoice) voiceWs.connect();
-                                    }}
-                                    className={cn(
-                                        "px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5",
-                                        inputMode === "voice"
-                                            ? "bg-gray-100 text-gray-900"
-                                            : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-                                    )}
-                                >
-                                    <Volume2 className="w-3 h-3" /> <ClientT>Voice</ClientT>
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setInputMode("text");
-                                        voiceWs.disconnect();
-                                        setShowTranscript(true);
-                                    }}
-                                    className={cn(
-                                        "px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5",
-                                        inputMode === "text"
-                                            ? "bg-gray-100 text-gray-900"
-                                            : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-                                    )}
-                                >
-                                    <Keyboard className="w-3 h-3" /> <ClientT>Text</ClientT>
-                                </button>
-                                {survey?.isVoice && (
+                            {/* Transcript Toggle for Voice Surveys */}
+                            {survey?.isVoice && (
+                                <div className="absolute -top-14 left-1/2 -translate-x-1/2 flex items-center gap-1 p-1 bg-white border border-gray-100 shadow-sm rounded-full">
                                     <button
                                         onClick={() => setShowTranscript(!showTranscript)}
                                         className={cn(
@@ -694,8 +736,8 @@ export default function SampleReviewPage() {
                                     >
                                         <MessageSquare className="w-3 h-3" /> <ClientT>Transcript</ClientT>
                                     </button>
-                                )}
-                            </div>
+                                </div>
+                            )}
 
                             {inputMode === "voice" ? (
                                 <div className="flex flex-col items-center justify-center space-y-3 pb-2 pt-2">
@@ -751,7 +793,7 @@ export default function SampleReviewPage() {
                                     />
                                     <button
                                         type="submit"
-                                        disabled={!textInput.trim() || isTextLoading}
+                                        disabled={!textInput.trim() || isSimulating || isCompleted}
                                         className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white text-gray-900 rounded-lg hover:bg-gray-100 transition-all disabled:opacity-0 shadow-sm border border-gray-100"
                                     >
                                         <Send className="w-4 h-4" />
@@ -793,10 +835,10 @@ export default function SampleReviewPage() {
 
                                 <button
                                     onClick={handleRetry}
-                                    disabled={!feedback.trim() || isRetrying || !canRetry}
+                                    disabled={!feedback.trim() || isRetrying || !canRetry || !isCompleted}
                                     className={cn(
                                         "w-full py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 shadow-sm",
-                                        feedback.trim() && canRetry
+                                        feedback.trim() && canRetry && isCompleted
                                             ? "bg-gray-900 text-white hover:bg-black"
                                             : "bg-gray-200 text-gray-400 cursor-not-allowed"
                                     )}

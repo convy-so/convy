@@ -6,7 +6,7 @@ import { getDb } from "@/db";
 import { surveys, users } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { buildCompleteSurveyConfig } from "@/lib/surveys";
-import { AgentOrchestrator } from "@/lib/agents/orchestrator";
+import { AnalyticsSpecialist } from "@/lib/agents/analytics-specialist";
 import type { AgentContext } from "@/lib/agents/types";
 
 export const maxDuration = 300;
@@ -24,11 +24,39 @@ export async function POST(
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
-    const body = (await request.json()) as { messages?: unknown[] };
-    const rawMessages = body.messages;
+    const body = (await request.json()) as { 
+      messages?: unknown[];
+      audio?: string; // Base64 audio string
+      language?: string;
+    };
+    let rawMessages = body.messages || [];
 
-    if (!rawMessages || !Array.isArray(rawMessages)) {
-      return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
+    // 0. Handle STT if audio is provided
+    if (body.audio) {
+      try {
+        const { transcribeAudioBuffer } = await import("@/lib/voice/analytics-stt");
+        const audioBuffer = Buffer.from(body.audio, "base64");
+        const transcript = await transcribeAudioBuffer(audioBuffer, body.language || "en");
+        
+        // Append the transcribed message as a new user message
+        const userMessage = {
+          id: crypto.randomUUID(),
+          role: "user",
+          content: transcript,
+          createdAt: new Date(),
+        };
+        rawMessages = [...rawMessages, userMessage];
+      } catch (sttError) {
+        console.error("[Analytics Chat STT] Failed:", sttError);
+        // Fallback: if STT fails but we have messages, continue. If only audio was sent, error.
+        if (rawMessages.length === 0) {
+          return NextResponse.json({ error: "Speech-to-text failed" }, { status: 500 });
+        }
+      }
+    }
+
+    if (!rawMessages || !Array.isArray(rawMessages) || rawMessages.length === 0) {
+      return NextResponse.json({ error: "Invalid messages or audio" }, { status: 400 });
     }
 
     // 1. Verify survey ownership
@@ -80,9 +108,9 @@ export async function POST(
         (user?.preferredLanguage as "en" | "fr" | "de" | "es" | "it") || "en",
     };
 
-    // 4. Initialize Orchestrator and get Analytics Specialist
-    const orchestrator = new AgentOrchestrator(agentContext);
-    const analyticsSpecialist = orchestrator.getAnalyticsSpecialist();
+    // 4. Initialize Analytics Specialist directly
+    const analyticsSpecialist = new AnalyticsSpecialist(agentContext);
+    await analyticsSpecialist.initialize();
 
     // 5. Stream response using correctly typed ModelMessages
     const result = analyticsSpecialist.stream(modelMessages);

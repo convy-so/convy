@@ -5,21 +5,15 @@
  * No authentication required — participants are anonymous.
  *
  * Body: { rating?: 1-5, feltNatural?: bool, uncomfortableTopics?: bool, freeText?: string }
- *
- * Side effects:
- * - Inserts into participant_feedback
- * - If uncomfortableTopics=true, marks all patterns from this conversation as DEPRECATED
  */
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { nanoid } from "nanoid";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 import { getDb } from "@/db";
-import { surveyConversations} from "@/db/schema";
-import { participantFeedback } from "@/db/schema/learning";
-import { knowledgeBase } from "@/db/schema/vectors";
+import { surveyConversations, participantFeedback } from "@/db/schema";
 
 const bodySchema = z.object({
   rating: z.number().int().min(1).max(5).optional(),
@@ -70,27 +64,6 @@ export async function POST(
       uncomfortableTopics: uncomfortableTopics ?? false,
       freeText: freeText ?? null,
     });
-
-    // ── Discomfort veto ──────────────────────────────────────────────────────
-    // If participant reported uncomfortable topics, deprecate any patterns
-    // that were extracted from this conversation (prevents bad patterns reaching ACTIVE).
-    if (uncomfortableTopics) {
-      const deprecated = await getDb()
-        .update(knowledgeBase)
-        .set({ status: "DEPRECATED" })
-        .where(
-          and(
-            // Patterns sourced from this conversation are identified by conversationId in metadata
-            sql`${knowledgeBase.metadata}->>'conversationId' = ${conversationId}`,
-            // Only deprecate if not already ACTIVE (protect established patterns)
-            sql`${knowledgeBase.status} IN ('CANDIDATE', 'SHADOW', 'IN_EXPERIMENT')`
-          )
-        );
-
-      console.log(
-        `[FeedbackAPI] Discomfort veto applied for conversation ${conversationId}. Patterns deprecated.`
-      );
-    }
 
     console.log(
       `[FeedbackAPI] Feedback saved: conversation=${conversationId} rating=${rating ?? "n/a"} discomfort=${uncomfortableTopics}`

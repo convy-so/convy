@@ -356,9 +356,12 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
     // Trigger RAG ingestion
     try {
       const { ingestConversation } = await import("@/lib/rag/ingest");
-      await ingestConversation(conversationId);
+      const { ExpertStateStore } = await import("@/lib/expert-state-store");
+      const expertState = await ExpertStateStore.get(surveyId);
+      
+      await ingestConversation(conversationId, expertState);
       console.log(
-        `[Conversation Insights Worker] Ingested conversation ${conversationId} into RAG`,
+        `[Conversation Insights Worker] Ingested conversation ${conversationId} (with ExpertState) into RAG`,
       );
     } catch (error) {
       console.error(

@@ -64,7 +64,7 @@ export interface PatternExtractionJobData {
   conversationId: string;
   surveyId: string;
   conversationType: "creation" | "response" | "sample";
-  domainId?: number | null;
+  domainId?: string | null;
 }
 
 export interface SurveyCreationExtractionJobData {

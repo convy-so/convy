@@ -8,6 +8,7 @@ import { Users, MessageSquare, Send, ShieldPlus, Loader2, X, Plus } from "lucide
 import toast from "react-hot-toast";
 import { ClientT } from "@/components/i18n/client-t";
 import { getClientTranslation } from "@/app/actions/translate";
+import { cn } from "@/lib/utils";
 
 type Comment = {
     id: string;
@@ -28,13 +29,24 @@ type WorkspaceMember = {
     user: { id: string; name: string; email: string; image?: string | null };
 };
 
-export function CollaborationSidebar({ surveyId, isOwner, collaborators = [] }: { surveyId: string; isOwner: boolean; collaborators?: string[] }) {
+export function CollaborationSidebar({ 
+    surveyId, 
+    isOwner, 
+    collaborators = [], 
+    isOpen, 
+    onClose 
+}: { 
+    surveyId: string; 
+    isOwner: boolean; 
+    collaborators?: string[];
+    isOpen: boolean;
+    onClose: () => void;
+}) {
     const { user } = useAuth();
     const [comments, setComments] = useState<Comment[]>([]);
     const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
     const [newComment, setNewComment] = useState("");
     const [isPosting, setIsPosting] = useState(false);
-    const [isOpen, setIsOpen] = useState(false);
 
     // Access Management State
     const [showAccessModal, setShowAccessModal] = useState(false);
@@ -48,7 +60,7 @@ export function CollaborationSidebar({ surveyId, isOwner, collaborators = [] }: 
         let mounted = true;
 
         const pollData = async () => {
-            if (!surveyId) return;
+            if (!surveyId || !isOpen) return;
 
             try {
                 const [presenceRes, commentsRes] = await Promise.all([
@@ -74,7 +86,7 @@ export function CollaborationSidebar({ surveyId, isOwner, collaborators = [] }: 
             mounted = false;
             clearInterval(interval);
         };
-    }, [surveyId]);
+    }, [surveyId, isOpen]);
 
     useEffect(() => {
         commentsEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -121,33 +133,18 @@ export function CollaborationSidebar({ surveyId, isOwner, collaborators = [] }: 
         }
     };
 
-    if (!isOpen) {
-        return (
-            <button
-                onClick={() => setIsOpen(true)}
-                className="fixed bottom-6 right-6 p-4 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 transition"
-            >
-                <div className="relative">
-                    <MessageSquare className="w-6 h-6" />
-                    {activeUsers.length > 1 && (
-                        <span className="absolute -top-2 -right-2 bg-emerald-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full border-2 border-indigo-600">
-                            {activeUsers.length}
-                        </span>
-                    )}
-                </div>
-            </button>
-        );
-    }
-
     return (
         <>
-            <div className="fixed right-0 top-0 h-screen w-80 bg-white border-l border-gray-100 shadow-2xl flex flex-col z-40 transform transition-transform">
+            <div className={cn(
+                "fixed right-0 top-0 h-screen w-80 bg-white border-l border-gray-100 shadow-2xl flex flex-col z-50 transform transition-transform duration-300 ease-in-out",
+                isOpen ? "translate-x-0" : "translate-x-full"
+            )}>
                 <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
                     <div className="flex items-center gap-2">
                         <Users className="w-5 h-5 text-indigo-600" />
                         <h3 className="font-semibold text-gray-900"><ClientT>Team Collaboration</ClientT></h3>
                     </div>
-                    <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600">
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
@@ -213,13 +210,23 @@ export function CollaborationSidebar({ surveyId, isOwner, collaborators = [] }: 
                 </div>
             </div>
 
+            {/* Backdrop for mobile or focus */}
+            {isOpen && (
+                <div 
+                    className="fixed inset-0 bg-black/5 backdrop-blur-[1px] z-40 transition-opacity" 
+                    onClick={onClose}
+                />
+            )}
+
             {/* Access Modal */}
             {showAccessModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-2xl shadow-xl w-[400px] max-w-[90%] p-6 space-y-6">
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+                    <div className="bg-white rounded-2xl shadow-xl w-[400px] max-w-[90%] p-6 space-y-6 animate-in zoom-in-95 duration-200">
                         <div className="flex items-center justify-between">
                             <h3 className="font-bold text-lg text-gray-900"><ClientT>Manage Edit Access</ClientT></h3>
-                            <button onClick={() => setShowAccessModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+                            <button onClick={() => setShowAccessModal(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
                         </div>
 
                         <p className="text-sm text-gray-500">
@@ -256,7 +263,7 @@ export function CollaborationSidebar({ surveyId, isOwner, collaborators = [] }: 
                             )}
                         </div>
 
-                        <button onClick={() => setShowAccessModal(false)} className="w-full py-2 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition">
+                        <button onClick={() => setShowAccessModal(false)} className="w-full py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-colors">
                             <ClientT>Done</ClientT>
                         </button>
                     </div>
