@@ -1,147 +1,168 @@
+import { Suspense } from "react";
+import { ArrowLeft, Loader2, Search } from "lucide-react";
+
 import { ConversationCard } from "@/components/analytics/ConversationCard";
 import { T } from "@/components/i18n/t";
+import { buildConversationListItem } from "@/lib/analytics";
+import { Link, redirect } from "@/i18n/routing";
+import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
-import { surveyConversations } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
-import { Link } from "@/i18n/routing";
-import { ArrowLeft, Search, SlidersHorizontal, Loader2 } from "lucide-react";
-import { Suspense } from "react";
+import { surveySessionInsights, surveySessions } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
+import { getSurveyPermissionContext } from "@/lib/workspace-access";
 
 interface PageProps {
-  params: Promise<{ surveyId: string }>;
+  params: Promise<{ surveyId: string; locale: string }>;
 }
 
-import { headers } from "next/headers";
-
 export default async function ConversationsPage({ params }: PageProps) {
-  const { surveyId } = await params;
+  const { surveyId, locale } = await params;
 
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-      </div>
-    }>
-      <ConversationsContent surveyId={surveyId} />
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+        </div>
+      }
+    >
+      <ConversationsContent surveyId={surveyId} locale={locale} />
     </Suspense>
   );
 }
 
-async function ConversationsContent({ surveyId }: { surveyId: string }) {
-  // Use headers to force dynamic rendering within the Suspense boundary
-  await headers();
+async function ConversationsContent({
+  surveyId,
+  locale,
+}: {
+  surveyId: string;
+  locale: string;
+}) {
+  const session = await getVerifiedSession();
+  const permission = await getSurveyPermissionContext(session.user.id, surveyId);
+  if (!permission?.canView) {
+    redirect({ href: "/dashboard/analytics", locale });
+  }
+
+  const rows = await getDb()
+    .select({
+      sessionId: surveySessionInsights.sessionId,
+      insight: surveySessionInsights.insight,
+      createdAt: surveySessions.createdAt,
+      sessionType: surveySessions.sessionType,
+      sourceConversationId: surveySessions.sourceConversationId,
+    })
+    .from(surveySessionInsights)
+    .innerJoin(surveySessions, eq(surveySessions.id, surveySessionInsights.sessionId))
+    .where(
+      and(
+        eq(surveySessionInsights.surveyId, surveyId),
+        eq(surveySessions.sessionType, "live"),
+      ),
+    );
+
+  const conversations = rows.map((row) =>
+    buildConversationListItem({
+      insight: row.insight as any,
+      sessionType: row.sessionType,
+      createdAt: row.createdAt,
+      sourceConversationId: row.sourceConversationId,
+    }),
+  );
+  const total = conversations.length;
+  const highQuality = conversations.filter(
+    (item) => item.completenessPercent >= 80 && item.reliabilityPercent >= 65,
+  ).length;
+  const averageReliability =
+    total > 0
+      ? Math.round(
+          conversations.reduce((sum, item) => sum + item.reliabilityPercent, 0) /
+            total,
+        )
+      : 0;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen">
-      {/* Header - Visible Immediately */}
-      <div className="flex flex-col gap-6 mb-8">
+    <div className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mb-8 flex flex-col gap-6">
         <div className="flex items-center gap-4">
           <Link
             href={`/dashboard/surveys/${surveyId}/analytics`}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors group"
+            className="group rounded-full p-2 transition-colors hover:bg-gray-100"
           >
-            <ArrowLeft className="w-5 h-5 text-gray-400 group-hover:text-gray-700 transition-colors" />
+            <ArrowLeft className="h-5 w-5 text-gray-400 transition-colors group-hover:text-gray-700" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-              <T>Conversations</T>
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+              <T>Session Insights</T>
             </h1>
-            <p className="text-gray-500 text-sm">
-              <T>Explore individual participant sessions</T>
+            <p className="text-sm text-gray-500">
+              <T>Review the session-level summaries that feed the analytics snapshot.</T>
             </p>
           </div>
         </div>
 
-        {/* Filters & Search Toolbar - Visible Immediately */}
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search transcripts..."
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition-all"
-            />
-          </div>
-          <div className="flex gap-2">
-            <button className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-              <SlidersHorizontal className="w-4 h-4 text-gray-500" />
-              <span>
-                <T>Filter</T>
-              </span>
-            </button>
-            <select className="px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer">
-              <option>Newest first</option>
-              <option>Oldest first</option>
-              <option>Highest sentiment</option>
-              <option>Lowest sentiment</option>
-            </select>
-          </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <StatCard
+            label="Sessions"
+            value={String(total)}
+          />
+          <StatCard
+            label="High quality"
+            value={String(highQuality)}
+          />
+          <StatCard
+            label="Average reliability"
+            value={`${averageReliability}%`}
+          />
+        </div>
+
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search session summaries..."
+            className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-700 outline-none transition-all focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+            disabled
+          />
         </div>
       </div>
 
-      <Suspense
-        fallback={
-          <div className="flex flex-col items-center justify-center py-20 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
-            <Loader2 className="w-6 h-6 text-gray-400 animate-spin mb-2" />
-            <p className="text-sm text-gray-500">
-              <T>Loading conversations...</T>
-            </p>
+      {conversations.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-gray-50/50 py-20">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
+            <Search className="h-6 w-6 text-gray-400" />
           </div>
-        }
-      >
-        <ConversationsList surveyId={surveyId} />
-      </Suspense>
+          <h3 className="mb-1 font-medium text-gray-900">
+            <T>No session insights yet</T>
+          </h3>
+          <p className="text-sm text-gray-500">
+            <T>Complete a few live sessions to populate grounded analytics.</T>
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {conversations.map((conversation) => (
+            <ConversationCard
+              key={conversation.sessionId}
+              surveyId={surveyId}
+              conversation={conversation}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-async function ConversationsList({ surveyId }: { surveyId: string }) {
-  const conversations = await getDb().query.surveyConversations.findMany({
-    where: eq(surveyConversations.surveyId, surveyId),
-    orderBy: desc(surveyConversations.createdAt),
-    with: {
-      insights: true,
-    },
-  });
-
-  if (conversations.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
-        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-          <Search className="w-6 h-6 text-gray-400" />
-        </div>
-        <h3 className="text-gray-900 font-medium mb-1"><T>No conversations yet</T></h3>
-        <p className="text-sm text-gray-500">
-          <T>Share your survey link to start collecting responses.</T>
-        </p>
-      </div>
-    );
-  }
-
+function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {conversations.map((conv: any) => {
-        const insightsData = conv.insights?.insights as any;
-        const sentiment = insightsData?.sentiment?.score ?? 0;
-        const startTime = new Date(conv.createdAt).getTime();
-        const endTime = new Date(conv.updatedAt).getTime();
-        const duration = Math.max(1, Math.round((endTime - startTime) / 60000));
-        const msgCount = (conv.rawConversation as any[])?.length || 0;
-
-        return (
-          <ConversationCard
-            key={conv.id}
-            id={conv.id}
-            surveyId={surveyId}
-            summary={conv.summary || insightsData?.summary}
-            sentimentScore={sentiment}
-            durationMinutes={duration}
-            messageCount={msgCount}
-            isCompleted={conv.completed}
-            createdAt={conv.createdAt.toISOString()}
-          />
-        );
-      })}
+    <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+        {label}
+      </div>
+      <div className="mt-2 text-2xl font-black tracking-tight text-gray-900">
+        {value}
+      </div>
     </div>
   );
 }

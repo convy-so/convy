@@ -44,9 +44,20 @@ type MyUITools = {
 
 type ChatMessage = UIMessage<unknown, Record<string, unknown>, MyUITools>;
 
-function SuggestionPill({ icon: Icon, label }: { icon: React.ElementType, label: string }) {
+function SuggestionPill({
+    icon: Icon,
+    label,
+    onClick,
+}: {
+    icon: React.ElementType,
+    label: string,
+    onClick?: () => void,
+}) {
     return (
-        <button className="flex items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-100 rounded-full text-xs font-bold text-gray-500 hover:bg-white hover:border-gray-900 hover:text-gray-900 transition-all whitespace-nowrap">
+        <button
+            onClick={onClick}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-100 rounded-full text-xs font-bold text-gray-500 hover:bg-white hover:border-gray-900 hover:text-gray-900 transition-all whitespace-nowrap"
+        >
             <Icon className="w-3.5 h-3.5" />
             <ClientT>{label}</ClientT>
         </button>
@@ -59,6 +70,12 @@ export function ChatWithData({ surveyId }: ChatWithDataProps) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [input, setInput] = useState("");
     const [chatPlaceholder, setChatPlaceholder] = useState("Ask anything about your data...");
+    const suggestions = [
+        "How many students reported positive outcomes?",
+        "What barriers appear most often?",
+        "Compare the latest snapshot with the previous one.",
+        "Show the strongest evidence behind the top finding.",
+    ];
 
     useEffect(() => {
         getClientTranslation("Ask anything about your data...").then(setChatPlaceholder);
@@ -310,10 +327,10 @@ export function ChatWithData({ surveyId }: ChatWithDataProps) {
                     </button>
                 </form>
                 <div className="max-w-4xl mx-auto flex gap-4 mt-6 overflow-x-auto pb-2 px-2 no-scrollbar">
-                    <SuggestionPill icon={Search} label="Finding trends" />
-                    <SuggestionPill icon={Table} label="Pivot data" />
-                    <SuggestionPill icon={BarChart2} label="Visualize metrics" />
-                    <SuggestionPill icon={Sparkles} label="AI Insights" />
+                    <SuggestionPill icon={Search} label="Finding trends" onClick={() => setInput(suggestions[1])} />
+                    <SuggestionPill icon={Table} label="Pivot data" onClick={() => setInput(suggestions[0])} />
+                    <SuggestionPill icon={BarChart2} label="Visualize metrics" onClick={() => setInput(suggestions[2])} />
+                    <SuggestionPill icon={Sparkles} label="AI Insights" onClick={() => setInput(suggestions[3])} />
                 </div>
             </div>
         </div>

@@ -3,9 +3,7 @@ import {
   integer,
   jsonb,
   pgTable,
-  real,
   text,
-  timestamp,
   vector,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";

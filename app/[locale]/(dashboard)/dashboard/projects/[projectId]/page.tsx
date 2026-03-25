@@ -39,7 +39,6 @@ import { Suspense } from "react";
 
 import { getClientTranslation } from "@/app/actions/translate";
 import { authClient } from "@/lib/auth-client";
-import type { SupportedLanguage } from "@/lib/i18n/ai-translator";
 
 function ProjectDetailContent() {
   const params = useParams();
@@ -69,8 +68,7 @@ function ProjectDetailContent() {
     description: "Describe the objective of this project...",
   });
 
-  const { data: session } = authClient.useSession();
-  const language = (session?.user as any)?.preferredLanguage as SupportedLanguage || "en";
+  authClient.useSession();
 
   useEffect(() => {
     Promise.all([

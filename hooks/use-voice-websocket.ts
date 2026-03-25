@@ -31,7 +31,7 @@ export function useVoiceWebSocket({
   const micEnabledRef = useRef(false);
   const [isMicEnabled, setIsMicEnabled] = useState(false);
 
-  const [lastEventId, setLastEventId] = useState<string | null>(null);
+  const [lastEventId] = useState<string | null>(null);
   const lastEventIdRef = useRef<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
@@ -83,8 +83,7 @@ export function useVoiceWebSocket({
     // We do this check to avoid fetching for public endpoints
     if (
       url.includes("/voice/survey-creation") ||
-      url.includes("/voice/sample-conversation") ||
-      url.includes("/analytics")
+      url.includes("/voice/sample-conversation")
     ) {
       try {
         // console.log("[Voice WS] Fetching auth token...");
@@ -328,7 +327,6 @@ export function useVoiceWebSocket({
         float32Data[i] = int16Data[i] / 32768.0;
       }
 
-      const totalDuration = float32Data.length / sampleRate;
       const audioBuffer = audioCtx.createBuffer(
         1,
         float32Data.length,

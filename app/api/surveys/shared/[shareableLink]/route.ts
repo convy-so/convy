@@ -3,12 +3,13 @@ import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
+import { getResearchBrief } from "@/lib/education/storage";
 
 /**
  * Get a survey by its shareable link (public endpoint)
  */
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ shareableLink: string }> },
 ) {
   try {
@@ -18,7 +19,8 @@ export async function GET(
       .select({
         id: surveys.id,
         title: surveys.title,
-        expertState: surveys.expertState,
+        programId: surveys.programId,
+        coreObjective: surveys.coreObjective,
         status: surveys.status,
         currentParticipants: surveys.currentParticipants,
         participantLimit: surveys.participantLimit,
@@ -37,7 +39,14 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ survey });
+    const briefRow = await getResearchBrief(survey.id);
+
+    return NextResponse.json({
+      survey: {
+        ...survey,
+        brief: briefRow?.brief || null,
+      },
+    });
   } catch (error) {
     console.error("Error fetching shared survey:", error);
     return NextResponse.json(

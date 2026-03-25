@@ -1,33 +1,102 @@
+import { and, eq } from "drizzle-orm";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
-import { and, eq, lt } from "drizzle-orm";
+import { nanoid } from "nanoid";
+import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-
+import { getClientIP, apiRateLimiter } from "@/lib/ratelimit";
+import { generateAIResponse } from "@/lib/ai";
 import {
-  MAX_SAMPLE_CONVERSATIONS,
-  buildCompleteSurveyConfig,
-} from "@/lib/surveys";
-import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
-import { normalizeMessages, extractAIGeneratedResponse } from "@/lib/ai";
-import { ConversationManager } from "@/lib/conversation-manager";
-import { MemoryBridge, TranscriptTurn } from "@/lib/memory-bridge";
-import { ExpertStateStore } from "@/lib/expert-state-store";
-import type { AgentContext } from "@/lib/agents/types";
-import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
-import { StreamFieldExtractor } from "@/lib/agents/streaming/stream-field-extractor";
+  buildConductingSystemPrompt,
+  createInitialSessionState,
+  finalizeConductingTurn,
+} from "@/lib/education/conducting-runtime";
 import {
-  withGeminiLimit,
-  GeminiCapacityError,
-  geminiCapacityResponse,
-} from "@/lib/gemini-limiter";
+  ensureSession,
+  getActiveConductingProfile,
+  getActiveCoveragePlan,
+  purgeSessionAnalyticsArtifacts,
+  getResearchBrief,
+  getSessionBySourceId,
+} from "@/lib/education/storage";
+import { getConductingRuntimeLayers } from "@/lib/education/runtime-context";
+import {
+  acquireSurveyLease,
+  getActiveSurveyLease,
+  getCurrentSurveyRevision,
+  publishPendingOutboxEntries,
+  recordRealtimeEvent,
+} from "@/lib/collaboration-service";
+import { getSurveyPermissionContext } from "@/lib/workspace-access";
 
 export const maxDuration = 300;
+const MAX_SAMPLE_CONVERSATIONS = 3;
 
-/**
- * GET - Retrieve historical messages for a sample conversation
- */
+type ChatMessage = {
+  id?: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp?: string;
+};
+
+function normalizeMessages(messages: any[]): ChatMessage[] {
+  return messages
+    .map((message) => {
+      const content =
+        typeof message.content === "string"
+          ? message.content
+          : Array.isArray(message.parts)
+            ? message.parts
+                .filter((part: any) => part.type === "text")
+                .map((part: any) => part.text)
+                .join("")
+            : "";
+      return {
+        id: message.id,
+        role: message.role,
+        content,
+        timestamp: message.timestamp || new Date().toISOString(),
+      } as ChatMessage;
+    })
+    .filter((message) => message.role === "user" || message.role === "assistant");
+}
+
+async function ensureRehearsalLease(input: {
+  surveyId: string;
+  userId: string;
+  sessionId?: string | null;
+  leaseToken?: string | null;
+  force?: boolean;
+}) {
+  const activeLease = await getActiveSurveyLease(input.surveyId, "rehearsal");
+
+  if (
+    activeLease &&
+    activeLease.holderUserId !== input.userId &&
+    (!input.leaseToken || input.leaseToken !== activeLease.leaseToken)
+  ) {
+    return { ok: false as const, error: "LEASE_CONFLICT", lease: activeLease };
+  }
+
+  if (
+    activeLease &&
+    activeLease.holderUserId === input.userId &&
+    input.leaseToken === activeLease.leaseToken
+  ) {
+    return { ok: true as const, lease: activeLease };
+  }
+
+  return await acquireSurveyLease({
+    surveyId: input.surveyId,
+    stage: "rehearsal",
+    userId: input.userId,
+    sessionId: input.sessionId,
+    force: input.force,
+  });
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ surveyId: string }> },
@@ -38,30 +107,27 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const conversationNumber = Number(searchParams.get("conversationNumber") || 1);
 
-    const [survey] = await getDb()
-      .select()
-      .from(surveys)
-      .where(eq(surveys.id, surveyId));
+    const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
+    if (!survey) return new Response("Survey not found", { status: 404 });
 
-    if (!survey) {
-      return new Response("Survey not found", { status: 404 });
-    }
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission?.canView) return new Response("Unauthorized", { status: 403 });
 
-    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
-    const access = await getSurveyAccessLevel(session.user.id, survey.id);
-    if (access === "none") {
-      return new Response("Unauthorized", { status: 403 });
-    }
-
-    const sampleId = `sample-${surveyId}-${conversationNumber}`;
     const [sample] = await getDb()
       .select()
       .from(sampleConversations)
-      .where(eq(sampleConversations.id, sampleId));
+      .where(
+        and(
+          eq(sampleConversations.surveyId, surveyId),
+          eq(sampleConversations.conversationNumber, conversationNumber),
+        ),
+      )
+      .limit(1);
 
-    return new Response(JSON.stringify({ messages: sample?.messages || [] }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
+    return NextResponse.json({
+      messages: sample?.messages || [],
+      lease: await getActiveSurveyLease(surveyId, "rehearsal"),
+      revision: await getCurrentSurveyRevision(surveyId),
     });
   } catch (error) {
     console.error("[Sample GET] Error:", error);
@@ -69,20 +135,13 @@ export async function GET(
   }
 }
 
-/**
- * Stream a sample conversation for the survey maker to review
- * This allows interactive testing of the conversation flow
- * Now supports extended survey configuration including tone and images
- */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
-    // Rate limiting check
     const clientIP = getClientIP(request);
     const rateLimitResult = await apiRateLimiter.limit(clientIP);
-
     if (!rateLimitResult.success) {
       return new Response(
         JSON.stringify({
@@ -91,13 +150,7 @@ export async function POST(
         }),
         {
           status: 429,
-          headers: {
-            "Content-Type": "application/json",
-            "Retry-After": rateLimitResult.reset.toString(),
-            "X-RateLimit-Limit": "100",
-            "X-RateLimit-Remaining": rateLimitResult.remaining.toString(),
-            "X-RateLimit-Reset": rateLimitResult.reset.toString(),
-          },
+          headers: { "Content-Type": "application/json" },
         },
       );
     }
@@ -105,44 +158,23 @@ export async function POST(
     const session = await getVerifiedSession();
     const { surveyId } = await params;
     const body = await request.json();
-    console.log(`[Sample POST] Incoming request for survey: ${surveyId}. Body:`, JSON.stringify(body, null, 2));
-    const { messages, feedback, conversationNumber } = body as {
-      messages: any[];
-      feedback?: string;
-      conversationNumber?: number;
-    };
+    const conversationNumber = Number(body.conversationNumber || 1);
+    const messages = normalizeMessages(Array.isArray(body.messages) ? body.messages : []);
 
-    if (!Array.isArray(messages)) {
-      return new Response("Invalid messages", { status: 400 });
-    }
-
-    if (
-      !conversationNumber ||
-      conversationNumber < 1 ||
-      conversationNumber > MAX_SAMPLE_CONVERSATIONS
-    ) {
+    if (conversationNumber < 1 || conversationNumber > MAX_SAMPLE_CONVERSATIONS) {
       return new Response(
         `Invalid conversation number. Must be between 1 and ${MAX_SAMPLE_CONVERSATIONS}`,
         { status: 400 },
       );
     }
 
-    const [survey] = await getDb()
-      .select()
-      .from(surveys)
-      .where(eq(surveys.id, surveyId));
+    const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
+    if (!survey) return new Response("Survey not found", { status: 404 });
 
-    if (!survey) {
-      return new Response("Survey not found", { status: 404 });
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission?.canEdit) {
+      return new Response("Unauthorized: Editor access required", { status: 403 });
     }
-
-    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
-    const access = await getSurveyAccessLevel(session.user.id, survey.id);
-    if (access === "none") {
-      return new Response("Unauthorized", { status: 403 });
-    }
-
-    // Allow sample conversations for surveys in draft or sample_review status
     if (survey.status !== "draft" && survey.status !== "sample_review") {
       return new Response(
         "Survey must be in draft or sample_review status for sample conversations",
@@ -150,254 +182,215 @@ export async function POST(
       );
     }
 
-    if (conversationNumber > survey.sampleConversationCount + 1) {
-      return new Response("Sample conversations must be sequential", {
-        status: 400,
-      });
+    const currentRevision = await getCurrentSurveyRevision(surveyId);
+    if (
+      typeof body.expectedRevision === "number" &&
+      body.expectedRevision !== currentRevision
+    ) {
+      return NextResponse.json(
+        {
+          error: "REVISION_CONFLICT",
+          currentRevision,
+        },
+        { status: 409 },
+      );
     }
 
-    // Build complete survey config with all extended fields
-    const surveyConfig = buildCompleteSurveyConfig(survey);
+    const leaseResult = await ensureRehearsalLease({
+      surveyId,
+      userId: session.user.id,
+      sessionId:
+        typeof body.sessionId === "string" ? body.sessionId : session.session.id,
+      leaseToken: typeof body.leaseToken === "string" ? body.leaseToken : null,
+      force: Boolean(body.forceLease),
+    });
 
-    // Get previous feedback from earlier sample conversations
-    const previousFeedbackRows = await getDb()
-      .select({
-        feedback: sampleConversations.feedback,
-        finalComments: sampleConversations.finalComments,
-      })
+    if (!leaseResult.ok) {
+      return NextResponse.json(
+        {
+          error: leaseResult.error,
+          lease: "lease" in leaseResult ? leaseResult.lease : null,
+        },
+        { status: 409 },
+      );
+    }
+
+    const [briefRow, planRow] = await Promise.all([
+      getResearchBrief(surveyId),
+      getActiveCoveragePlan(surveyId),
+    ]);
+    if (!briefRow || !planRow) {
+      return new Response(
+        "This survey does not have an approved education brief yet.",
+        { status: 400 },
+      );
+    }
+
+    const [activeSampleProfile, runtimeLayers] = await Promise.all([
+      getActiveConductingProfile(surveyId, "sample"),
+      getConductingRuntimeLayers({
+        surveyId,
+        organizationId: survey.organizationId,
+        mode: "sample",
+      }),
+    ]);
+
+    let [sampleConversation] = await getDb()
+      .select()
       .from(sampleConversations)
       .where(
         and(
           eq(sampleConversations.surveyId, surveyId),
-          lt(sampleConversations.conversationNumber, conversationNumber),
+          eq(sampleConversations.conversationNumber, conversationNumber),
         ),
-      );
+      )
+      .limit(1);
 
-    // Combine all previous feedback
-    const previousFeedback = previousFeedbackRows
-      .flatMap((row) => [row.feedback, row.finalComments])
-      .filter((value): value is string => !!value && value.trim().length > 0)
-      .join("\n");
+    if (!sampleConversation) {
+      const [created] = await getDb()
+        .insert(sampleConversations)
+        .values({
+          id: `sample-${surveyId}-${conversationNumber}`,
+          surveyId,
+          conversationNumber,
+          messages: [],
+          confirmed: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+      sampleConversation = created;
+      await getDb()
+        .update(surveys)
+        .set({
+          sampleConversationCount: Math.max(
+            survey.sampleConversationCount,
+            conversationNumber,
+          ),
+          updatedAt: new Date(),
+        })
+        .where(eq(surveys.id, surveyId));
+    }
 
-    const combinedFeedback = [previousFeedback, feedback]
-      .filter((value): value is string => !!value && value.trim().length > 0)
-      .join("\n\n");
-
-    // Deterministic ID for context persistence during this sample session
-    const conversationId = `sample:${surveyId}:${conversationNumber}:${session.user.id}`;
-    const sampleId = `sample-${surveyId}-${conversationNumber}`;
-
-    const normalizedMessages = await normalizeMessages(messages);
-
-    // UPSERT the sampleConversations row so onFinish UPDATE always finds a real row.
-    // Without this, conversation history was silently dropped every turn (stuck survey bug).
-    const upsertSampleRowPromise = getDb()
-      .insert(sampleConversations)
-      .values({
-        id: sampleId,
-        surveyId: survey.id,
-        conversationNumber,
-        messages: [],
-      })
-      .onConflictDoNothing()
-      .catch((err) =>
-        console.error("[Sample Route] Failed to upsert sample row:", err),
-      );
-
-    const [memoryBridge] = await Promise.all([
-      ConversationManager.loadOrCreateMemoryBridge(conversationId),
-      upsertSampleRowPromise,
-    ]);
-    
-    const expertState = await ExpertStateStore.get(surveyConfig.id);
-
-    // Use raw messages, conducting agent streams prepends compressed transcript if memoryBridge is provided
-    const messagesForAI = normalizedMessages;
-
-    // --- AGENT INTEGRATION: Use ConductingSpecialist for agentic behavior ---
-    const agentContext: AgentContext = {
-      conversationId,
-      messages: messagesForAI as any,
-      surveyConfig,
-      memoryBridge,
-      expertState: expertState || undefined,
-      language: survey.language as "en" | "fr" | "de" | "es" | "it" | undefined,
-      modality: "text",
-      isSample: true,
-      sampleFeedback: combinedFeedback,
-      conversationNumber,
-      userId: session.user.id,
-      organizationId: survey.organizationId || undefined,
-    };
-
-    const conductingAgent = new ConductingSpecialist(agentContext);
-    await conductingAgent.initialize();
-
-    // Preload pattern learnings and skills for the agent
-    await Promise.all([
-      conductingAgent.preloadSkills(),
-      conductingAgent.preloadPatternLearnings(
-        ["questioning", "probing", "engagement"],
-        2,
-      ),
-    ]).catch((error) =>
-      console.warn(
-        "[Sample Route] Failed to preload agent capabilities:",
-        error,
-      ),
-    );
-
-    // Inject a transient user message to trigger the greeting if history is empty
-    const messagesToLLM = [...messagesForAI];
-    if (messagesToLLM.length === 0) {
-      messagesToLLM.push({
-        role: "user",
-        // This message is invisible to the user but prompts the AI to start
-        content:
-          "Start the conversation now. Greet the participant according to the system prompt instructions.",
+    let sessionRow = await getSessionBySourceId(sampleConversation.id);
+    if (!sessionRow) {
+      sessionRow = await ensureSession({
+        surveyId,
+        sessionType: "sample",
+        sourceConversationId: sampleConversation.id,
+        language: survey.language,
+        initialState: createInitialSessionState({
+          surveyId,
+          sessionId: nanoid(),
+          sessionType: "sample",
+          language: survey.language as any,
+          coveragePlan: planRow.plan,
+        }),
       });
     }
 
-    // Use the agent's stream method which includes domain expertise, checklist, and tools
-    const streamResult = await withGeminiLimit(async () => {
-      return conductingAgent.stream(
-        messagesToLLM as any,
-        () => {}, // No media display in sample testing right now
-        async (params: { text: string; usage: any; response: any }) => {
-          const { text, usage, response } = params;
-          const contentForStorage = extractAIGeneratedResponse(text);
-
-          if (sampleId) {
-            const newMessagesToAppend = response.messages.map((m: any) => ({
-              role: m.role,
-              content: typeof m.content === 'string' ? m.content : (m.role === 'assistant' ? contentForStorage : ""),
-              parts: Array.isArray(m.content) ? m.content : undefined,
-              timestamp: m.timestamp || new Date().toISOString(),
-            }));
-
-            const dbMessages = [
-              ...messagesToLLM,
-              ...newMessagesToAppend
-            ];
-
-            // Check if AI completed survey (look for finishSurvey in any step)
-            const isCompleted = response.messages.some((m: any) => 
-               Array.isArray(m.content) && m.content.some((p: any) => (p.type === 'tool-call' || p.type === 'tool-invocation') && p.toolName === 'finishSurvey')
-            );
-
-            await getDb()
-              .update(sampleConversations)
-              .set({
-                messages: dbMessages,
-                updatedAt: new Date(),
-              })
-              .where(eq(sampleConversations.id, sampleId));
-
-            if (isCompleted) {
-              const { enqueueSampleConversationInsights } =
-                await import("@/lib/queue");
-              await enqueueSampleConversationInsights({
-                surveyId: survey.id,
-                conversationNumber: Number(sampleId.split("-").pop() || 1),
-                messages: dbMessages as any,
-                userId: session.user.id,
-              });
-            }
-
-            if (expertState) {
-              const newTurn: TranscriptTurn = {
-                turnIndex: expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 1,
-                speaker: "agent",
-                text: contentForStorage,
-                timestamp: new Date().toISOString(),
-                type: "turn"
-              };
-              
-              const respondentMsg = normalizedMessages[normalizedMessages.length - 1];
-              if (respondentMsg && respondentMsg.role === "user") {
-                 const resTurn: TranscriptTurn = {
-                   turnIndex: expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 2,
-                   speaker: "respondent",
-                   text: typeof respondentMsg.content === 'string' ? respondentMsg.content : (Array.isArray(respondentMsg.content) ? (respondentMsg.content.find((p:any) => p.type === 'text') as any)?.text || "" : ""),
-                   timestamp: new Date().toISOString(),
-                   type: "turn"
-                 };
-                 resTurn.turnIndex = expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 1;
-                 newTurn.turnIndex = resTurn.turnIndex + 1;
-                 
-                 expertState.transcript.turns.push(resTurn);
-              }
-              expertState.transcript.turns.push(newTurn);
-              ExpertStateStore.update(surveyConfig.id, expertState).catch(console.error);
-              
-              ConversationManager.updateMemoryAsync(
-                conversationId,
-                surveyConfig,
-                expertState,
-                memoryBridge,
-                newTurn,
-                { userId: session.user.id }
-              ).catch((err) =>
-                console.error("[Sample Route] Async memory update failed:", err),
-              );
-            }
-          }
-        },
-        undefined,
-      );
+    const brief = briefRow.brief;
+    const state = sessionRow.sessionState;
+    const systemPrompt = buildConductingSystemPrompt({
+      brief,
+      coveragePlan: planRow.plan,
+      sessionState: state,
+      sessionType: "sample",
+      conductingProfile: activeSampleProfile?.profile ?? null,
+      playbookContext: runtimeLayers.playbookContext,
+      personalityContext: runtimeLayers.personalityContext,
     });
 
-    // MemoryBridge state is automatically persisted in updateMemoryAsync
+    const visibleMessages =
+      messages.length > 0
+        ? messages
+        : [
+            {
+              role: "user",
+              content:
+                "Start the sample interview by greeting the participant and asking the first best question.",
+            } as ChatMessage,
+          ];
 
-    // AI SDK v6 native UIMessage stream conversion
-    const uiStream = streamResult.toUIMessageStream();
+    const responseText = await generateAIResponse(
+      visibleMessages
+        .map((message) => `${message.role}: ${message.content}`)
+        .join("\n\n"),
+      systemPrompt,
+      { surveyId, userId: session.user.id, maxTokens: 500, temperature: 0.4 },
+    );
+
+    const assistantMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: responseText,
+      timestamp: new Date().toISOString(),
+    };
+    const persistedMessages =
+      messages.length > 0 ? [...messages, assistantMessage] : [assistantMessage];
+
+    await getDb().transaction(async (tx) => {
+      await tx
+        .update(sampleConversations)
+        .set({
+          messages: persistedMessages,
+          updatedAt: new Date(),
+        })
+        .where(eq(sampleConversations.id, sampleConversation.id));
+
+      await recordRealtimeEvent(tx, {
+        scope: "survey",
+        surveyId,
+        workspaceId: permission.workspaceId,
+        eventType: "survey.rehearsal_turn_added",
+        actorId: session.user.id,
+        payload: {
+          surveyId,
+          conversationNumber,
+          sampleConversationId: sampleConversation.id,
+          lease: leaseResult.lease,
+          messages: persistedMessages.slice(-2),
+        },
+      });
+    });
+
+    if (visibleMessages.some((message) => message.role === "user")) {
+      await finalizeConductingTurn({
+        surveyId,
+        sessionId: sessionRow.id,
+        brief,
+        coveragePlan: planRow.plan,
+        sessionState: state,
+        messages: persistedMessages,
+      });
+      await purgeSessionAnalyticsArtifacts({
+        surveyId,
+        sessionId: sessionRow.id,
+      }).catch((error) => {
+        console.error(
+          "[Sample Route] Failed to purge rehearsal analytics artifacts:",
+          error,
+        );
+      });
+    }
+
+    await publishPendingOutboxEntries();
 
     const remainingSamples = MAX_SAMPLE_CONVERSATIONS - conversationNumber;
-
     const response = createUIMessageStreamResponse({
       stream: createUIMessageStream({
         execute: async ({ writer }) => {
-          const extractor = new StreamFieldExtractor();
-          
-          for await (const chunk of uiStream) {
-            const chunkObj = chunk as any;
-            if (chunkObj.type === "text-delta") {
-              const delta = chunkObj.textDelta || chunkObj.delta;
-              console.log(`[Sample Stream] Chunk:`, delta);
-              const cleanText = extractor.processChunk(delta);
-              if (cleanText) {
-                console.log(`[Sample Stream] Yielding:`, cleanText);
-                writer.write({ type: "text-delta", textDelta: cleanText } as any);
-              }
-            } else {
-              writer.write(chunkObj);
-            }
-          }
-          const finalCleanText = extractor.flush();
-          if (finalCleanText) {
-            console.log(`[Sample Stream] Final Flush:`, finalCleanText);
-            writer.write({ type: "text-delta", textDelta: finalCleanText } as any);
-          }
+          writer.write({ type: "text-delta", textDelta: responseText } as any);
         },
       }),
     });
     response.headers.set("X-Remaining-Samples", remainingSamples.toString());
-    response.headers.set(
-      "X-Conversation-Number",
-      conversationNumber.toString(),
-    );
-
+    response.headers.set("X-Conversation-Number", conversationNumber.toString());
+    response.headers.set("X-Survey-Revision", String(currentRevision + 1));
+    response.headers.set("X-Lease-Token", leaseResult.lease.leaseToken);
     return response;
   } catch (error) {
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return new Response(error.message, { status: 401 });
-      }
-    }
-    console.error("Error in sample route:", error);
+    console.error("[Sample Route] Error:", error);
     return new Response("Internal server error", { status: 500 });
   }
 }

@@ -2,36 +2,77 @@ import { eq, and, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
-import {
-  surveys,
-  surveyCreationConversations,
-  surveyConversations,
-} from "@/db/schema";
+import { surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
+import {
+  publishPendingOutboxEntries,
+  recordRealtimeEvent,
+} from "@/lib/collaboration-service";
+import { getSurveyPermissionContext } from "@/lib/workspace-access";
 
 /**
  * DELETE - Delete a survey
  */
 export async function DELETE(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
 
-    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
-    const access = await getSurveyAccessLevel(session.user.id, surveyId);
-
-    if (access !== "owner") {
+    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
+      activeWorkspaceId: session.session.activeOrganizationId ?? null,
+    });
+    if (!permission?.canDelete || !permission.activeContextMatchesResource) {
       return NextResponse.json(
-        { error: "Unauthorized. Only owners can delete surveys." },
+        { error: "Unauthorized. You do not have permission to delete this survey." },
         { status: 403 },
       );
     }
 
-    // Delete survey (cascades to related records)
-    await getDb().delete(surveys).where(eq(surveys.id, surveyId));
+    const [survey] = await getDb()
+      .select({
+        id: surveys.id,
+        title: surveys.title,
+        organizationId: surveys.organizationId,
+      })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+
+    if (!survey) {
+      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+    }
+
+    await getDb().transaction(async (tx) => {
+      if (permission.workspaceId) {
+        await recordRealtimeEvent(tx, {
+          scope: "survey",
+          surveyId,
+          workspaceId: permission.workspaceId,
+          eventType: "survey.deleting",
+          actorId: session.user.id,
+          payload: {
+            surveyId,
+            title: survey.title,
+          },
+        });
+        await recordRealtimeEvent(tx, {
+          scope: "workspace",
+          workspaceId: permission.workspaceId,
+          eventType: "workspace.survey_deleted",
+          actorId: session.user.id,
+          payload: {
+            workspaceId: permission.workspaceId,
+            surveyId,
+            title: survey.title,
+          },
+        });
+      }
+
+      await tx.delete(surveys).where(eq(surveys.id, surveyId));
+    });
+    await publishPendingOutboxEntries();
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -63,13 +104,12 @@ export async function PATCH(
     const { surveyId } = await params;
     const body = await request.json();
 
-    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
-    const access = await getSurveyAccessLevel(session.user.id, surveyId);
-
-    const canEdit = access === "owner" || access === "editor";
-    if (!canEdit) {
+    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
+      activeWorkspaceId: session.session.activeOrganizationId ?? null,
+    });
+    if (!permission?.canEdit || !permission.activeContextMatchesResource) {
       return NextResponse.json(
-        { error: "Unauthorized. Only owners and editors can modify surveys." },
+        { error: "Unauthorized. Only the creator and approved editors can modify surveys." },
         { status: 403 },
       );
     }
@@ -100,7 +140,6 @@ export async function PATCH(
     if (typeof body.isVoice === "boolean") {
       // If turning on voice, check limit
       if (body.isVoice && !survey.isVoice) {
-        const activeOrgId = (session.session as any).activeOrganizationId;
         const existingVoiceSurveys = await getDb()
           .select({ id: surveys.id })
           .from(surveys)
@@ -108,8 +147,8 @@ export async function PATCH(
             and(
               eq(surveys.userId, session.user.id),
               eq(surveys.isVoice, true),
-              activeOrgId
-                ? eq(surveys.organizationId, activeOrgId)
+              survey.organizationId
+                ? eq(surveys.organizationId, survey.organizationId)
                 : isNull(surveys.organizationId),
             ),
           );
@@ -119,7 +158,7 @@ export async function PATCH(
             {
               error:
                 "Limit reached: You can only have 2 voice surveys per " +
-                (activeOrgId ? "workspace" : "personal account"),
+                (survey.organizationId ? "workspace" : "personal account"),
             },
             { status: 403 },
           );
@@ -136,13 +175,32 @@ export async function PATCH(
     }
 
     // Update survey
-    await getDb()
-      .update(surveys)
-      .set({
-        ...updates,
-        updatedAt: new Date(),
-      })
-      .where(eq(surveys.id, surveyId));
+    await getDb().transaction(async (tx) => {
+      await tx
+        .update(surveys)
+        .set({
+          ...updates,
+          updatedAt: new Date(),
+        })
+        .where(eq(surveys.id, surveyId));
+
+      if (permission.workspaceId) {
+        await recordRealtimeEvent(tx, {
+          scope: "workspace",
+          workspaceId: permission.workspaceId,
+          eventType: "workspace.survey_updated",
+          actorId: session.user.id,
+          payload: {
+            workspaceId: permission.workspaceId,
+            survey: {
+              id: surveyId,
+              ...updates,
+            },
+          },
+        });
+      }
+    });
+    await publishPendingOutboxEntries();
 
     return NextResponse.json({ success: true, updates });
   } catch (error) {

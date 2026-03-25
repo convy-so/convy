@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { surveys, analyticsChatSessions } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
+import { getSurveyPermissionContext } from "@/lib/workspace-access";
 
 /**
  * GET /api/surveys/[surveyId]/analytics/chat-sessions/[sessionId]
@@ -26,9 +27,10 @@ export async function GET(
       return NextResponse.json({ error: "Survey not found" }, { status: 404 });
     }
 
-    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
-    const access = await getSurveyAccessLevel(session.user.id, survey.id);
-    if (access === "none") {
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id, {
+      activeWorkspaceId: session.session.activeOrganizationId ?? null,
+    });
+    if (!permission?.canView || !permission.activeContextMatchesResource) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

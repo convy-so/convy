@@ -1,9 +1,6 @@
 import { FaRobot, FaBolt, FaSync, FaComments } from "react-icons/fa";
-import { useTranslations } from "next-intl";
 
 export default function InsightsSection() {
-  const t = useTranslations('Landing.Insights');
-
   return (
     <section className="p-[12px]">
       <div className="bg-[#292929] text-white rounded-[32px] py-12 sm:py-32 px-4 sm:px-6 lg:px-12 mx-auto max-w-[1920px]">

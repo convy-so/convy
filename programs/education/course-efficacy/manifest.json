@@ -1,0 +1,117 @@
+{
+  "id": "education.course_efficacy",
+  "displayName": "Course Efficacy",
+  "description": "Evaluate whether a course or learning program built usable mastery rather than superficial satisfaction.",
+  "routing": {
+    "keywords": [
+      "course",
+      "training",
+      "class",
+      "module",
+      "lesson",
+      "learning experience",
+      "workshop"
+    ],
+    "examples": [
+      "We need to understand whether learners can actually apply what they learned after the course.",
+      "I want feedback on whether our course content helped people perform better."
+    ]
+  },
+  "requiredBriefFields": [
+    "researchGoal",
+    "decisionToInform",
+    "audienceDefinition",
+    "learningContext",
+    "deliveryContext",
+    "timeWindow",
+    "requiredTopics",
+    "successCriteria"
+  ],
+  "defaultDurationMinutes": 12,
+  "analyticsDimensions": [
+    "mastery_signals",
+    "confidence_shift",
+    "instruction_gaps",
+    "practice_barriers"
+  ],
+  "policyFlags": {
+    "allowSensitiveTopics": true,
+    "requiresConsent": true,
+    "piiMaskingRequired": true
+  },
+  "nodes": [
+    {
+      "id": "CE-01",
+      "label": "Learning goals clarity",
+      "description": "Determine whether participants understood what the course was supposed to help them do.",
+      "priority": 1.0,
+      "completionThreshold": 0.8,
+      "requiredEvidenceTypes": [
+        "quote",
+        "behavioral-example"
+      ],
+      "probeFamilies": [
+        "goal_recall",
+        "expectation_alignment"
+      ]
+    },
+    {
+      "id": "CE-02",
+      "label": "Applied mastery",
+      "description": "Understand whether learners can describe concrete behaviors, tasks, or decisions they can now perform.",
+      "priority": 1.0,
+      "completionThreshold": 0.85,
+      "requiredEvidenceTypes": [
+        "quote",
+        "behavioral-example"
+      ],
+      "probeFamilies": [
+        "behavioral_recall",
+        "specific_example"
+      ]
+    },
+    {
+      "id": "CE-03",
+      "label": "Instruction quality",
+      "description": "Assess which instructional moments, assets, or facilitation choices helped or hindered learning.",
+      "priority": 0.8,
+      "completionThreshold": 0.75,
+      "requiredEvidenceTypes": [
+        "quote"
+      ],
+      "probeFamilies": [
+        "moment_recall",
+        "teaching_quality"
+      ]
+    },
+    {
+      "id": "CE-04",
+      "label": "Practice friction",
+      "description": "Capture where practice, exercises, or reinforcement broke down.",
+      "priority": 0.85,
+      "completionThreshold": 0.75,
+      "requiredEvidenceTypes": [
+        "quote",
+        "barrier"
+      ],
+      "probeFamilies": [
+        "friction",
+        "practice_gap"
+      ]
+    },
+    {
+      "id": "CE-05",
+      "label": "Transfer confidence",
+      "description": "Measure confidence and remaining uncertainty about applying the learning in real settings.",
+      "priority": 0.7,
+      "completionThreshold": 0.7,
+      "requiredEvidenceTypes": [
+        "quote"
+      ],
+      "probeFamilies": [
+        "confidence",
+        "future_use"
+      ]
+    }
+  ]
+}

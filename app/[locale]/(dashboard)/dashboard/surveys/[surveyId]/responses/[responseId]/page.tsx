@@ -1,319 +1,346 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Link } from "@/i18n/routing";
 import {
-    ArrowLeft,
-    User,
-    ThumbsUp,
-    ThumbsDown,
-    Minus,
-    Bot,
-    Download,
-    Loader2,
-    Calendar,
-    Clock
+  ArrowLeft,
+  Bot,
+  Loader2,
+  Quote,
+  ShieldCheck,
+  TriangleAlert,
+  User,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { format } from "date-fns";
-import { ClientT } from "@/components/i18n/client-t";
-import { getClientTranslation } from "@/app/actions/translate";
 
-interface ResponseData {
-    id: string;
-    surveyId: string;
-    surveyTitle: string;
-    participantId: string;
-    startedAt: string;
-    completedAt: string | null;
-    duration: string;
-    status: "completed" | "in_progress";
-    sentiment: "positive" | "negative" | "neutral" | null;
-    sentimentScore: number;
-    keyInsights: string[];
-    summary: string;
-    conversation: Array<{
-        role: "user" | "assistant";
-        content: string;
-        timestamp: string;
-        sentiment?: "positive" | "negative" | "neutral";
-    }>;
-}
+import type { AnalyticsSessionDetail } from "@/lib/analytics";
+import { Link } from "@/i18n/routing";
+import { ClientT } from "@/components/i18n/client-t";
+import { cn } from "@/lib/utils";
 
 export default function ResponseDetailPage() {
-    const params = useParams();
-    const surveyId = params.surveyId as string;
-    const responseId = params.responseId as string;
+  const params = useParams();
+  const surveyId = params.surveyId as string;
+  const responseId = params.responseId as string;
 
-    const [response, setResponse] = useState<ResponseData | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+  const [response, setResponse] = useState<AnalyticsSessionDetail | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        async function fetchResponse() {
-            try {
-                const res = await fetch(`/api/surveys/${surveyId}/responses/${responseId}`);
-                if (!res.ok) {
-                    if (res.status === 404) throw new Error("Response not found");
-                    throw new Error("Failed to load response data");
-                }
-                const data = await res.json();
-                setResponse(data);
-            } catch (err) {
-                setError(err instanceof Error ? err.message : "An error occurred");
-            } finally {
-                setIsLoading(false);
-            }
+  useEffect(() => {
+    async function fetchResponse() {
+      try {
+        const res = await fetch(`/api/surveys/${surveyId}/responses/${responseId}`);
+        if (!res.ok) {
+          if (res.status === 404) throw new Error("Session not found");
+          throw new Error("Failed to load session data");
         }
-
-        if (surveyId && responseId) {
-            fetchResponse();
-        }
-    }, [surveyId, responseId]);
-
-    const getSentimentIcon = (sentiment: string | null) => {
-        switch (sentiment) {
-            case "positive":
-                return <ThumbsUp className="w-3.5 h-3.5 text-emerald-500" />;
-            case "negative":
-                return <ThumbsDown className="w-3.5 h-3.5 text-red-500" />;
-            case "neutral":
-                return <Minus className="w-3.5 h-3.5 text-amber-500" />;
-            default:
-                return null;
-        }
-    };
-
-
-    if (isLoading) {
-        return (
-            <div className="flex items-center justify-center min-h-[50vh]">
-                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-            </div>
-        );
+        const data = await res.json();
+        setResponse(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "An error occurred");
+      } finally {
+        setIsLoading(false);
+      }
     }
 
-    if (error || !response) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-                <p className="text-gray-500">{error ? <ClientT>{error}</ClientT> : <ClientT>Response not found</ClientT>}</p>
-                <Link
-                    href={`/dashboard/surveys/${surveyId}`}
-                    className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
-                >
-                    <ArrowLeft className="w-4 h-4" />
-                    <ClientT>Back to Survey</ClientT>
-                </Link>
-            </div>
-        );
-    }
+    if (surveyId && responseId) fetchResponse();
+  }, [surveyId, responseId]);
 
+  if (isLoading) {
     return (
-        <div className="space-y-6 max-w-5xl mx-auto pb-10">
-            {/* Header */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-6 mb-2">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                        <Link
-                            href={`/dashboard/surveys/${surveyId}`}
-                            className="self-start sm:self-auto p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                        >
-                            <ArrowLeft className="w-5 h-5 text-gray-600" />
-                        </Link>
-                        <div>
-                            <div className="flex flex-wrap items-center gap-3">
-                                <h1 className="text-xl font-bold text-gray-900">
-                                    {response.participantId === 'Anonymous' ? <ClientT>{`Participant ${response.id.slice(0, 4)}`}</ClientT> : response.participantId}
-                                </h1>
-                                <span className={cn(
-                                    "px-2.5 py-1 rounded-full text-xs font-medium capitalize",
-                                    response.status === "completed" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-amber-50 text-amber-700 border border-amber-200"
-                                )}>
-                                    {response.status === "completed" ? <ClientT>Completed</ClientT> : <ClientT>In Progress</ClientT>}
-                                </span>
-                            </div>
-                            <p className="text-sm text-gray-500 mt-1">
-                                <ClientT>Response for</ClientT> <span className="font-medium text-gray-700">{response.surveyTitle}</span>
-                            </p>
-                        </div>
-                    </div>
-
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Conversation - ChatGPT Style */}
-                <div className="lg:col-span-2 space-y-4 order-2 lg:order-1">
-                    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-                        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-                            <h2 className="font-semibold text-gray-900"><ClientT>Conversation Transcript</ClientT></h2>
-                            <span className="text-xs font-medium text-gray-500 bg-white px-2 py-1 rounded border border-gray-200 shadow-sm">{response.conversation.length} <ClientT>messages</ClientT></span>
-                        </div>
-                        <div className="max-h-[800px] overflow-y-auto">
-                            {response.conversation.length === 0 ? (
-                                <div className="p-8 text-center text-gray-400 italic">
-                                    <ClientT>No transcript available.</ClientT>
-                                </div>
-                            ) : (
-                                response.conversation.map((message, index) => (
-                                    <div
-                                        key={index}
-                                        className={cn(
-                                            "px-6 py-5 border-b border-gray-50 last:border-0",
-                                            message.role === "assistant" ? "bg-white" : "bg-gray-50/50"
-                                        )}
-                                    >
-                                        <div className="max-w-3xl mx-auto flex gap-4">
-                                            {/* Avatar */}
-                                            <div className={cn(
-                                                "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm",
-                                                message.role === "assistant"
-                                                    ? "bg-gradient-to-br from-indigo-500 to-purple-600"
-                                                    : "bg-gray-900"
-                                            )}>
-                                                {message.role === "assistant" ? (
-                                                    <Bot className="w-4 h-4 text-white" />
-                                                ) : (
-                                                    <User className="w-4 h-4 text-white" />
-                                                )}
-                                            </div>
-
-                                            {/* Message Content */}
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 mb-1.5">
-                                                    <span className="font-semibold text-sm text-gray-900">
-                                                        {message.role === "assistant" ? <ClientT>Convyy AI</ClientT> : <ClientT>Participant</ClientT>}
-                                                    </span>
-                                                    <span className="text-xs text-gray-400">
-                                                        {message.timestamp ? new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                                                    </span>
-                                                    {message.role === "user" && message.sentiment && (
-                                                        <span className="flex items-center gap-1 ml-auto">
-                                                            {getSentimentIcon(message.sentiment)}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap">
-                                                    {message.content}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Sidebar */}
-                <div className="space-y-4 order-1 lg:order-2">
-                    {/* Response Info */}
-                    <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                        <h3 className="font-semibold text-gray-900 mb-4"><ClientT>Response Details</ClientT></h3>
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm text-gray-500 flex items-center gap-2"><ClientT>Status</ClientT></span>
-                                <span className={cn(
-                                    "px-2.5 py-1 rounded-full text-xs font-semibold capitalize",
-                                    response.status === "completed" ? "bg-emerald-50 text-emerald-700 border border-emerald-100" : "bg-amber-50 text-amber-700 border border-amber-100"
-                                )}>
-                                    {response.status === "completed" ? <ClientT>Completed</ClientT> : <ClientT>In Progress</ClientT>}
-                                </span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm text-gray-500 flex items-center gap-2">
-                                    <Clock className="w-3.5 h-3.5" /> <ClientT>Duration</ClientT>
-                                </span>
-                                <span className="text-sm font-medium text-gray-900 bg-gray-50 px-2 py-1 rounded">{response.duration}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm text-gray-500 flex items-center gap-2">
-                                    <Calendar className="w-3.5 h-3.5" /> <ClientT>Started</ClientT>
-                                </span>
-                                <div className="text-right">
-                                    <span className="text-sm text-gray-900 block">{format(new Date(response.startedAt), "MMM d, yyyy")}</span>
-                                    <span className="text-xs text-gray-500 block">{format(new Date(response.startedAt), "h:mm a")}</span>
-                                </div>
-                            </div>
-                            {response.completedAt && (
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm text-gray-500"><ClientT>Completed</ClientT></span>
-                                    <div className="text-right">
-                                        <span className="text-sm text-gray-900 block">{format(new Date(response.completedAt), "MMM d, yyyy")}</span>
-                                        <span className="text-xs text-gray-500 block">{format(new Date(response.completedAt), "h:mm a")}</span>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Sentiment Analysis */}
-                    {response.sentiment && (
-                        <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                            <h3 className="font-semibold text-gray-900 mb-4"><ClientT>Sentiment Analysis</ClientT></h3>
-                            <div className="text-center mb-4">
-                                <div className={cn(
-                                    "inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold capitalize shadow-sm",
-                                    response.sentiment === "positive" && "bg-emerald-50 text-emerald-700 border border-emerald-100",
-                                    response.sentiment === "neutral" && "bg-amber-50 text-amber-700 border border-amber-100",
-                                    response.sentiment === "negative" && "bg-red-50 text-red-700 border border-red-100"
-                                )}>
-                                    {getSentimentIcon(response.sentiment)}
-                                    <ClientT>{response.sentiment}</ClientT>
-                                </div>
-                                <p className="text-xs font-medium text-gray-400 mt-2 uppercase tracking-wide">Confidence Score: {(response.sentimentScore * 100).toFixed(0)}%</p>
-                            </div>
-                            <div className="h-2.5 bg-gray-100 rounded-full relative overflow-hidden">
-                                <div className="absolute inset-0 bg-gradient-to-r from-red-400 via-amber-400 to-emerald-400 opacity-20" />
-                                <div
-                                    className="absolute top-0 bottom-0 w-1 bg-gray-900 rounded-full transition-all duration-1000"
-                                    style={{ left: `${Math.max(5, Math.min(95, response.sentimentScore * 100))}%` }}
-                                />
-                            </div>
-                            <div className="flex justify-between mt-1 text-[10px] text-gray-400 uppercase font-bold">
-                                <span>Neg</span>
-                                <span>Pos</span>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Key Insights */}
-                    {response.keyInsights.length > 0 && (
-                        <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                            <h3 className="font-semibold text-gray-900 mb-4"><ClientT>Key Insights</ClientT></h3>
-                            <ul className="space-y-3">
-                                {response.keyInsights.map((insight, index) => (
-                                    <li key={index} className="flex items-start gap-3 text-sm group">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 flex-shrink-0 group-hover:bg-indigo-600 transition-colors" />
-                                        <span className="text-gray-600 leading-relaxed">{insight}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    )}
-
-                    {/* AI Summary */}
-                    {response.summary && (
-                        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-100 p-5 shadow-sm">
-                            <h3 className="font-semibold text-indigo-900 mb-2 flex items-center gap-2">
-                                <Bot className="w-4 h-4" /> <ClientT>AI Summary</ClientT>
-                            </h3>
-                            <p className="text-sm text-indigo-800 leading-relaxed">{response.summary}</p>
-                        </div>
-                    )}
-
-                    {/* Empty State for Incomplete */}
-                    {response.status !== "completed" && (
-                        <div className="bg-amber-50 rounded-xl border border-amber-100 p-5">
-                            <h3 className="font-semibold text-amber-900 mb-2"><ClientT>Analysis Pending</ClientT></h3>
-                            <p className="text-sm text-amber-800">
-                                <ClientT>This conversation is still in progress. Detailed analysis and insights will be generated once it is completed.</ClientT>
-                            </p>
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      </div>
     );
+  }
+
+  if (error || !response) {
+    return (
+      <div className="flex min-h-[50vh] flex-col items-center justify-center space-y-4">
+        <p className="text-gray-500">
+          {error ? <ClientT>{error}</ClientT> : <ClientT>Session not found</ClientT>}
+        </p>
+        <Link
+          href={`/dashboard/surveys/${surveyId}/analytics/conversations`}
+          className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-white transition-colors hover:bg-gray-800"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <ClientT>Back to Sessions</ClientT>
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-6 pb-10">
+      <div className="rounded-2xl border border-gray-100 bg-white p-4 sm:p-6">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <Link
+              href={`/dashboard/surveys/${surveyId}/analytics/conversations`}
+              className="self-start rounded-lg p-2 transition-colors hover:bg-gray-100"
+            >
+              <ArrowLeft className="h-5 w-5 text-gray-600" />
+            </Link>
+            <div>
+              <div className="mb-2 flex flex-wrap items-center gap-3">
+                <h1 className="text-xl font-bold text-gray-900">
+                  Session {response.id.slice(-4)}
+                </h1>
+                <span
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-xs font-medium capitalize",
+                    response.status === "completed"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-amber-200 bg-amber-50 text-amber-700",
+                  )}
+                >
+                  {response.status}
+                </span>
+                <span className="rounded-full bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-600">
+                  {response.sessionType} session
+                </span>
+              </div>
+              <p className="text-sm text-gray-500">
+                <ClientT>Analytics drilldown for</ClientT>{" "}
+                <span className="font-medium text-gray-700">{response.surveyTitle}</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="order-2 space-y-4 lg:order-1 lg:col-span-2">
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-5 py-4">
+              <h2 className="font-semibold text-gray-900">
+                <ClientT>Transcript</ClientT>
+              </h2>
+              <span className="rounded border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-500 shadow-sm">
+                {response.transcript.length} <ClientT>turns</ClientT>
+              </span>
+            </div>
+            <div className="max-h-[800px] overflow-y-auto">
+              {response.transcript.length === 0 ? (
+                <div className="p-8 text-center italic text-gray-400">
+                  <ClientT>No transcript available.</ClientT>
+                </div>
+              ) : (
+                response.transcript.map((message) => (
+                  <div
+                    key={message.id}
+                    className={cn(
+                      "border-b border-gray-50 px-6 py-5 last:border-0",
+                      message.role === "assistant" ? "bg-white" : "bg-gray-50/50",
+                    )}
+                  >
+                    <div className="mx-auto flex max-w-3xl gap-4">
+                      <div
+                        className={cn(
+                          "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg shadow-sm",
+                          message.role === "assistant"
+                            ? "bg-gradient-to-br from-indigo-500 to-purple-600"
+                            : "bg-gray-900",
+                        )}
+                      >
+                        {message.role === "assistant" ? (
+                          <Bot className="h-4 w-4 text-white" />
+                        ) : (
+                          <User className="h-4 w-4 text-white" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-1.5 text-sm font-semibold text-gray-900">
+                          {message.role === "assistant" ? "Convyy AI" : "Participant"}
+                        </div>
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
+                          {message.content}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="order-1 space-y-4 lg:order-2">
+          <StatPanel
+            title="Session Quality"
+            rows={[
+              {
+                icon: ShieldCheck,
+                label: "Reliability",
+                value: `${response.reliabilityPercent}%`,
+              },
+              {
+                icon: ShieldCheck,
+                label: "Completeness",
+                value: `${response.completenessPercent}%`,
+              },
+              {
+                icon: TriangleAlert,
+                label: "Fatigue",
+                value: `${response.fatiguePercent}%`,
+              },
+            ]}
+          />
+
+          <TextPanel title="Summary" body={response.summary} />
+
+          <ListPanel
+            title="Key Findings"
+            icon={Quote}
+            items={response.keyFindings}
+            emptyMessage="No key findings extracted yet."
+          />
+
+          <ListPanel
+            title="Risks"
+            icon={TriangleAlert}
+            items={response.risks}
+            emptyMessage="No major risks flagged."
+          />
+
+          <CoveragePanel coverage={response.nodeCoverage} />
+
+          <QuotePanel quotes={response.notableQuotes} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatPanel({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: Array<{ icon: any; label: string; value: string }>;
+}) {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+      <h3 className="mb-4 font-semibold text-gray-900">{title}</h3>
+      <div className="space-y-4">
+        {rows.map((row) => {
+          const Icon = row.icon;
+          return (
+            <div key={row.label} className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-sm text-gray-500">
+                <Icon className="h-3.5 w-3.5" />
+                {row.label}
+              </span>
+              <span className="rounded bg-gray-50 px-2 py-1 text-sm font-medium text-gray-900">
+                {row.value}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TextPanel({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+      <h3 className="mb-3 font-semibold text-gray-900">{title}</h3>
+      <p className="text-sm leading-relaxed text-gray-700">{body}</p>
+    </div>
+  );
+}
+
+function ListPanel({
+  title,
+  items,
+  emptyMessage,
+  icon: Icon,
+}: {
+  title: string;
+  items: string[];
+  emptyMessage: string;
+  icon: any;
+}) {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+      <h3 className="mb-4 flex items-center gap-2 font-semibold text-gray-900">
+        <Icon className="h-4 w-4" />
+        {title}
+      </h3>
+      {items.length > 0 ? (
+        <ul className="space-y-3">
+          {items.map((item, index) => (
+            <li key={index} className="flex gap-3 text-sm text-gray-600">
+              <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gray-300" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-gray-500">{emptyMessage}</p>
+      )}
+    </div>
+  );
+}
+
+function CoveragePanel({
+  coverage,
+}: {
+  coverage: AnalyticsSessionDetail["nodeCoverage"];
+}) {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+      <h3 className="mb-4 font-semibold text-gray-900">Node Coverage</h3>
+      <div className="space-y-4">
+        {coverage.map((item) => (
+          <div key={item.id} className="space-y-1.5">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-gray-800">{item.label}</span>
+              <span className="text-xs font-bold text-gray-500">
+                {item.coveragePercent}%
+              </span>
+            </div>
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
+              <div
+                className="h-full rounded-full bg-gray-900"
+                style={{ width: `${item.coveragePercent}%` }}
+              />
+            </div>
+            <p className="text-xs leading-relaxed text-gray-500">{item.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function QuotePanel({
+  quotes,
+}: {
+  quotes: AnalyticsSessionDetail["notableQuotes"];
+}) {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+      <h3 className="mb-4 font-semibold text-gray-900">Notable Quotes</h3>
+      {quotes.length > 0 ? (
+        <div className="space-y-3">
+          {quotes.map((quote) => (
+            <blockquote
+              key={quote.id}
+              className="rounded-xl bg-gray-50 p-4 text-sm italic leading-relaxed text-gray-700"
+            >
+              "{quote.excerpt}"
+              <div className="mt-2 text-[11px] font-medium not-italic text-gray-400">
+                {quote.nodeId} • reliability {quote.reliability}%
+              </div>
+            </blockquote>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-gray-500">No notable quotes selected yet.</p>
+      )}
+    </div>
+  );
 }

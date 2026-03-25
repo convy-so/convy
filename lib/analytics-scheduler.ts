@@ -1,240 +1,308 @@
-import { getRedisClient } from "@/lib/redis";
-import { enqueueSurveyAnalytics, getSurveyAnalyticsQueue } from "@/lib/queue";
+import { getSurveyAnalyticsQueue } from "@/lib/queue";
+import {
+  getAnalyticsState,
+  getLatestAnalyticsSnapshot,
+  listSurveySessionInsightsByType,
+  upsertAnalyticsState,
+} from "@/lib/education/storage";
+import type { AnalyticsGenerationState } from "@/lib/education/types";
+import {
+  publishPendingOutboxEntries,
+  recordRealtimeEvent,
+} from "@/lib/collaboration-service";
 import { getDb } from "@/db";
-import { surveyAnalytics } from "@/db/schema";
-import { eq } from "drizzle-orm";
 
-/**
- * Analytics Scheduling System
- *
- * Implements a two-stage approach:
- * 1. Accumulation mode: Track counter, generate only when threshold reached
- * 2. Debouncing mode: Once threshold reached, debounce for 5 minutes
- *
- * Exceptions:
- * - First 3 responses generate immediately
- */
+const ACTIVE_DEBOUNCE_MS = 90 * 1000;
+const BOOTSTRAP_DEBOUNCE_MS = 60 * 1000;
+const STALE_SNAPSHOT_MS = 6 * 60 * 60 * 1000;
 
-const DEBOUNCE_DELAY_MS = 5 * 60 * 1000;
-const RESPONSE_THRESHOLD = 10;
-const IMMEDIATE_THRESHOLD = 3;
-
-/**
- * Get the current analytics counter for a survey
- */
-async function getAnalyticsCounter(surveyId: string): Promise<number> {
-  const redis = getRedisClient();
-  const key = `analytics:counter:${surveyId}`;
-  const count = await redis.get(key);
-  return count ? parseInt(count, 10) : 0;
+function createDefaultState(surveyId: string): AnalyticsGenerationState {
+  return {
+    surveyId,
+    status: "idle",
+    latestSnapshotVersion: 0,
+    pendingJobId: null,
+    lastRequestedAt: null,
+    lastCompletedAt: null,
+    lastMaterialityReason: null,
+    lastMaterialityScore: 0,
+    lastError: null,
+  };
 }
 
-/**
- * Increment the analytics counter for a survey
- */
-async function incrementAnalyticsCounter(surveyId: string): Promise<number> {
-  const redis = getRedisClient();
-  const key = `analytics:counter:${surveyId}`;
-  const newCount = await redis.incr(key);
-  // Set expiration to 7 days (prevent Redis from accumulating stale counters)
-  await redis.expire(key, 7 * 24 * 60 * 60);
-  return newCount;
+function clamp(min: number, value: number, max: number) {
+  return Math.max(min, Math.min(max, value));
 }
 
-/**
- * Reset the analytics counter for a survey
- */
-async function resetAnalyticsCounter(surveyId: string): Promise<void> {
-  const redis = getRedisClient();
-  const key = `analytics:counter:${surveyId}`;
-  await redis.del(key);
+function getDebouncedJobId(surveyId: string) {
+  return `analytics-refresh-${surveyId}`;
 }
 
-/**
- * Check if analytics have been generated for a survey before
- * Checks the database to see if analytics exist
- */
-async function hasAnalyticsBeenGenerated(surveyId: string): Promise<boolean> {
-  try {
-    const [analytics] = await getDb()
-      .select()
-      .from(surveyAnalytics)
-      .where(eq(surveyAnalytics.surveyId, surveyId))
-      .limit(1);
-    return !!analytics;
-  } catch (error) {
-    console.error(
-      `[Analytics Scheduler] Error checking if analytics exist for survey ${surveyId}:`,
-      error,
-    );
-    // If we can't check, assume they don't exist (safer default)
-    return false;
+async function cancelPendingAnalyticsJob(surveyId: string) {
+  const queue = getSurveyAnalyticsQueue();
+  const jobId = getDebouncedJobId(surveyId);
+  const existing = await queue.getJob(jobId);
+  if (existing) {
+    await existing.remove();
   }
 }
 
-/**
- * Get the scheduled analytics job ID for a survey
- */
-function getScheduledJobId(surveyId: string): string {
-  return `analytics-debounced-${surveyId}`;
-}
+type MaterialityDecision = {
+  shouldQueue: boolean;
+  debounceMs: number;
+  score: number;
+  reason: string;
+};
 
-/**
- * Cancel any existing scheduled analytics job for a survey
- */
-async function cancelScheduledAnalytics(surveyId: string): Promise<void> {
-  try {
-    const jobId = getScheduledJobId(surveyId);
-    const job = await getSurveyAnalyticsQueue().getJob(jobId);
-    if (job) {
-      await job.remove();
-      console.log(
-        `[Analytics Scheduler] Cancelled scheduled analytics job for survey ${surveyId}`,
-      );
-    }
-  } catch (error) {
-    // Job might not exist, which is fine
-    console.log(
-      `[Analytics Scheduler] No scheduled job to cancel for survey ${surveyId}`,
-    );
+function decideMateriality(input: {
+  completedSessions: number;
+  lastCompletedSessions: number;
+  coverageOverall: number;
+  lastCoverageOverall: number;
+  averageReliability: number;
+  lastAverageReliability: number;
+  nodeMilestonesCrossed: string[];
+  thresholdCrossedCount: number;
+  snapshotAgeMs: number | null;
+  force?: boolean;
+}) : MaterialityDecision {
+  if (input.force) {
+    return {
+      shouldQueue: true,
+      debounceMs: 0,
+      score: 1.5,
+      reason: "manual_refresh",
+    };
   }
+
+  if (input.completedSessions <= 0) {
+    return { shouldQueue: false, debounceMs: ACTIVE_DEBOUNCE_MS, score: 0, reason: "waiting_for_completed_sessions" };
+  }
+
+  if (input.lastCompletedSessions === 0) {
+    return {
+      shouldQueue: true,
+      debounceMs: BOOTSTRAP_DEBOUNCE_MS,
+      score: 1,
+      reason: "first_completed_session",
+    };
+  }
+
+  if (input.completedSessions <= 5 && input.completedSessions > input.lastCompletedSessions) {
+    return {
+      shouldQueue: true,
+      debounceMs: BOOTSTRAP_DEBOUNCE_MS,
+      score: 1,
+      reason: "bootstrap_snapshot",
+    };
+  }
+
+  const completedDelta = Math.max(0, input.completedSessions - input.lastCompletedSessions);
+  const adaptiveSessionDelta = clamp(2, Math.ceil(Math.sqrt(input.lastCompletedSessions)), 10);
+  const coverageDelta = Math.abs(input.coverageOverall - input.lastCoverageOverall);
+  const reliabilityDelta = Math.abs(input.averageReliability - input.lastAverageReliability);
+
+  let score = 0;
+  let reason = "no_material_change";
+
+  if (completedDelta >= adaptiveSessionDelta) {
+    score += 0.7;
+    reason = "new_respondent_wave";
+  }
+
+  if (coverageDelta >= 0.05) {
+    score += 0.35;
+    reason = reason === "no_material_change" ? "coverage_shift" : reason;
+  }
+
+  if (input.nodeMilestonesCrossed.length > 0) {
+    score += 0.35;
+    reason = reason === "no_material_change" ? "coverage_milestone" : reason;
+  }
+
+  if (input.thresholdCrossedCount > 0) {
+    score += 0.25;
+    reason = reason === "no_material_change" ? "node_threshold_reached" : reason;
+  }
+
+  if (reliabilityDelta >= 0.05) {
+    score += 0.25;
+    reason = reason === "no_material_change" ? "quality_shift" : reason;
+  }
+
+  if (
+    input.snapshotAgeMs !== null &&
+    input.snapshotAgeMs >= STALE_SNAPSHOT_MS &&
+    completedDelta > 0
+  ) {
+    score += 0.2;
+    reason = reason === "no_material_change" ? "stale_snapshot" : reason;
+  }
+
+  return {
+    shouldQueue: score >= 1,
+    debounceMs: ACTIVE_DEBOUNCE_MS,
+    score,
+    reason,
+  };
 }
 
-/**
- * Schedule a debounced analytics generation job
- */
-async function scheduleDebouncedAnalytics(
-  surveyId: string,
-  userId: string,
-): Promise<void> {
-  try {
-    await cancelScheduledAnalytics(surveyId);
+export async function markAnalyticsRunning(surveyId: string) {
+  const current = (await getAnalyticsState(surveyId))?.state ?? createDefaultState(surveyId);
+  return await upsertAnalyticsState(surveyId, {
+    ...current,
+    status: "running",
+    pendingJobId: current.pendingJobId,
+    lastRequestedAt: current.lastRequestedAt ?? new Date().toISOString(),
+    lastError: null,
+  });
+}
 
-    const jobId = getScheduledJobId(surveyId);
-    await getSurveyAnalyticsQueue().add(
-      "generate-analytics",
-      {
-        surveyId,
-        userId,
+export async function markAnalyticsCompleted(params: {
+  surveyId: string;
+  version: number;
+  reason: string;
+  score: number;
+}) {
+  const current = (await getAnalyticsState(params.surveyId))?.state ?? createDefaultState(params.surveyId);
+  const state = await upsertAnalyticsState(params.surveyId, {
+    ...current,
+    status: "idle",
+    latestSnapshotVersion: params.version,
+    pendingJobId: null,
+    lastCompletedAt: new Date().toISOString(),
+    lastMaterialityReason: params.reason,
+    lastMaterialityScore: params.score,
+    lastError: null,
+  });
+
+  await getDb().transaction(async (tx) => {
+    await recordRealtimeEvent(tx, {
+      scope: "survey",
+      surveyId: params.surveyId,
+      actorId: "system",
+      eventType: "survey.analytics_ready",
+      payload: {
+        surveyId: params.surveyId,
+        version: params.version,
+        reason: params.reason,
+        score: params.score,
       },
-      {
-        jobId,
-        delay: DEBOUNCE_DELAY_MS,
-        priority: 3,
-      },
-    );
-
-    console.log(
-      `[Analytics Scheduler] Scheduled debounced analytics generation for survey ${surveyId} (5 minute delay)`,
-    );
-  } catch (error) {
-    console.error(
-      `[Analytics Scheduler] Failed to schedule debounced analytics:`,
-      error,
-    );
-    throw error;
-  }
-}
-
-/**
- * Generate analytics immediately
- */
-async function generateAnalyticsImmediately(
-  surveyId: string,
-  userId: string,
-): Promise<void> {
-  try {
-    await enqueueSurveyAnalytics({
-      surveyId,
-      userId,
     });
-    console.log(
-      `[Analytics Scheduler] Generated analytics immediately for survey ${surveyId}`,
-    );
-  } catch (error) {
-    console.error(
-      `[Analytics Scheduler] Failed to generate analytics immediately:`,
-      error,
-    );
-    throw error;
-  }
+  });
+
+  await publishPendingOutboxEntries();
+  return state;
 }
 
-/**
- * Main function to handle analytics scheduling when a new conversation completes
- *
- * Logic:
- * 1. If this is one of the first 3 responses → Generate immediately
- * 2. Otherwise, increment counter
- * 3. If counter < 10 → Just accumulate (do nothing)
- * 4. If counter >= 10 → Enter debouncing mode:
- *    - Cancel any existing scheduled job
- *    - Schedule new job with 5-minute delay
- *    - Each new response resets the timer
- */
-export async function scheduleAnalyticsOnNewResponse(
-  surveyId: string,
-  userId: string,
-): Promise<void> {
-  try {
-    // Check if analytics have been generated before
-    const hasGenerated = await hasAnalyticsBeenGenerated(surveyId);
-
-    // Get current counter
-    const currentCount = await getAnalyticsCounter(surveyId);
-
-    // Exception: First 3 responses generate immediately
-    if (!hasGenerated && currentCount < IMMEDIATE_THRESHOLD) {
-      const newCount = await incrementAnalyticsCounter(surveyId);
-      console.log(
-        `[Analytics Scheduler] Response ${newCount}/${IMMEDIATE_THRESHOLD} for survey ${surveyId} - generating immediately`,
-      );
-
-      // Generate immediately
-      await generateAnalyticsImmediately(surveyId, userId);
-
-      return;
-    }
-
-    // Increment counter
-    const newCount = await incrementAnalyticsCounter(surveyId);
-    console.log(
-      `[Analytics Scheduler] Survey ${surveyId} response count: ${newCount}/${RESPONSE_THRESHOLD}`,
-    );
-
-    // If counter is below threshold, just accumulate (do nothing)
-    if (newCount < RESPONSE_THRESHOLD) {
-      console.log(
-        `[Analytics Scheduler] Survey ${surveyId} accumulating responses (${newCount}/${RESPONSE_THRESHOLD})`,
-      );
-      return;
-    }
-
-    // Counter has reached threshold - enter debouncing mode
-    console.log(
-      `[Analytics Scheduler] Survey ${surveyId} reached threshold (${newCount} responses) - entering debouncing mode`,
-    );
-
-    // Cancel any existing scheduled job and schedule new one (resets timer)
-    await scheduleDebouncedAnalytics(surveyId, userId);
-  } catch (error) {
-    console.error(
-      `[Analytics Scheduler] Error scheduling analytics for survey ${surveyId}:`,
-      error,
-    );
-    // Don't throw - we don't want to fail the conversation insights job
-  }
+export async function markAnalyticsFailed(surveyId: string, error: unknown) {
+  const current = (await getAnalyticsState(surveyId))?.state ?? createDefaultState(surveyId);
+  return await upsertAnalyticsState(surveyId, {
+    ...current,
+    status: "failed",
+    pendingJobId: null,
+    lastError: error instanceof Error ? error.message : "Unknown analytics worker error",
+  });
 }
 
-/**
- * Reset the analytics counter after analytics are generated
- * This is called by the analytics worker after successful generation
- */
-export async function resetAnalyticsCounterAfterGeneration(
-  surveyId: string,
-): Promise<void> {
-  await resetAnalyticsCounter(surveyId);
-  console.log(
-    `[Analytics Scheduler] Reset counter for survey ${surveyId} after analytics generation`,
+export async function scheduleAnalyticsRefresh(params: {
+  surveyId: string;
+  userId: string;
+  force?: boolean;
+}) {
+  const [stateRow, snapshotRow, insightRows] = await Promise.all([
+    getAnalyticsState(params.surveyId),
+    getLatestAnalyticsSnapshot(params.surveyId),
+    listSurveySessionInsightsByType(params.surveyId, "live"),
+  ]);
+
+  const state = stateRow?.state ?? createDefaultState(params.surveyId);
+  const latestSnapshot = snapshotRow?.snapshot ?? null;
+  const completedSessions = insightRows.filter(
+    (row) => (row.insight as any).quality?.completeness >= 0.8,
+  ).length;
+  const coverageOverall =
+    insightRows.length > 0
+      ? insightRows.reduce(
+          (sum, row) => sum + (((row.insight as any).quality?.completeness as number) ?? 0),
+          0,
+        ) / insightRows.length
+      : 0;
+  const averageReliability =
+    insightRows.length > 0
+      ? insightRows.reduce(
+          (sum, row) => sum + (((row.insight as any).quality?.reliability as number) ?? 0),
+          0,
+        ) / insightRows.length
+      : 0;
+
+  const previousCoverageByNode = latestSnapshot?.coverage.byNode ?? {};
+  const latestCoverageByNode: Record<string, number> = {};
+  for (const row of insightRows) {
+    const nodeCoverage = (row.insight as any).nodeCoverage ?? {};
+    for (const [nodeId, value] of Object.entries(nodeCoverage)) {
+      latestCoverageByNode[nodeId] = (latestCoverageByNode[nodeId] ?? 0) + Number(value ?? 0);
+    }
+  }
+  const divisor = Math.max(1, insightRows.length);
+  const nodeMilestonesCrossed = Object.entries(latestCoverageByNode)
+    .filter(([nodeId, total]) => {
+      const previous = previousCoverageByNode[nodeId] ?? 0;
+      const current = total / divisor;
+      const milestones = [0.25, 0.5, 0.75, 0.9, 1];
+      return milestones.some((milestone) => previous < milestone && current >= milestone);
+    })
+    .map(([nodeId]) => nodeId);
+
+  const decision = decideMateriality({
+    completedSessions,
+    lastCompletedSessions: latestSnapshot?.participation.completedSessions ?? 0,
+    coverageOverall,
+    lastCoverageOverall: latestSnapshot?.coverage.overall ?? 0,
+    averageReliability,
+    lastAverageReliability: latestSnapshot?.quality.averageReliability ?? 0,
+    nodeMilestonesCrossed,
+    thresholdCrossedCount: nodeMilestonesCrossed.length,
+    snapshotAgeMs: latestSnapshot
+      ? Date.now() - new Date(latestSnapshot.generatedAt).getTime()
+      : null,
+    force: params.force,
+  });
+
+  if (!decision.shouldQueue) {
+    if (!stateRow) {
+      await upsertAnalyticsState(params.surveyId, state);
+    }
+    return { queued: false, reason: decision.reason, score: decision.score };
+  }
+
+  await cancelPendingAnalyticsJob(params.surveyId);
+  const queue = getSurveyAnalyticsQueue();
+  const jobId = getDebouncedJobId(params.surveyId);
+  await queue.add(
+    "generate-analytics",
+    {
+      surveyId: params.surveyId,
+      userId: params.userId,
+      reason: decision.reason,
+      score: decision.score,
+    } as any,
+    {
+      jobId,
+      delay: decision.debounceMs,
+      priority: params.force ? 1 : 3,
+    },
   );
+
+  await upsertAnalyticsState(params.surveyId, {
+    ...state,
+    status: "queued",
+    pendingJobId: jobId,
+    lastRequestedAt: new Date().toISOString(),
+    lastMaterialityReason: decision.reason,
+    lastMaterialityScore: decision.score,
+    lastError: null,
+  });
+
+  return { queued: true, reason: decision.reason, score: decision.score };
 }

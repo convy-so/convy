@@ -1,6 +1,6 @@
 import { WebSocket } from "ws";
 import { AuthenticatedConnection } from "../middleware/auth";
-import { getRedisClient, getRedisSubscriber } from "@/lib/redis";
+import { getRedisClient } from "@/lib/redis";
 import { getDb } from "@/db";
 import { users } from "@/db/schema/auth";
 import { eq } from "drizzle-orm";
@@ -36,7 +36,6 @@ export class PresenceHandler {
   public surveyId?: string;
   private isActive: boolean = true;
   private redisClient = getRedisClient();
-  private redisSubscriber = getRedisSubscriber();
 
   constructor(
     connection: AuthenticatedConnection,

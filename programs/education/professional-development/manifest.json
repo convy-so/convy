@@ -1,0 +1,113 @@
+{
+  "id": "education.professional_development",
+  "displayName": "Professional Development",
+  "description": "Evaluate growth programs for working professionals, with emphasis on role application, support, and advancement.",
+  "routing": {
+    "keywords": [
+      "professional development",
+      "career growth",
+      "manager",
+      "upskilling",
+      "leadership program",
+      "cohort"
+    ],
+    "examples": [
+      "We need to know whether our professional development program is helping employees grow in role.",
+      "Help me collect feedback about our manager-supported upskilling initiative."
+    ]
+  },
+  "requiredBriefFields": [
+    "researchGoal",
+    "decisionToInform",
+    "audienceDefinition",
+    "learningContext",
+    "deliveryContext",
+    "timeWindow",
+    "requiredTopics",
+    "successCriteria"
+  ],
+  "defaultDurationMinutes": 14,
+  "analyticsDimensions": [
+    "role_application",
+    "manager_support",
+    "growth_infrastructure",
+    "retention_risk"
+  ],
+  "policyFlags": {
+    "allowSensitiveTopics": true,
+    "requiresConsent": true,
+    "piiMaskingRequired": true
+  },
+  "nodes": [
+    {
+      "id": "PD-01",
+      "label": "Growth objective fit",
+      "description": "Clarify whether the program matched the participant's growth goals and role needs.",
+      "priority": 0.95,
+      "completionThreshold": 0.8,
+      "requiredEvidenceTypes": [
+        "quote"
+      ],
+      "probeFamilies": [
+        "goal_fit"
+      ]
+    },
+    {
+      "id": "PD-02",
+      "label": "On-the-job application",
+      "description": "Surface how learners are applying the development in current work.",
+      "priority": 1.0,
+      "completionThreshold": 0.85,
+      "requiredEvidenceTypes": [
+        "behavioral-example"
+      ],
+      "probeFamilies": [
+        "role_application",
+        "specific_example"
+      ]
+    },
+    {
+      "id": "PD-03",
+      "label": "Manager and team support",
+      "description": "Assess whether the environment made learning use realistic and encouraged.",
+      "priority": 0.9,
+      "completionThreshold": 0.75,
+      "requiredEvidenceTypes": [
+        "quote"
+      ],
+      "probeFamilies": [
+        "manager_support",
+        "team_support"
+      ]
+    },
+    {
+      "id": "PD-04",
+      "label": "Growth blockers",
+      "description": "Identify structural, cultural, or time barriers blocking development.",
+      "priority": 0.85,
+      "completionThreshold": 0.75,
+      "requiredEvidenceTypes": [
+        "barrier"
+      ],
+      "probeFamilies": [
+        "barrier",
+        "time_pressure"
+      ]
+    },
+    {
+      "id": "PD-05",
+      "label": "Future commitment and retention",
+      "description": "Understand whether the experience influences ongoing development and retention intent.",
+      "priority": 0.75,
+      "completionThreshold": 0.7,
+      "requiredEvidenceTypes": [
+        "quote",
+        "risk_signal"
+      ],
+      "probeFamilies": [
+        "future_intent",
+        "retention"
+      ]
+    }
+  ]
+}

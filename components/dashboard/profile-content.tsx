@@ -10,18 +10,16 @@ interface ProfileContentProps {
     cookieHeader: string | null;
 }
 
-export function ProfileContent({ cookieHeader }: ProfileContentProps) {
-    const { user, session } = useAuth();
+export function ProfileContent({ cookieHeader: _cookieHeader }: ProfileContentProps) {
+    const { user } = useAuth();
     const t = useTranslations("Profile");
     const [workspace, setWorkspace] = useState<any>(null);
-    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         async function loadData() {
             const wsRes = await getActiveWorkspace();
 
             if (wsRes.success && wsRes.data) setWorkspace(wsRes.data);
-            setIsLoading(false);
         }
         loadData();
     }, []);

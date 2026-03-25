@@ -1,0 +1,116 @@
+{
+  "id": "education.learning_outcome",
+  "displayName": "Learning Outcome",
+  "description": "Measure what changed after learning over time, including transfer, retention, and barriers to sustained use.",
+  "routing": {
+    "keywords": [
+      "outcome",
+      "impact",
+      "transfer",
+      "retention",
+      "apply",
+      "after training",
+      "post training"
+    ],
+    "examples": [
+      "We want to know what changed after participants completed the training a few weeks later.",
+      "Help me measure whether our program led to durable behavior change."
+    ]
+  },
+  "requiredBriefFields": [
+    "researchGoal",
+    "decisionToInform",
+    "audienceDefinition",
+    "learningContext",
+    "deliveryContext",
+    "timeWindow",
+    "requiredTopics",
+    "successCriteria",
+    "analysisQuestions"
+  ],
+  "defaultDurationMinutes": 14,
+  "analyticsDimensions": [
+    "behavior_change",
+    "retention",
+    "environmental_barriers",
+    "organizational_support"
+  ],
+  "policyFlags": {
+    "allowSensitiveTopics": true,
+    "requiresConsent": true,
+    "piiMaskingRequired": true
+  },
+  "nodes": [
+    {
+      "id": "LO-01",
+      "label": "Change since learning",
+      "description": "Surface what participants say is meaningfully different after the program.",
+      "priority": 1.0,
+      "completionThreshold": 0.8,
+      "requiredEvidenceTypes": [
+        "quote",
+        "before_after"
+      ],
+      "probeFamilies": [
+        "before_after",
+        "change_signal"
+      ]
+    },
+    {
+      "id": "LO-02",
+      "label": "Behavioral transfer",
+      "description": "Capture concrete examples of learners applying the learning in their real context.",
+      "priority": 1.0,
+      "completionThreshold": 0.85,
+      "requiredEvidenceTypes": [
+        "behavioral-example"
+      ],
+      "probeFamilies": [
+        "specific_example",
+        "transfer_story"
+      ]
+    },
+    {
+      "id": "LO-03",
+      "label": "Retention and decay",
+      "description": "Identify what stuck, what faded, and why.",
+      "priority": 0.85,
+      "completionThreshold": 0.75,
+      "requiredEvidenceTypes": [
+        "quote"
+      ],
+      "probeFamilies": [
+        "retention",
+        "forgetting"
+      ]
+    },
+    {
+      "id": "LO-04",
+      "label": "Contextual barriers",
+      "description": "Understand environmental constraints that blocked application.",
+      "priority": 0.85,
+      "completionThreshold": 0.75,
+      "requiredEvidenceTypes": [
+        "barrier"
+      ],
+      "probeFamilies": [
+        "barrier",
+        "context"
+      ]
+    },
+    {
+      "id": "LO-05",
+      "label": "Support ecosystem",
+      "description": "Assess how managers, peers, or systems reinforced or undermined learning use.",
+      "priority": 0.75,
+      "completionThreshold": 0.7,
+      "requiredEvidenceTypes": [
+        "quote"
+      ],
+      "probeFamilies": [
+        "support",
+        "reinforcement"
+      ]
+    }
+  ]
+}

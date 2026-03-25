@@ -2,7 +2,6 @@
 
 import {
     Area,
-    AreaChart,
     ResponsiveContainer,
     Tooltip,
     XAxis,

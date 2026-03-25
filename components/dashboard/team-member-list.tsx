@@ -58,7 +58,6 @@ export function TeamMemberList({
 }: TeamMemberListProps) {
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [inviteEmail, setInviteEmail] = useState("");
-    const [inviteRole, setInviteRole] = useState<"owner" | "member">("member");
     const [isInviting, setIsInviting] = useState(false);
     const [inviteError, setInviteError] = useState<string | null>(null);
     const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
@@ -75,14 +74,13 @@ export function TeamMemberList({
         try {
             const result = await inviteToWorkspace({
                 email: inviteEmail,
-                role: inviteRole,
+                role: "member",
                 organizationId: workspaceId,
             });
 
             if (result.success) {
                 setShowInviteModal(false);
                 setInviteEmail("");
-                setInviteRole("member");
                 toast.success(t("Toasts.InvitationSent"));
                 onInviteSent?.();
             } else {
@@ -338,47 +336,14 @@ export function TeamMemberList({
                                 </div>
                             </div>
 
-                            {/* Role Selection */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    {mlT("InviteModal.RoleLabel")}
-                                </label>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        onClick={() => setInviteRole("member")}
-                                        className={cn(
-                                            "p-4 rounded-xl border-2 text-left transition-all",
-                                            inviteRole === "member"
-                                                ? "border-gray-900 bg-gray-50"
-                                                : "border-gray-200 hover:border-gray-300"
-                                        )}
-                                    >
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <Shield className="w-4 h-4 text-gray-600" />
-                                            <span className="font-semibold text-gray-900">{t("Permissions.Member.Title")}</span>
-                                        </div>
-                                        <p className="text-xs text-gray-500">
-                                            {t("Permissions.Member.Description")}
-                                        </p>
-                                    </button>
-                                    <button
-                                        onClick={() => setInviteRole("owner")}
-                                        className={cn(
-                                            "p-4 rounded-xl border-2 text-left transition-all",
-                                            inviteRole === "owner"
-                                                ? "border-gray-900 bg-gray-50"
-                                                : "border-gray-200 hover:border-gray-300"
-                                        )}
-                                    >
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <Crown className="w-4 h-4 text-amber-500" />
-                                            <span className="font-semibold text-gray-900">{t("Permissions.Owner.Title")}</span>
-                                        </div>
-                                        <p className="text-xs text-gray-500">
-                                            {t("Permissions.Owner.Description")}
-                                        </p>
-                                    </button>
+                            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <Shield className="w-4 h-4 text-gray-600" />
+                                    <span className="font-semibold text-gray-900">{t("Permissions.Member.Title")}</span>
                                 </div>
+                                <p className="text-xs text-gray-500">
+                                    {t("Permissions.Member.Description")}
+                                </p>
                             </div>
 
                             {/* Error Message */}

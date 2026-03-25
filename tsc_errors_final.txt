@@ -1,2 +1,0 @@
-.next/types/validator.ts(404,39): error TS2307: Cannot find module '../../app/api/internal/agent-performance/route.js' or its corresponding type declarations.
-lib/agents/creation-specialist.ts(223,17): error TS2322: Type 'string' is not assignable to type 'number | SQL<unknown> | PgColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}> | null | undefined'.

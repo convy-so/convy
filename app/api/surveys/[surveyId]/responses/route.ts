@@ -2,8 +2,9 @@ import { eq, desc, count, and } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
-import { surveys, surveyConversations } from "@/db/schema";
+import { surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
+import { getSurveyPermissionContext } from "@/lib/workspace-access";
 
 /**
  * GET - Get all responses for a survey
@@ -22,10 +23,8 @@ export async function GET(
     const status = searchParams.get("status") || "all";
     const offset = (page - 1) * limit;
 
-    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
-    const access = await getSurveyAccessLevel(session.user.id, surveyId);
-
-    if (access === "none") {
+    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
+    if (!permission?.canView) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

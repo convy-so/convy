@@ -12,7 +12,6 @@ import {
     BrainCircuit
 } from "lucide-react";
 import { Link } from "@/i18n/routing";
-import { FeedbackForm } from "@/components/admin/feedback-form";
 import { Suspense } from "react";
 import { headers } from "next/headers";
 
@@ -31,6 +30,8 @@ async function ReviewContent({
     if (!survey) {
         notFound();
     }
+
+    const brief = (survey as any).brief?.brief;
 
     return (
         <div className="space-y-8">
@@ -89,10 +90,10 @@ async function ReviewContent({
                             </div>
                             <div className="space-y-3">
                                 <p className="text-sm text-gray-600 leading-relaxed">
-                                    <span className="font-semibold text-gray-900">Goal:</span> {(survey.expertState as any)?.objective?.goal || "Not defined"}
+                                    <span className="font-semibold text-gray-900">Goal:</span> {brief?.researchGoal || "Not defined"}
                                 </p>
                                 <p className="text-sm text-gray-600 leading-relaxed">
-                                    <span className="font-semibold text-gray-900">Decision to be made:</span> {(survey.expertState as any)?.objective?.decision || "Not defined"}
+                                    <span className="font-semibold text-gray-900">Decision to be made:</span> {brief?.decisionToInform || "Not defined"}
                                 </p>
                             </div>
                         </div>
@@ -104,10 +105,10 @@ async function ReviewContent({
                             </div>
                             <div className="space-y-3">
                                 <p className="text-sm text-gray-600 leading-relaxed">
-                                    <span className="font-semibold text-gray-900">Description:</span> {(survey.expertState as any)?.targetAudience?.description || "Not defined"}
+                                    <span className="font-semibold text-gray-900">Description:</span> {brief?.audienceDefinition || "Not defined"}
                                 </p>
                                 <p className="text-sm text-gray-600 leading-relaxed">
-                                    <span className="font-semibold text-gray-900">Relationship:</span> {(survey.expertState as any)?.targetAudience?.relationship || "Not defined"}
+                                    <span className="font-semibold text-gray-900">Relationship:</span> {brief?.audienceRelationship || "Not defined"}
                                 </p>
                             </div>
                         </div>
@@ -119,15 +120,15 @@ async function ReviewContent({
                             </div>
                             <div className="space-y-2">
                                 <p className="text-sm text-gray-600 leading-relaxed capitalize">
-                                    <span className="font-semibold text-gray-900">Breadth vs Depth:</span> {(survey.expertState as any)?.scope?.breadthVsDepth || "Not defined"}
+                                    <span className="font-semibold text-gray-900">Program Context:</span> {brief?.learningContext || "Not defined"}
                                 </p>
                                 <div className="flex flex-wrap gap-2 pt-1">
-                                    {(survey.expertState as any)?.scope?.mainTopics?.map((topic: string) => (
+                                    {brief?.requiredTopics?.map((topic: string) => (
                                         <span key={topic} className="px-2 py-1 bg-amber-50 text-amber-700 text-[10px] font-bold uppercase rounded-md">
                                             {topic}
                                         </span>
                                     ))}
-                                    {!(survey.expertState as any)?.scope?.mainTopics?.length && <span className="text-sm text-gray-400">No topics defined</span>}
+                                    {!brief?.requiredTopics?.length && <span className="text-sm text-gray-400">No topics defined</span>}
                                 </div>
                             </div>
                         </div>
@@ -139,15 +140,15 @@ async function ReviewContent({
                             </div>
                             <div className="space-y-2">
                                 <p className="text-sm text-gray-600 leading-relaxed">
-                                    <span className="font-semibold text-gray-900">Detail Level:</span> {(survey.expertState as any)?.successCriteria?.detailLevel || "Not defined"}
+                                    <span className="font-semibold text-gray-900">Program:</span> {brief?.programId || "Not defined"}
                                 </p>
                                 <div className="flex flex-wrap gap-2 pt-1">
-                                    {(survey.expertState as any)?.successCriteria?.insightTypes?.map((type: string) => (
+                                    {brief?.successCriteria?.map((type: string) => (
                                         <span key={type} className="px-2 py-1 bg-purple-50 text-purple-700 text-[10px] font-bold uppercase rounded-md">
                                             {type}
                                         </span>
                                     ))}
-                                    {!(survey.expertState as any)?.successCriteria?.insightTypes?.length && <span className="text-sm text-gray-400">No insight types defined</span>}
+                                    {!brief?.successCriteria?.length && <span className="text-sm text-gray-400">No success criteria defined</span>}
                                 </div>
                             </div>
                         </div>
@@ -188,15 +189,16 @@ async function ReviewContent({
                     </div>
                 </div>
 
-                {/* Right Column: Expert Feedback Form */}
+                {/* Right Column: Review Summary */}
                 <div className="w-full lg:w-96">
                     <div className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm sticky top-32 space-y-6">
                         <div className="space-y-1">
-                            <h2 className="text-xl font-bold text-gray-900 font-aspekta">Expert Feedback</h2>
-                            <p className="text-sm text-gray-500">Provide analysis on the survey quality and suggested improvements.</p>
+                            <h2 className="text-xl font-bold text-gray-900 font-aspekta">Review Notes</h2>
+                            <p className="text-sm text-gray-500">The legacy admin feedback textbox has been removed. This page now serves as a clean read-only review of the survey brief and creation transcript.</p>
                         </div>
-
-                        <FeedbackForm surveyId={id} initialFeedback={survey.improvementFeedback || ""} />
+                        <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600 leading-relaxed">
+                            Use the survey brief, required topics, and creation conversation above to assess quality. Any actual interviewer tuning now belongs in the sample-review optimization workflow, not in a detached admin feedback field.
+                        </div>
                     </div>
                 </div>
             </div>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X, Loader2, UserPlus, Mail, ChevronDown, Check, Eye, Edit3, Shield, User } from "lucide-react";
+import { X, Loader2, UserPlus, Mail, ChevronDown, Check, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { inviteToWorkspace } from "@/app/actions/workspace";
 import { useRouter } from "@/i18n/routing";
@@ -17,7 +17,6 @@ type InviteMemberModalProps = {
 export function InviteMemberModal({ isOpen, onClose, onSuccess, organizationId }: InviteMemberModalProps) {
     const router = useRouter();
     const [email, setEmail] = useState("");
-    const [role, setRole] = useState("member");
     const [isInviting, setIsInviting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [mounted, setMounted] = useState(false);
@@ -28,11 +27,10 @@ export function InviteMemberModal({ isOpen, onClose, onSuccess, organizationId }
     }, []);
 
     const roles = [
-        { id: 'member', label: 'Member', description: 'Can create and manage surveys', icon: User },
-        { id: 'owner', label: 'Owner', description: 'Full access to workspace settings', icon: Shield },
+        { id: 'member', label: 'Member', description: 'Can create and collaborate on workspace content', icon: User },
     ];
 
-    const selectedRole = roles.find(r => r.id === role) || roles[0];
+    const selectedRole = roles[0];
 
     const handleInvite = async () => {
         if (!email.trim()) return;
@@ -43,13 +41,12 @@ export function InviteMemberModal({ isOpen, onClose, onSuccess, organizationId }
         try {
             const result = await inviteToWorkspace({
                 email,
-                role: role as "member" | "owner",
+                role: "member",
                 organizationId
             });
 
             if (result.success) {
                 setEmail("");
-                setRole("member");
                 setIsRoleOpen(false);
                 onSuccess?.();
                 onClose();
@@ -139,19 +136,19 @@ export function InviteMemberModal({ isOpen, onClose, onSuccess, organizationId }
                                         {roles.map(r => (
                                             <button 
                                                 key={r.id}
-                                                onClick={() => { setRole(r.id); setIsRoleOpen(false); }}
+                                                onClick={() => { setIsRoleOpen(false); }}
                                                 className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
                                             >
-                                                <div className={cn("p-2 rounded-lg", role === r.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500")}>
+                                                <div className="p-2 rounded-lg bg-gray-900 text-white">
                                                     <r.icon className="w-4 h-4" />
                                                 </div>
                                                 <div className="flex-1">
-                                                    <div className={cn("font-medium", role === r.id ? "text-gray-900" : "text-gray-900")}>
+                                                    <div className="font-medium text-gray-900">
                                                         {r.label}
                                                     </div>
                                                     <div className="text-xs text-gray-500">{r.description}</div>
                                                 </div>
-                                                {role === r.id && <Check className="w-4 h-4 text-gray-900" />}
+                                                <Check className="w-4 h-4 text-gray-900" />
                                             </button>
                                         ))}
                                     </div>

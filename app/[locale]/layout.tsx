@@ -43,7 +43,7 @@ const fasthand = localFont({
   variable: "--font-fasthand",
 });
 
-import { translateUIString, SupportedLanguage } from "@/lib/i18n/ai-translator";
+import { SupportedLanguage } from "@/lib/i18n/ai-translator";
 
 const METADATA_CONFIG: Record<SupportedLanguage, { title: string; description: string }> = {
   en: {

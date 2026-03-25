@@ -4,11 +4,8 @@ import {
   FaBrain,
   FaFileAlt,
 } from "react-icons/fa";
-import { useTranslations } from "next-intl";
 
 export default function FeaturesSection() {
-  const t = useTranslations('Landing.Features');
-
   return (
     <section className="p-[12px] bg-[#FAFAFA]">
       <div className="mx-auto max-w-[1920px] py-10 sm:py-12 px-4 sm:px-6 lg:px-12">

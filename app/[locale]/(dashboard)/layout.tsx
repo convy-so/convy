@@ -4,7 +4,7 @@ import { DashboardHeader } from "@/components/dashboard/header";
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
-import { headers, cookies } from "next/headers";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { type SupportedLanguage } from "@/lib/i18n/ai-translator";
 import { NextIntlClientProvider } from "next-intl";

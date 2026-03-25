@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, ReactNode } from "react";
+import { useState, useEffect } from "react";
 import { getClientTranslation } from "@/app/actions/translate";
 
 interface ClientTProps {
@@ -13,13 +13,11 @@ interface ClientTProps {
  */
 export function ClientT({ children, context }: ClientTProps) {
     const [translation, setTranslation] = useState<string>(children);
-    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         async function load() {
             const result = await getClientTranslation(children, context);
             setTranslation(result);
-            setLoading(false);
         }
         load();
     }, [children, context]);

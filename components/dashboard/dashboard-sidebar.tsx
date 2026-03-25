@@ -30,7 +30,7 @@ interface DashboardSidebarProps {
   user?: User | null;
 }
 
-export function DashboardSidebar({ user: initialUser }: DashboardSidebarProps) {
+export function DashboardSidebar({ user: _initialUser }: DashboardSidebarProps) {
   const { user, session } = useAuth();
   const pathname = usePathname();
   const router = useRouter();

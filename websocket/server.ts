@@ -33,9 +33,12 @@ import {
 import { SurveyCreationVoiceHandler } from "./handlers/survey-creation-voice";
 import { SurveyResponseVoiceHandler } from "./handlers/survey-response-voice";
 import { SampleSurveyVoiceHandler } from "./handlers/sample-survey-voice";
-import { AnalyticsHandler } from "./handlers/analytics";
 import { PresenceHandler } from "./handlers/presence";
 import { getRedisSubscriber } from "@/lib/redis";
+import {
+  getSurveyPermissionContext,
+  isWorkspaceMember,
+} from "@/lib/workspace-access";
 
 /**
  * WebSocket Server for Voice-Enabled Surveys
@@ -52,7 +55,6 @@ const activeConnections = new Map<
     | SurveyCreationVoiceHandler
     | SurveyResponseVoiceHandler
     | SampleSurveyVoiceHandler
-    | AnalyticsHandler
     | PresenceHandler;
     userId?: string;
     createdAt: number; // Track when connection was created for cleanup
@@ -60,10 +62,18 @@ const activeConnections = new Map<
 >();
 
 // Issue 14 Fix: Flattened Map (userId + ":" + surveyId) -> handler to prevent nested Map leaks
-const analyticsConnections = new Map<string, AnalyticsHandler>();
 const presenceConnections = new Map<string, PresenceHandler>();
+const realtimeConnections = new Map<
+  string,
+  {
+    ws: WebSocket;
+    userId: string;
+    subscriptions: Set<string>;
+  }
+>();
+const realtimeChannelSubscriptions = new Map<string, Set<string>>();
 
-// Redis pub/sub subscriber for analytics events
+// Redis pub/sub subscriber for presence and realtime events
 let redisSubscriber: ReturnType<typeof getRedisSubscriber> | null = null;
 let redisSubscriberReconnectAttempts = 0;
 const MAX_REDIS_RECONNECT_ATTEMPTS = 10;
@@ -97,20 +107,26 @@ function cleanupStaleConnections(): void {
         activeConnections.delete(connectionId);
         cleanedCount++;
 
-        // Also clean up from analyticsConnections if applicable
-        if (
-          connection.userId &&
-          connection.handler instanceof AnalyticsHandler
-        ) {
-          const key = `${connection.userId}:${connection.handler.surveyId}`;
-          if (analyticsConnections.get(key) === connection.handler) {
-            analyticsConnections.delete(key);
-          }
-        }
       }
     } catch {
       // If we can't check the connection, remove it to be safe
       activeConnections.delete(connectionId);
+      cleanedCount++;
+    }
+  }
+
+  for (const [connectionId, connection] of realtimeConnections) {
+    if (
+      connection.ws.readyState === WebSocket.CLOSED ||
+      connection.ws.readyState === WebSocket.CLOSING
+    ) {
+      realtimeConnections.delete(connectionId);
+      for (const channel of connection.subscriptions) {
+        realtimeChannelSubscriptions.get(channel)?.delete(connectionId);
+        if (realtimeChannelSubscriptions.get(channel)?.size === 0) {
+          realtimeChannelSubscriptions.delete(channel);
+        }
+      }
       cleanedCount++;
     }
   }
@@ -189,8 +205,8 @@ wss.on("connection", async (ws: WebSocket, req) => {
       await handleSurveyResponse(ws, req);
     } else if (pathname === "/voice/sample-conversation") {
       await handleSampleConversation(ws, req);
-    } else if (pathname === "/analytics") {
-      await handleAnalytics(ws, req);
+    } else if (pathname === "/realtime") {
+      await handleRealtime(ws, req);
     } else if (pathname.startsWith("/presence")) {
       await handlePresence(ws, req);
     } else {
@@ -450,71 +466,6 @@ async function handleSampleConversation(
 }
 
 /**
- * Handle analytics connections (authenticated)
- */
-async function handleAnalytics(
-  ws: WebSocket,
-  req: IncomingMessage,
-): Promise<void> {
-  const authResult = await authenticateWebSocket(ws, req);
-
-  if ("code" in authResult) {
-    sendAuthError(ws, authResult);
-    return;
-  }
-
-  const connection = authResult as AuthenticatedConnection;
-  const url = parse(req.url || "", true);
-  const surveyId = url.query.surveyId as string;
-
-  if (!surveyId) {
-    ws.send(JSON.stringify({ type: "error", error: "Survey ID required" }));
-    ws.close();
-    return;
-  }
-
-  const identifier = getClientIdentifier(req, connection.userId);
-  const rateLimitCheck = await checkConnectionAllowed(identifier);
-
-  if (!rateLimitCheck.allowed) {
-    ws.send(
-      JSON.stringify({
-        type: "error",
-        error: rateLimitCheck.reason,
-        retryAfter: rateLimitCheck.retryAfter,
-      }),
-    );
-    ws.close();
-    return;
-  }
-
-  try {
-    const handler = new AnalyticsHandler(connection, surveyId);
-    await handler.initialize();
-
-    const connectionId = `analytics-${connection.userId}-${surveyId}-${Date.now()}`;
-    activeConnections.set(connectionId, {
-      handler,
-      userId: connection.userId,
-      createdAt: Date.now(),
-    });
-
-    const analyticsKey = `${connection.userId}:${surveyId}`;
-    analyticsConnections.set(analyticsKey, handler);
-
-    ws.on("close", async () => {
-      activeConnections.delete(connectionId);
-      analyticsConnections.delete(analyticsKey);
-      await releaseConnection(identifier);
-    });
-  } catch (error) {
-    console.error("[WebSocket] Analytics handler error:", error);
-    await releaseConnection(identifier);
-    ws.close();
-  }
-}
-
-/**
  * Handle presence connections (authenticated)
  * URL format: /presence?workspaceId={id}&surveyId={id}
  */
@@ -536,6 +487,13 @@ async function handlePresence(
 
   if (!workspaceId) {
     ws.send(JSON.stringify({ type: "error", error: "Workspace ID required" }));
+    ws.close();
+    return;
+  }
+
+  const member = await isWorkspaceMember(connection.userId, workspaceId);
+  if (!member) {
+    ws.send(JSON.stringify({ type: "error", error: "Unauthorized" }));
     ws.close();
     return;
   }
@@ -577,6 +535,125 @@ async function handlePresence(
   }
 }
 
+async function handleRealtime(
+  ws: WebSocket,
+  req: IncomingMessage,
+): Promise<void> {
+  const authResult = await authenticateWebSocket(ws, req);
+
+  if ("code" in authResult) {
+    sendAuthError(ws, authResult);
+    return;
+  }
+
+  const connection = authResult as AuthenticatedConnection;
+  const identifier = getClientIdentifier(req, connection.userId);
+  const rateLimitCheck = await checkConnectionAllowed(identifier);
+
+  if (!rateLimitCheck.allowed) {
+    ws.send(
+      JSON.stringify({
+        type: "error",
+        error: rateLimitCheck.reason,
+        retryAfter: rateLimitCheck.retryAfter,
+      }),
+    );
+    ws.close();
+    return;
+  }
+
+  const connectionId = `realtime-${connection.userId}-${Date.now()}`;
+  realtimeConnections.set(connectionId, {
+    ws,
+    userId: connection.userId,
+    subscriptions: new Set<string>(),
+  });
+
+  ws.on("message", async (raw) => {
+    try {
+      const data = JSON.parse(String(raw));
+      if (data.type === "subscribe") {
+        const channel = String(data.channel || "");
+        const allowed = await authorizeRealtimeSubscription(
+          connection.userId,
+          channel,
+        );
+
+        if (!allowed) {
+          ws.send(
+            JSON.stringify({
+              type: "subscription_error",
+              channel,
+              error: "Unauthorized",
+            }),
+          );
+          return;
+        }
+
+        realtimeConnections.get(connectionId)?.subscriptions.add(channel);
+        if (!realtimeChannelSubscriptions.has(channel)) {
+          realtimeChannelSubscriptions.set(channel, new Set<string>());
+        }
+        realtimeChannelSubscriptions.get(channel)?.add(connectionId);
+        ws.send(JSON.stringify({ type: "subscribed", channel }));
+        return;
+      }
+
+      if (data.type === "unsubscribe") {
+        const channel = String(data.channel || "");
+        realtimeConnections.get(connectionId)?.subscriptions.delete(channel);
+        realtimeChannelSubscriptions.get(channel)?.delete(connectionId);
+        if (realtimeChannelSubscriptions.get(channel)?.size === 0) {
+          realtimeChannelSubscriptions.delete(channel);
+        }
+        ws.send(JSON.stringify({ type: "unsubscribed", channel }));
+      }
+    } catch (error) {
+      ws.send(
+        JSON.stringify({
+          type: "error",
+          error:
+            error instanceof Error ? error.message : "Invalid realtime message",
+        }),
+      );
+    }
+  });
+
+  ws.on("close", async () => {
+    const active = realtimeConnections.get(connectionId);
+    if (active) {
+      for (const channel of active.subscriptions) {
+        realtimeChannelSubscriptions.get(channel)?.delete(connectionId);
+        if (realtimeChannelSubscriptions.get(channel)?.size === 0) {
+          realtimeChannelSubscriptions.delete(channel);
+        }
+      }
+    }
+    realtimeConnections.delete(connectionId);
+    await releaseConnection(identifier);
+  });
+
+  ws.send(JSON.stringify({ type: "connected" }));
+}
+
+async function authorizeRealtimeSubscription(
+  userId: string,
+  channel: string,
+): Promise<boolean> {
+  if (channel.startsWith("workspace:")) {
+    const workspaceId = channel.slice("workspace:".length);
+    return await isWorkspaceMember(userId, workspaceId);
+  }
+
+  if (channel.startsWith("survey:")) {
+    const surveyId = channel.slice("survey:".length);
+    const permission = await getSurveyPermissionContext(userId, surveyId);
+    return Boolean(permission?.canView && permission.collaborationAllowed);
+  }
+
+  return false;
+}
+
 /**
  * Initialize Redis pub/sub subscriber
  */
@@ -590,58 +667,32 @@ function initializeRedisSubscriber(): void {
     redisSubscriber = getRedisSubscriber();
 
     // Subscribe to patterns
-    redisSubscriber.psubscribe("analytics:complete:*:*");
     redisSubscriber.psubscribe("pubsub:presence:*");
-    redisSubscriber.psubscribe("survey:creation:events:*");
-    redisSubscriber.psubscribe("pubsub:workspace:*");
+    redisSubscriber.psubscribe("pubsub:realtime:*");
 
-    redisSubscriber.on("pmessage", async (pattern, channel, message) => {
+    redisSubscriber.on("pmessage", async (_pattern, channel, message) => {
       try {
-        if (channel.startsWith("analytics:complete:")) {
+        if (channel.startsWith("pubsub:presence:")) {
+          const workspaceId = channel.split(":")[2];
+          const data = JSON.parse(message);
+
+          for (const [key, handler] of presenceConnections.entries()) {
+            const parts = key.split(":");
+            if (parts[1] === workspaceId) {
+              handler.send(data);
+            }
+          }
+        } else if (channel.startsWith("pubsub:realtime:")) {
           const parts = channel.split(":");
-          if (parts.length === 4) {
-            const surveyId = parts[2];
-            const userId = parts[3];
-            const analyticsKey = `${userId}:${surveyId}`;
-            const handler = analyticsConnections.get(analyticsKey);
-            if (handler) handler.handleAnalyticsUpdate(JSON.parse(message));
-          }
-        } else if (channel.startsWith("pubsub:presence:")) {
-          const workspaceId = channel.split(":")[2];
+          const scope = parts[2];
+          const entityId = parts[3];
           const data = JSON.parse(message);
+          const subscriptionKey = `${scope}:${entityId}`;
 
-          for (const [key, handler] of presenceConnections.entries()) {
-            const parts = key.split(":");
-            if (parts[1] === workspaceId) {
-              handler.send(data);
-            }
-          }
-        } else if (channel.startsWith("pubsub:workspace:")) {
-          const workspaceId = channel.split(":")[2];
-          const data = JSON.parse(message);
-
-          // Forward workspace events (survey created, etc.) to all presence connections in that workspace
-          for (const [key, handler] of presenceConnections.entries()) {
-            const parts = key.split(":");
-            if (parts[1] === workspaceId) {
-              handler.send(data);
-            }
-          }
-        } else if (channel.startsWith("survey:creation:events:")) {
-          const surveyId = channel.split(":")[3];
-          const data = JSON.parse(message);
-
-          for (const connection of activeConnections.values()) {
-            const handler = connection.handler;
-            // Type-safe check: AnalyticsHandler and voice handlers have surveyId and send()
-            if (
-              handler &&
-              "surveyId" in handler &&
-              handler.surveyId === surveyId &&
-              "send" in handler &&
-              typeof handler.send === "function"
-            ) {
-              handler.send(data);
+          for (const connectionId of realtimeChannelSubscriptions.get(subscriptionKey) ?? []) {
+            const connection = realtimeConnections.get(connectionId);
+            if (connection?.ws.readyState === WebSocket.OPEN) {
+              connection.ws.send(JSON.stringify(data));
             }
           }
         }
@@ -672,7 +723,7 @@ function initializeRedisSubscriber(): void {
       }
     });
 
-    console.log("[Redis Pub/Sub] Subscribed to analytics and presence events");
+    console.log("[Redis Pub/Sub] Subscribed to presence and realtime events");
   } catch (error) {
     console.error("[Redis Pub/Sub] Failed to initialize subscriber:", error);
     if (redisSubscriberReconnectAttempts < MAX_REDIS_RECONNECT_ATTEMPTS) {
@@ -709,8 +760,6 @@ server.listen(PORT, () => {
 ║   • ws://localhost:${PORT}/voice/survey-creation             ║
 ║   • ws://localhost:${PORT}/voice/survey-response             ║
 ║   • ws://localhost:${PORT}/voice/sample-conversation?surveyId={id}&conversationNumber={n} ║
-║   • ws://localhost:${PORT}/analytics?surveyId={id}           ║
-║                                                              ║
 ║   Health Check: http://localhost:${PORT}/health              ║
 ║   Stats: http://localhost:${PORT}/stats                      ║
 ║                                                              ║
@@ -738,7 +787,8 @@ process.on("SIGTERM", async () => {
   // Unsubscribe from Redis channels
   if (redisSubscriber) {
     try {
-      await redisSubscriber.punsubscribe("analytics:complete:*:*");
+      await redisSubscriber.punsubscribe("pubsub:presence:*");
+      await redisSubscriber.punsubscribe("pubsub:realtime:*");
       await redisSubscriber.quit();
       console.log("[Redis Pub/Sub] Subscriber disconnected");
     } catch (error) {
@@ -761,6 +811,12 @@ process.on("SIGTERM", async () => {
         `[WebSocket] Error cleaning up connection ${connectionId}:`,
         error,
       );
+    }
+  }
+
+  for (const connection of realtimeConnections.values()) {
+    if (connection.ws.readyState === WebSocket.OPEN) {
+      connection.ws.close();
     }
   }
 

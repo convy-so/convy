@@ -5,12 +5,15 @@ import { z } from "zod";
 import { and, eq, ne, or, sql, isNull } from "drizzle-orm";
 
 import { getDb } from "@/db";
-import { surveys, users, organizations } from "@/db/schema";
+import { surveys, users, organizations, surveyEditors } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getSurveyAccessLevel } from "@/lib/workspace-access";
+import { getSurveyPermissionContext } from "@/lib/workspace-access";
 import { cache, cacheKeys } from "@/lib/cache";
 import { env } from "@/lib/env";
-import { publishWorkspaceEvent } from "@/lib/redis-events";
+import {
+  publishPendingOutboxEntries,
+  recordRealtimeEvent,
+} from "@/lib/collaboration-service";
 
 type ActionResult<T> =
   | { success: true; data: T }
@@ -58,11 +61,11 @@ export async function updateSurveyAction(
       return { success: false, error: "Survey not found" };
     }
 
-    const access = await getSurveyAccessLevel(
+    const permission = await getSurveyPermissionContext(
       session.user.id,
       existingSurvey.id,
     );
-    if (access !== "owner" && access !== "editor") {
+    if (!permission?.canEdit) {
       return { success: false, error: "Unauthorized: Editor access required" };
     }
 
@@ -84,10 +87,25 @@ export async function updateSurveyAction(
       updateData.participantLimit = body.participantLimit;
     if (body.language !== undefined) updateData.language = body.language;
 
-    await getDb()
-      .update(surveys)
-      .set(updateData)
-      .where(eq(surveys.id, body.id));
+    await getDb().transaction(async (tx) => {
+      await tx.update(surveys).set(updateData).where(eq(surveys.id, body.id));
+
+      if (permission?.workspaceId) {
+        await recordRealtimeEvent(tx, {
+          scope: "workspace",
+          workspaceId: permission.workspaceId,
+          eventType: "workspace.survey_updated",
+          actorId: session.user.id,
+          payload: {
+            workspaceId: permission.workspaceId,
+            survey: {
+              id: body.id,
+              ...updateData,
+            },
+          },
+        });
+      }
+    });
 
     // Invalidate dashboard cache
     await cache.delete(
@@ -97,21 +115,8 @@ export async function updateSurveyAction(
       ),
     );
 
-    // Publish event for real-time synchronization
     if (existingSurvey.organizationId) {
-      publishWorkspaceEvent({
-        type: "SURVEY_UPDATED",
-        workspaceId: existingSurvey.organizationId,
-        userId: session.user.id,
-        userName: session.user.name,
-        data: {
-          id: body.id,
-          title: body.title,
-          language: body.language,
-          participantLimit: body.participantLimit,
-        },
-        timestamp: new Date().toISOString(),
-      }).catch((err) => console.error("Failed to publish survey update event:", err));
+      await publishPendingOutboxEntries();
     }
 
     return { success: true, data: { id: body.id } };
@@ -241,9 +246,8 @@ export async function getSurveyAction(
       return { success: false, error: "Survey not found" };
     }
 
-    const accessLevel = await getSurveyAccessLevel(session.user.id, surveyId);
-
-    if (accessLevel === "none") {
+    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
+    if (!permission?.canView) {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -284,11 +288,11 @@ export async function confirmSurveyAction(
       return { success: false, error: "Survey not found" };
     }
 
-    const access = await getSurveyAccessLevel(session.user.id, survey.id);
-    if (access !== "owner") {
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission?.canPublish) {
       return {
         success: false,
-        error: "Unauthorized: Owner access required to publish survey",
+        error: "Unauthorized: Editor access required to publish survey",
       };
     }
 
@@ -300,13 +304,13 @@ export async function confirmSurveyAction(
       };
     }
 
-    // Check if survey has necessary structured configuration
-    // Required fields: objective, targetAudience, scope, successCriteria, constraints
-    if (!survey.expertState || Object.keys(survey.expertState).length === 0) {
+    const { getResearchBrief } = await import("@/lib/education/storage");
+    const briefRow = await getResearchBrief(surveyId);
+    if (!briefRow?.brief) {
       return {
         success: false,
         error:
-          "Survey is missing required configuration. Please complete the creation conversation.",
+          "Survey is missing a canonical research brief. Please complete the creation workflow.",
       };
     }
 
@@ -323,32 +327,52 @@ export async function confirmSurveyAction(
       shareableLink = `survey-${nanoid(12)}`;
     }
 
-    await getDb()
-      .update(surveys)
-      .set({
-        status: "active",
-        shareableLink,
-      })
-      .where(eq(surveys.id, surveyId));
+    await getDb().transaction(async (tx) => {
+      await tx
+        .update(surveys)
+        .set({
+          status: "active",
+          shareableLink,
+        })
+        .where(eq(surveys.id, surveyId));
+
+      await recordRealtimeEvent(tx, {
+        scope: "survey",
+        surveyId,
+        workspaceId: permission.workspaceId,
+        eventType: "survey.published",
+        actorId: session.user.id,
+        payload: {
+          surveyId,
+          status: "active",
+          shareableLink,
+        },
+      });
+
+      if (permission.workspaceId) {
+        await recordRealtimeEvent(tx, {
+          scope: "workspace",
+          workspaceId: permission.workspaceId,
+          eventType: "workspace.survey_updated",
+          actorId: session.user.id,
+          payload: {
+            workspaceId: permission.workspaceId,
+            survey: {
+              id: surveyId,
+              status: "active",
+              shareableLink,
+            },
+          },
+        });
+      }
+    });
 
     await cache.delete(
       cacheKeys.dashboardRecentSurveys(session.user.id, survey.organizationId),
     );
 
-    // Publish event for real-time synchronization
     if (survey.organizationId) {
-      publishWorkspaceEvent({
-        type: "SURVEY_UPDATED",
-        workspaceId: survey.organizationId,
-        userId: session.user.id,
-        userName: session.user.name,
-        data: {
-          id: surveyId,
-          status: "active",
-          shareableLink,
-        },
-        timestamp: new Date().toISOString(),
-      }).catch((err) => console.error("Failed to publish survey confirmation event:", err));
+      await publishPendingOutboxEntries();
     }
 
     const publicUrl = `/s/${shareableLink}`;
@@ -395,8 +419,8 @@ export async function getShareableLinkAction(
       return { success: false, error: "Survey not found" };
     }
 
-    const access = await getSurveyAccessLevel(session.user.id, survey.id);
-    if (access === "none") {
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission?.canView) {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -465,8 +489,8 @@ export async function setSurveyCustomSlugAction(input: {
       return { success: false, error: "Survey not found" };
     }
 
-    const access = await getSurveyAccessLevel(session.user.id, survey.id);
-    if (access !== "owner" && access !== "editor") {
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission?.canEdit) {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -545,8 +569,8 @@ export async function clearSurveyCustomSlugAction(
       return { success: false, error: "Survey not found" };
     }
 
-    const access = await getSurveyAccessLevel(session.user.id, survey.id);
-    if (access !== "owner" && access !== "editor") {
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission?.canEdit) {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -593,8 +617,8 @@ export async function getSurveyPublicUrlsAction(surveyId: string): Promise<
       return { success: false, error: "Survey not found" };
     }
 
-    const access = await getSurveyAccessLevel(session.user.id, survey.id);
-    if (access === "none") {
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission?.canView) {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -657,8 +681,8 @@ export async function getSurveyEmbedCodeAction(surveyId: string): Promise<
       return { success: false, error: "Survey not found" };
     }
 
-    const access = await getSurveyAccessLevel(session.user.id, survey.id);
-    if (access === "none") {
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission?.canView) {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -739,8 +763,8 @@ export async function deactivateSurveyAction(
       return { success: false, error: "Survey not found" };
     }
 
-    const access = await getSurveyAccessLevel(session.user.id, survey.id);
-    if (access !== "owner" && access !== "editor") {
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission?.canEdit) {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -794,8 +818,8 @@ export async function reactivateSurveyAction(
       return { success: false, error: "Survey not found" };
     }
 
-    const access = await getSurveyAccessLevel(session.user.id, survey.id);
-    if (access !== "owner" && access !== "editor") {
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission?.canEdit) {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -863,17 +887,8 @@ export async function deleteSurveyAction(
       return { success: false, error: "Survey not found" };
     }
 
-    // Strict Rule: Only the Creator or Workspace Owner can delete
-    let canDelete = survey.userId === session.user.id;
-    if (!canDelete && survey.organizationId) {
-      const { isWorkspaceOwner } = await import("@/lib/workspace-access");
-      canDelete = await isWorkspaceOwner(
-        session.user.id,
-        survey.organizationId,
-      );
-    }
-
-    if (!canDelete) {
+    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
+    if (!permission?.canDelete) {
       return {
         success: false,
         error:
@@ -885,26 +900,41 @@ export async function deleteSurveyAction(
     const surveyTitle = survey.title;
     const organizationId = survey.organizationId;
 
-    // Cascade delete will handle related table rows
-    await getDb().delete(surveys).where(eq(surveys.id, surveyId));
+    await getDb().transaction(async (tx) => {
+      if (permission.workspaceId) {
+        await recordRealtimeEvent(tx, {
+          scope: "survey",
+          surveyId,
+          workspaceId: permission.workspaceId,
+          eventType: "survey.deleting",
+          actorId: session.user.id,
+          payload: {
+            surveyId,
+            title: surveyTitle,
+          },
+        });
+        await recordRealtimeEvent(tx, {
+          scope: "workspace",
+          workspaceId: permission.workspaceId,
+          eventType: "workspace.survey_deleted",
+          actorId: session.user.id,
+          payload: {
+            workspaceId: permission.workspaceId,
+            surveyId,
+            title: surveyTitle,
+          },
+        });
+      }
+
+      await tx.delete(surveys).where(eq(surveys.id, surveyId));
+    });
 
     await cache.delete(
       cacheKeys.dashboardActivity(session.user.id, survey.organizationId),
     );
 
-    // Publish event for real-time synchronization
     if (organizationId) {
-      publishWorkspaceEvent({
-        type: "SURVEY_DELETED",
-        workspaceId: organizationId,
-        userId: session.user.id,
-        userName: session.user.name,
-        data: {
-          id: surveyId,
-          title: surveyTitle,
-        },
-        timestamp: new Date().toISOString(),
-      }).catch((err) => console.error("Failed to publish survey deletion event:", err));
+      await publishPendingOutboxEntries();
     }
 
     // Send Notifications if in a workspace
@@ -976,11 +1006,11 @@ export async function duplicateSurveyAction(
       return { success: false, error: "Survey not found" };
     }
 
-    const access = await getSurveyAccessLevel(
+    const permission = await getSurveyPermissionContext(
       session.user.id,
       existingSurvey.id,
     );
-    if (access !== "owner") {
+    if (!permission?.isSurveyCreator) {
       return {
         success: false,
         error: "Unauthorized: Only the creator can duplicate this survey",
@@ -990,32 +1020,56 @@ export async function duplicateSurveyAction(
     const newSurveyId = nanoid();
     const now = new Date();
 
-    // Copy survey data
-    const [newSurvey] = await getDb()
-      .insert(surveys)
-      .values({
-        ...existingSurvey,
-        id: newSurveyId,
-        userId: session.user.id,
-        title: `${existingSurvey.title || "Untitled Survey"} (Copy)`,
-        status: "draft",
-        confirmed: false,
-        currentParticipants: 0,
-        shareableLink: null,
-        customSlug: null,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
+    let newSurvey: typeof surveys.$inferSelect | undefined;
+    await getDb().transaction(async (tx) => {
+      [newSurvey] = await tx
+        .insert(surveys)
+        .values({
+          ...existingSurvey,
+          id: newSurveyId,
+          userId: session.user.id,
+          title: `${existingSurvey.title || "Untitled Survey"} (Copy)`,
+          status: "draft",
+          confirmed: false,
+          currentParticipants: 0,
+          shareableLink: null,
+          customSlug: null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+
+      if (existingSurvey.organizationId && newSurvey) {
+        await recordRealtimeEvent(tx, {
+          scope: "workspace",
+          workspaceId: existingSurvey.organizationId,
+          eventType: "workspace.survey_created",
+          actorId: session.user.id,
+          payload: {
+            workspaceId: existingSurvey.organizationId,
+            survey: {
+              id: newSurvey.id,
+              title: newSurvey.title,
+              status: newSurvey.status,
+              userId: newSurvey.userId,
+              isVoice: newSurvey.isVoice,
+              createdAt: newSurvey.createdAt?.toISOString() ?? now.toISOString(),
+            },
+          },
+        });
+      }
+    });
+
+    if (!newSurvey) {
+      return { success: false, error: "Failed to duplicate survey" };
+    }
 
     // Map to frontend format (similar to what GET /api/surveys returns)
     const formattedSurvey = {
       id: newSurvey.id,
       title: newSurvey.title || "Untitled Survey",
       description:
-        newSurvey.description ||
-        (newSurvey.expertState as any)?.objective?.description ||
-        "",
+        newSurvey.description || newSurvey.coreObjective || "",
       status: newSurvey.status,
       shareableLink: newSurvey.shareableLink,
       responses: newSurvey.currentParticipants,
@@ -1026,16 +1080,8 @@ export async function duplicateSurveyAction(
       isVoice: newSurvey.isVoice || false,
     };
 
-    // Publish event for real-time synchronization
     if (existingSurvey.organizationId) {
-      publishWorkspaceEvent({
-        type: "SURVEY_CREATED",
-        workspaceId: existingSurvey.organizationId,
-        userId: session.user.id,
-        userName: session.user.name,
-        data: formattedSurvey,
-        timestamp: now.toISOString(),
-      }).catch((err) => console.error("Failed to publish survey duplication event:", err));
+      await publishPendingOutboxEntries();
     }
 
     return {
@@ -1045,5 +1091,104 @@ export async function duplicateSurveyAction(
   } catch (error) {
     console.error("Error duplicating survey:", error);
     return { success: false, error: "Failed to duplicate survey" };
+  }
+}
+
+export async function transferSurveyOwnershipAction(input: {
+  surveyId: string;
+  newOwnerUserId: string;
+}): Promise<ActionResult<void>> {
+  try {
+    const session = await getVerifiedSession();
+    const [survey] = await getDb()
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, input.surveyId));
+
+    if (!survey) {
+      return { success: false, error: "Survey not found" };
+    }
+
+    if (!survey.organizationId) {
+      return {
+        success: false,
+        error: "Survey ownership transfer is only supported in workspaces",
+      };
+    }
+
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const { isWorkspaceMember, isWorkspaceOwner } = await import(
+      "@/lib/workspace-access"
+    );
+    const targetIsMember = await isWorkspaceMember(
+      input.newOwnerUserId,
+      survey.organizationId,
+    );
+    if (!targetIsMember) {
+      return {
+        success: false,
+        error: "New owner must be a member of the workspace",
+      };
+    }
+
+    const canTransfer =
+      permission.isSurveyCreator ||
+      (survey.organizationId &&
+        (await isWorkspaceOwner(session.user.id, survey.organizationId)));
+    if (!canTransfer) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    await getDb().transaction(async (tx) => {
+      await tx
+        .update(surveys)
+        .set({ userId: input.newOwnerUserId, updatedAt: new Date() })
+        .where(eq(surveys.id, input.surveyId));
+
+      await tx
+        .delete(surveyEditors)
+        .where(
+          and(
+            eq(surveyEditors.surveyId, input.surveyId),
+            eq(surveyEditors.userId, input.newOwnerUserId),
+          ),
+        );
+
+      await recordRealtimeEvent(tx, {
+        scope: "survey",
+        surveyId: input.surveyId,
+        workspaceId: survey.organizationId,
+        eventType: "survey.editor_revoked",
+        actorId: session.user.id,
+        payload: {
+          surveyId: input.surveyId,
+          userId: input.newOwnerUserId,
+          reason: "ownership_transferred",
+        },
+      });
+      await recordRealtimeEvent(tx, {
+        scope: "workspace",
+        workspaceId: survey.organizationId,
+        eventType: "workspace.survey_updated",
+        actorId: session.user.id,
+        payload: {
+          workspaceId: survey.organizationId,
+          survey: {
+            id: input.surveyId,
+            userId: input.newOwnerUserId,
+          },
+        },
+      });
+    });
+    await publishPendingOutboxEntries();
+
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error("Error transferring survey ownership:", error);
+    return { success: false, error: "Failed to transfer survey ownership" };
   }
 }

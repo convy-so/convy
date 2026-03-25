@@ -1,0 +1,113 @@
+{
+  "id": "education.institutional_experience",
+  "displayName": "Institutional Experience",
+  "description": "Study the lived experience of students or learners inside the broader institution, not just the course itself.",
+  "routing": {
+    "keywords": [
+      "student experience",
+      "institution",
+      "university",
+      "college",
+      "school",
+      "enrollment",
+      "support services"
+    ],
+    "examples": [
+      "We need feedback on the overall student experience across support, administration, and belonging.",
+      "Help us understand whether learners feel supported by the institution."
+    ]
+  },
+  "requiredBriefFields": [
+    "researchGoal",
+    "decisionToInform",
+    "audienceDefinition",
+    "learningContext",
+    "timeWindow",
+    "requiredTopics",
+    "successCriteria"
+  ],
+  "defaultDurationMinutes": 15,
+  "analyticsDimensions": [
+    "belonging",
+    "administrative_friction",
+    "support_access",
+    "trust_and_value"
+  ],
+  "policyFlags": {
+    "allowSensitiveTopics": true,
+    "requiresConsent": true,
+    "piiMaskingRequired": true
+  },
+  "nodes": [
+    {
+      "id": "IE-01",
+      "label": "Expectation versus reality",
+      "description": "Map how the lived institutional experience compares with what learners expected or were promised.",
+      "priority": 0.95,
+      "completionThreshold": 0.8,
+      "requiredEvidenceTypes": [
+        "quote"
+      ],
+      "probeFamilies": [
+        "expectation_alignment"
+      ]
+    },
+    {
+      "id": "IE-02",
+      "label": "Administrative friction",
+      "description": "Capture operational friction such as registration, communication, scheduling, or support access.",
+      "priority": 1.0,
+      "completionThreshold": 0.8,
+      "requiredEvidenceTypes": [
+        "barrier"
+      ],
+      "probeFamilies": [
+        "friction",
+        "service_journey"
+      ]
+    },
+    {
+      "id": "IE-03",
+      "label": "Belonging and care",
+      "description": "Understand whether learners feel seen, supported, and respected.",
+      "priority": 0.95,
+      "completionThreshold": 0.8,
+      "requiredEvidenceTypes": [
+        "quote",
+        "emotional_signal"
+      ],
+      "probeFamilies": [
+        "belonging",
+        "care"
+      ]
+    },
+    {
+      "id": "IE-04",
+      "label": "Help-seeking experience",
+      "description": "Assess what happened when participants needed help and how responsive the institution felt.",
+      "priority": 0.85,
+      "completionThreshold": 0.75,
+      "requiredEvidenceTypes": [
+        "quote"
+      ],
+      "probeFamilies": [
+        "help_seeking",
+        "support_quality"
+      ]
+    },
+    {
+      "id": "IE-05",
+      "label": "Retention risk signals",
+      "description": "Identify moments or patterns that could contribute to disengagement or attrition.",
+      "priority": 0.8,
+      "completionThreshold": 0.7,
+      "requiredEvidenceTypes": [
+        "risk_signal"
+      ],
+      "probeFamilies": [
+        "risk",
+        "frustration"
+      ]
+    }
+  ]
+}

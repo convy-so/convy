@@ -20,6 +20,7 @@ export interface SearchFilters {
   minDate?: Date;
   limit?: number;
   language?: SupportedLanguage;
+  sessionType?: "sample" | "live";
 }
 
 export interface SearchResult {
@@ -69,6 +70,9 @@ export async function vectorSearch(
           : undefined,
         filters.organizationId
           ? sql`${documentEmbeddings.metadata}->>'organizationId' = ${filters.organizationId}`
+          : undefined,
+        filters.sessionType
+          ? sql`${documentEmbeddings.metadata}->>'sessionType' = ${filters.sessionType}`
           : undefined,
       ),
     )
@@ -141,6 +145,9 @@ export async function fullTextSearch(
           : undefined,
         filters.organizationId
           ? sql`${documentEmbeddings.metadata}->>'organizationId' = ${filters.organizationId}`
+          : undefined,
+        filters.sessionType
+          ? sql`${documentEmbeddings.metadata}->>'sessionType' = ${filters.sessionType}`
           : undefined,
       ),
     )

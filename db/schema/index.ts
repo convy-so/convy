@@ -1,5 +1,4 @@
 export * from "./common";
-export * from "./domain-embeddings";
 export * from "./enums";
 export * from "./auth";
 export * from "./organization";

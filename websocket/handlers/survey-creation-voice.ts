@@ -1,56 +1,45 @@
+import { eq } from "drizzle-orm";
+import { nanoid } from "nanoid";
+
 import { getDb } from "@/db";
 import {
   surveyCreationConversations,
-  voiceSessions,
   surveys,
+  voiceSessions,
 } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import { nanoid } from "nanoid";
-import { enqueueCreationExtraction } from "@/lib/queue";
-
-import { type CollectedInfo, type SurveyConfig } from "@/lib/prompts";
-
+import {
+  getEducationProgram,
+  classifyEducationProgramHeuristically,
+} from "@/lib/education/catalog";
+import type {
+  CreationCollectedInfo,
+  EducationProgramId,
+  ResearchBrief,
+} from "@/lib/education/types";
+import {
+  persistCreationConversation,
+  runCreationWorkflow,
+  type CreationMessage,
+} from "@/lib/education/creation-workflow";
+import { getPhasePlaybookContext } from "@/lib/education/runtime-context";
+import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  acquireSurveyLease,
+  publishPendingOutboxEntries,
+  recordRealtimeEvent,
+  releaseSurveyLease,
+  renewSurveyLease,
+} from "@/lib/collaboration-service";
 import type { AuthenticatedConnection } from "../middleware/auth";
 import { BaseVoiceAgentHandler } from "./base-voice-agent-handler";
-import { CreationSpecialist } from "@/lib/agents/creation-specialist";
-import type { AgentContext } from "@/lib/agents/types";
 import {
   buildVoiceAgentSettings,
-  type VoiceAgentSettings,
-  type SupportedLanguage,
-  type FunctionCallRequestEvent,
   type ConversationTextEvent,
+  type FunctionCallRequestEvent,
+  type SupportedLanguage,
+  type VoiceAgentFunction,
+  type VoiceAgentSettings,
 } from "@/lib/voice/deepgram-voice-agent";
-import { RedisStreamManager } from "@/lib/redis-stream-manager";
-import { getSurveyAccessLevel } from "@/lib/workspace-access";
-import type { ModelMessage } from "ai";
-import { ExpertStateStore } from "@/lib/expert-state-store";
-
-interface ExtractedSurveyData {
-  information?: string;
-  requiredQuestions?: string[];
-  metrics?: string[];
-  domainId?: string | number;
-  summaryOfWhatWeKnow?: string;
-  objective?: {
-    goal: string;
-    context: string | null;
-    decision: string | null;
-    subjectDomain?: string | null;
-    subjectDescription?: string;
-  };
-  targetAudience?: {
-    description: string;
-    relationship: string;
-    knowledgeLevel: string;
-  };
-  scope?: {
-    breadthVsDepth: "broad" | "deep" | "balanced";
-    mainTopics: string[];
-    boundaries: string;
-  };
-  [key: string]: any; // Allow for other fields from extraction schema
-}
 
 interface CreationState {
   surveyId: string | null;
@@ -60,68 +49,174 @@ interface CreationState {
     content: string;
     timestamp: string;
   }>;
-  collectedInfo: CollectedInfo;
-  isProcessing: boolean;
+  collectedInfo: CreationCollectedInfo;
   language: SupportedLanguage;
-  extractedData: ExtractedSurveyData | null;
-  /** Timestamp of the last extraction call — used to enforce cooldown */
-  lastExtractionAt: number;
+  brief: ResearchBrief | null;
+  missingFields: string[];
+  readyForSampling: boolean;
+}
+
+const EMPTY_COLLECTED_INFO: CreationCollectedInfo = {
+  objective: false,
+  targetAudience: false,
+  scope: false,
+  successCriteria: false,
+  constraints: false,
+  hypotheses: false,
+  tone: false,
+  requiredQuestions: false,
+  metrics: false,
+  personalInfo: false,
+  subjectDefined: false,
+  programIdentified: false,
+  media: false,
+  subjectModelComplete: false,
+};
+
+function inferProgramId(messages: Array<{ role: "user" | "assistant"; content: string }>) {
+  const creatorText = messages
+    .filter((message) => message.role === "user")
+    .map((message) => message.content)
+    .join("\n");
+  return classifyEducationProgramHeuristically(creatorText).programId;
+}
+
+async function buildCreationSystemPrompt(
+  state: CreationState,
+  organizationId?: string | null,
+) {
+  const programId =
+    state.brief?.programId ||
+    inferProgramId(state.messages) ||
+    ("education.course_efficacy" as EducationProgramId);
+  const program = getEducationProgram(programId);
+  const brief = state.brief;
+
+  const missingFieldText =
+    state.missingFields.length > 0 ? state.missingFields.join(", ") : "none";
+  const playbookContext = state.surveyId
+    ? await getPhasePlaybookContext({
+        surveyId: state.surveyId,
+        organizationId: organizationId ?? null,
+        phase: "creation",
+      })
+    : "";
+
+  return `${program.creationPrompt}
+
+You are helping a creator define an education research study. Keep the exchange concise, clear, and practical.
+
+${playbookContext ? `Approved creation playbooks:\n${playbookContext}\n` : ""}
+
+Current draft brief:
+- Program: ${program.manifest.displayName}
+- Title: ${brief?.title || "Not set yet"}
+- Goal: ${brief?.researchGoal || "Missing"}
+- Decision to inform: ${brief?.decisionToInform || "Missing"}
+- Audience: ${brief?.audienceDefinition || "Missing"}
+- Learning context: ${brief?.learningContext || "Missing"}
+- Delivery context: ${brief?.deliveryContext || "Missing"}
+- Time window: ${brief?.timeWindow || "Missing"}
+- Required topics: ${brief?.requiredTopics.join(", ") || "Missing"}
+- Success criteria: ${brief?.successCriteria.join(", ") || "Missing"}
+- Analysis questions: ${brief?.analysisQuestions.join(", ") || "Missing"}
+- Missing fields: ${missingFieldText}
+- Ready for sampling: ${state.readyForSampling ? "yes" : "no"}
+
+Instructions:
+- Ask exactly one question at a time.
+- Focus on the highest-priority missing field or contradiction.
+- If the brief is ready, say so clearly and invite the creator to move to sample review.
+- Never mention internal JSON, hidden state, or implementation details.`;
+}
+
+function buildCreationFunctions(): VoiceAgentFunction[] {
+  return [
+    {
+      name: "finishSurvey",
+      description:
+        "Call this only when the education study brief is complete and ready for sample review.",
+      parameters: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+    },
+    {
+      name: "requestMediaUpload",
+      description:
+        "Call this if you explicitly need the creator to upload supporting survey media.",
+      parameters: {
+        type: "object",
+        properties: {
+          allowedTypes: {
+            type: "array",
+            items: { type: "string" },
+            description: "Allowed media types, such as image, audio, or video.",
+          },
+        },
+        required: ["allowedTypes"],
+        additionalProperties: false,
+      },
+    },
+  ];
+}
+
+function toCreationMessages(
+  messages: CreationState["messages"],
+): CreationMessage[] {
+  return messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+    timestamp: message.timestamp,
+  }));
+}
+
+function buildCollectedInfo(
+  brief: ResearchBrief,
+  readyForSampling: boolean,
+): CreationCollectedInfo {
+  return {
+    objective: Boolean(brief.researchGoal),
+    targetAudience: Boolean(brief.audienceDefinition),
+    scope: brief.requiredTopics.length > 0,
+    successCriteria: brief.successCriteria.length > 0,
+    constraints: true,
+    hypotheses: brief.assumptions.length > 0,
+    tone: Boolean(brief.tone),
+    requiredQuestions: brief.requiredQuestions.length > 0,
+    metrics: brief.metrics.length > 0,
+    personalInfo: brief.personalInfo.length > 0,
+    subjectDefined: Boolean(brief.learningContext),
+    programIdentified: Boolean(brief.programId),
+    media: true,
+    subjectModelComplete: readyForSampling,
+  };
 }
 
 export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
   private state: CreationState;
-  private creationAgent: CreationSpecialist | null = null;
-  private sessionStartTime: number = Date.now();
-  private streamManager: RedisStreamManager;
+  private sessionStartTime = Date.now();
+  private leaseToken: string | null = null;
 
   constructor(connection: AuthenticatedConnection) {
     super(connection.ws, `creation-${connection.userId}`, connection.userId);
-    this.streamManager = new RedisStreamManager();
 
     this.state = {
       surveyId: null,
       voiceSessionId: nanoid(),
       messages: [],
-      collectedInfo: {
-        objective: false,
-        targetAudience: false,
-        scope: false,
-        successCriteria: false,
-        constraints: false,
-        hypotheses: false,
-        tone: false,
-        requiredQuestions: false,
-        metrics: false,
-        personalInfo: false,
-        subjectDefined: false,
-        domainIdentified: false,
-        media: false,
-        subjectModelComplete: false,
-      },
-      isProcessing: false,
+      collectedInfo: { ...EMPTY_COLLECTED_INFO },
       language: "en",
-      extractedData: null as ExtractedSurveyData | null,
-      lastExtractionAt: 0,
+      brief: null,
+      missingFields: [],
+      readyForSampling: false,
     };
   }
 
   async initialize(): Promise<void> {
     try {
-      // Fetch user's preferred language
-      try {
-        const { getUserPreferredLanguage } =
-          await import("@/lib/translation-service");
-        const userLanguage = await getUserPreferredLanguage(this.userId!);
-        this.state.language = userLanguage;
-      } catch (error) {
-        console.error(
-          "[Survey Creation Voice] Failed to fetch user language, defaulting to 'en':",
-          error,
-        );
-        this.state.language = "en";
-      }
-
-      const dbInsertPromise = getDb().insert(voiceSessions).values({
+      await getDb().insert(voiceSessions).values({
         id: this.state.voiceSessionId,
         userId: this.userId,
         sessionType: "survey_creation",
@@ -130,19 +225,14 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       });
 
       this.resetIdleTimeout();
-
       this.send({
         type: "ready",
         voiceSessionId: this.state.voiceSessionId,
       });
-
-      await dbInsertPromise;
     } catch (error) {
       console.error("[Survey Creation Voice] Initialization error:", error);
       this.sendError("Failed to initialize voice session");
     }
-
-    // Connect happens on "start_conversation" control message
   }
 
   protected getLanguage(): SupportedLanguage {
@@ -150,135 +240,48 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
   }
 
   protected getInitialUserInput(): string | null {
-    // Creation flow provides its own greeting via settings/control messages.
-    // We return null here to avoid double-greeting or interfering with the specialist's logic.
     return null;
   }
 
   protected isNewSession(): boolean {
-    // Session is brand new if messages array is empty or only contains the pre-inserted draft message
-    return this.state.messages.length <= 1;
+    return this.state.messages.length === 0;
   }
 
   protected async getVoiceAgentSettings(): Promise<VoiceAgentSettings> {
-    // Build a partial SurveyConfig from extracted data for the agent
-    const partialConfig: SurveyConfig = {
-      id: this.state.surveyId || "temp",
-      information:
-        this.state.extractedData?.information || "Creating a new survey",
-      requiredQuestions: this.state.extractedData?.requiredQuestions || [],
-      metrics: this.state.extractedData?.metrics || [],
-      language: this.state.language,
-      domainId: this.state.extractedData?.domainId
-        ? String(this.state.extractedData.domainId)
-        : undefined,
-      expertState: {
-        objective: this.state.extractedData?.objective,
-        targetAudience: this.state.extractedData?.targetAudience,
-        scope: this.state.extractedData?.scope,
-        successCriteria: this.state.extractedData?.successCriteria,
-        constraints: this.state.extractedData?.constraints,
-        hypotheses: this.state.extractedData?.hypotheses,
-      },
-    };
-
-    // --- AGENT INTEGRATION: Use CreationSpecialist for agentic behavior ---
-    const agentContext: AgentContext = {
-      conversationId: this.identifier,
-      messages: this.state.messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      })) as any[],
-      surveyConfig: partialConfig,
-      language: this.state.language,
-    };
-
-    this.creationAgent = new CreationSpecialist(agentContext);
-    await this.creationAgent.initialize();
-
-    // Preload pattern learnings for self-improvement
-    await this.creationAgent.preloadPatternLearnings(["creation", "general"], 2);
-
-    // Use the agent's system prompt (includes domain expertise, checklist)
-    const systemPrompt = this.creationAgent.buildSystemPrompt();
-
-    // Use the agent's function definitions (converted to Deepgram format)
-    const functions = this.creationAgent.getDeepgramFunctions();
-
-    // - Resume with assistant spoke last: no greeting (user's turn)
-    let greeting: string | undefined;
-    if (this.state.messages.length <= 1) {
-      // Brand-new session (length 1 because of DB pre-inserted draft message)
-      greeting =
-        this.state.messages.length === 1
-          ? this.state.messages[0].content
-          : "Hi! I'm here to help you build a great survey. What are we looking to measure today?";
-    } else {
-      const lastMessage = this.state.messages[this.state.messages.length - 1];
-      if (lastMessage.role === "user") {
-        // User spoke last — briefly acknowledge return and continue
-        greeting = "Welcome back! Let me pick up right where we left off.";
-      }
-      // If assistant spoke last, no greeting — it's the user's turn
-    }
-
-    // Determine context messages to send.
-    // If it's a brand new session, we don't need to send the single pre-inserted greeting
-    // as context because we are already passing it as the `greeting` property.
-    const contextMessages =
-      this.state.messages.length > 1
-        ? this.state.messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          }))
+    const greeting =
+      this.state.messages.length === 0
+        ? "Hi. I’ll help you shape this education study. What learning program or experience do you want feedback on?"
         : undefined;
 
     return buildVoiceAgentSettings({
       language: this.state.language,
-      systemPrompt,
-      functions,
+      systemPrompt: await buildCreationSystemPrompt(
+        this.state,
+        this.organizationId ?? null,
+      ),
+      functions: buildCreationFunctions(),
       greeting,
-      conversationHistory: contextMessages,
+      conversationHistory:
+        this.state.messages.length > 0
+          ? this.state.messages.map((message) => ({
+              role: message.role,
+              content: message.content,
+            }))
+          : undefined,
     });
   }
 
-  // Removed buildFunctionDefinitions() - now using CreationSpecialist.getDeepgramFunctions()
-
-  protected async onFunctionCall(
-    event: FunctionCallRequestEvent,
-  ): Promise<void> {
-    console.log(
-      `[SurveyCreationVoiceHandler] 🛠️ Tool Call: ${event.function_name}`,
-      event.input,
-    );
-
+  protected async onFunctionCall(event: FunctionCallRequestEvent): Promise<void> {
     try {
-      if (event.function_name === "finishSurvey") {
-        const { summary } = event.input;
-        console.log(
-          `[SurveyCreationVoiceHandler] finishSurvey called. Summary: ${summary}`,
-        );
+      if (event.function_name === "requestMediaUpload") {
+        const allowedTypes = Array.isArray(event.input?.allowedTypes)
+          ? event.input.allowedTypes
+          : ["image", "audio", "video"];
 
-        // Perform final extraction
-        await this.performExtraction();
-
-        // Notify client
-        this.send({ type: "survey_completed" }); // Client should handle this to show "Go to Sample" button
-
-        this.voiceAgent?.sendFunctionCallResponse(
-          event.function_call_id,
-          event.function_name,
-          JSON.stringify({ success: true }),
-        );
-      } else if (event.function_name === "requestMediaUpload") {
-        const { allowedTypes } = event.input;
-
-        // Notify client to show upload UI
         this.send({
           type: "request_media_upload",
           allowedTypes,
         });
-
         this.voiceAgent?.sendFunctionCallResponse(
           event.function_call_id,
           event.function_name,
@@ -287,55 +290,56 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
             message: "Upload UI presented to user.",
           }),
         );
-      } else if (event.function_name === "setSurveyDomain") {
-        const { domains, summaryOfWhatWeKnow } = event.input;
-        const primaryDomain = domains.sort((a: any, b: any) => b.weight - a.weight)[0];
+        return;
+      }
 
-        // Store domain in state's extractedData
-        this.state.extractedData = {
-          ...(this.state.extractedData || {}),
-          domainId: primaryDomain.id,
-          summaryOfWhatWeKnow,
-          hybridDomains: domains,
-        };
+      if (event.function_name === "finishSurvey") {
+        if (!this.state.surveyId) {
+          this.voiceAgent?.sendFunctionCallResponse(
+            event.function_call_id,
+            event.function_name,
+            JSON.stringify({ error: "Survey is not linked yet" }),
+          );
+          return;
+        }
 
-        // Persist domain and hybrid domains to surveys table
-        if (this.state.surveyId) {
-          await Promise.all([
-            getDb()
-              .update(surveys)
-              .set({ 
-                domainId: String(primaryDomain.id),
-                hybridDomains: domains
-              })
-              .where(eq(surveys.id, this.state.surveyId)),
-            getDb()
-              .update(surveyCreationConversations)
-              .set({ extractedData: this.state.extractedData })
-              .where(
-                eq(surveyCreationConversations.surveyId, this.state.surveyId),
-              ),
-          ]);
+        const result = await runCreationWorkflow({
+          surveyId: this.state.surveyId,
+          messages: toCreationMessages(this.state.messages),
+          userId: this.userId || undefined,
+          organizationId: this.organizationId ?? null,
+        });
+        await this.persistWorkflowResult(result);
+        await this.broadcastCreationUpdate();
+
+        if (!result.validation.isReady) {
+          this.voiceAgent?.sendFunctionCallResponse(
+            event.function_call_id,
+            event.function_name,
+            JSON.stringify({
+              error: "The brief is not complete enough to finish yet",
+              missingFields: result.validation.missingFields,
+            }),
+          );
+          return;
         }
 
         this.voiceAgent?.sendFunctionCallResponse(
           event.function_call_id,
           event.function_name,
-          JSON.stringify({
-            success: true,
-            message: `Hybrid domain strategy (${primaryDomain.id}) locked in.`,
-          }),
+          JSON.stringify({ success: true }),
         );
-      } else {
-        // Unknown function
-        this.voiceAgent?.sendFunctionCallResponse(
-          event.function_call_id,
-          event.function_name,
-          JSON.stringify({ error: "Function not found" }),
-        );
+        this.send({ type: "survey_completed" });
+        return;
       }
+
+      this.voiceAgent?.sendFunctionCallResponse(
+        event.function_call_id,
+        event.function_name,
+        JSON.stringify({ error: "Function not found" }),
+      );
     } catch (error) {
-      console.error(`[SurveyCreationVoiceHandler] Tool Call Error:`, error);
+      console.error("[Survey Creation Voice] Tool call error:", error);
       this.voiceAgent?.sendFunctionCallResponse(
         event.function_call_id,
         event.function_name,
@@ -344,23 +348,23 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
     }
   }
 
-  protected async onConversationText(
-    event: ConversationTextEvent,
-  ): Promise<void> {
+  protected async onConversationText(event: ConversationTextEvent): Promise<void> {
+    const leaseOk = await this.ensureCreationLease();
+    if (!leaseOk) {
+      return;
+    }
+
     const now = new Date();
     const lastMessage = this.state.messages[this.state.messages.length - 1];
 
-    // Aggregation logic: Same role and within 5 seconds
     if (
       lastMessage &&
       lastMessage.role === event.role &&
-      lastMessage.timestamp &&
       now.getTime() - new Date(lastMessage.timestamp).getTime() < 3000
     ) {
-      lastMessage.content += " " + event.content;
-      lastMessage.timestamp = now.toISOString(); // Refresh timestamp for consecutive merges
+      lastMessage.content += ` ${event.content}`;
+      lastMessage.timestamp = now.toISOString();
     } else {
-      // Add as a new message
       this.state.messages.push({
         role: event.role,
         content: event.content,
@@ -370,138 +374,67 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
 
     await this.saveConversation();
 
-    // Zero-Loss Broadcast: Append to Redis Stream for collaborators
-    if (this.state.surveyId) {
-      this.surveyId = this.state.surveyId; // Sync public surveyId for billing/base class
-      const streamKey = `stream:survey_creation:${this.state.surveyId}`;
-      const eventData = {
-        type: "conversation_text",
-        role: event.role,
-        content: event.content,
-        userId: this.userId,
-        timestamp: now.toISOString(),
-        connectionId: this.identifier, // Use identifier to ignore echo on sender side
-      };
-
-      const messageId = await this.streamManager.appendEvent(
-        streamKey,
-        eventData,
-      );
-
-      // Hybrid Broadcast: Publish to Pub/Sub for immediate notification across servers
-      const pubsubChannel = `survey:creation:events:${this.state.surveyId}`;
-      const redis = this.streamManager.client;
-      await redis.publish(
-        pubsubChannel,
-        JSON.stringify({
-          ...eventData,
-          streamId: messageId,
-        }),
-      );
+    if (event.role !== "user" || !this.state.surveyId) {
+      await this.broadcastCreationUpdate();
+      return;
     }
 
-    // Push mid-conversation prompt update (V2 Architecture: Proactive Sync)
-    if (this.creationAgent && this.state.surveyId) {
-      // Re-fetch latest expert state if available (it might have been updated by background extraction)
-      const latestExpertState = await ExpertStateStore.get(this.state.surveyId);
-      
-      this.creationAgent.updateContext({
-        expertState: latestExpertState || undefined,
-        messages: this.state.messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        })) as ModelMessage[],
-      });
+    const result = await runCreationWorkflow({
+      surveyId: this.state.surveyId,
+      messages: toCreationMessages(this.state.messages),
+      userId: this.userId || undefined,
+      organizationId: this.organizationId ?? null,
+    });
+    await this.persistWorkflowResult(result);
+    await this.broadcastCreationUpdate();
 
-      const newSystemPrompt = this.creationAgent.buildSystemPrompt();
-      const functions = this.creationAgent.getDeepgramFunctions();
-
-      this.voiceAgent?.updateThink({
-        provider: { type: "open_ai", model: "gpt-4o-mini" },
-        prompt: `${newSystemPrompt}\n\nRespond in the language the user is speaking.`,
-        functions: functions.map((f) => {
-          const { client_side, ...rest } = f;
-          return rest;
-        }),
-      });
-    }
-
-    // Trigger extraction after assistant messages
-    if (event.role === "assistant") {
-      this.performExtraction().catch(console.error);
-    }
+    this.voiceAgent?.updateThink({
+      provider: { type: "open_ai", model: "gpt-4o-mini" },
+      prompt: `${await buildCreationSystemPrompt(
+        this.state,
+        this.organizationId ?? null,
+      )}\n\nRespond in the language the creator is speaking.`,
+      functions: buildCreationFunctions(),
+    });
   }
 
   protected async handleControlMessage(message: any): Promise<void> {
     switch (message.type) {
-      case "set_survey_id":
+      case "set_survey_id": {
         try {
-          // Check permissions
-          const access = await getSurveyAccessLevel(this.userId!, message.surveyId);
-          if (access !== "owner" && access !== "editor") {
-            console.error(`[SurveyCreationVoiceHandler] Unauthorized access for user ${this.userId} to survey ${message.surveyId}`);
+          const surveyId = String(message.surveyId || "");
+          const permission = await getSurveyPermissionContext(this.userId, surveyId);
+          if (!permission?.canEdit) {
             this.send({ type: "error", error: "Unauthorized: Editor access required" });
             return;
           }
 
-          this.state.surveyId = message.surveyId;
-
+          this.state.surveyId = surveyId;
           await this.loadExistingState();
-
-          // Catch-up: Replay missed events from stream if client provides lastEventId
-          if (message.lastEventId && this.state.surveyId) {
-            const streamKey = `stream:survey_creation:${this.state.surveyId}`;
-            const missedEvents = await this.streamManager.readEvents(
-              streamKey,
-              message.lastEventId,
-            );
-            if (missedEvents.length > 0) {
-              for (const event of missedEvents) {
-                // Only send to this specific connection
-                this.send({
-                  ...event.data,
-                  streamId: event.id,
-                  isReplay: true,
-                });
-              }
-            }
-          }
-
-          // Notify client that state is loaded so it can safely start conversation
           this.send({ type: "survey_state_loaded" });
         } catch (error) {
-          console.error(
-            `[SurveyCreationVoiceHandler] Error loading state/catch-up:`,
-            error,
-          );
+          console.error("[Survey Creation Voice] Failed to load survey state:", error);
           this.sendError("Failed to load survey state");
         }
-        break;
-
-      case "update_collected_info":
-        if (message.collectedInfo) {
-          this.state.collectedInfo = {
-            ...this.state.collectedInfo,
-            ...message.collectedInfo,
-          };
-        }
-        break;
+        return;
+      }
 
       case "start_conversation":
-        // Reload state to get latest domain/messages from DB (e.g. if updated via REST API or text chat)
-        await this.loadExistingState();
-
-        // Connect the Voice Agent (with greeting if new session)
-        await this.connectVoiceAgent();
-        break;
-
-      case "text_message":
-        if (message.text) {
-          if (this.voiceAgent?.connected) {
-            this.voiceAgent.sendInjectUserMessage(message.text);
+        if (this.state.surveyId) {
+          const leaseOk = await this.ensureCreationLease();
+          if (!leaseOk) {
+            return;
           }
         }
-        break;
+        await this.loadExistingState();
+        await this.connectVoiceAgent();
+        return;
+
+      case "text_message":
+        if (message.text && this.voiceAgent?.connected) {
+          this.voiceAgent.sendInjectUserMessage(message.text);
+        }
+        return;
 
       case "set_language":
         if (
@@ -512,35 +445,32 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
           if (this.state.surveyId) {
             await getDb()
               .update(surveys)
-              .set({ language: message.language })
+              .set({ language: message.language, updatedAt: new Date() })
               .where(eq(surveys.id, this.state.surveyId));
           }
-          // Reconnect Voice Agent with new language if already connected
           if (this.voiceAgent?.connected) {
             await this.reconnectVoiceAgent();
           }
         }
-        break;
+        return;
     }
   }
 
   private async loadExistingState(): Promise<void> {
     if (!this.state.surveyId) return;
 
-    const [conv] = await getDb()
-      .select()
-      .from(surveyCreationConversations)
-      .where(eq(surveyCreationConversations.surveyId, this.state.surveyId));
-
-    // Also fetch the survey to get the language and organizationId
-    const [survey] = await getDb()
-      .select({
-        language: surveys.language,
-        organizationId: surveys.organizationId,
-        id: surveys.id,
-      })
-      .from(surveys)
-      .where(eq(surveys.id, this.state.surveyId));
+    const [conversation, survey] = await Promise.all([
+      getDb()
+        .select()
+        .from(surveyCreationConversations)
+        .where(eq(surveyCreationConversations.surveyId, this.state.surveyId))
+        .then((rows) => rows[0]),
+      getDb()
+        .select()
+        .from(surveys)
+        .where(eq(surveys.id, this.state.surveyId))
+        .then((rows) => rows[0]),
+    ]);
 
     if (survey) {
       this.organizationId = survey.organizationId;
@@ -548,62 +478,208 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       if (["en", "fr", "de", "es", "it"].includes(survey.language)) {
         this.state.language = survey.language as SupportedLanguage;
       }
-    }
 
-    if (conv) {
-      this.state.messages = (conv.messages as any[]) || [];
-      this.state.collectedInfo = conv.collectedInfo as CollectedInfo;
-      this.state.extractedData = conv.extractedData || null;
-
-      // Update voice session with surveyId
       await getDb()
         .update(voiceSessions)
-        .set({ surveyId: this.state.surveyId })
+        .set({ surveyId: survey.id })
         .where(eq(voiceSessions.id, this.state.voiceSessionId));
     }
+
+    if (!conversation) return;
+
+    this.state.messages = ((conversation.messages as CreationState["messages"]) || []).map((message) => ({
+      role: message.role,
+      content: message.content,
+      timestamp: message.timestamp || new Date().toISOString(),
+    }));
+
+    const extractedData = (conversation.extractedData || {}) as Record<string, any>;
+    this.state.brief = extractedData.brief || null;
+    this.state.missingFields = Array.isArray(extractedData.missingFields)
+      ? extractedData.missingFields.map(String)
+      : [];
+    this.state.readyForSampling = Boolean(extractedData.readyForSampling);
+    this.state.collectedInfo = {
+      ...EMPTY_COLLECTED_INFO,
+      ...(conversation.collectedInfo as CreationCollectedInfo),
+    };
   }
 
   private async saveConversation(): Promise<void> {
     if (!this.state.surveyId) return;
 
+    await persistCreationConversation(this.state.surveyId, toCreationMessages(this.state.messages));
+  }
+
+  private async ensureCreationLease() {
+    if (!this.state.surveyId) {
+      return true;
+    }
+
+    if (this.leaseToken) {
+      const renewed = await renewSurveyLease({
+        surveyId: this.state.surveyId,
+        stage: "creation",
+        userId: this.userId,
+        leaseToken: this.leaseToken,
+      });
+
+      if (renewed.ok) {
+        return true;
+      }
+    }
+
+    const acquired = await acquireSurveyLease({
+      surveyId: this.state.surveyId,
+      stage: "creation",
+      userId: this.userId,
+      sessionId: this.state.voiceSessionId,
+    });
+
+    if (!acquired.ok) {
+      const holderId =
+        "lease" in acquired && acquired.lease?.holderUserId
+          ? acquired.lease.holderUserId
+          : null;
+      this.send({
+        type: "error",
+        error: holderId
+          ? `Another editor currently controls survey creation (${holderId}).`
+          : "Another editor currently controls survey creation.",
+      });
+      return false;
+    }
+
+    this.leaseToken = acquired.lease.leaseToken;
+    await this.broadcastLeaseEvent("survey.lease_acquired", acquired.lease.expiresAt);
+    return true;
+  }
+
+  private async broadcastCreationUpdate() {
+    if (!this.state.surveyId) return;
+
+    await getDb().transaction(async (tx) => {
+      await recordRealtimeEvent(tx, {
+        scope: "survey",
+        surveyId: this.state.surveyId,
+        actorId: this.userId,
+        eventType: "survey.creation_turn_added",
+        payload: {
+          surveyId: this.state.surveyId,
+          messageCount: this.state.messages.length,
+          readyForSampling: this.state.readyForSampling,
+          status: this.state.readyForSampling ? "sample_review" : "creating",
+          source: "voice",
+        },
+      });
+    });
+
+    await publishPendingOutboxEntries();
+  }
+
+  private async broadcastLeaseEvent(
+    eventType: "survey.lease_acquired" | "survey.lease_released",
+    expiresAt?: Date | null,
+  ) {
+    if (!this.state.surveyId) return;
+
+    await getDb().transaction(async (tx) => {
+      await recordRealtimeEvent(tx, {
+        scope: "survey",
+        surveyId: this.state.surveyId,
+        actorId: this.userId,
+        eventType,
+        payload: {
+          surveyId: this.state.surveyId,
+          stage: "creation",
+          holderUserId:
+            eventType === "survey.lease_released" ? null : this.userId,
+          holderSessionId:
+            eventType === "survey.lease_released"
+              ? null
+              : this.state.voiceSessionId,
+          expiresAt: expiresAt?.toISOString() ?? null,
+          source: "voice",
+        },
+      });
+    });
+
+    await publishPendingOutboxEntries();
+  }
+
+  private async persistWorkflowResult(result: Awaited<ReturnType<typeof runCreationWorkflow>>) {
+    if (!this.state.surveyId) return;
+
+    this.state.brief = result.brief;
+    this.state.missingFields = result.validation.missingFields;
+    this.state.readyForSampling = result.validation.isReady;
+    this.state.collectedInfo = buildCollectedInfo(
+      result.brief,
+      result.validation.isReady,
+    );
+
     await getDb()
       .update(surveyCreationConversations)
       .set({
-        messages: this.state.messages,
-        status: "in_progress",
+        extractedData: {
+          programId: result.brief.programId,
+          objective: {
+            goal: result.brief.researchGoal,
+            context: result.brief.learningContext,
+            decision: result.brief.decisionToInform,
+          },
+          targetAudience: {
+            description: result.brief.audienceDefinition,
+            relationship: result.brief.audienceRelationship,
+            knowledgeLevel: result.brief.audienceKnowledgeLevel,
+          },
+          scope: {
+            breadthVsDepth: "balanced",
+            mainTopics: result.brief.requiredTopics,
+            boundaries: result.brief.deliveryContext,
+          },
+          successCriteria: {
+            insightTypes: ["behavioral", "rational"],
+            detailLevel: "high",
+            description: result.brief.successCriteria.join(", "),
+          },
+          constraints: {
+            timeLimit: null,
+            sensitiveTopics: result.brief.riskFlags,
+            otherConstraints: result.brief.constraints.join(", "),
+          },
+          tone: result.brief.tone,
+          requiredQuestions: result.brief.requiredQuestions,
+          metrics: result.brief.metrics,
+          personalInfo: result.brief.personalInfo,
+          brief: result.brief,
+          missingFields: result.validation.missingFields,
+          readyForSampling: result.validation.isReady,
+        },
+        collectedInfo: this.state.collectedInfo,
+        updatedAt: new Date(),
       })
       .where(eq(surveyCreationConversations.surveyId, this.state.surveyId));
   }
 
-  private async performExtraction(): Promise<void> {
-    if (!this.state.surveyId || this.state.messages.length < 2) return;
-
-    // Cooldown: skip if last extraction was less than 15 seconds ago
-    const EXTRACTION_COOLDOWN_MS = 15_000;
-    const now = Date.now();
-    if (now - this.state.lastExtractionAt < EXTRACTION_COOLDOWN_MS) {
-      return;
-    }
-    this.state.lastExtractionAt = now;
-
-    try {
-      await enqueueCreationExtraction({
-        surveyId: this.state.surveyId,
-        messages: this.state.messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
-      });
-    } catch (error) {
-      console.error(
-        "[Survey Creation Voice] Failed to enqueue extraction:",
-        error,
-      );
-    }
-  }
-
   protected async cleanup(): Promise<void> {
     await super.cleanup();
+
+    if (this.state.surveyId && this.leaseToken) {
+      const releaseResult = await releaseSurveyLease({
+        surveyId: this.state.surveyId,
+        stage: "creation",
+        userId: this.userId,
+        leaseToken: this.leaseToken,
+      }).catch((error) => {
+        console.error(error);
+        return null;
+      });
+      if (releaseResult?.ok) {
+        await this.broadcastLeaseEvent("survey.lease_released").catch(console.error);
+      }
+      this.leaseToken = null;
+    }
 
     getDb()
       .update(voiceSessions)
@@ -611,18 +687,17 @@ export class SurveyCreationVoiceHandler extends BaseVoiceAgentHandler {
       .where(eq(voiceSessions.id, this.state.voiceSessionId))
       .catch(console.error);
 
-    // Update creation conversation with duration metrics
-    if (this.state.surveyId) {
-      const sessionDurationMs = Date.now() - this.sessionStartTime;
+    if (!this.state.surveyId) return;
 
-      await getDb()
-        .update(surveyCreationConversations)
-        .set({
-          durationMs: sessionDurationMs,
-          activeDurationMs: Math.round(this.activeDurationMs),
-        })
-        .where(eq(surveyCreationConversations.surveyId, this.state.surveyId))
-        .catch(console.error);
-    }
+    const sessionDurationMs = Date.now() - this.sessionStartTime;
+    await getDb()
+      .update(surveyCreationConversations)
+      .set({
+        durationMs: sessionDurationMs,
+        activeDurationMs: Math.round(this.activeDurationMs),
+        updatedAt: new Date(),
+      })
+      .where(eq(surveyCreationConversations.surveyId, this.state.surveyId))
+      .catch(console.error);
   }
 }

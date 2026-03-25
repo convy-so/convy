@@ -6,6 +6,8 @@ import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { Suspense } from "react";
+import { getVerifiedSession } from "@/lib/auth/session";
+import { getSurveyPermissionContext } from "@/lib/workspace-access";
 
 interface PageProps {
     params: Promise<{
@@ -15,6 +17,14 @@ interface PageProps {
 }
 
 async function SurveyChatContent({ surveyId, locale }: { surveyId: string; locale: string }) {
+    const session = await getVerifiedSession();
+    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
+        activeWorkspaceId: session.session.activeOrganizationId ?? null,
+    });
+    if (!permission?.canView || !permission.activeContextMatchesResource) {
+        redirect({ href: "/dashboard/analytics", locale });
+    }
+
     const db = getDb();
     const [survey] = await db
         .select({ status: surveys.status, title: surveys.title })

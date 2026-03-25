@@ -81,7 +81,7 @@ export default function TeamPage() {
     }
   };
 
-  const handleMemberRemoved = async (id: string) => {
+  const handleMemberRemoved = async (_id: string) => {
     if (activeWorkspace?.id) {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.members(activeWorkspace.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.invitations(activeWorkspace.id) });

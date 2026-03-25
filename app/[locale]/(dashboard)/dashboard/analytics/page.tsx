@@ -1,6 +1,6 @@
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
-import { surveys, surveyConversations } from "@/db/schema";
+import { surveys, surveyAnalyticsSnapshots, surveySessions } from "@/db/schema";
 import { eq, desc, count, and, isNull } from "drizzle-orm";
 import { Link } from "@/i18n/routing";
 import {
@@ -10,7 +10,6 @@ import {
   MessageSquare,
   Loader2,
 } from "lucide-react";
-import { SupportedLanguage } from "@/lib/i18n/ai-translator";
 import { formatDistanceToNow } from "date-fns";
 import { Suspense } from "react";
 import { headers } from "next/headers";
@@ -21,7 +20,6 @@ async function AnalyticsContent({ authHeaders }: { authHeaders: Headers | string
   const t = await getTranslations("AnalyticsPage");
 
   const activeOrgId = session.session.activeOrganizationId;
-  const language = (session.user as { preferredLanguage?: SupportedLanguage }).preferredLanguage || "en";
 
   const userSurveys = await getDb()
     .select({
@@ -30,12 +28,26 @@ async function AnalyticsContent({ authHeaders }: { authHeaders: Headers | string
       description: surveys.description,
       status: surveys.status,
       createdAt: surveys.createdAt,
+      hasSnapshot: surveyAnalyticsSnapshots.id,
       _count: {
-        conversations: count(surveyConversations.id)
+        conversations: count(surveySessions.id)
       }
     })
     .from(surveys)
-    .leftJoin(surveyConversations, eq(surveyConversations.surveyId, surveys.id))
+    .leftJoin(
+      surveySessions,
+      and(
+        eq(surveySessions.surveyId, surveys.id),
+        eq(surveySessions.sessionType, "live"),
+      ),
+    )
+    .leftJoin(
+      surveyAnalyticsSnapshots,
+      and(
+        eq(surveyAnalyticsSnapshots.surveyId, surveys.id),
+        eq(surveyAnalyticsSnapshots.isLatest, true),
+      ),
+    )
     .where(
       and(
         eq(surveys.userId, session.user.id),
@@ -45,7 +57,14 @@ async function AnalyticsContent({ authHeaders }: { authHeaders: Headers | string
           : isNull(surveys.organizationId)
       )
     )
-    .groupBy(surveys.id, surveys.title, surveys.description, surveys.status, surveys.createdAt)
+    .groupBy(
+      surveys.id,
+      surveys.title,
+      surveys.description,
+      surveys.status,
+      surveys.createdAt,
+      surveyAnalyticsSnapshots.id,
+    )
     .orderBy(desc(surveys.createdAt));
 
   const statusConfig: Record<string, { color: string; bgColor: string; icon: React.ReactNode }> = {
@@ -111,6 +130,9 @@ async function AnalyticsContent({ authHeaders }: { authHeaders: Headers | string
                           <span className="flex items-center gap-1.5">
                             <MessageSquare className="w-4 h-4" />
                             {survey._count?.conversations || 0} {t("Card.Responses")}
+                          </span>
+                          <span className={`text-xs font-medium ${survey.hasSnapshot ? "text-emerald-600" : "text-gray-400"}`}>
+                            {survey.hasSnapshot ? "Snapshot ready" : "No snapshot yet"}
                           </span>
                           <span className="text-xs text-gray-400">
                             {formatDistanceToNow(new Date(survey.createdAt), { addSuffix: true })}

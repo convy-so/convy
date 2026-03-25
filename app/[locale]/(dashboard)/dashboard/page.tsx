@@ -21,7 +21,6 @@ import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import { Loader2 } from "lucide-react";
 import { cache, cacheKeys } from "@/lib/cache";
-import { RealTimeRefresh } from "@/components/dashboard/real-time-refresh";
 
 async function DashboardContent({ authHeaders }: { authHeaders: Headers | string | null }) {
   const session = await getVerifiedSession(authHeaders);
@@ -29,7 +28,8 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
 
   const userId = session.user.id;
   const activeOrgId = session.session.activeOrganizationId;
-  const language = (session.user as any).preferredLanguage as SupportedLanguage || "en";
+  const language =
+    (session.user as any).preferredLanguage as SupportedLanguage || "en";
 
   const quickActions = [
     {

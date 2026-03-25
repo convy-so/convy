@@ -1,43 +1,143 @@
-import { eq } from "drizzle-orm";
-import { createUIMessageStreamResponse } from "ai";
+import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
+import { and, eq } from "drizzle-orm";
+import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
-import { surveys, surveyCreationConversations } from "@/db/schema";
-import { normalizeMessages } from "@/lib/ai";
+import { surveyCreationConversations, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { type CollectedInfo } from "@/lib/prompts";
-import { apiRateLimiter, getClientIP } from "@/lib/ratelimit";
-import { CreationSpecialist } from "@/lib/agents/creation-specialist";
-import { type AgentContext } from "@/lib/agents/types";
-import { buildCompleteSurveyConfig } from "@/lib/surveys";
+import { getClientIP, apiRateLimiter } from "@/lib/ratelimit";
 import {
-  withGeminiLimit,
-  GeminiCapacityError,
-  geminiCapacityResponse,
-} from "@/lib/gemini-limiter";
+  acquireSurveyLease,
+  getActiveSurveyLease,
+  getCurrentSurveyRevision,
+  publishPendingOutboxEntries,
+  recordRealtimeEvent,
+} from "@/lib/collaboration-service";
+import {
+  persistCreationConversation,
+  runCreationWorkflow,
+  type CreationMessage,
+} from "@/lib/education/creation-workflow";
+import { getSurveyPermissionContext } from "@/lib/workspace-access";
 
 export const maxDuration = 300;
 
-/**
- * Stream a survey creation conversation
- * This guides the survey maker through providing all necessary information
- * Now uses the CreationSpecialist agent for domain-specific interactions
- */
+function normalizeMessages(messages: any[]): CreationMessage[] {
+  return messages
+    .map((message) => {
+      const content =
+        typeof message.content === "string"
+          ? message.content
+          : Array.isArray(message.parts)
+            ? message.parts
+                .filter((part: any) => part.type === "text")
+                .map((part: any) => part.text)
+                .join("")
+            : "";
+      return {
+        id: message.id,
+        role: message.role,
+        content,
+        timestamp: message.timestamp || new Date().toISOString(),
+      } as CreationMessage;
+    })
+    .filter((message) => message.role === "user" || message.role === "assistant");
+}
+
+async function ensureCreationLease(input: {
+  surveyId: string;
+  userId: string;
+  sessionId?: string | null;
+  leaseToken?: string | null;
+  force?: boolean;
+}) {
+  const activeLease = await getActiveSurveyLease(input.surveyId, "creation");
+
+  if (
+    activeLease &&
+    activeLease.holderUserId !== input.userId &&
+    (!input.leaseToken || input.leaseToken !== activeLease.leaseToken)
+  ) {
+    return { ok: false as const, error: "LEASE_CONFLICT", lease: activeLease };
+  }
+
+  if (
+    activeLease &&
+    activeLease.holderUserId === input.userId &&
+    input.leaseToken === activeLease.leaseToken
+  ) {
+    return { ok: true as const, lease: activeLease };
+  }
+
+  return await acquireSurveyLease({
+    surveyId: input.surveyId,
+    stage: "creation",
+    userId: input.userId,
+    sessionId: input.sessionId,
+    force: input.force,
+  });
+}
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ surveyId: string }> },
+) {
+  try {
+    const session = await getVerifiedSession();
+    const { surveyId } = await params;
+    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
+      activeWorkspaceId: session.session.activeOrganizationId ?? null,
+    });
+
+    if (!permission?.canView || !permission.activeContextMatchesResource) {
+      return new Response("Unauthorized", { status: 403 });
+    }
+
+    const [survey, creationConversation, revision, lease] = await Promise.all([
+      getDb().select().from(surveys).where(eq(surveys.id, surveyId)).then((rows) => rows[0]),
+      getDb()
+        .select()
+        .from(surveyCreationConversations)
+        .where(eq(surveyCreationConversations.surveyId, surveyId))
+        .then((rows) => rows[0]),
+      getCurrentSurveyRevision(surveyId),
+      getActiveSurveyLease(surveyId, "creation"),
+    ]);
+
+    if (!survey) {
+      return new Response("Survey not found", { status: 404 });
+    }
+
+    return NextResponse.json({
+      surveyId,
+      status: survey.status,
+      revision,
+      permission,
+      lease,
+      messages: creationConversation?.messages || [],
+      collectedInfo: creationConversation?.collectedInfo || {},
+      extractedData: creationConversation?.extractedData || {},
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED")
+    ) {
+      return new Response(error.message, { status: 401 });
+    }
+    console.error("[Create Route GET] Error:", error);
+    return new Response("Internal server error", { status: 500 });
+  }
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
-  const { surveyId } = await params;
-  console.log(`[CreateAPI:POST] Entry. SID: ${surveyId}`);
-
   try {
     const clientIP = getClientIP(request);
-    console.log(`[CreateAPI:POST] Checking rate limit for IP: ${clientIP}...`);
     const rateLimitResult = await apiRateLimiter.limit(clientIP);
-    console.log(
-      `[CreateAPI:POST] Rate limit result: ${rateLimitResult.success ? "PASS" : "FAIL"}`,
-    );
-
     if (!rateLimitResult.success) {
       return new Response(
         JSON.stringify({
@@ -46,254 +146,185 @@ export async function POST(
         }),
         {
           status: 429,
-          headers: {
-            "Content-Type": "application/json",
-            "Retry-After": rateLimitResult.reset.toString(),
-            "X-RateLimit-Limit": "100",
-            "X-RateLimit-Remaining": rateLimitResult.remaining.toString(),
-            "X-RateLimit-Reset": rateLimitResult.reset.toString(),
-          },
+          headers: { "Content-Type": "application/json" },
         },
       );
     }
 
     const session = await getVerifiedSession();
+    const { surveyId } = await params;
     const body = await request.json();
-    const { messages } = body as {
-      messages: Array<any>;
-    };
+    const incomingMessages = Array.isArray(body.messages) ? body.messages : null;
+    if (!incomingMessages) return new Response("Invalid messages", { status: 400 });
 
-    if (!Array.isArray(messages)) {
-      console.warn(`[CreateAPI:POST] Aborting: messages is not an array.`);
-      return new Response("Invalid messages", { status: 400 });
+    const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
+    if (!survey) return new Response("Survey not found", { status: 404 });
+
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id, {
+      activeWorkspaceId: session.session.activeOrganizationId ?? null,
+    });
+    if (!permission?.canEdit || !permission.activeContextMatchesResource) {
+      return new Response("Unauthorized: Editor access required", { status: 403 });
     }
-
-    const [survey] = await getDb()
-      .select()
-      .from(surveys)
-      .where(eq(surveys.id, surveyId));
-
-    if (!survey) {
-      return new Response("Survey not found", { status: 404 });
-    }
-
-    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
-    const access = await getSurveyAccessLevel(session.user.id, survey.id);
-    if (access !== "owner" && access !== "editor") {
-      return new Response("Unauthorized: Editor access required", {
-        status: 403,
-      });
-    }
-
     if (survey.status !== "creating") {
       return new Response(
-        "Survey is not in creation mode. Status: " + survey.status,
+        `Survey is not in creation mode. Status: ${survey.status}`,
         { status: 400 },
       );
     }
 
-    const [creationConversation] = await getDb()
-      .select()
-      .from(surveyCreationConversations)
-      .where(eq(surveyCreationConversations.surveyId, surveyId));
-
-    const collectedInfo: CollectedInfo =
-      creationConversation?.collectedInfo || {
-        objective: false,
-        targetAudience: false,
-        scope: false,
-        successCriteria: false,
-        constraints: false,
-        hypotheses: false,
-        tone: false,
-        requiredQuestions: false,
-        metrics: false,
-        personalInfo: false,
-        subjectDefined: false,
-        domainIdentified: false,
-        media: false,
-        subjectModelComplete: false,
-      };
-
-    // --- AGENT INTEGRATION START ---
-
-    // 1. Build Agent Context
-    // We update the survey config with latest extracted data for the agent
-    const currentConfig = buildCompleteSurveyConfig(survey);
-    const extractedData = creationConversation?.extractedData;
-
-    // Overlay extracted data onto config so agent sees what has been collected
-    if (extractedData?.domainId)
-      currentConfig.domainId = extractedData.domainId;
-    if (extractedData?.objective || extractedData?.targetAudience) {
-      currentConfig.expertState = {
-        ...currentConfig.expertState,
-        objective:
-          extractedData?.objective || currentConfig.expertState?.objective,
-        targetAudience:
-          extractedData?.targetAudience ||
-          currentConfig.expertState?.targetAudience,
-      };
-    }
-    // ... other fields are less critical for immediate context, or are handled by extractedData updates
-
-    const outputMessages = await normalizeMessages(messages);
-
-    // SAVE CONVERSATION STATE — fire non-blocking so it runs while agent initializes
-    const messagesWithTimestamp = messages.map((msg) => {
-      let textContent = msg.content;
-      if (!textContent && Array.isArray(msg.parts)) {
-        textContent = msg.parts
-          .filter((p: any) => p.type === "text")
-          .map((p: any) => p.text)
-          .join("");
-      }
-      return {
-        id: msg.id,
-        role: msg.role,
-        content: textContent || "",
-        parts: msg.parts,
-        timestamp: msg.timestamp || new Date().toISOString(),
-      };
-    });
-
-    const dbSavePromise = (
-      creationConversation
-        ? getDb()
-            .update(surveyCreationConversations)
-            .set({ messages: messagesWithTimestamp })
-            .where(eq(surveyCreationConversations.surveyId, surveyId))
-        : getDb().insert(surveyCreationConversations).values({
-            id: crypto.randomUUID(),
-            surveyId,
-            messages: messagesWithTimestamp,
-            status: "in_progress",
-            collectedInfo: collectedInfo,
-            extractedData: {},
-          })
-    ).catch((err) =>
-      console.error("[CreateAPI] Non-blocking DB save failed:", err),
-    );
-
-    const agentContext: AgentContext = {
-      surveyConfig: currentConfig,
-      language: survey.language,
-      conversationId: creationConversation?.id || crypto.randomUUID(),
-      userId: session.user.id,
-      organizationId: (session.user as any).organizationId,
-    };
-
-    // 2. Instantiate Creation Specialist — initialize while DB save is in-flight
-    const agent = new CreationSpecialist(agentContext);
-    console.log(`[CreateAPI:Agent] Initializing...`);
-    await agent.initialize();
-    console.log(`[CreateAPI:Agent] Initialized.`);
-
-    // Preload capabilities in parallel; also wait for DB save to complete
-    await Promise.all([
-      dbSavePromise,
-      agent.preloadSkills(),
-      agent.preloadPatternLearnings(["creation", "general"], 2),
-    ]).catch((error) =>
-      console.warn(
-        "[Create Route] Failed to preload agent capabilities:",
-        error,
-      ),
-    );
-
-    // 3. Get System Prompt from Agent
-    const systemPrompt = agent.buildSystemPrompt();
-
-    // 4. Dynamic Resume Logic — only fire for genuine resumes (existing conversation beyond greeting + first reply)
-    // The last message is ALWAYS a user message (that's what triggered the POST), so we can't use
-    // lastMessage.role === 'user' as the condition — it would always fire.
-    // A session is a resume when there are > 3 messages (greeting + at least one full exchange = 3+).
-    let dynamicDirective = undefined;
-    if (outputMessages.length > 3) {
-      dynamicDirective =
-        "You are resuming this survey design session. The creator has returned after a pause. Acknowledge naturally and continue where you left off without re-introducing yourself or repeating questions already answered.";
-    }
-
-    // 5. Stream response using Agent's prompt and tool logic (wrapped with concurrency limit)
-    const streamResult = await withGeminiLimit(async () => {
-      return agent.stream(
-        outputMessages,
-        async (result) => {
-          const { text, response } = result;
-          console.log(
-            `[CreateAPI:POST] agent.stream callback: onFinish triggered. TextLen: ${text?.length}`,
-          );
-          try {
-            const assistantMessage = response.messages.find(
-              (m: any) => m.role === "assistant",
-            );
-
-            // Re-fetch to get latest state in case extraction updated it
-            const [latestConv] = await getDb()
-              .select()
-              .from(surveyCreationConversations)
-              .where(eq(surveyCreationConversations.surveyId, surveyId));
-
-            if (latestConv) {
-              const currentMessages = latestConv.messages as Array<any>;
-              
-              const newMessagesToAppend = response.messages.map((m: any) => ({
-                role: m.role,
-                content: typeof m.content === 'string' ? m.content : (m.role === 'assistant' ? text : ""),
-                parts: Array.isArray(m.content) ? m.content : undefined,
-                timestamp: new Date().toISOString(),
-              }));
-
-              const updatedMessages = [
-                ...currentMessages,
-                ...newMessagesToAppend
-              ];
-
-              await getDb()
-                .update(surveyCreationConversations)
-                .set({
-                  messages: updatedMessages,
-                })
-                .where(eq(surveyCreationConversations.surveyId, surveyId));
-            }
-          } catch (error) {
-            console.error(
-              "Error saving conversation or performing extraction:",
-              error,
-            );
-          }
+    const currentRevision = await getCurrentSurveyRevision(surveyId);
+    if (
+      typeof body.expectedRevision === "number" &&
+      body.expectedRevision !== currentRevision
+    ) {
+      return NextResponse.json(
+        {
+          error: "REVISION_CONFLICT",
+          currentRevision,
         },
-        dynamicDirective,
+        { status: 409 },
       );
+    }
+
+    const leaseResult = await ensureCreationLease({
+      surveyId,
+      userId: session.user.id,
+      sessionId:
+        typeof body.sessionId === "string" ? body.sessionId : session.session.id,
+      leaseToken: typeof body.leaseToken === "string" ? body.leaseToken : null,
+      force: Boolean(body.forceLease),
     });
 
-    // Use the SDK's own UIMessage stream conversion. This translates raw parts
-    // into the strict protocol the client expects, stripping internal metadata.
-    const uiStream = streamResult.toUIMessageStream();
+    if (!leaseResult.ok) {
+      return NextResponse.json(
+        {
+          error: leaseResult.error,
+          lease: "lease" in leaseResult ? leaseResult.lease : null,
+        },
+        { status: 409 },
+      );
+    }
 
-    return createUIMessageStreamResponse({ stream: uiStream });
+    const messages = normalizeMessages(incomingMessages);
+    await persistCreationConversation(surveyId, messages);
+    const result = await runCreationWorkflow({
+      surveyId,
+      organizationId: survey.organizationId,
+      messages,
+      userId: session.user.id,
+    });
+
+    const assistantMessage: CreationMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: result.responseText,
+      timestamp: new Date().toISOString(),
+    };
+    const persistedMessages = [...messages, assistantMessage];
+    await persistCreationConversation(surveyId, persistedMessages);
+
+    await getDb().transaction(async (tx) => {
+      await tx
+        .update(surveyCreationConversations)
+        .set({
+          extractedData: {
+            programId: result.brief.programId,
+            objective: {
+              goal: result.brief.researchGoal,
+              context: result.brief.learningContext,
+              decision: result.brief.decisionToInform,
+            },
+            targetAudience: {
+              description: result.brief.audienceDefinition,
+              relationship: result.brief.audienceRelationship,
+              knowledgeLevel: result.brief.audienceKnowledgeLevel,
+            },
+            scope: {
+              breadthVsDepth: "balanced",
+              mainTopics: result.brief.requiredTopics,
+              boundaries: result.brief.deliveryContext,
+            },
+            successCriteria: {
+              insightTypes: ["behavioral", "rational"],
+              detailLevel: "high",
+              description: result.brief.successCriteria.join(", "),
+            },
+            constraints: {
+              timeLimit: null,
+              sensitiveTopics: result.brief.riskFlags,
+              otherConstraints: result.brief.constraints.join(", "),
+            },
+            tone: result.brief.tone,
+            requiredQuestions: result.brief.requiredQuestions,
+            metrics: result.brief.metrics,
+            personalInfo: result.brief.personalInfo,
+            brief: result.brief,
+            missingFields: result.validation.missingFields,
+            readyForSampling: result.validation.isReady,
+          },
+          collectedInfo: {
+            objective: Boolean(result.brief.researchGoal),
+            targetAudience: Boolean(result.brief.audienceDefinition),
+            scope: result.brief.requiredTopics.length > 0,
+            successCriteria: result.brief.successCriteria.length > 0,
+            constraints: true,
+            hypotheses: result.brief.assumptions.length > 0,
+            tone: Boolean(result.brief.tone),
+            requiredQuestions: result.brief.requiredQuestions.length > 0,
+            metrics: true,
+            personalInfo: true,
+            subjectDefined: Boolean(result.brief.learningContext),
+            programIdentified: Boolean(result.brief.programId),
+            media: true,
+            subjectModelComplete: result.validation.isReady,
+          },
+          updatedAt: new Date(),
+        })
+        .where(eq(surveyCreationConversations.surveyId, surveyId));
+
+      await recordRealtimeEvent(tx, {
+        scope: "survey",
+        surveyId,
+        workspaceId: permission.workspaceId,
+        eventType: "survey.creation_turn_added",
+        actorId: session.user.id,
+        payload: {
+          surveyId,
+          lease: leaseResult.lease,
+          messages: persistedMessages.slice(-2),
+          status: "creating",
+        },
+      });
+    });
+    await publishPendingOutboxEntries();
+
+    const response = createUIMessageStreamResponse({
+      stream: createUIMessageStream({
+        execute: async ({ writer }) => {
+          writer.write({
+            type: "text-delta",
+            textDelta: result.responseText,
+          } as any);
+        },
+      }),
+    });
+    response.headers.set("X-Survey-Revision", String(currentRevision + 1));
+    response.headers.set("X-Lease-Token", leaseResult.lease.leaseToken);
+    return response;
   } catch (error) {
-    console.error("[CreateAPI:POST] UNCAUGHT ERROR:", error);
-    if (error instanceof GeminiCapacityError) {
-      return geminiCapacityResponse();
+    if (
+      error instanceof Error &&
+      (error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED")
+    ) {
+      return new Response(error.message, { status: 401 });
     }
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return new Response(error.message, { status: 401 });
-      }
-    }
-    console.error("Error in create route:", error);
+    console.error("[Create Route] Error:", error);
     return new Response("Internal server error", { status: 500 });
   }
 }
 
-/**
- * Save creation conversation messages and extract survey data
- * Called after each AI response to update the conversation state
- */
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ surveyId: string }> },
@@ -302,237 +333,82 @@ export async function PUT(
     const session = await getVerifiedSession();
     const { surveyId } = await params;
     const body = await request.json();
-    const { messages, collectedInfo, extractedData } = body as {
-      messages?: Array<any>;
-      collectedInfo?: CollectedInfo;
-      extractedData?: Record<string, unknown>;
-    };
+    const incomingMessages = Array.isArray(body.messages) ? body.messages : [];
 
-    console.log(
-      `[CreateAPI:PUT] Entry. SID: ${surveyId}. Msgs: ${messages?.length}. State: ${!!collectedInfo}/${!!extractedData}`,
-    );
+    const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
+    if (!survey) return new Response("Survey not found", { status: 404 });
 
-    if (messages && !Array.isArray(messages)) {
-      return new Response("Invalid messages format", { status: 400 });
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id, {
+      activeWorkspaceId: session.session.activeOrganizationId ?? null,
+    });
+    if (!permission?.canEdit || !permission.activeContextMatchesResource) {
+      return new Response("Unauthorized: Editor access required", { status: 403 });
     }
 
-    const [survey] = await getDb()
-      .select()
-      .from(surveys)
-      .where(eq(surveys.id, surveyId));
-
-    if (!survey) {
-      return new Response("Survey not found", { status: 404 });
+    if (
+      typeof body.expectedRevision === "number" &&
+      body.expectedRevision !== (await getCurrentSurveyRevision(surveyId))
+    ) {
+      return NextResponse.json({ error: "REVISION_CONFLICT" }, { status: 409 });
     }
 
-    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
-    const access = await getSurveyAccessLevel(session.user.id, survey.id);
-    if (access !== "owner" && access !== "editor") {
-      return new Response("Unauthorized: Editor access required", {
-        status: 403,
-      });
+    if (incomingMessages.length === 0) {
+      return new Response("OK", { status: 200 });
     }
 
-    const [existingConversation] = await getDb()
-      .select()
-      .from(surveyCreationConversations)
-      .where(eq(surveyCreationConversations.surveyId, surveyId));
-
-    await getDb().transaction(async (tx) => {
-      if (existingConversation) {
-        // Build the update payload dynamically — if nothing was provided, skip the DB call entirely
-        // (Drizzle throws "No values to set" if .set({}) receives an empty object)
-        const updatePayload: Record<string, any> = {};
-
-        if (messages) {
-          updatePayload.messages = messages.map((msg) => {
-            let textContent = msg.content;
-            if (!textContent && Array.isArray(msg.parts)) {
-              textContent = msg.parts
-                .filter((p: any) => p.type === "text")
-                .map((p: any) => p.text)
-                .join("");
-            }
-            return {
-              id: msg.id,
-              role: msg.role,
-              content: textContent || "",
-              parts: msg.parts,
-              timestamp: msg.timestamp || new Date().toISOString(),
-            };
-          });
-        }
-
-        if (collectedInfo) updatePayload.collectedInfo = collectedInfo;
-
-        if (extractedData) {
-          updatePayload.extractedData = {
-            ...existingConversation.extractedData,
-            ...extractedData,
-          };
-        }
-
-        // Nothing to update — body was empty (e.g. handleStart signal call)
-        if (Object.keys(updatePayload).length === 0) {
-          console.log("[CreateAPI:PUT] payload empty, skipping DB update.");
-          return; // exit transaction cleanly, no DB write needed
-        }
-
-        await tx
-          .update(surveyCreationConversations)
-          .set(updatePayload)
-          .where(eq(surveyCreationConversations.surveyId, surveyId));
-        console.log("[CreateAPI:PUT] conversationUpdate Success.");
-      } else {
-        await tx.insert(surveyCreationConversations).values({
-          id: crypto.randomUUID(),
-          surveyId,
-          messages: messages
-            ? messages.map((msg) => ({
-                id: msg.id,
-                role: msg.role,
-                content:
-                  msg.content ||
-                  (Array.isArray(msg.parts)
-                    ? msg.parts
-                        .filter((p: any) => p.type === "text")
-                        .map((p: any) => p.text)
-                        .join("")
-                    : ""),
-                parts: msg.parts,
-                timestamp: msg.timestamp || new Date().toISOString(),
-              }))
-            : [],
-          status: "in_progress",
-          extractedData: extractedData || {},
-          collectedInfo: collectedInfo || {
-            objective: false,
-            targetAudience: false,
-            scope: false,
-            successCriteria: false,
-            constraints: false,
-            hypotheses: false,
-            tone: false,
-            requiredQuestions: false,
-            metrics: false,
-            personalInfo: false,
-            subjectDefined: false,
-            domainIdentified: false,
-            media: false,
-            subjectModelComplete: false,
-          },
-        });
-      }
-
-      // Bidirectional sync: Push extractedData to the surveys table
-      if (extractedData) {
-        const currentExpertState = (survey.expertState || {}) as Record<
-          string,
-          any
-        >;
-        await tx
-          .update(surveys)
-          .set({
-            expertState: {
-              ...currentExpertState,
-              ...extractedData,
-            } as any,
-          })
-          .where(eq(surveys.id, surveyId));
-      }
+    const leaseResult = await ensureCreationLease({
+      surveyId,
+      userId: session.user.id,
+      sessionId:
+        typeof body.sessionId === "string" ? body.sessionId : session.session.id,
+      leaseToken: typeof body.leaseToken === "string" ? body.leaseToken : null,
+      force: Boolean(body.forceLease),
     });
 
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (error) {
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return new Response(error.message, { status: 401 });
-      }
-    }
-    console.error("Error updating creation conversation:", error);
-    return new Response("Internal server error", { status: 500 });
-  }
-}
-
-/**
- * Get the current state of a survey creation conversation
- */
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ surveyId: string }> },
-) {
-  const session = await getVerifiedSession();
-  const { surveyId } = await params;
-  console.log(`[CreateAPI:GET] Entry. SID: ${surveyId}`);
-  try {
-    const [survey] = await getDb()
-      .select()
-      .from(surveys)
-      .where(eq(surveys.id, surveyId));
-
-    if (!survey) {
-      return new Response("Survey not found", { status: 404 });
-    }
-
-    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
-    const access = await getSurveyAccessLevel(session.user.id, survey.id);
-    if (access === "none") {
-      return new Response("Unauthorized", { status: 403 });
-    }
-
-    const [creationConversation] = await getDb()
-      .select()
-      .from(surveyCreationConversations)
-      .where(eq(surveyCreationConversations.surveyId, surveyId));
-
-    if (!creationConversation) {
-      return new Response(
-        JSON.stringify({
-          collectedInfo: {
-            objective: false,
-            targetAudience: false,
-            scope: false,
-            successCriteria: false,
-            constraints: false,
-            hypotheses: false,
-            tone: false,
-            requiredQuestions: false,
-            metrics: false,
-            personalInfo: false,
-            subjectDefined: false,
-            domainIdentified: false,
-          },
-          extractedData: {},
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
+    if (!leaseResult.ok) {
+      return NextResponse.json(
+        {
+          error: leaseResult.error,
+          lease: "lease" in leaseResult ? leaseResult.lease : null,
+        },
+        { status: 409 },
       );
     }
 
-    return new Response(
-      JSON.stringify({
-        messages: creationConversation.messages || [],
-        collectedInfo: creationConversation.collectedInfo,
-        extractedData: creationConversation.extractedData,
-        status: creationConversation.status,
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    );
+    const normalizedMessages = normalizeMessages(incomingMessages);
+    await persistCreationConversation(surveyId, normalizedMessages);
+
+    await getDb().transaction(async (tx) => {
+      await recordRealtimeEvent(tx, {
+        scope: "survey",
+        surveyId,
+        workspaceId: permission.workspaceId,
+        eventType: "survey.creation_turn_added",
+        actorId: session.user.id,
+        payload: {
+          surveyId,
+          lease: leaseResult.lease,
+          messages: normalizedMessages.slice(-1),
+          status: survey.status,
+        },
+      });
+    });
+    await publishPendingOutboxEntries();
+
+    const revision = await getCurrentSurveyRevision(surveyId);
+    const response = new Response("OK", { status: 200 });
+    response.headers.set("X-Survey-Revision", String(revision));
+    response.headers.set("X-Lease-Token", leaseResult.lease.leaseToken);
+    return response;
   } catch (error) {
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return new Response(error.message, { status: 401 });
-      }
+    if (
+      error instanceof Error &&
+      (error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED")
+    ) {
+      return new Response(error.message, { status: 401 });
     }
-    console.error("Error fetching creation conversation:", error);
+    console.error("[Create Route PUT] Error:", error);
     return new Response("Internal server error", { status: 500 });
   }
 }

@@ -9,11 +9,22 @@
 import { auth } from "@/lib/auth";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
-import { organizations, members, invitations, users } from "@/db/schema";
+import {
+  organizations,
+  members,
+  invitations,
+  users,
+  projects,
+  surveys,
+  surveyEditors,
+  surveyEditLeases,
+} from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
-import { isWorkspaceOwner, isWorkspaceMember } from "@/lib/workspace-access";
-import { cache, cacheKeys } from "@/lib/cache";
-import { publishWorkspaceEvent } from "@/lib/redis-events";
+import { isWorkspaceOwner } from "@/lib/workspace-access";
+import {
+  publishPendingOutboxEntries,
+  recordRealtimeEvent,
+} from "@/lib/collaboration-service";
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -233,7 +244,7 @@ export async function setActiveWorkspace(
  */
 export async function inviteToWorkspace(data: {
   email: string;
-  role?: "owner" | "member";
+  role?: "member";
   organizationId?: string;
 }): Promise<ActionResult<{ invitationId: string }>> {
   try {
@@ -250,18 +261,19 @@ export async function inviteToWorkspace(data: {
       };
     }
 
-    if (data.organizationId) {
-      const { isWorkspaceOwner } = await import("@/lib/workspace-access");
-      const isOwner = await isWorkspaceOwner(
-        session.user.id,
-        data.organizationId,
-      );
-      if (!isOwner) {
-        return {
-          success: false,
-          error: "Unauthorized: Only workspace owners can invite members",
-        };
-      }
+    if (data.role && data.role !== "member") {
+      return {
+        success: false,
+        error: "Invalid role: workspace invitations can only grant member access",
+      };
+    }
+
+    const isOwner = await isWorkspaceOwner(session.user.id, organizationId);
+    if (!isOwner) {
+      return {
+        success: false,
+        error: "Unauthorized: Only workspace owners can invite members",
+      };
     }
 
     const existingPendingInvite =
@@ -304,7 +316,7 @@ export async function inviteToWorkspace(data: {
     const result = await auth.api.createInvitation({
       body: {
         email: normalizedEmail,
-        role: data.role || "member",
+        role: "member",
         organizationId,
       },
       headers: await getSessionHeaders(),
@@ -342,29 +354,121 @@ export async function removeWorkspaceMember(data: {
 }): Promise<ActionResult<void>> {
   try {
     const session = await getVerifiedSession();
+    const organizationId =
+      data.organizationId ||
+      ((session.session as any).activeOrganizationId as string | undefined);
 
-    if (data.organizationId) {
-      const { isWorkspaceOwner } = await import("@/lib/workspace-access");
-      const isOwner = await isWorkspaceOwner(
-        session.user.id,
-        data.organizationId,
-      );
-      if (!isOwner) {
+    if (!organizationId) {
+      return {
+        success: false,
+        error: "No active workspace selected",
+      };
+    }
+
+    const isOwner = await isWorkspaceOwner(session.user.id, organizationId);
+    if (!isOwner) {
+      return {
+        success: false,
+        error: "Unauthorized: Only workspace owners can remove members",
+      };
+    }
+
+    const targetMember = await getDb().query.members.findFirst({
+      where: and(
+        eq(members.organizationId, organizationId),
+        eq(members.userId, data.memberIdOrEmail),
+      ),
+    });
+
+    if (targetMember?.role === "owner") {
+      return {
+        success: false,
+        error: "The workspace owner cannot be removed from the workspace",
+      };
+    }
+
+    if (targetMember) {
+      const [ownedSurveys, ownedProjects] = await Promise.all([
+        getDb()
+          .select({ id: surveys.id })
+          .from(surveys)
+          .where(
+            and(
+              eq(surveys.organizationId, organizationId),
+              eq(surveys.userId, targetMember.userId),
+            ),
+          ),
+        getDb()
+          .select({ id: projects.id })
+          .from(projects)
+          .where(
+            and(
+              eq(projects.organizationId, organizationId),
+              eq(projects.userId, targetMember.userId),
+            ),
+          ),
+      ]);
+
+      if (ownedSurveys.length > 0 || ownedProjects.length > 0) {
         return {
           success: false,
-          error: "Unauthorized: Only workspace owners can remove members",
+          error:
+            "This member still owns surveys or projects. Transfer ownership before removing them.",
         };
       }
+
     }
 
     // Use Better Auth API to remove member
     await auth.api.removeMember({
       body: {
         memberIdOrEmail: data.memberIdOrEmail,
-        organizationId: data.organizationId,
+        organizationId,
       },
       headers: await getSessionHeaders(),
     });
+    if (targetMember) {
+      const workspaceSurveyIds = await getDb()
+        .select({ id: surveys.id })
+        .from(surveys)
+        .where(eq(surveys.organizationId, organizationId));
+
+      await Promise.all(
+        workspaceSurveyIds.map(async ({ id }) => {
+          await getDb()
+            .delete(surveyEditors)
+            .where(
+              and(
+                eq(surveyEditors.surveyId, id),
+                eq(surveyEditors.userId, targetMember.userId),
+              ),
+            );
+          await getDb()
+            .delete(surveyEditLeases)
+            .where(
+              and(
+                eq(surveyEditLeases.surveyId, id),
+                eq(surveyEditLeases.holderUserId, targetMember.userId),
+              ),
+            );
+        }),
+      );
+
+      await getDb().transaction(async (tx) => {
+        await recordRealtimeEvent(tx, {
+          scope: "workspace",
+          workspaceId: organizationId,
+          eventType: "workspace.member_removed",
+          actorId: session.user.id,
+          payload: {
+            workspaceId: organizationId,
+            memberId: targetMember.id,
+            userId: targetMember.userId,
+          },
+        });
+      });
+      await publishPendingOutboxEntries();
+    }
 
     return {
       success: true,
@@ -479,19 +583,23 @@ export async function updateWorkspace(data: {
       headers: await getSessionHeaders(),
     });
 
-    // Publish event for real-time synchronization
-    publishWorkspaceEvent({
-      type: "WORKSPACE_UPDATED",
-      workspaceId: data.organizationId,
-      userId: session.user.id,
-      userName: session.user.name,
-      data: {
-        name: data.name,
-        slug: data.slug,
-        logo: data.logo,
-      },
-      timestamp: new Date().toISOString(),
-    }).catch((err: unknown) => console.error("Failed to publish workspace update event:", err));
+    await getDb().transaction(async (tx) => {
+      await recordRealtimeEvent(tx, {
+        scope: "workspace",
+        workspaceId: data.organizationId,
+        eventType: "workspace.settings_updated",
+        actorId: session.user.id,
+        payload: {
+          workspaceId: data.organizationId,
+          updates: {
+            name: data.name,
+            slug: data.slug,
+            logo: data.logo,
+          },
+        },
+      });
+    });
+    await publishPendingOutboxEntries();
 
     return {
       success: true,
@@ -601,7 +709,14 @@ export async function getWorkspaceInvitations(organizationId: string): Promise<
   >
 > {
   try {
-    await getVerifiedSession();
+    const session = await getVerifiedSession();
+    const isOwner = await isWorkspaceOwner(session.user.id, organizationId);
+    if (!isOwner) {
+      return {
+        success: false,
+        error: "Unauthorized: Only workspace owners can view invitations",
+      };
+    }
 
     const workspaceMembers = await getDb().query.members.findMany({
       where: eq(members.organizationId, organizationId),
@@ -667,12 +782,33 @@ export async function acceptInvitationAction(
   try {
     const session = await getVerifiedSession();
 
+    const invitation = await getDb().query.invitations.findFirst({
+      where: eq(invitations.id, invitationId),
+    });
+
     await auth.api.acceptInvitation({
       body: {
         invitationId,
       },
       headers: await getSessionHeaders(),
     });
+
+    if (invitation?.organizationId) {
+      await getDb().transaction(async (tx) => {
+        await recordRealtimeEvent(tx, {
+          scope: "workspace",
+          workspaceId: invitation.organizationId,
+          eventType: "workspace.member_added",
+          actorId: session.user.id,
+          payload: {
+            workspaceId: invitation.organizationId,
+            userId: session.user.id,
+            email: session.user.email,
+          },
+        });
+      });
+      await publishPendingOutboxEntries();
+    }
 
     return {
       success: true,

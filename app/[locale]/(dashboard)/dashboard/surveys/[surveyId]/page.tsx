@@ -19,7 +19,6 @@ import {
   Calendar,
   Mic,
   CheckCircle,
-  Download,
   Filter,
   Search,
   Loader2,
@@ -42,32 +41,7 @@ import { ClientT } from "@/components/i18n/client-t";
 import { getSurveyEmbedCodeAction } from "@/app/actions/survey";
 import { fetchSurveyDetails, fetchSurveyResponses } from "@/lib/api/surveys";
 import { queryKeys } from "@/lib/query-keys";
-
-interface Survey {
-  id: string;
-  title: string;
-  status: "active" | "draft" | "completed" | "paused" | "creating" | "sample_review";
-  createdAt: string;
-  updatedAt: string;
-  expertState?: any;
-  coreObjective?: string;
-  tone?: string;
-  shareableLink?: string;
-  shareableUrl?: string;
-  participantLimit: number;
-  currentParticipants: number;
-  requiredQuestions?: string[];
-  metrics?: string[];
-  isVoice?: boolean;
-  description?: string;
-}
-
-interface SurveyStats {
-  totalResponses: number;
-  completedResponses: number;
-  completionRate: number;
-  avgDuration: string;
-}
+import { CreatorSettingsPanel } from "@/components/surveys/creator-settings-panel";
 
 interface Response {
   id: string;
@@ -84,26 +58,6 @@ interface Response {
 }
 
 
-
-interface AnalyticsTheme {
-  theme: string;
-  mentions: number;
-  sentiment: "neutral" | "positive" | "negative";
-}
-
-interface AnalyticsData {
-  sentimentBreakdown: {
-    positive: number;
-    neutral: number;
-    negative: number;
-  };
-  completionFunnel: {
-    stage: string;
-    count: number;
-    percentage: number;
-  }[];
-  topThemes: AnalyticsTheme[];
-}
 
 type TabType = "overview" | "responses" | "settings";
 
@@ -438,7 +392,7 @@ export default function SurveyDetailPage() {
           </div>
         </div>
         <p className="text-gray-500 mt-4 sm:ml-12 text-sm max-w-2xl leading-relaxed">
-          {survey.description || survey.coreObjective || (typeof survey.expertState?.objective === 'string' ? survey.expertState.objective : survey.expertState?.objective?.goal) || t("Header.NoDescription")}
+          {survey.description || survey.coreObjective || survey.brief?.researchGoal || survey.brief?.learningContext || t("Header.NoDescription")}
         </p>
       </div>
 
@@ -546,18 +500,18 @@ export default function SurveyDetailPage() {
               <div>
                 <p className="text-sm text-gray-500 mb-1">{t("Overview.Configuration.Objective")}</p>
                 <p className="text-gray-900">
-                  {survey.coreObjective || (typeof survey.expertState?.objective === 'string' ? survey.expertState.objective : survey.expertState?.objective?.goal) || t("Overview.Configuration.NotSpecified")}
+                  {survey.coreObjective || survey.brief?.researchGoal || t("Overview.Configuration.NotSpecified")}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-gray-500 mb-1">{t("Overview.Configuration.TargetAudience")}</p>
                 <p className="text-gray-900">
-                  {(typeof survey.expertState?.targetAudience === 'string' ? survey.expertState.targetAudience : survey.expertState?.targetAudience?.description) || t("Overview.Configuration.NotSpecified")}
+                  {survey.brief?.audienceDefinition || t("Overview.Configuration.NotSpecified")}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-gray-500 mb-1">{t("Overview.Configuration.Tone")}</p>
-                <p className="text-gray-900 capitalize">{survey.tone || survey.expertState?.tone || 'casual'}</p>
+                <p className="text-gray-900 capitalize">{survey.tone || survey.brief?.tone || 'casual'}</p>
               </div>
             </div>
           </div>
@@ -763,7 +717,7 @@ export default function SurveyDetailPage() {
 
       {/* Settings Tab */}
       {activeTab === "settings" && (
-        <div className="max-w-2xl space-y-6">
+        <div className="max-w-4xl space-y-6">
           <div className="bg-white rounded-xl border border-gray-100 p-5">
             <h3 className="font-semibold text-gray-900 mb-4">{t("Settings.Title")}</h3>
             <div className="space-y-4">
@@ -818,6 +772,8 @@ export default function SurveyDetailPage() {
               </button>
             </div>
           </div>
+
+          <CreatorSettingsPanel surveyId={surveyId} />
 
           {/* Embed Widget Section */}
           <div className="bg-white rounded-xl border border-gray-100 p-5">
