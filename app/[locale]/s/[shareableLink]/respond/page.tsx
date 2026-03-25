@@ -169,9 +169,7 @@ function SurveyContent() {
   }, [survey, locale, shareableLink, pathname, router]);
 
   const [isVoiceMode, setIsVoiceMode] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState<
-    "en" | "fr" | "de" | "es" | "it"
-  >((locale as any) || "en");
+  const selectedLanguage = locale as "en" | "fr" | "de" | "es" | "it";
 
   // Prepare initial messages for useChat
   // Sync Greeting: If voice survey and only 1 message exists (the initial greeting), 
@@ -180,7 +178,6 @@ function SurveyContent() {
     resumedMessages.length > 1 || (!survey?.isVoice && resumedMessages.length > 0)
       ? resumedMessages.map((msg: any, i) => {
         // Ensure we handle the transition from 'content' (old) to 'parts' (v6) robustly
-        const hasTextPart = msg.parts?.some((p: any) => p.type === 'text' && p.text);
         let parts = msg.parts && msg.parts.length > 0 ? msg.parts : [];
         let contentStr = msg.content || "";
 

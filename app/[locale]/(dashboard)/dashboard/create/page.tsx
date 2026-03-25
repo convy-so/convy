@@ -37,11 +37,11 @@ import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { uploadSurveyMediaAction } from "@/app/actions/survey-media";
 import { CollaborationSidebar } from "@/components/surveys/collaboration-sidebar";
 import { ActiveUsers } from "@/components/dashboard/active-users";
+import { useRealtime } from "@/hooks/use-realtime";
 
 
 
 
-type CreationStep = "objective" | "audience" | "questions" | "tone" | "review";
 
 type UIMessage = SDKMessage & {
   displayedContent?: string;
@@ -80,9 +80,54 @@ function CreateSurveyContent() {
   const [isVoiceSurvey, setIsVoiceSurvey] = useState(false);
 
   const [isOwner, setIsOwner] = useState(false);
-  const [collaborators, setCollaborators] = useState<string[]>([]);
+  const [editors, setEditors] = useState<string[]>([]);
   const [orgId, setOrgId] = useState<string | null>(null);
   const [isCollaborationOpen, setIsCollaborationOpen] = useState(false);
+
+  useRealtime({
+    channels: surveyId && orgId ? [`survey:${surveyId}`] : [],
+    onEvent: async (event) => {
+      if (!surveyId || event.actorId === user?.id) return;
+
+      if (
+        event.eventType === "survey.creation_turn_added" ||
+        event.eventType === "survey.editor_granted" ||
+        event.eventType === "survey.editor_revoked" ||
+        event.eventType === "survey.deleting"
+      ) {
+        try {
+          const response = await fetch(`/api/surveys/${surveyId}/create`, {
+            cache: "no-store",
+          });
+          if (!response.ok) return;
+          const data = await response.json();
+          if (Array.isArray(data.messages)) {
+            setMessages(
+              data.messages.map((m: any, idx: number) => ({
+                id: m.id || `msg-${idx}-${Date.now()}`,
+                role: m.role,
+                displayedContent:
+                  m.content ||
+                  m.parts
+                    ?.filter((p: any) => p.type === "text")
+                    .map((p: any) => p.text)
+                    .join(""),
+                isTyping: false,
+                parts:
+                  m.parts ||
+                  (m.content ? [{ type: "text", text: m.content }] : []),
+              })),
+            );
+          }
+          if (data.collectedInfo) setCollectedInfo(data.collectedInfo);
+          if (data.extractedData) setExtractedData(data.extractedData);
+          if (data.status) setSurveyStatus(data.status);
+        } catch (error) {
+          console.error("[Create Page] Failed to sync realtime survey event:", error);
+        }
+      }
+    },
+  });
 
   const handleStart = async () => {
     // 1. Optimistic UI: Immediately show loading state
@@ -218,7 +263,7 @@ function CreateSurveyContent() {
 
   const [isConnecting, setIsConnecting] = useState(false);
   const [hasAutoGreeted, setHasAutoGreeted] = useState(false);
-  const [hasGreetingPlayed, setHasGreetingPlayed] = useState(false);
+  const [_hasGreetingPlayed, setHasGreetingPlayed] = useState(false);
 
 
 
@@ -475,7 +520,7 @@ function CreateSurveyContent() {
       collectedInfo.objective &&
       collectedInfo.targetAudience &&
       collectedInfo.subjectDefined &&
-      collectedInfo.domainIdentified
+      collectedInfo.programIdentified
     );
 
     // If AI mentioned samples, we skip strict structural validation and trust the AI
@@ -499,15 +544,21 @@ function CreateSurveyContent() {
     );
 
     if (!allRequiredFlagsCollected || !extractedData) {
-      return false;
+      return Boolean(extractedData?.readyForSampling);
+    }
+
+    if (extractedData.readyForSampling) {
+      return true;
     }
 
     const hasObjective = !!(extractedData.objective?.goal);
     const hasAudience = !!(extractedData.targetAudience?.description);
-    const hasDomain = typeof extractedData.domainId === 'number';
+    const hasProgram =
+      (typeof extractedData.programId === 'string' &&
+        extractedData.programId.trim().length > 0);
 
     // We trust allRequiredFlagsCollected for everything else (opt-outs are valid)
-    const isReady = allRequiredFlagsCollected && hasObjective && hasAudience && hasDomain;
+    const isReady = allRequiredFlagsCollected && hasObjective && hasAudience && hasProgram;
 
     return isReady;
   }, [surveyId, collectedInfo, extractedData, messages]);
@@ -623,16 +674,18 @@ function CreateSurveyContent() {
 
 
             let isUserOwner = false;
-            let currentCollaborators: string[] = [];
+            let currentEditors: string[] = [];
+            let hasEditAccess = false;
 
             if (surveyData.survey?.userId) {
               isUserOwner = surveyData.survey.userId === user?.id;
               setIsOwner(isUserOwner);
             }
-            if (surveyData.survey?.collaborators) {
-              currentCollaborators = surveyData.survey.collaborators;
-              setCollaborators(currentCollaborators);
+            if (surveyData.survey?.editors) {
+              currentEditors = surveyData.survey.editors;
+              setEditors(currentEditors);
             }
+            hasEditAccess = Boolean(surveyData.survey?.permission?.canEdit);
 
             // Set language if available
             if (surveyData.survey?.language) {
@@ -645,7 +698,6 @@ function CreateSurveyContent() {
 
             // Read-only if survey is NOT in "creating" status OR if user has no edit access
             const isFinished = status && status !== "creating";
-            const hasEditAccess = isUserOwner || currentCollaborators.includes(user?.id || "");
 
             if (isFinished || !hasEditAccess) {
               setIsReadOnly(true);
@@ -698,7 +750,7 @@ function CreateSurveyContent() {
       const response = await fetch("/api/surveys", {
         method: "POST",
         credentials: "include",
-        body: JSON.stringify({ language, isVoice: isVoiceSurvey, domainId: null }),
+        body: JSON.stringify({ language, isVoice: isVoiceSurvey }),
       });
 
       console.log(`[Client] ensureDraftExists POST result: ${response.status}`);
@@ -1724,12 +1776,13 @@ function CreateSurveyContent() {
           }}
         />
 
-        {/* Real-time Collaboration Sidebar - Only for Org surveys or if there are collaborators */}
-        {(surveyId && (orgId || collaborators.length > 0)) && (
+        {/* Real-time Collaboration Sidebar - Only for org surveys or if there are approved editors */}
+        {(surveyId && orgId) && (
           <CollaborationSidebar
             surveyId={surveyId}
+            workspaceId={orgId}
             isOwner={isOwner}
-            collaborators={collaborators}
+            editors={editors}
             isOpen={isCollaborationOpen}
             onClose={() => setIsCollaborationOpen(false)}
           />
@@ -1931,7 +1984,7 @@ function MediaUploadFlow({
         {/* File Queue */}
         {queue.length > 0 && (
           <div className="flex-1 overflow-y-auto px-8 mt-5 space-y-4 pb-4">
-            {queue.map((item, idx) => (
+            {queue.map((item) => (
               <div key={item.id} className="border border-gray-100 bg-white" style={{ borderRadius: '2px' }}>
                 {/* File row */}
                 <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">

@@ -2,36 +2,44 @@ import { eq, count, and, desc, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
-import { surveys, surveyConversations } from "@/db/schema";
+import { surveyBriefs, surveys, surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { env } from "@/lib/env";
+import {
+  getSurveyEditors,
+  getSurveyPermissionContext,
+} from "@/lib/workspace-access";
 
 /**
  * GET - Get detailed survey info for the owner
  */
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
 
-    // Get survey
-    const [survey] = await getDb()
-      .select()
-      .from(surveys)
-      .where(eq(surveys.id, surveyId));
+    const [survey, briefRow] = await Promise.all([
+      getDb().select().from(surveys).where(eq(surveys.id, surveyId)).then((rows) => rows[0]),
+      getDb().select().from(surveyBriefs).where(eq(surveyBriefs.surveyId, surveyId)).then((rows) => rows[0]),
+    ]);
 
     if (!survey) {
       return NextResponse.json({ error: "Survey not found" }, { status: 404 });
     }
 
-    const { getSurveyAccessLevel } = await import("@/lib/workspace-access");
-    const access = await getSurveyAccessLevel(session.user.id, survey.id);
-    if (access === "none") {
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id, {
+      activeWorkspaceId: session.session.activeOrganizationId ?? null,
+    });
+    if (!permission?.canView || !permission.activeContextMatchesResource) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
+
+    const editors = permission.collaborationAllowed
+      ? await getSurveyEditors(surveyId)
+      : [];
 
     // Get response statistics (only count if they have at least one user message)
     const [stats] = await getDb()
@@ -125,8 +133,9 @@ export async function GET(
         description: survey.description,
         createdAt: survey.createdAt,
         updatedAt: survey.updatedAt,
-        expertState: survey.expertState,
         coreObjective: survey.coreObjective,
+        programId: survey.programId,
+        brief: briefRow?.brief || null,
         tone: survey.tone,
         shareableLink: survey.shareableLink,
         shareableUrl,
@@ -139,7 +148,9 @@ export async function GET(
         media: survey.media, // ADD: Include media for display in sample conversations
         sampleConversationCount: survey.sampleConversationCount, // ADD: Include sample count
         userId: survey.userId,
-        collaborators: survey.collaborators || [],
+        organizationId: survey.organizationId,
+        editors,
+        permission,
       },
       stats: {
         totalResponses,

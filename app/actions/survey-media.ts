@@ -10,10 +10,41 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { fileTypeFromBuffer } from "file-type";
 import sharp from "sharp";
 import { uploadSurveyMedia, deleteSurveyMedia } from "@/lib/storage";
+import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  publishPendingOutboxEntries,
+  recordRealtimeEvent,
+} from "@/lib/collaboration-service";
 
 type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
+
+async function emitSurveyMediaUpdatedEvent(
+  surveyId: string,
+  workspaceId: string | null,
+  actorId: string,
+  action: "uploaded" | "updated" | "removed" | "added" | "reordered",
+) {
+  if (!workspaceId) return;
+
+  await getDb().transaction(async (tx) => {
+    await recordRealtimeEvent(tx, {
+      scope: "workspace",
+      workspaceId,
+      actorId,
+      eventType: "workspace.survey_updated",
+      payload: {
+        surveyId,
+        workspaceId,
+        source: "media",
+        action,
+      },
+    });
+  });
+
+  await publishPendingOutboxEntries();
+}
 
 const addSurveyMediaSchema = z.object({
   surveyId: z.string().min(1),
@@ -143,7 +174,8 @@ export async function uploadSurveyMediaAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission?.canEdit) {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -229,6 +261,13 @@ export async function uploadSurveyMediaAction(
       .set({ media: updatedMedia })
       .where(eq(surveys.id, validation.surveyId));
 
+    await emitSurveyMediaUpdatedEvent(
+      survey.id,
+      survey.organizationId ?? null,
+      session.user.id,
+      "uploaded",
+    );
+
     return {
       success: true,
       data: { mediaId, media: newMedia },
@@ -270,7 +309,8 @@ export async function updateSurveyMediaAction(
     if (!survey) {
       return { success: false, error: "Survey not found" };
     }
-    if (survey.userId !== session.user.id) {
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission?.canEdit) {
       return { success: false, error: "Unauthorized" };
     }
     if (
@@ -312,6 +352,13 @@ export async function updateSurveyMediaAction(
       .set({ media: newMediaArray })
       .where(eq(surveys.id, body.surveyId));
 
+    await emitSurveyMediaUpdatedEvent(
+      survey.id,
+      survey.organizationId ?? null,
+      session.user.id,
+      "updated",
+    );
+
     return { success: true, data: { media: updatedMedia } };
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -350,7 +397,8 @@ export async function removeSurveyMediaAction(
     if (!survey) {
       return { success: false, error: "Survey not found" };
     }
-    if (survey.userId !== session.user.id) {
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission?.canEdit) {
       return { success: false, error: "Unauthorized" };
     }
     if (
@@ -410,6 +458,13 @@ export async function removeSurveyMediaAction(
       .set({ media: updatedMedia })
       .where(eq(surveys.id, body.surveyId));
 
+    await emitSurveyMediaUpdatedEvent(
+      survey.id,
+      survey.organizationId ?? null,
+      session.user.id,
+      "removed",
+    );
+
     return { success: true, data: { success: true } };
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -451,7 +506,8 @@ export async function addSurveyMediaAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission?.canEdit) {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -483,6 +539,13 @@ export async function addSurveyMediaAction(
       .update(surveys)
       .set({ media: updatedMedia })
       .where(eq(surveys.id, body.surveyId));
+
+    await emitSurveyMediaUpdatedEvent(
+      survey.id,
+      survey.organizationId ?? null,
+      session.user.id,
+      "added",
+    );
 
     return {
       success: true,
@@ -527,7 +590,8 @@ export async function getSurveyMediaAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission?.canView) {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -569,7 +633,8 @@ export async function reorderSurveyMediaAction(
       return { success: false, error: "Survey not found" };
     }
 
-    if (survey.userId !== session.user.id) {
+    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    if (!permission?.canEdit) {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -601,6 +666,13 @@ export async function reorderSurveyMediaAction(
       .update(surveys)
       .set({ media: reorderedMedia })
       .where(eq(surveys.id, surveyId));
+
+    await emitSurveyMediaUpdatedEvent(
+      survey.id,
+      survey.organizationId ?? null,
+      session.user.id,
+      "reordered",
+    );
 
     return {
       success: true,

@@ -9,32 +9,12 @@ export interface PresenceUser {
   lastActive: number;
 }
 
-export interface WorkspaceEvent {
-  type:
-    | "SURVEY_CREATED"
-    | "SURVEY_UPDATED"
-    | "SURVEY_DELETED"
-    | "PROJECT_CREATED"
-    | "PROJECT_UPDATED"
-    | "PROJECT_DELETED";
-  workspaceId: string;
-  userId: string;
-  userName?: string;
-  data: any;
-  timestamp: string;
-}
-
 export interface PresenceMessage {
-  type: "presence_update" | "user_joined" | "user_left" | "error" | "connected" | WorkspaceEvent["type"];
+  type: "presence_update" | "user_joined" | "user_left" | "error" | "connected";
   workspaceId: string;
   surveyId?: string;
   users?: PresenceUser[];
   user?: Partial<PresenceUser>;
-  // For workspace events
-  userId?: string;
-  userName?: string;
-  data?: any;
-  timestamp?: string;
 }
 
 interface UsePresenceOptions {
@@ -42,7 +22,6 @@ interface UsePresenceOptions {
   surveyId?: string;
   onUserJoined?: (user: Partial<PresenceUser>) => void;
   onUserLeft?: (user: Partial<PresenceUser>) => void;
-  onWorkspaceEvent?: (event: WorkspaceEvent) => void;
 }
 
 export function usePresence({
@@ -50,7 +29,6 @@ export function usePresence({
   surveyId,
   onUserJoined,
   onUserLeft,
-  onWorkspaceEvent,
 }: UsePresenceOptions) {
   const [users, setUsers] = useState<PresenceUser[]>([]);
   const [status, setStatus] = useState<"disconnected" | "connecting" | "connected" | "error">("disconnected");
@@ -106,21 +84,6 @@ export function usePresence({
               setUsers(prev => prev.filter(u => u.userId !== data.user?.userId));
               onUserLeft?.(data.user);
             }
-            break;
-          case "SURVEY_CREATED":
-          case "SURVEY_UPDATED":
-          case "SURVEY_DELETED":
-          case "PROJECT_CREATED":
-          case "PROJECT_UPDATED":
-          case "PROJECT_DELETED":
-            onWorkspaceEvent?.({
-              type: data.type,
-              workspaceId: data.workspaceId,
-              userId: data.userId!,
-              userName: data.userName,
-              data: data.data,
-              timestamp: data.timestamp!,
-            });
             break;
         }
       } catch (e) {

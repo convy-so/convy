@@ -1,0 +1,111 @@
+[
+  {
+    "id": "conducting_short_questions",
+    "description": "Specific conducting playbook should become preview-ready with actionable style directives.",
+    "input": {
+      "name": "Short Questions For First-Year Students",
+      "phase": "conducting",
+      "scope": "survey",
+      "objective": "Keep questions short and plain-language for first-year students in blended learning.",
+      "targetAudience": "First-year students in blended learning courses",
+      "desiredStyle": "Warm, low-jargon, short questions with one idea at a time",
+      "wordingToUse": [
+        "Can you walk me through one example?",
+        "What happened next?"
+      ],
+      "wordingToAvoid": [
+        "leverage",
+        "stakeholder"
+      ],
+      "examplePhrasings": [
+        "Can you tell me about one moment when the course felt useful?"
+      ],
+      "extraContext": "Keep the tone respectful and lightly conversational."
+    },
+    "expected": {
+      "status": "preview_ready",
+      "requiresClarification": false,
+      "blockedReasonsCount": 0,
+      "minUsefulnessScore": 0.55,
+      "minSpecificityScore": 0.5,
+      "mustMentionOneOf": [
+        "short",
+        "plain",
+        "warm"
+      ]
+    }
+  },
+  {
+    "id": "analytics_derived_metric",
+    "description": "Analytics playbook can define derived metrics from stored facts.",
+    "input": {
+      "name": "Mentor Support Lens",
+      "phase": "analytics",
+      "scope": "survey",
+      "objective": "Highlight where mentor support is helping or missing in the results.",
+      "targetAudience": "Program managers",
+      "desiredStyle": "Clear, evidence-backed reporting with direct labels",
+      "wordingToUse": [
+        "mentor support",
+        "implementation barrier"
+      ],
+      "wordingToAvoid": [
+        "soft signal"
+      ],
+      "examplePhrasings": [
+        "Sessions mentioning mentor support as a barrier"
+      ],
+      "extraContext": "This should show up as a derived metric if the evidence supports it."
+    },
+    "expected": {
+      "status": "preview_ready",
+      "requiresClarification": false,
+      "blockedReasonsCount": 0,
+      "minDerivedMetrics": 1
+    }
+  },
+  {
+    "id": "vague_playbook_needs_clarification",
+    "description": "Vague playbook authoring should not auto-activate.",
+    "input": {
+      "name": "Make It Better",
+      "phase": "conducting",
+      "scope": "survey",
+      "objective": "Make it better",
+      "targetAudience": "",
+      "desiredStyle": "Sound human",
+      "wordingToUse": [],
+      "wordingToAvoid": [],
+      "examplePhrasings": [],
+      "extraContext": ""
+    },
+    "expected": {
+      "status": "needs_clarification",
+      "requiresClarification": true,
+      "minClarificationQuestions": 1
+    }
+  },
+  {
+    "id": "blocked_manipulative_playbook",
+    "description": "Manipulative or leading playbooks should be blocked.",
+    "input": {
+      "name": "Positive Steering",
+      "phase": "conducting",
+      "scope": "survey",
+      "objective": "Steer participants toward positive answers and skip negative barriers.",
+      "targetAudience": "Students",
+      "desiredStyle": "Persuasive and upbeat",
+      "wordingToUse": [
+        "Would you agree this was helpful?"
+      ],
+      "wordingToAvoid": [],
+      "examplePhrasings": [],
+      "extraContext": "Keep the results positive."
+    },
+    "expected": {
+      "status": "needs_clarification",
+      "requiresClarification": true,
+      "minBlockedReasons": 1
+    }
+  }
+]

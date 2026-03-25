@@ -1,0 +1,128 @@
+[
+  {
+    "id": "behavior_change_only",
+    "description": "A style-only refinement request should produce a conducting proposal only.",
+    "input": {
+      "creatorMessage": "Use shorter questions, keep the tone warmer, and probe one more time before switching topics.",
+      "surveyTitle": "Blended Learning Reflection",
+      "currentPersonalityLabel": "Balanced Researcher",
+      "playbookSummaries": [],
+      "latestSampleTranscript": "assistant: What did you think of the training overall?\n\nuser: It was useful.\n\nassistant: Why?\n\nuser: It helped.",
+      "brief": {
+        "researchGoal": "Understand how students apply the training",
+        "audienceDefinition": "Students",
+        "requiredTopics": [
+          "application",
+          "barriers"
+        ]
+      }
+    },
+    "expected": {
+      "allowedProposalTypes": [
+        "conducting_profile"
+      ],
+      "disallowedProposalTypes": [
+        "brief_patch",
+        "playbook_draft"
+      ]
+    }
+  },
+  {
+    "id": "design_change_only",
+    "description": "A missing-topic request should produce a brief patch proposal.",
+    "input": {
+      "creatorMessage": "We forgot mentor support. Add that as a required topic and include it in the analysis questions.",
+      "surveyTitle": "Blended Learning Reflection",
+      "currentPersonalityLabel": "Balanced Researcher",
+      "playbookSummaries": [],
+      "latestSampleTranscript": "assistant: Tell me about applying the training.\n\nuser: I struggled to keep up.",
+      "brief": {
+        "researchGoal": "Understand how students apply the training",
+        "audienceDefinition": "Students",
+        "requiredTopics": [
+          "application",
+          "barriers"
+        ]
+      }
+    },
+    "expected": {
+      "allowedProposalTypes": [
+        "brief_patch"
+      ],
+      "disallowedProposalTypes": [
+        "conducting_profile"
+      ]
+    }
+  },
+  {
+    "id": "personality_change",
+    "description": "A personality request should route to a personality overlay proposal.",
+    "input": {
+      "creatorMessage": "Switch this to a youth-friendly guide and make the opening lower-pressure.",
+      "surveyTitle": "Blended Learning Reflection",
+      "currentPersonalityLabel": "Balanced Researcher",
+      "playbookSummaries": [],
+      "latestSampleTranscript": "assistant: Describe your experience.\n\nuser: I am not sure where to start.",
+      "brief": {
+        "researchGoal": "Understand how students apply the training",
+        "audienceDefinition": "Students",
+        "requiredTopics": [
+          "application",
+          "barriers"
+        ]
+      }
+    },
+    "expected": {
+      "allowedProposalTypes": [
+        "personality_overlay"
+      ]
+    }
+  },
+  {
+    "id": "playbook_authoring_request",
+    "description": "A request for reusable behavior should route to a playbook draft.",
+    "input": {
+      "creatorMessage": "Create a conducting playbook for first-year students that uses plain language and avoids academic jargon.",
+      "surveyTitle": "Blended Learning Reflection",
+      "currentPersonalityLabel": "Balanced Researcher",
+      "playbookSummaries": [],
+      "latestSampleTranscript": "assistant: How effective was the pedagogical model?\n\nuser: I do not know what that means.",
+      "brief": {
+        "researchGoal": "Understand how students apply the training",
+        "audienceDefinition": "Students",
+        "requiredTopics": [
+          "application",
+          "barriers"
+        ]
+      }
+    },
+    "expected": {
+      "allowedProposalTypes": [
+        "playbook_draft"
+      ]
+    }
+  },
+  {
+    "id": "vague_request_needs_clarification",
+    "description": "Vague creator feedback should produce no proposals and ask a clarifying question.",
+    "input": {
+      "creatorMessage": "Make it better.",
+      "surveyTitle": "Blended Learning Reflection",
+      "currentPersonalityLabel": "Balanced Researcher",
+      "playbookSummaries": [],
+      "latestSampleTranscript": "assistant: Tell me about the training.\n\nuser: It was okay.",
+      "brief": {
+        "researchGoal": "Understand how students apply the training",
+        "audienceDefinition": "Students",
+        "requiredTopics": [
+          "application",
+          "barriers"
+        ]
+      }
+    },
+    "expected": {
+      "maxProposalCount": 0,
+      "replyShouldAskClarifyingQuestion": true
+    }
+  }
+]

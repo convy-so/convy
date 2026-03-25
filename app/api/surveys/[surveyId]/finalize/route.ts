@@ -4,9 +4,14 @@ import { surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { env } from "@/lib/env";
 import { getDb } from "@/db";
+import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  publishPendingOutboxEntries,
+  recordRealtimeEvent,
+} from "@/lib/collaboration-service";
 
 export async function POST(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ surveyId: string }> }
 ) {
   try {
@@ -22,7 +27,8 @@ export async function POST(
       return new Response("Survey not found", { status: 404 });
     }
 
-    if (survey.userId !== session.user.id) {
+    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
+    if (!permission?.canPublish) {
       return new Response("Unauthorized", { status: 403 });
     }
 
@@ -38,16 +44,50 @@ export async function POST(
     }
 
     // Update survey status to active
-    const [updatedSurvey] = await getDb()
-      .update(surveys)
-      .set({
-        status: "active",
-        shareableLink,
-        confirmed: true,
-        updatedAt: new Date(),
-      })
-      .where(eq(surveys.id, surveyId))
-      .returning();
+    const [updatedSurvey] = await getDb().transaction(async (tx) => {
+      const [updated] = await tx
+        .update(surveys)
+        .set({
+          status: "active",
+          shareableLink,
+          confirmed: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(surveys.id, surveyId))
+        .returning();
+
+      await recordRealtimeEvent(tx, {
+        scope: "survey",
+        surveyId,
+        actorId: session.user.id,
+        eventType: "survey.published",
+        payload: {
+          surveyId,
+          workspaceId: survey.organizationId ?? null,
+          status: "active",
+          shareableLink,
+        },
+      });
+
+      if (survey.organizationId) {
+        await recordRealtimeEvent(tx, {
+          scope: "workspace",
+          workspaceId: survey.organizationId,
+          actorId: session.user.id,
+          eventType: "workspace.survey_updated",
+          payload: {
+            surveyId,
+            workspaceId: survey.organizationId,
+            status: "active",
+            shareableLink,
+          },
+        });
+      }
+
+      return [updated];
+    });
+
+    await publishPendingOutboxEntries();
 
     return new Response(
       JSON.stringify({

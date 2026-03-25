@@ -2,7 +2,7 @@
 "use client"
 import { User } from "better-auth/types";
 import { Search, LogOut, Settings, User as UserIcon, Bell } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
 import { useRouter, Link } from "@/i18n/routing";
@@ -13,7 +13,6 @@ import toast from "react-hot-toast";
 
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/providers/auth-provider";
-import { ClientT } from "@/components/i18n/client-t";
 import { ActiveUsers } from "./active-users";
 import { fetchActiveWorkspace } from "@/lib/api/workspace";
 import { WorkspaceNotifications } from "./workspace-notifications";
@@ -22,15 +21,13 @@ interface DashboardHeaderProps {
   user?: User | null;
 }
 
-export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
+export function DashboardHeader({ user: _initialUser }: DashboardHeaderProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
   const t = useTranslations("Header");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [searchPlaceholder, setSearchPlaceholder] = useState("Search");
-  const [unreadCountText, setUnreadCountText] = useState("");
 
   // Fetch active workspace using React Query
   const { data: activeWorkspace = null } = useQuery({
@@ -39,15 +36,10 @@ export function DashboardHeader({ user: initialUser }: DashboardHeaderProps) {
   });
 
   // Fetch notifications using React Query
-  const { data: notifications = [], isLoading, refetch: refetchNotifications } = useQuery({
+  const { data: notifications = [], isLoading } = useQuery({
     queryKey: queryKeys.notifications.all(),
     queryFn: fetchNotificationsAPI,
   });
-
-  // Keep fetchNotifications function for backwards compatibility (for manual refetch if needed)
-  const fetchNotifications = () => {
-    refetchNotifications();
-  };
 
   const unreadCount = notifications.filter(n => !n.read).length;
 

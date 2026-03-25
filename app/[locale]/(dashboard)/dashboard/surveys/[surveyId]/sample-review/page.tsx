@@ -13,7 +13,6 @@ import {
     ArrowLeft,
     CheckCircle,
     MessageSquare,
-    RefreshCcw,
     Bot,
     Send,
 
@@ -33,19 +32,11 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { SurveyStartOverlay } from "@/components/surveys/survey-start-overlay";
 import { addSampleConversationCommentAction } from "@/app/actions/sample-conversation";
+import { RefinementAssistantPanel } from "@/components/surveys/refinement-assistant-panel";
+import { getRehearsalCommentsAction } from "@/app/actions/collaboration";
+import { useRealtime } from "@/hooks/use-realtime";
 
 const MAX_SAMPLE_CONVERSATIONS = 3;
-
-type Message = {
-    id: string;
-    role: "user" | "assistant";
-    parts: Array<{ type: string; text?: string;[key: string]: any }>;
-    timestamp: string;
-    media?: any;
-    toolInvocations?: Array<any>;
-};
-
-
 
 export default function SampleReviewPage() {
     const params = useParams();
@@ -56,8 +47,6 @@ export default function SampleReviewPage() {
     const t = useTranslations("Survey.SampleReview");
 
     const [isConfirming, setIsConfirming] = useState(false);
-    const [feedback, setFeedback] = useState("");
-    const [isRetrying, setIsRetrying] = useState(false);
     const [inputMode, setInputMode] = useState<"voice" | "text">("text");
     const [textInput, setTextInput] = useState("");
     const [hasAutoGreeted, setHasAutoGreeted] = useState(false);
@@ -76,7 +65,6 @@ export default function SampleReviewPage() {
     // Translated placeholders
     const [placeholders, setPlaceholders] = useState({
         textInput: "Type your response...",
-        feedback: "Tell the AI what to improve...",
         publishTitle: "e.g. Q3 Customer Satisfaction",
         publishDescription: "Briefly describe the purpose of this survey..."
     });
@@ -84,15 +72,13 @@ export default function SampleReviewPage() {
     useEffect(() => {
         const translatePlaceholders = async () => {
             try {
-                const [textInput, feedback, pTitle, pDesc] = await Promise.all([
+                const [textInput, pTitle, pDesc] = await Promise.all([
                     getClientTranslation("Type your response..."),
-                    getClientTranslation("Tell the AI what to improve..."),
                     getClientTranslation("e.g. Q3 Customer Satisfaction"),
                     getClientTranslation("Briefly describe the purpose of this survey...")
                 ]);
                 setPlaceholders({
                     textInput,
-                    feedback,
                     publishTitle: pTitle,
                     publishDescription: pDesc
                 });
@@ -102,7 +88,6 @@ export default function SampleReviewPage() {
         };
         translatePlaceholders();
     }, []);
-
 
     const VisualizerRing = ({ isRecording, isAgentSpeaking, size = "normal" }: { isRecording: boolean; isAgentSpeaking: boolean; size?: "normal" | "large" }) => (
         <div className="relative flex items-center justify-center">
@@ -162,14 +147,13 @@ export default function SampleReviewPage() {
     const samplesRemaining = MAX_SAMPLE_CONVERSATIONS - (survey?.sampleConversationCount || 0);
     const canRetry = samplesRemaining > 0;
 
-    const isOwnerOrEditor = survey?.userId === user?.id || survey?.collaborators?.includes(user?.id || "");
+    const isOwnerOrEditor = Boolean(survey?.permission?.canEdit);
 
     // A workspace context exists if the current session is in a workspace
     // OR the survey itself belongs to an organization.
-    const isWorkspaceContext = !!(
-        (session as any)?.activeOrganizationId ||
-        survey?.organizationId
-    );
+    const isWorkspaceContext =
+        Boolean(survey?.organizationId) &&
+        (session?.activeOrganizationId || null) === (survey?.organizationId || null);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -187,6 +171,45 @@ export default function SampleReviewPage() {
         enabled: !!surveyId,
     });
 
+    const { data: rehearsalComments = [], refetch: refetchComments } = useQuery({
+        queryKey: ['sample-comments', surveyId, activeSampleNumber],
+        queryFn: async () => {
+            const result = await getRehearsalCommentsAction(surveyId, activeSampleNumber);
+            if (!result.success) return [];
+            return result.data;
+        },
+        enabled: !!surveyId && isWorkspaceContext,
+    });
+
+    useRealtime({
+        channels: surveyId && isWorkspaceContext ? [`survey:${surveyId}`] : [],
+        onEvent: async (event) => {
+            if (event.eventType === "survey.comment_added") {
+                refetchComments();
+            }
+            if (event.eventType === "survey.rehearsal_turn_added") {
+                if (event.payload?.conversationNumber === activeSampleNumber) {
+                    const response = await fetch(`/api/surveys/${surveyId}/sample?conversationNumber=${activeSampleNumber}`, {
+                        cache: "no-store",
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
+                        setMessages((data.messages || []).map((m: any, idx: number) => ({
+                            id: m.id || `hist-${idx}-${Date.now()}`,
+                            role: m.role,
+                            parts: m.parts || [{ type: 'text', text: m.content || "" }],
+                            timestamp: m.timestamp || new Date().toISOString()
+                        })));
+                    }
+                }
+                queryClient.invalidateQueries({ queryKey: ['sample-history', surveyId, activeSampleNumber] });
+            }
+            if (event.eventType === "survey.published") {
+                refetchSurvey();
+            }
+        },
+    });
+
     const { messages, setMessages, sendMessage, status } = useChat({
         id: `sample-${activeSampleNumber}`,
         messages: historyData?.messages || [],
@@ -194,7 +217,7 @@ export default function SampleReviewPage() {
             api: `/api/surveys/${surveyId}/sample`,
             body: { conversationNumber: activeSampleNumber },
         }),
-        onFinish: ({ message, isError, finishReason }: { message: any; isError: boolean; finishReason?: string }) => {
+        onFinish: ({ message, isError: _isError, finishReason }: { message: any; isError: boolean; finishReason?: string }) => {
             const messageText = message.parts
                 ?.filter((part: any) => part.type === "text")
                 .map((part: any) => part.text)
@@ -398,61 +421,10 @@ export default function SampleReviewPage() {
         }
     };
 
-    const handleRetry = async () => {
-        if (!canRetry) {
-            toast.error(t("Toasts.NoRetries"));
-            return;
-        }
-
-        setIsRetrying(true);
-        try {
-            // Save feedback and increment count
-            const response = await fetch(`/api/surveys/${surveyId}/sample/feedback`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ feedback }),
-            });
-
-            if (response.ok) {
-                getClientTranslation("Feedback applied. Starting new simulation...").then(toast.success);
-                setFeedback("");
-                setMessages([]);
-                setSelectedSampleNumber(null); // Reset to latest
-
-                // Refresh survey data to get new conversation count
-                await refetchSurvey(); // FIX: Using refetch instead of setSurvey
-
-                // Reconnect WS with new number if in voice mode
-                if (inputMode === "voice") {
-                    voiceWs.disconnect();
-                    setTimeout(() => voiceWs.connect(), 500);
-                }
-
-                // If in text mode, trigger greeting again
-                if (inputMode === "text") {
-                    // small delay to allow state reset
-                    setTimeout(() => {
-                        sendMessage({
-                            id: "init_ping_hidden",
-                            role: "user",
-                            parts: [{ type: 'text', text: "Start the conversation now. Greet the participant according to the system prompt instructions." }]
-                        } as any);
-                    }, 500);
-                }
-            } else {
-                getClientTranslation("Failed to apply feedback.").then(toast.error);
-            }
-        } catch (error) {
-            getClientTranslation("An error occurred. Please try again.").then(toast.error);
-        } finally {
-            setIsRetrying(false);
-        }
-    };
-
     // Opens the new publish modal and populates current title/desc
     const handleConfirm = () => {
         setPublishTitle(survey?.title || "");
-        setPublishDescription(survey?.description || survey?.expertState?.objective?.context || "");
+        setPublishDescription(survey?.description || survey?.brief?.learningContext || "");
         setIsPublishModalOpen(true);
     };
 
@@ -520,6 +492,7 @@ export default function SampleReviewPage() {
                 getClientTranslation("Comment added").then(toast.success);
                 setCommentText("");
                 refetchSurvey();
+                refetchComments();
             } else {
                 toast.error(result.error);
             }
@@ -551,7 +524,7 @@ export default function SampleReviewPage() {
                     onStart={handleStartSample}
                     initialLanguage={survey?.language || "en"}
                     title={survey?.title || "Sample Review"}
-                    description={survey?.expertState?.objective?.context || "Experience your survey exactly as a participant will."}
+                    description={survey?.brief?.learningContext || "Experience your survey exactly as a participant will."}
                     isVoice={survey?.isVoice}
                     t={t as any}
                 />
@@ -810,49 +783,7 @@ export default function SampleReviewPage() {
                 <div className="p-6 space-y-6 flex-1 overflow-y-auto">
                     {isOwnerOrEditor && (
                         <>
-                            <div>
-                                <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-1 flex items-center gap-2">
-                                    <MessageSquare className="w-3 h-3 text-gray-500" />
-                                    <ClientT>Simulation Feedback</ClientT>
-                                </h3>
-                                <p className="text-xs text-gray-500 leading-relaxed">
-                                    <ClientT>Is the AI not behaving as expected? Refine its logic by providing feedback below and restarting the simulation.</ClientT>
-                                </p>
-                            </div>
-
-                            <div className="space-y-3 pb-6 border-b border-gray-200">
-                                <textarea
-                                    value={feedback}
-                                    onChange={(e) => setFeedback(e.target.value)}
-                                    placeholder={placeholders.feedback}
-                                    className="w-full h-32 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-900/5 focus:border-gray-300 outline-none resize-none bg-white text-sm placeholder:text-gray-400"
-                                />
-
-                                <div className="flex items-center justify-between text-xs text-gray-400 px-1">
-                                    <span>{feedback.length} <ClientT>chars</ClientT></span>
-                                    <span>{samplesRemaining} <ClientT>retries left</ClientT></span>
-                                </div>
-
-                                <button
-                                    onClick={handleRetry}
-                                    disabled={!feedback.trim() || isRetrying || !canRetry || !isCompleted}
-                                    className={cn(
-                                        "w-full py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 shadow-sm",
-                                        feedback.trim() && canRetry && isCompleted
-                                            ? "bg-gray-900 text-white hover:bg-black"
-                                            : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                                    )}
-                                >
-                                    {isRetrying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
-                                    {isRetrying ? <ClientT>Applying...</ClientT> : <ClientT>Restart with Feedback</ClientT>}
-                                </button>
-
-                                {!canRetry && (
-                                    <div className="p-3 bg-amber-50 rounded-lg border border-amber-100 text-amber-800 text-xs mt-2">
-                                        <ClientT>Simulation limit reached for this version.</ClientT>
-                                    </div>
-                                )}
-                            </div>
+                            <RefinementAssistantPanel surveyId={surveyId} />
                         </>
                     )}
 
@@ -870,9 +801,25 @@ export default function SampleReviewPage() {
                             </div>
 
                             <div className="flex-1 overflow-y-auto mb-4 space-y-4">
-                                <div className="text-sm text-gray-500 italic p-4 bg-white rounded-xl border border-gray-100 shadow-sm text-center">
-                                    Comments are saved for your team to review.
-                                </div>
+                                {rehearsalComments.length === 0 ? (
+                                    <div className="text-sm text-gray-500 italic p-4 bg-white rounded-xl border border-gray-100 shadow-sm text-center">
+                                        Comments are saved for your team to review.
+                                    </div>
+                                ) : (
+                                    rehearsalComments.map((comment: any) => (
+                                        <div key={comment.id} className="rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
+                                            <div className="mb-1 flex items-center justify-between gap-3">
+                                                <span className="text-xs font-semibold text-gray-900">
+                                                    {comment.author?.name || comment.author?.email || "Workspace member"}
+                                                </span>
+                                                <span className="text-[11px] text-gray-400">
+                                                    {new Date(comment.createdAt).toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-gray-700 whitespace-pre-wrap">{comment.body}</p>
+                                        </div>
+                                    ))
+                                )}
                             </div>
 
                             <div className="mt-auto space-y-3">

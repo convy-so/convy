@@ -1,9 +1,6 @@
 import { Link } from "@/i18n/routing";
-import { useTranslations } from "next-intl";
 
 export default function CtaSection() {
-  const t = useTranslations('Landing.CTA');
-
   return (
     <section className="py-12 sm:py-24 bg-[#FAFAFA] px-4 sm:px-6 lg:px-12">
       <div className="mx-auto max-w-[1920px] flex justify-center">

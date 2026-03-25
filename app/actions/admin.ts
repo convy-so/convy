@@ -5,10 +5,7 @@ import { users, sessions } from "@/db/schema/auth";
 import { usageLogs } from "@/db/schema/billing";
 import { surveys } from "@/db/schema/surveys";
 import { sql, eq, gte, desc, count, sum } from "drizzle-orm";
-import { isAdmin } from "@/lib/auth/admin";
-import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { revalidatePath } from "next/cache";
 
 import { getRedisClient } from "@/lib/redis";
 import { env } from "@/lib/env";
@@ -184,33 +181,10 @@ export async function getSurveyReviewDetails(
     with: {
       user: true,
       creationConversation: true,
-      analytics: true,
+      brief: true,
     },
   });
 
   return survey;
 }
 
-/**
- * Submit expert improvement feedback for a survey.
- */
-export async function submitSurveyFeedback(
-  surveyId: string,
-  feedback: string,
-  authHeaders?: Headers | string | null,
-) {
-  await checkAdmin(authHeaders);
-
-  await getDb()
-    .update(surveys)
-    .set({
-      improvementFeedback: feedback,
-      updatedAt: new Date(),
-    })
-    .where(eq(surveys.id, surveyId));
-
-  revalidatePath(`/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/surveys/${surveyId}`);
-  revalidatePath("/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/surveys");
-
-  return { success: true };
-}

@@ -2,13 +2,15 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/components/providers/auth-provider";
-import { getCreationCommentsAction, postCreationCommentAction, updatePresenceAction, grantEditAccessAction, revokeEditAccessAction } from "@/app/actions/collaboration";
+import { getCreationCommentsAction, postCreationCommentAction, grantEditAccessAction, requestEditAccessAction, revokeEditAccessAction } from "@/app/actions/collaboration";
 import { getWorkspaceMembers } from "@/app/actions/workspace";
-import { Users, MessageSquare, Send, ShieldPlus, Loader2, X, Plus } from "lucide-react";
+import { Users, Send, ShieldPlus, Loader2, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { ClientT } from "@/components/i18n/client-t";
 import { getClientTranslation } from "@/app/actions/translate";
 import { cn } from "@/lib/utils";
+import { usePresence } from "@/hooks/use-presence";
+import { useRealtime } from "@/hooks/use-realtime";
 
 type Comment = {
     id: string;
@@ -31,20 +33,21 @@ type WorkspaceMember = {
 
 export function CollaborationSidebar({ 
     surveyId, 
+    workspaceId,
     isOwner, 
-    collaborators = [], 
+    editors = [], 
     isOpen, 
     onClose 
 }: { 
     surveyId: string; 
+    workspaceId?: string | null;
     isOwner: boolean; 
-    collaborators?: string[];
+    editors?: string[];
     isOpen: boolean;
     onClose: () => void;
 }) {
     const { user } = useAuth();
     const [comments, setComments] = useState<Comment[]>([]);
-    const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
     const [newComment, setNewComment] = useState("");
     const [isPosting, setIsPosting] = useState(false);
 
@@ -52,45 +55,68 @@ export function CollaborationSidebar({
     const [showAccessModal, setShowAccessModal] = useState(false);
     const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
     const [isLoadingMembers, setIsLoadingMembers] = useState(false);
-    const [currentCollaborators, setCurrentCollaborators] = useState<string[]>(collaborators);
+    const [currentEditors, setCurrentEditors] = useState<string[]>(editors);
+    const [isRequestingAccess, setIsRequestingAccess] = useState(false);
 
     const commentsEndRef = useRef<HTMLDivElement>(null);
+    const presence = usePresence({
+        workspaceId: workspaceId || "",
+        surveyId,
+    });
+
+    const activeUsers: ActiveUser[] = presence.users.map((user) => ({
+        id: user.userId,
+        name: user.name,
+    }));
 
     useEffect(() => {
-        let mounted = true;
-
-        const pollData = async () => {
+        const loadComments = async () => {
             if (!surveyId || !isOpen) return;
-
-            try {
-                const [presenceRes, commentsRes] = await Promise.all([
-                    updatePresenceAction(surveyId),
-                    getCreationCommentsAction(surveyId)
-                ]);
-
-                if (mounted && presenceRes.success) {
-                    setActiveUsers(presenceRes.data.activeUsers);
-                }
-
-                if (mounted && commentsRes.success) {
-                    setComments(commentsRes.data);
-                }
-            } catch (e) {
-                console.error("Polling error", e);
+            const commentsRes = await getCreationCommentsAction(surveyId);
+            if (commentsRes.success) {
+                setComments(commentsRes.data);
             }
         };
 
-        pollData();
-        const interval = setInterval(pollData, 5000);
-        return () => {
-            mounted = false;
-            clearInterval(interval);
-        };
+        loadComments().catch((error) => {
+            console.error("Failed to load collaboration comments", error);
+        });
     }, [surveyId, isOpen]);
+
+    useRealtime({
+        channels: isOpen ? [`survey:${surveyId}`] : [],
+        onEvent: (event) => {
+            if (event.eventType === "survey.comment_added" || event.eventType === "survey.editor_granted" || event.eventType === "survey.editor_revoked") {
+                getCreationCommentsAction(surveyId).then((result) => {
+                    if (result.success) {
+                        setComments(result.data);
+                    }
+                });
+            }
+
+            if (event.eventType === "survey.editor_granted" && event.payload?.userId) {
+                setCurrentEditors((prev) =>
+                    prev.includes(event.payload.userId)
+                        ? prev
+                        : [...prev, event.payload.userId],
+                );
+            }
+
+            if (event.eventType === "survey.editor_revoked" && event.payload?.userId) {
+                setCurrentEditors((prev) =>
+                    prev.filter((id) => id !== event.payload.userId),
+                );
+            }
+        },
+    });
 
     useEffect(() => {
         commentsEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [comments]);
+
+    useEffect(() => {
+        setCurrentEditors(editors);
+    }, [editors]);
 
     const loadMembers = async () => {
         setIsLoadingMembers(true);
@@ -123,14 +149,25 @@ export function CollaborationSidebar({
 
     const handleManageAccess = async (userIdToGrant: string, action: "grant" | "revoke") => {
         if (action === "grant") {
-            setCurrentCollaborators(prev => [...prev, userIdToGrant]);
+            setCurrentEditors(prev => [...prev, userIdToGrant]);
             const res = await grantEditAccessAction({ surveyId, userIdToGrant });
             if (!res.success) toast.error(res.error);
         } else {
-            setCurrentCollaborators(prev => prev.filter(id => id !== userIdToGrant));
+            setCurrentEditors(prev => prev.filter(id => id !== userIdToGrant));
             const res = await revokeEditAccessAction({ surveyId, userIdToGrant });
             if (!res.success) toast.error(res.error);
         }
+    };
+
+    const handleRequestAccess = async () => {
+        setIsRequestingAccess(true);
+        const result = await requestEditAccessAction(surveyId);
+        if (result.success) {
+            toast.success("Editor access request sent");
+        } else {
+            toast.error(result.error);
+        }
+        setIsRequestingAccess(false);
     };
 
     return (
@@ -168,6 +205,16 @@ export function CollaborationSidebar({
                         >
                             <ShieldPlus className="w-3.5 h-3.5" />
                             <ClientT>Access</ClientT>
+                        </button>
+                    )}
+                    {!isOwner && user && !currentEditors.includes(user.id) && (
+                        <button
+                            onClick={handleRequestAccess}
+                            disabled={isRequestingAccess}
+                            className="text-xs font-medium text-indigo-600 bg-white hover:bg-indigo-50 px-2.5 py-1.5 rounded-md flex items-center gap-1 transition border border-indigo-100 disabled:opacity-50"
+                        >
+                            {isRequestingAccess ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldPlus className="w-3.5 h-3.5" />}
+                            <ClientT>Request Edit Access</ClientT>
                         </button>
                     )}
                 </div>
@@ -239,7 +286,7 @@ export function CollaborationSidebar({
                             ) : (
                                 workspaceMembers.map((member) => {
                                     if (member.user.email === user?.email) return null; // Don't show self
-                                    const hasAccess = currentCollaborators.includes(member.userId);
+                                    const hasAccess = currentEditors.includes(member.userId);
                                     return (
                                         <div key={member.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 bg-gray-50/50">
                                             <div className="flex items-center gap-3">

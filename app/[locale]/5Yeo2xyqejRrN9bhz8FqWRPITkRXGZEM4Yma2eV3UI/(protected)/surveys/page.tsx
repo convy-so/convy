@@ -5,8 +5,6 @@ import {
     MessageSquare,
     User as UserIcon,
     Calendar,
-    CheckCircle2,
-    Circle,
     ChevronRight,
     Loader2
 } from "lucide-react";
@@ -21,7 +19,7 @@ export default async function AdminSurveysPage({ params }: { params: Promise<{ l
         <div className="space-y-6">
             <div>
                 <h1 className="text-2xl font-bold text-gray-900">Survey Expert Review</h1>
-                <p className="text-gray-500">Review created surveys and provide feedback for improvement.</p>
+                <p className="text-gray-500">Review created surveys and inspect their canonical research setup.</p>
             </div>
 
             <Suspense
@@ -64,7 +62,6 @@ async function SurveysList({ cookieHeader }: { cookieHeader: string | null }) {
                             <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Creator</th>
                             <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                             <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Created</th>
-                            <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Feedback</th>
                             <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Actions</th>
                         </tr>
                     </thead>
@@ -103,19 +100,6 @@ async function SurveysList({ cookieHeader }: { cookieHeader: string | null }) {
                                         <Calendar className="w-3 h-3" />
                                         {format(new Date(survey.createdAt), "MMM d, yyyy")}
                                     </div>
-                                </td>
-                                <td className="px-6 py-4">
-                                    {survey.improvementFeedback ? (
-                                        <div className="flex items-center gap-1.5 text-emerald-600">
-                                            <CheckCircle2 className="w-4 h-4" />
-                                            <span className="text-xs font-medium">Reviewed</span>
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-center gap-1.5 text-gray-400">
-                                            <Circle className="w-4 h-4" />
-                                            <span className="text-xs">Pending</span>
-                                        </div>
-                                    )}
                                 </td>
                                 <td className="px-6 py-4 text-right">
                                     <Link

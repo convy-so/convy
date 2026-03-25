@@ -109,7 +109,7 @@ export function useCreateProject() {
     onSuccess: () => {
       toast.success("Project created");
     },
-    onError: (err, newProject, context: any) => {
+    onError: (err, _newProject, context: any) => {
       toast.error(err.message);
       // Rollback to the previous value
       queryClient.setQueryData(

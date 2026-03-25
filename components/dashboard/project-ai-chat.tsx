@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Sparkles, Send, X,ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { extractAIGeneratedResponse } from "@/lib/ai-utils";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 
 import { InferSelectModel } from "drizzle-orm";

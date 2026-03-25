@@ -20,7 +20,7 @@ export const queryKeys = {
     detail: (surveyId: string) => ["survey", surveyId] as const,
     responses: (surveyId: string, page: number, status: string) =>
       ["surveyResponses", surveyId, page, status] as const,
-    analytics: (surveyId: string) => ["surveyAnalytics", surveyId] as const,
+    analytics: (surveyId: string) => ["analyticsSnapshot", surveyId] as const,
     extraction: (surveyId: string) => ["surveyExtraction", surveyId] as const,
   },
 

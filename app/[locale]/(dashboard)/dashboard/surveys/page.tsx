@@ -12,7 +12,6 @@ import {
   Edit,
   Trash2,
   Copy,
-  BarChart3,
   MessageSquare,
   MoreVertical,
   Clock,
@@ -43,7 +42,8 @@ import { getClientTranslation } from "@/app/actions/translate";
 interface Survey {
   id: string;
   title: string;
-  expertState?: any;
+  brief?: any;
+  coreObjective?: string;
   status: string;
   shareableLink?: string;
   responses: number;
@@ -66,7 +66,6 @@ function SurveysContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [surveyToDelete, setSurveyToDelete] = useState<{ id: string; title: string } | null>(null);
-  const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [isPageSizeOpen, setIsPageSizeOpen] = useState(false);
@@ -138,9 +137,7 @@ function SurveysContent() {
   const handleCopyLink = async (shareableLink: string) => {
     try {
       await navigator.clipboard.writeText(shareableLink);
-      setCopiedLink(shareableLink);
       toast.success(t("Card.Toasts.LinkCopied") || "Link copied to clipboard!");
-      setTimeout(() => setCopiedLink(null), 2000);
     } catch (error) {
       toast.error(t("Card.Toasts.CopyFailed") || "Failed to copy link.");
     }
@@ -180,7 +177,9 @@ function SurveysContent() {
     if (searchQuery) {
       result = result.filter(s =>
         s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.expertState?.objective?.goal?.toLowerCase().includes(searchQuery.toLowerCase())
+        s.coreObjective?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.brief?.researchGoal?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.brief?.learningContext?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -371,7 +370,7 @@ function SurveysContent() {
                       )}
                     </div>
                     <p className="text-sm text-gray-500 truncate max-w-md">
-                      {survey.expertState?.objective?.goal || "No description provided"}
+                      {survey.coreObjective || survey.brief?.researchGoal || survey.brief?.learningContext || "No description provided"}
                     </p>
                   </div>
                 </div>

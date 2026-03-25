@@ -22,32 +22,17 @@ Sentry.init({
 
 process.env.IS_WORKER = "true";
 
-
-import { env } from "@/lib/env";
-
 import { testRedisConnection } from "@/lib/redis";
 
 import conversationInsightsWorker from "./conversation-insights.worker";
 import surveyAnalyticsWorker from "./survey-analytics.worker";
-import sampleConversationInsightsWorker from "./sample-conversation-insights.worker";
 import emailWorker from "./email.worker";
-import surveyCreationExtractionWorker from "./survey-creation-extraction.worker";
-import generativeSummaryWorker from "./generative-summary.worker";
 
 // Collect all workers for coordinated shutdown
 const workers = [
   { name: "Conversation Insights", worker: conversationInsightsWorker },
   { name: "Survey Analytics", worker: surveyAnalyticsWorker },
-  {
-    name: "Sample Conversation Insights",
-    worker: sampleConversationInsightsWorker,
-  },
   { name: "Email", worker: emailWorker },
-  {
-    name: "Survey Creation Extraction",
-    worker: surveyCreationExtractionWorker,
-  },
-  { name: "Generative Summary", worker: generativeSummaryWorker },
 ];
 
 console.log("🚀 Starting all workers...");

@@ -1,22 +1,22 @@
-import { eq, and } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { NextResponse } from "next/server";
+
 import { getDb } from "@/db";
 import {
+  surveyCoveragePlans,
+  surveyEvidence,
+  surveySessionInsights,
+  surveySessions,
+  surveyTurns,
   surveys,
-  surveyConversations,
-  conversationInsights,
 } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
+import type { AnalyticsSessionDetail } from "@/lib/analytics";
+import { getSurveyPermissionContext } from "@/lib/workspace-access";
 
-/**
- * GET /api/surveys/[surveyId]/responses/[responseId]
- *
- * Returns detailed information for a specific response (conversation),
- * including the transcript, duration, status, and AI-generated insights.
- */
 export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ surveyId: string; responseId: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ surveyId: string; responseId: string }> },
 ) {
   try {
     const session = await getVerifiedSession();
@@ -35,85 +35,113 @@ export async function GET(
       return NextResponse.json({ error: "Survey not found" }, { status: 404 });
     }
 
-    if (survey.userId !== session.user.id) {
+    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
+    if (!permission?.canView) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    // 2. Fetch the conversation (response)
-    // We check both ID and SurveyID to ensure integrity
-    const [conversation] = await getDb()
+    const [sessionRow] = await getDb()
       .select()
-      .from(surveyConversations)
+      .from(surveySessions)
       .where(
         and(
-          eq(surveyConversations.id, responseId),
-          eq(surveyConversations.surveyId, surveyId)
-        )
+          eq(surveySessions.surveyId, surveyId),
+          or(
+            eq(surveySessions.id, responseId),
+            eq(surveySessions.sourceConversationId, responseId),
+          ),
+        ),
       );
 
-    if (!conversation) {
+    if (!sessionRow) {
       return NextResponse.json({ error: "Response not found" }, { status: 404 });
     }
 
-    // 3. Fetch insights if they exist
-    const [insights] = await getDb()
-      .select()
-      .from(conversationInsights)
-      .where(eq(conversationInsights.conversationId, responseId));
+    const [insightRow, turnRows, evidenceRows, activePlan] = await Promise.all([
+      getDb()
+        .select()
+        .from(surveySessionInsights)
+        .where(eq(surveySessionInsights.sessionId, sessionRow.id))
+        .then((rows) => rows[0]),
+      getDb()
+        .select()
+        .from(surveyTurns)
+        .where(eq(surveyTurns.sessionId, sessionRow.id)),
+      getDb()
+        .select()
+        .from(surveyEvidence)
+        .where(eq(surveyEvidence.sessionId, sessionRow.id)),
+      getDb()
+        .select()
+        .from(surveyCoveragePlans)
+        .where(
+          and(
+            eq(surveyCoveragePlans.surveyId, surveyId),
+            eq(surveyCoveragePlans.isActive, true),
+          ),
+        )
+        .then((rows) => rows[0]),
+    ]);
 
-    // 4. Transform data for frontend
-    const insightsData = (insights?.insights as Record<string, any>) || {};
+    const insight = insightRow?.insight as any;
+    const nodeCoverageMap = sessionRow.sessionState.coverageByNode || {};
+    const planNodes = activePlan?.plan.nodes || [];
 
-    // Calculate duration from raw conversation if not in insights
-    let duration = insightsData.durationMinutes 
-        ? `${Math.round(insightsData.durationMinutes)} min` 
-        : "N/A";
-        
-    // If we have raw conversation timestamps, we can be more precise if insights are missing
-    if (duration === "N/A" && conversation.rawConversation && conversation.rawConversation.length > 0) {
-        // @ts-ignore
-        const firstMsg = conversation.rawConversation[0];
-        // @ts-ignore
-        const lastMsg = conversation.rawConversation[conversation.rawConversation.length - 1];
-        if (firstMsg?.timestamp && lastMsg?.timestamp) {
-            // Timestamps are usually "HH:MM:SS" string in current implementation
-            // Rough calculation or just keep it simple if it's display only
-            duration = "unknown"; 
-        }
-    }
-
-    const response = {
-      id: conversation.id,
+    const payload: AnalyticsSessionDetail = {
+      id: sessionRow.id,
       surveyId: survey.id,
       surveyTitle: survey.title,
-      participantId: conversation.participantId || "Anonymous",
-      startedAt: conversation.createdAt.toISOString(),
-      completedAt: conversation.completed ? conversation.updatedAt.toISOString() : null, // Approx
-      duration: insightsData.durationMinutes ? `${Math.floor(insightsData.durationMinutes)}m ${Math.round((insightsData.durationMinutes % 1) * 60)}s` : "In Progress",
-      status: conversation.completed ? "completed" : "in_progress",
-      
-      // Insights Data (fallbacks if missing)
-      sentiment: insightsData.sentiment?.overall || null,
-      sentimentScore: insightsData.sentiment?.score || 0,
-      keyInsights: insights?.keyFindings?.split("\n\n") || [],
-      summary: conversation.summary || insightsData.summary || "No summary available yet.",
-      
-      // Conversation Transcript
-      conversation: conversation.rawConversation || [],
+      sessionType: sessionRow.sessionType,
+      sourceConversationId: sessionRow.sourceConversationId,
+      startedAt: sessionRow.createdAt.toISOString(),
+      completedAt: sessionRow.completedAt?.toISOString() ?? null,
+      status: sessionRow.sessionStatus,
+      summary:
+        insight?.summary ||
+        sessionRow.summary ||
+        "No session summary is available yet.",
+      keyFindings: Array.isArray(insight?.keyFindings) ? insight.keyFindings : [],
+      risks: Array.isArray(insight?.risks) ? insight.risks : [],
+      reliabilityPercent: Math.round(
+        (sessionRow.sessionState.reliabilityScore || 0) * 100,
+      ),
+      completenessPercent: Math.round(
+        (sessionRow.sessionState.overallCoverage || 0) * 100,
+      ),
+      fatiguePercent: Math.round(
+        (sessionRow.sessionState.fatigueScore || 0) * 100,
+      ),
+      nodeCoverage: planNodes.map((node: any) => ({
+        id: node.id,
+        label: node.label,
+        description: node.description,
+        coveragePercent: Math.round((nodeCoverageMap[node.id] || 0) * 100),
+      })),
+      notableQuotes: Array.isArray(insight?.notableQuotes) ? insight.notableQuotes : [],
+      evidence: evidenceRows.map((row) => row.metadata as any),
+      transcript: turnRows
+        .sort((a, b) => a.turnIndex - b.turnIndex)
+        .map((turn) => ({
+          id: turn.id,
+          role: turn.role,
+          content: turn.content,
+        })),
     };
 
-    return NextResponse.json(response);
-
+    return NextResponse.json(payload);
   } catch (error) {
-    if (error instanceof Error) {
-        if (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED") {
-            return NextResponse.json({ error: error.message }, { status: 401 });
-        }
+    if (
+      error instanceof Error &&
+      (error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED")
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
     }
+
     console.error("[Response Details API] Error:", error);
     return NextResponse.json(
       { error: "Failed to fetch response details" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

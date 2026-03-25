@@ -2,14 +2,17 @@
 
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { eq, and, isNull, count, sum, getTableColumns, sql } from "drizzle-orm";
+import { eq, and, isNull, count, sum, getTableColumns } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { projects, surveys, surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { isWorkspaceOwner, isWorkspaceMember } from "@/lib/workspace-access";
+import { isWorkspaceMember } from "@/lib/workspace-access";
 import { cache, cacheKeys } from "@/lib/cache";
-import { publishWorkspaceEvent } from "@/lib/redis-events";
+import {
+  publishPendingOutboxEntries,
+  recordRealtimeEvent,
+} from "@/lib/collaboration-service";
 
 type ActionResult<T> =
   | { success: true; data: T }
@@ -40,14 +43,36 @@ export async function createProjectAction(
 
     const projectId = nanoid();
 
-    await getDb().insert(projects).values({
-      id: projectId,
-      userId: session.user.id,
-      organizationId: activeOrgId,
-      name: body.name,
-      description: body.description,
-      color: body.color,
-      icon: body.icon,
+    await getDb().transaction(async (tx) => {
+      await tx.insert(projects).values({
+        id: projectId,
+        userId: session.user.id,
+        organizationId: activeOrgId,
+        name: body.name,
+        description: body.description,
+        color: body.color,
+        icon: body.icon,
+      });
+
+      if (activeOrgId) {
+        await recordRealtimeEvent(tx, {
+          scope: "workspace",
+          workspaceId: activeOrgId,
+          eventType: "workspace.project_created",
+          actorId: session.user.id,
+          payload: {
+            workspaceId: activeOrgId,
+            project: {
+              id: projectId,
+              name: body.name,
+              description: body.description ?? null,
+              color: body.color ?? null,
+              icon: body.icon ?? null,
+              userId: session.user.id,
+            },
+          },
+        });
+      }
     });
 
     // Invalidate dashboard cache
@@ -56,21 +81,8 @@ export async function createProjectAction(
       cacheKeys.dashboardRecentSurveys(session.user.id, activeOrgId),
     );
 
-    // Publish event for real-time synchronization
     if (activeOrgId) {
-      publishWorkspaceEvent({
-        type: "PROJECT_CREATED",
-        workspaceId: activeOrgId,
-        userId: session.user.id,
-        userName: session.user.name,
-        data: {
-          id: projectId,
-          name: body.name,
-          color: body.color,
-          icon: body.icon,
-        },
-        timestamp: new Date().toISOString(),
-      }).catch((err) => console.error("Failed to publish project creation event:", err));
+      await publishPendingOutboxEntries();
     }
 
     return { success: true, data: { id: projectId } };
@@ -439,10 +451,28 @@ export async function updateProjectAction(
     if (body.color !== undefined) updateData.color = body.color;
     if (body.icon !== undefined) updateData.icon = body.icon;
 
-    await getDb()
-      .update(projects)
-      .set(updateData)
-      .where(eq(projects.id, body.id));
+    await getDb().transaction(async (tx) => {
+      await tx
+        .update(projects)
+        .set(updateData)
+        .where(eq(projects.id, body.id));
+
+      if (project.organizationId) {
+        await recordRealtimeEvent(tx, {
+          scope: "workspace",
+          workspaceId: project.organizationId,
+          eventType: "workspace.project_updated",
+          actorId: session.user.id,
+          payload: {
+            workspaceId: project.organizationId,
+            project: {
+              id: body.id,
+              ...updateData,
+            },
+          },
+        });
+      }
+    });
 
     // Invalidate dashboard cache
     await cache.delete(
@@ -452,21 +482,8 @@ export async function updateProjectAction(
       cacheKeys.dashboardRecentSurveys(session.user.id, project.organizationId),
     );
 
-    // Publish event for real-time synchronization
     if (project.organizationId) {
-      publishWorkspaceEvent({
-        type: "PROJECT_UPDATED",
-        workspaceId: project.organizationId,
-        userId: session.user.id,
-        userName: session.user.name,
-        data: {
-          id: body.id,
-          name: body.name,
-          color: body.color,
-          icon: body.icon,
-        },
-        timestamp: new Date().toISOString(),
-      }).catch((err) => console.error("Failed to publish project update event:", err));
+      await publishPendingOutboxEntries();
     }
 
     return { success: true, data: { id: body.id } };
@@ -490,41 +507,33 @@ export async function deleteProjectAction(
       return { success: false, error: "Project not found" };
     }
 
-    let isAuthorized = false;
-
-    if (project.organizationId) {
-      if (project.userId === session.user.id) {
-        const { isWorkspaceMember } = await import("@/lib/workspace-access");
-        const isMember = await isWorkspaceMember(
-          session.user.id,
-          project.organizationId,
-        );
-        if (isMember) {
-          isAuthorized = true;
-        }
-      } else {
-        const { isWorkspaceOwner } = await import("@/lib/workspace-access");
-        isAuthorized = await isWorkspaceOwner(
-          session.user.id,
-          project.organizationId,
-        );
-      }
-    } else {
-      if (project.userId === session.user.id) {
-        isAuthorized = true;
-      }
-    }
+    const isAuthorized = project.userId === session.user.id;
 
     if (!isAuthorized) {
       return { success: false, error: "Unauthorized" };
     }
 
-    await getDb()
-      .update(surveys)
-      .set({ projectId: null })
-      .where(eq(surveys.projectId, id));
+    await getDb().transaction(async (tx) => {
+      await tx
+        .update(surveys)
+        .set({ projectId: null })
+        .where(eq(surveys.projectId, id));
 
-    await getDb().delete(projects).where(eq(projects.id, id));
+      await tx.delete(projects).where(eq(projects.id, id));
+
+      if (project.organizationId) {
+        await recordRealtimeEvent(tx, {
+          scope: "workspace",
+          workspaceId: project.organizationId,
+          eventType: "workspace.project_deleted",
+          actorId: session.user.id,
+          payload: {
+            workspaceId: project.organizationId,
+            projectId: id,
+          },
+        });
+      }
+    });
 
     // Invalidate dashboard cache
     await cache.delete(
@@ -534,22 +543,86 @@ export async function deleteProjectAction(
       cacheKeys.dashboardRecentSurveys(session.user.id, project.organizationId),
     );
 
-    // Publish event for real-time synchronization
     if (project.organizationId) {
-      publishWorkspaceEvent({
-        type: "PROJECT_DELETED",
-        workspaceId: project.organizationId,
-        userId: session.user.id,
-        userName: session.user.name,
-        data: {
-          id,
-        },
-        timestamp: new Date().toISOString(),
-      }).catch((err) => console.error("Failed to publish project deletion event:", err));
+      await publishPendingOutboxEntries();
     }
 
     return { success: true, data: undefined };
   } catch (error) {
     return { success: false, error: "Failed to delete project" };
+  }
+}
+
+export async function transferProjectOwnershipAction(input: {
+  projectId: string;
+  newOwnerUserId: string;
+}): Promise<ActionResult<void>> {
+  try {
+    const session = await getVerifiedSession();
+
+    const [project] = await getDb()
+      .select()
+      .from(projects)
+      .where(eq(projects.id, input.projectId));
+
+    if (!project) {
+      return { success: false, error: "Project not found" };
+    }
+
+    if (!project.organizationId) {
+      return {
+        success: false,
+        error: "Project ownership transfer is only supported in workspaces",
+      };
+    }
+
+    const isMember = await isWorkspaceMember(
+      input.newOwnerUserId,
+      project.organizationId,
+    );
+    if (!isMember) {
+      return {
+        success: false,
+        error: "New owner must be a member of the workspace",
+      };
+    }
+
+    if (project.userId !== session.user.id) {
+      const { isWorkspaceOwner } = await import("@/lib/workspace-access");
+      const isOwner = await isWorkspaceOwner(
+        session.user.id,
+        project.organizationId,
+      );
+      if (!isOwner) {
+        return { success: false, error: "Unauthorized" };
+      }
+    }
+
+    await getDb().transaction(async (tx) => {
+      await tx
+        .update(projects)
+        .set({ userId: input.newOwnerUserId, updatedAt: new Date() })
+        .where(eq(projects.id, input.projectId));
+
+      await recordRealtimeEvent(tx, {
+        scope: "workspace",
+        workspaceId: project.organizationId,
+        eventType: "workspace.project_updated",
+        actorId: session.user.id,
+        payload: {
+          workspaceId: project.organizationId,
+          project: {
+            id: project.id,
+            userId: input.newOwnerUserId,
+          },
+        },
+      });
+    });
+    await publishPendingOutboxEntries();
+
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error("Error transferring project ownership:", error);
+    return { success: false, error: "Failed to transfer project ownership" };
   }
 }

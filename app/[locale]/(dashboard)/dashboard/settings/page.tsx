@@ -5,16 +5,12 @@ import {
     User,
     Bell,
     Shield,
-
     Key,
-    Mail,
-    Smartphone,
     Check,
     Loader2,
     Camera,
     AlertCircle,
     Globe,
-    LogOut,
     CreditCard
 } from "lucide-react";
 import { usePathname, useRouter } from "@/i18n/routing";
@@ -27,6 +23,7 @@ import { useTranslations } from "next-intl";
 import { getClientTranslation, updateUserLanguage } from "@/app/actions/translate";
 import { SupportedLanguage } from "@/lib/i18n/ai-translator";
 import { ClientT } from "@/components/i18n/client-t";
+import { useRealtime } from "@/hooks/use-realtime";
 
 export default function SettingsPage() {
     const { user, session } = useAuth();
@@ -56,11 +53,8 @@ export default function SettingsPage() {
 
     const tabs = [
         { id: "profile", name: t("Tabs.Profile"), icon: User },
-        // Workspace and Billing tabs only shown to owners in workspace context
-        ...(isWorkspaceContext && isOwner ? [
-            { id: "workspace", name: t("Tabs.Workspace"), icon: Key },
-            { id: "billing", name: t("Tabs.Billing") || "Billing", icon: CreditCard }
-        ] : []),
+        ...(isWorkspaceContext ? [{ id: "workspace", name: t("Tabs.Workspace"), icon: Key }] : []),
+        ...(isWorkspaceContext && isOwner ? [{ id: "billing", name: t("Tabs.Billing") || "Billing", icon: CreditCard }] : []),
         { id: "notifications", name: t("Tabs.Notifications"), icon: Bell },
         { id: "preferences", name: t("Tabs.Preferences"), icon: Globe },
         { id: "security", name: t("Tabs.Security"), icon: Shield },
@@ -114,30 +108,26 @@ export default function SettingsPage() {
         loadWorkspace();
     }, []);
 
-    // Listen for real-time workspace updates
-    useEffect(() => {
-        if (!session?.activeOrganizationId) return;
-
-        const handleWorkspaceUpdate = (event: any) => {
-            const data = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
-            
-            if (data.type === "WORKSPACE_UPDATED" && data.workspaceId === session.activeOrganizationId) {
-                if (data.data.name) setWsName(data.data.name);
-                if (data.data.slug) setWsSlug(data.data.slug);
-                if (data.data.logo !== undefined) setWsLogo(data.data.logo);
-                
-                setActiveWorkspace(prev => prev ? {
-                    ...prev,
-                    name: data.data.name || prev.name,
-                    slug: data.data.slug || prev.slug,
-                    logo: data.data.logo !== undefined ? data.data.logo : prev.logo
-                } : null);
+    useRealtime({
+        channels: session?.activeOrganizationId ? [`workspace:${session.activeOrganizationId}`] : [],
+        onEvent: (event) => {
+            if (event.eventType !== "workspace.settings_updated" || event.workspaceId !== session?.activeOrganizationId) {
+                return;
             }
-        };
 
-        window.addEventListener('convy-workspace-event', handleWorkspaceUpdate);
-        return () => window.removeEventListener('convy-workspace-event', handleWorkspaceUpdate);
-    }, [session?.activeOrganizationId]);
+            const updates = event.payload?.updates || {};
+            if (updates.name) setWsName(updates.name);
+            if (updates.slug) setWsSlug(updates.slug);
+            if (updates.logo !== undefined) setWsLogo(updates.logo);
+
+            setActiveWorkspace(prev => prev ? {
+                ...prev,
+                name: updates.name || prev.name,
+                slug: updates.slug || prev.slug,
+                logo: updates.logo !== undefined ? updates.logo : prev.logo
+            } : null);
+        },
+    });
 
     const handleProfileSave = async () => {
         setIsSaving(true);
@@ -194,6 +184,10 @@ export default function SettingsPage() {
 
     const handleWorkspaceSave = async () => {
         if (!activeWorkspace) return;
+        if (!isOwner) {
+            toast.error(await getClientTranslation("Only the workspace owner can update workspace settings"));
+            return;
+        }
         setIsSaving(true);
         try {
             const result = await updateWorkspace({
@@ -409,6 +403,11 @@ export default function SettingsPage() {
                                     </div>
                                 ) : (
                                     <div className="space-y-6">
+                                        {!isOwner && (
+                                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                                                <ClientT>Workspace settings are visible to members, but only the workspace owner can change them.</ClientT>
+                                            </div>
+                                        )}
                                         {/* Workspace Logo */}
                                         <div className="flex items-center gap-5">
                                             <div className="relative">
@@ -429,6 +428,7 @@ export default function SettingsPage() {
                                                         type="file"
                                                         accept="image/*"
                                                         className="hidden"
+                                                        disabled={!isOwner}
                                                         onChange={(e) => {
                                                             const file = e.target.files?.[0];
                                                             if (file) {
@@ -448,6 +448,7 @@ export default function SettingsPage() {
                                                 {wsLogo && (
                                                     <button
                                                         onClick={() => setWsLogo(null)}
+                                                        disabled={!isOwner}
                                                         className="text-xs text-red-500 hover:text-red-600 mt-1"
                                                     >
                                                         <ClientT>Remove</ClientT>
@@ -465,6 +466,7 @@ export default function SettingsPage() {
                                                     type="text"
                                                     value={wsName}
                                                     onChange={(e) => setWsName(e.target.value)}
+                                                    disabled={!isOwner}
                                                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
                                                 />
                                             </div>
@@ -480,6 +482,7 @@ export default function SettingsPage() {
                                                         type="text"
                                                         value={wsSlug}
                                                         onChange={(e) => setWsSlug(e.target.value)}
+                                                        disabled={!isOwner}
                                                         className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
                                                     />
                                                 </div>
@@ -493,7 +496,7 @@ export default function SettingsPage() {
                                 <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
                                     <button
                                         onClick={handleSave}
-                                        disabled={isSaving}
+                                        disabled={isSaving || !isOwner}
                                         className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-xl font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50 shadow-sm"
                                     >
                                         {isSaving ? (

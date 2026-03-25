@@ -1,11 +1,8 @@
 import { Link } from "@/i18n/routing";
 import { ArrowUpRight } from "lucide-react";
 import MacWindow from "./mac-window";
-import { useTranslations } from "next-intl";
 
 export default function HeroSection() {
-    const t = useTranslations('Landing.Hero');
-
     return (
         <div className="min-h-screen bg-[#FAFAFA]">
             <section className="mx-auto max-w-[1920px] px-4 sm:px-6 lg:px-12 pt-[30px] pb-20 sm:pb-32">

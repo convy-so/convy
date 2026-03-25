@@ -1,29 +1,55 @@
-import { nanoid } from "nanoid";
 import { eq } from "drizzle-orm";
-import {
-  stepCountIs,
-  createUIMessageStream,
-  createUIMessageStreamResponse,
-  type ModelMessage,
-} from "ai";
+import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
+import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
 import { surveyConversations, surveys } from "@/db/schema";
-import { chatRateLimiter, getClientIP } from "@/lib/ratelimit";
-import { normalizeMessages, extractAIGeneratedResponse } from "@/lib/ai";
+import { generateAIResponse } from "@/lib/ai";
 import {
-  logPromptInjectionAttempt,
-  sanitizeUserInput,
-} from "@/lib/prompt-injection-detection";
-import { buildCompleteSurveyConfig } from "@/lib/surveys";
-import { ConversationManager } from "@/lib/conversation-manager";
-import { TranscriptTurn } from "@/lib/memory-bridge";
-import { ExpertStateStore } from "@/lib/expert-state-store";
-import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
-import { domainBrain } from "@/lib/domain-brain";
-import { StreamFieldExtractor } from "@/lib/agents/streaming/stream-field-extractor";
+  buildConductingSystemPrompt,
+  createInitialSessionState,
+  finalizeConductingTurn,
+} from "@/lib/education/conducting-runtime";
+import {
+  ensureSession,
+  getActiveConductingProfile,
+  getActiveCoveragePlan,
+  getResearchBrief,
+  getSessionBySourceId,
+} from "@/lib/education/storage";
+import { chatRateLimiter, getClientIP } from "@/lib/ratelimit";
+import { enqueueConversationInsights } from "@/lib/queue";
+import { getConductingRuntimeLayers } from "@/lib/education/runtime-context";
 
-import type { AgentContext } from "@/lib/agents/types";
+type ChatMessage = {
+  id?: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp?: string;
+};
+
+function normalizeMessages(messages: any[]): ChatMessage[] {
+  return messages
+    .map((message) => {
+      const content =
+        typeof message.content === "string"
+          ? message.content
+          : Array.isArray(message.parts)
+            ? message.parts
+                .filter((part: any) => part.type === "text")
+                .map((part: any) => part.text)
+                .join("")
+            : "";
+
+      return {
+        id: message.id,
+        role: message.role,
+        content,
+        timestamp: message.timestamp || new Date().toISOString(),
+      } as ChatMessage;
+    })
+    .filter((message) => message.role === "user" || message.role === "assistant");
+}
 
 export const maxDuration = 300;
 
@@ -34,7 +60,6 @@ export async function POST(
   try {
     const clientIP = getClientIP(request);
     const rateLimitResult = await chatRateLimiter.limit(clientIP);
-
     if (!rateLimitResult.success) {
       return new Response(
         JSON.stringify({
@@ -43,362 +68,243 @@ export async function POST(
         }),
         {
           status: 429,
-          headers: {
-            "Content-Type": "application/json",
-            "Retry-After": rateLimitResult.reset.toString(),
-            "X-RateLimit-Limit": "20",
-            "X-RateLimit-Remaining": rateLimitResult.remaining.toString(),
-            "X-RateLimit-Reset": rateLimitResult.reset.toString(),
-          },
+          headers: { "Content-Type": "application/json" },
         },
       );
     }
 
     const { surveyId } = await params;
-    const body = await request.json();
-    const { messages, conversationId } = body as {
-      messages: Array<any>;
+    const body = (await request.json()) as {
+      messages?: any[];
       conversationId?: string;
+      language?: string;
     };
 
-    if (!Array.isArray(messages) || messages.length === 0) {
+    const visibleMessages = normalizeMessages(Array.isArray(body.messages) ? body.messages : []);
+    if (visibleMessages.length === 0) {
       return new Response("Invalid messages", { status: 400 });
     }
 
-    const normalizedMessages = await normalizeMessages(messages);
-
-    const sanitizedMessages = normalizedMessages.map((msg) => {
-      if (msg.role === "user") {
-        const textContent = typeof msg.content === "string" ? msg.content : "";
-        logPromptInjectionAttempt(textContent, {
-          surveyId,
-          conversationId,
-        });
-        return {
-          ...msg,
-          content: sanitizeUserInput(textContent),
-        };
-      }
-      return msg;
-    });
-
-    const [survey] = await getDb()
+    const survey = await getDb()
       .select()
       .from(surveys)
-      .where(eq(surveys.shareableLink, surveyId));
-
-    if (!survey) {
-      return new Response("Survey not found", { status: 404 });
-    }
-
-    if (survey.status !== "active") {
-      return new Response("Survey is not active", { status: 403 });
-    }
-
+      .where(eq(surveys.shareableLink, surveyId))
+      .then((rows) => rows[0]);
+    if (!survey) return new Response("Survey not found", { status: 404 });
+    if (survey.status !== "active") return new Response("Survey is not active", { status: 403 });
     if (survey.currentParticipants >= survey.participantLimit) {
-      return new Response("Survey has reached participant limit", {
-        status: 403,
-      });
+      return new Response("Survey has reached participant limit", { status: 403 });
     }
 
-    const surveyConfig = buildCompleteSurveyConfig(survey);
+    const [briefRow, planRow] = await Promise.all([
+      getResearchBrief(survey.id),
+      getActiveCoveragePlan(survey.id),
+    ]);
+    if (!briefRow || !planRow) {
+      return new Response("This survey does not have an approved education brief yet.", { status: 400 });
+    }
 
-    let convId = conversationId;
-    if (!convId) {
-      convId = nanoid();
+    let conversation = body.conversationId
+      ? await getDb().select().from(surveyConversations).where(eq(surveyConversations.id, body.conversationId)).then((rows) => rows[0])
+      : null;
 
-      await getDb().insert(surveyConversations).values({
-        id: convId,
-        surveyId: survey.id,
-        rawConversation: sanitizedMessages.map((msg) => ({
-          ...msg,
-          content:
-            typeof msg.content === "string"
-              ? msg.content
-              : JSON.stringify(msg.content),
-          role:
-            msg.role === "system"
-              ? "assistant"
-              : (msg.role as "user" | "assistant"),
-          timestamp: new Date().toISOString(),
-        })),
-        completed: false,
-      });
-
+    if (!conversation) {
+      const conversationId = nanoid();
+      const [created] = await getDb()
+        .insert(surveyConversations)
+        .values({
+          id: conversationId,
+          surveyId: survey.id,
+          participantId: nanoid(8),
+          rawConversation: [],
+          completed: false,
+          originalLanguage: body.language || survey.language || "en",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+      conversation = created;
       await getDb()
         .update(surveys)
         .set({
           currentParticipants: survey.currentParticipants + 1,
+          updatedAt: new Date(),
         })
         .where(eq(surveys.id, survey.id));
+    } else if (conversation.surveyId !== survey.id) {
+      return new Response("Conversation not found", { status: 404 });
     }
 
-    // Load or create MemoryBridge 
-    const memoryBridge = await ConversationManager.loadOrCreateMemoryBridge(convId);
+    let sessionRow = await getSessionBySourceId(conversation.id);
+    if (!sessionRow) {
+      sessionRow = await ensureSession({
+        surveyId: survey.id,
+        sessionType: "live",
+        sourceConversationId: conversation.id,
+        language: (body.language || survey.language || "en") as string,
+        respondentId: conversation.participantId,
+        initialState: createInitialSessionState({
+          surveyId: survey.id,
+          sessionId: nanoid(),
+          sessionType: "live",
+          language: (body.language || survey.language || "en") as any,
+          coveragePlan: planRow.plan,
+        }),
+      });
+    }
 
-    const messagesForAI = sanitizedMessages;
-    const expertState = await ExpertStateStore.get(survey.id);
-
-    // --- AGENT INTEGRATION: Use ConductingSpecialist for agentic behavior ---
-    const agentContext: AgentContext = {
-      conversationId: convId,
-      messages: messagesForAI as ModelMessage[],
-      surveyConfig,
-      memoryBridge,
-      expertState: expertState || undefined,
-      language: survey.language as "en" | "fr" | "de" | "es" | "it" | undefined,
-      userId: survey.userId,
-      organizationId: survey.organizationId || undefined,
-    };
-
-    const conductingAgent = new ConductingSpecialist(agentContext);
-    await conductingAgent.initialize();
-
-    // Preload pattern learnings and skills for the agent
-    await Promise.all([
-      conductingAgent.preloadSkills(),
-      conductingAgent.preloadPatternLearnings(
-        ["questioning", "probing", "engagement"],
-        2,
-      ),
-    ]).catch((error) =>
-      console.warn("[Chat Route] Failed to preload agent capabilities:", error),
-    );
-
-    // Use the agent's stream method which includes domain expertise, checklist, and tools
-    // Pass onFinish callback for persistence
-    const result = conductingAgent.stream(
-      messagesForAI as ModelMessage[],
-      undefined, // onMediaDisplay - not needed for text chat
-      async ({ text, response }) => {
-        const contentForStorage = extractAIGeneratedResponse(text);
-        // Persistence logic for participant chat
-        try {
-          const [currentConv] = await getDb()
-            .select()
-            .from(surveyConversations)
-            .where(eq(surveyConversations.id, convId!));
-
-          if (currentConv) {
-            const currentMessages = currentConv.rawConversation as Array<any>;
-            
-            const newMessagesToAppend = response.messages.map((m: any) => ({
-              role: m.role,
-              content: typeof m.content === 'string' ? m.content : (m.role === 'assistant' ? contentForStorage : ""),
-              parts: Array.isArray(m.content) ? m.content : undefined,
-              timestamp: new Date().toISOString(),
-            }));
-
-            const updatedMessages = [
-              ...currentMessages,
-              ...newMessagesToAppend
-            ];
-
-            await getDb()
-              .update(surveyConversations)
-              .set({
-                rawConversation: updatedMessages,
-              })
-              .where(eq(surveyConversations.id, convId!));
-              
-            if (expertState) {
-              const newTurnText = contentForStorage || "";
-              const newTurn: TranscriptTurn = {
-                turnIndex: expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 1,
-                speaker: "agent",
-                text: newTurnText,
-                timestamp: new Date().toISOString(),
-                type: "turn"
-              };
-              
-              const respondentMsg = sanitizedMessages[sanitizedMessages.length - 1];
-              if (respondentMsg && respondentMsg.role === "user") {
-                 const resTurn: TranscriptTurn = {
-                   turnIndex: expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 1,
-                   speaker: "respondent",
-                   text: typeof respondentMsg.content === 'string' ? respondentMsg.content : "",
-                   timestamp: new Date().toISOString(),
-                   type: "turn"
-                 };
-                 newTurn.turnIndex = resTurn.turnIndex + 1;
-                 expertState.transcript.turns.push(resTurn);
-              }
-              expertState.transcript.turns.push(newTurn);
-              await ExpertStateStore.update(survey.id, expertState);
-              
-              ConversationManager.updateMemoryAsync(
-                convId!,
-                surveyConfig,
-                expertState,
-                memoryBridge,
-                newTurn,
-                { userId: survey.userId, organizationId: survey.organizationId || undefined }
-              ).catch(console.error);
-            }
-          }
-        } catch (error) {
-          console.error(
-            "Error saving participant conversation message:",
-            error,
-          );
-        }
-      },
-    );
-
-    // AI SDK v6 native UIMessage stream conversion
-    const uiStream = result.toUIMessageStream();
-
-    const responseStream = createUIMessageStream({
-      execute: async ({ writer }) => {
-        const extractor = new StreamFieldExtractor();
-        
-        for await (const chunk of uiStream) {
-          const chunkObj = chunk as any;
-          if (chunkObj.type === "text-delta") {
-            const cleanText = extractor.processChunk(chunkObj.textDelta || chunkObj.delta);
-            if (cleanText) {
-              writer.write({ type: "text-delta", textDelta: cleanText } as any);
-            }
-          } else {
-            writer.write(chunkObj);
-          }
-        }
-        const finalCleanText = extractor.flush();
-        if (finalCleanText) {
-          writer.write({ type: "text-delta", textDelta: finalCleanText } as any);
-        }
-      },
+    const [activeLiveProfile, sampleFallbackProfile, runtimeLayers] = await Promise.all([
+      getActiveConductingProfile(survey.id, "live"),
+      getActiveConductingProfile(survey.id, "sample"),
+      getConductingRuntimeLayers({
+        surveyId: survey.id,
+        organizationId: survey.organizationId,
+        mode: "live",
+      }),
+    ]);
+    const systemPrompt = buildConductingSystemPrompt({
+      brief: briefRow.brief,
+      coveragePlan: planRow.plan,
+      sessionState: sessionRow.sessionState,
+      sessionType: "live",
+      conductingProfile: activeLiveProfile?.profile ?? sampleFallbackProfile?.profile ?? null,
+      playbookContext: runtimeLayers.playbookContext,
+      personalityContext: runtimeLayers.personalityContext,
     });
 
-    // Load ExpertState for V2 headers
-    const latestExpertState = await ExpertStateStore.get(survey.id);
-    const coverage = latestExpertState ? domainBrain.calculateCoverage(latestExpertState) : 0;
+    const responseText = await generateAIResponse(
+      visibleMessages.map((message) => `${message.role}: ${message.content}`).join("\n\n"),
+      systemPrompt,
+      { surveyId: survey.id, maxTokens: 550, temperature: 0.4 },
+    );
 
-    const response = createUIMessageStreamResponse({ stream: responseStream });
-    response.headers.set("X-Conversation-Id", convId);
-    response.headers.set(
-      "X-Conversation-Progress",
-      Math.round(coverage * 100).toString(),
-    );
-    response.headers.set(
-      "X-Conversation-State",
-      latestExpertState ? domainBrain.getNextPriorityTopic(latestExpertState)?.label || "Wrap up" : "Greeting",
-    );
+    const assistantMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: responseText,
+      timestamp: new Date().toISOString(),
+    };
+    const persistedMessages = [...visibleMessages, assistantMessage];
+
+    await getDb()
+      .update(surveyConversations)
+      .set({
+        rawConversation: persistedMessages,
+        updatedAt: new Date(),
+      })
+      .where(eq(surveyConversations.id, conversation.id));
+
+    let finalState = sessionRow.sessionState;
+    if (visibleMessages.some((message) => message.role === "user")) {
+      const result = await finalizeConductingTurn({
+        surveyId: survey.id,
+        sessionId: sessionRow.id,
+        brief: briefRow.brief,
+        coveragePlan: planRow.plan,
+        sessionState: sessionRow.sessionState,
+        messages: persistedMessages,
+      });
+      finalState = result.nextState;
+      await enqueueConversationInsights({
+        conversationId: conversation.id,
+        surveyId: survey.id,
+        userId: survey.userId,
+      }).catch((error) => {
+        console.error("[Chat Route] Failed to enqueue analytics refresh:", error);
+      });
+      await getDb()
+        .update(surveyConversations)
+        .set({ completed: finalState.status === "completed", updatedAt: new Date() })
+        .where(eq(surveyConversations.id, conversation.id));
+    }
+
+    const response = createUIMessageStreamResponse({
+      stream: createUIMessageStream({
+        execute: async ({ writer }) => {
+          writer.write({ type: "text-delta", textDelta: responseText } as any);
+        },
+      }),
+    });
+    response.headers.set("X-Conversation-Id", conversation.id);
+    response.headers.set("X-Conversation-Progress", Math.round(finalState.overallCoverage * 100).toString());
+    response.headers.set("X-Conversation-State", finalState.currentNodeId || "wrap_up");
     response.headers.set("X-RateLimit-Limit", "20");
-    response.headers.set(
-      "X-RateLimit-Remaining",
-      rateLimitResult.remaining.toString(),
-    );
+    response.headers.set("X-RateLimit-Remaining", rateLimitResult.remaining.toString());
     response.headers.set("X-RateLimit-Reset", rateLimitResult.reset.toString());
     return response;
   } catch (error) {
-    console.error("Error in chat route:", error);
+    console.error("[Chat Route] Error:", error);
     return new Response("Internal server error", { status: 500 });
   }
 }
 
-/**
- * Save conversation messages (called after streaming completes)
- */
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
     const { surveyId } = await params;
-    const body = await request.json();
-    const { conversationId, messages, completed } = body as {
+    const body = (await request.json()) as {
       conversationId: string;
-      messages: Array<any>;
+      messages: any[];
       completed?: boolean;
     };
 
-    if (!conversationId || !Array.isArray(messages)) {
+    if (!body.conversationId || !Array.isArray(body.messages)) {
       return new Response("Invalid request", { status: 400 });
     }
 
-    const [survey] = await getDb()
+    const survey = await getDb()
       .select()
       .from(surveys)
-      .where(eq(surveys.shareableLink, surveyId));
+      .where(eq(surveys.shareableLink, surveyId))
+      .then((rows) => rows[0]);
+    if (!survey) return new Response("Survey not found", { status: 404 });
 
-    if (!survey) {
-      return new Response("Survey not found", { status: 404 });
-    }
-
-    // Calculate duration metrics
+    const messages = normalizeMessages(body.messages);
     const sortedMessages = messages
-      .filter((m) => m.timestamp)
-      .sort(
-        (a, b) =>
-          new Date(a.timestamp!).getTime() - new Date(b.timestamp!).getTime(),
-      );
+      .filter((message) => message.timestamp)
+      .sort((a, b) => new Date(a.timestamp!).getTime() - new Date(b.timestamp!).getTime());
 
     let durationMs = 0;
     let activeDurationMs = 0;
-    const MAX_ACTIVE_GAP_MS = 2 * 60 * 1000; // 2 minutes threshold for "active" time per message
+    const maxActiveGapMs = 2 * 60 * 1000;
 
     if (sortedMessages.length > 1) {
-      const startTime = new Date(sortedMessages[0].timestamp!).getTime();
-      const endTime = new Date(
-        sortedMessages[sortedMessages.length - 1].timestamp!,
-      ).getTime();
-      durationMs = endTime - startTime;
+      durationMs =
+        new Date(sortedMessages[sortedMessages.length - 1].timestamp!).getTime() -
+        new Date(sortedMessages[0].timestamp!).getTime();
 
-      // Calculate active duration by summing gaps, capped at threshold
-      for (let i = 1; i < sortedMessages.length; i++) {
-        const prevTime = new Date(sortedMessages[i - 1].timestamp!).getTime();
-        const currTime = new Date(sortedMessages[i].timestamp!).getTime();
-        const gap = currTime - prevTime;
-
-        // Only valid positive gaps
-        if (gap > 0) {
-          activeDurationMs += Math.min(gap, MAX_ACTIVE_GAP_MS);
-        }
+      for (let index = 1; index < sortedMessages.length; index += 1) {
+        const previous = new Date(sortedMessages[index - 1].timestamp!).getTime();
+        const current = new Date(sortedMessages[index].timestamp!).getTime();
+        const gap = current - previous;
+        if (gap > 0) activeDurationMs += Math.min(gap, maxActiveGapMs);
       }
     }
 
     await getDb()
       .update(surveyConversations)
       .set({
-        rawConversation: messages.map((msg) => ({
-          id: msg.id,
-          role: msg.role,
-          content: msg.content,
-          parts: msg.parts,
-          timestamp: msg.timestamp || new Date().toISOString(),
+        rawConversation: messages.map((message) => ({
+          id: message.id,
+          role: message.role,
+          content: message.content,
+          timestamp: message.timestamp || new Date().toISOString(),
         })),
-        completed: completed ?? false,
+        completed: body.completed ?? false,
         durationMs,
         activeDurationMs,
+        updatedAt: new Date(),
       })
-      .where(eq(surveyConversations.id, conversationId));
-
-    // Trigger conversation insights generation and Slack auto-post (if completed)
-    if (completed) {
-      // Trigger conversation insights generation (auto-generates analytics after insights are done)
-      try {
-        const { enqueueConversationInsights } = await import("@/lib/queue");
-        await enqueueConversationInsights({
-          conversationId,
-          surveyId: survey.id,
-          userId: survey.userId,
-        });
-        console.log(
-          `[Chat Route] Enqueued conversation insights for conversation ${conversationId}`,
-        );
-      } catch (error) {
-        console.error("Failed to enqueue conversation insights:", error);
-        // Don't fail the conversation save if insights enqueue fails
-      }
-    }
+      .where(eq(surveyConversations.id, body.conversationId));
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("Error updating conversation:", error);
+    console.error("[Chat Route] PUT error:", error);
     return new Response("Internal server error", { status: 500 });
   }
 }

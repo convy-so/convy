@@ -4,6 +4,11 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
+import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  publishPendingOutboxEntries,
+  recordRealtimeEvent,
+} from "@/lib/collaboration-service";
 
 export async function PATCH(
     request: Request,
@@ -29,18 +34,37 @@ export async function PATCH(
             return NextResponse.json({ error: "Survey not found" }, { status: 404 });
         }
 
-        if (survey.userId !== session.user.id) {
+        const permission = await getSurveyPermissionContext(session.user.id, surveyId);
+        if (!permission?.canEdit) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 
         // Update survey status
-        await getDb()
-            .update(surveys)
-            .set({
-                status: status as "active" | "paused",
-                updatedAt: new Date(),
-            })
-            .where(eq(surveys.id, surveyId));
+        await getDb().transaction(async (tx) => {
+            await tx
+                .update(surveys)
+                .set({
+                    status: status as "active" | "paused",
+                    updatedAt: new Date(),
+                })
+                .where(eq(surveys.id, surveyId));
+
+            if (survey.organizationId) {
+                await recordRealtimeEvent(tx, {
+                    scope: "workspace",
+                    workspaceId: survey.organizationId,
+                    actorId: session.user.id,
+                    eventType: "workspace.survey_updated",
+                    payload: {
+                        surveyId,
+                        workspaceId: survey.organizationId,
+                        status,
+                    },
+                });
+            }
+        });
+
+        await publishPendingOutboxEntries();
 
         return NextResponse.json({ success: true, status });
     } catch (error) {

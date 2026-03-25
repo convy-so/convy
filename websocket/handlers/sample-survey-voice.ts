@@ -1,24 +1,46 @@
-import { getDb } from "@/db";
-import { surveys, sampleConversations, voiceSessions } from "@/db/schema";
-import { eq, and, lt } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { type SurveyConfig } from "@/lib/prompts";
-import { buildCompleteSurveyConfig } from "@/lib/surveys";
-import { MemoryBridge, TranscriptTurn } from "@/lib/memory-bridge";
-import type { AuthenticatedConnection } from "../middleware/auth";
-import { BaseVoiceAgentHandler } from "./base-voice-agent-handler";
-import { ConversationManager } from "@/lib/conversation-manager";
-import { ConductingSpecialist } from "@/lib/agents/conducting-specialist";
-import type { AgentContext } from "@/lib/agents/types";
+
+import { getDb } from "@/db";
+import { sampleConversations, surveys, voiceSessions } from "@/db/schema";
+import {
+  buildConductingSystemPrompt,
+  createInitialSessionState,
+  finalizeConductingTurn,
+} from "@/lib/education/conducting-runtime";
+import {
+  ensureSession,
+  getActiveConductingProfile,
+  getActiveCoveragePlan,
+  getResearchBrief,
+  getSessionBySourceId,
+  purgeSessionAnalyticsArtifacts,
+  updateSessionState,
+} from "@/lib/education/storage";
+import { getConductingRuntimeLayers } from "@/lib/education/runtime-context";
+import type {
+  CoveragePlan,
+  ResearchBrief,
+  SessionState,
+} from "@/lib/education/types";
 import {
   buildVoiceAgentSettings,
-  type VoiceAgentSettings,
   type ConversationTextEvent,
   type FunctionCallRequestEvent,
   type SupportedLanguage,
+  type VoiceAgentFunction,
+  type VoiceAgentSettings,
 } from "@/lib/voice/deepgram-voice-agent";
-import { ExpertStateStore } from "@/lib/expert-state-store";
-import type { ModelMessage } from "ai";
+import type { AuthenticatedConnection } from "../middleware/auth";
+import { BaseVoiceAgentHandler } from "./base-voice-agent-handler";
+import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  acquireSurveyLease,
+  publishPendingOutboxEntries,
+  recordRealtimeEvent,
+  releaseSurveyLease,
+  renewSurveyLease,
+} from "@/lib/collaboration-service";
 
 interface SampleState {
   surveyId: string;
@@ -32,19 +54,56 @@ interface SampleState {
   }>;
   survey: typeof surveys.$inferSelect | null;
   language: SupportedLanguage;
-  memoryBridge: MemoryBridge | null;
-  surveyConfig: SurveyConfig | null;
+  brief: ResearchBrief | null;
+  coveragePlan: CoveragePlan | null;
+  sessionId: string | null;
+  sessionState: SessionState | null;
+}
+
+function buildVoiceFunctions(
+  survey: typeof surveys.$inferSelect | null,
+): VoiceAgentFunction[] {
+  const functions: VoiceAgentFunction[] = [
+    {
+      name: "finishSurvey",
+      description:
+        "Call this only when the interview has gathered enough evidence and you are ready to close the rehearsal naturally.",
+      parameters: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+    },
+  ];
+
+  if ((survey?.media || []).length > 0) {
+    functions.unshift({
+      name: "showMedia",
+      description:
+        "Display a survey media asset when it is directly relevant to the current question.",
+      parameters: {
+        type: "object",
+        properties: {
+          mediaId: { type: "string", description: "The media identifier to display." },
+        },
+        required: ["mediaId"],
+        additionalProperties: false,
+      },
+    });
+  }
+
+  return functions;
 }
 
 export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
   private state: SampleState;
-  private conductingAgent: ConductingSpecialist | null = null;
-  private sessionStartTime: number = Date.now();
+  private sessionStartTime = Date.now();
+  private leaseToken: string | null = null;
 
   constructor(
     connection: AuthenticatedConnection,
     surveyId: string,
-    conversationNumber: number = 1,
+    conversationNumber = 1,
   ) {
     super(connection.ws, `sample-${connection.userId}`, connection.userId);
 
@@ -56,17 +115,20 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       messages: [],
       survey: null,
       language: "en",
-      memoryBridge: null,
-      surveyConfig: null,
+      brief: null,
+      coveragePlan: null,
+      sessionId: null,
+      sessionState: null,
     };
   }
 
   async initialize(): Promise<void> {
     try {
-      const [survey] = await getDb()
-        .select()
-        .from(surveys)
-        .where(eq(surveys.id, this.state.surveyId));
+      const [survey, briefRow, planRow] = await Promise.all([
+        getDb().select().from(surveys).where(eq(surveys.id, this.state.surveyId)).then((rows) => rows[0]),
+        getResearchBrief(this.state.surveyId),
+        getActiveCoveragePlan(this.state.surveyId),
+      ]);
 
       if (!survey) {
         this.sendError("Survey not found");
@@ -74,32 +136,49 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
         return;
       }
 
-      if (survey.userId !== this.userId) {
+      const permission = await getSurveyPermissionContext(
+        this.userId,
+        this.state.surveyId,
+      );
+      if (!permission?.canEdit) {
         this.sendError("Unauthorized");
+        this.ws.close();
+        return;
+      }
+
+      const lease = await acquireSurveyLease({
+        surveyId: this.state.surveyId,
+        stage: "rehearsal",
+        userId: this.userId,
+        sessionId: this.state.voiceSessionId,
+      });
+      if (!lease.ok) {
+        this.sendError("Another editor currently controls this rehearsal.");
+        this.ws.close();
+        return;
+      }
+      this.leaseToken = lease.lease.leaseToken;
+      await this.broadcastLeaseEvent("survey.lease_acquired", lease.lease.expiresAt);
+
+      if (!briefRow || !planRow) {
+        this.sendError("This survey is not ready for education interview rehearsal yet.");
         this.ws.close();
         return;
       }
 
       if (this.state.conversationNumber > survey.sampleConversationCount + 1) {
         this.sendError("Sample conversations must be sequential");
+        this.ws.close();
         return;
       }
 
       this.state.survey = survey;
+      this.state.language = survey.language as SupportedLanguage;
+      this.state.brief = briefRow.brief;
+      this.state.coveragePlan = planRow.plan;
       this.surveyId = survey.id;
       this.organizationId = survey.organizationId;
-      this.state.language = survey.language as SupportedLanguage;
-      this.state.surveyConfig = buildCompleteSurveyConfig(survey);
 
-      // Deterministic ID for context persistence
-      const contextId = `sample:${this.state.surveyId}:${this.state.conversationNumber}:${this.userId}`;
-
-      // Load or create rolling context
-      this.state.memoryBridge = await ConversationManager.loadOrCreateMemoryBridge(
-        contextId
-      );
-
-      // Create voice session in database
       await getDb().insert(voiceSessions).values({
         id: this.state.voiceSessionId,
         surveyId: survey.id,
@@ -109,45 +188,69 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
         startedAt: new Date(),
       });
 
-      // Check if sample conversation already exists
-      const existingConversation = await getDb()
+      let sampleConversation = await getDb()
         .select()
         .from(sampleConversations)
         .where(
           and(
             eq(sampleConversations.surveyId, survey.id),
-            eq(
-              sampleConversations.conversationNumber,
-              this.state.conversationNumber,
-            ),
+            eq(sampleConversations.conversationNumber, this.state.conversationNumber),
           ),
         )
-        .limit(1);
+        .then((rows) => rows[0]);
 
-      let conversationId: string;
-
-      if (existingConversation.length > 0) {
-        conversationId = existingConversation[0].id;
-        this.state.messages = (existingConversation[0].messages as any[]) || [];
-        console.log(
-          `[Sample Survey Voice] Reusing existing conversation ${conversationId} with ${this.state.messages.length} messages`,
-        );
-      } else {
-        conversationId = nanoid();
-        await getDb().insert(sampleConversations).values({
-          id: conversationId,
-          surveyId: survey.id,
-          conversationNumber: this.state.conversationNumber,
-          messages: [],
-          confirmed: false,
-        });
-        this.state.messages = [];
-        console.log(
-          `[Sample Survey Voice] Created new conversation ${conversationId}`,
-        );
+      if (!sampleConversation) {
+        const [created] = await getDb()
+          .insert(sampleConversations)
+          .values({
+            id: nanoid(),
+            surveyId: survey.id,
+            conversationNumber: this.state.conversationNumber,
+            messages: [],
+            confirmed: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning();
+        sampleConversation = created;
+        await getDb()
+          .update(surveys)
+          .set({
+            sampleConversationCount: Math.max(
+              survey.sampleConversationCount,
+              this.state.conversationNumber,
+            ),
+            updatedAt: new Date(),
+          })
+          .where(eq(surveys.id, survey.id));
       }
 
-      this.state.conversationId = conversationId;
+      this.state.conversationId = sampleConversation.id;
+      this.state.messages = ((sampleConversation.messages as SampleState["messages"]) || []).map((message) => ({
+        role: message.role,
+        content: message.content,
+        timestamp: message.timestamp || new Date().toISOString(),
+      }));
+
+      let sessionRow = await getSessionBySourceId(sampleConversation.id);
+      if (!sessionRow) {
+        sessionRow = await ensureSession({
+          surveyId: survey.id,
+          sessionType: "sample",
+          sourceConversationId: sampleConversation.id,
+          language: this.state.language,
+          initialState: createInitialSessionState({
+            surveyId: survey.id,
+            sessionId: nanoid(),
+            sessionType: "sample",
+            language: this.state.language,
+            coveragePlan: planRow.plan,
+          }),
+        });
+      }
+
+      this.state.sessionId = sessionRow.id;
+      this.state.sessionState = sessionRow.sessionState;
       this.resetIdleTimeout();
 
       this.send({
@@ -157,11 +260,11 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
         conversationNumber: this.state.conversationNumber,
       });
 
-      // Connect Voice Agent immediately (greeting is in Settings)
       await this.connectVoiceAgent();
     } catch (error) {
       console.error("[Sample Survey Voice] Initialization error:", error);
       this.sendError("Failed to initialize session");
+      this.ws.close();
     }
   }
 
@@ -170,20 +273,15 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
   }
 
   protected getInitialUserInput(): string | null {
-    // If no history, trigger the AI to generate the initial greeting
     if (this.state.messages.length === 0) {
-      return "Start the conversation now. Greet the participant according to the system prompt instructions.";
+      return "Start the sample interview now. Greet the participant warmly and ask the first best question.";
     }
 
-    // RESUME CASE: Check who spoke last
     const lastMessage = this.state.messages[this.state.messages.length - 1];
-
-    // If the user was the last to speak, the AI must catch up/continue
     if (lastMessage.role === "user") {
-      return "The user is returning to this sample survey session and their last response was not addressed. Briefly acknowledge their return and continue the interview naturally, picking up where you left off.";
+      return "The user is returning to a rehearsal session. Briefly welcome them back, acknowledge their last answer, and continue the interview naturally.";
     }
 
-    // If the assistant spoke last, do nothing (ball is in user's court)
     return null;
   }
 
@@ -192,77 +290,36 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
   }
 
   protected async getVoiceAgentSettings(): Promise<VoiceAgentSettings> {
-    if (!this.state.surveyConfig || !this.state.memoryBridge) {
-      throw new Error("Survey config or MemoryBridge not initialized");
+    if (!this.state.survey || !this.state.brief || !this.state.coveragePlan || !this.state.sessionState) {
+      throw new Error("Sample survey voice state is incomplete");
     }
 
-    // Get previous feedback for rehearsal
-    const previousFeedbackRows = await getDb()
-      .select({
-        feedback: sampleConversations.feedback,
-        finalComments: sampleConversations.finalComments,
-      })
-      .from(sampleConversations)
-      .where(
-        and(
-          eq(sampleConversations.surveyId, this.state.surveyId),
-          lt(
-            sampleConversations.conversationNumber,
-            this.state.conversationNumber,
-          ),
-        ),
-      );
-
-    const combinedFeedback = previousFeedbackRows
-      .flatMap((r) => [r.feedback, r.finalComments])
-      .filter(Boolean)
-      .join("\n\n");
-
-    // --- AGENT INTEGRATION: Use ConductingSpecialist for agentic behavior ---
-    const agentContext: AgentContext = {
-      conversationId: `sample-${this.state.surveyId}-${this.state.conversationNumber}`,
-      messages: this.state.messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      })) as any[],
-      surveyConfig: this.state.surveyConfig,
-      memoryBridge: this.state.memoryBridge,
-      language: this.state.language,
-      modality: "voice",
-      knowledgeContext: combinedFeedback || undefined, // Pass feedback as knowledge context
-    };
-
-    this.conductingAgent = new ConductingSpecialist(agentContext);
-    await this.conductingAgent.initialize();
-
-    // Preload capabilities
-    await Promise.all([
-      this.conductingAgent.preloadSkills(),
-      this.conductingAgent.preloadPatternLearnings(
-        ["questioning", "probing", "engagement"],
-        2,
-      ),
+    const [activeSampleProfile, runtimeLayers] = await Promise.all([
+      getActiveConductingProfile(this.state.surveyId, "sample"),
+      getConductingRuntimeLayers({
+        surveyId: this.state.surveyId,
+        organizationId: this.state.survey?.organizationId,
+        mode: "sample",
+      }),
     ]);
 
-    // Use the agent's system prompt (includes domain expertise, checklist, questioning strategy)
-    let systemPrompt = this.conductingAgent.buildSystemPrompt();
+    const systemPrompt = `${buildConductingSystemPrompt({
+      brief: this.state.brief,
+      coveragePlan: this.state.coveragePlan,
+      sessionState: this.state.sessionState,
+      sessionType: "sample",
+      conductingProfile: activeSampleProfile?.profile ?? null,
+      playbookContext: runtimeLayers.playbookContext,
+      personalityContext: runtimeLayers.personalityContext,
+    })}
 
-    // Add sample-specific instructions
-    const sampleInstructions = `
-Additional guidance for this rehearsal with the survey creator:
-- Treat the survey creator exactly like a participant so they can experience the real flow
-- After covering every required topic, wrap up politely just as you would with a participant
-- This is sample conversation #${this.state.conversationNumber || 1}${this.state.conversationNumber && this.state.conversationNumber > 1 ? ". Adjust your tone and pacing based on previous feedback." : ""}
-${combinedFeedback ? `- Apply the survey creator's latest feedback precisely:\n${combinedFeedback}` : ""}
-- CRITICAL: When the survey is finished and you have said goodbye, output this exact token at the very end: [[SURVEY_COMPLETED]]
-`;
+Additional sample-session rules:
+- Treat the creator exactly like a participant so they can feel the real interview flow.
+- Honor the approved sample conducting profile precisely when it is present.
+- Close naturally once the required education evidence is covered.
+- Keep the exchange realistic and participant-centered.`;
 
-    systemPrompt = systemPrompt + "\n\n" + sampleInstructions;
-
-    // Use the agent's function definitions (converted to Deepgram format)
-    const functions = this.conductingAgent.getDeepgramFunctions();
-
-    const tone = (this.state.survey?.tone || "casual") as
+    const tone = (this.state.survey.tone || "casual") as
       | "casual"
       | "formal"
       | "playful"
@@ -272,37 +329,34 @@ ${combinedFeedback ? `- Apply the survey creator's latest feedback precisely:\n$
       language: this.state.language,
       tone,
       systemPrompt,
-      functions,
+      functions: buildVoiceFunctions(this.state.survey),
       conversationHistory:
         this.state.messages.length > 0
-          ? this.state.messages.map((m) => ({
-              role: m.role,
-              content: m.content,
+          ? this.state.messages.map((message) => ({
+              role: message.role,
+              content: message.content,
             }))
           : undefined,
     });
   }
 
-  protected async onConversationText(
-    event: ConversationTextEvent,
-  ): Promise<void> {
+  protected async onConversationText(event: ConversationTextEvent): Promise<void> {
+    const leaseOk = await this.ensureRehearsalLease();
+    if (!leaseOk) {
+      return;
+    }
+
     const now = new Date();
     const lastMessage = this.state.messages[this.state.messages.length - 1];
 
-    // Aggregation logic: Same role and within 5 seconds
     if (
       lastMessage &&
       lastMessage.role === event.role &&
-      lastMessage.timestamp &&
       now.getTime() - new Date(lastMessage.timestamp).getTime() < 3000
     ) {
-      console.log(
-        `[SampleSurveyVoiceHandler] 🔄 Aggregating ${event.role} message in DB`,
-      );
-      lastMessage.content += " " + event.content;
-      lastMessage.timestamp = now.toISOString(); // Refresh timestamp for consecutive merges
+      lastMessage.content += ` ${event.content}`;
+      lastMessage.timestamp = now.toISOString();
     } else {
-      // Add as a new message
       this.state.messages.push({
         role: event.role,
         content: event.content,
@@ -310,143 +364,192 @@ ${combinedFeedback ? `- Apply the survey creator's latest feedback precisely:\n$
       });
     }
 
-    // Save to database
     if (this.state.conversationId) {
       await getDb()
         .update(sampleConversations)
         .set({
-          messages: this.state.messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
+          messages: this.state.messages,
+          updatedAt: new Date(),
         })
         .where(eq(sampleConversations.id, this.state.conversationId));
+
+      await getDb().transaction(async (tx) => {
+        await recordRealtimeEvent(tx, {
+          scope: "survey",
+          surveyId: this.state.surveyId,
+          actorId: this.userId,
+          eventType: "survey.rehearsal_turn_added",
+          payload: {
+            surveyId: this.state.surveyId,
+            conversationId: this.state.conversationId,
+            conversationNumber: this.state.conversationNumber,
+            messageCount: this.state.messages.length,
+            source: "voice",
+          },
+        });
+      });
+      await publishPendingOutboxEntries();
     }
 
-    let newTurn: TranscriptTurn | null = null;
-    let expertState: any = null;
-
-    if (this.state.surveyConfig && this.state.memoryBridge) {
-      const contextId = `sample:${this.state.surveyId}:${this.state.conversationNumber}:${this.userId}`;
-
-      expertState = await ExpertStateStore.get(this.state.surveyConfig.id);
-
-      if (expertState) {
-        newTurn = {
-          turnIndex: expertState.transcript.turns.filter((t: any) => t.type !== "summary_block").length + 1,
-          speaker: event.role === "assistant" ? "agent" : "respondent",
-          text: event.content,
-          timestamp: now.toISOString(),
-          type: "turn"
-        };
-        expertState.transcript.turns.push(newTurn);
-        await ExpertStateStore.update(this.state.surveyConfig.id, expertState);
-      }
-
-      if (this.conductingAgent && expertState) {
-        this.conductingAgent.updateContext({
-          expertState,
-          memoryBridge: this.state.memoryBridge,
-          messages: this.state.messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })) as ModelMessage[],
-        });
-
-        const newSystemPrompt = this.conductingAgent.buildSystemPrompt();
-        const functions = this.conductingAgent.getDeepgramFunctions();
-
-        const tone = (this.state.survey?.tone || "casual") as any;
-        const sampleInstructions = `
-Additional guidance for this rehearsal with the survey creator:
-- Treat the survey creator exactly like a participant so they can experience the real flow
-- After covering every required topic, wrap up politely just as you would with a participant
-- This is sample conversation #${this.state.conversationNumber || 1}.
-- CRITICAL: When the survey is finished and you have said goodbye, output this exact token at the very end: [[SURVEY_COMPLETED]]
-`;
-
-        this.voiceAgent?.updateThink({
-          provider: { type: "open_ai", model: "gpt-4o-mini" },
-          prompt: `${newSystemPrompt}\n\n${sampleInstructions}\n\nRespond in the language the user is speaking.`,
-          functions: functions.map((f) => {
-            const { client_side, ...rest } = f;
-            return rest;
-          }),
-        });
-      }
-
-      if (event.role === "assistant" && expertState && newTurn) {
-        ConversationManager.updateMemoryAsync(
-          contextId,
-          this.state.surveyConfig,
-          expertState,
-          this.state.memoryBridge,
-          newTurn,
-          { userId: this.userId }
-        ).catch(console.error);
-      }
+    if (
+      event.role !== "assistant" ||
+      !this.state.sessionId ||
+      !this.state.sessionState ||
+      !this.state.brief ||
+      !this.state.coveragePlan ||
+      !this.state.conversationId ||
+      !this.state.messages.some((message) => message.role === "user")
+    ) {
+      return;
     }
+
+    const { nextState } = await finalizeConductingTurn({
+      surveyId: this.state.surveyId,
+      sessionId: this.state.sessionId,
+      brief: this.state.brief,
+      coveragePlan: this.state.coveragePlan,
+      sessionState: this.state.sessionState,
+      messages: this.state.messages,
+    });
+
+    this.state.sessionState = nextState;
+    await purgeSessionAnalyticsArtifacts({
+      surveyId: this.state.surveyId,
+      sessionId: this.state.sessionId,
+    }).catch((error) => {
+      console.error("[Sample Survey Voice] Failed to purge rehearsal analytics artifacts:", error);
+    });
+
+    this.send({
+      type: "progress",
+      completionPercentage: Math.round(nextState.overallCoverage * 100),
+      state: nextState.status,
+      shouldWrapUp: nextState.status === "completed",
+    });
+
+    const [refreshedSampleProfile, refreshedRuntimeLayers] = await Promise.all([
+      getActiveConductingProfile(this.state.surveyId, "sample"),
+      getConductingRuntimeLayers({
+        surveyId: this.state.surveyId,
+        organizationId: this.state.survey?.organizationId,
+        mode: "sample",
+      }),
+    ]);
+    const refreshedPrompt = `${buildConductingSystemPrompt({
+      brief: this.state.brief,
+      coveragePlan: this.state.coveragePlan,
+      sessionState: nextState,
+      sessionType: "sample",
+      conductingProfile: refreshedSampleProfile?.profile ?? null,
+      playbookContext: refreshedRuntimeLayers.playbookContext,
+      personalityContext: refreshedRuntimeLayers.personalityContext,
+    })}
+
+Additional sample-session rules:
+- Treat the creator exactly like a participant so they can feel the real interview flow.
+- Close naturally once the required education evidence is covered.
+- Keep the exchange realistic and participant-centered.`;
+
+    this.voiceAgent?.updateThink({
+      provider: { type: "open_ai", model: "gpt-4o-mini" },
+      prompt: `${refreshedPrompt}\n\nRespond in the language the participant is speaking.`,
+      functions: buildVoiceFunctions(this.state.survey),
+    });
   }
 
-  protected async onFunctionCall(
-    event: FunctionCallRequestEvent,
-  ): Promise<void> {
+  protected async onFunctionCall(event: FunctionCallRequestEvent): Promise<void> {
     switch (event.function_name) {
       case "showMedia": {
         const mediaId = event.input?.mediaId;
-        const media = this.state.surveyConfig?.media?.find(
-          (m) => m.id === mediaId,
-        );
+        const media = this.state.survey?.media?.find((item) => item.id === mediaId);
 
-        if (media) {
-          this.send({
-            type: "display_media",
-            media: {
-              id: media.id,
-              type: media.type,
-              url: media.url,
-              description: media.description,
-              altText: media.altText,
-              durationMs: media.durationMs,
-            },
-          });
-          this.voiceAgent?.sendFunctionCallResponse(
-            event.function_call_id,
-            event.function_name,
-            JSON.stringify({
-              success: true,
-              media: {
-                id: media.id,
-                type: media.type,
-                description: media.description,
-              },
-            }),
-          );
-        } else {
+        if (!media) {
           this.voiceAgent?.sendFunctionCallResponse(
             event.function_call_id,
             event.function_name,
             JSON.stringify({ error: "Media not found" }),
           );
+          return;
         }
-        break;
-      }
 
-      case "finishSurvey": {
+        this.send({
+          type: "display_media",
+          media: {
+            id: media.id,
+            type: media.type,
+            url: media.url,
+            description: media.description,
+            altText: media.altText,
+            durationMs: media.durationMs,
+          },
+        });
         this.voiceAgent?.sendFunctionCallResponse(
           event.function_call_id,
           event.function_name,
           JSON.stringify({
             success: true,
-            message: "Survey marked as complete",
+            media: {
+              id: media.id,
+              type: media.type,
+              description: media.description,
+            },
           }),
         );
-        // End session after a brief delay for the agent to speak a farewell
+        return;
+      }
+
+      case "finishSurvey": {
+        if (!this.state.sessionState || !this.state.sessionId || !this.state.coveragePlan) {
+          this.voiceAgent?.sendFunctionCallResponse(
+            event.function_call_id,
+            event.function_name,
+            JSON.stringify({ error: "Session state not ready" }),
+          );
+          return;
+        }
+
+        const threshold = this.state.coveragePlan.completionRule.minimumRequiredNodeCoverage;
+        if (
+          this.state.sessionState.status !== "completed" &&
+          this.state.sessionState.overallCoverage < threshold
+        ) {
+          this.voiceAgent?.sendFunctionCallResponse(
+            event.function_call_id,
+            event.function_name,
+            JSON.stringify({
+              error: "Interview coverage is not high enough to finish yet",
+              currentCoverage: this.state.sessionState.overallCoverage,
+              requiredCoverage: threshold,
+            }),
+          );
+          return;
+        }
+
+        const completedState: SessionState =
+          this.state.sessionState.status === "completed"
+            ? this.state.sessionState
+            : {
+                ...this.state.sessionState,
+                status: "completed",
+                stopReason: "agent_finish_signal",
+              };
+
+        if (completedState !== this.state.sessionState) {
+          await updateSessionState(this.state.sessionId, completedState);
+          this.state.sessionState = completedState;
+        }
+
+        this.voiceAgent?.sendFunctionCallResponse(
+          event.function_call_id,
+          event.function_name,
+          JSON.stringify({ success: true, message: "Survey marked as complete" }),
+        );
+
         setTimeout(() => {
           this.send({ type: "survey_completed" });
           this.cleanup();
         }, 500);
-        break;
+        return;
       }
 
       default:
@@ -464,32 +567,102 @@ Additional guidance for this rehearsal with the survey creator:
     }
   }
 
-  // Removed buildFunctionDefinitions() - now using ConductingSpecialist.getDeepgramFunctions()
-
   protected async cleanup(): Promise<void> {
     await super.cleanup();
 
-    // Update DB status
-    if (this.state.voiceSessionId) {
-      getDb()
-        .update(voiceSessions)
-        .set({ status: "completed", endedAt: new Date() })
-        .where(eq(voiceSessions.id, this.state.voiceSessionId))
-        .catch(console.error);
+    if (this.leaseToken) {
+      const releaseResult = await releaseSurveyLease({
+        surveyId: this.state.surveyId,
+        stage: "rehearsal",
+        userId: this.userId,
+        leaseToken: this.leaseToken,
+      }).catch((error) => {
+        console.error(error);
+        return null;
+      });
+      if (releaseResult?.ok) {
+        await this.broadcastLeaseEvent("survey.lease_released").catch(console.error);
+      }
+      this.leaseToken = null;
+    }
 
-      // Update sample conversation with duration metrics
-      if (this.state.conversationId) {
-        const sessionDurationMs = Date.now() - this.sessionStartTime;
+    if (!this.state.voiceSessionId) return;
 
-        getDb()
-          .update(sampleConversations)
-          .set({
-            durationMs: sessionDurationMs,
-            activeDurationMs: Math.round(this.activeDurationMs),
-          })
-          .where(eq(sampleConversations.id, this.state.conversationId))
-          .catch(console.error);
+    getDb()
+      .update(voiceSessions)
+      .set({ status: "completed", endedAt: new Date() })
+      .where(eq(voiceSessions.id, this.state.voiceSessionId))
+      .catch(console.error);
+
+    if (!this.state.conversationId) return;
+
+    const sessionDurationMs = Date.now() - this.sessionStartTime;
+    getDb()
+      .update(sampleConversations)
+      .set({
+        durationMs: sessionDurationMs,
+        activeDurationMs: Math.round(this.activeDurationMs),
+      })
+      .where(eq(sampleConversations.id, this.state.conversationId))
+      .catch(console.error);
+  }
+
+  private async ensureRehearsalLease() {
+    if (this.leaseToken) {
+      const renewed = await renewSurveyLease({
+        surveyId: this.state.surveyId,
+        stage: "rehearsal",
+        userId: this.userId,
+        leaseToken: this.leaseToken,
+      });
+
+      if (renewed.ok) {
+        return true;
       }
     }
+
+    const acquired = await acquireSurveyLease({
+      surveyId: this.state.surveyId,
+      stage: "rehearsal",
+      userId: this.userId,
+      sessionId: this.state.voiceSessionId,
+    });
+
+    if (!acquired.ok) {
+      this.sendError("Another editor currently controls this rehearsal.");
+      return false;
+    }
+
+    this.leaseToken = acquired.lease.leaseToken;
+    await this.broadcastLeaseEvent("survey.lease_acquired", acquired.lease.expiresAt);
+    return true;
+  }
+
+  private async broadcastLeaseEvent(
+    eventType: "survey.lease_acquired" | "survey.lease_released",
+    expiresAt?: Date | null,
+  ) {
+    await getDb().transaction(async (tx) => {
+      await recordRealtimeEvent(tx, {
+        scope: "survey",
+        surveyId: this.state.surveyId,
+        actorId: this.userId,
+        eventType,
+        payload: {
+          surveyId: this.state.surveyId,
+          stage: "rehearsal",
+          holderUserId:
+            eventType === "survey.lease_released" ? null : this.userId,
+          holderSessionId:
+            eventType === "survey.lease_released"
+              ? null
+              : this.state.voiceSessionId,
+          expiresAt: expiresAt?.toISOString() ?? null,
+          source: "voice",
+        },
+      });
+    });
+
+    await publishPendingOutboxEntries();
   }
 }

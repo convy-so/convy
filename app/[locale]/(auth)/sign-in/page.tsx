@@ -38,7 +38,7 @@ export default function SignInPage() {
         password: formData.password,
         rememberMe: formData.rememberMe,
         fetchOptions: {
-          onSuccess: (ctx) => {
+          onSuccess: () => {
             toast.success(t('Success'));
             setIsRedirecting(true);
             router.push("/dashboard");

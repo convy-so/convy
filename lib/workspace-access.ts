@@ -2,7 +2,7 @@
 
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/db";
-import { members, organizations, surveys, projects } from "@/db/schema";
+import { members, surveyEditors, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 
 /**
@@ -65,10 +65,11 @@ export async function getWorkspaceOwnerId(
 }
 
 /**
- * Determine a user's access level for a survey
- * - "owner": The creator of the survey (full access)
- * - "workspace-member": Member of the workspace the survey belongs to (read-only)
- * - "none": No access
+ * Determine a user's survey-scoped access level.
+ * - "owner": the survey creator
+ * - "editor": an explicitly granted survey editor
+ * - "viewer": any other workspace member
+ * - "none": no access
  */
 export async function getSurveyAccessLevel(
   userId: string,
@@ -78,7 +79,6 @@ export async function getSurveyAccessLevel(
     .select({
       userId: surveys.userId,
       organizationId: surveys.organizationId,
-      collaborators: surveys.collaborators,
     })
     .from(surveys)
     .where(eq(surveys.id, surveyId));
@@ -92,21 +92,21 @@ export async function getSurveyAccessLevel(
     const isMember = await isWorkspaceMember(userId, survey.organizationId);
     if (!isMember) return "none";
 
-    // If survey is in a workspace and user is a member:
-    // 1. Creator = Owner
-    // 2. Workspace Owner = Owner (Can manage/close)
-    // 3. Workspace Member = Viewer (Can view, create new)
-
     if (survey.userId === userId) {
       return "owner";
     }
 
-    const isOwner = await isWorkspaceOwner(userId, survey.organizationId);
-    if (isOwner) {
-      return "owner";
-    }
+    const [editorRecord] = await getDb()
+      .select({ userId: surveyEditors.userId })
+      .from(surveyEditors)
+      .where(
+        and(
+          eq(surveyEditors.surveyId, surveyId),
+          eq(surveyEditors.userId, userId),
+        ),
+      );
 
-    if (survey.collaborators && survey.collaborators.includes(userId)) {
+    if (editorRecord) {
       return "editor";
     }
 
@@ -118,6 +118,122 @@ export async function getSurveyAccessLevel(
   if (survey.userId === userId) return "owner";
 
   return "none";
+}
+
+export type SurveyPermissionContext = {
+  surveyId: string;
+  workspaceId: string | null;
+  resourceScope: "personal" | "workspace";
+  activeContextMatchesResource: boolean;
+  collaborationAllowed: boolean;
+  creatorId: string;
+  accessLevel: "owner" | "editor" | "viewer" | "none";
+  isWorkspaceMember: boolean;
+  isWorkspaceOwner: boolean;
+  isSurveyCreator: boolean;
+  isSurveyEditor: boolean;
+  canView: boolean;
+  canComment: boolean;
+  canEdit: boolean;
+  canPublish: boolean;
+  canDelete: boolean;
+};
+
+export async function getSurveyPermissionContext(
+  userId: string,
+  surveyId: string,
+  options?: {
+    activeWorkspaceId?: string | null;
+  },
+): Promise<SurveyPermissionContext | null> {
+  const [survey] = await getDb()
+    .select({
+      id: surveys.id,
+      userId: surveys.userId,
+      organizationId: surveys.organizationId,
+    })
+    .from(surveys)
+    .where(eq(surveys.id, surveyId));
+
+  if (!survey) return null;
+
+  const accessLevel = await getSurveyAccessLevel(userId, surveyId);
+  const resourceScope = survey.organizationId ? "workspace" : "personal";
+  const activeContextMatchesResource =
+    options?.activeWorkspaceId === undefined
+      ? true
+      : survey.organizationId
+        ? options.activeWorkspaceId === survey.organizationId
+        : options.activeWorkspaceId == null;
+  const isSurveyCreator = survey.userId === userId;
+  const isWorkspaceOwner = survey.organizationId
+    ? await isWorkspaceOwnerOrFalse(userId, survey.organizationId)
+    : false;
+  const isWorkspaceMember = survey.organizationId
+    ? await isWorkspaceMember(userId, survey.organizationId)
+    : survey.userId === userId;
+  const [editorRecord] = isSurveyCreator
+    ? [{ userId }]
+    : await getDb()
+        .select({ userId: surveyEditors.userId })
+        .from(surveyEditors)
+        .where(
+          and(
+            eq(surveyEditors.surveyId, surveyId),
+            eq(surveyEditors.userId, userId),
+          ),
+        );
+  const isSurveyEditor = isSurveyCreator || Boolean(editorRecord);
+
+  return {
+    surveyId: survey.id,
+    workspaceId: survey.organizationId ?? null,
+    resourceScope,
+    activeContextMatchesResource,
+    collaborationAllowed: Boolean(survey.organizationId),
+    creatorId: survey.userId,
+    accessLevel,
+    isWorkspaceMember,
+    isWorkspaceOwner,
+    isSurveyCreator,
+    isSurveyEditor,
+    canView: accessLevel !== "none",
+    canComment: accessLevel !== "none",
+    canEdit: isSurveyCreator || accessLevel === "editor",
+    canPublish: isSurveyCreator || accessLevel === "editor",
+    canDelete:
+      isSurveyCreator || (Boolean(survey.organizationId) && isWorkspaceOwner),
+  };
+}
+
+async function isWorkspaceOwnerOrFalse(
+  userId: string,
+  organizationId: string,
+): Promise<boolean> {
+  try {
+    return await isWorkspaceOwner(userId, organizationId);
+  } catch {
+    return false;
+  }
+}
+
+export async function getSurveyEditors(
+  surveyId: string,
+): Promise<string[]> {
+  const rows = await getDb()
+    .select({ userId: surveyEditors.userId })
+    .from(surveyEditors)
+    .where(eq(surveyEditors.surveyId, surveyId));
+
+  return rows.map((row) => row.userId);
+}
+
+export async function isSurveyEditor(
+  userId: string,
+  surveyId: string,
+): Promise<boolean> {
+  const permission = await getSurveyPermissionContext(userId, surveyId);
+  return Boolean(permission?.canEdit);
 }
 
 /**

@@ -1,5 +1,5 @@
 import { Queue, QueueEvents, QueueOptions } from "bullmq";
-import { getRedisClient, createBlockingClient } from "@/lib/redis";
+import { getRedisClient } from "@/lib/redis";
 
 /**
  * Lazy Queue Management
@@ -30,18 +30,6 @@ function getQueue<T>(
   return global.queues![name] as Queue<T>;
 }
 
-function getQueueEvents(name: string): QueueEvents {
-  if (!global.queueEvents) global.queueEvents = {};
-
-  if (!global.queueEvents[name]) {
-    global.queueEvents[name] = new QueueEvents(name, {
-      connection: createBlockingClient(),
-    });
-  }
-
-  return global.queueEvents[name];
-}
-
 export interface ConversationInsightsJobData {
   conversationId: string;
   surveyId: string;
@@ -51,25 +39,8 @@ export interface ConversationInsightsJobData {
 export interface SurveyAnalyticsJobData {
   surveyId: string;
   userId: string;
-}
-
-export interface SampleConversationInsightsJobData {
-  surveyId: string;
-  conversationNumber: number;
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
-  userId: string;
-}
-
-export interface PatternExtractionJobData {
-  conversationId: string;
-  surveyId: string;
-  conversationType: "creation" | "response" | "sample";
-  domainId?: string | null;
-}
-
-export interface SurveyCreationExtractionJobData {
-  surveyId: string;
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  reason?: string;
+  score?: number;
 }
 
 export interface EmailJobData {
@@ -116,36 +87,6 @@ export const getSurveyAnalyticsQueue = () =>
     },
   });
 
-export const getSampleConversationInsightsQueue = () =>
-  getQueue<SampleConversationInsightsJobData>("sample-conversation-insights", {
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: "exponential", delay: 2000 },
-      removeOnComplete: { age: 24 * 3600, count: 1000 },
-      removeOnFail: { age: 7 * 24 * 3600 },
-    },
-  });
-
-export const getPatternExtractionQueue = () =>
-  getQueue<PatternExtractionJobData>("pattern-extraction", {
-    defaultJobOptions: {
-      attempts: 2,
-      backoff: { type: "exponential", delay: 3000 },
-      removeOnComplete: { age: 7 * 24 * 3600, count: 5000 },
-      removeOnFail: { age: 7 * 24 * 3600 },
-    },
-  });
-
-export const getSurveyCreationExtractionQueue = () =>
-  getQueue<SurveyCreationExtractionJobData>("survey-creation-extraction", {
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: "exponential", delay: 2000 },
-      removeOnComplete: { age: 3600, count: 500 },
-      removeOnFail: { age: 24 * 3600 },
-    },
-  });
-
 export const getEmailQueue = () =>
   getQueue<EmailJobData>("email", {
     defaultJobOptions: {
@@ -173,22 +114,6 @@ export const getExperimentEvaluationQueue = () =>
       backoff: { type: "exponential", delay: 5000 },
       removeOnComplete: { count: 30 },
       removeOnFail: { count: 30 },
-    },
-  });
-
-export interface GenerativeSummaryJobData {
-  surveyId: string;
-  userId: string;
-  firstScheduledAt: number;
-}
-
-export const getGenerativeSummaryQueue = () =>
-  getQueue<GenerativeSummaryJobData>("generative-summary", {
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: "exponential", delay: 30_000 },
-      removeOnComplete: { age: 24 * 3600, count: 1000 },
-      removeOnFail: { age: 7 * 24 * 3600 },
     },
   });
 
@@ -225,40 +150,6 @@ export async function enqueueSurveyAnalytics(data: SurveyAnalyticsJobData) {
   });
 }
 
-export async function enqueueSampleConversationInsights(
-  data: SampleConversationInsightsJobData,
-) {
-  return await getSampleConversationInsightsQueue().add(
-    "generate-sample-insights",
-    data,
-    {
-      jobId: `sample-insights-${data.surveyId}-${data.conversationNumber}`,
-      priority: 2,
-    },
-  );
-}
-
-export async function enqueuePatternExtraction(data: PatternExtractionJobData) {
-  return await getPatternExtractionQueue().add("extract-patterns", data, {
-    jobId: `pattern-extraction-${data.conversationId}`,
-    priority: 1,
-  });
-}
-
-export async function enqueueCreationExtraction(
-  data: SurveyCreationExtractionJobData,
-) {
-  return await getSurveyCreationExtractionQueue().add(
-    "extract-creation",
-    data,
-    {
-      jobId: `creation-extraction-${data.surveyId}`,
-      delay: 5_000,
-      priority: 2,
-    },
-  );
-}
-
 export async function enqueueEmail(data: EmailJobData) {
   return await getEmailQueue().add(`send-${data.type}`, data, {
     priority: 1,
@@ -270,32 +161,6 @@ export async function enqueueImageUpload(data: ImageUploadJobData) {
     jobId: `image-upload-${data.surveyId}-${data.imageId}`,
     priority: 2,
   });
-}
-
-export async function enqueueGenerativeSummary(
-  data: Omit<GenerativeSummaryJobData, "firstScheduledAt">,
-) {
-  const DEBOUNCE_DELAY_MS = 2 * 60 * 1000;
-  const MAX_WAIT_MS = 15 * 60 * 1000;
-
-  const jobId = `gen-summary-${data.surveyId}`;
-  const queue = getGenerativeSummaryQueue();
-  const existingJob = await queue.getJob(jobId);
-  const firstScheduledAt =
-    (existingJob?.data?.firstScheduledAt as number | undefined) ?? Date.now();
-
-  const elapsed = Date.now() - firstScheduledAt;
-  const delay = elapsed >= MAX_WAIT_MS ? 0 : DEBOUNCE_DELAY_MS;
-
-  return await queue.add(
-    "generate-summary",
-    { ...data, firstScheduledAt },
-    {
-      jobId,
-      delay,
-      priority: 4,
-    },
-  );
 }
 
 export async function scheduleExperimentEvaluation() {

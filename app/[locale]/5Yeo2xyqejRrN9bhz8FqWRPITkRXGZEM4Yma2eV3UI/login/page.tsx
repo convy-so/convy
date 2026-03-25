@@ -1,9 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useParams } from "next/navigation";
-import { Link, useRouter } from "@/i18n/routing";
-import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/routing";
 import { Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { AuthCard } from "@/components/auth/auth-card";
 import { InputField } from "@/components/auth/input-field";
