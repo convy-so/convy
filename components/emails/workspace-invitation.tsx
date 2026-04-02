@@ -14,18 +14,19 @@ export const WorkspaceInvitationEmail = ({
   inviteLink,
   name,
 }: WorkspaceInvitationProps) => {
-  const previewText = `You've been invited to join ${workspaceName} on Convyy`;
+  const previewText = `You have been invited to join ${workspaceName} on Convyy`;
 
   return (
     <BaseLayout previewText={previewText}>
-      <Text style={globalStyles.h1}>You're invited!</Text>
-      
+      <Text style={globalStyles.h1}>You&apos;re invited!</Text>
+
       <Text style={globalStyles.text}>
         Hi {name ?? "there"},
       </Text>
-      
+
       <Text style={globalStyles.text}>
-        <strong>{invitedBy}</strong> has invited you to join their workspace, <strong>{workspaceName}</strong>, on Convyy.
+        <strong>{invitedBy}</strong> has invited you to join their workspace,
+        <strong> {workspaceName}</strong>, on Convyy.
       </Text>
 
       <Section style={globalStyles.buttonContainer}>
@@ -35,7 +36,8 @@ export const WorkspaceInvitationEmail = ({
       </Section>
 
       <Text style={globalStyles.secondaryText}>
-        If you weren't expecting this invitation, you can safely ignore this email.
+        If you weren&apos;t expecting this invitation, you can safely ignore
+        this email.
       </Text>
     </BaseLayout>
   );

@@ -22,15 +22,12 @@ import {
   authenticateWebSocket,
   verifyPublicAccess,
   sendAuthError,
-  getClientIP,
-  type AuthenticatedConnection,
 } from "./middleware/auth";
 import {
   checkConnectionAllowed,
   releaseConnection,
   getClientIdentifier,
 } from "./middleware/rate-limit";
-import { SurveyCreationVoiceHandler } from "./handlers/survey-creation-voice";
 import { SurveyResponseVoiceHandler } from "./handlers/survey-response-voice";
 import { SampleSurveyVoiceHandler } from "./handlers/sample-survey-voice";
 import { PresenceHandler } from "./handlers/presence";
@@ -52,7 +49,6 @@ const activeConnections = new Map<
   string,
   {
     handler:
-    | SurveyCreationVoiceHandler
     | SurveyResponseVoiceHandler
     | SampleSurveyVoiceHandler
     | PresenceHandler;
@@ -61,7 +57,8 @@ const activeConnections = new Map<
   }
 >();
 
-// Issue 14 Fix: Flattened Map (userId + ":" + surveyId) -> handler to prevent nested Map leaks
+// Track each presence socket independently so multiple tabs from the same user
+// do not overwrite each other.
 const presenceConnections = new Map<string, PresenceHandler>();
 const realtimeConnections = new Map<
   string,
@@ -83,6 +80,17 @@ const REDIS_RECONNECT_DELAY_MS = 5000;
 const CLEANUP_INTERVAL_MS = 60000; // Every minute
 const MAX_CONNECTION_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours max connection age
 
+function getSingleQueryParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function hasCleanupMethod(
+  handler: object
+): handler is { cleanup: () => Promise<void> } {
+  const cleanup = Reflect.get(handler, "cleanup");
+  return typeof cleanup === "function";
+}
+
 /**
  * Cleanup stale connections that may have leaked
  * This catches connections where the close event was missed
@@ -94,22 +102,32 @@ function cleanupStaleConnections(): void {
   for (const [connectionId, connection] of activeConnections) {
     try {
       // Check if WebSocket is closed by accessing private ws property
-      // Cast to unknown first to bypass private property TypeScript check
       const ws =
-        connection.handler && "ws" in connection.handler
-          ? (connection.handler as unknown as { ws: WebSocket }).ws
+        connection.handler && "getSocket" in connection.handler
+          ? connection.handler.getSocket()
           : null;
 
       const isClosed = ws && ws.readyState === WebSocket.CLOSED;
       const isTooOld = now - connection.createdAt > MAX_CONNECTION_AGE_MS;
 
       if (isClosed || isTooOld) {
+        if (presenceConnections.has(connectionId)) {
+          presenceConnections.delete(connectionId);
+        }
+        if (hasCleanupMethod(connection.handler)) {
+          void connection.handler.cleanup().catch((error) => {
+            console.error("[WebSocket] Failed to cleanup stale connection:", error);
+          });
+        }
         activeConnections.delete(connectionId);
         cleanedCount++;
 
       }
     } catch {
       // If we can't check the connection, remove it to be safe
+      if (presenceConnections.has(connectionId)) {
+        presenceConnections.delete(connectionId);
+      }
       activeConnections.delete(connectionId);
       cleanedCount++;
     }
@@ -132,9 +150,6 @@ function cleanupStaleConnections(): void {
   }
 
   if (cleanedCount > 0) {
-    console.log(
-      `[WebSocket] Cleaned up ${cleanedCount} stale connections. Active: ${activeConnections.size}`,
-    );
   }
 }
 
@@ -191,17 +206,13 @@ const wss = new WebSocketServer({
  * Handle new WebSocket connections
  */
 wss.on("connection", async (ws: WebSocket, req) => {
-  const clientIP = getClientIP(req);
   const url = parse(req.url || "", true);
   const pathname = url.pathname || "";
 
-  console.log(`[WebSocket] New connection from ${clientIP} to ${pathname}`);
 
   try {
     // Route based on pathname
-    if (pathname === "/voice/survey-creation") {
-      await handleSurveyCreation(ws, req);
-    } else if (pathname === "/voice/survey-response") {
+    if (pathname === "/voice/survey-response") {
       await handleSurveyResponse(ws, req);
     } else if (pathname === "/voice/sample-conversation") {
       await handleSampleConversation(ws, req);
@@ -231,78 +242,6 @@ wss.on("connection", async (ws: WebSocket, req) => {
 });
 
 /**
- * Handle survey creation voice connections (authenticated)
- */
-async function handleSurveyCreation(
-  ws: WebSocket,
-  req: IncomingMessage,
-): Promise<void> {
-  const authResult = await authenticateWebSocket(ws, req);
-
-  if ("code" in authResult) {
-    sendAuthError(ws, authResult);
-    return;
-  }
-
-  const connection = authResult as AuthenticatedConnection;
-
-  // Get client identifier (user-based)
-  const identifier = getClientIdentifier(req, connection.userId);
-
-  // Check rate limits with Upstash
-  const rateLimitCheck = await checkConnectionAllowed(identifier);
-
-  if (!rateLimitCheck.allowed) {
-    ws.send(
-      JSON.stringify({
-        type: "error",
-        error: rateLimitCheck.reason,
-        retryAfter: rateLimitCheck.retryAfter,
-      }),
-    );
-    ws.close();
-    return;
-  }
-
-  try {
-    // Create handler
-    const handler = new SurveyCreationVoiceHandler(connection);
-    await handler.initialize();
-
-    // Track connection with timestamp for cleanup
-    const connectionId = `creation-${connection.userId}-${Date.now()}`;
-    activeConnections.set(connectionId, {
-      handler,
-      userId: connection.userId,
-      createdAt: Date.now(),
-    });
-
-    // Handle disconnection
-    ws.on("close", async () => {
-      activeConnections.delete(connectionId);
-      await releaseConnection(identifier);
-      console.log(
-        `[WebSocket] Survey creation connection closed for user ${connection.userId}`,
-      );
-    });
-
-    console.log(
-      `[WebSocket] Survey creation handler initialized for user ${connection.userId}`,
-    );
-  } catch (error) {
-    console.error("[WebSocket] Survey creation handler error:", error);
-    await releaseConnection(identifier);
-    ws.send(
-      JSON.stringify({
-        type: "error",
-        error: `Failed to initialize voice session: ${error instanceof Error ? error.message : String(error)}`,
-      }),
-    );
-    ws.close();
-  }
-}
-
-/**
  * Handle survey response voice connections (public)
  */
 async function handleSurveyResponse(
@@ -316,7 +255,7 @@ async function handleSurveyResponse(
     return;
   }
 
-  const { surveyId } = accessResult;
+  const { surveyId, conversationId } = accessResult;
 
   // Get client identifier (IP-based for public access)
   const identifier = getClientIdentifier(req);
@@ -339,12 +278,13 @@ async function handleSurveyResponse(
   try {
     // Extract language from URL
     const url = parse(req.url || "", true);
-    const language = (url.query?.language as string) || "en";
+    const language = getSingleQueryParam(url.query?.language) || "en";
 
     // Create handler with language
     const handler = new SurveyResponseVoiceHandler(
       ws,
       surveyId,
+      conversationId,
       identifier,
       language,
     );
@@ -358,14 +298,8 @@ async function handleSurveyResponse(
     ws.on("close", async () => {
       activeConnections.delete(connectionId);
       await releaseConnection(identifier);
-      console.log(
-        `[WebSocket] Survey response connection closed for survey ${surveyId}`,
-      );
     });
 
-    console.log(
-      `[WebSocket] Survey response handler initialized for survey ${surveyId}`,
-    );
   } catch (error) {
     console.error("[WebSocket] Survey response handler error:", error);
     await releaseConnection(identifier);
@@ -394,13 +328,13 @@ async function handleSampleConversation(
     return;
   }
 
-  const connection = authResult as AuthenticatedConnection;
+  const connection = authResult;
 
   // Get surveyId and conversationNumber from query parameters
   const url = parse(req.url || "", true);
-  const surveyId = url.query?.surveyId as string;
+  const surveyId = getSingleQueryParam(url.query?.surveyId);
   const conversationNumber = parseInt(
-    (url.query?.conversationNumber as string) || "1",
+    getSingleQueryParam(url.query?.conversationNumber) || "1",
   );
 
   if (!surveyId) {
@@ -449,9 +383,6 @@ async function handleSampleConversation(
       await releaseConnection(identifier);
     });
 
-    console.log(
-      `[WebSocket] Sample voice handler initialized for user ${connection.userId}, survey ${surveyId}`,
-    );
   } catch (error) {
     console.error("[WebSocket] Sample voice handler error:", error);
     await releaseConnection(identifier);
@@ -480,10 +411,10 @@ async function handlePresence(
     return;
   }
 
-  const connection = authResult as AuthenticatedConnection;
+  const connection = authResult;
   const url = parse(req.url || "", true);
-  const workspaceId = url.query.workspaceId as string;
-  const surveyId = url.query.surveyId as string | undefined;
+  const workspaceId = getSingleQueryParam(url.query.workspaceId);
+  const surveyId = getSingleQueryParam(url.query.surveyId);
 
   if (!workspaceId) {
     ws.send(JSON.stringify({ type: "error", error: "Workspace ID required" }));
@@ -509,22 +440,25 @@ async function handlePresence(
   }
 
   try {
-    const handler = new PresenceHandler(connection, workspaceId, surveyId);
+    const connectionId = `presence-${connection.userId}-${workspaceId}-${Date.now()}`;
+    const handler = new PresenceHandler(
+      connection,
+      connectionId,
+      workspaceId,
+      surveyId,
+    );
     await handler.initialize();
 
-    const connectionId = `presence-${connection.userId}-${workspaceId}-${Date.now()}`;
     activeConnections.set(connectionId, {
       handler,
       userId: connection.userId,
       createdAt: Date.now(),
     });
-
-    const presenceKey = `${connection.userId}:${workspaceId}${surveyId ? `:${surveyId}` : ""}`;
-    presenceConnections.set(presenceKey, handler);
+    presenceConnections.set(connectionId, handler);
 
     ws.on("close", async () => {
       activeConnections.delete(connectionId);
-      presenceConnections.delete(presenceKey);
+      presenceConnections.delete(connectionId);
       await releaseConnection(identifier);
     });
 
@@ -546,7 +480,7 @@ async function handleRealtime(
     return;
   }
 
-  const connection = authResult as AuthenticatedConnection;
+  const connection = authResult;
   const identifier = getClientIdentifier(req, connection.userId);
   const rateLimitCheck = await checkConnectionAllowed(identifier);
 
@@ -673,12 +607,14 @@ function initializeRedisSubscriber(): void {
     redisSubscriber.on("pmessage", async (_pattern, channel, message) => {
       try {
         if (channel.startsWith("pubsub:presence:")) {
-          const workspaceId = channel.split(":")[2];
+          const channelParts = channel.split(":");
+          const workspaceId = channelParts[2];
+          const surveyId =
+            channelParts.length > 3 ? channelParts.slice(3).join(":") : undefined;
           const data = JSON.parse(message);
 
-          for (const [key, handler] of presenceConnections.entries()) {
-            const parts = key.split(":");
-            if (parts[1] === workspaceId) {
+          for (const handler of presenceConnections.values()) {
+            if (handler.matchesScope(workspaceId, surveyId)) {
               handler.send(data);
             }
           }
@@ -712,23 +648,19 @@ function initializeRedisSubscriber(): void {
 
     redisSubscriber.on("connect", () => {
       redisSubscriberReconnectAttempts = 0;
-      console.log("[Redis Pub/Sub] Subscriber connected");
     });
 
     redisSubscriber.on("end", () => {
-      console.log("[Redis Pub/Sub] Subscriber connection ended");
       if (redisSubscriberReconnectAttempts < MAX_REDIS_RECONNECT_ATTEMPTS) {
         redisSubscriberReconnectAttempts++;
         setTimeout(initializeRedisSubscriber, REDIS_RECONNECT_DELAY_MS);
       }
     });
 
-    console.log("[Redis Pub/Sub] Subscribed to presence and realtime events");
   } catch (error) {
     console.error("[Redis Pub/Sub] Failed to initialize subscriber:", error);
     if (redisSubscriberReconnectAttempts < MAX_REDIS_RECONNECT_ATTEMPTS) {
       redisSubscriberReconnectAttempts++;
-      console.log("[Redis Pub/Sub] Retrying initialization...");
       setTimeout(initializeRedisSubscriber, REDIS_RECONNECT_DELAY_MS);
     }
   }
@@ -748,26 +680,8 @@ server.listen(PORT, () => {
   // Initialize Redis pub/sub subscriber
   initializeRedisSubscriber();
 
-  console.log(`
-╔══════════════════════════════════════════════════════════════╗
-║                                                              ║
-║   🎤 Voice Survey WebSocket Server                           ║
-║                                                              ║
-║   Port: ${PORT}                                              ║
-║   Environment: ${env.NODE_ENV}                               ║
-║                                                              ║
-║   Endpoints:                                                 ║
-║   • ws://localhost:${PORT}/voice/survey-creation             ║
-║   • ws://localhost:${PORT}/voice/survey-response             ║
-║   • ws://localhost:${PORT}/voice/sample-conversation?surveyId={id}&conversationNumber={n} ║
-║   Health Check: http://localhost:${PORT}/health              ║
-║   Stats: http://localhost:${PORT}/stats                      ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
-  `);
 
   if (process.env.SENTRY_TEST_TRIGGER === "true") {
-    console.log("⚠️ Sentry Test Trigger enabled. Throwing test error in websocket server...");
     throw new Error("Sentry Test WebSocket Error: This is a test error from the WebSocket process.");
   }
 });
@@ -776,7 +690,6 @@ server.listen(PORT, () => {
  * Graceful shutdown
  */
 process.on("SIGTERM", async () => {
-  console.log("[WebSocket] Received SIGTERM, shutting down gracefully...");
 
   // Stop the cleanup interval
   clearInterval(cleanupInterval);
@@ -790,7 +703,6 @@ process.on("SIGTERM", async () => {
       await redisSubscriber.punsubscribe("pubsub:presence:*");
       await redisSubscriber.punsubscribe("pubsub:realtime:*");
       await redisSubscriber.quit();
-      console.log("[Redis Pub/Sub] Subscriber disconnected");
     } catch (error) {
       console.error("[Redis Pub/Sub] Error disconnecting subscriber:", error);
     }
@@ -799,12 +711,8 @@ process.on("SIGTERM", async () => {
   // Close all active connections
   for (const [connectionId, { handler }] of activeConnections.entries()) {
     try {
-      if (
-        handler &&
-        typeof (handler as { cleanup?: () => Promise<void> }).cleanup ===
-        "function"
-      ) {
-        await (handler as { cleanup: () => Promise<void> }).cleanup();
+      if (hasCleanupMethod(handler)) {
+        await handler.cleanup();
       }
     } catch (error) {
       console.error(
@@ -822,12 +730,10 @@ process.on("SIGTERM", async () => {
 
   // Close WebSocket server
   wss.close(() => {
-    console.log("[WebSocket] WebSocket server closed");
   });
 
   // Close HTTP server
   server.close(() => {
-    console.log("[WebSocket] HTTP server closed");
     process.exit(0);
   });
 
@@ -839,6 +745,5 @@ process.on("SIGTERM", async () => {
 });
 
 process.on("SIGINT", async () => {
-  console.log("[WebSocket] Received SIGINT, shutting down...");
   process.emit("SIGTERM");
 });

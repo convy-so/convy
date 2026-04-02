@@ -33,12 +33,19 @@ export interface SearchResult {
   createdAt: Date;
 }
 
+function normalizeMetadata(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null
+    ? Object.fromEntries(Object.entries(value))
+    : {};
+}
+
 export async function vectorSearch(
   query: string,
   filters: SearchFilters = {},
 ): Promise<SearchResult[]> {
   const embedding = await generateEmbedding(query);
   const limit = filters.limit || 20;
+  const queryVector = JSON.stringify(embedding);
 
   // Search document embeddings
   const docResults = await getDb()
@@ -49,7 +56,7 @@ export async function vectorSearch(
       sourceType: documentEmbeddings.sourceType,
       sourceId: documentEmbeddings.sourceId,
       createdAt: documentEmbeddings.createdAt,
-      similarity: sql<number>`1 - (${documentEmbeddings.embedding} <=> ${JSON.stringify(embedding)})`,
+      similarity: sql<number>`1 - (${documentEmbeddings.embedding} <=> ${queryVector})`,
     })
     .from(documentEmbeddings)
     .where(
@@ -76,21 +83,14 @@ export async function vectorSearch(
           : undefined,
       ),
     )
-    .orderBy(
-      sql`1 - (${documentEmbeddings.embedding} <=> ${JSON.stringify(embedding)}) DESC`,
-    )
+    .orderBy(sql`${documentEmbeddings.embedding} <=> ${queryVector} ASC`)
     .limit(limit);
 
-  // Sort and limit
-  const allResults = [...docResults]
-    .sort((a, b) => b.similarity - a.similarity)
-    .slice(0, limit);
-
-  return allResults.map((r) => ({
+  return docResults.map((r) => ({
     id: r.id,
     content: r.content,
     score: r.similarity,
-    metadata: r.metadata as Record<string, unknown>,
+    metadata: normalizeMetadata(r.metadata),
     sourceType: r.sourceType,
     sourceId: r.sourceId || undefined,
     createdAt: r.createdAt,
@@ -103,6 +103,7 @@ export async function fullTextSearch(
   language: SupportedLanguage = "en",
 ): Promise<SearchResult[]> {
   const limit = filters.limit || 20;
+  const effectiveLanguage = filters.language ?? language;
 
   const langConfigMap: Record<SupportedLanguage, string> = {
     en: "english",
@@ -112,7 +113,7 @@ export async function fullTextSearch(
     it: "italian",
   };
 
-  const tsConfig = langConfigMap[language] || "english";
+  const tsConfig = langConfigMap[effectiveLanguage] || "english";
   const tsQuery = sql`websearch_to_tsquery(${tsConfig}, ${query})`;
 
   const docRank = sql<number>`ts_rank(to_tsvector(${tsConfig}, ${documentEmbeddings.content}), ${tsQuery})`;
@@ -140,8 +141,8 @@ export async function fullTextSearch(
           ? gt(documentEmbeddings.createdAt, filters.minDate)
           : undefined,
         sql`to_tsvector(${tsConfig}, ${documentEmbeddings.content}) @@ ${tsQuery}`,
-        filters.language || language
-          ? sql`${documentEmbeddings.metadata}->>'language' = ${filters.language || language}`
+        effectiveLanguage
+          ? sql`${documentEmbeddings.metadata}->>'language' = ${effectiveLanguage}`
           : undefined,
         filters.organizationId
           ? sql`${documentEmbeddings.metadata}->>'organizationId' = ${filters.organizationId}`
@@ -154,15 +155,11 @@ export async function fullTextSearch(
     .orderBy(desc(docRank))
     .limit(limit);
 
-  const allResults = [...docResults]
-    .sort((a, b) => b.rank - a.rank)
-    .slice(0, limit);
-
-  return allResults.map((r) => ({
+  return docResults.map((r) => ({
     id: r.id,
     content: r.content,
     score: r.rank,
-    metadata: r.metadata as Record<string, unknown>,
+    metadata: normalizeMetadata(r.metadata),
     sourceType: r.sourceType,
     sourceId: r.sourceId || undefined,
     createdAt: r.createdAt,
@@ -228,7 +225,7 @@ export async function executeRAGQuery(
     console.warn("[RAG] Query executed without strict organizationId. This is a security risk. Proceeding but logged flagged.");
   }
   
-  let queriesToRun = [rawQuery];
+  const queriesToRun = [rawQuery];
   
   try {
     const { output: object } = await generateText({
@@ -288,7 +285,7 @@ export async function executeRAGQuery(
   const reranked = await rerank(rawQuery, candidatePool, finalContextLimit);
   
   return reranked.map(r => {
-    let rawAnswer = r.content;
+    const rawAnswer = r.content;
     r.content = `[Source ID: ${r.id}] Context chunk:\n${rawAnswer}`;
     return r;
   });

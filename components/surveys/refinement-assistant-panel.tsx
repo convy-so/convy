@@ -1,23 +1,37 @@
 ﻿"use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Bot, Loader2, Send } from "lucide-react";
+import { z } from "zod";
+import type {
+  RefinementMessage,
+  RefinementProposal,
+} from "@/lib/education/playbooks";
+import {
+  refinementMessageSchema,
+  refinementProposalSchema,
+} from "@/lib/education/playbooks";
 
-type StoredMessage = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-};
+type StoredMessage = Pick<RefinementMessage, "id" | "role" | "content">;
+type Proposal = RefinementProposal;
 
-type Proposal = {
-  id: string;
-  type: string;
-  title: string;
-  originalRequest: string;
-  interpretation: string;
-  runtimeEffect: string[];
-  status: "pending" | "approved" | "rejected";
-};
+const storedMessageSchema = refinementMessageSchema.pick({
+  id: true,
+  role: true,
+  content: true,
+});
+
+const refinementResponseSchema = z.object({
+  messages: z.array(storedMessageSchema).optional(),
+  proposals: z
+    .array(
+      z.union([
+        refinementProposalSchema,
+        z.object({ proposal: refinementProposalSchema }),
+      ]),
+    )
+    .optional(),
+});
 
 export function RefinementAssistantPanel({ surveyId }: { surveyId: string }) {
   const [messages, setMessages] = useState<StoredMessage[]>([]);
@@ -25,43 +39,94 @@ export function RefinementAssistantPanel({ surveyId }: { surveyId: string }) {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     setIsLoading(true);
-    const response = await fetch(`/api/surveys/${surveyId}/refinement`);
-    const data = await response.json();
-    setMessages((data.messages || []).map((item: any) => ({ id: item.id, role: item.role, content: item.content })));
-    setProposals((data.proposals || []).map((item: any) => item.proposal || item));
-    setIsLoading(false);
-  }
+    setError(null);
+    try {
+      const response = await fetch(`/api/surveys/${surveyId}/refinement`);
+
+      if (!response.ok) {
+        throw new Error("Failed to load refinement context.");
+      }
+
+      const data = refinementResponseSchema.parse(await response.json());
+      setMessages(
+        Array.isArray(data.messages)
+          ? data.messages.map((item) => ({
+              id: item.id,
+              role: item.role,
+              content: item.content,
+            }))
+          : [],
+      );
+      setProposals(
+        Array.isArray(data.proposals)
+          ? data.proposals.map((item) => ("proposal" in item ? item.proposal : item))
+          : [],
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [surveyId]);
 
   useEffect(() => {
-    load().catch(() => setIsLoading(false));
-  }, [surveyId]);
+    void load().catch((loadError) => {
+      console.error("[RefinementAssistantPanel] Failed to load:", loadError);
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Failed to load refinement context.",
+      );
+    });
+  }, [load]);
 
   async function handleSend(event: FormEvent) {
     event.preventDefault();
     if (!input.trim()) return;
     setIsSending(true);
+    setError(null);
     try {
-      await fetch(`/api/surveys/${surveyId}/refinement`, {
+      const response = await fetch(`/api/surveys/${surveyId}/refinement`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: input.trim() }),
       });
+
+      if (!response.ok) {
+        throw new Error("Failed to send refinement request.");
+      }
+
       setInput("");
       await load();
+    } catch (sendError) {
+      console.error("[RefinementAssistantPanel] Failed to send:", sendError);
+      setError(
+        sendError instanceof Error
+          ? sendError.message
+          : "Failed to send refinement request.",
+      );
     } finally {
       setIsSending(false);
     }
   }
 
   async function handleProposal(proposalId: string, action: "approve" | "reject", applyToLive = false) {
-    await fetch(`/api/surveys/${surveyId}/refinement/proposals/${proposalId}`, {
+    setError(null);
+    const response = await fetch(`/api/surveys/${surveyId}/refinement/proposals/${proposalId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, applyToLive }),
     });
+
+    if (!response.ok) {
+      const message = `Failed to ${action} refinement proposal.`;
+      console.error("[RefinementAssistantPanel]", message, { proposalId, applyToLive });
+      setError(message);
+      return;
+    }
+
     await load();
   }
 
@@ -84,6 +149,12 @@ export function RefinementAssistantPanel({ surveyId }: { surveyId: string }) {
         </ul>
       </div>
 
+      {error && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          {error}
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -94,7 +165,7 @@ export function RefinementAssistantPanel({ surveyId }: { surveyId: string }) {
           <div className="max-h-72 space-y-3 overflow-y-auto rounded-xl border border-gray-100 bg-gray-50 p-3">
             {messages.length === 0 ? (
               <div className="text-sm text-gray-500">
-                Ask for a concrete change in plain language. Example: "I want the interviewer to sound warmer and ask shorter questions."
+                Ask for a concrete change in plain language. Example: &quot;I want the interviewer to sound warmer and ask shorter questions.&quot;
               </div>
             ) : (
               messages.map((message) => (

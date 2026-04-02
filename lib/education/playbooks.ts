@@ -142,7 +142,7 @@ export const surveyPersonalityAssignmentSchema = z.object({
 export type SurveyPersonalityAssignment = z.infer<typeof surveyPersonalityAssignmentSchema>;
 
 export const researchBriefPatchSchema = z.object({
-  setFields: z.record(z.string(), z.any()).default({}),
+  setFields: z.record(z.string(), z.unknown()).default({}),
   addRequiredTopics: z.array(z.string()).default([]),
   removeRequiredTopics: z.array(z.string()).default([]),
   addSuccessCriteria: z.array(z.string()).default([]),
@@ -169,7 +169,7 @@ export const refinementProposalSchema = z.object({
   interpretation: z.string(),
   runtimeEffect: z.array(z.string()).default([]),
   status: z.enum(["pending", "approved", "rejected"]).default("pending"),
-  payload: z.record(z.string(), z.any()).default({}),
+  payload: z.record(z.string(), z.unknown()).default({}),
 });
 
 export type RefinementProposal = z.infer<typeof refinementProposalSchema>;

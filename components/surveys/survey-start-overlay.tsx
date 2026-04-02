@@ -10,7 +10,14 @@ interface SurveyStartOverlayProps {
     title: string;
     description: string;
     isVoice?: boolean;
-    t: (key: string) => string;
+    translations: {
+        selectLanguage: string;
+        micPermissionDenied: string;
+        micConsentTitle: string;
+        micConsentDescription: string;
+        initializing: string;
+        startInterview: string;
+    };
 }
 
 const LANGUAGES = [
@@ -27,7 +34,7 @@ export function SurveyStartOverlay({
     title,
     description,
     isVoice = false,
-    t,
+    translations,
 }: SurveyStartOverlayProps) {
     const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage);
     const [isRequestingPermission, setIsRequestingPermission] = useState(false);
@@ -48,10 +55,10 @@ export function SurveyStartOverlay({
 
                 // Permission granted, proceed to start
                 await onStart(selectedLanguage);
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error("Microphone permission denied:", err);
                 setPermissionError(
-                    t("micPermissionDenied") ||
+                    translations.micPermissionDenied ||
                     "Microphone access is required for this survey. Please enable it in your browser settings to continue.",
                 );
                 setIsRequestingPermission(false);
@@ -93,7 +100,7 @@ export function SurveyStartOverlay({
                 <div className="space-y-4">
                     <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-400 px-1">
                         <Globe className="w-3.5 h-3.5" />
-                        {t("selectLanguage") || "Select Language"}
+                        {translations.selectLanguage || "Select Language"}
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {LANGUAGES.map((lang) => (
@@ -135,10 +142,10 @@ export function SurveyStartOverlay({
                             </div>
                             <div className="space-y-1">
                                 <p className="text-sm font-semibold text-slate-900">
-                                    {t("micConsentTitle") || "Microphone Access"}
+                                    {translations.micConsentTitle || "Microphone Access"}
                                 </p>
                                 <p className="text-xs text-slate-500 leading-relaxed">
-                                    {t("micConsentDescription") || "I understand that this survey uses voice recording. I grant permission to use my microphone for the duration of the interview."}
+                                    {translations.micConsentDescription || "I understand that this survey uses voice recording. I grant permission to use my microphone for the duration of the interview."}
                                 </p>
                             </div>
                         </div>
@@ -157,11 +164,11 @@ export function SurveyStartOverlay({
                         {isRequestingPermission ? (
                             <>
                                 <Loader2 className="w-5 h-5 animate-spin" />
-                                {t("initializing") || "Initializing..."}
+                                {translations.initializing || "Initializing..."}
                             </>
                         ) : (
                             <>
-                                {t("startInterview") || "Start Survey"}
+                                {translations.startInterview || "Start Survey"}
                                 <ArrowRight className="w-5 h-5 opacity-50 group-hover:translate-x-1.5 transition-transform duration-300" />
                             </>
                         )}

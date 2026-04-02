@@ -45,6 +45,22 @@ const fasthand = localFont({
 
 import { SupportedLanguage } from "@/lib/i18n/ai-translator";
 
+function isSupportedLanguage(value: string): value is SupportedLanguage {
+  return (
+    value === "en" ||
+    value === "fr" ||
+    value === "de" ||
+    value === "es" ||
+    value === "it"
+  );
+}
+
+function isRoutingLocale(
+  value: string,
+): value is (typeof routing.locales)[number] {
+  return routing.locales.some((locale) => locale === value);
+}
+
 const METADATA_CONFIG: Record<SupportedLanguage, { title: string; description: string }> = {
   en: {
     title: "Convyy — Turn Forms into AI Conversations",
@@ -74,7 +90,7 @@ export async function generateMetadata({
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
   const { locale } = await params;
-  const lang = (locale as SupportedLanguage) || "en";
+  const lang = isSupportedLanguage(locale) ? locale : "en";
   const { title, description } = METADATA_CONFIG[lang] || METADATA_CONFIG.en;
 
   return {
@@ -136,7 +152,7 @@ export default async function LocaleLayout({
   const { locale } = await params;
 
   // Ensure that the incoming `locale` is valid
-  if (!routing.locales.includes(locale as any)) {
+  if (!isRoutingLocale(locale)) {
     notFound();
   }
 

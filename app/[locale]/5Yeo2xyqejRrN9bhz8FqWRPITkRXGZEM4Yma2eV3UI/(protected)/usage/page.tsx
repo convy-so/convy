@@ -12,17 +12,26 @@ async function UsageDashboard({ cookieHeader }: { cookieHeader: string | null })
         getUsageTypeBreakdown(cookieHeader)
     ]);
 
-    const chartData = usageCosts.map(c => ({
-        date: new Date(c.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-        newUsers: 0, // Not needed here but chart expects it
-        cost: parseFloat(c.cost.toFixed(2))
-    }));
+    const chartData = usageCosts.map(c => {
+        const date = typeof c.date === "string" ? c.date : "";
+        const cost = typeof c.cost === "number" ? c.cost : 0;
+        return {
+            date: new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+            newUsers: 0, // Not needed here but chart expects it
+            cost: parseFloat(cost.toFixed(2))
+        };
+    });
 
-    const pieData = breakdown.map(b => ({
-        name: b.type.replace('llm_', '').toUpperCase(),
-        value: parseFloat(b.totalCost || "0"),
-        count: b.count
-    }));
+    const pieData = breakdown.map(b => {
+        const typeStr = typeof b.type === "string" ? b.type : "unknown";
+        const costStr = typeof b.totalCost === "string" ? b.totalCost : "0";
+        const count = typeof b.count === "number" ? b.count : 0;
+        return {
+            name: typeStr.replace('llm_', '').toUpperCase(),
+            value: parseFloat(costStr),
+            count: count
+        };
+    });
 
     return (
         <div className="space-y-8">
@@ -52,13 +61,18 @@ async function UsageDashboard({ cookieHeader }: { cookieHeader: string | null })
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                        {breakdown.map((b) => (
-                            <tr key={b.type} className="hover:bg-gray-50/50 transition-colors">
-                                <td className="px-6 py-4 text-sm font-medium text-gray-900 capitalize">{b.type.replace('_', ' ')}</td>
-                                <td className="px-6 py-4 text-sm text-gray-600">{b.count}</td>
-                                <td className="px-6 py-4 text-sm text-gray-900 font-bold text-right">${parseFloat(b.totalCost || "0").toFixed(4)}</td>
-                            </tr>
-                        ))}
+                        {breakdown.map((b) => {
+                            const typeStr = typeof b.type === "string" ? b.type : "unknown";
+                            const count = typeof b.count === "number" ? b.count : 0;
+                            const costStr = typeof b.totalCost === "string" ? b.totalCost : "0";
+                            return (
+                                <tr key={typeStr} className="hover:bg-gray-50/50 transition-colors">
+                                    <td className="px-6 py-4 text-sm font-medium text-gray-900 capitalize">{typeStr.replace('_', ' ')}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-600">{count}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-900 font-bold text-right">${parseFloat(costStr).toFixed(4)}</td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>

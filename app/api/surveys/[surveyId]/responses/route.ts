@@ -6,6 +6,35 @@ import { surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
 
+type ConversationMessage = {
+  role: string;
+  content: string;
+  timestamp?: string;
+};
+
+function normalizeConversationMessages(value: unknown): ConversationMessage[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (typeof item !== "object" || item === null) {
+      return [];
+    }
+
+    const role = typeof item.role === "string" ? item.role : null;
+    const content = typeof item.content === "string" ? item.content : null;
+    const timestamp =
+      typeof item.timestamp === "string" ? item.timestamp : undefined;
+
+    if (!role || !content) {
+      return [];
+    }
+
+    return [{ role, content, timestamp }];
+  });
+}
+
 /**
  * GET - Get all responses for a survey
  */
@@ -55,11 +84,7 @@ export async function GET(
 
     // Format responses for frontend
     const formattedResponses = responses.map((r) => {
-      const messages = r.rawConversation as Array<{
-        role: string;
-        content: string;
-        timestamp?: string;
-      }>;
+      const messages = normalizeConversationMessages(r.rawConversation);
       const messageCount = messages?.length || 0;
 
       // Calculate duration from first to last message

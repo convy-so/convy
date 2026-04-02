@@ -1,7 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { z } from "zod";
+import {
+  playbookPhaseSchema,
+  playbookScopeSchema,
+  type PlaybookAuthorInput,
+} from "@/lib/education/playbooks";
 
 type PlaybookRecord = {
   playbook: {
@@ -29,7 +35,16 @@ type PlaybookRecord = {
   isAttached: boolean;
 };
 
-const EMPTY_FORM = {
+type PlaybookFormState = Omit<
+  PlaybookAuthorInput,
+  "wordingToUse" | "wordingToAvoid" | "examplePhrasings"
+> & {
+  wordingToUse: string;
+  wordingToAvoid: string;
+  examplePhrasings: string;
+};
+
+const EMPTY_FORM: PlaybookFormState = {
   name: "",
   phase: "conducting",
   scope: "survey",
@@ -42,23 +57,78 @@ const EMPTY_FORM = {
   extraContext: "",
 };
 
+const playbookRecordSchema = z.object({
+  playbook: z.object({
+    id: z.string(),
+    name: z.string(),
+    phase: playbookPhaseSchema,
+    scope: playbookScopeSchema,
+    status: z.string(),
+  }),
+  activeVersion: z
+    .object({
+      id: z.string(),
+      interpretation: z.object({
+        summary: z.string(),
+        blockedReasons: z.array(z.string()),
+        clarificationQuestions: z.array(z.string()),
+        usefulnessScore: z.number(),
+        specificityScore: z.number(),
+      }),
+      preview: z.object({
+        interpretedEffect: z.array(z.string()),
+        unchangedGuardrails: z.array(z.string()),
+        examples: z.array(z.string()),
+      }),
+    })
+    .nullable(),
+  isAttached: z.boolean(),
+});
+
+const playbooksResponseSchema = z.object({
+  playbooks: z.array(playbookRecordSchema).optional(),
+});
+
+function parsePlaybookPhase(value: string): PlaybookAuthorInput["phase"] {
+  return playbookPhaseSchema.catch("conducting").parse(value);
+}
+
+function parsePlaybookScope(value: string): PlaybookAuthorInput["scope"] {
+  return playbookScopeSchema.catch("survey").parse(value);
+}
+
 export function PlaybookStudioPanel({ surveyId }: { surveyId: string }) {
   const [playbooks, setPlaybooks] = useState<PlaybookRecord[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     setIsLoading(true);
-    const response = await fetch(`/api/surveys/${surveyId}/playbooks`);
-    const data = await response.json();
-    setPlaybooks(data.playbooks || []);
-    setIsLoading(false);
-  }
+    setError(null);
+    try {
+      const response = await fetch(`/api/surveys/${surveyId}/playbooks`);
+
+      if (!response.ok) {
+        throw new Error("Failed to load playbooks.");
+      }
+
+      const data = playbooksResponseSchema.parse(await response.json());
+      setPlaybooks(data.playbooks ?? []);
+    } catch (loadError) {
+      console.error("[PlaybookStudioPanel] Failed to load:", loadError);
+      setError(
+        loadError instanceof Error ? loadError.message : "Failed to load playbooks.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [surveyId]);
 
   useEffect(() => {
-    load().catch(() => setIsLoading(false));
-  }, [surveyId]);
+    void load();
+  }, [load]);
 
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
@@ -129,7 +199,12 @@ export function PlaybookStudioPanel({ surveyId }: { surveyId: string }) {
         <div className="grid grid-cols-2 gap-2">
           <select
             value={form.phase}
-            onChange={(event) => setForm((current) => ({ ...current, phase: event.target.value as any }))}
+            onChange={(event) =>
+              setForm((current) => ({
+                ...current,
+                phase: parsePlaybookPhase(event.target.value),
+              }))
+            }
             className="rounded-xl border border-gray-200 p-3 text-sm outline-none"
           >
             <option value="creation">Creation</option>
@@ -138,7 +213,12 @@ export function PlaybookStudioPanel({ surveyId }: { surveyId: string }) {
           </select>
           <select
             value={form.scope}
-            onChange={(event) => setForm((current) => ({ ...current, scope: event.target.value as any }))}
+            onChange={(event) =>
+              setForm((current) => ({
+                ...current,
+                scope: parsePlaybookScope(event.target.value),
+              }))
+            }
             className="rounded-xl border border-gray-200 p-3 text-sm outline-none"
           >
             <option value="survey">Survey</option>
@@ -196,6 +276,12 @@ export function PlaybookStudioPanel({ surveyId }: { surveyId: string }) {
           {isSubmitting ? "Creating..." : "Create playbook draft"}
         </button>
       </form>
+
+      {error && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          {error}
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex items-center gap-2 text-sm text-gray-500">

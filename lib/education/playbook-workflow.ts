@@ -27,14 +27,79 @@ const BLOCKED_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\b(unprofessional|slang)\b/i, reason: "Playbooks cannot intentionally lower professionalism." },
 ];
 
-function safeJsonParse<T>(raw: string): T | null {
+const MAX_OPTIMIZER_ATTEMPTS = 1;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function safeJsonParse(raw: string): unknown | null {
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) return null;
   try {
-    return JSON.parse(match[0]) as T;
+    return JSON.parse(match[0]);
   } catch {
     return null;
   }
+}
+
+function getStringArray(value: unknown): string[] | undefined {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : undefined;
+}
+
+function applyBriefSetFields(
+  brief: ResearchBrief,
+  setFields: Record<string, unknown>,
+): ResearchBrief {
+  const nextBrief: ResearchBrief = { ...brief };
+
+  if (typeof setFields.title === "string") nextBrief.title = setFields.title;
+  if (typeof setFields.researchGoal === "string") nextBrief.researchGoal = setFields.researchGoal;
+  if (typeof setFields.decisionToInform === "string") nextBrief.decisionToInform = setFields.decisionToInform;
+  if (typeof setFields.audienceDefinition === "string") nextBrief.audienceDefinition = setFields.audienceDefinition;
+  if (typeof setFields.audienceRelationship === "string") nextBrief.audienceRelationship = setFields.audienceRelationship;
+  if (typeof setFields.audienceKnowledgeLevel === "string") nextBrief.audienceKnowledgeLevel = setFields.audienceKnowledgeLevel;
+  if (typeof setFields.learningContext === "string") nextBrief.learningContext = setFields.learningContext;
+  if (typeof setFields.deliveryContext === "string") nextBrief.deliveryContext = setFields.deliveryContext;
+  if (typeof setFields.timeWindow === "string") nextBrief.timeWindow = setFields.timeWindow;
+  if (typeof setFields.routingRationale === "string") nextBrief.routingRationale = setFields.routingRationale;
+  if (typeof setFields.routingConfidence === "number") nextBrief.routingConfidence = setFields.routingConfidence;
+  if (typeof setFields.readyForSampling === "boolean") nextBrief.readyForSampling = setFields.readyForSampling;
+  if (setFields.tone === "formal" || setFields.tone === "casual" || setFields.tone === "playful" || setFields.tone === "empathetic") {
+    nextBrief.tone = setFields.tone;
+  }
+
+  const requiredQuestions = getStringArray(setFields.requiredQuestions);
+  if (requiredQuestions) nextBrief.requiredQuestions = requiredQuestions;
+  const metrics = getStringArray(setFields.metrics);
+  if (metrics) nextBrief.metrics = metrics;
+  const personalInfo = getStringArray(setFields.personalInfo);
+  if (personalInfo) nextBrief.personalInfo = personalInfo;
+  const riskFlags = getStringArray(setFields.riskFlags);
+  if (riskFlags) nextBrief.riskFlags = riskFlags;
+  const constraints = getStringArray(setFields.constraints);
+  if (constraints) nextBrief.constraints = constraints;
+  const assumptions = getStringArray(setFields.assumptions);
+  if (assumptions) nextBrief.assumptions = assumptions;
+  const missingFields = getStringArray(setFields.missingFields);
+  if (missingFields) nextBrief.missingFields = missingFields;
+
+  return nextBrief;
+}
+
+function parseRefinementAssistantResponse(
+  value: unknown,
+): { reply?: string; proposals?: unknown[] } | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    reply: typeof value.reply === "string" ? value.reply : undefined,
+    proposals: Array.isArray(value.proposals) ? value.proposals : undefined,
+  };
 }
 
 function summarizeIntent(input: PlaybookAuthorInput) {
@@ -48,6 +113,199 @@ function summarizeIntent(input: PlaybookAuthorInput) {
     .filter(Boolean)
     .join("\n")
     .trim();
+}
+
+function hasConcretePlaybookDirectives(interpretation: PlaybookInterpretation) {
+  return (
+    interpretation.styleDirectives.length > 0 ||
+    interpretation.wordingPreferences.length > 0 ||
+    interpretation.avoidRules.length > 0 ||
+    interpretation.examples.length > 0 ||
+    interpretation.derivedMetrics.length > 0
+  );
+}
+
+function evaluatePlaybookInterpretation(
+  input: PlaybookAuthorInput,
+  interpretation: PlaybookInterpretation,
+  parseFailed: boolean,
+  rawIntent: string,
+) {
+  const issues: string[] = [];
+
+  if (parseFailed) {
+    issues.push("The interpretation did not parse into the required schema.");
+  }
+
+  if (input.phase !== "analytics" && interpretation.derivedMetrics.length > 0) {
+    issues.push("Derived metrics are only allowed for analytics playbooks.");
+  }
+
+  if (
+    rawIntent.length >= 40 &&
+    interpretation.clarificationQuestions.length === 0 &&
+    !hasConcretePlaybookDirectives(interpretation)
+  ) {
+    issues.push("The interpretation is too generic for the amount of detail the creator provided.");
+  }
+
+  if (
+    rawIntent.length >= 40 &&
+    interpretation.usefulnessScore < 0.45 &&
+    interpretation.clarificationQuestions.length === 0
+  ) {
+    issues.push("The usefulness score is too low for a non-vague request.");
+  }
+
+  if (
+    interpretation.blockedReasons.length === 0 &&
+    interpretation.guardrailsPreserved.length === 0
+  ) {
+    issues.push("The interpretation does not explicitly preserve any guardrails.");
+  }
+
+  return {
+    ok: issues.length === 0,
+    issues,
+  };
+}
+
+async function optimizePlaybookInterpretation(input: {
+  authorInput: PlaybookAuthorInput;
+  previousRaw: string;
+  issues: string[];
+}) {
+  const prompt = `Repair this playbook interpretation so it satisfies the schema and issues below. Return JSON only.
+
+<input>
+Name: ${input.authorInput.name}
+Phase: ${input.authorInput.phase}
+Scope: ${input.authorInput.scope}
+Objective: ${input.authorInput.objective}
+Target audience: ${input.authorInput.targetAudience}
+Desired style: ${input.authorInput.desiredStyle}
+Preferred wording: ${input.authorInput.wordingToUse.join(", ")}
+Avoid wording: ${input.authorInput.wordingToAvoid.join(", ")}
+Example phrasings: ${input.authorInput.examplePhrasings.join(" || ")}
+Extra context: ${input.authorInput.extraContext}
+</input>
+
+<issues>
+${input.issues.map((issue) => `- ${issue}`).join("\n")}
+</issues>
+
+<previous-output>
+${input.previousRaw}
+</previous-output>
+
+<guardrails>
+${PLAYBOOK_GUARDRAILS.join("\n")}
+</guardrails>
+
+<rules>
+- Keep the output compact and actionable.
+- Only suggest derived metrics for analytics playbooks.
+- If the request is still too vague, use clarificationQuestions instead of inventing detail.
+- Preserve any valid parts of the previous interpretation when possible.
+</rules>`;
+
+  return await generateAIResponse(prompt, undefined, {
+    model: analysisModel,
+    temperature: 0.1,
+    maxTokens: 1400,
+  }).catch(() => "");
+}
+
+function evaluateRefinementAssistantResult(input: {
+  creatorMessage: string;
+  reply: string;
+  validProposals: RefinementProposal[];
+  rawProposalCount: number;
+}) {
+  const issues: string[] = [];
+  const requestLooksSpecific = input.creatorMessage.trim().length >= 24;
+  const hasClarifyingQuestion = input.reply.includes("?");
+
+  if (!input.reply.trim()) {
+    issues.push("The assistant reply is empty.");
+  }
+
+  if (input.rawProposalCount > 0 && input.validProposals.length === 0) {
+    issues.push("Proposals were returned but none survived schema validation.");
+  }
+
+  if (
+    requestLooksSpecific &&
+    input.validProposals.length === 0 &&
+    !hasClarifyingQuestion
+  ) {
+    issues.push("A specific request produced neither actionable proposals nor a clarifying question.");
+  }
+
+  if (input.validProposals.some((proposal) => proposal.runtimeEffect.length === 0)) {
+    issues.push("Every proposal must describe its runtime effect.");
+  }
+
+  if (input.validProposals.some((proposal) => !proposal.title.trim())) {
+    issues.push("Every proposal must include a non-empty title.");
+  }
+
+  return {
+    ok: issues.length === 0,
+    issues,
+  };
+}
+
+async function optimizeRefinementAssistantResponse(input: {
+  creatorMessage: string;
+  surveyTitle: string;
+  currentPersonalityLabel: string;
+  playbookSummaries: string[];
+  latestSampleTranscript: string;
+  brief: ResearchBrief;
+  previousRaw: string;
+  issues: string[];
+}) {
+  const prompt = `Repair this refinement assistant output so it satisfies the issues below. Return JSON only.
+
+<context>
+Survey title: ${input.surveyTitle}
+Current personality: ${input.currentPersonalityLabel}
+Active playbooks: ${input.playbookSummaries.join(" | ") || "none"}
+Research goal: ${input.brief.researchGoal}
+Audience: ${input.brief.audienceDefinition}
+Required topics: ${input.brief.requiredTopics.join(", ")}
+</context>
+
+<latest-sample>
+${input.latestSampleTranscript || "No sample transcript yet."}
+</latest-sample>
+
+<creator-request>
+${input.creatorMessage}
+</creator-request>
+
+<issues>
+${input.issues.map((issue) => `- ${issue}`).join("\n")}
+</issues>
+
+<previous-output>
+${input.previousRaw}
+</previous-output>
+
+<rules>
+- If the request is vague, ask one targeted clarifying question and produce no proposals.
+- If the request is specific, produce bounded proposals rather than generic advice.
+- Keep proposals practical and safe.
+- Do not reduce rigor or neutrality.
+- Preserve any valid proposal ideas from the previous output when possible.
+</rules>`;
+
+  return await generateAIResponse(prompt, undefined, {
+    model: defaultModel,
+    temperature: 0.1,
+    maxTokens: 1400,
+  }).catch(() => "");
 }
 
 export async function compilePlaybookAuthorInput(input: PlaybookAuthorInput) {
@@ -101,14 +359,14 @@ ${PLAYBOOK_GUARDRAILS.join("\n")}
 }
 </schema>`;
 
-  const raw = await generateAIResponse(prompt, undefined, {
+  let raw = await generateAIResponse(prompt, undefined, {
     model: analysisModel,
     temperature: 0.2,
     maxTokens: 1400,
   }).catch(() => "");
-  const parsed = playbookInterpretationSchema.safeParse(safeJsonParse(raw));
 
-  const interpretation: PlaybookInterpretation = parsed.success
+  let parsed = playbookInterpretationSchema.safeParse(safeJsonParse(raw));
+  let interpretation: PlaybookInterpretation = parsed.success
     ? {
         ...parsed.data,
         blockedReasons: Array.from(new Set([...blockedReasons, ...parsed.data.blockedReasons])),
@@ -132,6 +390,33 @@ ${PLAYBOOK_GUARDRAILS.join("\n")}
         specificityScore: rawIntent.length > 24 ? 0.6 : 0.3,
         likelyImpact: rawIntent.length > 60 ? "medium" : "low",
       };
+
+  for (let attempt = 0; attempt < MAX_OPTIMIZER_ATTEMPTS; attempt++) {
+    const evaluation = evaluatePlaybookInterpretation(
+      input,
+      interpretation,
+      !parsed.success,
+      rawIntent,
+    );
+    if (evaluation.ok) {
+      break;
+    }
+
+    raw = await optimizePlaybookInterpretation({
+      authorInput: input,
+      previousRaw: raw,
+      issues: evaluation.issues,
+    });
+    parsed = playbookInterpretationSchema.safeParse(safeJsonParse(raw));
+    interpretation = parsed.success
+      ? {
+          ...parsed.data,
+          blockedReasons: Array.from(
+            new Set([...blockedReasons, ...parsed.data.blockedReasons]),
+          ),
+        }
+      : interpretation;
+  }
 
   const preview = buildPlaybookPreview(input, interpretation);
   const status =
@@ -241,8 +526,7 @@ export function applyResearchBriefPatch(params: {
   patch: ResearchBriefPatch;
 }) {
   const nextBrief: ResearchBrief = {
-    ...params.brief,
-    ...(params.patch.setFields as Partial<ResearchBrief>),
+    ...applyBriefSetFields(params.brief, params.patch.setFields),
     requiredTopics: Array.from(
       new Set([
         ...params.brief.requiredTopics.filter((topic) => !params.patch.removeRequiredTopics.includes(topic)),
@@ -336,24 +620,48 @@ ${input.creatorMessage}
 }
 </schema>`;
 
-  const raw = await generateAIResponse(prompt, undefined, {
+  let raw = await generateAIResponse(prompt, undefined, {
     model: defaultModel,
     temperature: 0.2,
     maxTokens: 1400,
   }).catch(() => "");
-  const parsed = safeJsonParse<{
-    reply?: string;
-    proposals?: unknown[];
-  }>(raw);
-  const proposals = Array.isArray(parsed?.proposals)
-    ? parsed!.proposals
-        .map((proposal) => refinementProposalSchema.safeParse(proposal))
-        .filter((result): result is { success: true; data: RefinementProposal } => result.success)
-        .map((result) => ({
-          ...result.data,
-          id: result.data.id || nanoid(),
-        }))
-    : [];
+  let parsed = parseRefinementAssistantResponse(safeJsonParse(raw));
+
+  const parseProposals = (candidate: typeof parsed) =>
+    Array.isArray(candidate?.proposals)
+      ? candidate!.proposals
+          .map((proposal) => refinementProposalSchema.safeParse(proposal))
+          .filter(
+            (result): result is { success: true; data: RefinementProposal } =>
+              result.success,
+          )
+          .map((result) => ({
+            ...result.data,
+            id: result.data.id || nanoid(),
+          }))
+      : [];
+
+  let proposals = parseProposals(parsed);
+
+  for (let attempt = 0; attempt < MAX_OPTIMIZER_ATTEMPTS; attempt++) {
+    const evaluation = evaluateRefinementAssistantResult({
+      creatorMessage: input.creatorMessage,
+      reply: parsed?.reply || "",
+      validProposals: proposals,
+      rawProposalCount: Array.isArray(parsed?.proposals) ? parsed!.proposals.length : 0,
+    });
+    if (evaluation.ok) {
+      break;
+    }
+
+    raw = await optimizeRefinementAssistantResponse({
+      ...input,
+      previousRaw: raw,
+      issues: evaluation.issues,
+    });
+    parsed = parseRefinementAssistantResponse(safeJsonParse(raw));
+    proposals = parseProposals(parsed);
+  }
 
   return {
     reply:

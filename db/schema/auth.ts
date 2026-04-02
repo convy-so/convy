@@ -21,6 +21,13 @@ const users = pgTable(
     name: text("name").notNull(),
     image: text("image"),
     role: userRoleEnum("role").default("user").notNull(),
+    banned: boolean("banned").default(false).notNull(),
+    banReason: text("ban_reason"),
+    banExpires: timestamp("ban_expires", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    uiLocale: text("ui_locale").default("en"),
     preferredLanguage: text("preferred_language").default("en"),
   },
   (table) => [unique("users_email_unique").on(table.email)]
@@ -94,6 +101,7 @@ const sessions = pgTable(
     userAgent: text("user_agent"),
     activeOrganizationId: text("active_organization_id"),
     activeTeamId: text("active_team_id"),
+    impersonatedBy: text("impersonated_by"),
   },
   (table) => [
     unique("sessions_token_unique").on(table.token),

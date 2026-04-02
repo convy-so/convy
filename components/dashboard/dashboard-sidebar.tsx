@@ -1,7 +1,5 @@
 "use client";
 
-import { User } from "better-auth/types";
-
 import { useState } from "react";
 import { Link, usePathname, useRouter } from "@/i18n/routing";
 import Image from "next/image";
@@ -12,6 +10,7 @@ import {
   Settings,
   Users,
   FolderOpen,
+  GraduationCap,
   Menu,
   X,
   LogOut,
@@ -26,11 +25,7 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
 
-interface DashboardSidebarProps {
-  user?: User | null;
-}
-
-export function DashboardSidebar({ user: _initialUser }: DashboardSidebarProps) {
+export function DashboardSidebar() {
   const { user, session } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
@@ -42,9 +37,10 @@ export function DashboardSidebar({ user: _initialUser }: DashboardSidebarProps) 
   const navigation = [
     { name: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard },
     { name: t("Surveys"), href: "/dashboard/surveys", icon: MessageSquare },
-    { name: t("Projects"), href: "/dashboard/projects", icon: FolderOpen },
+    { name: "Learning", href: "/dashboard/learning", icon: GraduationCap },
+    { name: "Folders", href: "/dashboard/projects", icon: FolderOpen },
     { name: t("Analytics"), href: "/dashboard/analytics", icon: BarChart3 },
-    ...(activeOrgId ? [{ name: t("Team"), href: "/dashboard/team", icon: Users }] : []),
+    ...(activeOrgId ? [{ name: "Workspace", href: "/dashboard/team", icon: Users }] : []),
   ];
 
   const bottomNavigation = [

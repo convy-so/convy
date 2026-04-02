@@ -245,6 +245,10 @@ export const workspaceOutbox = pgTable(
     index("workspace_outbox_scope_idx").on(table.scope, table.publishedAt),
     index("workspace_outbox_workspace_idx").on(table.workspaceId, table.publishedAt),
     index("workspace_outbox_survey_idx").on(table.surveyId, table.publishedAt),
+    index("workspace_outbox_unpublished_created_idx").on(
+      table.publishedAt,
+      table.createdAt,
+    ),
   ],
 );
 

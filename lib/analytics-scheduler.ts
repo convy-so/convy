@@ -1,13 +1,17 @@
-import { getSurveyAnalyticsQueue } from "@/lib/queue";
+import {
+  getSurveyAnalyticsQueue,
+  type SurveyAnalyticsJobData,
+} from "@/lib/queue";
 import {
   getAnalyticsState,
   getLatestAnalyticsSnapshot,
   listSurveySessionInsightsByType,
   upsertAnalyticsState,
 } from "@/lib/education/storage";
-import type { AnalyticsGenerationState } from "@/lib/education/types";
+import type {
+  AnalyticsGenerationState,
+} from "@/lib/education/types";
 import {
-  publishPendingOutboxEntries,
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
 import { getDb } from "@/db";
@@ -32,6 +36,22 @@ function createDefaultState(surveyId: string): AnalyticsGenerationState {
 
 function clamp(min: number, value: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getNodeCoverage(value: unknown): Record<string, number> {
+  if (!isRecord(value) || !isRecord(value.nodeCoverage)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value.nodeCoverage).flatMap(([nodeId, score]) =>
+      typeof score === "number" ? [[nodeId, score]] : [],
+    ),
+  );
 }
 
 function getDebouncedJobId(surveyId: string) {
@@ -191,7 +211,6 @@ export async function markAnalyticsCompleted(params: {
     });
   });
 
-  await publishPendingOutboxEntries();
   return state;
 }
 
@@ -219,19 +238,19 @@ export async function scheduleAnalyticsRefresh(params: {
   const state = stateRow?.state ?? createDefaultState(params.surveyId);
   const latestSnapshot = snapshotRow?.snapshot ?? null;
   const completedSessions = insightRows.filter(
-    (row) => (row.insight as any).quality?.completeness >= 0.8,
+    (row) => row.insight.quality?.completeness >= 0.8,
   ).length;
   const coverageOverall =
     insightRows.length > 0
       ? insightRows.reduce(
-          (sum, row) => sum + (((row.insight as any).quality?.completeness as number) ?? 0),
+          (sum, row) => sum + (row.insight.quality?.completeness ?? 0),
           0,
         ) / insightRows.length
       : 0;
   const averageReliability =
     insightRows.length > 0
       ? insightRows.reduce(
-          (sum, row) => sum + (((row.insight as any).quality?.reliability as number) ?? 0),
+          (sum, row) => sum + (row.insight.quality?.reliability ?? 0),
           0,
         ) / insightRows.length
       : 0;
@@ -239,7 +258,7 @@ export async function scheduleAnalyticsRefresh(params: {
   const previousCoverageByNode = latestSnapshot?.coverage.byNode ?? {};
   const latestCoverageByNode: Record<string, number> = {};
   for (const row of insightRows) {
-    const nodeCoverage = (row.insight as any).nodeCoverage ?? {};
+    const nodeCoverage = getNodeCoverage(row.insight);
     for (const [nodeId, value] of Object.entries(nodeCoverage)) {
       latestCoverageByNode[nodeId] = (latestCoverageByNode[nodeId] ?? 0) + Number(value ?? 0);
     }
@@ -286,7 +305,7 @@ export async function scheduleAnalyticsRefresh(params: {
       userId: params.userId,
       reason: decision.reason,
       score: decision.score,
-    } as any,
+    } satisfies SurveyAnalyticsJobData,
     {
       jobId,
       delay: decision.debounceMs,

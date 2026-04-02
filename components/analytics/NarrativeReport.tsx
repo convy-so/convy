@@ -250,7 +250,7 @@ export function NarrativeReport({ data, surveyId }: NarrativeReportProps) {
                         key={item.id}
                         className="rounded-2xl bg-gray-50 p-4 text-sm italic leading-relaxed text-gray-700"
                       >
-                        "{item.excerpt}"
+                        &quot;{item.excerpt}&quot;
                       </blockquote>
                     ))}
                   </div>
@@ -346,7 +346,7 @@ export function NarrativeReport({ data, surveyId }: NarrativeReportProps) {
                 />
                 <Tooltip
                   cursor={{ fill: "transparent" }}
-                  formatter={(value: number) => [`${value}%`, "Coverage"]}
+                  formatter={(value) => [`${value || 0}%`, "Coverage"]}
                   contentStyle={{
                     borderRadius: "12px",
                     border: "none",
@@ -399,7 +399,7 @@ export function NarrativeReport({ data, surveyId }: NarrativeReportProps) {
                 key={quote.id}
                 className="rounded-[2rem] border border-gray-100 bg-white p-5 text-sm italic leading-relaxed text-gray-700 shadow-sm"
               >
-                "{quote.excerpt}"
+                &quot;{quote.excerpt}&quot;
                 <div className="mt-3 text-[11px] font-medium not-italic text-gray-400">
                   {quote.nodeId} • reliability {quote.reliability}%
                 </div>

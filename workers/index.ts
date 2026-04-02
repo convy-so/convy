@@ -27,19 +27,19 @@ import { testRedisConnection } from "@/lib/redis";
 import conversationInsightsWorker from "./conversation-insights.worker";
 import surveyAnalyticsWorker from "./survey-analytics.worker";
 import emailWorker from "./email.worker";
+import learningPatternsWorker from "./learning-patterns.worker";
+import contentTranslationWorker from "./content-translation.worker";
 
 // Collect all workers for coordinated shutdown
 const workers = [
   { name: "Conversation Insights", worker: conversationInsightsWorker },
   { name: "Survey Analytics", worker: surveyAnalyticsWorker },
   { name: "Email", worker: emailWorker },
+  { name: "Learning Patterns", worker: learningPatternsWorker },
+  { name: "Content Translation", worker: contentTranslationWorker },
 ];
-
-console.log("🚀 Starting all workers...");
-
 // Test Redis connection before confirming workers are ready
 (async () => {
-  console.log("🔍 Testing Redis connection...");
   const isConnected = await testRedisConnection();
 
   if (!isConnected) {
@@ -51,23 +51,12 @@ console.log("🚀 Starting all workers...");
     process.exit(1);
   }
 
-  console.log("✅ Redis connection successful\n");
 
   // Schedule recurring jobs (none currently)
-
-  // Log all workers that are now running
-  for (const { name } of workers) {
-    console.log(`✅ ${name} Worker started`);
-  }
-
-  console.log("\n📊 Workers are now processing jobs...");
-
   if (process.env.SENTRY_TEST_TRIGGER === "true") {
-    console.log("⚠️ Sentry Test Trigger enabled. Throwing test error in worker...");
     throw new Error("Sentry Test Worker Error: This is a test error from the Worker process.");
   }
 
-  console.log("Press Ctrl+C to gracefully shutdown\n");
 })();
 
 // Graceful shutdown flag to prevent multiple shutdowns
@@ -77,23 +66,18 @@ let isShuttingDown = false;
  * Graceful shutdown handler
  * Closes all workers in parallel and waits for them to finish
  */
-async function gracefulShutdown(signal: string) {
+async function gracefulShutdown() {
   if (isShuttingDown) {
-    console.log("Shutdown already in progress...");
     return;
   }
 
   isShuttingDown = true;
-  console.log(
-    `\n👋 Received ${signal}, shutting down all workers gracefully...`,
-  );
 
   try {
     // Close all workers in parallel
     const closePromises = workers.map(async ({ name, worker }) => {
       try {
         await worker.close();
-        console.log(`✅ ${name} Worker closed`);
       } catch (error) {
         console.error(`❌ Error closing ${name} Worker:`, error);
       }
@@ -107,7 +91,6 @@ async function gracefulShutdown(signal: string) {
       ),
     ]);
 
-    console.log("\n✅ All workers shut down successfully");
     process.exit(0);
   } catch (error) {
     console.error("\n❌ Error during shutdown:", error);
@@ -116,6 +99,6 @@ async function gracefulShutdown(signal: string) {
 }
 
 // Handle shutdown signals
-process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+process.on("SIGTERM", () => void gracefulShutdown());
+process.on("SIGINT", () => void gracefulShutdown());
 

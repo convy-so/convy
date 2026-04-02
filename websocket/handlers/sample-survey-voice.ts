@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
 import { sampleConversations, surveys, voiceSessions } from "@/db/schema";
+import { type ChatMessage } from "@/lib/chat-types";
 import {
   buildConductingSystemPrompt,
   createInitialSessionState,
@@ -23,20 +24,20 @@ import type {
   ResearchBrief,
   SessionState,
 } from "@/lib/education/types";
+import { buildSampleVoiceFunctions } from "@/lib/education/agent-tools";
 import {
   buildVoiceAgentSettings,
   type ConversationTextEvent,
   type FunctionCallRequestEvent,
   type SupportedLanguage,
-  type VoiceAgentFunction,
   type VoiceAgentSettings,
+  VOICE_AGENT_THINK_MODEL,
 } from "@/lib/voice/deepgram-voice-agent";
 import type { AuthenticatedConnection } from "../middleware/auth";
 import { BaseVoiceAgentHandler } from "./base-voice-agent-handler";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
 import {
   acquireSurveyLease,
-  publishPendingOutboxEntries,
   recordRealtimeEvent,
   releaseSurveyLease,
   renewSurveyLease,
@@ -47,11 +48,7 @@ interface SampleState {
   conversationId: string | null;
   conversationNumber: number;
   voiceSessionId: string;
-  messages: Array<{
-    role: "user" | "assistant";
-    content: string;
-    timestamp: string;
-  }>;
+  messages: ChatMessage[];
   survey: typeof surveys.$inferSelect | null;
   language: SupportedLanguage;
   brief: ResearchBrief | null;
@@ -60,39 +57,49 @@ interface SampleState {
   sessionState: SessionState | null;
 }
 
-function buildVoiceFunctions(
-  survey: typeof surveys.$inferSelect | null,
-): VoiceAgentFunction[] {
-  const functions: VoiceAgentFunction[] = [
-    {
-      name: "finishSurvey",
-      description:
-        "Call this only when the interview has gathered enough evidence and you are ready to close the rehearsal naturally.",
-      parameters: {
-        type: "object",
-        properties: {},
-        additionalProperties: false,
-      },
-    },
-  ];
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
-  if ((survey?.media || []).length > 0) {
-    functions.unshift({
-      name: "showMedia",
-      description:
-        "Display a survey media asset when it is directly relevant to the current question.",
-      parameters: {
-        type: "object",
-        properties: {
-          mediaId: { type: "string", description: "The media identifier to display." },
-        },
-        required: ["mediaId"],
-        additionalProperties: false,
-      },
-    });
+function isSupportedLanguage(value: unknown): value is SupportedLanguage {
+  return (
+    value === "en" ||
+    value === "fr" ||
+    value === "de" ||
+    value === "es" ||
+    value === "it"
+  );
+}
+
+function isChatMessageRole(value: unknown): value is ChatMessage["role"] {
+  return (
+    value === "user" ||
+    value === "assistant" ||
+    value === "system" ||
+    value === "tool"
+  );
+}
+
+function normalizeStoredMessages(value: unknown): ChatMessage[] {
+  if (!Array.isArray(value)) {
+    return [];
   }
 
-  return functions;
+  return value.flatMap((message) => {
+    if (!isRecord(message) || !isChatMessageRole(message.role)) {
+      return [];
+    }
+
+    return [{
+      id: typeof message.id === "string" ? message.id : nanoid(),
+      role: message.role,
+      content: typeof message.content === "string" ? message.content : "",
+      timestamp:
+        typeof message.timestamp === "string"
+          ? message.timestamp
+          : new Date().toISOString(),
+    }];
+  });
 }
 
 export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
@@ -137,7 +144,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       }
 
       const permission = await getSurveyPermissionContext(
-        this.userId,
+        this.userId!,
         this.state.surveyId,
       );
       if (!permission?.canEdit) {
@@ -149,7 +156,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       const lease = await acquireSurveyLease({
         surveyId: this.state.surveyId,
         stage: "rehearsal",
-        userId: this.userId,
+        userId: this.userId!,
         sessionId: this.state.voiceSessionId,
       });
       if (!lease.ok) {
@@ -173,7 +180,9 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       }
 
       this.state.survey = survey;
-      this.state.language = survey.language as SupportedLanguage;
+      this.state.language = isSupportedLanguage(survey.language)
+        ? survey.language
+        : "en";
       this.state.brief = briefRow.brief;
       this.state.coveragePlan = planRow.plan;
       this.surveyId = survey.id;
@@ -226,11 +235,7 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       }
 
       this.state.conversationId = sampleConversation.id;
-      this.state.messages = ((sampleConversation.messages as SampleState["messages"]) || []).map((message) => ({
-        role: message.role,
-        content: message.content,
-        timestamp: message.timestamp || new Date().toISOString(),
-      }));
+      this.state.messages = normalizeStoredMessages(sampleConversation.messages);
 
       let sessionRow = await getSessionBySourceId(sampleConversation.id);
       if (!sessionRow) {
@@ -311,6 +316,10 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       conductingProfile: activeSampleProfile?.profile ?? null,
       playbookContext: runtimeLayers.playbookContext,
       personalityContext: runtimeLayers.personalityContext,
+      toolContext: {
+        canFinishSurvey: true,
+        canShowMedia: (this.state.survey?.media || []).length > 0,
+      },
     })}
 
 Additional sample-session rules:
@@ -329,7 +338,9 @@ Additional sample-session rules:
       language: this.state.language,
       tone,
       systemPrompt,
-      functions: buildVoiceFunctions(this.state.survey),
+      functions: buildSampleVoiceFunctions(
+        (this.state.survey?.media || []).length > 0,
+      ),
       conversationHistory:
         this.state.messages.length > 0
           ? this.state.messages.map((message) => ({
@@ -358,6 +369,7 @@ Additional sample-session rules:
       lastMessage.timestamp = now.toISOString();
     } else {
       this.state.messages.push({
+        id: nanoid(),
         role: event.role,
         content: event.content,
         timestamp: now.toISOString(),
@@ -368,7 +380,7 @@ Additional sample-session rules:
       await getDb()
         .update(sampleConversations)
         .set({
-          messages: this.state.messages,
+          messages: this.state.messages.map(m => ({ ...m, id: m.id || nanoid() })),
           updatedAt: new Date(),
         })
         .where(eq(sampleConversations.id, this.state.conversationId));
@@ -377,7 +389,7 @@ Additional sample-session rules:
         await recordRealtimeEvent(tx, {
           scope: "survey",
           surveyId: this.state.surveyId,
-          actorId: this.userId,
+          actorId: this.userId!,
           eventType: "survey.rehearsal_turn_added",
           payload: {
             surveyId: this.state.surveyId,
@@ -388,7 +400,6 @@ Additional sample-session rules:
           },
         });
       });
-      await publishPendingOutboxEntries();
     }
 
     if (
@@ -443,6 +454,10 @@ Additional sample-session rules:
       conductingProfile: refreshedSampleProfile?.profile ?? null,
       playbookContext: refreshedRuntimeLayers.playbookContext,
       personalityContext: refreshedRuntimeLayers.personalityContext,
+      toolContext: {
+        canFinishSurvey: true,
+        canShowMedia: (this.state.survey?.media || []).length > 0,
+      },
     })}
 
 Additional sample-session rules:
@@ -451,9 +466,11 @@ Additional sample-session rules:
 - Keep the exchange realistic and participant-centered.`;
 
     this.voiceAgent?.updateThink({
-      provider: { type: "open_ai", model: "gpt-4o-mini" },
+      provider: { type: "open_ai", model: VOICE_AGENT_THINK_MODEL },
       prompt: `${refreshedPrompt}\n\nRespond in the language the participant is speaking.`,
-      functions: buildVoiceFunctions(this.state.survey),
+      functions: buildSampleVoiceFunctions(
+        (this.state.survey?.media || []).length > 0,
+      ),
     });
   }
 
@@ -561,7 +578,7 @@ Additional sample-session rules:
     }
   }
 
-  protected async handleControlMessage(message: any): Promise<void> {
+  protected async handleControlMessage(message: Record<string, unknown>): Promise<void> {
     if (message.type === "end_session") {
       await this.cleanup();
     }
@@ -574,7 +591,7 @@ Additional sample-session rules:
       const releaseResult = await releaseSurveyLease({
         surveyId: this.state.surveyId,
         stage: "rehearsal",
-        userId: this.userId,
+        userId: this.userId!,
         leaseToken: this.leaseToken,
       }).catch((error) => {
         console.error(error);
@@ -612,7 +629,7 @@ Additional sample-session rules:
       const renewed = await renewSurveyLease({
         surveyId: this.state.surveyId,
         stage: "rehearsal",
-        userId: this.userId,
+        userId: this.userId!,
         leaseToken: this.leaseToken,
       });
 
@@ -624,7 +641,7 @@ Additional sample-session rules:
     const acquired = await acquireSurveyLease({
       surveyId: this.state.surveyId,
       stage: "rehearsal",
-      userId: this.userId,
+      userId: this.userId!,
       sessionId: this.state.voiceSessionId,
     });
 
@@ -646,13 +663,13 @@ Additional sample-session rules:
       await recordRealtimeEvent(tx, {
         scope: "survey",
         surveyId: this.state.surveyId,
-        actorId: this.userId,
+        actorId: this.userId!,
         eventType,
         payload: {
           surveyId: this.state.surveyId,
           stage: "rehearsal",
           holderUserId:
-            eventType === "survey.lease_released" ? null : this.userId,
+            eventType === "survey.lease_released" ? null : this.userId!,
           holderSessionId:
             eventType === "survey.lease_released"
               ? null
@@ -662,7 +679,5 @@ Additional sample-session rules:
         },
       });
     });
-
-    await publishPendingOutboxEntries();
   }
 }

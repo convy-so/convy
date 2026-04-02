@@ -19,6 +19,9 @@ export type UsageLogInput = {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+  inputNoCacheTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   durationMs?: number;
 };
 
@@ -28,6 +31,7 @@ const PRICING: Record<string, { prompt: number; completion: number }> = {
   "gemini-2.5-flash-lite": { prompt: 0.075, completion: 0.3 },
   "gpt-4o": { prompt: 5.0, completion: 15.0 },
   "gpt-4o-mini": { prompt: 0.15, completion: 0.6 },
+  "gpt-4.1-mini": { prompt: 0.4, completion: 1.6 },
 };
 
 function calculateCost(input: UsageLogInput): string {

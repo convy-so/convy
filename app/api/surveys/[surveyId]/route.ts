@@ -5,7 +5,6 @@ import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
-  publishPendingOutboxEntries,
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
@@ -72,7 +71,6 @@ export async function DELETE(
 
       await tx.delete(surveys).where(eq(surveys.id, surveyId));
     });
-    await publishPendingOutboxEntries();
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -200,7 +198,6 @@ export async function PATCH(
         });
       }
     });
-    await publishPendingOutboxEntries();
 
     return NextResponse.json({ success: true, updates });
   } catch (error) {

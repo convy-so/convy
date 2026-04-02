@@ -4,11 +4,57 @@ import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
+import type { ChatSessionMessage } from "@/db/schema/surveys";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { answerAnalyticsQuestion } from "@/lib/education/analytics-workflow";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import { z } from "zod";
 
 export const maxDuration = 300;
+
+type AnalyticsChatMessage = {
+  role: string;
+  content?: string;
+  parts?: ChatSessionMessage["parts"];
+};
+
+const analyticsChatMessageSchema = z.object({
+  role: z.string(),
+  content: z.string().optional(),
+  parts: z
+    .custom<ChatSessionMessage["parts"]>((value) => Array.isArray(value))
+    .optional(),
+});
+
+const analyticsChatRequestSchema = z.object({
+  messages: z.array(analyticsChatMessageSchema).optional(),
+  audio: z.string().optional(),
+  language: z.string().optional(),
+});
+
+function getMessageText(
+  message: Pick<AnalyticsChatMessage, "content" | "parts"> | undefined,
+) {
+  if (typeof message?.content === "string") {
+    return message.content;
+  }
+
+  if (!Array.isArray(message?.parts)) {
+    return "";
+  }
+
+  return message.parts
+    .filter(
+      (
+        part,
+      ): part is Extract<
+        ChatSessionMessage["parts"][number],
+        { type: "text" }
+      > => part.type === "text",
+    )
+    .map((part) => part.text)
+    .join("");
+}
 
 export async function POST(
   request: NextRequest,
@@ -17,30 +63,44 @@ export async function POST(
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
-    const body = (await request.json()) as {
-      messages?: Array<{ role: string; content?: string; parts?: any[] }>;
-      audio?: string;
-      language?: string;
-    };
+    const body = analyticsChatRequestSchema.parse(await request.json());
 
     let rawMessages = Array.isArray(body.messages) ? body.messages : [];
+    let sttError: string | null = null;
     if (body.audio) {
       try {
-        const { transcribeAudioBuffer } = await import("@/lib/voice/analytics-stt");
-        const audioBuffer = Buffer.from(body.audio, "base64");
-        const transcript = await transcribeAudioBuffer(audioBuffer, body.language || "en");
+        const { transcribeAudioBuffer } =
+          await import("@/lib/voice/analytics-stt");
+        const normalizedAudio = body.audio.includes(",")
+          ? body.audio.split(",").pop() || ""
+          : body.audio;
+        const audioBuffer = Buffer.from(normalizedAudio, "base64");
+        const { transcript } = await transcribeAudioBuffer(
+          audioBuffer,
+          body.language || "multi",
+        );
         rawMessages = [...rawMessages, { role: "user", content: transcript }];
       } catch (error) {
         console.error("[Analytics Chat] STT failed:", error);
+        sttError =
+          error instanceof Error ? error.message : "Voice transcription failed";
       }
     }
 
-    const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
-    if (!survey) return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+    const [survey] = await getDb()
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+    if (!survey)
+      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
 
-    const permission = await getSurveyPermissionContext(session.user.id, survey.id, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
+    const permission = await getSurveyPermissionContext(
+      session.user.id,
+      survey.id,
+      {
+        activeWorkspaceId: session.session.activeOrganizationId ?? null,
+      },
+    );
     if (!permission?.canView || !permission.activeContextMatchesResource) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
@@ -48,13 +108,17 @@ export async function POST(
     const latestUserMessage = [...rawMessages]
       .reverse()
       .find((message) => message.role === "user");
-    const question = typeof latestUserMessage?.content === "string"
-      ? latestUserMessage.content
-      : Array.isArray(latestUserMessage?.parts)
-        ? latestUserMessage.parts.filter((part: any) => part.type === "text").map((part: any) => part.text).join("")
-        : "";
+
+    const question = getMessageText(latestUserMessage);
+
     if (!question.trim()) {
-      return NextResponse.json({ error: "No question to process" }, { status: 400 });
+      if (sttError) {
+        return NextResponse.json({ error: sttError }, { status: 422 });
+      }
+      return NextResponse.json(
+        { error: "No question to process" },
+        { status: 400 },
+      );
     }
 
     const answer = await answerAnalyticsQuestion({ surveyId, question });
@@ -65,15 +129,26 @@ export async function POST(
     return createUIMessageStreamResponse({
       stream: createUIMessageStream({
         execute: async ({ writer }) => {
-          writer.write({ type: "text-delta", textDelta: responseText } as any);
+          writer.write({
+            id: crypto.randomUUID(),
+            type: "text-delta",
+            delta: responseText || "",
+          });
         },
       }),
     });
   } catch (error) {
-    if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) {
+    if (
+      error instanceof Error &&
+      (error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED")
+    ) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
     console.error("[Analytics Chat API] Error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }

@@ -54,7 +54,7 @@ export function InviteMemberModal({ isOpen, onClose, onSuccess, organizationId }
             } else {
                 setError(result.error);
             }
-        } catch (err) {
+        } catch {
             setError("An unexpected error occurred");
         } finally {
             setIsInviting(false);

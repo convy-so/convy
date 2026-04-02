@@ -1,12 +1,113 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { SurveyMedia, VoiceAgentMessage } from "@/lib/chat-types";
+
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+  }
+}
+
+type VoiceWebSocketStatus = "disconnected" | "connecting" | "connected" | "error";
+
+type VoiceSocketJsonMessage = VoiceAgentMessage;
 
 interface UseVoiceWebSocketOptions {
   url: string;
-  onMessage?: (message: any) => void;
+  onMessage?: (message: VoiceSocketJsonMessage) => void;
   onReady?: () => void;
-  onError?: (error: any) => void;
+  onError?: (error: unknown) => void;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseSurveyMedia(value: unknown): (SurveyMedia & { id: string }) | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    (value.type !== "image" && value.type !== "video" && value.type !== "audio") ||
+    typeof value.url !== "string"
+  ) {
+    return undefined;
+  }
+
+  return {
+    id: value.id,
+    type: value.type,
+    url: value.url,
+    description: typeof value.description === "string" ? value.description : undefined,
+    mimeType: typeof value.mimeType === "string" ? value.mimeType : undefined,
+    altText: typeof value.altText === "string" ? value.altText : undefined,
+    durationMs: typeof value.durationMs === "number" ? value.durationMs : undefined,
+  };
+}
+
+function parseVoiceSocketJsonMessage(value: unknown): VoiceSocketJsonMessage | null {
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return null;
+  }
+
+  return {
+    type: value.type,
+    text: typeof value.text === "string" ? value.text : undefined,
+    isFinal: typeof value.isFinal === "boolean" ? value.isFinal : undefined,
+    role: typeof value.role === "string" ? value.role : undefined,
+    content: typeof value.content === "string" ? value.content : undefined,
+    error:
+      typeof value.error === "string" || isRecord(value.error)
+        ? value.error
+        : undefined,
+    description: typeof value.description === "string" ? value.description : undefined,
+    awaitingAgentIntro:
+      typeof value.awaitingAgentIntro === "boolean"
+        ? value.awaitingAgentIntro
+        : undefined,
+    streamId: typeof value.streamId === "string" ? value.streamId : undefined,
+    toolCallId: typeof value.toolCallId === "string" ? value.toolCallId : undefined,
+    allowedTypes:
+      Array.isArray(value.allowedTypes) &&
+      value.allowedTypes.every((item) => typeof item === "string")
+        ? value.allowedTypes
+        : undefined,
+    recommendation:
+      typeof value.recommendation === "string" ? value.recommendation : undefined,
+    rationale: typeof value.rationale === "string" ? value.rationale : undefined,
+    suggestedDescription:
+      typeof value.suggestedDescription === "string"
+        ? value.suggestedDescription
+        : undefined,
+    suggestedFeedbackFocus:
+      typeof value.suggestedFeedbackFocus === "string"
+        ? value.suggestedFeedbackFocus
+        : undefined,
+    extractedData: isRecord(value.extractedData) ? value.extractedData : undefined,
+    collectedInfo: isRecord(value.collectedInfo) ? value.collectedInfo : undefined,
+    media: parseSurveyMedia(value.media),
+    connectionId:
+      typeof value.connectionId === "string" ? value.connectionId : undefined,
+  };
+}
+
+function getTokenFromPayload(value: unknown): string | null {
+  if (!isRecord(value) || typeof value.token !== "string") {
+    return null;
+  }
+
+  return value.token;
+}
+
+function getAudioContextConstructor() {
+  const AudioContextConstructor = window.AudioContext ?? window.webkitAudioContext;
+  if (!AudioContextConstructor) {
+    throw new Error("AudioContext is not supported in this browser.");
+  }
+  return AudioContextConstructor;
 }
 
 export function useVoiceWebSocket({
@@ -15,9 +116,7 @@ export function useVoiceWebSocket({
   onReady,
   onError,
 }: UseVoiceWebSocketOptions) {
-  const [status, setStatus] = useState<
-    "disconnected" | "connecting" | "connected" | "error"
-  >("disconnected");
+  const [status, setStatus] = useState<VoiceWebSocketStatus>("disconnected");
   const [isRecording, setIsRecording] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasAudioPlayed, setHasAudioPlayed] = useState(false);
@@ -25,15 +124,11 @@ export function useVoiceWebSocket({
   const [interimTranscription, setInterimTranscription] = useState("");
   const [isMicMuted, setIsMicMutedState] = useState(false);
   const isMicMutedRef = useRef(false);
-  // Gate: mic audio is sent to WS only after the greeting ends (agent_audio_done)
-  // This prevents ambient silence from triggering UserStartedSpeaking before AI greeted,
-  // and prevents echo from AI TTS being picked up by the mic.
   const micEnabledRef = useRef(false);
   const [isMicEnabled, setIsMicEnabled] = useState(false);
 
   const [lastEventId] = useState<string | null>(null);
   const lastEventIdRef = useRef<string | null>(null);
-
   const [error, setError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -42,362 +137,128 @@ export function useVoiceWebSocket({
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const audioQueueRef = useRef<Blob[]>([]);
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const isPlayingRef = useRef(false);
   const isPlayingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isAgentSpeakingRef = useRef(false); // Gate for local mic gating
-  const lastPlaybackEndTimeRef = useRef<number>(0); // Sync gate for physical playback
+  const isAgentSpeakingRef = useRef(false);
+  const lastPlaybackEndTimeRef = useRef<number>(0);
+  const nextStartTimeRef = useRef<number>(0);
 
-  // Update refs
   useEffect(() => {
     lastEventIdRef.current = lastEventId;
   }, [lastEventId]);
 
-  // Keep latest callback in ref to avoid stale closures in ws.onmessage
   const onMessageRef = useRef(onMessage);
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
 
-  // Initialize WebSocket
-  const connect = useCallback(async () => {
-    /*
-    console.log("[Voice WS] connect() called", { url });
-    if (wsRef.current) {
-      console.log("[Voice WS] Already have connection, skipping");
-      return;
-    }
-    */
-    if (wsRef.current) return;
-
-    // console.log("[Voice WS] Setting status to connecting");
-    setStatus("connecting");
-    setHasAudioPlayed(false);
-    setError(null);
-    // console.log("[Voice WS] Connection state reset. hasAudioPlayed=false");
-
-    let connectionUrl = url;
-
-    // Auto-inject token if we can find one for authenticated endpoints
-    // We do this check to avoid fetching for public endpoints
-    if (
-      url.includes("/voice/survey-creation") ||
-      url.includes("/voice/sample-conversation")
-    ) {
-      try {
-        // console.log("[Voice WS] Fetching auth token...");
-        const res = await fetch("/api/auth/token");
-        // console.log("[Voice WS] Token fetch response:", res.status, res.ok);
-        if (res.ok) {
-          const { token } = await res.json();
-          console.log(
-            "[Voice WS] Got token:",
-            token ? `${token.substring(0, 20)}...` : "null",
-          );
-          if (token) {
-            const urlObj = new URL(url);
-            urlObj.searchParams.set("token", token);
-            connectionUrl = urlObj.toString();
-            // console.log("[Voice WS] Updated connection URL with token");
-          }
-        } else {
-          console.warn(
-            "[Voice WS] Token fetch failed with status:",
-            res.status,
-          );
-        }
-      } catch (e) {
-        console.error("[Voice WS] Failed to fetch auth token:", e);
-      }
+  const getPlaybackContext = useCallback(() => {
+    if (!playbackContextRef.current) {
+      const AudioContextConstructor = getAudioContextConstructor();
+      playbackContextRef.current = new AudioContextConstructor();
     }
 
-    let ws: WebSocket;
-    try {
-      /*
-      console.log(
-        "[Voice WS] Creating WebSocket connection to:",
-        connectionUrl,
-      );
-      */
-      ws = new WebSocket(connectionUrl);
-      wsRef.current = ws;
-      /*
-      console.log(
-        "[Voice WS] WebSocket object created, readyState:",
-        ws.readyState,
-      );
-      */
-    } catch (e) {
-      console.error("[Voice WS] Failed to create WebSocket instance:", e);
-      setStatus("error");
-      setError(
-        e instanceof Error
-          ? e.message
-          : "Failed to create WebSocket connection",
-      );
-      onError?.(e);
-      return;
+    if (playbackContextRef.current.state === "suspended") {
+      void playbackContextRef.current.resume();
     }
 
-    ws.onopen = () => {
-      // console.log("[Voice WS] ✅ WebSocket OPENED successfully!");
-      setStatus("connected");
-      onReady?.();
-    };
-
-    ws.onmessage = async (event) => {
-      if (event.data instanceof Blob) {
-        handleIncomingAudio(event.data);
-      } else {
-        try {
-          const data = JSON.parse(event.data);
-
-          // Suppress echoes from our own connection
-          if (data.connectionId === `creation-${wsRef.current?.url.split("token=")[0]}`) {
-            // Identifier logic in handler is `creation-${connection.userId}`
-            // We don't have direct access to userId here easily, but handler uses it.
-            // Actually, we can check if it's a replay or a new event.
-            // For now, let's just log and process, as page logic should handle duplicates.
-          }
-
-          handleJsonMessage(data);
-        } catch (e) {
-          console.error(
-            "[Voice WS] Failed to parse JSON message",
-            e,
-            event.data,
-          );
-        }
-      }
-    };
-
-    ws.onerror = (e) => {
-      console.error("[Voice WS] ❌ WebSocket ERROR:", e);
-      console.error("[Voice WS] Error details:", {
-        readyState: ws.readyState,
-        url: connectionUrl,
-      });
-      setStatus("error");
-      // WebSocket onError doesn't provide error details for security reasons
-      // We'll rely on server sending an error message or the close event
-      onError?.(e);
-    };
-
-    ws.onclose = (event) => {
-      /*
-      console.log("[Voice WS] WebSocket CLOSED:", {
-        code: event.code,
-        reason: event.reason,
-        wasClean: event.wasClean,
-      });
-      */
-      setStatus((prev) => (prev !== "error" ? "disconnected" : prev));
-      if (event.reason) {
-        setError(event.reason);
-      }
-      wsRef.current = null;
-    };
-  }, [url, onReady, onError]);
-
-  const disconnect = useCallback(() => {
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-    stopRecording();
+    return playbackContextRef.current;
   }, []);
 
-  const handleJsonMessage = (data: any) => {
-    switch (data.type) {
-      case "transcription":
-        if (data.isFinal) {
-          setTranscription(data.text);
-          setInterimTranscription("");
-        }
-        break;
-      case "transcription_interim":
-        setInterimTranscription(data.text);
-        break;
-      case "conversation_text":
-        // Voice Agent API: unified conversation text event
-        if (data.role === "user") {
-          setTranscription(data.content);
-          setInterimTranscription("");
-        }
-        break;
-      case "audio_sent":
-        // AI started speaking (legacy)
-        break;
-      case "agent_thinking":
-        // AI is processing (Voice Agent API)
-        break;
-      case "agent_started_speaking":
-        // AI started speaking (Voice Agent API)
-        isAgentSpeakingRef.current = true;
-        break;
-      case "agent_ready":
-        // Deepgram settings applied: agent is ready to listen
-        // We open the gate NOW so user can barge-in and interrupt greetings!
-        if (!micEnabledRef.current) {
-          /*
-          console.log(
-            "[Voice WS] 🤖 Agent Ready: un-gating mic for user input",
-          );
-          */
-          micEnabledRef.current = true;
-          setIsMicEnabled(true);
-
-          // Proactively start recording for high-premium hands-free experience
-          // Users who clicked "Start" have already given gesture-based permission
-          startRecording().catch((err) => {
-            console.error("[Voice WS] Failed to auto-start recording:", err);
-          });
-        }
-        break;
-      case "agent_audio_done":
-        // AI finished speaking
-        isAgentSpeakingRef.current = false;
-        break;
-      case "speech_start":
-        // User started speaking
-        break;
-      case "interrupt":
-        // console.log("[Voice WS] Interruption signal received");
-        // Clear queue
-        audioQueueRef.current = [];
-        // Stop current playback
-        if (activeAudioRef.current) {
-          activeAudioRef.current.pause();
-          activeAudioRef.current = null;
-        }
-        setIsPlaying(false);
-        isPlayingRef.current = false;
-        isAgentSpeakingRef.current = false;
-        break;
-      case "error":
-        console.error(
-          "[Voice WS] ❌ Server-reported error:",
-          JSON.stringify(data, null, 2),
-        );
-        // Extract a string representation of the error to show in UI
-        let errorMessage = "Unknown error";
-        if (data.error) {
-          errorMessage =
-            typeof data.error === "string"
-              ? data.error
-              : JSON.stringify(data.error);
-        } else if (data.description) {
-          errorMessage = data.description;
-        } else {
-          errorMessage = JSON.stringify(data);
-        }
-
-        console.error(
-          "[Voice WS] Calculated error message:",
-          errorMessage,
-        );
-        setStatus("error");
-        setError(errorMessage);
-        if (onError) onError(errorMessage);
-        break;
-      default:
-        break;
-    }
-    onMessageRef.current?.(data);
-  };
-
-  // --- Audio Playback Logic (PCM Streaming) ---
-
-  const handleIncomingAudio = async (blob: Blob) => {
-    // We now receive raw PCM (linear16, 24kHz) from Deepgram
-    // Convert Blob -> ArrayBuffer -> Int16Array -> Float32Array -> AudioBuffer
-    try {
-      const arrayBuffer = await blob.arrayBuffer();
+  const queueAudioBuffer = useCallback(
+    (audioBuffer: AudioBuffer) => {
       const audioCtx = getPlaybackContext();
+      const source = audioCtx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(audioCtx.destination);
 
-      // Create audio buffer (1 channel, length, sampleRate)
-      // Deepgram output is 16-bit linear PCM at 24000Hz (mono)
-      const sampleRate = 24000;
-      const int16Data = new Int16Array(arrayBuffer);
-      const float32Data = new Float32Array(int16Data.length);
-
-      // Convert Int16 to Float32 [-1.0, 1.0]
-      for (let i = 0; i < int16Data.length; i++) {
-        float32Data[i] = int16Data[i] / 32768.0;
+      const currentTime = audioCtx.currentTime;
+      if (nextStartTimeRef.current < currentTime) {
+        nextStartTimeRef.current = currentTime + 0.15;
       }
 
-      const audioBuffer = audioCtx.createBuffer(
-        1,
-        float32Data.length,
-        sampleRate,
-      );
-      audioBuffer.getChannelData(0).set(float32Data);
+      source.start(nextStartTimeRef.current);
+      nextStartTimeRef.current += audioBuffer.duration;
 
-      // Queue and play
-      queueAudioBuffer(audioBuffer);
-    } catch (err) {
-      console.error("[Voice WS] Error processing audio chunk:", err);
-    }
-  };
+      setIsPlaying(true);
+      isPlayingRef.current = true;
+      setHasAudioPlayed(true);
 
-  // Queue for scheduling audio chunks continuously
-  const nextStartTimeRef = useRef<number>(0);
-
-  const queueAudioBuffer = (audioBuffer: AudioBuffer) => {
-    const audioCtx = getPlaybackContext();
-    const source = audioCtx.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(audioCtx.destination);
-
-    // Schedule playback
-    const currentTime = audioCtx.currentTime;
-    if (nextStartTimeRef.current < currentTime) {
-      // Jitter buffer: 150ms (0.15) — enough to smooth WebSocket delivery variance
-      // without adding perceptible latency to AI speech start
-      nextStartTimeRef.current = currentTime + 0.15;
-    }
-
-    source.start(nextStartTimeRef.current);
-    nextStartTimeRef.current += audioBuffer.duration;
-
-    setIsPlaying(true);
-    isPlayingRef.current = true;
-    setHasAudioPlayed(true);
-
-    source.onended = () => {
-      // HYSTERESIS: Wait 250ms before saying "not playing" to bridge tiny gaps
-      if (isPlayingTimeoutRef.current)
-        clearTimeout(isPlayingTimeoutRef.current);
-
-      isPlayingTimeoutRef.current = setTimeout(() => {
-        if (audioCtx.currentTime >= nextStartTimeRef.current - 0.1) {
-          setIsPlaying(false);
-          isPlayingRef.current = false;
-          lastPlaybackEndTimeRef.current = Date.now();
+      source.onended = () => {
+        if (isPlayingTimeoutRef.current) {
+          clearTimeout(isPlayingTimeoutRef.current);
         }
-      }, 100);
-    };
-  };
 
-  const getPlaybackContext = () => {
-    if (!playbackContextRef.current) {
-      playbackContextRef.current = new (
-        window.AudioContext || (window as any).webkitAudioContext
-      )();
-    }
-    if (playbackContextRef.current.state === "suspended") {
-      playbackContextRef.current.resume();
-    }
-    return playbackContextRef.current;
-  };
+        isPlayingTimeoutRef.current = setTimeout(() => {
+          if (audioCtx.currentTime >= nextStartTimeRef.current - 0.1) {
+            setIsPlaying(false);
+            isPlayingRef.current = false;
+            lastPlaybackEndTimeRef.current = Date.now();
+          }
+        }, 100);
+      };
+    },
+    [getPlaybackContext],
+  );
 
-  /**
-   * Start recording using AudioWorklet for raw PCM capture
-   * The worklet handles downsampling from the native sample rate (typically 48kHz) to 16kHz
-   * and buffers audio into ~80ms chunks (2560 bytes) as required by Deepgram Flux
-   */
-  const startRecording = async () => {
+  const handleIncomingAudio = useCallback(
+    async (blob: Blob) => {
+      try {
+        const arrayBuffer = await blob.arrayBuffer();
+        const sampleRate = 24000;
+        const int16Data = new Int16Array(arrayBuffer);
+        const float32Data = new Float32Array(int16Data.length);
+
+        for (let index = 0; index < int16Data.length; index += 1) {
+          float32Data[index] = int16Data[index] / 32768;
+        }
+
+        const audioCtx = getPlaybackContext();
+        const audioBuffer = audioCtx.createBuffer(1, float32Data.length, sampleRate);
+        audioBuffer.getChannelData(0).set(float32Data);
+        queueAudioBuffer(audioBuffer);
+      } catch (processingError) {
+        console.error("[Voice WS] Error processing audio chunk:", processingError);
+      }
+    },
+    [getPlaybackContext, queueAudioBuffer],
+  );
+
+  const stopRecording = useCallback(() => {
+    if (workletNodeRef.current) {
+      workletNodeRef.current.port.postMessage({ command: "stop" });
+      workletNodeRef.current.disconnect();
+      workletNodeRef.current = null;
+    }
+
+    if (sourceNodeRef.current) {
+      sourceNodeRef.current.disconnect();
+      sourceNodeRef.current = null;
+    }
+
+    if (recordingContextRef.current) {
+      void recordingContextRef.current.close().catch(console.error);
+      recordingContextRef.current = null;
+    }
+
+    if (playbackContextRef.current) {
+      void playbackContextRef.current.close().catch(console.error);
+      playbackContextRef.current = null;
+      nextStartTimeRef.current = 0;
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    micEnabledRef.current = false;
+    setIsMicEnabled(false);
+    setIsRecording(false);
+  }, []);
+
+  const startRecording = useCallback(async () => {
     if (isRecording) return;
     setError(null);
 
@@ -411,111 +272,231 @@ export function useVoiceWebSocket({
       });
       streamRef.current = stream;
 
-      const recordingContext = new AudioContext({ sampleRate: 16000 });
+      const AudioContextConstructor = getAudioContextConstructor();
+      const recordingContext = new AudioContextConstructor({ sampleRate: 16000 });
       recordingContextRef.current = recordingContext;
-      await recordingContext.audioWorklet.addModule(
-        "/audio-worklet-processor.js",
-      );
+      await recordingContext.audioWorklet.addModule("/audio-worklet-processor.js");
 
       const source = recordingContext.createMediaStreamSource(stream);
       sourceNodeRef.current = source;
 
-      const workletNode = new AudioWorkletNode(
-        recordingContext,
-        "pcm-processor",
-      );
+      const workletNode = new AudioWorkletNode(recordingContext, "pcm-processor");
       workletNodeRef.current = workletNode;
 
       workletNode.port.onmessage = (event) => {
-        if (
-          event.data.type === "audio" &&
-          micEnabledRef.current &&
-          wsRef.current?.readyState === WebSocket.OPEN
-        ) {
-          // Chain of Trust: Audio Egress
-          // Echo Protection: Gate mic audio if AI is actively speaking physically OUT of speakers
-          const timeSincePlayback = Date.now() - (lastPlaybackEndTimeRef.current || 0);
-          if (
-            isAgentSpeakingRef.current || 
-            isPlayingRef.current || 
-            (lastPlaybackEndTimeRef.current > 0 && timeSincePlayback < 150)
-          ) {
-            return;
-          }
+        const payload = event.data;
+        if (!isRecord(payload) || payload.type !== "audio") {
+          return;
+        }
 
-          if (Math.random() < 0.01) {
-            // Very throttled
-          }
-          wsRef.current.send(event.data.buffer);
+        if (!micEnabledRef.current || wsRef.current?.readyState !== WebSocket.OPEN) {
+          return;
+        }
+
+        const timeSincePlayback = Date.now() - (lastPlaybackEndTimeRef.current || 0);
+        if (
+          isAgentSpeakingRef.current ||
+          isPlayingRef.current ||
+          (lastPlaybackEndTimeRef.current > 0 && timeSincePlayback < 150)
+        ) {
+          return;
+        }
+
+        if (payload.buffer instanceof ArrayBuffer) {
+          wsRef.current.send(payload.buffer);
         }
       };
 
       source.connect(workletNode);
       setIsRecording(true);
-    } catch (e) {
+    } catch (recordingError) {
       setError("Microphone access failed. Please check permissions.");
-      onError?.(e);
+      onError?.(recordingError);
     }
-  };
+  }, [isRecording, onError]);
 
-  const stopRecording = useCallback(() => {
-    // Stop the worklet
-    if (workletNodeRef.current) {
-      workletNodeRef.current.port.postMessage({ command: "stop" });
-      workletNodeRef.current.disconnect();
-      workletNodeRef.current = null;
+  const handleJsonMessage = useCallback(
+    (data: VoiceSocketJsonMessage) => {
+      switch (data.type) {
+        case "transcription":
+          if (data.isFinal) {
+            setTranscription(data.text ?? "");
+            setInterimTranscription("");
+          }
+          break;
+        case "transcription_interim":
+          setInterimTranscription(data.text ?? "");
+          break;
+        case "conversation_text":
+          if (data.role === "user") {
+            setTranscription(data.content ?? "");
+            setInterimTranscription("");
+          }
+          break;
+        case "agent_started_speaking":
+          isAgentSpeakingRef.current = true;
+          break;
+        case "agent_ready":
+          if (!micEnabledRef.current) {
+            micEnabledRef.current = true;
+            setIsMicEnabled(true);
+            void startRecording().catch((recordingError) => {
+              console.error("[Voice WS] Failed to auto-start recording:", recordingError);
+            });
+          }
+          break;
+        case "agent_audio_done":
+          isAgentSpeakingRef.current = false;
+          break;
+        case "interrupt":
+          if (activeAudioRef.current) {
+            activeAudioRef.current.pause();
+            activeAudioRef.current = null;
+          }
+          setIsPlaying(false);
+          isPlayingRef.current = false;
+          isAgentSpeakingRef.current = false;
+          break;
+        case "error": {
+          let nextErrorMessage = "Unknown error";
+          if (typeof data.error === "string") {
+            nextErrorMessage = data.error;
+          } else if (typeof data.description === "string") {
+            nextErrorMessage = data.description;
+          } else if (data.error !== undefined) {
+            nextErrorMessage = JSON.stringify(data.error);
+          } else {
+            nextErrorMessage = JSON.stringify(data);
+          }
+
+          setStatus("error");
+          setError(nextErrorMessage);
+          onError?.(nextErrorMessage);
+          break;
+        }
+        default:
+          break;
+      }
+
+      onMessageRef.current?.(data);
+    },
+    [onError, startRecording],
+  );
+
+  const disconnect = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    stopRecording();
+  }, [stopRecording]);
+
+  const connect = useCallback(async () => {
+    if (wsRef.current) return;
+
+    setStatus("connecting");
+    setHasAudioPlayed(false);
+    setError(null);
+
+    let connectionUrl = url;
+
+    if (url.includes("/voice/sample-conversation")) {
+      try {
+        const response = await fetch("/api/auth/token");
+        if (response.ok) {
+          const token = getTokenFromPayload(await response.json());
+          if (token) {
+            const urlObject = new URL(url);
+            urlObject.searchParams.set("token", token);
+            connectionUrl = urlObject.toString();
+          }
+        }
+      } catch (tokenError) {
+        console.error("[Voice WS] Failed to fetch auth token:", tokenError);
+      }
     }
 
-    // Disconnect source
-    if (sourceNodeRef.current) {
-      sourceNodeRef.current.disconnect();
-      sourceNodeRef.current = null;
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(connectionUrl);
+      wsRef.current = ws;
+    } catch (connectionError) {
+      console.error("[Voice WS] Failed to create WebSocket instance:", connectionError);
+      setStatus("error");
+      setError(
+        connectionError instanceof Error
+          ? connectionError.message
+          : "Failed to create WebSocket connection",
+      );
+      onError?.(connectionError);
+      return;
     }
 
-    // Close audio contexts
-    if (recordingContextRef.current) {
-      recordingContextRef.current.close().catch(console.error);
-      recordingContextRef.current = null;
-    }
+    ws.onopen = () => {
+      setStatus("connected");
+      onReady?.();
+    };
 
-    if (playbackContextRef.current) {
-      playbackContextRef.current.close().catch(console.error);
-      playbackContextRef.current = null;
-      nextStartTimeRef.current = 0;
-    }
+    ws.onmessage = async (event) => {
+      if (event.data instanceof Blob) {
+        await handleIncomingAudio(event.data);
+        return;
+      }
 
-    // Stop media stream tracks
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
+      if (typeof event.data !== "string") {
+        return;
+      }
 
-    // Reset mic gate on stop — next session starts muted
-    micEnabledRef.current = false;
-    setIsMicEnabled(false);
-    setIsRecording(false);
-  }, []);
+      try {
+        const parsed = parseVoiceSocketJsonMessage(JSON.parse(event.data));
+        if (!parsed) {
+          return;
+        }
 
-  const sendJson = (data: any) => {
+        handleJsonMessage(parsed);
+      } catch (messageError) {
+        console.error(
+          "[Voice WS] Failed to parse JSON message",
+          messageError,
+          event.data,
+        );
+      }
+    };
+
+    ws.onerror = (socketError) => {
+      console.error("[Voice WS] WebSocket error:", socketError);
+      setStatus("error");
+      onError?.(socketError);
+    };
+
+    ws.onclose = (event) => {
+      setStatus((currentStatus) =>
+        currentStatus !== "error" ? "disconnected" : currentStatus,
+      );
+      if (event.reason) {
+        setError(event.reason);
+      }
+      wsRef.current = null;
+    };
+  }, [handleIncomingAudio, handleJsonMessage, onError, onReady, url]);
+
+  const sendJson = useCallback((data: unknown) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      // console.log("[Voice WS] 📤 Sending JSON:", data.type);
       wsRef.current.send(JSON.stringify(data));
     } else {
       console.warn(
-        "[Voice WS] ⚠️ Cannot send JSON, socket state:",
+        "[Voice WS] Cannot send JSON, socket state:",
         wsRef.current?.readyState,
       );
     }
-  };
+  }, []);
 
   const enableMic = useCallback(() => {
-    // console.log("[Voice WS] enableMic() called");
     micEnabledRef.current = true;
     setIsMicEnabled(true);
   }, []);
 
   const disableMic = useCallback(() => {
-    // console.log("[Voice WS] disableMic() called");
     micEnabledRef.current = false;
     setIsMicEnabled(false);
   }, []);
@@ -525,7 +506,6 @@ export function useVoiceWebSocket({
     setIsMicMutedState(muted);
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopRecording();
@@ -535,7 +515,6 @@ export function useVoiceWebSocket({
     };
   }, [stopRecording]);
 
-  // Keep latest status in ref to avoid stale closures during connection polling
   const statusRef = useRef(status);
   useEffect(() => {
     statusRef.current = status;

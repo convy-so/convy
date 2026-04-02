@@ -15,8 +15,10 @@ import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
 
 function ForgotPasswordContent() {
-  const params = useParams();
-  const locale = params.locale as string;
+  const params = useParams<{ locale?: string | string[] }>();
+  const locale = Array.isArray(params.locale)
+    ? (params.locale[0] ?? "en")
+    : (params.locale ?? "en");
   const t = useTranslations('Auth.ForgotPassword');
   const [email, setEmail] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);

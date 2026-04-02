@@ -7,6 +7,10 @@ export async function register() {
     dns.setDefaultResultOrder("ipv4first");
 
     await import("./sentry.server.config");
+
+    // Start the outbox worker that polls workspace_outbox and publishes to Redis.
+    const { startOutboxWorker } = await import("./lib/outbox-worker");
+    startOutboxWorker();
   }
 
   if (process.env.NEXT_RUNTIME === "edge") {

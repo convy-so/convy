@@ -1,13 +1,14 @@
 import { generateText } from "ai";
 import { google } from "@ai-sdk/google";
 import { logUsage } from "./billing/logger";
+import { appLocaleLabels, type AppLocale } from "@/lib/i18n/config";
 
 /**
  * Translation Service for Locale-Aware Survey System
  * Handles conversation translation for dual storage (raw + translated)
  */
 
-export type SupportedLanguage = "en" | "fr" | "de" | "es" | "it";
+export type SupportedLanguage = AppLocale;
 
 export interface ConversationMessage {
   role: "user" | "assistant";
@@ -50,15 +51,7 @@ export async function translateConversation(
     )
     .join("\n\n");
 
-  const languageNames: Record<SupportedLanguage, string> = {
-    en: "English",
-    fr: "French",
-    de: "German",
-    es: "Spanish",
-    it: "Italian",
-  };
-
-  const prompt = `You are a professional translator. Translate the following survey conversation from ${languageNames[sourceLanguage]} to ${languageNames[targetLanguage]}.
+  const prompt = `You are a professional translator. Translate the following survey conversation from ${appLocaleLabels[sourceLanguage]} to ${appLocaleLabels[targetLanguage]}.
 
 CRITICAL INSTRUCTIONS:
 1. Maintain the exact structure: each line should start with either "RESPONDENT:" or "AI:"
@@ -67,12 +60,12 @@ CRITICAL INSTRUCTIONS:
 4. Do NOT add any additional commentary or explanations
 5. Output ONLY the translated conversation in the exact same format
 
-Original Conversation (${languageNames[sourceLanguage]}):
+Original Conversation (${appLocaleLabels[sourceLanguage]}):
 ---
 ${conversationText}
 ---
 
-Translated Conversation (${languageNames[targetLanguage]}):`;
+Translated Conversation (${appLocaleLabels[targetLanguage]}):`;
 
   try {
     const { text, usage } = await generateText({
@@ -223,12 +216,22 @@ export async function getUserPreferredLanguage(
     const { eq } = await import("drizzle-orm");
 
     const [user] = await getDb()
-      .select({ preferredLanguage: users.preferredLanguage })
+      .select({ preferredLanguage: users.preferredLanguage, uiLocale: users.uiLocale })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
 
-    return (user?.preferredLanguage as SupportedLanguage) || "en";
+    const locale = user?.uiLocale ?? user?.preferredLanguage;
+    switch (locale) {
+      case "fr":
+      case "de":
+      case "es":
+      case "it":
+      case "en":
+        return locale;
+      default:
+        return "en";
+    }
   } catch (error) {
     console.error("[Translation Service] Failed to get user language:", error);
     return "en";

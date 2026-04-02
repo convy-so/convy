@@ -38,7 +38,7 @@ export default function FeaturesSection() {
                   Design with AI
                 </h3>
                 <p className="text-[16px] font-normal text-[#696969] leading-[22px]">
-                  Describe your form's goal and Convyy builds the conversational flow for you.
+                  Describe your form&apos;s goal and Convyy builds the conversational flow for you.
                 </p>
               </div>
             </div>

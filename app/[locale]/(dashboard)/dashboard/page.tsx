@@ -7,8 +7,8 @@ import {
   ArrowUpRight,
   Sparkles,
   FolderOpen,
+  GraduationCap,
 } from "lucide-react";
-import { SupportedLanguage } from "@/lib/i18n/ai-translator";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { SurveyCard } from "@/components/dashboard/survey-card";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
@@ -21,6 +21,29 @@ import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import { Loader2 } from "lucide-react";
 import { cache, cacheKeys } from "@/lib/cache";
+import { resolvePreferredUiLocale } from "@/lib/i18n/resolve-locale";
+
+type DashboardSurveyStatus =
+  | "draft"
+  | "active"
+  | "completed"
+  | "paused"
+  | "creating"
+  | "archived";
+
+function normalizeDashboardSurveyStatus(status: string | null | undefined): DashboardSurveyStatus {
+  switch (status) {
+    case "active":
+    case "completed":
+    case "paused":
+    case "creating":
+    case "archived":
+      return status;
+    case "draft":
+    default:
+      return "draft";
+  }
+}
 
 async function DashboardContent({ authHeaders }: { authHeaders: Headers | string | null }) {
   const session = await getVerifiedSession(authHeaders);
@@ -28,8 +51,7 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
 
   const userId = session.user.id;
   const activeOrgId = session.session.activeOrganizationId;
-  const language =
-    (session.user as any).preferredLanguage as SupportedLanguage || "en";
+  const language = await resolvePreferredUiLocale(session);
 
   const quickActions = [
     {
@@ -47,11 +69,18 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
       color: "from-purple-500 to-pink-500",
     },
     {
-      title: t("QuickActions.ManageProjects.Title"),
-      description: t("QuickActions.ManageProjects.Description"),
+      title: "Folders",
+      description: "Organize surveys into teacher-friendly folders instead of generic projects.",
       icon: FolderOpen,
       href: "/dashboard/projects",
       color: "from-amber-500 to-orange-500",
+    },
+    {
+      title: "Learning workspace",
+      description: "Run classes, topics, student tutoring, and progress tracking.",
+      icon: GraduationCap,
+      href: "/dashboard/learning",
+      color: "from-sky-500 to-blue-500",
     },
   ];
 
@@ -146,12 +175,16 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
           .orderBy(desc(surveyConversations.createdAt))
           .limit(5);
 
-        return recentActivitiesRaw.map(activity => ({
-          id: activity.id,
-          type: "new_response" as const,
-          description: activity.surveyTitle,
-          createdAt: activity.createdAt!,
-        }));
+        return recentActivitiesRaw.flatMap((activity) =>
+          activity.createdAt
+            ? [{
+                id: activity.id,
+                type: "new_response" as const,
+                description: activity.surveyTitle,
+                createdAt: activity.createdAt,
+              }]
+            : [],
+        );
       },
       60 * 1 // Cache for 1 minute
     )
@@ -160,7 +193,7 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
   // Format data for display using the request locale
   const formattedRecentSurveys = recentSurveys.map(survey => ({
     ...survey,
-    status: survey.status as any,
+    status: normalizeDashboardSurveyStatus(survey.status),
     lastActivity: new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(survey.updatedAt)),
     createdAtFormatted: new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(survey.createdAt)),
     projectName: survey.projectId ? "Project" : "Default Project",

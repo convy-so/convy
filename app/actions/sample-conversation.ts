@@ -12,7 +12,6 @@ import {
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
 import {
-  publishPendingOutboxEntries,
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
 
@@ -110,7 +109,6 @@ export async function addSampleConversationCommentAction(
         },
       });
     });
-    await publishPendingOutboxEntries();
 
     return { success: true, data: { id: commentId } };
   } catch (error) {

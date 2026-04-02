@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
-import { getDb } from "@/db";
+import { getDb, type DbClient } from "@/db";
 import {
   collaborationEvents,
   surveyCollaborationComments,
@@ -15,6 +15,7 @@ import { getRedisClient } from "@/lib/redis";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
 
 const DEFAULT_LEASE_DURATION_MS = 30_000;
+type DbTransaction = Parameters<Parameters<DbClient["transaction"]>[0]>[0];
 
 export type RealtimeScope = "workspace" | "survey";
 
@@ -34,7 +35,7 @@ function buildRealtimeChannel(scope: RealtimeScope, id: string) {
   return `pubsub:realtime:${scope}:${id}`;
 }
 
-async function nextWorkspaceRevision(tx: any, workspaceId: string) {
+async function nextWorkspaceRevision(tx: DbTransaction, workspaceId: string) {
   const [row] = await tx
     .insert(workspaceRevisions)
     .values({
@@ -54,7 +55,7 @@ async function nextWorkspaceRevision(tx: any, workspaceId: string) {
   return row.revision;
 }
 
-async function nextSurveyRevision(tx: any, surveyId: string) {
+async function nextSurveyRevision(tx: DbTransaction, surveyId: string) {
   const [survey] = await tx
     .select({ organizationId: surveys.organizationId })
     .from(surveys)
@@ -84,7 +85,7 @@ async function nextSurveyRevision(tx: any, surveyId: string) {
 }
 
 export async function recordRealtimeEvent(
-  tx: any,
+  tx: DbTransaction,
   input: {
     scope: RealtimeScope;
     workspaceId?: string | null;
@@ -96,7 +97,7 @@ export async function recordRealtimeEvent(
 ): Promise<RecordedRealtimeEvent> {
   let revision = 0;
   let workspaceId = input.workspaceId ?? null;
-  let surveyId = input.surveyId ?? null;
+  const surveyId = input.surveyId ?? null;
 
   if (input.scope === "workspace") {
     if (!workspaceId) {
@@ -151,7 +152,10 @@ export async function recordRealtimeEvent(
     scope: event.scope,
     channel: buildRealtimeChannel(event.scope, channelId),
     eventType: event.eventType,
-    payload: event as unknown as Record<string, unknown>,
+    payload: {
+      ...event,
+      payload: event.payload,
+    },
     createdAt,
     updatedAt: createdAt,
   });
@@ -160,25 +164,39 @@ export async function recordRealtimeEvent(
 }
 
 export async function publishPendingOutboxEntries(limit = 100) {
-  const db = getDb();
-  const entries = await db
-    .select()
-    .from(workspaceOutbox)
-    .where(isNull(workspaceOutbox.publishedAt))
-    .orderBy(asc(workspaceOutbox.createdAt))
-    .limit(limit);
-
-  if (entries.length === 0) return;
-
   const redis = getRedisClient();
+  await getDb().transaction(async (tx) => {
+    const claimedEntries = await tx.execute(
+      sql<{
+        id: string;
+        channel: string;
+        payload: Record<string, unknown>;
+      }>`
+        select id, channel, payload
+        from workspace_outbox
+        where published_at is null
+        order by created_at asc
+        limit ${limit}
+        for update skip locked
+      `,
+    );
 
-  for (const entry of entries) {
-    await redis.publish(entry.channel, JSON.stringify(entry.payload));
-    await db
-      .update(workspaceOutbox)
-      .set({ publishedAt: new Date(), updatedAt: new Date() })
-      .where(eq(workspaceOutbox.id, entry.id));
-  }
+    if (claimedEntries.rows.length === 0) {
+      return;
+    }
+
+    for (const row of claimedEntries.rows) {
+      const entryId = String(row.id);
+      const entryChannel = String(row.channel);
+      const entryPayload = row.payload;
+
+      await redis.publish(entryChannel, JSON.stringify(entryPayload));
+      await tx
+        .update(workspaceOutbox)
+        .set({ publishedAt: new Date(), updatedAt: new Date() })
+        .where(eq(workspaceOutbox.id, entryId));
+    }
+  });
 }
 
 export async function getWorkspaceRealtimeEvents(

@@ -14,6 +14,10 @@ import {
 import { getSurveysAction } from "@/app/actions/survey";
 import { useAuth } from "@/components/providers/auth-provider";
 
+type ProjectResponse = Awaited<ReturnType<typeof getProjectsAction>>;
+type ProjectList = Extract<ProjectResponse, { success: true }>["data"];
+type ProjectListItem = ProjectList extends Array<infer T> ? T : never;
+
 // Keys
 export const projectKeys = {
   all: (orgId?: string | null) => ["projects", orgId] as const,
@@ -98,7 +102,7 @@ export function useCreateProject() {
       );
 
       // Optimistically update to the new value
-      queryClient.setQueryData(projectKeys.lists(activeOrgId), (old: any) => [
+      queryClient.setQueryData(projectKeys.lists(activeOrgId), (old: Record<string, unknown>[] | undefined) => [
         ...(old || []),
         { ...newProject, id: "temp-id", createdAt: new Date() },
       ]);
@@ -109,12 +113,12 @@ export function useCreateProject() {
     onSuccess: () => {
       toast.success("Project created");
     },
-    onError: (err, _newProject, context: any) => {
+    onError: (err, _newProject, context: { previousProjects?: unknown } | undefined) => {
       toast.error(err.message);
       // Rollback to the previous value
       queryClient.setQueryData(
         projectKeys.lists(activeOrgId),
-        context.previousProjects,
+        context?.previousProjects,
       );
     },
     onSettled: () => {
@@ -156,14 +160,14 @@ export function useUpdateProject() {
         projectKeys.detail(updatedProject.id),
       );
 
-      queryClient.setQueryData(projectKeys.lists(activeOrgId), (old: any) =>
-        old?.map((p: any) =>
+      queryClient.setQueryData(projectKeys.lists(activeOrgId), (old: ProjectList | undefined) =>
+        old?.map((p: ProjectListItem) =>
           p.id === updatedProject.id ? { ...p, ...updatedProject } : p,
         ),
       );
       queryClient.setQueryData(
         projectKeys.detail(updatedProject.id),
-        (old: any) => ({ ...old, ...updatedProject }),
+        (old: Record<string, unknown> | undefined) => ({ ...(old || {}), ...updatedProject }),
       );
 
       return { previousProjects, previousProject };
@@ -171,15 +175,15 @@ export function useUpdateProject() {
     onSuccess: () => {
       toast.success("Project updated");
     },
-    onError: (err, updatedProject, context: any) => {
+    onError: (err, updatedProject, context: { previousProjects?: unknown, previousProject?: unknown } | undefined) => {
       toast.error(err.message);
       queryClient.setQueryData(
         projectKeys.lists(activeOrgId),
-        context.previousProjects,
+        context?.previousProjects,
       );
       queryClient.setQueryData(
         projectKeys.detail(updatedProject.id),
-        context.previousProject,
+        context?.previousProject,
       );
     },
     onSettled: (_, __, variables) => {
@@ -213,8 +217,8 @@ export function useDeleteProject() {
         projectKeys.lists(activeOrgId),
       );
 
-      queryClient.setQueryData(projectKeys.lists(activeOrgId), (old: any) =>
-        old?.filter((p: any) => p.id !== id),
+      queryClient.setQueryData(projectKeys.lists(activeOrgId), (old: ProjectList | undefined) =>
+        old?.filter((p: ProjectListItem) => p.id !== id),
       );
 
       return { previousProjects };
@@ -222,11 +226,11 @@ export function useDeleteProject() {
     onSuccess: () => {
       toast.success("Project deleted");
     },
-    onError: (err, _, context: any) => {
+    onError: (err, _, context: { previousProjects?: unknown } | undefined) => {
       toast.error(err.message);
       queryClient.setQueryData(
         projectKeys.lists(activeOrgId),
-        context.previousProjects,
+        context?.previousProjects,
       );
     },
     onSettled: () => {

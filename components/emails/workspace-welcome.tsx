@@ -17,13 +17,14 @@ export const WorkspaceWelcomeEmail = ({
   return (
     <BaseLayout previewText={previewText}>
       <Text style={globalStyles.h1}>Welcome aboard</Text>
-      
+
       <Text style={globalStyles.text}>
         Hi {name ?? "there"},
       </Text>
-      
+
       <Text style={globalStyles.text}>
-        You have been successfully added to the <strong>{workspaceName}</strong> workspace on Convyy.
+        You have been successfully added to the <strong>{workspaceName}</strong>
+        {" "}workspace on Convyy.
       </Text>
 
       <Section style={globalStyles.buttonContainer}>
@@ -33,7 +34,8 @@ export const WorkspaceWelcomeEmail = ({
       </Section>
 
       <Text style={globalStyles.secondaryText}>
-        We're excited to have you! Jump right in and start creating insights.
+        We&apos;re excited to have you! Jump right in and start creating
+        insights.
       </Text>
     </BaseLayout>
   );

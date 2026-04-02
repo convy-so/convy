@@ -1,19 +1,16 @@
 "use client";
 
+import Image from "next/image";
 import { Link } from "@/i18n/routing";
 import { useAuth } from "@/components/providers/auth-provider";
 import { getActiveWorkspace } from "@/app/actions/workspace";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
-interface ProfileContentProps {
-    cookieHeader: string | null;
-}
-
-export function ProfileContent({ cookieHeader: _cookieHeader }: ProfileContentProps) {
+export function ProfileContent() {
     const { user } = useAuth();
     const t = useTranslations("Profile");
-    const [workspace, setWorkspace] = useState<any>(null);
+    const [workspace, setWorkspace] = useState<{ role?: string; [key: string]: unknown } | null>(null);
 
     useEffect(() => {
         async function loadData() {
@@ -38,7 +35,14 @@ export function ProfileContent({ cookieHeader: _cookieHeader }: ProfileContentPr
                 <div className="relative group">
                     <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-gray-50 bg-gray-50 flex items-center justify-center">
                         {user.image ? (
-                            <img src={user.image} alt={user.name ?? ""} className="w-full h-full object-cover" />
+                            <Image
+                                src={user.image}
+                                alt={user.name ?? ""}
+                                width={96}
+                                height={96}
+                                unoptimized
+                                className="w-full h-full object-cover"
+                            />
                         ) : (
                             <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-white text-3xl font-medium uppercase">
                                 {user.name?.charAt(0)}

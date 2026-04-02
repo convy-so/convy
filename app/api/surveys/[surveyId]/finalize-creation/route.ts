@@ -6,7 +6,6 @@ import { surveyCreationConversations, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getResearchBrief, getActiveCoveragePlan } from "@/lib/education/storage";
 import {
-  publishPendingOutboxEntries,
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
@@ -102,7 +101,6 @@ export async function POST(
         });
       }
     });
-    await publishPendingOutboxEntries();
 
     return NextResponse.json({
       success: true,

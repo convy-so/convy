@@ -7,9 +7,12 @@
  */
 
 import { auth } from "@/lib/auth";
+import { nanoid } from "nanoid";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
 import {
+  classrooms,
+  departments,
   organizations,
   members,
   invitations,
@@ -19,16 +22,35 @@ import {
   surveyEditors,
   surveyEditLeases,
 } from "@/db/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, inArray, ne, sql } from "drizzle-orm";
+import { z } from "zod";
 import { isWorkspaceOwner } from "@/lib/workspace-access";
 import {
-  publishPendingOutboxEntries,
+  defaultWorkspaceLocaleSettings,
+  normalizeAppLocale,
+  type WorkspaceLocaleSettings,
+} from "@/lib/i18n/config";
+import {
+  getWorkspaceLocaleSettings,
+  normalizeWorkspaceLocaleSettings,
+  upsertWorkspaceLocaleSettings,
+} from "@/lib/i18n/workspace-settings";
+import {
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
 
 export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
+
+const departmentNamePattern = /^[A-Za-z0-9][A-Za-z0-9 &/-]{1,79}$/;
+const workspaceLocalizationSchema = z.object({
+  defaultUiLocale: z.enum(["en", "fr", "de", "es", "it"]),
+  defaultContentLocale: z.enum(["en", "fr", "de", "es", "it"]),
+  emailLocale: z.enum(["en", "fr", "de", "es", "it"]),
+  allowedLocales: z.array(z.enum(["en", "fr", "de", "es", "it"])).min(1),
+  autoTranslateGeneratedContent: z.boolean(),
+});
 
 /**
  * Create a new workspace
@@ -69,6 +91,21 @@ export async function createWorkspace(data: {
         error: "Failed to create workspace",
       };
     }
+
+    const creatorLocale = normalizeAppLocale(
+      session.user.uiLocale ?? session.user.preferredLanguage,
+    );
+    await upsertWorkspaceLocaleSettings({
+      organizationId: result.id,
+      settings: {
+        defaultUiLocale: creatorLocale,
+        defaultContentLocale: creatorLocale,
+        emailLocale: creatorLocale,
+        allowedLocales: [...defaultWorkspaceLocaleSettings.allowedLocales],
+        autoTranslateGeneratedContent:
+          defaultWorkspaceLocaleSettings.autoTranslateGeneratedContent,
+      },
+    });
 
     return {
       success: true,
@@ -119,7 +156,7 @@ export async function getUserWorkspaces(): Promise<
 
     return {
       success: true,
-      data: result.map((org: any) => ({
+      data: result.map((org: { id: string; name: string; slug: string; role?: string; logo?: string | null }) => ({
         id: org.id,
         name: org.name,
         slug: org.slug,
@@ -148,15 +185,14 @@ export async function getActiveWorkspace(): Promise<
     role: string;
     logo?: string | null;
     plan?: string | null;
+    localization: WorkspaceLocaleSettings;
   } | null>
 > {
   try {
     const session = await getVerifiedSession();
 
     // Get active organization ID from session
-    // Note: session.session has activeOrganizationId added by the organization plugin
-    const activeOrganizationId = (session.session as any)
-      .activeOrganizationId as string | null | undefined;
+    const activeOrganizationId = session.session.activeOrganizationId;
 
     if (!activeOrganizationId) {
       return {
@@ -182,6 +218,9 @@ export async function getActiveWorkspace(): Promise<
         eq(members.userId, session.user.id),
       ),
     });
+    const localization =
+      (await getWorkspaceLocaleSettings(activeOrganizationId)) ??
+      { ...defaultWorkspaceLocaleSettings };
 
     return {
       success: true,
@@ -192,6 +231,7 @@ export async function getActiveWorkspace(): Promise<
         role: member?.role || "member",
         logo: org.logo || null,
         plan: "Free",
+        localization,
       },
     };
   } catch (error) {
@@ -251,8 +291,7 @@ export async function inviteToWorkspace(data: {
     const session = await getVerifiedSession();
     const normalizedEmail = data.email.trim().toLowerCase();
     const organizationId =
-      data.organizationId ||
-      ((session.session as any).activeOrganizationId as string | undefined);
+      data.organizationId || session.session.activeOrganizationId;
 
     if (!organizationId) {
       return {
@@ -332,7 +371,7 @@ export async function inviteToWorkspace(data: {
     return {
       success: true,
       data: {
-        invitationId: result.id as string,
+        invitationId: result.id,
       },
     };
   } catch (error) {
@@ -355,8 +394,7 @@ export async function removeWorkspaceMember(data: {
   try {
     const session = await getVerifiedSession();
     const organizationId =
-      data.organizationId ||
-      ((session.session as any).activeOrganizationId as string | undefined);
+      data.organizationId || session.session.activeOrganizationId;
 
     if (!organizationId) {
       return {
@@ -467,7 +505,6 @@ export async function removeWorkspaceMember(data: {
           },
         });
       });
-      await publishPendingOutboxEntries();
     }
 
     return {
@@ -525,7 +562,17 @@ export async function getWorkspaceMembers(data?: {
 
     return {
       success: true,
-      data: result.members.map((member: any) => ({
+      data: result.members.map((member: {
+        id: string;
+        userId: string;
+        role: string;
+        user: {
+          id: string;
+          name: string;
+          email: string;
+          image?: string | null;
+        };
+      }) => ({
         id: member.id,
         userId: member.userId,
         role: member.role,
@@ -599,7 +646,6 @@ export async function updateWorkspace(data: {
         },
       });
     });
-    await publishPendingOutboxEntries();
 
     return {
       success: true,
@@ -611,6 +657,130 @@ export async function updateWorkspace(data: {
       success: false,
       error:
         error instanceof Error ? error.message : "Failed to update workspace",
+    };
+  }
+}
+
+export async function getWorkspaceLocalizationSettingsAction(data?: {
+  organizationId?: string;
+}): Promise<ActionResult<WorkspaceLocaleSettings>> {
+  try {
+    const session = await getVerifiedSession();
+    const organizationId =
+      data?.organizationId || session.session.activeOrganizationId;
+
+    if (!organizationId) {
+      return {
+        success: false,
+        error: "No active workspace selected",
+      };
+    }
+
+    const member = await getDb().query.members.findFirst({
+      where: and(
+        eq(members.organizationId, organizationId),
+        eq(members.userId, session.user.id),
+      ),
+    });
+
+    if (!member) {
+      return {
+        success: false,
+        error: "Unauthorized",
+      };
+    }
+
+    const localization =
+      (await getWorkspaceLocaleSettings(organizationId)) ??
+      { ...defaultWorkspaceLocaleSettings };
+
+    return {
+      success: true,
+      data: localization,
+    };
+  } catch (error) {
+    console.error("Error getting workspace localization settings:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to get workspace localization settings",
+    };
+  }
+}
+
+export async function updateWorkspaceLocalizationSettingsAction(data: {
+  organizationId?: string;
+  settings: WorkspaceLocaleSettings;
+}): Promise<ActionResult<WorkspaceLocaleSettings>> {
+  try {
+    const session = await getVerifiedSession();
+    const organizationId =
+      data.organizationId || session.session.activeOrganizationId;
+
+    if (!organizationId) {
+      return {
+        success: false,
+        error: "No active workspace selected",
+      };
+    }
+
+    const isOwner = await isWorkspaceOwner(session.user.id, organizationId);
+    if (!isOwner) {
+      return {
+        success: false,
+        error:
+          "Unauthorized: Only workspace owners can update workspace language settings",
+      };
+    }
+
+    const parsedSettings = workspaceLocalizationSchema.parse(data.settings);
+    const normalizedSettings = normalizeWorkspaceLocaleSettings(parsedSettings);
+    const allowedLocales = Array.from(
+      new Set([
+        ...normalizedSettings.allowedLocales,
+        normalizedSettings.defaultContentLocale,
+        normalizedSettings.emailLocale,
+      ]),
+    );
+    const localization: WorkspaceLocaleSettings = {
+      ...normalizedSettings,
+      allowedLocales,
+    };
+    await upsertWorkspaceLocaleSettings({
+      organizationId,
+      settings: localization,
+    });
+
+    await getDb().transaction(async (tx) => {
+      await recordRealtimeEvent(tx, {
+        scope: "workspace",
+        workspaceId: organizationId,
+        eventType: "workspace.settings_updated",
+        actorId: session.user.id,
+        payload: {
+          workspaceId: organizationId,
+          localization,
+        },
+      });
+    });
+
+    return {
+      success: true,
+      data: localization,
+    };
+  } catch (error) {
+    console.error("Error updating workspace localization settings:", error);
+    return {
+      success: false,
+      error:
+        error instanceof z.ZodError
+          ? error.errors[0]?.message ??
+            "Invalid workspace localization settings"
+          : error instanceof Error
+            ? error.message
+            : "Failed to update workspace localization settings",
     };
   }
 }
@@ -807,7 +977,6 @@ export async function acceptInvitationAction(
           },
         });
       });
-      await publishPendingOutboxEntries();
     }
 
     return {
@@ -820,6 +989,399 @@ export async function acceptInvitationAction(
       success: false,
       error:
         error instanceof Error ? error.message : "Failed to accept invitation",
+    };
+  }
+}
+
+export async function createDepartment(data: {
+  name: string;
+  code?: string;
+  description?: string;
+  headUserId?: string | null;
+  organizationId?: string;
+}): Promise<
+  ActionResult<{
+    id: string;
+    name: string;
+    code: string | null;
+    description: string | null;
+    headUserId: string | null;
+  }>
+> {
+  try {
+    const session = await getVerifiedSession();
+    const organizationId =
+      data.organizationId || session.session.activeOrganizationId;
+
+    if (!organizationId) {
+      return { success: false, error: "No active workspace selected" };
+    }
+
+    const isOwner = await isWorkspaceOwner(session.user.id, organizationId);
+    if (!isOwner) {
+      return {
+        success: false,
+        error: "Unauthorized: Only workspace owners can create departments",
+      };
+    }
+
+    const normalizedName = data.name.trim();
+    if (!departmentNamePattern.test(normalizedName)) {
+      return { success: false, error: "Please provide a valid department name." };
+    }
+
+    const normalizedCode = data.code?.trim() || null;
+    const normalizedDescription = data.description?.trim() || null;
+
+    const existingDepartment = await getDb().query.departments.findFirst({
+      where: and(
+        eq(departments.organizationId, organizationId),
+        sql`lower(${departments.name}) = ${normalizedName.toLowerCase()}`,
+      ),
+    });
+
+    if (existingDepartment) {
+      return {
+        success: false,
+        error: "A department with this name already exists in the workspace.",
+      };
+    }
+
+    if (data.headUserId) {
+      const headMember = await getDb().query.members.findFirst({
+        where: and(
+          eq(members.organizationId, organizationId),
+          eq(members.userId, data.headUserId),
+        ),
+      });
+
+      if (!headMember) {
+        return {
+          success: false,
+          error: "The selected department head must belong to this workspace.",
+        };
+      }
+    }
+
+    const departmentId = `dept_${nanoid()}`;
+    await getDb().insert(departments).values({
+      id: departmentId,
+      organizationId,
+      name: normalizedName,
+      code: normalizedCode,
+      description: normalizedDescription,
+      headUserId: data.headUserId ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    return {
+      success: true,
+      data: {
+        id: departmentId,
+        name: normalizedName,
+        code: normalizedCode,
+        description: normalizedDescription,
+        headUserId: data.headUserId ?? null,
+      },
+    };
+  } catch (error) {
+    console.error("Error creating department:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Failed to create department",
+    };
+  }
+}
+
+export async function getWorkspaceDepartments(data?: {
+  organizationId?: string;
+}): Promise<
+  ActionResult<
+    Array<{
+      id: string;
+      name: string;
+      code: string | null;
+      description: string | null;
+      headUserId: string | null;
+      headName: string | null;
+      classroomCount: number;
+      surveyCount: number;
+      folderCount: number;
+    }>
+  >
+> {
+  try {
+    const session = await getVerifiedSession();
+    const organizationId =
+      data?.organizationId || session.session.activeOrganizationId;
+
+    if (!organizationId) {
+      return { success: true, data: [] };
+    }
+
+    const isMember = await getDb().query.members.findFirst({
+      where: and(
+        eq(members.organizationId, organizationId),
+        eq(members.userId, session.user.id),
+      ),
+    });
+
+    if (!isMember) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const rows = await getDb().query.departments.findMany({
+      where: eq(departments.organizationId, organizationId),
+      orderBy: (table, { asc }) => [asc(table.name)],
+      with: {
+        headUser: {
+          columns: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    const departmentIds = rows.map((department) => department.id);
+    let classroomCounts: Array<{ departmentId: string | null; count: number }> = [];
+    let surveyCounts: Array<{ departmentId: string | null; count: number }> = [];
+    let folderCounts: Array<{ departmentId: string | null; count: number }> = [];
+
+    if (departmentIds.length > 0) {
+      [classroomCounts, surveyCounts, folderCounts] = await Promise.all([
+        getDb()
+          .select({
+            departmentId: classrooms.departmentId,
+            count: sql<number>`count(*)`,
+          })
+          .from(classrooms)
+          .where(inArray(classrooms.departmentId, departmentIds))
+          .groupBy(classrooms.departmentId),
+        getDb()
+          .select({
+            departmentId: surveys.departmentId,
+            count: sql<number>`count(*)`,
+          })
+          .from(surveys)
+          .where(inArray(surveys.departmentId, departmentIds))
+          .groupBy(surveys.departmentId),
+        getDb()
+          .select({
+            departmentId: projects.departmentId,
+            count: sql<number>`count(*)`,
+          })
+          .from(projects)
+          .where(inArray(projects.departmentId, departmentIds))
+          .groupBy(projects.departmentId),
+      ]);
+    }
+
+    const classroomCountByDepartment = new Map(
+      classroomCounts.flatMap((row) =>
+        row.departmentId ? [[row.departmentId, Number(row.count)]] : [],
+      ),
+    );
+    const surveyCountByDepartment = new Map(
+      surveyCounts.flatMap((row) =>
+        row.departmentId ? [[row.departmentId, Number(row.count)]] : [],
+      ),
+    );
+    const folderCountByDepartment = new Map(
+      folderCounts.flatMap((row) =>
+        row.departmentId ? [[row.departmentId, Number(row.count)]] : [],
+      ),
+    );
+
+    return {
+      success: true,
+      data: rows.map((department) => ({
+        id: department.id,
+        name: department.name,
+        code: department.code,
+        description: department.description,
+        headUserId: department.headUserId ?? null,
+        headName:
+          department.headUser?.name || department.headUser?.email || null,
+        classroomCount: classroomCountByDepartment.get(department.id) ?? 0,
+        surveyCount: surveyCountByDepartment.get(department.id) ?? 0,
+        folderCount: folderCountByDepartment.get(department.id) ?? 0,
+      })),
+    };
+  } catch (error) {
+    console.error("Error getting departments:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Failed to get departments",
+    };
+  }
+}
+
+export async function updateDepartment(data: {
+  departmentId: string;
+  name: string;
+  code?: string;
+  description?: string;
+  headUserId?: string | null;
+}): Promise<
+  ActionResult<{
+    id: string;
+    name: string;
+    code: string | null;
+    description: string | null;
+    headUserId: string | null;
+  }>
+> {
+  try {
+    const session = await getVerifiedSession();
+    const normalizedName = data.name.trim();
+    if (!departmentNamePattern.test(normalizedName)) {
+      return { success: false, error: "Please provide a valid department name." };
+    }
+
+    const department = await getDb().query.departments.findFirst({
+      where: eq(departments.id, data.departmentId),
+    });
+
+    if (!department) {
+      return { success: false, error: "Department not found." };
+    }
+
+    const isOwner = await isWorkspaceOwner(session.user.id, department.organizationId);
+    if (!isOwner) {
+      return {
+        success: false,
+        error: "Unauthorized: Only workspace owners can update departments",
+      };
+    }
+
+    const existingDepartment = await getDb().query.departments.findFirst({
+      where: and(
+        eq(departments.organizationId, department.organizationId),
+        sql`lower(${departments.name}) = ${normalizedName.toLowerCase()}`,
+        ne(departments.id, department.id),
+      ),
+    });
+
+    if (existingDepartment) {
+      return {
+        success: false,
+        error: "A department with this name already exists in the workspace.",
+      };
+    }
+
+    const nextHeadUserId = data.headUserId ?? null;
+    if (nextHeadUserId) {
+      const headMember = await getDb().query.members.findFirst({
+        where: and(
+          eq(members.organizationId, department.organizationId),
+          eq(members.userId, nextHeadUserId),
+        ),
+      });
+
+      if (!headMember) {
+        return {
+          success: false,
+          error: "The selected department head must belong to this workspace.",
+        };
+      }
+    }
+
+    const normalizedCode = data.code?.trim() || null;
+    const normalizedDescription = data.description?.trim() || null;
+
+    await getDb()
+      .update(departments)
+      .set({
+        name: normalizedName,
+        code: normalizedCode,
+        description: normalizedDescription,
+        headUserId: nextHeadUserId,
+        updatedAt: new Date(),
+      })
+      .where(eq(departments.id, department.id));
+
+    return {
+      success: true,
+      data: {
+        id: department.id,
+        name: normalizedName,
+        code: normalizedCode,
+        description: normalizedDescription,
+        headUserId: nextHeadUserId,
+      },
+    };
+  } catch (error) {
+    console.error("Error updating department:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Failed to update department",
+    };
+  }
+}
+
+export async function deleteDepartment(data: {
+  departmentId: string;
+}): Promise<ActionResult<void>> {
+  try {
+    const session = await getVerifiedSession();
+    const department = await getDb().query.departments.findFirst({
+      where: eq(departments.id, data.departmentId),
+    });
+
+    if (!department) {
+      return { success: false, error: "Department not found." };
+    }
+
+    const isOwner = await isWorkspaceOwner(session.user.id, department.organizationId);
+    if (!isOwner) {
+      return {
+        success: false,
+        error: "Unauthorized: Only workspace owners can delete departments",
+      };
+    }
+
+    const [classroomUsage, surveyUsage, folderUsage] = await Promise.all([
+      getDb()
+        .select({ count: sql<number>`count(*)` })
+        .from(classrooms)
+        .where(eq(classrooms.departmentId, department.id)),
+      getDb()
+        .select({ count: sql<number>`count(*)` })
+        .from(surveys)
+        .where(eq(surveys.departmentId, department.id)),
+      getDb()
+        .select({ count: sql<number>`count(*)` })
+        .from(projects)
+        .where(eq(projects.departmentId, department.id)),
+    ]);
+
+    const classroomCount = Number(classroomUsage[0]?.count ?? 0);
+    const surveyCount = Number(surveyUsage[0]?.count ?? 0);
+    const folderCount = Number(folderUsage[0]?.count ?? 0);
+
+    if (classroomCount > 0 || surveyCount > 0 || folderCount > 0) {
+      return {
+        success: false,
+        error:
+          "This department is still assigned to classrooms, surveys, or folders. Reassign them before deleting the department.",
+      };
+    }
+
+    await getDb().delete(departments).where(eq(departments.id, department.id));
+
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error("Error deleting department:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Failed to delete department",
     };
   }
 }

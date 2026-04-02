@@ -23,10 +23,18 @@ export async function GET(
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
-    const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
-    if (!survey) return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
-    if (!permission?.canView) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    const [survey] = await getDb()
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+    if (!survey)
+      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+    const permission = await getSurveyPermissionContext(
+      session.user.id,
+      surveyId,
+    );
+    if (!permission?.canView)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
     const [sampleAssignment, liveAssignment] = await Promise.all([
       getActivePersonalityAssignment(surveyId, "sample"),
@@ -42,7 +50,10 @@ export async function GET(
     });
   } catch (error) {
     console.error("[Personalities GET] Error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }
 
@@ -53,15 +64,22 @@ export async function POST(
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
-    const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
-    if (!survey) return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
+    const [survey] = await getDb()
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
+    if (!survey)
+      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+    const permission = await getSurveyPermissionContext(
+      session.user.id,
+      surveyId,
+    );
     if (!permission?.canEdit) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     const body = await req.json();
-    const mode = body.mode === "live" ? "live" : "sample";
+    const mode: "live" | "sample" = body.mode === "live" ? "live" : "sample";
     const presetId = personalityPresetIdSchema.parse(body.presetId);
     const overlay = personalityOverlaySchema.parse(body.overlay ?? {});
 
@@ -81,7 +99,10 @@ export async function POST(
     });
 
     if (body.applyToLive && mode === "sample") {
-      const liveCurrent = await getActivePersonalityAssignment(surveyId, "live");
+      const liveCurrent = await getActivePersonalityAssignment(
+        surveyId,
+        "live",
+      );
       await replacePersonalityAssignment({
         surveyId,
         mode: "live",
@@ -101,6 +122,9 @@ export async function POST(
     });
   } catch (error) {
     console.error("[Personalities POST] Error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }

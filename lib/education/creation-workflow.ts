@@ -15,12 +15,7 @@ import {
 } from "./types";
 import { renderPlaybookContext } from "./playbooks";
 
-export type CreationMessage = {
-  id?: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp?: string;
-};
+import { type ChatMessage } from "@/lib/chat-types";
 
 const FIELD_LABELS: Record<string, string> = {
   researchGoal: "the main research goal",
@@ -34,23 +29,79 @@ const FIELD_LABELS: Record<string, string> = {
   analysisQuestions: "the downstream analysis questions",
 };
 
-function conversationToText(messages: CreationMessage[]): string {
+function conversationToText(messages: ChatMessage[]): string {
   return messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
     .map((message) => `${message.role === "user" ? "Creator" : "Assistant"}: ${message.content}`)
     .join("\n\n");
 }
 
-function safeJsonParse<T>(raw: string): T | null {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function safeJsonParse(raw: string): unknown | null {
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) return null;
   try {
-    return JSON.parse(match[0]) as T;
+    return JSON.parse(match[0]);
   } catch {
     return null;
   }
 }
 
-async function classifyProgram(messages: CreationMessage[]) {
+function isEducationProgramId(value: unknown): value is EducationProgramId {
+  return listEducationPrograms().some((program) => program.manifest.id === value);
+}
+
+function parseProgramClassification(value: unknown): {
+  programId?: EducationProgramId;
+  confidence?: number;
+  rationale?: string;
+} | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    programId: isEducationProgramId(value.programId) ? value.programId : undefined,
+    confidence: typeof value.confidence === "number" ? value.confidence : undefined,
+    rationale: typeof value.rationale === "string" ? value.rationale : undefined,
+  };
+}
+
+function getBriefFieldValue(brief: ResearchBrief, field: string): unknown {
+  switch (field) {
+    case "researchGoal":
+      return brief.researchGoal;
+    case "decisionToInform":
+      return brief.decisionToInform;
+    case "audienceDefinition":
+      return brief.audienceDefinition;
+    case "learningContext":
+      return brief.learningContext;
+    case "deliveryContext":
+      return brief.deliveryContext;
+    case "timeWindow":
+      return brief.timeWindow;
+    case "requiredTopics":
+      return brief.requiredTopics;
+    case "successCriteria":
+      return brief.successCriteria;
+    case "analysisQuestions":
+      return brief.analysisQuestions;
+    default:
+      return undefined;
+  }
+}
+
+function parseResponseField(value: unknown): string | undefined {
+  return isRecord(value) && typeof value.response === "string"
+    ? value.response
+    : undefined;
+}
+
+async function classifyProgram(messages: ChatMessage[]) {
   const userText = messages
     .filter((message) => message.role === "user")
     .map((message) => message.content)
@@ -59,22 +110,25 @@ async function classifyProgram(messages: CreationMessage[]) {
   const catalog = listEducationPrograms()
     .map((program) => `${program.manifest.id}: ${program.manifest.description}`)
     .join("\n");
-  const prompt = `Classify the creator intent into one education research program. Return JSON only.
+  const systemPrompt = `Classify the creator intent into one education research program. Return JSON only.
 Programs:
 ${catalog}
 
-Conversation:
-${conversationToText(messages)}
-
 Schema:
 {"programId":"education.course_efficacy|education.learning_outcome|education.institutional_experience|education.professional_development","confidence":0.0,"rationale":"string"}`;
+  const prompt = `Conversation:
+${conversationToText(messages)}`;
 
-  const modelText = await generateAIResponse(prompt, undefined, {
+  const modelText = await generateAIResponse(prompt, systemPrompt, {
     model: analysisModel,
     temperature: 0.1,
     maxTokens: 250,
+    promptCache: {
+      namespace: "creation-classify-program",
+      staticSystemPrompt: systemPrompt,
+    },
   }).catch(() => "");
-  const parsed = safeJsonParse<{ programId?: EducationProgramId; confidence?: number; rationale?: string }>(modelText);
+  const parsed = parseProgramClassification(safeJsonParse(modelText));
   if (parsed?.programId) {
     return {
       programId: parsed.programId,
@@ -85,14 +139,14 @@ Schema:
   return heuristic;
 }
 
-function buildExtractionPrompt(
+function buildExtractionPromptParts(
   programId: EducationProgramId,
-  messages: CreationMessage[],
+  messages: ChatMessage[],
   playbookContext: string,
 ) {
   const program = getEducationProgram(programId);
   const required = program.manifest.requiredBriefFields.join(", ");
-  return `${program.creationPrompt}
+  const systemPrompt = `${program.creationPrompt}
 
 <task>
 Extract the latest canonical research brief from the creator conversation.
@@ -104,11 +158,8 @@ Return JSON only.
 Required fields for this program: ${required}
 </program-requirements>
 
-${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>\n\n` : ""}<conversation>
-${conversationToText(messages)}
-</conversation>
-
-<rules>
+  ${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>\n\n` : ""}
+  <rules>
 - Infer nothing that is contradicted by the conversation.
 - Prefer concrete phrasing over generic phrasing.
 - If a field is still unclear, leave it sparse and add it to missingFields.
@@ -140,12 +191,16 @@ ${conversationToText(messages)}
   "missingFields": ["string"]
 }
 </schema>`;
+  const prompt = `<conversation>
+${conversationToText(messages)}
+</conversation>`;
+  return { systemPrompt, prompt };
 }
 
 export function validateBrief(brief: ResearchBrief, programId: EducationProgramId): BriefValidationResult {
   const program = getEducationProgram(programId);
   const missingFields = program.manifest.requiredBriefFields.filter((field) => {
-    const value = (brief as Record<string, unknown>)[field];
+    const value = getBriefFieldValue(brief, field);
     if (Array.isArray(value)) return value.length === 0;
     return !value || (typeof value === "string" && value.trim().length < 3);
   });
@@ -175,16 +230,25 @@ export function buildCoveragePlan(surveyId: string, brief: ResearchBrief): Cover
 
 async function extractBrief(
   programId: EducationProgramId,
-  messages: CreationMessage[],
+  messages: ChatMessage[],
   playbookContext: string,
 ) {
-  const prompt = buildExtractionPrompt(programId, messages, playbookContext);
-  const raw = await generateAIResponse(prompt, undefined, {
+  const promptParts = buildExtractionPromptParts(
+    programId,
+    messages,
+    playbookContext,
+  );
+  const raw = await generateAIResponse(promptParts.prompt, promptParts.systemPrompt, {
     model: analysisModel,
     temperature: 0.1,
     maxTokens: 1500,
+    promptCache: {
+      namespace: "creation-extract-brief",
+      staticSystemPrompt: promptParts.systemPrompt,
+    },
   });
-  const parsed = safeJsonParse<Record<string, unknown>>(raw) ?? {};
+  const parsedCandidate = safeJsonParse(raw);
+  const parsed = isRecord(parsedCandidate) ? parsedCandidate : {};
 
   const brief: ResearchBrief = {
     programId,
@@ -220,13 +284,13 @@ async function extractBrief(
 async function planNextQuestion(
   brief: ResearchBrief,
   validation: BriefValidationResult,
-  messages: CreationMessage[],
+  messages: ChatMessage[],
   playbookContext: string,
 ) {
   const program = getEducationProgram(brief.programId);
   const latestUserMessage = [...messages].reverse().find((message) => message.role === "user")?.content || "";
   const missingField = validation.missingFields[0];
-  const prompt = `${program.creationPrompt}
+  const systemPrompt = `${program.creationPrompt}
 
 <task>
 The brief is not complete yet.
@@ -234,13 +298,7 @@ Ask exactly one concise next question that helps fill the highest-priority missi
 Return JSON only.
 </task>
 
-${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>\n\n` : ""}<brief-state>
-Missing fields: ${validation.missingFields.join(", ")}
-Latest creator message: ${latestUserMessage}
-Research goal: ${brief.researchGoal || "missing"}
-Decision to inform: ${brief.decisionToInform || "missing"}
-Audience: ${brief.audienceDefinition || "missing"}
-</brief-state>
+${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>\n\n` : ""}
 
 <rules>
 - Ask only one question.
@@ -250,13 +308,24 @@ Audience: ${brief.audienceDefinition || "missing"}
 </rules>
 
 <schema>{"response":"string"}</schema>`;
-  const raw = await generateAIResponse(prompt, undefined, {
+  const prompt = `<brief-state>
+Missing fields: ${validation.missingFields.join(", ")}
+Latest creator message: ${latestUserMessage}
+Research goal: ${brief.researchGoal || "missing"}
+Decision to inform: ${brief.decisionToInform || "missing"}
+Audience: ${brief.audienceDefinition || "missing"}
+</brief-state>`;
+  const raw = await generateAIResponse(prompt, systemPrompt, {
     model: defaultModel,
     temperature: 0.3,
     maxTokens: 220,
+    promptCache: {
+      namespace: "creation-next-question",
+      staticSystemPrompt: systemPrompt,
+    },
   }).catch(() => "");
-  const parsed = safeJsonParse<{ response?: string }>(raw);
-  if (parsed?.response) return parsed.response;
+  const response = parseResponseField(safeJsonParse(raw));
+  if (response) return response;
   return missingField
     ? `To make this study usable, what should this research help you decide about ${FIELD_LABELS[missingField] || missingField}?`
     : "What is the most important thing this education study should uncover?";
@@ -264,7 +333,7 @@ Audience: ${brief.audienceDefinition || "missing"}
 
 async function planCompletionResponse(brief: ResearchBrief, playbookContext: string) {
   const program = getEducationProgram(brief.programId);
-  const prompt = `${program.creationPrompt}
+  const systemPrompt = `${program.creationPrompt}
 
 <task>
 The research brief is complete.
@@ -272,11 +341,7 @@ Write a short, confident update that confirms readiness for sample review and me
 Return JSON only.
 </task>
 
-${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>\n\n` : ""}<brief-summary>
-Program: ${program.manifest.displayName}
-Goal: ${brief.researchGoal}
-Decision: ${brief.decisionToInform}
-</brief-summary>
+${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>\n\n` : ""}
 
 <rules>
 - Keep it under 2 sentences.
@@ -285,18 +350,27 @@ Decision: ${brief.decisionToInform}
 </rules>
 
 <schema>{"response":"string"}</schema>`;
-  const raw = await generateAIResponse(prompt, undefined, {
+  const prompt = `<brief-summary>
+Program: ${program.manifest.displayName}
+Goal: ${brief.researchGoal}
+Decision: ${brief.decisionToInform}
+</brief-summary>`;
+  const raw = await generateAIResponse(prompt, systemPrompt, {
     model: defaultModel,
     temperature: 0.3,
     maxTokens: 180,
+    promptCache: {
+      namespace: "creation-completion-response",
+      staticSystemPrompt: systemPrompt,
+    },
   }).catch(() => "");
-  return safeJsonParse<{ response?: string }>(raw)?.response || `The research brief is now ready for sample review. I have aligned it to the ${program.manifest.displayName} program.`;
+  return parseResponseField(safeJsonParse(raw)) || `The research brief is now ready for sample review. I have aligned it to the ${program.manifest.displayName} program.`;
 }
 
 export async function runCreationWorkflow(input: {
   surveyId: string;
   organizationId?: string | null;
-  messages: CreationMessage[];
+  messages: ChatMessage[];
   userId?: string;
 }) {
   const routing = await classifyProgram(input.messages);
@@ -313,7 +387,7 @@ export async function runCreationWorkflow(input: {
       interpretation: record.activeVersion!.interpretation,
     })),
   );
-  let brief = await extractBrief(routing.programId, input.messages, playbookContext);
+  const brief = await extractBrief(routing.programId, input.messages, playbookContext);
   brief.routingConfidence = routing.confidence;
   brief.routingRationale = routing.rationale;
 
@@ -371,7 +445,7 @@ export async function runCreationWorkflow(input: {
   };
 }
 
-export async function persistCreationConversation(surveyId: string, messages: CreationMessage[]) {
+export async function persistCreationConversation(surveyId: string, messages: ChatMessage[]) {
   const [existing] = await getDb()
     .select()
     .from(surveyCreationConversations)
@@ -381,6 +455,7 @@ export async function persistCreationConversation(surveyId: string, messages: Cr
     id: message.id ?? nanoid(),
     role: message.role,
     content: message.content,
+    ...(message.parts ? { parts: message.parts } : {}),
     timestamp: message.timestamp || new Date().toISOString(),
   }));
 

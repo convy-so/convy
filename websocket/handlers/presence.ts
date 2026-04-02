@@ -32,22 +32,32 @@ export interface PresenceMessage {
 export class PresenceHandler {
   private ws: WebSocket;
   private userId: string;
+  private memberId: string;
   private workspaceId: string;
   public surveyId?: string;
   private isActive: boolean = true;
+  private hasLeft = false;
+  private userName = "User";
+  private userImage: string | null = null;
   private redisClient = getRedisClient();
 
   constructor(
     connection: AuthenticatedConnection,
+    memberId: string,
     workspaceId: string,
     surveyId?: string
   ) {
     this.ws = connection.ws;
     this.userId = connection.userId;
+    this.memberId = memberId;
     this.workspaceId = workspaceId;
     this.surveyId = surveyId;
 
     this.setupEventHandlers();
+  }
+
+  public getSocket(): WebSocket {
+    return this.ws;
   }
 
   async initialize(): Promise<void> {
@@ -58,34 +68,34 @@ export class PresenceHandler {
         .from(users)
         .where(eq(users.id, this.userId));
 
-      const name = userData?.name || "User";
-      const image = userData?.image || null;
+      this.userName = userData?.name || "User";
+      this.userImage = userData?.image || null;
 
-      // 2. Store metadata in Redis for other members to see
-      await this.redisClient.hset(
-        `user:metadata:${this.userId}`,
-        "name", name,
-        "image", image || ""
-      );
-      await this.redisClient.expire(`user:metadata:${this.userId}`, 3600); // 1 hour cache
-
-      // 3. Join the presence set in Redis
+      // 2. Join the presence set in Redis with a connection-scoped member id.
+      // This preserves presence across multiple tabs from the same user.
       await this.updatePresence();
 
-      // 4. Broadcast "joined" event to others
+      // 3. Broadcast initial presence after the connection is registered.
+      const activeUsers = await this.getActiveUsers();
+      await this.broadcast({
+        type: "presence_update",
+        workspaceId: this.workspaceId,
+        surveyId: this.surveyId,
+        users: activeUsers,
+      });
+
       await this.broadcast({
         type: "user_joined",
         workspaceId: this.workspaceId,
         surveyId: this.surveyId,
         user: {
           userId: this.userId,
-          name,
-          image,
+          name: this.userName,
+          image: this.userImage,
         }
       });
 
-      // 3. Send initial state to the user
-      const activeUsers = await this.getActiveUsers();
+      // 4. Send initial state to the user
       this.send({
         type: "connected",
         workspaceId: this.workspaceId,
@@ -93,7 +103,6 @@ export class PresenceHandler {
         users: activeUsers
       });
 
-      console.log(`[Presence Handler] User ${this.userId} joined ${this.workspaceId}${this.surveyId ? ` / ${this.surveyId}` : ""}`);
     } catch (error) {
       console.error("[Presence Handler] Initialization error:", error);
       this.ws.close(1011, "Internal server error");
@@ -103,7 +112,17 @@ export class PresenceHandler {
   private async updatePresence(): Promise<void> {
     const key = this.getPresenceKey();
     const score = Date.now();
-    await this.redisClient.zadd(key, score, this.userId);
+    const memberMetadataKey = this.getPresenceMemberMetadataKey();
+
+    await this.redisClient.hset(
+      memberMetadataKey,
+      "userId", this.userId,
+      "name", this.userName,
+      "image", this.userImage || "",
+      "lastActive", String(score),
+    );
+    await this.redisClient.expire(memberMetadataKey, 300);
+    await this.redisClient.zadd(key, score, this.memberId);
     // Set expiry for the presence set
     await this.redisClient.expire(key, 300); // 5 minutes
   }
@@ -116,26 +135,54 @@ export class PresenceHandler {
     // Clean up stale users
     await this.redisClient.zremrangebyscore(key, 0, threshold);
 
-    const userIds = await this.redisClient.zrange(key, 0, -1);
+    const memberIds = await this.redisClient.zrange(key, 0, -1);
+    const activeUsers = new Map<string, NonNullable<PresenceMessage["users"]>[number]>();
     
-    // Fetch metadata for all active users
-    const usersWithMeta = await Promise.all(
-      userIds.map(async (id) => {
-        const meta = await this.redisClient.hgetall(`user:metadata:${id}`);
-        return {
-          userId: id,
-          name: meta.name || `User ${id.substring(0, 4)}`,
+    // Fetch metadata for all active connections, then collapse to unique users.
+    await Promise.all(
+      memberIds.map(async (memberId) => {
+        const meta = await this.redisClient.hgetall(
+          this.getPresenceMemberMetadataKey(memberId),
+        );
+        const userId = meta.userId;
+        if (!userId) {
+          return;
+        }
+
+        const candidate = {
+          userId,
+          name: meta.name || `User ${userId.substring(0, 4)}`,
           image: meta.image || null,
-          lastActive: now
+          lastActive:
+            meta.lastActive && !Number.isNaN(Number(meta.lastActive))
+              ? Number(meta.lastActive)
+              : now,
         };
-      })
+
+        const existing = activeUsers.get(userId);
+        if (!existing || candidate.lastActive >= existing.lastActive) {
+          activeUsers.set(userId, candidate);
+        }
+      }),
     );
 
-    return usersWithMeta;
+    return Array.from(activeUsers.values());
   }
 
   private getPresenceKey(): string {
     return `presence:${this.workspaceId}${this.surveyId ? `:${this.surveyId}` : ""}`;
+  }
+
+  private getPresenceMemberMetadataKey(memberId: string = this.memberId): string {
+    return `presence:member:${memberId}`;
+  }
+
+  private getPresenceChannel(): string {
+    return `pubsub:presence:${this.workspaceId}${this.surveyId ? `:${this.surveyId}` : ""}`;
+  }
+
+  public matchesScope(workspaceId: string, surveyId?: string): boolean {
+    return this.workspaceId === workspaceId && this.surveyId === surveyId;
   }
 
   private setupEventHandlers(): void {
@@ -148,6 +195,22 @@ export class PresenceHandler {
       this.isActive = false;
     });
 
+    this.ws.on("message", async (raw) => {
+      try {
+        const data = JSON.parse(String(raw));
+        if (
+          typeof data === "object" &&
+          data !== null &&
+          "type" in data &&
+          data.type === "heartbeat"
+        ) {
+          await this.updatePresence();
+        }
+      } catch {
+        // Ignore malformed presence messages from the client.
+      }
+    });
+
     // Keepalive/Heartbeat
     this.ws.on("pong", async () => {
       await this.updatePresence();
@@ -155,22 +218,36 @@ export class PresenceHandler {
   }
 
   private async handleLeave(): Promise<void> {
+    if (this.hasLeft) {
+      return;
+    }
+    this.hasLeft = true;
+
     const key = this.getPresenceKey();
-    await this.redisClient.zrem(key, this.userId);
+    await this.redisClient.zrem(key, this.memberId);
+    await this.redisClient.del(this.getPresenceMemberMetadataKey());
+
+    const activeUsers = await this.getActiveUsers();
+    await this.broadcast({
+      type: "presence_update",
+      workspaceId: this.workspaceId,
+      surveyId: this.surveyId,
+      users: activeUsers,
+    });
     await this.broadcast({
       type: "user_left",
       workspaceId: this.workspaceId,
       surveyId: this.surveyId,
       user: {
         userId: this.userId,
-        name: "User"
+        name: this.userName,
+        image: this.userImage,
       }
     });
   }
 
   private async broadcast(message: PresenceMessage): Promise<void> {
-    const channel = `pubsub:presence:${this.workspaceId}`;
-    await this.redisClient.publish(channel, JSON.stringify(message));
+    await this.redisClient.publish(this.getPresenceChannel(), JSON.stringify(message));
   }
 
   public send(message: PresenceMessage): void {

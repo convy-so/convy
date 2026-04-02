@@ -1,6 +1,6 @@
 
 "use client"
-import { User } from "better-auth/types";
+import Image from "next/image";
 import { Search, LogOut, Settings, User as UserIcon, Bell } from "lucide-react";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,11 +17,15 @@ import { ActiveUsers } from "./active-users";
 import { fetchActiveWorkspace } from "@/lib/api/workspace";
 import { WorkspaceNotifications } from "./workspace-notifications";
 
-interface DashboardHeaderProps {
-  user?: User | null;
-}
+type NotificationListItem = {
+  id: string;
+  title: string;
+  message: string;
+  createdAt: string | Date;
+  read: boolean;
+};
 
-export function DashboardHeader({ user: _initialUser }: DashboardHeaderProps) {
+export function DashboardHeader() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -36,22 +40,33 @@ export function DashboardHeader({ user: _initialUser }: DashboardHeaderProps) {
   });
 
   // Fetch notifications using React Query
-  const { data: notifications = [], isLoading } = useQuery({
+  const { data: notifications = [], isLoading } = useQuery<NotificationListItem[]>({
     queryKey: queryKeys.notifications.all(),
     queryFn: fetchNotificationsAPI,
   });
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  // Replaced manual getClientTranslation with static keys
-
   const handleMarkAsRead = async (id: string) => {
+    const previousNotifications =
+      queryClient.getQueryData<NotificationListItem[]>(queryKeys.notifications.all()) ?? [];
+
+    queryClient.setQueryData(
+      queryKeys.notifications.all(),
+      previousNotifications.map((notification) =>
+        notification.id === id
+          ? { ...notification, read: true }
+          : notification,
+      ),
+    );
+
     const result = await markNotificationAsRead(id);
     if (result.success) {
-      queryClient.setQueryData(queryKeys.notifications.all(), (prev: any[]) =>
-        prev ? prev.map(n => n.id === id ? { ...n, read: true } : n) : []
-      );
+      return;
     }
+
+    queryClient.setQueryData(queryKeys.notifications.all(), previousNotifications);
+    toast.error(result.error ?? t("Notifications"));
   };
 
   const handleSignOut = async () => {
@@ -126,10 +141,14 @@ export function DashboardHeader({ user: _initialUser }: DashboardHeaderProps) {
                       <p className="text-sm text-gray-500">{t("Notifications")}...</p>
                     </div>
                   ) : notifications.length > 0 ? (
-                    notifications.map((notification) => (
+                    notifications.map((notification: NotificationListItem) => (
                       <div
                         key={notification.id}
-                        onClick={() => handleMarkAsRead(notification.id)}
+                        onClick={() => {
+                          if (!notification.read) {
+                            void handleMarkAsRead(notification.id);
+                          }
+                        }}
                         className={`px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors border-l-2 ${!notification.read ? 'border-blue-500 bg-blue-50/30' : 'border-transparent'
                           }`}
                       >
@@ -170,9 +189,12 @@ export function DashboardHeader({ user: _initialUser }: DashboardHeaderProps) {
               </div>
               <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shadow-sm ring-2 ring-white">
                 {user.image ? (
-                  <img
+                  <Image
                     src={user.image}
                     alt={user.name ?? ""}
+                    width={32}
+                    height={32}
+                    unoptimized
                     className="w-full h-full object-cover"
                   />
                 ) : (

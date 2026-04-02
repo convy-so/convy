@@ -21,18 +21,111 @@ import type { SampleConductingProfile } from "./sample-feedback";
 
 type ChatMessage = {
   id?: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system" | "tool";
   content: string;
 };
 
-function safeJsonParse<T>(raw: string): T | null {
+type TurnAnalysisResult = {
+  nodeCoverage?: Record<string, number>;
+  completedNodeIds?: string[];
+  evidence?: Array<{
+    nodeId: string;
+    evidenceType: string;
+    excerpt: string;
+    sentiment?: "positive" | "negative" | "neutral" | "mixed";
+    reliability?: number;
+  }>;
+  contradictions?: string[];
+  fatigueScore?: number;
+  reliabilityScore?: number;
+  notes?: string[];
+  shouldStop?: boolean;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function safeJsonParse(raw: string): unknown | null {
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) return null;
   try {
-    return JSON.parse(match[0]) as T;
+    return JSON.parse(match[0]);
   } catch {
     return null;
   }
+}
+
+function normalizeTurnAnalysisResult(value: unknown): TurnAnalysisResult | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    nodeCoverage: isRecord(value.nodeCoverage)
+      ? Object.fromEntries(
+          Object.entries(value.nodeCoverage).filter(
+            (entry): entry is [string, number] => typeof entry[1] === "number",
+          ),
+        )
+      : undefined,
+    completedNodeIds: Array.isArray(value.completedNodeIds)
+      ? value.completedNodeIds.filter(
+          (item): item is string => typeof item === "string",
+        )
+      : undefined,
+    evidence: Array.isArray(value.evidence)
+      ? value.evidence.flatMap((item) => {
+          if (!isRecord(item)) {
+            return [];
+          }
+
+          const nodeId = typeof item.nodeId === "string" ? item.nodeId : null;
+          const evidenceType =
+            typeof item.evidenceType === "string" ? item.evidenceType : null;
+          const excerpt = typeof item.excerpt === "string" ? item.excerpt : null;
+          const reliability =
+            typeof item.reliability === "number" ? item.reliability : undefined;
+          const sentiment =
+            item.sentiment === "positive" ||
+            item.sentiment === "negative" ||
+            item.sentiment === "neutral" ||
+            item.sentiment === "mixed"
+              ? item.sentiment
+              : undefined;
+
+          if (!nodeId || !evidenceType || !excerpt) {
+            return [];
+          }
+
+          return [
+            {
+              nodeId,
+              evidenceType,
+              excerpt,
+              sentiment,
+              reliability,
+            },
+          ];
+        })
+      : undefined,
+    contradictions: Array.isArray(value.contradictions)
+      ? value.contradictions.filter(
+          (item): item is string => typeof item === "string",
+        )
+      : undefined,
+    fatigueScore:
+      typeof value.fatigueScore === "number" ? value.fatigueScore : undefined,
+    reliabilityScore:
+      typeof value.reliabilityScore === "number"
+        ? value.reliabilityScore
+        : undefined,
+    notes: Array.isArray(value.notes)
+      ? value.notes.filter((item): item is string => typeof item === "string")
+      : undefined,
+    shouldStop:
+      typeof value.shouldStop === "boolean" ? value.shouldStop : undefined,
+  };
 }
 
 export function createInitialSessionState(input: {
@@ -78,14 +171,47 @@ export function buildConductingSystemPrompt(input: {
   conductingProfile?: SampleConductingProfile | null;
   playbookContext?: string;
   personalityContext?: string;
+  toolContext?: {
+    canFinishSurvey?: boolean;
+    canShowMedia?: boolean;
+  };
+}) {
+  const parts = buildConductingSystemPromptParts(input);
+  return parts.dynamicSystemPrompt
+    ? `${parts.staticSystemPrompt}\n\n${parts.dynamicSystemPrompt}`
+    : parts.staticSystemPrompt;
+}
+
+export function buildConductingSystemPromptParts(input: {
+  brief: ResearchBrief;
+  coveragePlan: CoveragePlan;
+  sessionState: SessionState;
+  sessionType: SessionType;
+  conductingProfile?: SampleConductingProfile | null;
+  playbookContext?: string;
+  personalityContext?: string;
+  toolContext?: {
+    canFinishSurvey?: boolean;
+    canShowMedia?: boolean;
+  };
 }) {
   const program = getEducationProgram(input.brief.programId);
   const activeNode = input.coveragePlan.nodes.find((node) => node.id === input.sessionState.currentNodeId) ?? input.coveragePlan.nodes[0];
   const completedLabels = input.coveragePlan.nodes
     .filter((node) => input.sessionState.completedNodeIds.includes(node.id))
     .map((node) => node.label);
+  const toolRules = [
+    input.toolContext?.canFinishSurvey
+      ? "- If required coverage is achieved and the interview should end, call `finishSurvey` instead of only implying the interview is over."
+      : "- If required coverage is achieved and the interview should end, close clearly and naturally.",
+    input.toolContext?.canShowMedia
+      ? "- If media is available, call `showMedia` only when a specific media asset is directly relevant to the current question."
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-  return `${program.conductingPrompt}
+  const staticSystemPrompt = `${program.conductingPrompt}
 
 <research-brief>
 - Title: ${input.brief.title}
@@ -102,15 +228,6 @@ export function buildConductingSystemPrompt(input: {
 <coverage-plan>
 ${input.coveragePlan.nodes.map((node) => `- ${node.id}: ${node.label} (${node.description})`).join("\n")}
 </coverage-plan>
-
-<current-session>
-- Session type: ${input.sessionType}
-- Active node: ${activeNode?.id || "none"} ${activeNode?.label || ""}
-- Completed nodes: ${completedLabels.join(", ") || "None"}
-- Overall coverage: ${(input.sessionState.overallCoverage * 100).toFixed(0)}%
-- Reliability: ${(input.sessionState.reliabilityScore * 100).toFixed(0)}%
-- Fatigue: ${(input.sessionState.fatigueScore * 100).toFixed(0)}%
-</current-session>
 
 ${input.playbookContext ? `<approved-playbooks>
 ${input.playbookContext}
@@ -134,8 +251,23 @@ ${input.conductingProfile.coverageDirectives.map((item) => `- Coverage: ${item}`
 - Stay anchored to the active node unless a participant answer directly advances another required node.
 - Favor concrete examples.
 - If fatigue is high and required coverage is achieved, close gracefully.
+${toolRules}
 - Never mention internal nodes or percentages.
 </response-rules>`;
+
+  const dynamicSystemPrompt = `<current-session>
+- Session type: ${input.sessionType}
+- Active node: ${activeNode?.id || "none"} ${activeNode?.label || ""}
+- Completed nodes: ${completedLabels.join(", ") || "None"}
+- Overall coverage: ${(input.sessionState.overallCoverage * 100).toFixed(0)}%
+- Reliability: ${(input.sessionState.reliabilityScore * 100).toFixed(0)}%
+- Fatigue: ${(input.sessionState.fatigueScore * 100).toFixed(0)}%
+</current-session>`;
+
+  return {
+    staticSystemPrompt,
+    dynamicSystemPrompt,
+  };
 }
 
 async function evaluateTurn(input: {
@@ -189,22 +321,7 @@ ${input.messages.map((message) => `${message.role}: ${message.content}`).join("\
     surveyId: input.surveyId,
   });
 
-  return safeJsonParse<{
-    nodeCoverage?: Record<string, number>;
-    completedNodeIds?: string[];
-    evidence?: Array<{
-      nodeId: string;
-      evidenceType: string;
-      excerpt: string;
-      sentiment?: "positive" | "negative" | "neutral" | "mixed";
-      reliability?: number;
-    }>;
-    contradictions?: string[];
-    fatigueScore?: number;
-    reliabilityScore?: number;
-    notes?: string[];
-    shouldStop?: boolean;
-  }>(raw);
+  return normalizeTurnAnalysisResult(safeJsonParse(raw));
 }
 
 export async function finalizeConductingTurn(input: {

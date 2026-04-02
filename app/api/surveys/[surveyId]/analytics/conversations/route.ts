@@ -5,6 +5,7 @@ import { getDb } from "@/db";
 import { surveySessionInsights, surveySessions } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { buildConversationListItem } from "@/lib/analytics";
+import { conversationInsightSchema } from "@/lib/education/types";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
 
 export async function GET(
@@ -43,14 +44,22 @@ export async function GET(
       );
 
     const totalCount = rows.length;
-    const conversationItems = rows.map((row) =>
-      buildConversationListItem({
-        insight: row.insight as any,
-        createdAt: row.createdAt,
-        sessionType: row.sessionType,
-        sourceConversationId: row.sourceConversationId,
-      }),
-    );
+    const conversationItems = rows.flatMap((row) => {
+      const parsedInsight = conversationInsightSchema.safeParse(row.insight);
+
+      if (!parsedInsight.success) {
+        return [];
+      }
+
+      return [
+        buildConversationListItem({
+          insight: parsedInsight.data,
+          createdAt: row.createdAt,
+          sessionType: row.sessionType,
+          sourceConversationId: row.sourceConversationId,
+        }),
+      ];
+    });
     const paginated = conversationItems.slice((page - 1) * limit, page * limit);
     const completedHighQuality = conversationItems.filter(
       (item) => item.completenessPercent >= 80 && item.reliabilityPercent >= 65,

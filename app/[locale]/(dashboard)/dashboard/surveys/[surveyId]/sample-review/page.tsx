@@ -22,28 +22,194 @@ import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { toast } from "react-hot-toast";
 import { useAuth } from "@/components/providers/auth-provider";
-import { ClientT } from "@/components/i18n/client-t";
-import { getClientTranslation } from "@/app/actions/translate";
 import { useVoiceWebSocket } from "@/hooks/use-voice-websocket";
 import { MediaDisplay } from "@/components/surveys/media-display";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { useQuery } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
+import { useRealtime } from "@/hooks/use-realtime";
+import { UIMessage } from "ai";
+import { ChatMessagePart, SurveyMedia } from "@/lib/chat-types";
+import { toUIMessages } from "@/lib/chat-ui-messages";
 import { DefaultChatTransport } from "ai";
 import { SurveyStartOverlay } from "@/components/surveys/survey-start-overlay";
 import { addSampleConversationCommentAction } from "@/app/actions/sample-conversation";
 import { RefinementAssistantPanel } from "@/components/surveys/refinement-assistant-panel";
 import { getRehearsalCommentsAction } from "@/app/actions/collaboration";
-import { useRealtime } from "@/hooks/use-realtime";
 
 const MAX_SAMPLE_CONVERSATIONS = 3;
+
+type SampleReviewMessage = UIMessage & {
+    media?: SurveyMedia;
+    createdAt?: Date;
+};
+
+type StoredSampleMessage = {
+    id?: string;
+    role: string;
+    content?: string;
+    parts?: ChatMessagePart[];
+    timestamp?: string;
+};
+
+type RehearsalComment = {
+    id: string;
+    body: string;
+    createdAt: Date;
+    author: {
+        id: string;
+        name: string | null;
+        email: string;
+    };
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+}
+
+function isConversationRole(role: string): role is "user" | "assistant" {
+    return role === "user" || role === "assistant";
+}
+
+function normalizeSampleMessage(
+    message: StoredSampleMessage,
+    index: number,
+): SampleReviewMessage | null {
+    if (!isConversationRole(message.role)) {
+        return null;
+    }
+
+    const [uiMessage] = toUIMessages([{
+        id: message.id || `hist-${index}-${Date.now()}`,
+        role: message.role,
+        content: message.content || "",
+        parts: message.parts,
+        timestamp: message.timestamp ?? new Date().toISOString(),
+    }]);
+
+    if (!uiMessage) {
+        return null;
+    }
+
+    return {
+        ...uiMessage,
+        createdAt: message.timestamp ? new Date(message.timestamp) : new Date(),
+    };
+}
+
+function getMessageText(message: UIMessage): string {
+    return message.parts
+        ?.filter((part): part is { type: "text"; text: string } => part.type === "text")
+        .map((part) => part.text)
+        .join("") || "";
+}
+
+function isFinishSurveyPart(part: UIMessage["parts"][number]): boolean {
+    return (
+        (part.type === "tool-invocation" || part.type === "tool-call") &&
+        "toolName" in part &&
+        part.toolName === "finishSurvey"
+    );
+}
+
+function parseToolResult(value: unknown): Record<string, unknown> | null {
+    if (isRecord(value)) {
+        return value;
+    }
+
+    if (typeof value !== "string") {
+        return null;
+    }
+
+    try {
+        const parsed = JSON.parse(value);
+        return isRecord(parsed) ? parsed : null;
+    } catch {
+        return null;
+    }
+}
+
+function normalizeSurveyMedia(value: unknown): SurveyMedia[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value.flatMap((item) => {
+        if (!isRecord(item) || typeof item.type !== "string" || typeof item.url !== "string") {
+            return [];
+        }
+
+        if (item.type !== "image" && item.type !== "audio" && item.type !== "video") {
+            return [];
+        }
+
+        return [{
+            type: item.type,
+            url: item.url,
+            id: typeof item.id === "string" ? item.id : `media-${Math.random().toString(36).substring(2, 9)}`,
+            description: typeof item.description === "string" ? item.description : undefined,
+            mimeType: typeof item.mimeType === "string" ? item.mimeType : undefined,
+        }];
+    });
+}
+
+function getMediaFromMessagePart(part: UIMessage["parts"][number]): SurveyMedia | null {
+    if ((part.type === "tool-invocation" || part.type === "tool-call") && "toolName" in part && part.toolName === "showMedia") {
+        const result = parseToolResult("result" in part ? part.result : undefined);
+        const media = result?.media;
+        return normalizeSurveyMedia(media ? [media] : [])[0] ?? null;
+    }
+
+    return null;
+}
+
+const VisualizerRing = ({ isRecording, isAgentSpeaking, size = "normal", status }: { isRecording: boolean; isAgentSpeaking: boolean; size?: "normal" | "large"; status: string }) => (
+    <div className="relative flex items-center justify-center">
+        {(isRecording || isAgentSpeaking) && (
+            <>
+                <div className={cn(
+                    "absolute inset-0 rounded-full border-4 border-indigo-500/20 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite]",
+                    size === "large" ? "border-8" : "border-4",
+                    isAgentSpeaking ? "border-emerald-500/20" : "border-indigo-500/20"
+                )} />
+                <div className={cn(
+                    "absolute inset-0 rounded-full border-4 border-indigo-500/10 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]",
+                    size === "large" ? "border-8" : "border-4",
+                    isAgentSpeaking ? "border-emerald-500/10" : "border-indigo-500/10"
+                )} />
+            </>
+        )}
+        <div className={cn(
+            "relative z-10 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl backdrop-blur-sm border border-white/10",
+            status === "error"
+                ? "bg-red-500 shadow-red-500/50"
+                : isAgentSpeaking
+                    ? "bg-gradient-to-br from-emerald-500 to-teal-600 scale-110 shadow-emerald-500/30"
+                    : isRecording
+                        ? "bg-gradient-to-br from-indigo-600 to-violet-600 scale-110 shadow-indigo-500/50"
+                        : "bg-gray-900 shadow-xl hover:scale-105",
+            size === "large" ? "w-32 h-32" : "w-14 h-14"
+        )}>
+            {status === "error" ? (
+                <Loader2 className={cn("text-white animate-spin", size === "large" ? "w-12 h-12" : "w-6 h-6")} />
+            ) : isAgentSpeaking ? (
+                <Bot className={cn("text-white animate-pulse", size === "large" ? "w-12 h-12" : "w-6 h-6")} />
+            ) : isRecording ? (
+                <MicOff className={cn("text-white", size === "large" ? "w-12 h-12" : "w-6 h-6")} />
+            ) : (
+                <Mic className={cn("text-white", size === "large" ? "w-12 h-12" : "w-6 h-6")} />
+            )}
+        </div>
+    </div>
+);
 
 export default function SampleReviewPage() {
     const params = useParams();
     const router = useRouter();
     const queryClient = useQueryClient();
-    const { user, session } = useAuth();
-    const surveyId = params.surveyId as string;
+    const { session } = useAuth();
+    const surveyId =
+        typeof params.surveyId === "string" ? params.surveyId : "";
     const t = useTranslations("Survey.SampleReview");
 
     const [isConfirming, setIsConfirming] = useState(false);
@@ -73,9 +239,9 @@ export default function SampleReviewPage() {
         const translatePlaceholders = async () => {
             try {
                 const [textInput, pTitle, pDesc] = await Promise.all([
-                    getClientTranslation("Type your response..."),
-                    getClientTranslation("e.g. Q3 Customer Satisfaction"),
-                    getClientTranslation("Briefly describe the purpose of this survey...")
+                    Promise.resolve(t("Input.Placeholder")),
+                    Promise.resolve("e.g. Q3 Customer Satisfaction"),
+                    Promise.resolve("Briefly describe the purpose of this survey...")
                 ]);
                 setPlaceholders({
                     textInput,
@@ -89,45 +255,6 @@ export default function SampleReviewPage() {
         translatePlaceholders();
     }, []);
 
-    const VisualizerRing = ({ isRecording, isAgentSpeaking, size = "normal" }: { isRecording: boolean; isAgentSpeaking: boolean; size?: "normal" | "large" }) => (
-        <div className="relative flex items-center justify-center">
-            {(isRecording || isAgentSpeaking) && (
-                <>
-                    <div className={cn(
-                        "absolute inset-0 rounded-full border-4 border-indigo-500/20 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite]",
-                        size === "large" ? "border-8" : "border-4",
-                        isAgentSpeaking ? "border-emerald-500/20" : "border-indigo-500/20"
-                    )} />
-                    <div className={cn(
-                        "absolute inset-0 rounded-full border-4 border-indigo-500/10 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]",
-                        size === "large" ? "border-8" : "border-4",
-                        isAgentSpeaking ? "border-emerald-500/10" : "border-indigo-500/10"
-                    )} />
-                </>
-            )}
-            <div className={cn(
-                "relative z-10 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl backdrop-blur-sm border border-white/10",
-                voiceWs.status === "error"
-                    ? "bg-red-500 shadow-red-500/50"
-                    : isAgentSpeaking
-                        ? "bg-gradient-to-br from-emerald-500 to-teal-600 scale-110 shadow-emerald-500/30"
-                        : isRecording
-                            ? "bg-gradient-to-br from-indigo-600 to-violet-600 scale-110 shadow-indigo-500/50"
-                            : "bg-gray-900 shadow-xl hover:scale-105",
-                size === "large" ? "w-32 h-32" : "w-14 h-14"
-            )}>
-                {voiceWs.status === "error" ? (
-                    <Loader2 className={cn("text-white animate-spin", size === "large" ? "w-12 h-12" : "w-6 h-6")} />
-                ) : isAgentSpeaking ? (
-                    <Bot className={cn("text-white animate-pulse", size === "large" ? "w-12 h-12" : "w-6 h-6")} />
-                ) : isRecording ? (
-                    <MicOff className={cn("text-white", size === "large" ? "w-12 h-12" : "w-6 h-6")} />
-                ) : (
-                    <Mic className={cn("text-white", size === "large" ? "w-12 h-12" : "w-6 h-6")} />
-                )}
-            </div>
-        </div>
-    );
 
     const { data: surveyData, isLoading, refetch: refetchSurvey } = useQuery({
         queryKey: ['survey', surveyId],
@@ -171,7 +298,7 @@ export default function SampleReviewPage() {
         enabled: !!surveyId,
     });
 
-    const { data: rehearsalComments = [], refetch: refetchComments } = useQuery({
+    const { data: rehearsalComments = [], refetch: refetchComments } = useQuery<RehearsalComment[]>({
         queryKey: ['sample-comments', surveyId, activeSampleNumber],
         queryFn: async () => {
             const result = await getRehearsalCommentsAction(surveyId, activeSampleNumber);
@@ -183,23 +310,27 @@ export default function SampleReviewPage() {
 
     useRealtime({
         channels: surveyId && isWorkspaceContext ? [`survey:${surveyId}`] : [],
-        onEvent: async (event) => {
+        onEvent: async (baseEvent) => {
+            const event = baseEvent;
             if (event.eventType === "survey.comment_added") {
                 refetchComments();
             }
             if (event.eventType === "survey.rehearsal_turn_added") {
-                if (event.payload?.conversationNumber === activeSampleNumber) {
+                const payload = event.payload as Record<string, unknown> | undefined;
+                if (payload?.conversationNumber === activeSampleNumber) {
                     const response = await fetch(`/api/surveys/${surveyId}/sample?conversationNumber=${activeSampleNumber}`, {
                         cache: "no-store",
                     });
                     if (response.ok) {
                         const data = await response.json();
-                        setMessages((data.messages || []).map((m: any, idx: number) => ({
-                            id: m.id || `hist-${idx}-${Date.now()}`,
-                            role: m.role,
-                            parts: m.parts || [{ type: 'text', text: m.content || "" }],
-                            timestamp: m.timestamp || new Date().toISOString()
-                        })));
+                        setMessages(
+                            (Array.isArray(data.messages) ? data.messages : []).flatMap(
+                                (message: StoredSampleMessage, index: number) => {
+                                    const normalizedMessage = normalizeSampleMessage(message, index);
+                                    return normalizedMessage ? [normalizedMessage] : [];
+                                },
+                            ),
+                        );
                     }
                 }
                 queryClient.invalidateQueries({ queryKey: ['sample-history', surveyId, activeSampleNumber] });
@@ -217,13 +348,11 @@ export default function SampleReviewPage() {
             api: `/api/surveys/${surveyId}/sample`,
             body: { conversationNumber: activeSampleNumber },
         }),
-        onFinish: ({ message, isError: _isError, finishReason }: { message: any; isError: boolean; finishReason?: string }) => {
-            const messageText = message.parts
-                ?.filter((part: any) => part.type === "text")
-                .map((part: any) => part.text)
-                .join("") || "";
-            if (messageText.includes("[[SURVEY_COMPLETED]]") || finishReason === 'tool-calls') {
-                getClientTranslation("Your survey is complete!").then(toast.success);
+        onFinish: ({ message, finishReason }) => {
+            const messageText = getMessageText(message);
+            const hasFinishTool = message.parts?.some((part) => isFinishSurveyPart(part));
+            if (messageText.includes("[[SURVEY_COMPLETED]]") || finishReason === 'tool-calls' || hasFinishTool) {
+                toast.success(t("Toasts.Finished"));
             }
         }
     });
@@ -231,21 +360,18 @@ export default function SampleReviewPage() {
     // Sync historyData with useChat messages when it finishes loading
     useEffect(() => {
         if (!isHistoryLoading && historyData?.messages) {
-            console.log("[Sample Review] History loaded:", historyData.messages.length, "messages");
             if (messages.length === 0 && historyData.messages.length > 0) {
-                console.log("[Sample Review] Syncing historyData to useChat");
-                setMessages(historyData.messages.map((m: any, idx: number) => ({
-                    id: m.id || `hist-${idx}-${Date.now()}`,
-                    role: m.role,
-                    parts: m.parts || [{ type: 'text', text: m.content || "" }],
-                    timestamp: m.timestamp || new Date().toISOString()
-                })));
+                setMessages(
+                    historyData.messages.flatMap((message: StoredSampleMessage, index: number) => {
+                        const normalizedMessage = normalizeSampleMessage(message, index);
+                        return normalizedMessage ? [normalizedMessage] : [];
+                    }),
+                );
             }
         }
     }, [isHistoryLoading, historyData, setMessages, messages.length]);
 
     useEffect(() => {
-        console.log(`[Sample Review] useChat Status: ${status} | Messages: ${messages.length}`);
     }, [status, messages.length]);
 
     useEffect(() => {
@@ -256,7 +382,7 @@ export default function SampleReviewPage() {
     const isCompleted = messages.some(msg =>
         msg.role === "assistant" && (
             msg.parts?.some(p => p.type === 'text' && p.text.includes("[[SURVEY_COMPLETED]]")) ||
-            msg.parts?.some(p => (p.type === 'tool-invocation' || p.type === 'tool-call') && (p as any).toolName === 'finishSurvey')
+            msg.parts?.some(isFinishSurveyPart)
         )
     );
 
@@ -265,9 +391,8 @@ export default function SampleReviewPage() {
     const visibleMessages = messages.map(msg => {
         const textPart = msg.parts?.find(p => p.type === 'text');
         const hasCompletionTag = msg.role === "assistant" && textPart && textPart.text.includes("[[SURVEY_COMPLETED]]");
-        const hasCompletionTool = msg.role === "assistant" && msg.parts?.some(p => 
-            (p.type === 'tool-invocation' || p.type === 'tool-call') && (p as any).toolName === 'finishSurvey'
-        );
+        const hasCompletionTool =
+            msg.role === "assistant" && msg.parts?.some(isFinishSurveyPart);
 
         if (hasCompletionTag || hasCompletionTool) {
             return {
@@ -289,59 +414,74 @@ export default function SampleReviewPage() {
             p.type === 'tool-invocation' || 
             p.type === 'tool-call'
         );
-        return !isInternalPing && (hasVisibleContent || (m as any).media);
+        return !isInternalPing && Boolean(hasVisibleContent);
     });
 
     // WebSocket Hook for Voice Conversation
     const voiceWs = useVoiceWebSocket({
         url: `${clientEnv.NEXT_PUBLIC_WEBSOCKET_URL}/voice/sample-conversation?surveyId=${surveyId}&conversationNumber=${activeSampleNumber}`,
         onReady: () => {
-            console.log("Sample conversation WebSocket ready");
         },
         onMessage: (data) => {
             if (data.type === "conversation_text") {
                 const { role, content } = data;
 
                 // Filter out internal thinking/directives
-                if (content.includes("<thinking>") || content.includes("Internal instructions:")) {
+                if (content && (content.includes("<thinking>") || content.includes("Internal instructions:"))) {
                     return;
                 }
 
                 setMessages(prev => {
                     // Avoid duplicate messages if the same text was already transcribed or sent
                     const lastMsg = prev[prev.length - 1];
-                    const lastText = lastMsg?.parts?.find(p => p.type === 'text')?.text;
+                    const lastText = lastMsg?.parts?.find(p => p.type === 'text' && "text" in p)?.text;
                     if (lastText === content && lastMsg?.role === role) return prev;
 
-                    return [...prev, {
-                        id: `voice-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                        role: role as "assistant" | "user",
-                        parts: [{ type: 'text', text: content }],
-                        timestamp: new Date().toISOString()
-                    } as any];
+                    if (!isConversationRole(role || "")) {
+                        return prev;
+                    }
+
+                    const nextMessage: SampleReviewMessage = {
+                        id: `voice-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                        role: role as "user" | "assistant",
+                        parts: [{ type: 'text', text: typeof content === 'string' ? content : "" }],
+                        createdAt: new Date()
+                    };
+
+                    return [...prev, nextMessage];
                 });
             } else if (data.type === "audio_sent" || data.type === "text_response") {
                 if (!data.text) return;
-                setMessages(prev => [...prev, {
+                const nextMessage: SampleReviewMessage = {
                     id: `legacy-${Date.now()}`,
                     role: "assistant",
                     parts: [{ type: 'text', text: data.text }],
-                    timestamp: new Date().toISOString()
-                } as any]);
+                    createdAt: new Date()
+                };
+                setMessages(prev => [...prev, nextMessage]);
             } else if (data.type === "transcription" && data.isFinal) {
                 // DUAL-AGENT BUG FIX: No longer calling sendMessage() here
-                console.log("[Sample Review] Transcription received (Voice):", data.text);
             } else if (data.type === 'display_media') {
-                if (survey?.media) {
-                    const fullMedia = survey.media.find((m: any) => m.id === data.media.id);
+                const surveyMedia = normalizeSurveyMedia(survey?.media);
+                if (surveyMedia.length > 0) {
+                    const fullMedia = surveyMedia.find((media) => media.id === data.media?.id);
                     if (fullMedia) {
-                        setMessages(prev => [...prev, {
+                        const mediaMessage: SampleReviewMessage = {
                             id: `media-${Date.now()}`,
                             role: "assistant",
-                            parts: [{ type: 'text', text: "Shared media" }],
-                            timestamp: new Date().toISOString(),
-                            media: fullMedia
-                        } as any]);
+                            parts: [
+                                { type: 'text', text: "Shared media" },
+                                {
+                                    type: 'tool-showMedia' as const,
+                                    toolCallId: `show-media-${Date.now()}`,
+                                    state: 'output-available' as const,
+                                    input: {},
+                                    output: { media: fullMedia },
+                                },
+                            ],
+                            createdAt: new Date(),
+                        };
+                        setMessages(prev => [...prev, mediaMessage]);
                     }
                 }
             }
@@ -365,7 +505,6 @@ export default function SampleReviewPage() {
         if (survey.isVoice && !hasStarted) return;
 
         if (survey.isVoice) {
-            console.log("[Sample Review] Connecting voice websocket...");
             voiceWs.connect();
             setHasAutoGreeted(true);
             isHandlingGreetingRef.current = true;
@@ -376,7 +515,6 @@ export default function SampleReviewPage() {
             const userSpokeLast = lastMessage?.role === "user";
 
             if (isNew || userSpokeLast) {
-                console.log("[Sample Review] Triggering AI catch-up/start (Text Mode)... API:", `/api/surveys/${surveyId}/sample`);
                 isHandlingGreetingRef.current = true;
                 
                 sendMessage({
@@ -384,7 +522,6 @@ export default function SampleReviewPage() {
                         ? "Start the conversation now. Greet the participant according to the system prompt instructions."
                         : "The user has returned to this sample survey review. Respond to their last input and continue the interview naturally."
                 }).then(() => {
-                    console.log("[Sample Review] sendMessage successful");
                     setHasAutoGreeted(true);
                 }).catch((err) => {
                     console.error("[Sample Review] sendMessage failed:", err);
@@ -392,7 +529,7 @@ export default function SampleReviewPage() {
                 });
             }
         }
-    }, [survey, hasAutoGreeted, isHistoryLoading, hasStarted, status, sendMessage, voiceWs, messages, historyData]);
+    }, [survey, hasAutoGreeted, isHistoryLoading, hasStarted, status, sendMessage, voiceWs, messages, historyData, surveyId]);
 
     // Initialize inputMode based on survey type
     useEffect(() => {
@@ -416,8 +553,8 @@ export default function SampleReviewPage() {
             sendMessage({
                 text: currentInput
             });
-        } catch (error) {
-            getClientTranslation("Failed to send message. Please try again.").then(toast.error);
+        } catch {
+            toast.error(t("Toasts.ResponseFailed"));
         }
     };
 
@@ -446,18 +583,26 @@ export default function SampleReviewPage() {
             });
 
             if (response.ok) {
-                getClientTranslation("Survey published successfully!").then(toast.success);
+                toast.success(t("Toasts.Confirmed"));
                 setIsPublishModalOpen(false);
 
                 // Optimistically update the query cache so the destination page doesn't flash the old State & "sample_review" button
-                queryClient.setQueryData(queryKeys.surveys.detail(surveyId), (oldData: any) => {
+                queryClient.setQueryData(queryKeys.surveys.all(), (oldData: { surveys: Array<{ id: string; status: string }> } | undefined) => {
+                    if (!oldData || !oldData.surveys) return oldData;
+                    return {
+                        ...oldData,
+                        surveys: oldData.surveys.map(s => s.id === surveyId ? { ...s, status: 'active' } : s)
+                    };
+                });
+
+                queryClient.setQueryData(queryKeys.surveys.detail(surveyId), (oldData: { survey: { id: string; status: string; title: string; description: string } } | undefined) => {
                     if (!oldData || !oldData.survey) return oldData;
                     return {
                         ...oldData,
                         survey: {
                             ...oldData.survey,
                             status: "active",
-                            title: finalTitle,
+                            title: finalTitle || "",
                             description: finalDesc
                         }
                     };
@@ -468,10 +613,10 @@ export default function SampleReviewPage() {
 
                 router.push(`/dashboard/surveys/${surveyId}`);
             } else {
-                getClientTranslation("Failed to publish survey.").then(toast.error);
+                toast.error(t("Toasts.ConfirmFailed"));
             }
-        } catch (error) {
-            getClientTranslation("An error occurred while publishing.").then(toast.error);
+        } catch {
+            toast.error(t("Toasts.ConfirmFailed"));
         } finally {
             setIsConfirming(false);
         }
@@ -489,14 +634,14 @@ export default function SampleReviewPage() {
             );
 
             if (result.success) {
-                getClientTranslation("Comment added").then(toast.success);
+                toast.success("Comment added");
                 setCommentText("");
                 refetchSurvey();
                 refetchComments();
             } else {
                 toast.error(result.error);
             }
-        } catch (error) {
+        } catch {
             toast.error("Failed to add comment");
         } finally {
             setIsCommenting(false);
@@ -526,7 +671,14 @@ export default function SampleReviewPage() {
                     title={survey?.title || "Sample Review"}
                     description={survey?.brief?.learningContext || "Experience your survey exactly as a participant will."}
                     isVoice={survey?.isVoice}
-                    t={t as any}
+                    translations={{
+                        selectLanguage: t("selectLanguage"),
+                        micPermissionDenied: t("micPermissionDenied"),
+                        micConsentTitle: t("micConsentTitle"),
+                        micConsentDescription: t("micConsentDescription"),
+                        initializing: t("initializing"),
+                        startInterview: t("startInterview"),
+                    }}
                 />
             )}
 
@@ -550,7 +702,7 @@ export default function SampleReviewPage() {
                                 </h1>
                                 <div className="flex items-center gap-2">
                                     <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">
-                                        <ClientT>Sample Review</ClientT>
+                                        Sample Review
                                     </span>
                                     {survey?.sampleConversationCount > 0 && (
                                         <div className="flex items-center gap-1 ml-1 border-l border-gray-200 pl-2">
@@ -586,7 +738,7 @@ export default function SampleReviewPage() {
                                 ) : (
                                     <CheckCircle className="w-4 h-4" />
                                 )}
-                                <span><ClientT>Publish Survey</ClientT></span>
+                                <span>{t("Actions.Publish")}</span>
                             </button>
                         </div>
                     </div>
@@ -612,12 +764,13 @@ export default function SampleReviewPage() {
                                     isRecording={voiceWs.isRecording}
                                     isAgentSpeaking={voiceWs.isPlaying}
                                     size="normal"
+                                    status={voiceWs.status}
                                 />
                             </button>
 
                             <div className="text-center animate-in fade-in slide-in-from-top-2 duration-500">
                                 <p className="text-xs font-medium text-gray-900">
-                                    {voiceWs.isRecording ? <ClientT>Listening...</ClientT> : voiceWs.isPlaying ? <ClientT>AI Speaking...</ClientT> : <ClientT>Tap to speak</ClientT>}
+                                    {voiceWs.isRecording ? t("VoiceVisualizer.Listening") : voiceWs.isPlaying ? t("VoiceVisualizer.AISpeaking") : t("VoiceVisualizer.TapToSpeak")}
                                 </p>
                             </div>
                         </div>
@@ -631,17 +784,17 @@ export default function SampleReviewPage() {
                                     <Bot className="w-8 h-8 text-gray-400" />
                                 </div>
                                 <div className="space-y-2 max-w-xs">
-                                    <p className="text-sm font-medium text-gray-900"><ClientT>Experience your survey</ClientT></p>
+                                    <p className="text-sm font-medium text-gray-900">Experience your survey</p>
                                     <p className="text-xs text-gray-500">
                                         {inputMode === "voice"
-                                            ? <ClientT>Speak naturally to the AI researcher to test the conversation flow.</ClientT>
-                                            : <ClientT>Type your responses below to see how the AI handles different scenarios.</ClientT>}
+                                            ? "Speak naturally to the AI researcher to test the conversation flow."
+                                            : "Type your responses below to see how the AI handles different scenarios."}
                                     </p>
                                 </div>
                             </div>
                         )}
 
-                        {visibleMessages.map((msg: any) => (
+                        {visibleMessages.map((msg) => (
                             <div key={msg.id} className={cn("flex flex-col gap-2 max-w-[85%]", msg.role === "user" ? "self-end items-end" : "self-start items-start")}>
                                 <div className={cn(
                                     "px-5 py-3 rounded-2xl text-[15px] leading-relaxed shadow-sm",
@@ -649,25 +802,24 @@ export default function SampleReviewPage() {
                                         ? "bg-gray-50 text-gray-800 rounded-tl-sm border border-gray-100"
                                         : "bg-black text-white rounded-tr-sm"
                                 )}>
-                                    {msg.parts?.map((part: any, index: number) => {
+                                    {msg.parts?.map((part, index: number) => {
                                         if (part.type === 'text') {
                                             return <MarkdownMessage key={index} content={part.text} />;
                                         }
-                                        if (part.type === 'tool-invocation' || part.type === 'tool-call') {
-                                            const inv = part as any;
-                                            if (inv.toolName === 'showMedia' && inv.state === 'result') {
-                                                const media = inv.result?.media || (typeof inv.result === 'string' ? JSON.parse(inv.result).media : null);
-                                                return media ? <MediaDisplay key={inv.toolCallId || index} media={media} /> : null;
+                                        if ((part.type === 'tool-invocation' || part.type === 'tool-call') && 'toolName' in part) {
+                                            if (part.toolName === 'showMedia') {
+                                                const media = getMediaFromMessagePart(part);
+                                                return media ? <MediaDisplay key={part.toolCallId || index} media={media} /> : null;
                                             }
-                                            if (inv.toolName === 'finishSurvey') {
+                                            if (part.toolName === 'finishSurvey') {
                                                 return (
-                                                    <div key={inv.toolCallId || index} className="flex flex-col gap-2 mt-2">
+                                                    <div key={part.toolCallId || index} className="flex flex-col gap-2 mt-2">
                                                         <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
                                                             <CheckCircle className="w-3.5 h-3.5" />
-                                                            <ClientT>Your survey is complete!</ClientT>
+                                                            {t("Toasts.Finished")}
                                                         </div>
                                                         <p className="text-[11px] text-gray-500 italic pl-1">
-                                                            <ClientT>You can now provide feedback in the sidebar to refine future simulations.</ClientT>
+                                                            You can now provide feedback in the sidebar to refine future simulations.
                                                         </p>
                                                     </div>
                                                 );
@@ -675,7 +827,6 @@ export default function SampleReviewPage() {
                                         }
                                         return null;
                                     })}
-                                    {msg.media && <MediaDisplay media={msg.media} />}
                                 </div>
                             </div>
                         ))}
@@ -707,7 +858,7 @@ export default function SampleReviewPage() {
                                                 : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
                                         )}
                                     >
-                                        <MessageSquare className="w-3 h-3" /> <ClientT>Transcript</ClientT>
+                                        <MessageSquare className="w-3 h-3" /> Transcript
                                     </button>
                                 </div>
                             )}
@@ -739,14 +890,14 @@ export default function SampleReviewPage() {
                                     </button>
 
                                     <p className="text-xs text-center h-4 text-gray-500 font-medium truncate max-w-sm">
-                                        {voiceWs.isRecording ? (voiceWs.transcription || <ClientT>Listening...</ClientT>) : (voiceWs.status !== "connected" ? <ClientT>Connecting...</ClientT> : <ClientT>Tap to speak</ClientT>)}
+                                        {voiceWs.isRecording ? (voiceWs.transcription || t("VoiceVisualizer.Listening")) : (voiceWs.status !== "connected" ? t("VoiceVisualizer.Connecting") : t("VoiceVisualizer.TapToSpeak"))}
                                     </p>
 
                                     {/* Live Transcription Display */}
                                     {showTranscript && (voiceWs.isRecording || voiceWs.isPlaying) && (voiceWs.transcription || voiceWs.interimTranscription) && (
                                         <div className="mt-4 bg-gray-50 border border-gray-200 rounded-2xl p-4 animate-in fade-in slide-in-from-bottom-2 duration-200 max-w-lg mx-auto">
                                             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 text-center">
-                                                <ClientT>Live Transcription</ClientT>
+                                                {t("Input.LiveTranscription")}
                                             </p>
                                             <p className="text-sm text-gray-900 leading-relaxed text-center">
                                                 {voiceWs.transcription}
@@ -806,7 +957,7 @@ export default function SampleReviewPage() {
                                         Comments are saved for your team to review.
                                     </div>
                                 ) : (
-                                    rehearsalComments.map((comment: any) => (
+                                    rehearsalComments.map((comment) => (
                                         <div key={comment.id} className="rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
                                             <div className="mb-1 flex items-center justify-between gap-3">
                                                 <span className="text-xs font-semibold text-gray-900">
@@ -840,7 +991,7 @@ export default function SampleReviewPage() {
                                     )}
                                 >
                                     {isCommenting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                                    <ClientT>Post Comment</ClientT>
+                                    Post Comment
                                 </button>
                             </div>
                         </div>
@@ -854,16 +1005,16 @@ export default function SampleReviewPage() {
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
                         <div className="bg-white rounded-2xl shadow-xl w-full max-w-md border border-gray-100 overflow-hidden animate-in zoom-in-95 duration-200">
                             <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/50">
-                                <h2 className="text-xl font-semibold text-gray-900"><ClientT>Publish Survey</ClientT></h2>
+                                <h2 className="text-xl font-semibold text-gray-900">{t("Actions.Publish")}</h2>
                                 <p className="text-sm text-gray-500 mt-1">
-                                    <ClientT>Review your survey's details before making it live and shareable.</ClientT>
+                                    Review your survey&apos;s details before making it live and shareable.
                                 </p>
                             </div>
 
                             <form onSubmit={submitPublish} className="p-6 space-y-5">
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium text-gray-700">
-                                        <ClientT>Survey Title</ClientT>
+                                        Survey Title
                                     </label>
                                     <input
                                         type="text"
@@ -878,7 +1029,7 @@ export default function SampleReviewPage() {
 
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium text-gray-700">
-                                        <ClientT>Description</ClientT> <span className="text-gray-400 font-normal">(<ClientT>Optional</ClientT>)</span>
+                                        Description <span className="text-gray-400 font-normal">(Optional)</span>
                                     </label>
                                     <textarea
                                         value={publishDescription}
@@ -897,7 +1048,7 @@ export default function SampleReviewPage() {
                                         disabled={isConfirming}
                                         className="flex-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 font-medium text-sm rounded-xl hover:bg-gray-50 hover:text-gray-900 transition-colors disabled:opacity-50"
                                     >
-                                        <ClientT>Cancel</ClientT>
+                                        {t("ConfirmDialog.Cancel")}
                                     </button>
                                     <button
                                         type="submit"
@@ -905,7 +1056,7 @@ export default function SampleReviewPage() {
                                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-900 text-white font-medium text-sm rounded-xl hover:bg-black transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         {isConfirming ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                                        <ClientT>Confirm Publish</ClientT>
+                                        {t("ConfirmDialog.Confirm")}
                                     </button>
                                 </div>
                             </form>
@@ -916,4 +1067,3 @@ export default function SampleReviewPage() {
         </div>
     );
 }
-

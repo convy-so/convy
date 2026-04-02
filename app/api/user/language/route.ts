@@ -4,6 +4,8 @@ import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
+import { normalizeAppLocale, isAppLocale } from "@/lib/i18n/config";
+import { cookies } from "next/headers";
 
 /**
  * GET /api/user/language
@@ -20,13 +22,16 @@ export async function GET() {
     }
 
     const [user] = await getDb()
-      .select({ preferredLanguage: users.preferredLanguage })
+      .select({ preferredLanguage: users.preferredLanguage, uiLocale: users.uiLocale })
       .from(users)
       .where(eq(users.id, session.user.id))
       .limit(1);
 
+    const uiLocale = normalizeAppLocale(user?.uiLocale ?? user?.preferredLanguage);
+
     return NextResponse.json({
-      preferredLanguage: user?.preferredLanguage || "en",
+      uiLocale,
+      preferredLanguage: uiLocale,
     });
   } catch (error) {
     console.error("[User Language API] Error fetching language:", error);
@@ -54,16 +59,27 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const { language } = body;
 
-    if (!language || !["en", "fr", "de", "es", "it"].includes(language)) {
+    if (!isAppLocale(language)) {
       return NextResponse.json({ error: "Invalid language" }, { status: 400 });
     }
 
     await getDb()
       .update(users)
-      .set({ preferredLanguage: language })
+      .set({ preferredLanguage: language, uiLocale: language })
       .where(eq(users.id, session.user.id));
 
-    return NextResponse.json({ success: true, preferredLanguage: language });
+    (await cookies()).set("NEXT_LOCALE", language, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+
+    return NextResponse.json({
+      success: true,
+      uiLocale: language,
+      preferredLanguage: language,
+    });
   } catch (error) {
     console.error("[User Language API] Error updating language:", error);
     return NextResponse.json(

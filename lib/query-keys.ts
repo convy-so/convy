@@ -10,6 +10,8 @@ export const queryKeys = {
     active: ["activeWorkspace"] as const,
     members: (workspaceId: string) =>
       ["workspaceMembers", workspaceId] as const,
+    departments: (workspaceId: string) =>
+      ["workspaceDepartments", workspaceId] as const,
     invitations: (workspaceId: string) =>
       ["workspaceInvitations", workspaceId] as const,
   },
@@ -33,5 +35,30 @@ export const queryKeys = {
   // Notifications
   notifications: {
     all: (orgId?: string | null) => ["notifications", orgId] as const,
+  },
+
+  // Learning
+  learning: {
+    me: ["learningMe"] as const,
+    myPatterns: ["learningMyPatterns"] as const,
+    classrooms: ["learningClassrooms"] as const,
+    classroomRequests: (classroomId: string) =>
+      ["learningClassroomRequests", classroomId] as const,
+    classroomCollaborators: (classroomId: string) =>
+      ["learningClassroomCollaborators", classroomId] as const,
+    students: (classroomId: string) => ["learningStudents", classroomId] as const,
+    topics: (classroomId: string) => ["learningTopics", classroomId] as const,
+    materials: (topicId: string) => ["learningMaterials", topicId] as const,
+    readiness: (topicId: string) => ["learningReadiness", topicId] as const,
+    reports: (topicId: string) => ["learningReports", topicId] as const,
+      questions: (topicId: string) => ["learningQuestions", topicId] as const,
+      studentPatterns: (studentId: string) =>
+        ["learningStudentPatterns", studentId] as const,
+      studentOverview: (studentId: string) =>
+        ["learningStudentOverview", studentId] as const,
+      topicOverview: (topicId: string) =>
+        ["learningTopicOverview", topicId] as const,
+      onboarding: ["learningOnboarding"] as const,
+      tutoring: (topicId: string) => ["learningTutoring", topicId] as const,
   },
 } as const;

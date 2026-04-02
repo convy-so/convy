@@ -11,7 +11,8 @@ import {
 import { relations } from "drizzle-orm";
 import { timestamps } from "./common";
 import { users } from "./auth";
-import { organizations, projects } from "./organization";
+import { departments, organizations, projects } from "./organization";
+import { classrooms } from "./learning";
 import type {
   AnalyticsFact,
   AnalyticsGenerationState,
@@ -42,6 +43,7 @@ import {
   languageEnum,
   creationConversationStatusEnum,
 } from "./enums";
+import { type ChatMessage, type ExtractedData } from "@/lib/chat-types";
 
 export type SurveyObjective = {
   goal: string;
@@ -81,21 +83,8 @@ export type SurveyHypotheses = {
   assumptions: string[];
 };
 
-export type SurveyMedia = {
-  id: string;
-  url: string;
-  type: "image" | "audio" | "video";
-  description: string;
-  contextForUse: string;
-
-  durationMs?: number | null;
-  mimeType?: string;
-  priority?: "high" | "medium" | "low";
-  requiredQuestions?: string[];
-  expectedInsights?: ("emotional" | "behavioral" | "rational")[];
-  altText?: string;
-  thumbnailUrl?: string;
-};
+import { SurveyMedia } from "@/lib/education/brief-media";
+export { type SurveyMedia, type SurveyMedia as SurveyImage }; // Re-export as part of media refactor
 
 // export type SurveyImage = SurveyMedia; // Removed as part of media refactor
 
@@ -110,9 +99,16 @@ const surveys = pgTable(
     organizationId: text("organization_id").references(() => organizations.id, {
       onDelete: "cascade",
     }),
+    departmentId: text("department_id").references(() => departments.id, {
+      onDelete: "set null",
+    }),
+    classroomId: text("classroom_id").references(() => classrooms.id, {
+      onDelete: "cascade",
+    }),
     projectId: text("project_id").references(() => projects.id, {
       onDelete: "cascade",
     }),
+    deliveryMode: text("delivery_mode").default("link").notNull(),
     title: text("title").notNull(),
     description: text("description"),
     coreObjective: text("core_objective"),
@@ -137,6 +133,9 @@ const surveys = pgTable(
   (table) => [
     index("surveys_user_id_idx").on(table.userId),
     index("surveys_organization_id_idx").on(table.organizationId),
+    index("surveys_department_id_idx").on(table.departmentId),
+    index("surveys_classroom_id_idx").on(table.classroomId),
+    index("surveys_delivery_mode_idx").on(table.deliveryMode),
     index("surveys_shareable_link_idx").on(table.shareableLink),
     index("surveys_custom_slug_idx").on(table.customSlug),
     index("surveys_status_idx").on(table.status),
@@ -158,15 +157,7 @@ const surveyCreationConversations = pgTable(
       .references(() => surveys.id, { onDelete: "cascade" })
       .unique(),
     messages: jsonb("messages")
-      .$type<
-        Array<{
-          id?: string;
-          role: "user" | "assistant" | "tool";
-          content: string;
-          parts?: any[]; // For AI SDK v6 parts (tool calls, etc.)
-          timestamp: string;
-        }>
-      >()
+      .$type<ChatMessage[]>()
       .notNull()
       .default([]),
     durationMs: integer("duration_ms").default(0),
@@ -178,7 +169,7 @@ const surveyCreationConversations = pgTable(
       .$type<Record<string, boolean>>()
       .default({}),
     extractedData: jsonb("extracted_data")
-      .$type<Record<string, any>>()
+      .$type<ExtractedData>()
       .default({}),
   },
   (table) => [
@@ -197,15 +188,7 @@ const sampleConversations = pgTable(
       .references(() => surveys.id, { onDelete: "cascade" }),
     conversationNumber: integer("conversation_number").notNull(),
     messages: jsonb("messages")
-      .$type<
-        Array<{
-          id?: string;
-          role: "user" | "assistant";
-          content: string;
-          parts?: any[];
-          timestamp?: string;
-        }>
-      >()
+      .$type<ChatMessage[]>()
       .notNull(),
     durationMs: integer("duration_ms").default(0),
     activeDurationMs: integer("active_duration_ms").default(0),
@@ -248,30 +231,14 @@ const surveyConversations = pgTable(
       .references(() => surveys.id, { onDelete: "cascade" }),
     participantId: text("participant_id"),
     rawConversation: jsonb("raw_conversation")
-      .$type<
-        Array<{
-          id?: string;
-          role: "user" | "assistant";
-          content: string;
-          parts?: any[];
-          timestamp: string;
-        }>
-      >()
+      .$type<ChatMessage[]>()
       .notNull(),
     durationMs: integer("duration_ms").default(0),
     activeDurationMs: integer("active_duration_ms").default(0),
     summary: text("summary"),
     completed: boolean("completed").default(false).notNull(),
     originalLanguage: text("original_language").default("en"),
-    translatedConversation: jsonb("translated_conversation").$type<
-      Array<{
-        id?: string;
-        role: "user" | "assistant";
-        content: string;
-        parts?: any[];
-        timestamp: string;
-      }>
-    >(),
+    translatedConversation: jsonb("translated_conversation").$type<ChatMessage[]>(),
   },
   (table) => [
     index("survey_conversations_survey_id_idx").on(table.surveyId),
@@ -765,6 +732,14 @@ const surveysRelations = relations(surveys, ({ one, many }) => ({
   organization: one(organizations, {
     fields: [surveys.organizationId],
     references: [organizations.id],
+  }),
+  department: one(departments, {
+    fields: [surveys.departmentId],
+    references: [departments.id],
+  }),
+  classroom: one(classrooms, {
+    fields: [surveys.classroomId],
+    references: [classrooms.id],
   }),
   project: one(projects, {
     fields: [surveys.projectId],

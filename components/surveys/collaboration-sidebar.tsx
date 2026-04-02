@@ -6,11 +6,13 @@ import { getCreationCommentsAction, postCreationCommentAction, grantEditAccessAc
 import { getWorkspaceMembers } from "@/app/actions/workspace";
 import { Users, Send, ShieldPlus, Loader2, X } from "lucide-react";
 import toast from "react-hot-toast";
-import { ClientT } from "@/components/i18n/client-t";
-import { getClientTranslation } from "@/app/actions/translate";
 import { cn } from "@/lib/utils";
 import { usePresence } from "@/hooks/use-presence";
-import { useRealtime } from "@/hooks/use-realtime";
+import { useRealtime, type RealtimeEvent } from "@/hooks/use-realtime";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+}
 
 type Comment = {
     id: string;
@@ -85,7 +87,7 @@ export function CollaborationSidebar({
 
     useRealtime({
         channels: isOpen ? [`survey:${surveyId}`] : [],
-        onEvent: (event) => {
+        onEvent: (event: RealtimeEvent) => {
             if (event.eventType === "survey.comment_added" || event.eventType === "survey.editor_granted" || event.eventType === "survey.editor_revoked") {
                 getCreationCommentsAction(surveyId).then((result) => {
                     if (result.success) {
@@ -94,17 +96,19 @@ export function CollaborationSidebar({
                 });
             }
 
-            if (event.eventType === "survey.editor_granted" && event.payload?.userId) {
+            if (event.eventType === "survey.editor_granted" && isRecord(event.payload) && typeof event.payload.userId === "string") {
+                const userId = event.payload.userId;
                 setCurrentEditors((prev) =>
-                    prev.includes(event.payload.userId)
+                    prev.includes(userId)
                         ? prev
-                        : [...prev, event.payload.userId],
+                        : [...prev, userId],
                 );
             }
 
-            if (event.eventType === "survey.editor_revoked" && event.payload?.userId) {
+            if (event.eventType === "survey.editor_revoked" && isRecord(event.payload) && typeof event.payload.userId === "string") {
+                const userId = event.payload.userId;
                 setCurrentEditors((prev) =>
-                    prev.filter((id) => id !== event.payload.userId),
+                    prev.filter((id) => id !== userId),
                 );
             }
         },
@@ -137,7 +141,7 @@ export function CollaborationSidebar({
 
         const res = await postCreationCommentAction({ surveyId, text });
         if (!res.success) {
-            getClientTranslation("Failed to post comment").then(msg => toast.error(msg));
+            toast.error("Failed to post comment");
             setNewComment(text); // revert
         } else {
             // Optimistically fetch again to update list
@@ -179,7 +183,7 @@ export function CollaborationSidebar({
                 <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
                     <div className="flex items-center gap-2">
                         <Users className="w-5 h-5 text-indigo-600" />
-                        <h3 className="font-semibold text-gray-900"><ClientT>Team Collaboration</ClientT></h3>
+                        <h3 className="font-semibold text-gray-900">Team Collaboration</h3>
                     </div>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors">
                         <X className="w-5 h-5" />
@@ -204,7 +208,7 @@ export function CollaborationSidebar({
                             className="text-xs font-medium text-indigo-600 bg-indigo-100 hover:bg-indigo-200 px-2.5 py-1.5 rounded-md flex items-center gap-1 transition"
                         >
                             <ShieldPlus className="w-3.5 h-3.5" />
-                            <ClientT>Access</ClientT>
+                            Access
                         </button>
                     )}
                     {!isOwner && user && !currentEditors.includes(user.id) && (
@@ -214,7 +218,7 @@ export function CollaborationSidebar({
                             className="text-xs font-medium text-indigo-600 bg-white hover:bg-indigo-50 px-2.5 py-1.5 rounded-md flex items-center gap-1 transition border border-indigo-100 disabled:opacity-50"
                         >
                             {isRequestingAccess ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldPlus className="w-3.5 h-3.5" />}
-                            <ClientT>Request Edit Access</ClientT>
+                            Request Edit Access
                         </button>
                     )}
                 </div>
@@ -233,7 +237,7 @@ export function CollaborationSidebar({
                         </div>
                     ))}
                     <div ref={commentsEndRef} />
-                    {comments.length === 0 && <p className="text-center text-gray-400 mt-10 italic"><ClientT>No comments yet</ClientT></p>}
+                    {comments.length === 0 && <p className="text-center text-gray-400 mt-10 italic">No comments yet</p>}
                 </div>
 
                 {/* Input Area */}
@@ -270,14 +274,14 @@ export function CollaborationSidebar({
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
                     <div className="bg-white rounded-2xl shadow-xl w-[400px] max-w-[90%] p-6 space-y-6 animate-in zoom-in-95 duration-200">
                         <div className="flex items-center justify-between">
-                            <h3 className="font-bold text-lg text-gray-900"><ClientT>Manage Edit Access</ClientT></h3>
+                            <h3 className="font-bold text-lg text-gray-900">Manage Edit Access</h3>
                             <button onClick={() => setShowAccessModal(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
 
                         <p className="text-sm text-gray-500">
-                            <ClientT>Select workspace members who can edit this survey alongside you. Viewers can only leave comments.</ClientT>
+                            Select workspace members who can open and edit this survey alongside you. Teachers without access can still discover that the survey exists, but they cannot open its internals.
                         </p>
 
                         <div className="space-y-3 max-h-60 overflow-y-auto">
@@ -302,7 +306,7 @@ export function CollaborationSidebar({
                                                 onClick={() => handleManageAccess(member.userId, hasAccess ? "revoke" : "grant")}
                                                 className={`text-xs font-semibold px-3 py-1.5 rounded-md transition ${hasAccess ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
                                             >
-                                                {hasAccess ? <ClientT>Revoke Access</ClientT> : <ClientT>Grant Edit Access</ClientT>}
+                                                {hasAccess ? "Revoke Access" : "Grant Edit Access"}
                                             </button>
                                         </div>
                                     );
@@ -311,7 +315,7 @@ export function CollaborationSidebar({
                         </div>
 
                         <button onClick={() => setShowAccessModal(false)} className="w-full py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-colors">
-                            <ClientT>Done</ClientT>
+                            Done
                         </button>
                     </div>
                 </div>

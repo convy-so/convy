@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import {
     UserPlus,
     Mail,
@@ -106,7 +107,7 @@ export function TeamMemberList({
             } else {
                 toast.error(t("Toasts.RemoveFailed"));
             }
-        } catch (error) {
+        } catch {
             toast.error(t("Toasts.RemoveFailed"));
         } finally {
             setRemovingMemberId(null);
@@ -151,9 +152,12 @@ export function TeamMemberList({
                                 {/* Avatar */}
                                 <div className="relative">
                                     {member.user.image ? (
-                                        <img
+                                        <Image
                                             src={member.user.image}
                                             alt={member.user.name}
+                                            width={40}
+                                            height={40}
+                                            unoptimized
                                             className="w-10 h-10 rounded-full object-cover"
                                         />
                                     ) : (

@@ -2,14 +2,15 @@ import { Suspense } from "react";
 import { ArrowLeft, Loader2, Search } from "lucide-react";
 
 import { ConversationCard } from "@/components/analytics/ConversationCard";
-import { T } from "@/components/i18n/t";
 import { buildConversationListItem } from "@/lib/analytics";
 import { Link, redirect } from "@/i18n/routing";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
 import { surveySessionInsights, surveySessions } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
+import { conversationInsightSchema } from "@/lib/education/types";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import { getTranslations } from "next-intl/server";
 
 interface PageProps {
   params: Promise<{ surveyId: string; locale: string }>;
@@ -38,6 +39,8 @@ async function ConversationsContent({
   surveyId: string;
   locale: string;
 }) {
+  const t = await getTranslations({ locale, namespace: "SurveyAnalytics.Conversations" });
+  const tt = (key: string, fallback: string) => (t.has(key) ? t(key) : fallback);
   const session = await getVerifiedSession();
   const permission = await getSurveyPermissionContext(session.user.id, surveyId);
   if (!permission?.canView) {
@@ -61,14 +64,22 @@ async function ConversationsContent({
       ),
     );
 
-  const conversations = rows.map((row) =>
-    buildConversationListItem({
-      insight: row.insight as any,
-      sessionType: row.sessionType,
-      createdAt: row.createdAt,
-      sourceConversationId: row.sourceConversationId,
-    }),
-  );
+  const conversations = rows.flatMap((row) => {
+    const parsedInsight = conversationInsightSchema.safeParse(row.insight);
+
+    if (!parsedInsight.success) {
+      return [];
+    }
+
+    return [
+      buildConversationListItem({
+        insight: parsedInsight.data,
+        sessionType: row.sessionType,
+        createdAt: row.createdAt,
+        sourceConversationId: row.sourceConversationId,
+      }),
+    ];
+  });
   const total = conversations.length;
   const highQuality = conversations.filter(
     (item) => item.completenessPercent >= 80 && item.reliabilityPercent >= 65,
@@ -93,25 +104,25 @@ async function ConversationsContent({
           </Link>
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-              <T>Session Insights</T>
+              {tt("Title", "Session Insights")}
             </h1>
             <p className="text-sm text-gray-500">
-              <T>Review the session-level summaries that feed the analytics snapshot.</T>
+              {tt("Description", "Review the session-level summaries that feed the analytics snapshot.")}
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <StatCard
-            label="Sessions"
+            label={tt("Stats.Sessions", "Sessions")}
             value={String(total)}
           />
           <StatCard
-            label="High quality"
+            label={tt("Stats.HighQuality", "High quality")}
             value={String(highQuality)}
           />
           <StatCard
-            label="Average reliability"
+            label={tt("Stats.AverageReliability", "Average reliability")}
             value={`${averageReliability}%`}
           />
         </div>
@@ -120,7 +131,7 @@ async function ConversationsContent({
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Search session summaries..."
+            placeholder={tt("SearchPlaceholder", "Search session summaries...")}
             className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-700 outline-none transition-all focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
             disabled
           />
@@ -133,10 +144,10 @@ async function ConversationsContent({
             <Search className="h-6 w-6 text-gray-400" />
           </div>
           <h3 className="mb-1 font-medium text-gray-900">
-            <T>No session insights yet</T>
+            {tt("EmptyTitle", "No session insights yet")}
           </h3>
           <p className="text-sm text-gray-500">
-            <T>Complete a few live sessions to populate grounded analytics.</T>
+            {tt("EmptyDescription", "Complete a few live sessions to populate grounded analytics.")}
           </p>
         </div>
       ) : (

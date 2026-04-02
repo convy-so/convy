@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 const testimonials = [
   {
     quote:
@@ -88,9 +90,12 @@ export default function TestimonialsSection() {
 
                   {/* Author */}
                   <div className="flex items-center gap-3 mt-auto pt-2">
-                    <img
+                    <Image
                       src={testimonial.image}
                       alt={testimonial.name}
+                      width={36}
+                      height={36}
+                      unoptimized
                       className="h-9 w-9 rounded-full object-cover"
                     />
                     <div>
@@ -125,9 +130,12 @@ export default function TestimonialsSection() {
 
                   {/* Author */}
                   <div className="flex items-center gap-3 mt-auto pt-2">
-                    <img
+                    <Image
                       src={testimonial.image}
                       alt={testimonial.name}
+                      width={36}
+                      height={36}
+                      unoptimized
                       className="h-9 w-9 rounded-full object-cover"
                     />
                     <div>

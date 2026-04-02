@@ -95,7 +95,9 @@ function buildRequestedChanges(input: SampleFeedbackEntryInput): SampleRequested
   const allDimensions = Array.from(
     new Set([
       ...input.selectedDimensions,
-      ...input.selectedIssues.map((issue) => ISSUE_TO_DIMENSION[issue]).filter(Boolean) as FeedbackDimension[],
+      ...input.selectedIssues
+        .map((issue) => ISSUE_TO_DIMENSION[issue])
+        .filter((dimension): dimension is FeedbackDimension => Boolean(dimension)),
     ]),
   );
 

@@ -8,6 +8,10 @@ import type {
   ResearchBrief,
 } from "@/lib/education/types";
 
+function isEvidenceRecord(value: EvidenceRecord | undefined): value is EvidenceRecord {
+  return Boolean(value);
+}
+
 export interface AnalyticsDashboardNodeView {
   id: string;
   label: string;
@@ -265,7 +269,7 @@ export function buildDashboardAnalyticsData(input: {
       supportingEvidence:
         finding.supportingEvidenceIds
           .map((id) => evidenceById.get(id))
-          .filter(Boolean) as EvidenceRecord[],
+          .filter(isEvidenceRecord),
     })),
     derivedMetrics: input.snapshot.derivedMetrics ?? [],
     recommendations: input.snapshot.recommendations,

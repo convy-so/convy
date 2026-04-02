@@ -4,21 +4,48 @@ import {
   checkAudioChunkAllowed,
 } from "../middleware/rate-limit";
 import {
-  DeepgramVoiceAgentConnection,
+  createVoiceAgentConnection,
   type VoiceAgentSettings,
   type ConversationTextEvent,
   type FunctionCallRequestEvent,
   type SupportedLanguage,
-} from "@/lib/voice/deepgram-voice-agent";
+  type VoiceAgentConnection,
+} from "@/lib/voice/voice-agent-provider";
 import { logUsage } from "@/lib/billing/logger";
 
 // Configuration constants
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const IDLE_WARNING_MS = 30 * 1000;
-const VAD_INTERRUPT_COOLDOWN_MS = 2500; // Ignore VAD after agent starts speaking (echo protection — prevents AI's own TTS from triggering false interrupts)
+const VAD_INTERRUPT_COOLDOWN_MS = 2500; // Defensive echo guard in case the client leaks agent audio back after playback starts.
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getErrorCode(value: unknown): string | undefined {
+  return isRecord(value) && typeof value.code === "string"
+    ? value.code
+    : undefined;
+}
+
+function normalizeErrorPayload(value: unknown): string | Record<string, unknown> {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (isRecord(value)) {
+    return value;
+  }
+
+  if (value instanceof Error) {
+    return { message: value.message };
+  }
+
+  return { message: "Unknown error" };
+}
 
 /**
- * Base handler for voice sessions using Deepgram's Voice Agent API.
+ * Base handler for voice sessions using the configured voice-agent provider.
  *
  * Replaces the old BaseVoiceHandler which manually orchestrated STT/LLM/TTS.
  * This handler acts as a proxy: browser audio → Deepgram Voice Agent → browser.
@@ -36,7 +63,7 @@ export abstract class BaseVoiceAgentHandler {
   protected organizationId: string | null | undefined;
 
   // Voice Agent connection
-  protected voiceAgent: DeepgramVoiceAgentConnection | null = null;
+  protected voiceAgent: VoiceAgentConnection | null = null;
 
   // Idle timeout state
   protected idleTimeout: NodeJS.Timeout | null = null;
@@ -56,6 +83,10 @@ export abstract class BaseVoiceAgentHandler {
 
     this.setupBrowserConnectionHandlers();
     this.setupBrowserMessageHandlers();
+  }
+
+  public getSocket(): WebSocket {
+    return this.ws;
   }
 
   // ── Abstract Methods ─────────────────────────────────────────────────────
@@ -80,7 +111,9 @@ export abstract class BaseVoiceAgentHandler {
   ): Promise<void>;
 
   /** Handle control messages from the browser (subclass-specific) */
-  protected abstract handleControlMessage(message: any): Promise<void>;
+  protected abstract handleControlMessage(
+    message: Record<string, unknown>,
+  ): Promise<void>;
 
   /** Get initial user input to trigger proactively (AI speaks first) */
   protected abstract getInitialUserInput(): string | null;
@@ -91,11 +124,11 @@ export abstract class BaseVoiceAgentHandler {
   // ── Voice Agent Management ─────────────────────────────────────────────
 
   /**
-   * Create and connect the Deepgram Voice Agent
+   * Create and connect the configured voice agent
    */
   protected async connectVoiceAgent(): Promise<void> {
     const settings = await this.getVoiceAgentSettings();
-    this.voiceAgent = new DeepgramVoiceAgentConnection(settings);
+    this.voiceAgent = createVoiceAgentConnection(settings);
 
     // Set up Voice Agent event handlers
     this.voiceAgent.on("audio", (audioData: Buffer) => {
@@ -182,7 +215,10 @@ export abstract class BaseVoiceAgentHandler {
     });
 
     this.voiceAgent.on("settingsApplied", () => {
-      this.send({ type: "agent_ready" });
+      this.send({
+        type: "agent_ready",
+        awaitingAgentIntro: this.isNewSession() || this.getInitialUserInput() !== null,
+      });
 
       // Proactively trigger initial greeting if it's a new session
       if (this.isNewSession()) {
@@ -197,33 +233,24 @@ export abstract class BaseVoiceAgentHandler {
       }
     });
 
-    this.voiceAgent.on("error", (error: any) => {
+    this.voiceAgent.on("error", (error: unknown) => {
       console.error(
         `[VoiceAgentHandler] Voice Agent error (${this.identifier}):`,
         error,
       );
-      this.sendError(error, error?.code);
+      this.sendError(error, getErrorCode(error));
     });
 
     /*
     this.voiceAgent.on("close", () => {
-      console.log(
-        `[VoiceAgentHandler] Voice Agent connection closed for ${this.identifier}`,
-      );
     });
     */
 
     // Connect
     /*
-    console.log(
-      `[BaseVoiceAgent] Connecting Voice Agent for ${this.identifier}...`,
-    );
     */
     await this.voiceAgent.connect();
     /*
-    console.log(
-      `[VoiceAgentHandler] Voice Agent connected for ${this.identifier}`,
-    );
     */
   }
 
@@ -231,9 +258,6 @@ export abstract class BaseVoiceAgentHandler {
    * Reconnect the Voice Agent with new settings (e.g., language change)
    */
   protected async reconnectVoiceAgent(): Promise<void> {
-    console.log(
-      `[BaseVoiceAgent] Reconnecting Voice Agent for ${this.identifier}...`,
-    );
     if (this.voiceAgent) {
       this.voiceAgent.close();
       this.voiceAgent = null;
@@ -260,8 +284,7 @@ export abstract class BaseVoiceAgentHandler {
 
   private setupBrowserMessageHandlers(): void {
     this.ws.on("message", async (data: Buffer, isBinary: boolean) => {
-      // console.log(`[BaseVoiceAgent] Raw WS message received: ${data.length} bytes, isBinary: ${isBinary}`);
-      if (!this.isActive) return;
+      //       if (!this.isActive) return;
 
       this.resetIdleTimeout();
 
@@ -271,11 +294,11 @@ export abstract class BaseVoiceAgentHandler {
           const strData = data.toString();
 
           const message = JSON.parse(strData);
+          if (!isRecord(message) || typeof message.type !== "string") {
+            return;
+          }
           /*
           if (message.type !== "ping") {
-            console.log(
-              `[BaseVoiceAgent] Received control message: ${message.type}`,
-            );
           }
           */
 
@@ -337,18 +360,22 @@ export abstract class BaseVoiceAgentHandler {
 
   // ── Helpers ────────────────────────────────────────────────────────────
 
-  public send(data: any): void {
+  public send(data: Record<string, unknown> | Buffer): void {
     if (this.ws.readyState === WebSocket.OPEN) {
-      if (data.type !== "audio" && data.type !== "pong") {
-        if (data.type === "error") {
-          console.error(
-            `[VoiceAgent] 📤 Error sent to browser:`,
-            JSON.stringify(data, null, 2),
-          );
+      if (!Buffer.isBuffer(data)) {
+        const dataType =
+          isRecord(data) && typeof data.type === "string" ? data.type : undefined;
+        if (dataType !== "audio" && dataType !== "pong") {
+          if (dataType === "error") {
+            console.error(
+              `[VoiceAgent] 📤 Error sent to browser:`,
+              JSON.stringify(data, null, 2),
+            );
+          }
         }
       }
       try {
-        this.ws.send(JSON.stringify(data));
+        this.ws.send(Buffer.isBuffer(data) ? data : JSON.stringify(data));
       } catch (err) {
         console.error(
           `[BaseVoiceAgent] Failed to stringify/send data:`,
@@ -357,14 +384,26 @@ export abstract class BaseVoiceAgentHandler {
         );
       }
     } else {
+      const dataType =
+        !Buffer.isBuffer(data) &&
+        typeof data === "object" &&
+        data !== null &&
+        "type" in data &&
+        typeof data.type === "string"
+          ? data.type
+          : "unknown";
       console.warn(
-        `[BaseVoiceAgent] Cannot send to browser (closed): ${data.type}`,
+        `[BaseVoiceAgent] Cannot send to browser (closed): ${dataType}`,
       );
     }
   }
 
-  protected sendError(errorPayload: any, code?: string): void {
-    this.send({ type: "error", error: errorPayload, code });
+  protected sendError(errorPayload: unknown, code?: string): void {
+    this.send({
+      type: "error",
+      error: normalizeErrorPayload(errorPayload),
+      code,
+    });
   }
 
   // ── Idle Timeout ───────────────────────────────────────────────────────

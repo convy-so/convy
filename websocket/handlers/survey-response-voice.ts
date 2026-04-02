@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { WebSocket } from "ws";
 
@@ -9,11 +9,17 @@ import {
   createInitialSessionState,
   finalizeConductingTurn,
 } from "@/lib/education/conducting-runtime";
+import { type ChatMessage } from "@/lib/chat-types";
+import {
+  toPersistedUIChatMessages,
+  toVisibleConversationMessages,
+} from "@/lib/chat-ui-messages";
 import {
   ensureSession,
   getActiveConductingProfile,
   getActiveCoveragePlan,
   getResearchBrief,
+  getSessionBySourceId,
   updateSessionState,
 } from "@/lib/education/storage";
 import { getConductingRuntimeLayers } from "@/lib/education/runtime-context";
@@ -22,15 +28,23 @@ import type {
   ResearchBrief,
   SessionState,
 } from "@/lib/education/types";
+import { buildRespondentVoiceFunctions } from "@/lib/education/agent-tools";
 import { enqueueConversationInsights } from "@/lib/queue";
 import {
   buildVoiceAgentSettings,
   type ConversationTextEvent,
   type FunctionCallRequestEvent,
   type SupportedLanguage,
-  type VoiceAgentFunction,
   type VoiceAgentSettings,
+  VOICE_AGENT_THINK_MODEL,
 } from "@/lib/voice/deepgram-voice-agent";
+import {
+  admitParticipantOnFirstUserTurn,
+  buildRespondentVoiceGreeting,
+  buildVoiceAgentKeyterms,
+  getUsableRespondentMessages,
+  hasUserTurn,
+} from "@/lib/respondent-conversation";
 import { BaseVoiceAgentHandler } from "./base-voice-agent-handler";
 
 const ESTIMATED_STT_COST_PER_MINUTE = 0.0059;
@@ -40,11 +54,7 @@ interface ResponseState {
   surveyId: string;
   conversationId: string | null;
   voiceSessionId: string;
-  messages: Array<{
-    role: "user" | "assistant";
-    content: string;
-    timestamp: string;
-  }>;
+  messages: ChatMessage[];
   survey: typeof surveys.$inferSelect | null;
   language: SupportedLanguage;
   brief: ResearchBrief | null;
@@ -53,39 +63,16 @@ interface ResponseState {
   sessionState: SessionState | null;
 }
 
-function buildVoiceFunctions(
-  survey: typeof surveys.$inferSelect | null,
-): VoiceAgentFunction[] {
-  const functions: VoiceAgentFunction[] = [
-    {
-      name: "finishSurvey",
-      description:
-        "Call this only when the interview has gathered enough evidence and you are ready to close the participant interview naturally.",
-      parameters: {
-        type: "object",
-        properties: {},
-        additionalProperties: false,
-      },
-    },
-  ];
-
-  if ((survey?.media || []).length > 0) {
-    functions.unshift({
-      name: "showMedia",
-      description:
-        "Display a survey media asset when it is directly relevant to the current question.",
-      parameters: {
-        type: "object",
-        properties: {
-          mediaId: { type: "string", description: "The media identifier to display." },
-        },
-        required: ["mediaId"],
-        additionalProperties: false,
-      },
-    });
-  }
-
-  return functions;
+function getSupportedLanguage(value: unknown): SupportedLanguage {
+  return (
+    value === "en" ||
+    value === "fr" ||
+    value === "de" ||
+    value === "es" ||
+    value === "it"
+  )
+    ? value
+    : "en";
 }
 
 export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
@@ -98,19 +85,20 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
   constructor(
     ws: WebSocket,
     surveyId: string,
+    conversationId: string,
     identifier: string,
     language?: string,
   ) {
     super(ws, identifier);
 
-    this.participantId = nanoid();
+    this.participantId = "";
     this.state = {
       surveyId,
-      conversationId: null,
+      conversationId,
       voiceSessionId: nanoid(),
       messages: [],
       survey: null,
-      language: (language as SupportedLanguage) || "en",
+      language: getSupportedLanguage(language),
       brief: null,
       coveragePlan: null,
       sessionId: null,
@@ -138,12 +126,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
         return;
       }
 
-      if (survey.currentParticipants >= survey.participantLimit) {
-        this.sendError("Survey has reached participant limit");
-        this.ws.close();
-        return;
-      }
-
       const [briefRow, planRow] = await Promise.all([
         getResearchBrief(survey.id),
         getActiveCoveragePlan(survey.id),
@@ -162,45 +144,66 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       this.ownerId = survey.userId;
 
       if (!this.state.language || this.state.language === "en") {
-        this.state.language = (survey.language as SupportedLanguage) || "en";
+        this.state.language = getSupportedLanguage(survey.language);
+      }
+
+      const conversation = await getDb()
+        .select()
+        .from(surveyConversations)
+        .where(eq(surveyConversations.id, this.state.conversationId!))
+        .then((rows) => rows[0]);
+
+      if (!conversation || conversation.surveyId !== survey.id) {
+        this.sendError("Conversation not found");
+        this.ws.close();
+        return;
+      }
+
+      this.participantId = conversation.participantId || nanoid(8);
+      this.state.messages = getUsableRespondentMessages(
+        toVisibleConversationMessages(
+          toPersistedUIChatMessages(
+            Array.isArray(conversation.rawConversation)
+              ? conversation.rawConversation
+              : [],
+            ["user", "assistant"],
+          ),
+        ),
+        survey.isVoice,
+      );
+      if (!conversation.participantId) {
+        await getDb()
+          .update(surveyConversations)
+          .set({ participantId: this.participantId, updatedAt: new Date() })
+          .where(eq(surveyConversations.id, conversation.id));
       }
 
       await getDb().insert(voiceSessions).values({
         id: this.state.voiceSessionId,
         surveyId: survey.id,
+        conversationId: conversation.id,
         sessionType: "survey_response",
         status: "active",
         startedAt: new Date(),
       });
 
-      const conversationId = nanoid();
-      await getDb().insert(surveyConversations).values({
-        id: conversationId,
-        surveyId: survey.id,
-        participantId: this.participantId,
-        rawConversation: [],
-        completed: false,
-        originalLanguage: this.state.language,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      this.state.conversationId = conversationId;
-
-      const sessionRow = await ensureSession({
-        surveyId: survey.id,
-        sessionType: "live",
-        sourceConversationId: conversationId,
-        language: this.state.language,
-        respondentId: this.participantId,
-        initialState: createInitialSessionState({
+      let sessionRow = await getSessionBySourceId(conversation.id);
+      if (!sessionRow) {
+        sessionRow = await ensureSession({
           surveyId: survey.id,
-          sessionId: nanoid(),
           sessionType: "live",
+          sourceConversationId: conversation.id,
           language: this.state.language,
-          coveragePlan: planRow.plan,
-        }),
-      });
+          respondentId: this.participantId,
+          initialState: createInitialSessionState({
+            surveyId: survey.id,
+            sessionId: nanoid(),
+            sessionType: "live",
+            language: this.state.language,
+            coveragePlan: planRow.plan,
+          }),
+        });
+      }
 
       this.state.sessionId = sessionRow.id;
       this.state.sessionState = sessionRow.sessionState;
@@ -209,7 +212,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       this.send({
         type: "ready",
         voiceSessionId: this.state.voiceSessionId,
-        conversationId,
+        conversationId: conversation.id,
         language: this.state.language,
       });
 
@@ -227,7 +230,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
   protected getInitialUserInput(): string | null {
     if (this.state.messages.length === 0) {
-      return "Start the interview now. Greet the participant and ask the first best question.";
+      return null;
     }
 
     const lastMessage = this.state.messages[this.state.messages.length - 1];
@@ -264,6 +267,10 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       conductingProfile: activeLiveProfile?.profile ?? sampleFallbackProfile?.profile ?? null,
       playbookContext: runtimeLayers.playbookContext,
       personalityContext: runtimeLayers.personalityContext,
+      toolContext: {
+        canFinishSurvey: true,
+        canShowMedia: (this.state.survey?.media || []).length > 0,
+      },
     });
 
     const tone = (this.state.survey.tone || "casual") as
@@ -276,7 +283,23 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       language: this.state.language,
       tone,
       systemPrompt,
-      functions: buildVoiceFunctions(this.state.survey),
+      functions: buildRespondentVoiceFunctions(
+        (this.state.survey?.media || []).length > 0,
+      ),
+      keyterms: buildVoiceAgentKeyterms({
+        surveyTitle: this.state.survey.title,
+        requiredQuestions: this.state.survey.requiredQuestions,
+        media: this.state.survey.media,
+        brief: this.state.brief,
+      }),
+      greeting:
+        this.state.messages.length === 0
+          ? buildRespondentVoiceGreeting({
+              language: this.state.language,
+              surveyTitle: this.state.survey.title,
+              brief: this.state.brief,
+            })
+          : undefined,
       conversationHistory:
         this.state.messages.length > 0
           ? this.state.messages.map((message) => ({
@@ -300,6 +323,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       lastMessage.timestamp = now.toISOString();
     } else {
       this.state.messages.push({
+        id: nanoid(),
         role: event.role,
         content: event.content,
         timestamp: now.toISOString(),
@@ -308,11 +332,20 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
     if (!this.state.conversationId) return;
 
-    if (event.role === "user" && this.state.messages.filter((message) => message.role === "user").length === 1) {
-      await getDb()
-        .update(surveys)
-        .set({ currentParticipants: sql`current_participants + 1` })
-        .where(eq(surveys.id, this.state.survey!.id));
+    if (event.role === "user" && this.state.survey) {
+      const admission = await admitParticipantOnFirstUserTurn({
+        surveyId: this.state.survey.id,
+        conversationId: this.state.conversationId,
+      });
+
+      if (!admission.allowed) {
+        this.send({
+          type: "error",
+          error: "Survey has reached participant limit",
+        });
+        this.ws.close(1008, "Survey has reached participant limit");
+        return;
+      }
     }
 
     await getDb()
@@ -329,7 +362,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       !this.state.sessionState ||
       !this.state.brief ||
       !this.state.coveragePlan ||
-      !this.state.messages.some((message) => message.role === "user")
+      !hasUserTurn(this.state.messages)
     ) {
       return;
     }
@@ -340,7 +373,11 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       brief: this.state.brief,
       coveragePlan: this.state.coveragePlan,
       sessionState: this.state.sessionState,
-      messages: this.state.messages,
+      messages: this.state.messages.map(m => ({
+        ...m,
+        id: m.id || nanoid(),
+        timestamp: m.timestamp || new Date().toISOString()
+      })),
     });
 
     this.state.sessionState = nextState;
@@ -378,9 +415,11 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       personalityContext: refreshedRuntimeLayers.personalityContext,
     });
     this.voiceAgent?.updateThink({
-      provider: { type: "open_ai", model: "gpt-4o-mini" },
+      provider: { type: "open_ai", model: VOICE_AGENT_THINK_MODEL },
       prompt: `${refreshedPrompt}\n\nRespond in the language the participant is speaking.`,
-      functions: buildVoiceFunctions(this.state.survey),
+      functions: buildRespondentVoiceFunctions(
+        (this.state.survey?.media || []).length > 0,
+      ),
     });
 
     if (nextState.status === "completed") {
@@ -495,7 +534,9 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
     }
   }
 
-  protected async handleControlMessage(message: any): Promise<void> {
+  protected async handleControlMessage(
+    message: Record<string, unknown>,
+  ): Promise<void> {
     if (message.type === "complete") {
       await this.handleComplete();
     }
@@ -586,12 +627,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
         .reduce((sum, message) => sum + message.content.length, 0);
       const estimatedTtsCost = totalAssistantChars * ESTIMATED_TTS_COST_PER_CHAR;
       const totalCost = estimatedSttCost + estimatedTtsCost;
-
-      if (this.state.conversationId && this.state.messages.length === 0) {
-        await getDb()
-          .delete(surveyConversations)
-          .where(eq(surveyConversations.id, this.state.conversationId));
-      }
 
       await getDb()
         .update(voiceSessions)

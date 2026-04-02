@@ -1,13 +1,63 @@
 import { headers } from "next/headers";
 import { auth, type AuthSessionWithUser } from "@/lib/auth";
-import type { ReadonlyHeaders } from "next/dist/server/web/spec-extension/adapters/headers";
+import type { AppLocale } from "@/lib/i18n/config";
+
+type HeadersLike = {
+  forEach?: (callback: (value: string, key: string) => void) => void;
+};
+
+function hasHeaderIterator(value: unknown): value is HeadersLike {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "forEach" in value &&
+    typeof value.forEach === "function"
+  );
+}
+
+function isSupportedLanguage(value: unknown): value is AppLocale {
+  return (
+    value === "en" ||
+    value === "fr" ||
+    value === "de" ||
+    value === "es" ||
+    value === "it"
+  );
+}
+
+function toTypedSession(
+  session: Awaited<ReturnType<typeof auth.api.getSession>>,
+): AuthSessionWithUser | null {
+  if (!session) {
+    return null;
+  }
+
+  return {
+    ...session,
+    user: {
+      ...session.user,
+      uiLocale:
+        "uiLocale" in session.user && isSupportedLanguage(session.user.uiLocale)
+          ? session.user.uiLocale
+          : "preferredLanguage" in session.user &&
+              isSupportedLanguage(session.user.preferredLanguage)
+            ? session.user.preferredLanguage
+            : undefined,
+      preferredLanguage:
+        "preferredLanguage" in session.user &&
+        isSupportedLanguage(session.user.preferredLanguage)
+          ? session.user.preferredLanguage
+          : undefined,
+    },
+  };
+}
 
 /**
  * Specifically handles cloning Next.js ReadonlyHeaders into a standard Headers object.
  * This resolves TypeScript compatibility issues while maintaining full header context.
  */
 const cloneRequestHeaders = async (
-  incoming?: Headers | ReadonlyHeaders,
+  incoming?: HeadersLike,
 ): Promise<Headers> => {
   const source = incoming || (await headers());
   const result = new Headers();
@@ -36,20 +86,17 @@ export async function getCurrentSession(
   } else if (typeof authHeaders === "string") {
     finalHeaders = new Headers();
     finalHeaders.append("cookie", authHeaders);
-  } else if (
-    authHeaders &&
-    typeof (authHeaders as { forEach?: Function }).forEach === "function"
-  ) {
+  } else if (hasHeaderIterator(authHeaders)) {
     // Handle cases where ReadonlyHeaders are passed directly but fail instanceof
-    finalHeaders = await cloneRequestHeaders(authHeaders as Headers);
+    finalHeaders = await cloneRequestHeaders(authHeaders);
   } else {
     // If no headers provided, clone from current request context
     finalHeaders = await cloneRequestHeaders();
   }
 
-  return auth.api.getSession({
+  return toTypedSession(await auth.api.getSession({
     headers: finalHeaders,
-  });
+  }));
 }
 
 /**

@@ -24,6 +24,60 @@ interface UsePresenceOptions {
   onUserLeft?: (user: Partial<PresenceUser>) => void;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function normalizePresenceUser(value: unknown): PresenceUser | null {
+  if (!isRecord(value) || typeof value.userId !== "string") {
+    return null;
+  }
+
+  return {
+    userId: value.userId,
+    name: typeof value.name === "string" ? value.name : "Unknown user",
+    image:
+      typeof value.image === "string" || value.image === null
+        ? value.image
+        : null,
+    lastActive:
+      typeof value.lastActive === "number" ? value.lastActive : Date.now(),
+  };
+}
+
+function normalizePresenceUsers(value: unknown): PresenceUser[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((user) => {
+    const normalized = normalizePresenceUser(user);
+    return normalized ? [normalized] : [];
+  });
+}
+
+function parsePresenceMessage(value: unknown): PresenceMessage | null {
+  if (
+    !isRecord(value) ||
+    (value.type !== "presence_update" &&
+      value.type !== "user_joined" &&
+      value.type !== "user_left" &&
+      value.type !== "error" &&
+      value.type !== "connected") ||
+    typeof value.workspaceId !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    type: value.type,
+    workspaceId: value.workspaceId,
+    surveyId: typeof value.surveyId === "string" ? value.surveyId : undefined,
+    users: normalizePresenceUsers(value.users),
+    user: normalizePresenceUser(value.user) ?? undefined,
+  };
+}
+
 export function usePresence({
   workspaceId,
   surveyId,
@@ -59,24 +113,37 @@ export function usePresence({
 
     ws.onopen = () => {
       setStatus("connected");
-      console.log("[Presence Hook] Connected to presence server");
     };
 
     ws.onmessage = (event) => {
       try {
-        const data: PresenceMessage = JSON.parse(event.data);
+        if (typeof event.data !== "string") {
+          return;
+        }
+
+        const data = parsePresenceMessage(JSON.parse(event.data));
+        if (!data) {
+          return;
+        }
         
         switch (data.type) {
           case "connected":
+          case "presence_update":
             if (data.users) setUsers(data.users);
             break;
           case "user_joined":
-            if (data.user?.userId) {
+            if (data.user?.userId && data.user.name) {
+              const fullUser: PresenceUser = {
+                userId: data.user.userId,
+                name: data.user.name,
+                image: data.user.image,
+                lastActive: data.user.lastActive || Date.now()
+              };
               setUsers(prev => {
-                if (prev.find(u => u.userId === data.user?.userId)) return prev;
-                return [...prev, data.user as PresenceUser];
+                if (prev.find(u => u.userId === fullUser.userId)) return prev;
+                return [...prev, fullUser];
               });
-              onUserJoined?.(data.user);
+              onUserJoined?.(fullUser);
             }
             break;
           case "user_left":
@@ -110,8 +177,14 @@ export function usePresence({
   }, []);
 
   useEffect(() => {
-    connect();
-    return () => disconnect();
+    const timer = window.setTimeout(() => {
+      void connect();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+      disconnect();
+    };
   }, [connect, disconnect]);
 
   // Heartbeat/Update presence

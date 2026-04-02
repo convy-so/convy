@@ -1,21 +1,64 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type RealtimeStatus = "disconnected" | "connecting" | "connected" | "error";
 
+export interface RealtimeEvent {
+  eventType: string;
+  workspaceId?: string;
+  surveyId?: string;
+  payload?: unknown;
+}
+
 type UseRealtimeOptions = {
   channels: string[];
-  onEvent?: (event: any) => void;
+  onEvent?: (event: RealtimeEvent) => void;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseRealtimeEvent(value: unknown): RealtimeEvent | null {
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return null;
+  }
+
+  return {
+    eventType: value.type,
+    workspaceId: typeof value.workspaceId === "string" ? value.workspaceId : undefined,
+    surveyId: typeof value.surveyId === "string" ? value.surveyId : undefined,
+    payload: value,
+  };
+}
+
+function getAuthTokenFromPayload(value: unknown): string | null {
+  if (!isRecord(value) || typeof value.token !== "string") {
+    return null;
+  }
+
+  return value.token;
+}
+
 export function useRealtime({ channels, onEvent }: UseRealtimeOptions) {
-  const channelKey = channels.join("|");
+  const channelKey = [...channels].sort().join("|");
+  const parsedChannels = useMemo(
+    () => (channelKey ? channelKey.split("|") : []),
+    [channelKey],
+  );
   const [status, setStatus] = useState<RealtimeStatus>("disconnected");
   const wsRef = useRef<WebSocket | null>(null);
   const subscribedRef = useRef<Set<string>>(new Set());
-  const reconnectTimerRef = useRef<number | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shouldReconnectRef = useRef(true);
+  const connectRef = useRef<(() => Promise<void>) | null>(null);
+
+  // Keep latest callback in ref
+  const onEventRef = useRef(onEvent);
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
 
   const disconnect = useCallback(() => {
     shouldReconnectRef.current = false;
@@ -28,13 +71,10 @@ export function useRealtime({ channels, onEvent }: UseRealtimeOptions) {
       wsRef.current = null;
     }
     subscribedRef.current.clear();
+    setStatus("disconnected");
   }, []);
 
-  const connect = useCallback(async () => {
-    if (wsRef.current || channels.length === 0) return;
-    shouldReconnectRef.current = true;
-    setStatus("connecting");
-
+  const resolveConnectionUrl = useCallback(async () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsHost = process.env.NEXT_PUBLIC_WEBSOCKET_URL || "localhost:3001";
     let url = `${protocol}//${wsHost}/realtime`;
@@ -42,7 +82,7 @@ export function useRealtime({ channels, onEvent }: UseRealtimeOptions) {
     try {
       const res = await fetch("/api/auth/token");
       if (res.ok) {
-        const { token } = await res.json();
+        const token = getAuthTokenFromPayload(await res.json());
         if (token) {
           url += `?token=${encodeURIComponent(token)}`;
         }
@@ -51,31 +91,63 @@ export function useRealtime({ channels, onEvent }: UseRealtimeOptions) {
       console.error("[Realtime Hook] Auth token fetch failed:", error);
     }
 
+    return url;
+  }, []);
+
+  const openConnection = useCallback(async (announceConnecting: boolean) => {
+    if (wsRef.current || parsedChannels.length === 0) return;
+    shouldReconnectRef.current = true;
+    if (announceConnecting) {
+      setStatus("connecting");
+    }
+
+    const url = await resolveConnectionUrl();
+
+    if (!shouldReconnectRef.current) return;
+
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
     ws.onopen = () => {
       setStatus("connected");
-      for (const channel of channels) {
+      for (const channel of parsedChannels) {
         ws.send(JSON.stringify({ type: "subscribe", channel }));
       }
     };
 
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.type === "subscribed") {
-          subscribedRef.current.add(String(data.channel));
+        if (typeof event.data !== "string") {
           return;
         }
-        if (data.type === "unsubscribed") {
-          subscribedRef.current.delete(String(data.channel));
+
+        const data = parseRealtimeEvent(JSON.parse(event.data));
+        if (!data) {
           return;
         }
-        if (data.type === "connected") {
+
+        if (data.eventType === "subscribed") {
+          const payload = isRecord(data.payload) ? data.payload : null;
+          const channel =
+            payload && typeof payload.channel === "string" ? payload.channel : null;
+          if (channel) {
+            subscribedRef.current.add(channel);
+          }
           return;
         }
-        onEvent?.(data);
+        if (data.eventType === "unsubscribed") {
+          const payload = isRecord(data.payload) ? data.payload : null;
+          const channel =
+            payload && typeof payload.channel === "string" ? payload.channel : null;
+          if (channel) {
+            subscribedRef.current.delete(channel);
+          }
+          return;
+        }
+        if (data.eventType === "connected") {
+          return;
+        }
+        onEventRef.current?.(data);
       } catch (error) {
         console.error("[Realtime Hook] Failed to parse message:", error);
       }
@@ -89,29 +161,136 @@ export function useRealtime({ channels, onEvent }: UseRealtimeOptions) {
     ws.onclose = () => {
       wsRef.current = null;
       subscribedRef.current.clear();
-      setStatus("disconnected");
       if (shouldReconnectRef.current) {
-        reconnectTimerRef.current = window.setTimeout(() => {
-          connect().catch((error) => {
+        setStatus("connecting");
+        reconnectTimerRef.current = setTimeout(() => {
+          const reconnect = connectRef.current;
+          if (!reconnect) {
+            return;
+          }
+
+          void reconnect().catch((error) => {
             console.error("[Realtime Hook] Reconnect failed:", error);
+            setStatus("error");
           });
         }, 2000);
+      } else {
+        setStatus("disconnected");
       }
     };
-  }, [channelKey, onEvent]);
+  }, [parsedChannels, resolveConnectionUrl]);
+
+  const connect = useCallback(async () => {
+    await openConnection(true);
+  }, [openConnection]);
 
   useEffect(() => {
-    connect().catch((error) => {
-      console.error("[Realtime Hook] Connect failed:", error);
-      setStatus("error");
-    });
+    connectRef.current = connect;
+  }, [connect]);
+
+  useEffect(() => {
+    if (wsRef.current || parsedChannels.length === 0) {
+      return () => disconnect();
+    }
+
+    shouldReconnectRef.current = true;
+    const cancelled = false;
+
+    void (async () => {
+      try {
+        const url = await resolveConnectionUrl();
+        if (cancelled || !shouldReconnectRef.current || wsRef.current) {
+          return;
+        }
+
+        const ws = new WebSocket(url);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          setStatus("connected");
+          for (const channel of parsedChannels) {
+            ws.send(JSON.stringify({ type: "subscribe", channel }));
+          }
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            if (typeof event.data !== "string") {
+              return;
+            }
+
+            const data = parseRealtimeEvent(JSON.parse(event.data));
+            if (!data) {
+              return;
+            }
+
+            if (data.eventType === "subscribed") {
+              const payload = isRecord(data.payload) ? data.payload : null;
+              const channel =
+                payload && typeof payload.channel === "string" ? payload.channel : null;
+              if (channel) {
+                subscribedRef.current.add(channel);
+              }
+              return;
+            }
+            if (data.eventType === "unsubscribed") {
+              const payload = isRecord(data.payload) ? data.payload : null;
+              const channel =
+                payload && typeof payload.channel === "string" ? payload.channel : null;
+              if (channel) {
+                subscribedRef.current.delete(channel);
+              }
+              return;
+            }
+            if (data.eventType === "connected") {
+              return;
+            }
+            onEventRef.current?.(data);
+          } catch (error) {
+            console.error("[Realtime Hook] Failed to parse message:", error);
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error("[Realtime Hook] Error:", error);
+          setStatus("error");
+        };
+
+        ws.onclose = () => {
+          wsRef.current = null;
+          subscribedRef.current.clear();
+          if (shouldReconnectRef.current) {
+            setStatus("connecting");
+            reconnectTimerRef.current = setTimeout(() => {
+              const reconnect = connectRef.current;
+              if (!reconnect) {
+                return;
+              }
+
+              void reconnect().catch((error) => {
+                console.error("[Realtime Hook] Reconnect failed:", error);
+                setStatus("error");
+              });
+            }, 2000);
+          } else {
+            setStatus("disconnected");
+          }
+        };
+      } catch (error) {
+        console.error("[Realtime Hook] Connect failed:", error);
+        window.setTimeout(() => {
+          setStatus("error");
+        }, 0);
+      }
+    })();
+
     return () => disconnect();
-  }, [connect, disconnect]);
+  }, [disconnect, parsedChannels, resolveConnectionUrl]);
 
   useEffect(() => {
     if (status !== "connected" || !wsRef.current) return;
 
-    const desired = new Set(channels);
+    const desired = new Set(parsedChannels);
     const current = new Set(subscribedRef.current);
 
     for (const channel of desired) {
@@ -125,7 +304,7 @@ export function useRealtime({ channels, onEvent }: UseRealtimeOptions) {
         wsRef.current.send(JSON.stringify({ type: "unsubscribe", channel }));
       }
     }
-  }, [channelKey, status, channels]);
+  }, [parsedChannels, status]);
 
   return { status, disconnect, connect };
 }

@@ -12,13 +12,24 @@ import sharp from "sharp";
 import { uploadSurveyMedia, deleteSurveyMedia } from "@/lib/storage";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
 import {
-  publishPendingOutboxEntries,
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
 
 type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
+
+function getFormDataString(
+  formData: FormData,
+  key: string,
+): string | undefined {
+  const value = formData.get(key);
+  return typeof value === "string" ? value : undefined;
+}
+
+function getSurveyMediaType(value: string | undefined): "image" | "audio" | "video" {
+  return value === "audio" || value === "video" ? value : "image";
+}
 
 async function emitSurveyMediaUpdatedEvent(
   surveyId: string,
@@ -42,8 +53,6 @@ async function emitSurveyMediaUpdatedEvent(
       },
     });
   });
-
-  await publishPendingOutboxEntries();
 }
 
 const addSurveyMediaSchema = z.object({
@@ -101,14 +110,12 @@ export async function uploadSurveyMediaAction(
   try {
     const session = await getVerifiedSession();
 
-    const surveyId = formData.get("surveyId") as string;
-    const description = formData.get("description") as string;
-    const contextForUse = formData.get("contextForUse") as string;
-
-    const type =
-      (formData.get("type") as "image" | "audio" | "video") || "image"; // Default to image if not specified
+    const surveyId = getFormDataString(formData, "surveyId");
+    const description = getFormDataString(formData, "description");
+    const contextForUse = getFormDataString(formData, "contextForUse");
+    const type = getSurveyMediaType(getFormDataString(formData, "type"));
     const durationMs = Number(formData.get("durationMs"));
-    const file = formData.get("file") as File;
+    const file = formData.get("file");
 
     const validation = uploadSurveyMediaSchema.parse({
       surveyId,
@@ -193,10 +200,10 @@ export async function uploadSurveyMediaAction(
     const mediaId = nanoid();
 
     const arrayBuffer = await file.arrayBuffer();
-    let buffer = Buffer.from(arrayBuffer);
+    let buffer: Buffer = Buffer.from(arrayBuffer);
 
     // SERVER-SIDE VERIFICATION: Verify file type using magic bytes
-    const fileType = await fileTypeFromBuffer(buffer as any);
+    const fileType = await fileTypeFromBuffer(buffer);
     if (!fileType) {
       return { success: false, error: "Could not determine file type" };
     }
@@ -225,9 +232,9 @@ export async function uploadSurveyMediaAction(
     // IMAGE HARDENING: Strip metadata/EXIF and normalize
     if (type === "image") {
       try {
-        buffer = (await sharp(buffer as any)
+        buffer = await sharp(buffer)
           .rotate() // Auto-rotate based on EXIF before stripping
-          .toBuffer()) as any; // metadata is stripped by default in toBuffer unless specifically kept
+          .toBuffer(); // metadata is stripped by default in toBuffer unless specifically kept
       } catch (sharpError) {
         console.error("[Media Upload] Sharp processing failed:", sharpError);
         return { success: false, error: "Failed to process image safely" };
@@ -252,6 +259,8 @@ export async function uploadSurveyMediaAction(
 
       durationMs: validation.durationMs || null,
       mimeType: fileType.mime, // Use verified mime type
+      requiredQuestions: [],
+      expectedInsights: [],
     };
 
     const updatedMedia = [...(survey.media || []), newMedia];
@@ -531,6 +540,8 @@ export async function addSurveyMediaAction(
       contextForUse: body.contextForUse,
 
       durationMs: body.durationMs || null,
+      requiredQuestions: [],
+      expectedInsights: [],
     };
 
     const updatedMedia = [...(survey.media || []), newMedia];

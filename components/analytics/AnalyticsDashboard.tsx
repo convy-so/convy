@@ -15,6 +15,32 @@ interface AnalyticsDashboardProps {
   enableRealtime?: boolean;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Failed to load analytics";
+}
+
+function isAnalyticsPendingData(
+  value: SurveyAnalyticsData | AnalyticsPendingData | undefined,
+): value is AnalyticsPendingData {
+  return Boolean(
+    value &&
+      (value.status === "not_generated" ||
+        value.status === "queued" ||
+        value.status === "running" ||
+        value.status === "failed"),
+  );
+}
+
+function isSurveyAnalyticsData(
+  value: SurveyAnalyticsData | AnalyticsPendingData | undefined,
+): value is SurveyAnalyticsData {
+  return Boolean(value && value.status === "ready");
+}
+
 async function fetchAnalytics(
   surveyId: string,
 ): Promise<SurveyAnalyticsData | AnalyticsPendingData> {
@@ -46,9 +72,13 @@ export function AnalyticsDashboard({
   useRealtime({
     channels: enableRealtime ? [`survey:${surveyId}`] : [],
     onEvent: (message) => {
+      if (!isRecord(message)) {
+        return;
+      }
+
       if (
-        message?.eventType === "survey.analytics_ready" &&
-        message?.surveyId === surveyId
+        message.eventType === "survey.analytics_ready" &&
+        message.surveyId === surveyId
       ) {
         void refetch();
       }
@@ -82,7 +112,7 @@ export function AnalyticsDashboard({
       <div className="flex min-h-[400px] flex-col items-center justify-center text-red-500">
         <AlertCircle className="mb-4 h-10 w-10" />
         <p className="text-lg font-bold">Analytics unavailable</p>
-        <p className="mt-1 text-sm text-gray-500">{(error as Error).message}</p>
+        <p className="mt-1 text-sm text-gray-500">{getErrorMessage(error)}</p>
         <button
           onClick={() => refetch()}
           className="mt-6 rounded-full border border-gray-200 bg-white px-6 py-2.5 text-sm font-bold text-gray-900 shadow-sm transition-all hover:bg-gray-50"
@@ -93,8 +123,8 @@ export function AnalyticsDashboard({
     );
   }
 
-  if (!data || data.status !== "ready") {
-    const pending = data as AnalyticsPendingData | undefined;
+  if (!isSurveyAnalyticsData(data)) {
+    const pending = isAnalyticsPendingData(data) ? data : undefined;
     return (
       <div className="mx-auto mt-8 flex min-h-[400px] max-w-2xl flex-col items-center justify-center rounded-[2.5rem] border border-dashed border-gray-200 bg-white p-12 text-center">
         <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gray-50">
@@ -155,7 +185,7 @@ export function AnalyticsDashboard({
     );
   }
 
-  const analytics = data as SurveyAnalyticsData;
+  const analytics = data;
 
   return (
     <div className="animate-in fade-in space-y-12 duration-700 pb-20">

@@ -22,7 +22,16 @@ export async function GET(
     const { surveyId } = await params;
 
     const [survey, briefRow] = await Promise.all([
-      getDb().select().from(surveys).where(eq(surveys.id, surveyId)).then((rows) => rows[0]),
+      getDb().query.surveys.findFirst({
+        where: eq(surveys.id, surveyId),
+        with: {
+          classroom: {
+            columns: {
+              title: true,
+            },
+          },
+        },
+      }),
       getDb().select().from(surveyBriefs).where(eq(surveyBriefs.surveyId, surveyId)).then((rows) => rows[0]),
     ]);
 
@@ -144,11 +153,14 @@ export async function GET(
         requiredQuestions: survey.requiredQuestions,
         metrics: survey.metrics,
         language: survey.language,
-        isVoice: survey.isVoice, // ADD: Include voice capability flag
-        media: survey.media, // ADD: Include media for display in sample conversations
-        sampleConversationCount: survey.sampleConversationCount, // ADD: Include sample count
+        isVoice: survey.isVoice,
+        media: survey.media,
+        sampleConversationCount: survey.sampleConversationCount,
         userId: survey.userId,
         organizationId: survey.organizationId,
+        deliveryMode: survey.deliveryMode,
+        classroomId: survey.classroomId,
+        classroomTitle: survey.classroom?.title ?? null,
         editors,
         permission,
       },

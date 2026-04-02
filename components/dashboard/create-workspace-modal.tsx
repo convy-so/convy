@@ -10,7 +10,7 @@ import { useTranslations } from "next-intl";
 type CreateWorkspaceModalProps = {
     isOpen: boolean;
     onClose: () => void;
-    onSuccess?: () => void;
+    onSuccess?: (workspaceId: string) => void | Promise<void>;
 };
 
 export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorkspaceModalProps) {
@@ -44,20 +44,24 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
 
             if (result.success) {
                 // Set as active instantly
-                await setActiveWorkspace(result.data.id);
+                const activationResult = await setActiveWorkspace(result.data.id);
+                if (!activationResult.success) {
+                    setError(activationResult.error);
+                    return;
+                }
 
                 setName("");
                 setSlug("");
                 setDescription("");
-                onSuccess?.();
+                await onSuccess?.(result.data.id);
                 onClose();
                 router.refresh();
-                // Force reload to ensure session state is updated in all components
-                window.location.href = "/dashboard";
+                router.push("/dashboard");
             } else {
                 setError(result.error);
             }
-        } catch (err) {
+        } catch (error) {
+            console.error("Failed to create workspace:", error);
             setError(t("Error"));
         } finally {
             setIsCreating(false);

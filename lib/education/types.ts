@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { SurveyMedia } from "@/db/schema";
+import { surveyMediaSchema } from "./brief-media";
 
 export const EDUCATION_PROGRAM_IDS = [
   "education.course_efficacy",
@@ -34,14 +34,14 @@ export const researchBriefSchema = z.object({
   constraints: z.array(z.string()).default([]),
   assumptions: z.array(z.string()).default([]),
   tone: z.enum(["formal", "casual", "playful", "empathetic"]).default("casual"),
-  media: z.array(z.any()).default([]),
+  media: z.array(surveyMediaSchema).default([]),
   routingConfidence: z.number().min(0).max(1).default(0),
   routingRationale: z.string().default(""),
   missingFields: z.array(z.string()).default([]),
   readyForSampling: z.boolean().default(false),
 });
 
-export type ResearchBrief = z.infer<typeof researchBriefSchema> & { media: SurveyMedia[] };
+export type ResearchBrief = z.infer<typeof researchBriefSchema>;
 
 export const coverageNodeSchema = z.object({
   id: z.string(),
@@ -79,7 +79,7 @@ export const evidenceRecordSchema = z.object({
   excerpt: z.string(),
   sentiment: z.enum(["positive", "negative", "neutral", "mixed"]).optional(),
   reliability: z.number().int().min(0).max(100),
-  metadata: z.record(z.string(), z.any()).default({}),
+  metadata: z.record(z.string(), z.unknown()).default({}),
 });
 
 export type EvidenceRecord = z.infer<typeof evidenceRecordSchema>;
@@ -213,7 +213,7 @@ export const analyticsFactSchema = z.object({
   themes: z.array(z.string()).default([]),
   outcomeSignal: z.string().default("general_feedback"),
   sourceEvidenceIds: z.array(z.string()).default([]),
-  metadata: z.record(z.string(), z.any()).default({}),
+  metadata: z.record(z.string(), z.unknown()).default({}),
 });
 
 export type AnalyticsFact = z.infer<typeof analyticsFactSchema>;

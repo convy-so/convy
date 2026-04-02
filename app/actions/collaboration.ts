@@ -11,7 +11,6 @@ import {
   surveyCreationComments,
   surveyEditorRequests,
   surveyEditors,
-  surveys,
   users,
 } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
@@ -20,7 +19,6 @@ import {
   getSurveyEditors,
 } from "@/lib/workspace-access";
 import {
-  publishPendingOutboxEntries,
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
 
@@ -135,7 +133,6 @@ export async function grantEditAccessAction(
         },
       });
     });
-    await publishPendingOutboxEntries();
 
     return { success: true, data: undefined };
   } catch (error) {
@@ -193,7 +190,6 @@ export async function revokeEditAccessAction(
         },
       });
     });
-    await publishPendingOutboxEntries();
 
     return { success: true, data: undefined };
   } catch (error) {
@@ -211,7 +207,7 @@ export async function requestEditAccessAction(
       activeWorkspaceId: session.session.activeOrganizationId ?? null,
     });
 
-    if (!permission?.canView || !permission.activeContextMatchesResource) {
+    if (!permission?.canDiscover || !permission.activeContextMatchesResource) {
       return { success: false, error: "Unauthorized" };
     }
     if (!permission.collaborationAllowed) {
@@ -258,7 +254,6 @@ export async function requestEditAccessAction(
         },
       });
     });
-    await publishPendingOutboxEntries();
 
     return { success: true, data: { requestId } };
   } catch (error) {
@@ -327,7 +322,6 @@ export async function postCreationCommentAction(
         },
       });
     });
-    await publishPendingOutboxEntries();
 
     return { success: true, data: { id: commentId } };
   } catch (error) {

@@ -58,11 +58,14 @@ async function GrowthByDateSection() {
 
     // Merge data for a dual-axis chart
     const data = userGrowth.map(ug => {
-        const costEntry = usageCosts.find(c => c.date === ug.date);
+        const ugDate = typeof ug.date === "string" ? ug.date : "";
+        const count = typeof ug.count === "number" ? ug.count : 0;
+        const costEntry = usageCosts.find(c => c.date === ugDate);
+        const costVal = costEntry && typeof costEntry.cost === "number" ? costEntry.cost : 0;
         return {
-            date: new Date(ug.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-            newUsers: ug.count,
-            cost: costEntry ? parseFloat(costEntry.cost.toFixed(2)) : 0
+            date: new Date(ugDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+            newUsers: count,
+            cost: parseFloat(costVal.toFixed(2))
         };
     });
 
@@ -72,11 +75,16 @@ async function GrowthByDateSection() {
 async function UsageBreakdownSection() {
     const breakdown = await getUsageTypeBreakdown();
 
-    const data = breakdown.map(b => ({
-        name: b.type.replace('llm_', '').toUpperCase(),
-        value: parseFloat(b.totalCost || "0"),
-        count: b.count
-    }));
+    const data = breakdown.map(b => {
+        const typeStr = typeof b.type === "string" ? b.type : "unknown";
+        const costStr = typeof b.totalCost === "string" ? b.totalCost : "0";
+        const count = typeof b.count === "number" ? b.count : 0;
+        return {
+            name: typeStr.replace('llm_', '').toUpperCase(),
+            value: parseFloat(costStr),
+            count: count
+        };
+    });
 
     return <UsageTypeChart data={data} />;
 }
