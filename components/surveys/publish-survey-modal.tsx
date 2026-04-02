@@ -42,7 +42,7 @@ export function PublishSurveyModal({
       await new Promise(resolve => setTimeout(resolve, 1000));
       setTitle("Customer Satisfaction Survey");
       toast.success(t("Toasts.TitleSuggestionGenerated"));
-    } catch (error) {
+    } catch {
       toast.error(t("Toasts.TitleSuggestionFailed"));
     } finally {
       setIsGeneratingTitle(false);
@@ -72,8 +72,7 @@ export function PublishSurveyModal({
       setPublishedUrl(data.shareUrl);
       toast.success(t("Toasts.Success"));
       onPublished?.(data.shareUrl);
-    } catch (error) {
-      console.error("Publish error:", error);
+    } catch {
       toast.error(t("Toasts.Failed"));
     } finally {
       setIsPublishing(false);
@@ -88,7 +87,7 @@ export function PublishSurveyModal({
       setCopied(true);
       toast.success(t("Toasts.LinkCopied"));
       setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
+    } catch {
       toast.error(t("Toasts.CopyFailed"));
     }
   };

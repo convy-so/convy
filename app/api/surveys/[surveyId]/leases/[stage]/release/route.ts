@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 import {
-  publishPendingOutboxEntries,
   recordRealtimeEvent,
   releaseSurveyLease,
 } from "@/lib/collaboration-service";
@@ -61,7 +60,6 @@ export async function POST(
         },
       });
     });
-    await publishPendingOutboxEntries();
 
     return NextResponse.json({ success: true });
   } catch (error) {

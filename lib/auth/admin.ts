@@ -14,7 +14,7 @@ export function isAdmin(user: AuthUser | null): boolean {
 
   // 2. Security Check: Only allow if email is verified (if applicable)
   // If your auth flow allows unverified accounts, we should strictly check .emailVerified
-  const isVerified = (user as any).emailVerified !== false;
+  const isVerified = user.emailVerified !== false;
 
   return isEmailAdmin && isVerified;
 }

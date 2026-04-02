@@ -92,7 +92,8 @@ export async function getUserGrowthData(authHeaders?: Headers | string | null) {
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
   // Group by date using SQL to handle different DB dialects (Postgres here)
-  const results = await getDb().execute(sql`
+  const results = await getDb().execute(
+    sql<{ date: string; count: number }>`
     SELECT 
       DATE(created_at) as date,
       COUNT(*)::int as count
@@ -100,9 +101,10 @@ export async function getUserGrowthData(authHeaders?: Headers | string | null) {
     WHERE created_at >= ${thirtyDaysAgo}
     GROUP BY DATE(created_at)
     ORDER BY date ASC
-  `);
+  `,
+  );
 
-  return results as unknown as Array<{ date: string; count: number }>;
+  return results.rows;
 }
 
 /**
@@ -114,7 +116,8 @@ export async function getUsageCostData(authHeaders?: Headers | string | null) {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const results = await getDb().execute(sql`
+  const results = await getDb().execute(
+    sql<{ date: string; cost: number }>`
     SELECT 
       DATE(created_at) as date,
       SUM(cost)::double precision as cost
@@ -122,9 +125,10 @@ export async function getUsageCostData(authHeaders?: Headers | string | null) {
     WHERE created_at >= ${thirtyDaysAgo}
     GROUP BY DATE(created_at)
     ORDER BY date ASC
-  `);
+  `,
+  );
 
-  return results as unknown as Array<{ date: string; cost: number }>;
+  return results.rows;
 }
 
 /**

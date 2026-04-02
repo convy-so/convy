@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import {
     User,
     Bell,
@@ -17,13 +18,88 @@ import { usePathname, useRouter } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/providers/auth-provider";
 import { authClient } from "@/lib/auth-client";
-import { getActiveWorkspace, updateWorkspace } from "@/app/actions/workspace";
+import {
+    getActiveWorkspace,
+    updateWorkspace,
+    updateWorkspaceLocalizationSettingsAction,
+} from "@/app/actions/workspace";
 import toast from "react-hot-toast";
 import { useTranslations } from "next-intl";
-import { getClientTranslation, updateUserLanguage } from "@/app/actions/translate";
-import { SupportedLanguage } from "@/lib/i18n/ai-translator";
-import { ClientT } from "@/components/i18n/client-t";
-import { useRealtime } from "@/hooks/use-realtime";
+import { updateUserLanguage } from "@/app/actions/translate";
+import { useRealtime, type RealtimeEvent } from "@/hooks/use-realtime";
+import {
+    appLocaleLabels,
+    isAppLocale,
+    type AppLocale,
+    type WorkspaceLocaleSettings,
+} from "@/lib/i18n/config";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeWorkspaceLocalizationInput(
+    value: unknown,
+    fallback: WorkspaceLocaleSettings,
+): WorkspaceLocaleSettings {
+    if (!isRecord(value)) {
+        return fallback;
+    }
+
+    return {
+        defaultUiLocale: isAppLocale(value.defaultUiLocale)
+            ? value.defaultUiLocale
+            : fallback.defaultUiLocale,
+        defaultContentLocale: isAppLocale(value.defaultContentLocale)
+            ? value.defaultContentLocale
+            : fallback.defaultContentLocale,
+        emailLocale: isAppLocale(value.emailLocale)
+            ? value.emailLocale
+            : fallback.emailLocale,
+        allowedLocales: Array.isArray(value.allowedLocales)
+            ? (() => {
+                const locales = value.allowedLocales.filter(isAppLocale);
+                return locales.length > 0 ? locales : fallback.allowedLocales;
+            })()
+            : fallback.allowedLocales,
+        autoTranslateGeneratedContent:
+            typeof value.autoTranslateGeneratedContent === "boolean"
+                ? value.autoTranslateGeneratedContent
+                : fallback.autoTranslateGeneratedContent,
+    };
+}
+
+const localeOptions: Array<{ code: AppLocale; name: string; flag: string }> = [
+    { code: "en", name: appLocaleLabels.en, flag: "🇺🇸" },
+    { code: "fr", name: appLocaleLabels.fr, flag: "🇫🇷" },
+    { code: "de", name: appLocaleLabels.de, flag: "🇩🇪" },
+    { code: "es", name: appLocaleLabels.es, flag: "🇪🇸" },
+    { code: "it", name: appLocaleLabels.it, flag: "🇮🇹" },
+];
+
+const initialNotifications = {
+    emailNewResponse: true,
+    emailWeeklySummary: true,
+    emailTeamUpdates: false,
+    pushNewResponse: true,
+    pushSurveyComplete: true,
+};
+
+type NotificationSettings = typeof initialNotifications;
+type NotificationChannel = "email" | "push";
+type NotificationOptionKey = "NewResponse" | "WeeklySummary" | "TeamUpdates" | "SurveyComplete";
+
+const notificationStateKeyMap: Record<NotificationChannel, Partial<Record<NotificationOptionKey, keyof NotificationSettings>>> = {
+    email: {
+        NewResponse: "emailNewResponse",
+        WeeklySummary: "emailWeeklySummary",
+        TeamUpdates: "emailTeamUpdates",
+    },
+    push: {
+        NewResponse: "pushNewResponse",
+        SurveyComplete: "pushSurveyComplete",
+    },
+};
 
 export default function SettingsPage() {
     const { user, session } = useAuth();
@@ -33,7 +109,13 @@ export default function SettingsPage() {
     const router = useRouter();
     const pathname = usePathname();
     const t = useTranslations("Settings");
-    const currentLocale = (user as { preferredLanguage?: SupportedLanguage })?.preferredLanguage || "en";
+    const tt = (key: string, fallback: string) => (t.has(key) ? t(key) : fallback);
+    const currentLocale: AppLocale =
+        isAppLocale(user?.uiLocale)
+            ? user.uiLocale
+            : isAppLocale(user?.preferredLanguage)
+                ? user.preferredLanguage
+                : "en";
 
     const [activeTab, setActiveTab] = useState("profile");
     const [isSaving, setIsSaving] = useState(false);
@@ -47,6 +129,7 @@ export default function SettingsPage() {
         role: string;
         logo?: string | null;
         plan?: string | null;
+        localization: WorkspaceLocaleSettings;
     } | null>(null);
 
     const isOwner = activeWorkspace?.role === "owner";
@@ -54,7 +137,7 @@ export default function SettingsPage() {
     const tabs = [
         { id: "profile", name: t("Tabs.Profile"), icon: User },
         ...(isWorkspaceContext ? [{ id: "workspace", name: t("Tabs.Workspace"), icon: Key }] : []),
-        ...(isWorkspaceContext && isOwner ? [{ id: "billing", name: t("Tabs.Billing") || "Billing", icon: CreditCard }] : []),
+        ...(isWorkspaceContext && isOwner ? [{ id: "billing", name: tt("Tabs.Billing", "Billing"), icon: CreditCard }] : []),
         { id: "notifications", name: t("Tabs.Notifications"), icon: Bell },
         { id: "preferences", name: t("Tabs.Preferences"), icon: Globe },
         { id: "security", name: t("Tabs.Security"), icon: Shield },
@@ -70,14 +153,15 @@ export default function SettingsPage() {
     const [wsName, setWsName] = useState("");
     const [wsSlug, setWsSlug] = useState("");
     const [wsLogo, setWsLogo] = useState<string | null>(null);
-
-    const [notifications, setNotifications] = useState({
-        emailNewResponse: true,
-        emailWeeklySummary: true,
-        emailTeamUpdates: false,
-        pushNewResponse: true,
-        pushSurveyComplete: true,
+    const [workspaceLocalization, setWorkspaceLocalization] = useState<WorkspaceLocaleSettings>({
+        defaultUiLocale: "en",
+        defaultContentLocale: "en",
+        emailLocale: "en",
+        allowedLocales: ["en", "fr", "de", "es", "it"],
+        autoTranslateGeneratedContent: true,
     });
+
+    const [notifications, setNotifications] = useState<NotificationSettings>(initialNotifications);
 
     const [passwordData, setPasswordData] = useState({
         currentPassword: "",
@@ -103,6 +187,7 @@ export default function SettingsPage() {
                 setWsName(result.data.name);
                 setWsSlug(result.data.slug);
                 setWsLogo(result.data.logo || null);
+                setWorkspaceLocalization(result.data.localization);
             }
         }
         loadWorkspace();
@@ -110,21 +195,37 @@ export default function SettingsPage() {
 
     useRealtime({
         channels: session?.activeOrganizationId ? [`workspace:${session.activeOrganizationId}`] : [],
-        onEvent: (event) => {
+        onEvent: (event: RealtimeEvent) => {
             if (event.eventType !== "workspace.settings_updated" || event.workspaceId !== session?.activeOrganizationId) {
                 return;
             }
 
-            const updates = event.payload?.updates || {};
-            if (updates.name) setWsName(updates.name);
-            if (updates.slug) setWsSlug(updates.slug);
-            if (updates.logo !== undefined) setWsLogo(updates.logo);
+            const payload = event.payload;
+            if (!isRecord(payload)) return;
+            
+            const updates = isRecord(payload.updates) ? payload.updates : {};
+            
+            const name = typeof updates.name === "string" ? updates.name : undefined;
+            const slug = typeof updates.slug === "string" ? updates.slug : undefined;
+            const logo = (typeof updates.logo === "string" || updates.logo === null) ? updates.logo : undefined;
+            const localization = payload.localization
+                ? normalizeWorkspaceLocalizationInput(
+                    payload.localization,
+                    workspaceLocalization,
+                )
+                : undefined;
+
+            if (name) setWsName(name);
+            if (slug) setWsSlug(slug);
+            if (logo !== undefined) setWsLogo(logo);
+            if (localization) setWorkspaceLocalization(localization);
 
             setActiveWorkspace(prev => prev ? {
                 ...prev,
-                name: updates.name || prev.name,
-                slug: updates.slug || prev.slug,
-                logo: updates.logo !== undefined ? updates.logo : prev.logo
+                name: name || prev.name,
+                slug: slug || prev.slug,
+                logo: logo !== undefined ? logo : prev.logo,
+                localization: localization || prev.localization,
             } : null);
         },
     });
@@ -137,15 +238,15 @@ export default function SettingsPage() {
                 image: profileImage || profile.image || undefined,
                 fetchOptions: {
                     onSuccess: async () => {
-                        toast.success(t("Profile.Saved") || "Settings saved successfully");
+                        toast.success(tt("Profile.Saved", "Settings saved successfully"));
                     },
                     onError: async (ctx) => {
-                        toast.error(await getClientTranslation(ctx.error.message || "Failed to save settings"));
+                        toast.error(ctx.error.message || tt("Error", "Failed to save settings"));
                     }
                 }
             });
-        } catch (error) {
-            toast.error(await getClientTranslation("An error occurred while saving profile"));
+        } catch {
+            toast.error(tt("Error", "An error occurred while saving profile"));
         } finally {
             setIsSaving(false);
         }
@@ -153,7 +254,7 @@ export default function SettingsPage() {
 
     const handlePasswordUpdate = async () => {
         if (passwordData.newPassword !== passwordData.confirmPassword) {
-            toast.error(await getClientTranslation("Passwords do not match"));
+            toast.error(t("Security.PasswordMismatch"));
             return;
         }
         setIsSaving(true);
@@ -163,7 +264,7 @@ export default function SettingsPage() {
                 currentPassword: passwordData.currentPassword,
                 fetchOptions: {
                     onSuccess: async () => {
-                        toast.success(await getClientTranslation("Password updated successfully"));
+                        toast.success(tt("Security.Success", "Password updated successfully"));
                         setPasswordData({
                             currentPassword: "",
                             newPassword: "",
@@ -171,12 +272,12 @@ export default function SettingsPage() {
                         });
                     },
                     onError: async (ctx) => {
-                        toast.error(await getClientTranslation(ctx.error.message || "Failed to update password"));
+                        toast.error(ctx.error.message || tt("Security.Error", "Failed to update password"));
                     }
                 }
             });
-        } catch (error) {
-            toast.error(await getClientTranslation("An error occurred while updating password"));
+        } catch {
+            toast.error(tt("Security.Error", "An error occurred while updating password"));
         } finally {
             setIsSaving(false);
         }
@@ -185,34 +286,66 @@ export default function SettingsPage() {
     const handleWorkspaceSave = async () => {
         if (!activeWorkspace) return;
         if (!isOwner) {
-            toast.error(await getClientTranslation("Only the workspace owner can update workspace settings"));
+            toast.error("Only the workspace owner can update workspace settings");
             return;
         }
         setIsSaving(true);
         try {
-            const result = await updateWorkspace({
-                organizationId: activeWorkspace.id,
-                name: wsName,
-                slug: wsSlug,
-                logo: wsLogo || undefined,
-            });
-            if (result.success) {
-                toast.success(await getClientTranslation("Workspace updated successfully"));
-                setActiveWorkspace({ ...activeWorkspace, name: wsName, slug: wsSlug, logo: wsLogo });
+            const [workspaceResult, localizationResult] = await Promise.all([
+                updateWorkspace({
+                    organizationId: activeWorkspace.id,
+                    name: wsName,
+                    slug: wsSlug,
+                    logo: wsLogo || undefined,
+                }),
+                updateWorkspaceLocalizationSettingsAction({
+                    organizationId: activeWorkspace.id,
+                    settings: workspaceLocalization,
+                }),
+            ]);
+            if (workspaceResult.success && localizationResult.success) {
+                toast.success(tt("Workspace.Updated", "Workspace updated successfully"));
+                setActiveWorkspace({
+                    ...activeWorkspace,
+                    name: wsName,
+                    slug: wsSlug,
+                    logo: wsLogo,
+                    localization: localizationResult.data,
+                });
             } else {
-                toast.error(await getClientTranslation(result.error || "Failed to update workspace"));
+                const errorMessage = !workspaceResult.success
+                    ? workspaceResult.error || "Failed to update workspace"
+                    : !localizationResult.success
+                        ? localizationResult.error || "Failed to update workspace language settings"
+                        : "Failed to update workspace";
+                toast.error(
+                    errorMessage,
+                );
             }
-        } catch (error) {
-            toast.error(await getClientTranslation("An error occurred while updating workspace"));
+        } catch {
+            toast.error(tt("Workspace.UpdateError", "An error occurred while updating workspace"));
         } finally {
             setIsSaving(false);
         }
     };
 
-    const handleNotificationToggle = (type: 'email' | 'push', key: string) => {
-        setNotifications(prev => ({
+    const getNotificationStateKey = (
+        type: NotificationChannel,
+        key: NotificationOptionKey,
+    ) => notificationStateKeyMap[type][key];
+
+    const handleNotificationToggle = (
+        type: NotificationChannel,
+        key: NotificationOptionKey,
+    ) => {
+        const stateKey = getNotificationStateKey(type, key);
+        if (!stateKey) {
+            return;
+        }
+
+        setNotifications((prev) => ({
             ...prev,
-            [`${type}${key}`]: !prev[`${type}${key}` as keyof typeof prev]
+            [stateKey]: !prev[stateKey],
         }));
     };
 
@@ -226,28 +359,57 @@ export default function SettingsPage() {
         } else if (activeTab === "notifications") {
             setIsSaving(true);
             await new Promise((resolve) => setTimeout(resolve, 800));
-            toast.success(await getClientTranslation("Notification settings saved"));
+            toast.success(t("Notifications.Saved"));
             setIsSaving(false);
         } else if (activeTab === "preferences") {
-            toast.success(await getClientTranslation("Preferences saved"));
+            toast.success(t("Preferences.Toast"));
         } else {
             setIsSaving(true);
             await new Promise((resolve) => setTimeout(resolve, 1000));
             setIsSaving(false);
-            toast.success(await getClientTranslation("Settings saved successfully"));
+            toast.success(tt("Profile.Saved", "Settings saved successfully"));
         }
     };
 
-    const handleLanguageChange = async (newLocale: string) => {
-        const result = await updateUserLanguage(newLocale as SupportedLanguage);
+    const handleLanguageChange = async (newLocale: AppLocale) => {
+        const result = await updateUserLanguage(newLocale);
         if (result.success) {
             toast.success(t("Preferences.Toast") || "Language updated successfully");
             // Navigate to the same path but with the new locale to update the UI shell
             router.push(pathname, { locale: newLocale });
         } else {
-            toast.error(t("Error") || "Failed to update language");
+            toast.error(tt("Error", "Failed to update language"));
         }
     };
+
+    const notificationItems: Array<{
+        title: string;
+        description: string;
+        key: NotificationOptionKey;
+    }> = [
+        {
+            title: t("Notifications.Types.NewResponse"),
+            description: t("Notifications.Types.NewResponseDesc"),
+            key: "NewResponse",
+        },
+        {
+            title: t("Notifications.Types.WeeklySummary"),
+            description: t("Notifications.Types.WeeklySummaryDesc"),
+            key: "WeeklySummary",
+        },
+        {
+            title: tt("Notifications.Types.SurveyComplete", "Survey complete"),
+            description: tt("Notifications.Types.SurveyCompleteDesc", "Receive push notifications when an important survey flow reaches completion"),
+            key: "SurveyComplete",
+        },
+    ];
+    if (isWorkspaceContext) {
+        notificationItems.splice(2, 0, {
+            title: t("Notifications.Types.TeamUpdates"),
+            description: t("Notifications.Types.TeamUpdatesDesc"),
+            key: "TeamUpdates",
+        });
+    }
 
     return (
         <div className="max-w-5xl mx-auto">
@@ -296,9 +458,12 @@ export default function SettingsPage() {
                                 <div className="flex items-center gap-5">
                                     <div className="relative">
                                         {profileImage || profile.image ? (
-                                            <img
+                                            <Image
                                                 src={profileImage || profile.image}
                                                 alt="Profile"
+                                                width={80}
+                                                height={80}
+                                                unoptimized
                                                 className="w-20 h-20 rounded-2xl object-cover"
                                             />
                                         ) : (
@@ -316,8 +481,10 @@ export default function SettingsPage() {
                                                     const file = e.target.files?.[0];
                                                     if (file) {
                                                         const reader = new FileReader();
-                                                        reader.onload = (e) => {
-                                                            setProfileImage(e.target?.result as string);
+                                                        reader.onload = (event) => {
+                                                            if (typeof event.target?.result === "string") {
+                                                                setProfileImage(event.target.result);
+                                                            }
                                                         };
                                                         reader.readAsDataURL(file);
                                                     }
@@ -353,7 +520,7 @@ export default function SettingsPage() {
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            <ClientT>Email Address</ClientT>
+                                            {t("Profile.Email")}
                                         </label>
                                         <input
                                             type="email"
@@ -361,7 +528,7 @@ export default function SettingsPage() {
                                             disabled
                                             className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-500 cursor-not-allowed outline-none transition-all"
                                         />
-                                        <p className="mt-1 text-xs text-gray-400 font-normal italic"><ClientT>Email cannot be changed. Contact support if needed.</ClientT></p>
+                                        <p className="mt-1 text-xs text-gray-400 font-normal italic">{t("Profile.EmailHint")}</p>
                                     </div>
                                 </div>
                             </div>
@@ -375,12 +542,12 @@ export default function SettingsPage() {
                                     {isSaving ? (
                                         <>
                                             <Loader2 className="w-4 h-4 animate-spin" />
-                                            <ClientT>Saving...</ClientT>
+                                            {t("Profile.Saving")}
                                         </>
                                     ) : (
                                         <>
                                             <Check className="w-4 h-4" />
-                                            <ClientT>Save Changes</ClientT>
+                                            {t("Profile.Save")}
                                         </>
                                     )}
                                 </button>
@@ -392,8 +559,8 @@ export default function SettingsPage() {
                     {activeTab === "workspace" && (
                         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-100">
-                                <h2 className="text-lg font-semibold text-gray-900"><ClientT>Workspace Settings</ClientT></h2>
-                                <p className="text-sm text-gray-500"><ClientT>Manage your workspace identification and branding.</ClientT></p>
+                                <h2 className="text-lg font-semibold text-gray-900">{t("Workspace.Title")}</h2>
+                                <p className="text-sm text-gray-500">{t("Workspace.Description")}</p>
                             </div>
 
                             <div className="p-6 space-y-6">
@@ -405,16 +572,19 @@ export default function SettingsPage() {
                                     <div className="space-y-6">
                                         {!isOwner && (
                                             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                                                <ClientT>Workspace settings are visible to members, but only the workspace owner can change them.</ClientT>
+                                                {tt("Workspace.MemberNotice", "Workspace settings are visible to members, but only the workspace owner can change them.")}
                                             </div>
                                         )}
                                         {/* Workspace Logo */}
                                         <div className="flex items-center gap-5">
                                             <div className="relative">
                                                 {wsLogo ? (
-                                                    <img
+                                                    <Image
                                                         src={wsLogo}
                                                         alt="Workspace Logo"
+                                                        width={64}
+                                                        height={64}
+                                                        unoptimized
                                                         className="w-16 h-16 rounded-xl object-cover border border-gray-100"
                                                     />
                                                 ) : (
@@ -433,8 +603,10 @@ export default function SettingsPage() {
                                                             const file = e.target.files?.[0];
                                                             if (file) {
                                                                 const reader = new FileReader();
-                                                                reader.onload = (e) => {
-                                                                    setWsLogo(e.target?.result as string);
+                                                                reader.onload = (event) => {
+                                                                    if (typeof event.target?.result === "string") {
+                                                                        setWsLogo(event.target.result);
+                                                                    }
                                                                 };
                                                                 reader.readAsDataURL(file);
                                                             }
@@ -443,15 +615,15 @@ export default function SettingsPage() {
                                                 </label>
                                             </div>
                                             <div>
-                                                <p className="font-medium text-gray-900"><ClientT>Workspace Logo</ClientT></p>
-                                                <p className="text-xs text-gray-500"><ClientT>Upload a square image for your workspace.</ClientT></p>
+                                                <p className="font-medium text-gray-900">{t("Workspace.Logo")}</p>
+                                                <p className="text-xs text-gray-500">{tt("Workspace.LogoUploadHint", "Upload a square image for your workspace.")}</p>
                                                 {wsLogo && (
                                                     <button
                                                         onClick={() => setWsLogo(null)}
                                                         disabled={!isOwner}
                                                         className="text-xs text-red-500 hover:text-red-600 mt-1"
                                                     >
-                                                        <ClientT>Remove</ClientT>
+                                                        {t("Workspace.Remove")}
                                                     </button>
                                                 )}
                                             </div>
@@ -460,7 +632,7 @@ export default function SettingsPage() {
                                         <div className="grid grid-cols-1 gap-5">
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    <ClientT>Workspace Name</ClientT>
+                                                    {t("Workspace.Name")}
                                                 </label>
                                                 <input
                                                     type="text"
@@ -472,7 +644,7 @@ export default function SettingsPage() {
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    <ClientT>Workspace Slug</ClientT>
+                                                    {t("Workspace.Slug")}
                                                 </label>
                                                 <div className="flex gap-2">
                                                     <span className="flex items-center px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-500 text-sm">
@@ -488,6 +660,160 @@ export default function SettingsPage() {
                                                 </div>
                                             </div>
                                         </div>
+
+                                        <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-5 space-y-5">
+                                            <div>
+                                                <h3 className="text-sm font-semibold text-gray-900">{tt("Workspace.Language.Title", "Workspace Languages")}</h3>
+                                                <p className="mt-1 text-sm text-gray-500">
+                                                    {tt("Workspace.Language.Description", "Choose workspace defaults for app UI, content creation, and outgoing emails. Each member still chooses their own interface language.")}
+                                                </p>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        {tt("Workspace.Language.DefaultUi", "Default interface language")}
+                                                    </label>
+                                                    <select
+                                                        value={workspaceLocalization.defaultUiLocale}
+                                                        onChange={(e) => {
+                                                            const nextLocale = e.target.value;
+                                                            if (!isAppLocale(nextLocale)) return;
+                                                            setWorkspaceLocalization((prev) => ({
+                                                                ...prev,
+                                                                defaultUiLocale: nextLocale,
+                                                            }));
+                                                        }}
+                                                        disabled={!isOwner}
+                                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-white text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                                    >
+                                                        {localeOptions.map((locale) => (
+                                                            <option key={`workspace-ui-${locale.code}`} value={locale.code}>
+                                                                {locale.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        {tt("Workspace.Language.DefaultContent", "Default content language")}
+                                                    </label>
+                                                    <select
+                                                        value={workspaceLocalization.defaultContentLocale}
+                                                        onChange={(e) => {
+                                                            const nextLocale = e.target.value;
+                                                            if (!isAppLocale(nextLocale)) return;
+                                                            setWorkspaceLocalization((prev) => ({
+                                                                ...prev,
+                                                                defaultContentLocale: nextLocale,
+                                                                allowedLocales: prev.allowedLocales.includes(nextLocale)
+                                                                    ? prev.allowedLocales
+                                                                    : [...prev.allowedLocales, nextLocale],
+                                                            }));
+                                                        }}
+                                                        disabled={!isOwner}
+                                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-white text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                                    >
+                                                        {localeOptions.map((locale) => (
+                                                            <option key={`workspace-content-${locale.code}`} value={locale.code}>
+                                                                {locale.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        {tt("Workspace.Language.Email", "Email language")}
+                                                    </label>
+                                                    <select
+                                                        value={workspaceLocalization.emailLocale}
+                                                        onChange={(e) => {
+                                                            const nextLocale = e.target.value;
+                                                            if (!isAppLocale(nextLocale)) return;
+                                                            setWorkspaceLocalization((prev) => ({
+                                                                ...prev,
+                                                                emailLocale: nextLocale,
+                                                                allowedLocales: prev.allowedLocales.includes(nextLocale)
+                                                                    ? prev.allowedLocales
+                                                                    : [...prev.allowedLocales, nextLocale],
+                                                            }));
+                                                        }}
+                                                        disabled={!isOwner}
+                                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-white text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                                    >
+                                                        {localeOptions.map((locale) => (
+                                                            <option key={`workspace-email-${locale.code}`} value={locale.code}>
+                                                                {locale.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-3">
+                                                    {tt("Workspace.Language.Allowed", "Allowed content languages")}
+                                                </label>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                    {localeOptions.map((locale) => {
+                                                        const enabled = workspaceLocalization.allowedLocales.includes(locale.code);
+                                                        const isRequired =
+                                                            locale.code === workspaceLocalization.defaultContentLocale ||
+                                                            locale.code === workspaceLocalization.emailLocale;
+
+                                                        return (
+                                                            <label
+                                                                key={`workspace-allowed-${locale.code}`}
+                                                                className={cn(
+                                                                    "flex items-center gap-3 rounded-xl border px-4 py-3 bg-white text-sm transition-colors",
+                                                                    enabled ? "border-gray-900" : "border-gray-200",
+                                                                )}
+                                                            >
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={enabled}
+                                                                    disabled={!isOwner || isRequired}
+                                                                    onChange={() =>
+                                                                        setWorkspaceLocalization((prev) => {
+                                                                            const nextAllowed = enabled
+                                                                                ? prev.allowedLocales.filter((item) => item !== locale.code)
+                                                                                : [...prev.allowedLocales, locale.code];
+
+                                                                            return {
+                                                                                ...prev,
+                                                                                allowedLocales: nextAllowed.length > 0 ? nextAllowed : prev.allowedLocales,
+                                                                            };
+                                                                        })
+                                                                    }
+                                                                    className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                                                                />
+                                                                <span className="font-medium text-gray-800">
+                                                                    {locale.flag} {locale.name}
+                                                                </span>
+                                                            </label>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+
+                                            <label className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={workspaceLocalization.autoTranslateGeneratedContent}
+                                                    onChange={(e) =>
+                                                        setWorkspaceLocalization((prev) => ({
+                                                            ...prev,
+                                                            autoTranslateGeneratedContent: e.target.checked,
+                                                        }))
+                                                    }
+                                                    disabled={!isOwner}
+                                                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                                                />
+                                                <span>{tt("Workspace.Language.AutoTranslateDescription", "Automatically translate generated summaries when a translated version is requested and missing.")}</span>
+                                            </label>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -502,12 +828,12 @@ export default function SettingsPage() {
                                         {isSaving ? (
                                             <>
                                                 <Loader2 className="w-4 h-4 animate-spin" />
-                                                <ClientT>Updating...</ClientT>
+                                                {t("Workspace.Updating")}
                                             </>
                                         ) : (
                                             <>
                                                 <Check className="w-4 h-4" />
-                                                <ClientT>Update Workspace</ClientT>
+                                                {t("Workspace.Update")}
                                             </>
                                         )}
                                     </button>
@@ -520,63 +846,54 @@ export default function SettingsPage() {
                     {activeTab === "notifications" && (
                         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-100">
-                                <h2 className="text-lg font-semibold text-gray-900"><ClientT>Notification Preferences</ClientT></h2>
-                                <p className="text-sm text-gray-500"><ClientT>Choose how and when you want to be notified.</ClientT></p>
+                                <h2 className="text-lg font-semibold text-gray-900">{t("Notifications.Title")}</h2>
+                                <p className="text-sm text-gray-500">{t("Notifications.Description")}</p>
                             </div>
                             <div className="p-6">
                                 <div className="space-y-6">
-                                    {[
-                                        {
-                                            title: <ClientT>New Survey Response</ClientT>,
-                                            description: <ClientT>Get notified when someone completes your survey.</ClientT>,
-                                            key: "NewResponse"
-                                        },
-                                        {
-                                            title: <ClientT>Weekly Summary</ClientT>,
-                                            description: <ClientT>A weekly digest of your survey performance.</ClientT>,
-                                            key: "WeeklySummary"
-                                        },
-                                        // Team Updates notification only shown in workspace context
-                                        ...(isWorkspaceContext ? [{
-                                            title: <ClientT>Team Updates</ClientT>,
-                                            description: <ClientT>Notifications about team member changes.</ClientT>,
-                                            key: "TeamUpdates"
-                                        }] : []),
-                                    ].map((item, index) => (
-                                        <div key={index} className="flex items-start justify-between pb-6 border-b border-gray-100 last:border-0 last:pb-0">
-                                            <div>
-                                                <h3 className="font-medium text-gray-900">{item.title}</h3>
-                                                <p className="text-sm text-gray-500 mt-1">{item.description}</p>
-                                            </div>
-                                            <div className="flex items-center gap-4">
-                                                <label className="flex items-center gap-2 cursor-pointer group">
-                                                    <input
-                                                        type="checkbox"
-                                                        className="hidden"
-                                                        checked={notifications[`email${item.key}` as keyof typeof notifications]}
-                                                        onChange={() => handleNotificationToggle('email', item.key)}
-                                                    />
-                                                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${notifications[`email${item.key}` as keyof typeof notifications] ? 'bg-gray-900 border-gray-900' : 'border-gray-300 bg-white'}`}>
-                                                        {notifications[`email${item.key}` as keyof typeof notifications] && <Check className="w-3.5 h-3.5 text-white" />}
-                                                    </div>
-                                                    <span className="text-sm text-gray-600 group-hover:text-gray-900"><ClientT>Email</ClientT></span>
-                                                </label>
-                                                <label className="flex items-center gap-2 cursor-pointer group">
-                                                    <input
-                                                        type="checkbox"
-                                                        className="hidden"
-                                                        checked={notifications[`push${item.key}` as keyof typeof notifications]}
-                                                        onChange={() => handleNotificationToggle('push', item.key)}
-                                                    />
-                                                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${notifications[`push${item.key}` as keyof typeof notifications] ? 'bg-gray-900 border-gray-900' : 'border-gray-300 bg-white'}`}>
-                                                        {notifications[`push${item.key}` as keyof typeof notifications] && <Check className="w-3.5 h-3.5 text-white" />}
-                                                    </div>
-                                                    <span className="text-sm text-gray-600 group-hover:text-gray-900"><ClientT>Push</ClientT></span>
-                                                </label>
-                                            </div>
-                                        </div>
-                                    ))}
+                                    {notificationItems.map((item, index) => {
+                                        const emailStateKey = getNotificationStateKey("email", item.key);
+                                        const pushStateKey = getNotificationStateKey("push", item.key);
 
+                                        return (
+                                            <div key={index} className="flex items-start justify-between pb-6 border-b border-gray-100 last:border-0 last:pb-0">
+                                                <div>
+                                                    <h3 className="font-medium text-gray-900">{item.title}</h3>
+                                                    <p className="text-sm text-gray-500 mt-1">{item.description}</p>
+                                                </div>
+                                                <div className="flex items-center gap-4">
+                                                    {emailStateKey ? (
+                                                        <label className="flex items-center gap-2 cursor-pointer group">
+                                                            <input
+                                                                type="checkbox"
+                                                                className="hidden"
+                                                                checked={notifications[emailStateKey]}
+                                                                onChange={() => handleNotificationToggle("email", item.key)}
+                                                            />
+                                                            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${notifications[emailStateKey] ? "bg-gray-900 border-gray-900" : "border-gray-300 bg-white"}`}>
+                                                                {notifications[emailStateKey] ? <Check className="w-3.5 h-3.5 text-white" /> : null}
+                                                            </div>
+                                                            <span className="text-sm text-gray-600 group-hover:text-gray-900">{tt("Notifications.ChannelEmail", "Email")}</span>
+                                                        </label>
+                                                    ) : null}
+                                                    {pushStateKey ? (
+                                                        <label className="flex items-center gap-2 cursor-pointer group">
+                                                            <input
+                                                                type="checkbox"
+                                                                className="hidden"
+                                                                checked={notifications[pushStateKey]}
+                                                                onChange={() => handleNotificationToggle("push", item.key)}
+                                                            />
+                                                            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${notifications[pushStateKey] ? "bg-gray-900 border-gray-900" : "border-gray-300 bg-white"}`}>
+                                                                {notifications[pushStateKey] ? <Check className="w-3.5 h-3.5 text-white" /> : null}
+                                                            </div>
+                                                            <span className="text-sm text-gray-600 group-hover:text-gray-900">{tt("Notifications.ChannelPush", "Push")}</span>
+                                                        </label>
+                                                    ) : null}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                             <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
@@ -588,12 +905,12 @@ export default function SettingsPage() {
                                     {isSaving ? (
                                         <>
                                             <Loader2 className="w-4 h-4 animate-spin" />
-                                            <ClientT>Saving...</ClientT>
+                                            {t("Notifications.Saving")}
                                         </>
                                     ) : (
                                         <>
                                             <Check className="w-4 h-4" />
-                                            <ClientT>Save Preferences</ClientT>
+                                            {t("Notifications.Save")}
                                         </>
                                     )}
                                 </button>
@@ -605,8 +922,8 @@ export default function SettingsPage() {
                     {activeTab === "preferences" && (
                         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-100">
-                                <h2 className="text-lg font-semibold text-gray-900"><ClientT>App Preferences</ClientT></h2>
-                                <p className="text-sm text-gray-500"><ClientT>Customize your experience and regional settings.</ClientT></p>
+                                <h2 className="text-lg font-semibold text-gray-900">{t("Preferences.Title")}</h2>
+                                <p className="text-sm text-gray-500">{t("Preferences.Description")}</p>
                             </div>
 
                             <div className="p-6 space-y-6">
@@ -616,13 +933,14 @@ export default function SettingsPage() {
                                         <h3 className="font-medium text-gray-900">{t("Preferences.Language")}</h3>
                                     </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        {[
+                                        {localeOptions.map((lang) => (<>
+                                            {/*
                                             { code: "en", name: "English", flag: "🇺🇸" },
                                             { code: "fr", name: "Français", flag: "🇫🇷" },
                                             { code: "de", name: "Deutsch", flag: "🇩🇪" },
                                             { code: "es", name: "Español", flag: "🇪🇸" },
                                             { code: "it", name: "Italiano", flag: "🇮🇹" },
-                                        ].map((lang) => (
+                                            */}
                                             <button
                                                 key={lang.code}
                                                 onClick={() => handleLanguageChange(lang.code)}
@@ -645,7 +963,7 @@ export default function SettingsPage() {
                                                         <Check className="w-4 h-4 text-gray-900" />
                                                     </div>
                                                 )}
-                                            </button>
+                                            </button></>
                                         ))}
                                     </div>
                                 </div>
@@ -656,24 +974,24 @@ export default function SettingsPage() {
                     {activeTab === "billing" && (
                         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-100">
-                                <h2 className="text-lg font-semibold text-gray-900"><ClientT>Billing & Subscription</ClientT></h2>
-                                <p className="text-sm text-gray-500"><ClientT>Manage your workspace plan and payment methods.</ClientT></p>
+                                <h2 className="text-lg font-semibold text-gray-900">{tt("Billing.Title", "Billing & Subscription")}</h2>
+                                <p className="text-sm text-gray-500">{tt("Billing.Description", "Manage your workspace plan and payment methods.")}</p>
                             </div>
                             <div className="p-12 flex flex-col items-center justify-center text-center">
                                 <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mb-4">
                                     <CreditCard className="w-8 h-8 text-gray-400" />
                                 </div>
                                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                                    <ClientT>Current Plan:</ClientT> {activeWorkspace?.plan || "Free"}
+                                    {tt("Billing.CurrentPlan", "Current Plan:")} {activeWorkspace?.plan || tt("Billing.FreePlan", "Free")}
                                 </h3>
                                 <p className="text-gray-500 max-w-sm mb-8">
-                                    <ClientT>Billing management is coming soon. You are currently on the Free plan which includes up to 50 participants per survey.</ClientT>
+                                    {tt("Billing.ComingSoon", "Billing management is coming soon. You are currently on the Free plan which includes up to 50 participants per survey.")}
                                 </p>
                                 <button
                                     disabled
                                     className="px-6 py-3 bg-gray-100 text-gray-400 rounded-xl font-medium cursor-not-allowed"
                                 >
-                                    <ClientT>Upgrade Plan</ClientT>
+                                    {tt("Billing.Upgrade", "Upgrade Plan")}
                                 </button>
                             </div>
                         </div>
@@ -684,13 +1002,13 @@ export default function SettingsPage() {
                             {/* Password */}
                             <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                                 <div className="px-6 py-4 border-b border-gray-100">
-                                    <h2 className="text-lg font-semibold text-gray-900"><ClientT>Security Settings</ClientT></h2>
-                                    <p className="text-sm text-gray-500"><ClientT>Manage your password and account security options.</ClientT></p>
+                                    <h2 className="text-lg font-semibold text-gray-900">{tt("Security.PanelTitle", "Security Settings")}</h2>
+                                    <p className="text-sm text-gray-500">{tt("Security.PanelDescription", "Manage your password and account security options.")}</p>
                                 </div>
                                 <div className="p-6 space-y-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            <ClientT>Current Password</ClientT>
+                                            {t("Security.Current")}
                                         </label>
                                         <div className="relative">
                                             <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -704,7 +1022,7 @@ export default function SettingsPage() {
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            <ClientT>New Password</ClientT>
+                                            {t("Security.New")}
                                         </label>
                                         <div className="relative">
                                             <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -718,7 +1036,7 @@ export default function SettingsPage() {
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            <ClientT>Confirm New Password</ClientT>
+                                            {t("Security.Confirm")}
                                         </label>
                                         <div className="relative">
                                             <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -740,12 +1058,12 @@ export default function SettingsPage() {
                                         {isSaving ? (
                                             <>
                                                 <Loader2 className="w-4 h-4 animate-spin" />
-                                                <ClientT>Updating...</ClientT>
+                                                {t("Security.Updating")}
                                             </>
                                         ) : (
                                             <>
                                                 <Check className="w-4 h-4" />
-                                                <ClientT>Update Password</ClientT>
+                                                {t("Security.Update")}
                                             </>
                                         )}
                                     </button>
@@ -760,14 +1078,14 @@ export default function SettingsPage() {
                                             <Key className="w-5 h-5 text-orange-600" />
                                         </div>
                                         <div>
-                                            <h3 className="font-semibold text-gray-900"><ClientT>Two-Factor Authentication</ClientT></h3>
+                                            <h3 className="font-semibold text-gray-900">{t("Security.TwoFactor.Title")}</h3>
                                             <p className="text-sm text-gray-500 mt-1">
-                                                <ClientT>Add an extra layer of security to your account.</ClientT>
+                                                {t("Security.TwoFactor.Description")}
                                             </p>
                                         </div>
                                     </div>
                                     <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                                        <ClientT>Enable</ClientT>
+                                        {t("Security.TwoFactor.Enable")}
                                     </button>
                                 </div>
                             </div>
@@ -777,12 +1095,12 @@ export default function SettingsPage() {
                                 <div className="flex items-start gap-4">
                                     <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
                                     <div>
-                                        <h3 className="font-semibold text-red-900"><ClientT>Delete Account</ClientT></h3>
+                                        <h3 className="font-semibold text-red-900">{t("Security.Delete.Title")}</h3>
                                         <p className="text-sm text-red-700 mt-1 mb-4">
-                                            <ClientT>Permanently delete your account and all associated data. This action cannot be undone.</ClientT>
+                                            {tt("Security.Delete.FullDescription", "Permanently delete your account and all associated data. This action cannot be undone.")}
                                         </p>
                                         <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
-                                            <ClientT>Delete Account</ClientT>
+                                            {t("Security.Delete.Button")}
                                         </button>
                                     </div>
                                 </div>

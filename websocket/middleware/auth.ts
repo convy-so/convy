@@ -1,8 +1,8 @@
 import { IncomingMessage } from "http";
 import { WebSocket } from "ws";
 import { getDb } from "@/db";
-import { sessions, users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { sessions, users, members } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
 
 /**
  * WebSocket Authentication Middleware
@@ -71,9 +71,7 @@ async function verifySessionToken(token: string): Promise<{
   role: "user" | "admin" | "org_admin" | "org_member";
 } | null> {
   try {
-    console.log(
-      `[WS Auth] Verifying token: ${token.substring(0, 5)}...${token.substring(token.length - 5)}`,
-    );
+
 
     // Query session from database - check both token and id
     const [session] = await getDb()
@@ -82,13 +80,14 @@ async function verifySessionToken(token: string): Promise<{
         userId: sessions.userId,
         expiresAt: sessions.expiresAt,
         token: sessions.token,
+        activeOrganizationId: sessions.activeOrganizationId,
       })
       .from(sessions)
       .where(eq(sessions.token, token))
       .limit(1);
 
     if (!session) {
-      console.log(`[WS Auth] No session found for token.`);
+
       // Try fallback to ID just in case the cookie contains the ID
       const [sessionById] = await getDb()
         .select({
@@ -96,13 +95,14 @@ async function verifySessionToken(token: string): Promise<{
           userId: sessions.userId,
           expiresAt: sessions.expiresAt,
           token: sessions.token,
+          activeOrganizationId: sessions.activeOrganizationId,
         })
         .from(sessions)
         .where(eq(sessions.id, token))
         .limit(1);
 
       if (sessionById) {
-        console.log(`[WS Auth] Found session by ID fallback.`);
+
         // Continue with sessionById
         return processSession(sessionById);
       }
@@ -112,13 +112,10 @@ async function verifySessionToken(token: string): Promise<{
 
     return processSession(session);
 
-    async function processSession(session: any) {
+    async function processSession(session: { userId: string; id: string; expiresAt: Date | null; activeOrganizationId?: string | null }) {
       // Check if session is expired
       const now = new Date();
       if (session.expiresAt && session.expiresAt < now) {
-        console.log(
-          `[WS Auth] Session expired. Expires at: ${session.expiresAt}, Now: ${now}`,
-        );
         return null;
       }
 
@@ -134,22 +131,50 @@ async function verifySessionToken(token: string): Promise<{
         .limit(1);
 
       if (!user) {
-        console.log(`[WS Auth] User not found for session: ${session.userId}`);
         return null;
       }
 
-      console.log(`[WS Auth] Session verified for user: ${user.email}`);
+      // Determine the derived role
+      let derivedRole: "user" | "admin" | "org_admin" | "org_member" = "user";
+
+      // 1. Global Admin always wins
+      if (user.role === "admin") {
+        derivedRole = "admin";
+      } 
+      // 2. If an organization is active, check the user's role in that organization
+      else if (session.activeOrganizationId) {
+        const [membership] = await getDb()
+          .select({
+            role: members.role,
+          })
+          .from(members)
+          .where(
+            and(
+              eq(members.userId, session.userId),
+              eq(members.organizationId, session.activeOrganizationId)
+            )
+          )
+          .limit(1);
+
+        if (membership) {
+          // Map organization roles to derived roles
+          if (membership.role === "owner" || membership.role === "admin") {
+            derivedRole = "org_admin";
+          } else {
+            derivedRole = "org_member";
+          }
+        }
+      }
 
       return {
         userId: session.userId,
         sessionId: session.id,
         userEmail: user.email,
         emailVerified: user.emailVerified,
-        role: user.role as any,
+        role: derivedRole,
       };
     }
-  } catch (error) {
-    console.error("[WS Auth] Session verification error:", error);
+  } catch {
     return null;
   }
 }
@@ -204,9 +229,10 @@ export async function authenticateWebSocket(
  */
 export async function verifyPublicAccess(
   request: IncomingMessage,
-): Promise<{ surveyId: string } | AuthError> {
+): Promise<{ surveyId: string; conversationId: string } | AuthError> {
   const url = new URL(request.url || "", `http://${request.headers.host}`);
   const surveyId = url.searchParams.get("surveyId");
+  const conversationId = url.searchParams.get("conversationId");
 
   if (!surveyId) {
     return {
@@ -215,10 +241,17 @@ export async function verifyPublicAccess(
     };
   }
 
+  if (!conversationId) {
+    return {
+      code: "NO_CONVERSATION_ID",
+      message: "Conversation ID not provided",
+    };
+  }
+
   // Additional validation could be added here
   // e.g., check if survey exists and is active
 
-  return { surveyId };
+  return { surveyId, conversationId };
 }
 
 /**
@@ -244,7 +277,7 @@ export function createAuthMiddleware(requireAuth: boolean = true) {
   return async (
     ws: WebSocket,
     request: IncomingMessage,
-  ): Promise<AuthenticatedConnection | { surveyId: string } | null> => {
+  ): Promise<AuthenticatedConnection | { surveyId: string; conversationId: string } | null> => {
     if (requireAuth) {
       const result = await authenticateWebSocket(ws, request);
 

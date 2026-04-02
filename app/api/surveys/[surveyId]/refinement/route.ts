@@ -17,6 +17,7 @@ import {
   listRefinementProposals,
 } from "@/lib/education/storage";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import type { ChatMessage } from "@/lib/chat-types";
 
 export async function GET(
   _req: NextRequest,
@@ -103,7 +104,9 @@ export async function POST(
     });
 
     const transcript = Array.isArray(latestSample?.messages)
-      ? latestSample!.messages.map((message: any) => `${message.role}: ${message.content}`).join("\n\n")
+      ? latestSample.messages
+          .map((message: ChatMessage) => `${message.role}: ${message.content}`)
+          .join("\n\n")
       : "";
     const activePreset = getPersonalityPreset(personality?.assignment.presetId);
     const assistantResult = await buildRefinementAssistantResponse({

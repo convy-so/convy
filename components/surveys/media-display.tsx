@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import { FileAudio } from "lucide-react";
+import { SurveyMedia } from "@/lib/chat-types";
 
-export function MediaDisplay({ media }: { media: any }) {
+export function MediaDisplay({ media }: { media: SurveyMedia }) {
     if (!media || !media.url) return null;
 
     if (media.type === "image") {

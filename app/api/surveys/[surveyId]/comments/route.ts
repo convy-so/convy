@@ -6,7 +6,6 @@ import { getDb } from "@/db";
 import { sampleConversations, surveyCollaborationComments } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
-  publishPendingOutboxEntries,
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
@@ -97,7 +96,6 @@ export async function POST(
         },
       });
     });
-    await publishPendingOutboxEntries();
 
     return NextResponse.json({ id: commentId });
   } catch (error) {

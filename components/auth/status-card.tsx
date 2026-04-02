@@ -1,4 +1,5 @@
 import { Link } from "@/i18n/routing";
+import Image from "next/image";
 import { LucideIcon } from "lucide-react";
 
 interface StatusCardProps {
@@ -48,7 +49,7 @@ export function StatusCard({
         
         {imageSrc ? (
           <div className="flex justify-center mb-6">
-            <img src={imageSrc} alt={title} className="w-32 h-32 object-contain" />
+            <Image src={imageSrc} alt={title} width={128} height={128} className="w-32 h-32 object-contain" />
           </div>
         ) : Icon && (
           <div className={`w-16 h-16 ${iconColorClasses[iconColor]} rounded-full flex items-center justify-center mx-auto mb-6`}>

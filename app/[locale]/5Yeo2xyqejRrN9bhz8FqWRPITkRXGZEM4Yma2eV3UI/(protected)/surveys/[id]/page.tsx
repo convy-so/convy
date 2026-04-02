@@ -31,7 +31,7 @@ async function ReviewContent({
         notFound();
     }
 
-    const brief = (survey as any).brief?.brief;
+    const brief = survey.brief?.brief;
 
     return (
         <div className="space-y-8">
@@ -62,7 +62,7 @@ async function ReviewContent({
                                 <p className="text-xs font-semibold text-gray-400 uppercase">Creator</p>
                                 <div className="flex items-center gap-2 text-sm text-gray-900 font-medium">
                                     <UserIcon className="w-4 h-4 text-gray-400" />
-                                    {(survey as any).user?.name}
+                                    {survey.user?.name}
                                 </div>
                             </div>
                             <div className="space-y-1">
@@ -162,12 +162,12 @@ async function ReviewContent({
                                 Creation Conversation
                             </h3>
                             <span className="text-xs text-gray-400">
-                                {(survey as any).creationConversation?.messages?.length || 0} messages
+                                {survey.creationConversation?.messages?.length || 0} messages
                             </span>
                         </div>
 
                         <div className="space-y-6 max-h-[500px] overflow-y-auto pr-4 custom-scrollbar">
-                            {(survey as any).creationConversation?.messages?.map((msg: any, idx: number) => (
+                            {survey.creationConversation?.messages?.map((msg, idx: number) => (
                                 <div key={idx} className={`space-y-1 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
                                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">
                                         {msg.role}
@@ -180,7 +180,7 @@ async function ReviewContent({
                                     </div>
                                 </div>
                             ))}
-                            {!(survey as any).creationConversation && (
+                            {!survey.creationConversation && (
                                 <div className="py-12 text-center text-gray-400 italic">
                                     No creation conversation transcript found.
                                 </div>

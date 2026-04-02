@@ -6,9 +6,9 @@ import { useRouter } from "@/i18n/routing";
 import { Loader2 } from "lucide-react";
 
 export default function ShareableSurveyPage() {
-  const params = useParams();
+  const params = useParams<{ shareableLink: string }>();
   const router = useRouter();
-  const shareableLink = params.shareableLink as string;
+  const shareableLink = params.shareableLink;
   
   useEffect(() => {
     if (shareableLink) {

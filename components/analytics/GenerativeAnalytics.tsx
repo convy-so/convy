@@ -13,7 +13,6 @@ import {
     Tooltip,
     ResponsiveContainer,
 } from "recharts";
-import { ClientT } from "@/components/i18n/client-t";
 
 const COLORS = ["#111827", "#374151", "#6B7280", "#9CA3AF", "#D1D5DB"];
 
@@ -35,17 +34,56 @@ interface ChartProps {
 
 interface CustomTooltipProps {
     active?: boolean;
-    payload?: any[];
+    payload?: Record<string, unknown>[];
     label?: string;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+}
+
+function isChartDataPointArray(value: unknown): value is ChartDataPoint[] {
+    return Array.isArray(value) && value.every((item) => (
+        isRecord(item) &&
+        typeof item.label === "string" &&
+        typeof item.value === "number"
+    ));
+}
+
+export function isRenderChartResult(value: unknown): value is RenderChartResult {
+    if (!isRecord(value)) {
+        return false;
+    }
+
+    return (
+        typeof value.type === "string" &&
+        (value.type === "bar" || value.type === "pie" || value.type === "line") &&
+        typeof value.title === "string" &&
+        isChartDataPointArray(value.data)
+    );
+}
+
+export function isRenderTableResult(value: unknown): value is RenderTableResult {
+    if (!isRecord(value)) {
+        return false;
+    }
+
+    return (
+        !("type" in value) &&
+        typeof value.title === "string" &&
+        Array.isArray(value.columns) &&
+        Array.isArray(value.rows)
+    );
+}
+
 const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
+    const value = payload?.[0]?.value;
     if (active && payload && payload.length) {
         return (
             <div className="bg-white p-3 shadow-lg rounded-xl border border-gray-100 text-[11px]">
                 <p className="font-bold text-gray-900 mb-1">{label}</p>
                 <p className="text-gray-600">
-                    <ClientT>Value</ClientT>: <span className="font-semibold text-gray-900">{payload[0].value}</span>
+                    Value: <span className="font-semibold text-gray-900">{typeof value === "string" || typeof value === "number" ? value : ""}</span>
                 </p>
             </div>
         );
@@ -238,8 +276,8 @@ export function GenerativeAnalyticsRenderer({
     toolName: string;
     result: RenderChartResult | RenderTableResult;
 }) {
-    if (toolName === "renderChart") {
-        const chartResult = result as RenderChartResult;
+    if (toolName === "renderChart" && isRenderChartResult(result)) {
+        const chartResult = result;
         const { type, title, description, data, config } = chartResult;
         switch (type) {
             case "bar":
@@ -253,8 +291,8 @@ export function GenerativeAnalyticsRenderer({
         }
     }
 
-    if (toolName === "renderTable") {
-        const tableResult = result as RenderTableResult;
+    if (toolName === "renderTable" && isRenderTableResult(result)) {
+        const tableResult = result;
         const { title, description, columns, rows } = tableResult;
         return <GenerativeTable title={title} description={description} columns={columns} rows={rows} />;
     }

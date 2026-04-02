@@ -34,15 +34,16 @@ const usageLogs = pgTable(
       onDelete: "cascade",
     }),
 
-    // Enum-like fields as text for flexibility (could also be pgEnum)
-    type: text("type").notNull(), // 'llm_text', 'stt', 'tts', 'search', etc.
-    provider: text("provider").notNull(), // 'openai', 'deepgram', 'tavily', etc.
-    modelName: text("model_name"), // e.g. 'gpt-4o', 'nova-2'
+    type: text("type").notNull(),
+    provider: text("provider").notNull(),
+    modelName: text("model_name"),
 
-    // Metrics
     promptTokens: integer("prompt_tokens").default(0),
     completionTokens: integer("completion_tokens").default(0),
     totalTokens: integer("total_tokens").default(0),
+    inputNoCacheTokens: integer("input_no_cache_tokens").default(0),
+    cacheReadTokens: integer("cache_read_tokens").default(0),
+    cacheWriteTokens: integer("cache_write_tokens").default(0),
     durationMs: integer("duration_ms").default(0),
 
     // Cost

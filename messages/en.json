@@ -50,7 +50,7 @@
             },
             "ReadOnlyBanner": {
                 "Message": "You are viewing a completed conversation.",
-                "Link": "Go to Survey Details →"
+                "Link": "Go to Survey Details â†’"
             },
             "Chat": {
                 "Started": "Voice Conversation Started",
@@ -128,7 +128,7 @@
             "TitlePublished": "Survey Published!",
             "Subtitle": "Make your survey live and shareable",
             "SubtitlePublished": "Your survey is now live and shareable",
-            "SuccessMessage": "🎉 Your survey is now live!",
+            "SuccessMessage": "ðŸŽ‰ Your survey is now live!",
             "Buttons": {
                 "CopyLink": "Copy Link",
                 "ViewSurvey": "View Survey",
@@ -350,45 +350,6 @@
                 "Save": "Save Changes",
                 "Saving": "Saving..."
             },
-            "Embed": {
-                "Title": "Embed Widget",
-                "ActiveWarning": {
-                    "Title": "Survey must be active",
-                    "Description": "Publish your survey before generating an embed widget."
-                },
-                "Generate": {
-                    "Description": "Embed your survey on any website with a simple code snippet.",
-                    "Button": "Generate Embed Code",
-                    "Generating": "Generating..."
-                },
-                "Options": {
-                    "Inline": "Inline",
-                    "Popover": "Popover",
-                    "SideTab": "Side Tab",
-                    "Iframe": "Iframe",
-                    "Iframe2": "Option 1: iframe Embed",
-                    "Script": "Option 2: Inline Script",
-                    "Copy": "Copy",
-                    "Copied": "Copied!",
-                    "Color": "Button Color",
-                    "TabText": "Tab Label",
-                    "ScriptLabel": "{type} embed code",
-                    "Position": {
-                        "Label": "Position",
-                        "Left": "Left",
-                        "Right": "Right"
-                    }
-                },
-                "Instructions": {
-                    "Title": "How to use",
-                    "IframeTitle": "Iframe Instructions",
-                    "Step1": "Copy one of the code snippets above",
-                    "Step2": "Paste it into your website's HTML where you want the survey to appear",
-                    "Step3": "The survey will load as an interactive iframe on your page",
-                    "Step4": "Responses will be collected and visible in your dashboard"
-                },
-                "DirectLink": "Direct Link:"
-            },
             "DeleteModal": {
                 "Title": "Delete Survey",
                 "Description": "Are you sure you want to delete \"{title}\"? This action cannot be undone and will permanently remove all responses.",
@@ -407,9 +368,6 @@
                 "Deleted": "Survey deleted",
                 "DeleteFailed": "Failed to delete survey",
                 "LinkCopied": "Link copied!",
-                "EmbedGenerated": "Embed code generated!",
-                "EmbedFailed": "Failed to generate embed code",
-                "CodeCopied": "Code copied to clipboard!",
                 "Error": "An error occurred"
             }
         }
@@ -523,7 +481,7 @@
     },
     "Dashboard": {
         "Welcome": {
-            "Title": "Welcome back! 👋",
+            "Title": "Welcome back! ðŸ‘‹",
             "Subtitle": "Here's what's happening with your surveys today."
         },
         "CreateSurvey": "Create Survey",
@@ -711,7 +669,7 @@
         "MemberList": {
             "Header": "Team Members",
             "Count": "{count, plural, one {# member} other {# members}}",
-            "PendingCount": "• {count} pending",
+            "PendingCount": "â€¢ {count} pending",
             "InviteButton": "Invite",
             "You": "(you)",
             "Menu": {
@@ -761,6 +719,7 @@
         "Tabs": {
             "Profile": "Profile",
             "Workspace": "Workspace",
+            "Billing": "Billing",
             "Notifications": "Notifications",
             "Preferences": "Preferences",
             "Security": "Security"
@@ -784,11 +743,22 @@
         "Workspace": {
             "Title": "Workspace Settings",
             "Description": "Manage your workspace identity",
+            "MemberNotice": "Workspace settings are visible to members, but only the workspace owner can change them.",
             "Logo": "Workspace Logo",
             "LogoHint": "Recommended: 256x256px",
+            "LogoUploadHint": "Upload a square image for your workspace.",
             "Remove": "Remove",
             "Name": "Workspace Name",
             "Slug": "Workspace Slug",
+            "Language": {
+                "Title": "Workspace Languages",
+                "Description": "Choose workspace defaults for app UI, content creation, and outgoing emails. Each member still chooses their own interface language.",
+                "DefaultUi": "Default interface language",
+                "DefaultContent": "Default content language",
+                "Email": "Email language",
+                "Allowed": "Allowed content languages",
+                "AutoTranslateDescription": "Automatically translate generated summaries when a translated version is requested and missing."
+            },
             "Update": "Update Workspace",
             "Updating": "Updating..."
         },
@@ -797,6 +767,8 @@
             "Description": "Choose how you want to be notified",
             "Email": "Email Notifications",
             "Push": "Push Notifications",
+            "ChannelEmail": "Email",
+            "ChannelPush": "Push",
             "Saved": "Notification preferences saved",
             "Types": {
                 "NewResponse": "New survey responses",
@@ -805,6 +777,8 @@
                 "WeeklySummaryDesc": "Receive a weekly digest of your survey analytics",
                 "TeamUpdates": "Team updates",
                 "TeamUpdatesDesc": "Get notified about team member actions",
+                "SurveyComplete": "Survey complete",
+                "SurveyCompleteDesc": "Receive push notifications when an important survey flow reaches completion",
                 "RealTime": "New responses",
                 "RealTimeDesc": "Real-time alerts for new responses",
                 "MilestonesDesc": "When surveys reach response goals"
@@ -813,7 +787,17 @@
             "Saving": "Saving...",
             "Save": "Save Changes"
         },
+        "Billing": {
+            "Title": "Billing & Subscription",
+            "Description": "Manage your workspace plan and payment methods.",
+            "CurrentPlan": "Current Plan:",
+            "FreePlan": "Free",
+            "ComingSoon": "Billing management is coming soon. You are currently on the Free plan which includes up to 50 participants per survey.",
+            "Upgrade": "Upgrade Plan"
+        },
         "Security": {
+            "PanelTitle": "Security Settings",
+            "PanelDescription": "Manage your password and account security options.",
             "Title": "Change Password",
             "Description": "Update your account password",
             "Current": "Current Password",
@@ -829,6 +813,7 @@
             "Delete": {
                 "Title": "Delete Account",
                 "Description": "Once you delete your account, there is no going back. Please be certain.",
+                "FullDescription": "Permanently delete your account and all associated data. This action cannot be undone.",
                 "Button": "Delete Account"
             },
             "PasswordMismatch": "Passwords do not match"
@@ -901,7 +886,7 @@
         "Footer": {
             "Message": "Convy helps you collect better answers with <br /> less friction and more context.",
             "Contact": "Follow Convy on X",
-            "Rights": "© {year} Convy. All rights reserved.",
+            "Rights": "Â© {year} Convy. All rights reserved.",
             "Privacy": "Privacy Policy",
             "Cookies": "Cookie Policy",
             "Blog": "Blog"
@@ -1034,7 +1019,25 @@
     },
     "SurveyAnalytics": {
         "Title": "Survey Analysis",
-        "Subtitle": "AI-powered insights and metrics"
+        "Subtitle": "AI-powered insights and metrics",
+        "LoadingSummary": "Loading summary...",
+        "Chat": {
+            "Badge": "Data Assistant",
+            "Title": "Intelligence Chat",
+            "Loading": "Initializing Data Assistant..."
+        },
+        "Conversations": {
+            "Title": "Session Insights",
+            "Description": "Review the session-level summaries that feed the analytics snapshot.",
+            "Stats": {
+                "Sessions": "Sessions",
+                "HighQuality": "High quality",
+                "AverageReliability": "Average reliability"
+            },
+            "SearchPlaceholder": "Search session summaries...",
+            "EmptyTitle": "No session insights yet",
+            "EmptyDescription": "Complete a few live sessions to populate grounded analytics."
+        }
     },
     "SurveyStatus": {
         "Active": "Active",
@@ -1069,6 +1072,22 @@
             "Error": "An unexpected error occurred"
         }
     },
+    "AppError": {
+        "UnauthorizedBadge": "Access Denied",
+        "GenericBadge": "System Error",
+        "UnauthorizedTitle": "Unauthorized Access",
+        "GenericTitle": "Something went wrong",
+        "UnauthorizedDescription": "Please sign in to access this page.",
+        "GenericDescription": "An unexpected error occurred. Please try again or contact support if the issue persists.",
+        "SignIn": "Sign In",
+        "TryAgain": "Try Again"
+    },
+    "AppNotFound": {
+        "Title": "404 - Page Not Found",
+        "Description": "We've searched every sector, but this page seems to have vanished into digital space.",
+        "GoBack": "Go Back",
+        "Code": "Error Code: PAGE_NOT_FOUND"
+    },
     "Common": {
         "Cancel": "Cancel",
         "Delete": "Delete",
@@ -1099,7 +1118,7 @@
             "ChoicesText": "You are in control of your data. When you first visit, our cookie banner allows you to choose to accept all cookies or only the necessary ones. You can also clear or manage your cookies anytime directly from your browser settings."
         },
         "Privacy": {
-            "Title": "PRIVACY POLICY — CONVYY",
+            "Title": "PRIVACY POLICY â€” CONVYY",
             "Dates": {
                 "Updated": "Last Updated: March 10, 2026",
                 "Effective": "Effective Date: March 10, 2026",
@@ -1110,9 +1129,9 @@
                 "P1": "Convyy (\"we\", \"our\", \"us\") is committed to the protection of your personal data. This Privacy Policy explains how we collect, use, store, and share personal data when you access or use the Convyy platform (\"Service\"), and describes your rights under applicable law.",
                 "P2": "This Policy applies to:",
                 "Bullets": [
-                    "Customers — individuals and organizations that create and manage surveys using Convyy;",
-                    "Respondents — individuals who participate in surveys created by Customers on the Platform;",
-                    "Visitors — individuals who visit our website without registering."
+                    "Customers â€” individuals and organizations that create and manage surveys using Convyy;",
+                    "Respondents â€” individuals who participate in surveys created by Customers on the Platform;",
+                    "Visitors â€” individuals who visit our website without registering."
                 ]
             },
             "S1": {
@@ -1149,7 +1168,7 @@
                 "H24": "2.4 Data We Do Not Collect",
                 "P24": "Convyy does not intentionally collect:",
                 "B24": [
-                    "Sensitive personal data — including health data, biometric data, racial or ethnic origin, religious beliefs, political opinions, or sexual orientation — unless you as a Customer explicitly configure a survey to collect such data, in which case you are solely responsible for the appropriate legal basis and safeguards.",
+                    "Sensitive personal data â€” including health data, biometric data, racial or ethnic origin, religious beliefs, political opinions, or sexual orientation â€” unless you as a Customer explicitly configure a survey to collect such data, in which case you are solely responsible for the appropriate legal basis and safeguards.",
                     "Data from individuals under 18 years of age. If you believe a minor has submitted data through the Platform, please contact us directly."
                 ]
             },
@@ -1181,12 +1200,12 @@
                         [
                             "Survey de-duplication and integrity",
                             "De-duplication cookie, session token",
-                            "Legitimate interest — prevention of fraudulent or duplicate responses"
+                            "Legitimate interest â€” prevention of fraudulent or duplicate responses"
                         ],
                         [
                             "AI model improvement via Interaction Patterns",
-                            "Anonymized, aggregated structural signals only — never raw responses or identifiable data",
-                            "Legitimate interest — platform development (see Section 4)"
+                            "Anonymized, aggregated structural signals only â€” never raw responses or identifiable data",
+                            "Legitimate interest â€” platform development (see Section 4)"
                         ],
                         [
                             "Security monitoring and fraud prevention",
@@ -1212,9 +1231,9 @@
                 }
             },
             "S4": {
-                "Title": "4. AI Model Improvement — Our Strict Commitment",
+                "Title": "4. AI Model Improvement â€” Our Strict Commitment",
                 "P1": "This section is important and we want to be fully transparent about it.",
-                "P2": "What we extract. To improve the quality of our AI survey assistant, we analyze Interaction Patterns — structural, anonymized, and aggregated signals that help us understand:",
+                "P2": "What we extract. To improve the quality of our AI survey assistant, we analyze Interaction Patterns â€” structural, anonymized, and aggregated signals that help us understand:",
                 "B1": [
                     "Which conversational flows lead to complete, high-quality survey engagements;",
                     "Which question-phrasing approaches work best in specific domains (e.g., customer experience, HR, civic research);",
@@ -1222,19 +1241,19 @@
                 ],
                 "P3": "What we never extract or use for training:",
                 "B2": [
-                    "The substantive content of your surveys — your questions and your respondents' answers;",
+                    "The substantive content of your surveys â€” your questions and your respondents' answers;",
                     "Any information about your company's strategy, products, competitive positioning, or operations;",
                     "Any personally identifiable information about you or your respondents;",
                     "Any data that could identify your organization or be attributed to it."
                 ],
-                "P4": "The principle. Our AI learns how good conversations are structured — not what your conversations contain. The service delivery pipeline and the model improvement pipeline are architecturally separated. Raw Customer Data does not enter the model training pipeline.",
+                "P4": "The principle. Our AI learns how good conversations are structured â€” not what your conversations contain. The service delivery pipeline and the model improvement pipeline are architecturally separated. Raw Customer Data does not enter the model training pipeline.",
                 "P5": "You may object to this processing at any time by contacting us directly (see Section 9)."
             },
             "S5": {
                 "Title": "5. Cookies and Tracking Technologies",
                 "P1": "We use the following categories of cookies:",
                 "StrictlyNecessary": "Strictly Necessary Cookies (No consent required)",
-                "StrictlyNecessaryText": "These cookies are essential for the Platform to function. They include session management cookies, authentication tokens, and the survey de-duplication cookie — deployed specifically to prevent a Respondent from completing the same survey more than once. Respondents are informed of this cookie when they access a survey. This cookie contains no personal content, does not track behavior across sites, and expires upon survey completion or session end.",
+                "StrictlyNecessaryText": "These cookies are essential for the Platform to function. They include session management cookies, authentication tokens, and the survey de-duplication cookie â€” deployed specifically to prevent a Respondent from completing the same survey more than once. Respondents are informed of this cookie when they access a survey. This cookie contains no personal content, does not track behavior across sites, and expires upon survey completion or session end.",
                 "Analytics": "Analytics and Performance Cookies (Require consent)",
                 "AnalyticsText": "We use analytics tools to understand how the Platform is used. These cookies are only set after you provide active, informed consent via our cookie consent banner. You may withdraw consent at any time.",
                 "Marketing": "Marketing Cookies (Require consent)",
@@ -1243,7 +1262,7 @@
             },
             "S6": {
                 "Title": "6. Data Sharing and Third-Party Processors",
-                "P1": "We do not sell your personal data. We do not share Customer Data with third parties for their own commercial purposes. We share limited data with trusted third-party data processors — entities that act strictly on our instruction — including:",
+                "P1": "We do not sell your personal data. We do not share Customer Data with third parties for their own commercial purposes. We share limited data with trusted third-party data processors â€” entities that act strictly on our instruction â€” including:",
                 "B1": [
                     "Cloud infrastructure providers for platform hosting and storage;",
                     "Payment processors for billing, who handle payment card data under their own security-compliant frameworks;",
@@ -1297,21 +1316,21 @@
             },
             "S8": {
                 "Title": "8. International Data Transfers",
-                "P1": "Convyy is registered and primarily operates in Germany. If we transfer personal data to processors or infrastructure located in other countries, we ensure that appropriate safeguards are in place — including contractual protections, adequacy mechanisms, or other recognized legal frameworks applicable in the relevant jurisdiction.",
+                "P1": "Convyy is registered and primarily operates in Germany. If we transfer personal data to processors or infrastructure located in other countries, we ensure that appropriate safeguards are in place â€” including contractual protections, adequacy mechanisms, or other recognized legal frameworks applicable in the relevant jurisdiction.",
                 "P2": "You may request information about the specific safeguards applicable to your data by contacting us directly."
             },
             "S9": {
                 "Title": "9. Your Rights",
                 "P1": "Depending on your jurisdiction, you may have the right to:",
                 "B1": [
-                    "Access — request a copy of the personal data we hold about you;",
-                    "Rectification — request correction of inaccurate or incomplete data;",
-                    "Erasure — request deletion of your data where it is no longer necessary, or where processing is unlawful;",
-                    "Restriction — request that we limit how we process your data in certain circumstances;",
-                    "Portability — receive your data in a structured, commonly used, machine-readable format;",
-                    "Object — object to processing carried out on the basis of legitimate interest, including the use of Interaction Patterns for AI improvement. Upon a valid objection, we will cease that processing unless we can demonstrate compelling grounds that override your interests;",
-                    "Withdraw Consent — where processing is based on consent, you may withdraw it at any time without affecting the lawfulness of prior processing;",
-                    "Non-Automated Decision-Making — the right not to be subject to decisions based solely on automated processing that produce significant legal effects. Convyy does not make such decisions about you."
+                    "Access â€” request a copy of the personal data we hold about you;",
+                    "Rectification â€” request correction of inaccurate or incomplete data;",
+                    "Erasure â€” request deletion of your data where it is no longer necessary, or where processing is unlawful;",
+                    "Restriction â€” request that we limit how we process your data in certain circumstances;",
+                    "Portability â€” receive your data in a structured, commonly used, machine-readable format;",
+                    "Object â€” object to processing carried out on the basis of legitimate interest, including the use of Interaction Patterns for AI improvement. Upon a valid objection, we will cease that processing unless we can demonstrate compelling grounds that override your interests;",
+                    "Withdraw Consent â€” where processing is based on consent, you may withdraw it at any time without affecting the lawfulness of prior processing;",
+                    "Non-Automated Decision-Making â€” the right not to be subject to decisions based solely on automated processing that produce significant legal effects. Convyy does not make such decisions about you."
                 ],
                 "P2": "To exercise any of these rights, contact us directly. We will respond within 30 days. In complex cases, we may extend this period by an additional 60 days with prior notice."
             },
@@ -1330,7 +1349,7 @@
                 "Title": "11. Respondent-Specific Provisions",
                 "P1": "Respondents accessing surveys hosted on the Convyy Platform should be aware that:",
                 "B1": [
-                    "The survey is created and operated by the Customer — the organization that sent you the survey link. For questions about how your responses will be used, please contact that organization directly.",
+                    "The survey is created and operated by the Customer â€” the organization that sent you the survey link. For questions about how your responses will be used, please contact that organization directly.",
                     "Convyy acts as a data processor on behalf of the Customer for your survey responses.",
                     "You are interacting with an AI-powered conversational system. This is disclosed to you at the point of entry into every survey.",
                     "A de-duplication cookie will be stored on your device to prevent multiple submissions to the same survey. You are notified of this upon entering the survey. This cookie is technically necessary for survey integrity."
@@ -1342,7 +1361,7 @@
             },
             "S13": {
                 "Title": "13. Updates to This Privacy Policy",
-                "P1": "We may update this Privacy Policy from time to time. If we make material changes — for example, to the purposes for which we process your data or to the rights available to you — we will notify you by email and/or by a prominent notice on the Platform at least 14 days before the changes take effect. The \"Last Updated\" date at the top of this Policy reflects the most recent revision. Your continued use of the Service after the effective date of any update constitutes your acceptance of the revised Policy."
+                "P1": "We may update this Privacy Policy from time to time. If we make material changes â€” for example, to the purposes for which we process your data or to the rights available to you â€” we will notify you by email and/or by a prominent notice on the Platform at least 14 days before the changes take effect. The \"Last Updated\" date at the top of this Policy reflects the most recent revision. Your continued use of the Service after the effective date of any update constitutes your acceptance of the revised Policy."
             },
             "S14": {
                 "Title": "14. Right to Lodge a Complaint",
@@ -1350,7 +1369,7 @@
             }
         },
         "Terms": {
-            "Title": "TERMS OF SERVICE — CONVYY",
+            "Title": "TERMS OF SERVICE â€” CONVYY",
             "Dates": {
                 "Updated": "Last Updated: March 10, 2026",
                 "Effective": "Effective Date: March 10, 2026",
@@ -1358,7 +1377,7 @@
             },
             "Preamble": {
                 "Title": "Preamble",
-                "P1": "These Terms of Service (\"Terms\", \"Agreement\") constitute a legally binding contract between Convyy (\"Convyy\", \"we\", \"our\", or \"us\"), a company registered in Germany, and you (\"User\", \"Customer\", or \"you\") — whether an individual accessing the platform or a legal entity whose authorized representative has accepted these Terms on its behalf.",
+                "P1": "These Terms of Service (\"Terms\", \"Agreement\") constitute a legally binding contract between Convyy (\"Convyy\", \"we\", \"our\", or \"us\"), a company registered in Germany, and you (\"User\", \"Customer\", or \"you\") â€” whether an individual accessing the platform or a legal entity whose authorized representative has accepted these Terms on its behalf.",
                 "P2": "By registering for, accessing, or using the Convyy platform and any associated services (collectively, the \"Service\"), you confirm that you have read, understood, and agree to be bound by these Terms and all documents incorporated by reference, including our Privacy Policy and Cookie Policy.",
                 "P3": "If you do not agree with any part of these Terms, you must not access or use the Service."
             },
@@ -1368,8 +1387,8 @@
                 "B1": [
                     "\"Platform\" means the Convyy web application, APIs, mobile interfaces, and all related technology provided by Convyy.",
                     "\"Service\" means all features, tools, and functionalities provided through the Platform, including AI-powered conversational surveys, Subject Intelligence tools, analytics dashboards, collaborative Workspaces, and related functions.",
-                    "\"Customer Data\" means all data, content, and information — including survey questions, respondent answers, organization-specific configurations, and analytical outputs — that you or your respondents submit to the Platform.",
-                    "\"Interaction Patterns\" means anonymized, aggregated, statistical signals derived from conversations on the Platform that relate solely to the structure, flow, phrasing effectiveness, and domain-appropriate conversational mechanics of surveys — explicitly excluding any Customer Data, business strategies, competitive intelligence, product information, or personally identifiable information.",
+                    "\"Customer Data\" means all data, content, and information â€” including survey questions, respondent answers, organization-specific configurations, and analytical outputs â€” that you or your respondents submit to the Platform.",
+                    "\"Interaction Patterns\" means anonymized, aggregated, statistical signals derived from conversations on the Platform that relate solely to the structure, flow, phrasing effectiveness, and domain-appropriate conversational mechanics of surveys â€” explicitly excluding any Customer Data, business strategies, competitive intelligence, product information, or personally identifiable information.",
                     "\"Account\" means the registered account you create to access the Service.",
                     "\"Respondent\" means any individual who participates in a survey created by a Customer on the Platform.",
                     "\"Subscription Plan\" means the applicable paid or free plan under which you access the Service.",
@@ -1403,7 +1422,7 @@
                 "B42": [
                     "collect, process, or store data in violation of any applicable law, including the GDPR or BDSG;",
                     "create, deploy, or distribute surveys intended to deceive, manipulate, harass, defame, or harm any individual or group;",
-                    "collect sensitive personal data (as defined under Art. 9 GDPR — including health, religious beliefs, racial or ethnic origin, sexual orientation, or biometric data) without explicit, informed consent and appropriate technical safeguards;",
+                    "collect sensitive personal data (as defined under Art. 9 GDPR â€” including health, religious beliefs, racial or ethnic origin, sexual orientation, or biometric data) without explicit, informed consent and appropriate technical safeguards;",
                     "send unsolicited surveys or communications in violation of applicable anti-spam laws;",
                     "attempt to reverse engineer, decompile, disassemble, or otherwise access the source code, algorithms, or underlying technology of the Platform;",
                     "circumvent, disable, or interfere with security or access control features of the Platform;",
@@ -1415,7 +1434,7 @@
                 "P43": "4.3 Respondent Rights. You are solely responsible for ensuring that your surveys comply with all applicable laws regarding data collection from Respondents, including obtaining any necessary consents, providing required privacy notices, and honoring opt-out requests."
             },
             "S5": {
-                "Title": "5. AI Model Improvement — Interaction Patterns",
+                "Title": "5. AI Model Improvement â€” Interaction Patterns",
                 "P51": "5.1 Scope of AI Learning. To improve the quality, accuracy, and domain-relevance of our conversational AI models, Convyy uses Interaction Patterns derived from activity on the Platform. This is a core and explicitly disclosed function of the Service.",
                 "P52": "5.2 What We Use. Interaction Patterns are strictly limited to anonymized, aggregated statistical signals about:",
                 "B52": [
@@ -1438,7 +1457,7 @@
                 "Title": "6. Customer Data and Intellectual Property",
                 "P61": "6.1 Your Ownership. You retain full ownership of all Customer Data. Nothing in these Terms transfers any Intellectual Property Rights in your Customer Data to Convyy.",
                 "P62": "6.2 License to Operate. You grant Convyy a limited, non-exclusive, revocable license to access, process, store, and display Customer Data solely to the extent necessary to provide and maintain the Service.",
-                "P63": "6.3 Convyy's Intellectual Property. All rights in the Platform — including its software, design, user interface, trademarks, trade names, AI models, and underlying technology — are and remain the exclusive property of Convyy. These Terms do not grant you any rights in Convyy's intellectual property except the limited right to use the Service as described herein.",
+                "P63": "6.3 Convyy's Intellectual Property. All rights in the Platform â€” including its software, design, user interface, trademarks, trade names, AI models, and underlying technology â€” are and remain the exclusive property of Convyy. These Terms do not grant you any rights in Convyy's intellectual property except the limited right to use the Service as described herein.",
                 "P64": "6.4 Feedback. If you submit suggestions, ideas, or feedback regarding the Service (\"Feedback\"), you grant Convyy a non-exclusive, royalty-free, perpetual, irrevocable license to use and incorporate such Feedback into the Platform without restriction or compensation."
             },
             "S7": {
@@ -1471,8 +1490,8 @@
             },
             "S11": {
                 "Title": "11. Limitation of Liability",
-                "P111": "11.1 Indirect Damages. To the maximum extent permitted by applicable law, Convyy shall not be liable for any indirect, incidental, special, consequential, punitive, or exemplary damages — including loss of profits, loss of data, loss of business opportunity, or reputational harm — arising from your use of or inability to use the Service, even if Convyy has been advised of the possibility of such damages.",
-                "P112": "11.2 Cap on Liability. Convyy's total aggregate liability to you for any claims arising under or in connection with these Terms — whether in contract, tort, or otherwise — shall not exceed the greater of: (a) the total fees paid by you to Convyy in the twelve (12) months immediately preceding the event giving rise to the claim; or (b) €5 EUR, if you are on a free plan.",
+                "P111": "11.1 Indirect Damages. To the maximum extent permitted by applicable law, Convyy shall not be liable for any indirect, incidental, special, consequential, punitive, or exemplary damages â€” including loss of profits, loss of data, loss of business opportunity, or reputational harm â€” arising from your use of or inability to use the Service, even if Convyy has been advised of the possibility of such damages.",
+                "P112": "11.2 Cap on Liability. Convyy's total aggregate liability to you for any claims arising under or in connection with these Terms â€” whether in contract, tort, or otherwise â€” shall not exceed the greater of: (a) the total fees paid by you to Convyy in the twelve (12) months immediately preceding the event giving rise to the claim; or (b) â‚¬5 EUR, if you are on a free plan.",
                 "P113": "11.3 Mandatory Exceptions. Nothing in these Terms excludes or limits Convyy's liability for: (a) death or personal injury caused by Convyy's negligence; (b) fraud or fraudulent misrepresentation; (c) any liability that cannot be excluded or limited under applicable German or EU law, including consumer protection rights under the BGB."
             },
             "S12": {
@@ -1518,3 +1537,4 @@
         }
     }
 }
+

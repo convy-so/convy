@@ -8,30 +8,18 @@ import { eq, desc, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { ActionResult } from "./workspace";
 
-export async function getNotifications(): Promise<ActionResult<any[]>> {
+type NotificationRecord = typeof notifications.$inferSelect;
+
+export async function getNotifications(): Promise<ActionResult<NotificationRecord[]>> {
     try {
         const session = await auth.api.getSession({ headers: await headers() });
         if (!session) return { success: false, error: "Unauthorized" };
 
-        let userNotifications = await getDb().query.notifications.findMany({
+        const userNotifications = await getDb().query.notifications.findMany({
             where: eq(notifications.userId, session.user.id),
             orderBy: [desc(notifications.createdAt)],
             limit: 20,
         });
-
-        if (userNotifications.length === 0) {
-            await createNotification(
-                session.user.id,
-                "Welcome to Convyy!",
-                "We're glad to have you here. Explore your dashboard to get started.",
-                "success"
-            );
-            userNotifications = await getDb().query.notifications.findMany({
-                where: eq(notifications.userId, session.user.id),
-                orderBy: [desc(notifications.createdAt)],
-                limit: 20,
-            });
-        }
 
         return {
             success: true,
@@ -51,13 +39,19 @@ export async function markNotificationAsRead(id: string): Promise<ActionResult<v
         const session = await auth.api.getSession({ headers: await headers() });
         if (!session) return { success: false, error: "Unauthorized" };
 
-        await getDb()
+        const updatedRows = await getDb()
             .update(notifications)
             .set({ read: true })
-            .where(and(eq(notifications.id, id), eq(notifications.userId, session.user.id)));
+            .where(and(eq(notifications.id, id), eq(notifications.userId, session.user.id)))
+            .returning({ id: notifications.id });
+
+        if (updatedRows.length === 0) {
+            return { success: false, error: "Notification not found" };
+        }
 
         return { success: true, data: undefined };
     } catch (error) {
+        console.error("Error marking notification as read:", error);
         return { success: false, error: "Failed to mark as read" };
     }
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { normalizeAppLocale } from "@/lib/i18n/config";
 
 /**
  * GET /api/user/language/sync
@@ -10,12 +11,8 @@ import { cookies } from "next/headers";
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const locale = searchParams.get("locale");
+  const locale = normalizeAppLocale(searchParams.get("locale"));
   const redirectTo = searchParams.get("redirect") || "/dashboard";
-
-  if (!locale) {
-    return NextResponse.redirect(new URL(redirectTo, request.url));
-  }
 
   const response = NextResponse.redirect(new URL(redirectTo, request.url));
 

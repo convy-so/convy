@@ -15,8 +15,10 @@ import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
 
 export default function SignInPage() {
-  const params = useParams();
-  const locale = params.locale as string;
+  const params = useParams<{ locale?: string | string[] }>();
+  const locale = Array.isArray(params.locale)
+    ? (params.locale[0] ?? "en")
+    : (params.locale ?? "en");
   const router = useRouter();
   const t = useTranslations('Auth.SignIn');
   const [showPassword, setShowPassword] = useState(false);

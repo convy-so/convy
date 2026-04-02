@@ -15,6 +15,48 @@ import { Suspense } from "react";
 import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 
+type StatusConfig = {
+  color: string;
+  bgColor: string;
+  icon: React.ReactNode;
+};
+
+function getStatusConfig(status: string | null | undefined): StatusConfig {
+  switch (status) {
+    case "active":
+      return {
+        color: "text-emerald-600",
+        bgColor: "bg-emerald-50",
+        icon: <BarChart3 className="w-6 h-6" />,
+      };
+    case "creating":
+      return {
+        color: "text-blue-600",
+        bgColor: "bg-blue-50",
+        icon: <BarChart3 className="w-6 h-6" />,
+      };
+    case "completed":
+      return {
+        color: "text-gray-600",
+        bgColor: "bg-gray-100",
+        icon: <BarChart3 className="w-6 h-6" />,
+      };
+    case "paused":
+      return {
+        color: "text-orange-600",
+        bgColor: "bg-orange-50",
+        icon: <BarChart3 className="w-6 h-6" />,
+      };
+    case "draft":
+    default:
+      return {
+        color: "text-amber-600",
+        bgColor: "bg-amber-50",
+        icon: <BarChart3 className="w-6 h-6" />,
+      };
+  }
+}
+
 async function AnalyticsContent({ authHeaders }: { authHeaders: Headers | string | null }) {
   const session = await getVerifiedSession(authHeaders);
   const t = await getTranslations("AnalyticsPage");
@@ -67,14 +109,6 @@ async function AnalyticsContent({ authHeaders }: { authHeaders: Headers | string
     )
     .orderBy(desc(surveys.createdAt));
 
-  const statusConfig: Record<string, { color: string; bgColor: string; icon: React.ReactNode }> = {
-    active: { color: "text-emerald-600", bgColor: "bg-emerald-50", icon: <BarChart3 className="w-6 h-6" /> },
-    draft: { color: "text-amber-600", bgColor: "bg-amber-50", icon: <BarChart3 className="w-6 h-6" /> },
-    creating: { color: "text-blue-600", bgColor: "bg-blue-50", icon: <BarChart3 className="w-6 h-6" /> },
-    completed: { color: "text-gray-600", bgColor: "bg-gray-100", icon: <BarChart3 className="w-6 h-6" /> },
-    paused: { color: "text-orange-600", bgColor: "bg-orange-50", icon: <BarChart3 className="w-6 h-6" /> },
-  };
-
   return (
     <div className="min-h-screen bg-[#F8F9FB] p-6 sm:p-8 lg:p-10 font-sans text-slate-900">
       <div className="max-w-6xl mx-auto space-y-8">
@@ -100,7 +134,7 @@ async function AnalyticsContent({ authHeaders }: { authHeaders: Headers | string
         <div className="space-y-4">
           {userSurveys.length > 0 ? (
             userSurveys.map((survey) => {
-              const config = statusConfig[survey.status as string] || statusConfig.draft;
+              const config = getStatusConfig(survey.status);
 
               return (
                 <div

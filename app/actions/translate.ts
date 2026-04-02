@@ -1,40 +1,19 @@
 "use server";
 
-import { translateUIString, SupportedLanguage } from "@/lib/i18n/ai-translator";
-import { auth } from "@/lib/auth";
+import { getCurrentSession } from "@/lib/auth/session";
 import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
 import { getDb } from "@/db";
 import { users } from "@/db/schema/auth";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
-
-/**
- * Server Action to translate a string for client-side components
- */
-export async function getClientTranslation(text: string, context?: string) {
-  try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    const targetLanguage =
-      (session?.user as { preferredLanguage?: SupportedLanguage })
-        ?.preferredLanguage || "en";
-
-    if (targetLanguage === "en") return text;
-
-    return await translateUIString(text, targetLanguage, context);
-  } catch (error) {
-    console.error("[getClientTranslation] Error:", error);
-    return text;
-  }
-}
+import { normalizeAppLocale, type AppLocale } from "@/lib/i18n/config";
 
 /**
  * Server Action to update the user's preferred language
  */
-export async function updateUserLanguage(language: SupportedLanguage) {
+export async function updateUserLanguage(language: AppLocale) {
   try {
     const session = await auth.api.getSession({
       headers: await headers(),
@@ -47,7 +26,7 @@ export async function updateUserLanguage(language: SupportedLanguage) {
     const db = getDb();
     await db
       .update(users)
-      .set({ preferredLanguage: language })
+      .set({ preferredLanguage: language, uiLocale: language })
       .where(eq(users.id, session.user.id));
 
     revalidatePath("/", "layout");
@@ -63,4 +42,9 @@ export async function updateUserLanguage(language: SupportedLanguage) {
     console.error("[updateUserLanguage] Error:", error);
     return { success: false, error: "Failed to update language" };
   }
+}
+
+export async function getCurrentUiLocale() {
+  const session = await getCurrentSession();
+  return normalizeAppLocale(session?.user.uiLocale ?? session?.user.preferredLanguage);
 }

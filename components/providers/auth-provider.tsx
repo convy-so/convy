@@ -2,10 +2,13 @@
 "use client";
 
 import { authClient } from "@/lib/auth-client";
-import { Session, User } from "better-auth/types";
 import { createContext, useContext } from "react";
 
-type SessionData = typeof authClient.$Infer.Session;
+type BaseSessionData = typeof authClient.$Infer.Session;
+type SessionData = {
+    session: BaseSessionData["session"] & { activeOrganizationId?: string | null };
+    user: BaseSessionData["user"] & { preferredLanguage?: string; uiLocale?: string };
+};
 
 type AuthContextType = {
     session: SessionData["session"] | null;
@@ -24,10 +27,7 @@ export function AuthProvider({
     initialSession,
 }: {
     children: React.ReactNode;
-    initialSession?: {
-        session: Session | null;
-        user: User | null;
-    } | null;
+    initialSession?: SessionData | null;
 }) {
     // Sync with better-auth hook
     const { data, isPending } = authClient.useSession();

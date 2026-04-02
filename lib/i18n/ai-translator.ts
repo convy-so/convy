@@ -1,16 +1,14 @@
 import { generateText } from "ai";
 import { google } from "@ai-sdk/google";
 import { getCachedTranslation, setCachedTranslation } from "./ai-cache";
+import {
+  appLocaleLabels,
+  defaultAppLocale,
+  isAppLocale,
+  type AppLocale,
+} from "@/lib/i18n/config";
 
-export type SupportedLanguage = "en" | "fr" | "de" | "es" | "it";
-
-const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
-  en: "English",
-  fr: "French",
-  de: "German",
-  es: "Spanish",
-  it: "Italian",
-};
+export type SupportedLanguage = AppLocale;
 
 /**
  * Translates a UI string contextually using AI
@@ -20,15 +18,14 @@ export async function translateUIString(
   targetLanguage: SupportedLanguage,
   context: string = "General UI label",
 ): Promise<string> {
-  "use cache";
-  if (targetLanguage === "en") return text;
+  if (targetLanguage === defaultAppLocale) return text;
 
   // 1. Check Cache
   const cached = await getCachedTranslation(text, targetLanguage);
   if (cached) return cached;
 
   // 2. Generate with AI
-  const prompt = `Translate the following UI string from English to ${LANGUAGE_NAMES[targetLanguage]}.
+  const prompt = `Translate the following UI string from English to ${appLocaleLabels[targetLanguage]}.
 Context: ${context} or similar application UI.
 
 Rules:
@@ -37,7 +34,7 @@ Rules:
 - Return ONLY the translated string.
 
 English String: "${text}"
-${LANGUAGE_NAMES[targetLanguage]} Translation:`;
+${appLocaleLabels[targetLanguage]} Translation:`;
 
   try {
     const { text: translation } = await generateText({
@@ -81,8 +78,8 @@ Code:`;
     });
 
     const result = code.trim().toLowerCase().replace(/^"|"$/g, "");
-    if (["en", "fr", "de", "es", "it"].includes(result)) {
-      return result as SupportedLanguage;
+    if (isAppLocale(result)) {
+      return result;
     }
     return "unknown";
   } catch (error) {
@@ -95,5 +92,5 @@ Code:`;
  * Checks if a language code is supported
  */
 export function isSupportedLanguage(code: string): code is SupportedLanguage {
-  return ["en", "fr", "de", "es", "it"].includes(code);
+  return isAppLocale(code);
 }

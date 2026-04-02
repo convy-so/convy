@@ -13,6 +13,7 @@ import {
 } from "@/lib/education/playbook-workflow";
 import { personalityPresetIdSchema, playbookAuthorInputSchema } from "@/lib/education/playbooks";
 import { validateBrief } from "@/lib/education/creation-workflow";
+import { sampleRequestedChangeSchema } from "@/lib/education/sample-feedback";
 import {
   approvePlaybookVersion,
   createPlaybook,
@@ -29,6 +30,17 @@ import {
   upsertResearchBrief,
 } from "@/lib/education/storage";
 import { getSurveyPermissionContext, isWorkspaceOwner } from "@/lib/workspace-access";
+import { z } from "zod";
+
+const conductingProfilePayloadSchema = z.object({
+  changes: z.array(sampleRequestedChangeSchema).optional(),
+  summary: z.string().optional(),
+});
+
+const personalityOverlayPayloadSchema = z.object({
+  presetId: z.string().optional(),
+  overlay: z.record(z.string(), z.unknown()).optional(),
+});
 
 export async function POST(
   req: NextRequest,
@@ -58,10 +70,7 @@ export async function POST(
 
     switch (proposal.type) {
       case "conducting_profile": {
-        const payload = proposal.payload as {
-          changes?: Array<{ dimension: any; instruction: string; strength: any; rationale: string }>;
-          summary?: string;
-        };
+        const payload = conductingProfilePayloadSchema.parse(proposal.payload);
         const currentSample = await getActiveConductingProfile(surveyId, "sample");
         const profile = buildConductingProfileFromProposal({
           version: (currentSample?.profile.version ?? 0) + 1,
@@ -102,7 +111,11 @@ export async function POST(
         if (!briefRow || !planRow) {
           return NextResponse.json({ error: "The survey brief is not ready." }, { status: 400 });
         }
-        const patch = normalizeResearchBriefPatch(proposal.payload as Record<string, unknown>);
+        const patch = normalizeResearchBriefPatch(
+          typeof proposal.payload === "object" && proposal.payload !== null
+            ? proposal.payload
+            : {},
+        );
         const result = applyResearchBriefPatch({
           surveyId,
           brief: briefRow.brief,
@@ -133,7 +146,7 @@ export async function POST(
         break;
       }
       case "personality_overlay": {
-        const payload = proposal.payload as { presetId?: string; overlay?: Record<string, unknown> };
+        const payload = personalityOverlayPayloadSchema.parse(proposal.payload);
         const presetId = personalityPresetIdSchema.parse(payload.presetId || "balanced_researcher");
         const overlay = normalizePersonalityOverlay(payload.overlay ?? {});
         const currentSample = await getActivePersonalityAssignment(surveyId, "sample");

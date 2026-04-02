@@ -26,8 +26,10 @@ export default function VerifyEmailPage() {
 
 function VerifyEmailContent() {
   const router = useRouter();
-  const params = useParams();
-  const locale = params.locale as string;
+  const params = useParams<{ locale?: string | string[] }>();
+  const locale = Array.isArray(params.locale)
+    ? (params.locale[0] ?? "en")
+    : (params.locale ?? "en");
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
   const t = useTranslations('Auth.VerifyEmail');
@@ -64,7 +66,7 @@ function VerifyEmailContent() {
               }
             }
           });
-        } catch (error) {
+        } catch {
           setIsVerifying(false);
           toast.error(t('GenericError'));
         }
@@ -84,7 +86,7 @@ function VerifyEmailContent() {
         callbackURL: `/${locale}/dashboard`
       });
       toast.success(t('ResendSuccess'));
-    } catch (err) {
+    } catch {
       toast.error(t('ResendError'));
     } finally {
       setIsResending(false);

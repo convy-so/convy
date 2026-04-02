@@ -1,4 +1,3 @@
-
 import { Link, Section, Text } from "@react-email/components";
 import { BaseLayout, globalStyles } from "./base-layout";
 
@@ -16,13 +15,14 @@ export const SecondaryVerificationEmail = ({
   return (
     <BaseLayout previewText={previewText}>
       <Text style={globalStyles.h1}>Verify your new email</Text>
-      
+
       <Text style={globalStyles.text}>
         Hi {name ?? "there"},
       </Text>
-      
+
       <Text style={globalStyles.text}>
-        Please confirm this email address to add it as a secondary login method to your Convyy account.
+        Please confirm this email address to add it as a secondary login method
+        to your Convyy account.
       </Text>
 
       <Section style={globalStyles.buttonContainer}>
@@ -32,7 +32,8 @@ export const SecondaryVerificationEmail = ({
       </Section>
 
       <Text style={globalStyles.secondaryText}>
-        If you didn't request to add this email to an account, you can safely ignore this exact email.
+        If you didn&apos;t request to add this email to an account, you can
+        safely ignore this exact email.
       </Text>
     </BaseLayout>
   );

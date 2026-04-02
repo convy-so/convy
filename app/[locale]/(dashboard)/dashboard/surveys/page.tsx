@@ -24,6 +24,7 @@ import {
   Play,
   AlertTriangle,
   Mic,
+  Lock,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -31,30 +32,12 @@ import {
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { deleteSurveyAction, duplicateSurveyAction } from "@/app/actions/survey";
-import { fetchSurveys } from "@/lib/api/surveys";
+import { requestEditAccessAction } from "@/app/actions/collaboration";
+import { fetchSurveys, type SurveyListItem } from "@/lib/api/surveys";
 import { queryKeys } from "@/lib/query-keys";
 import { useAuth } from "@/components/providers/auth-provider";
 
 import { useTranslations } from "next-intl";
-import { getClientTranslation } from "@/app/actions/translate";
-
-
-interface Survey {
-  id: string;
-  title: string;
-  brief?: any;
-  coreObjective?: string;
-  status: string;
-  shareableLink?: string;
-  responses: number;
-  completionRate: number;
-  createdAt: string;
-  lastResponse: string;
-  isOwner: boolean;
-  isVoice: boolean;
-  sharedBy?: string;
-  role?: string;
-}
 
 type FilterTab = "all" | "published" | "unpublished";
 
@@ -76,7 +59,7 @@ function SurveysContent() {
   const activeOrgId = session?.activeOrganizationId || null;
 
   // Fetch surveys using React Query
-  const { data: surveys = [], isLoading } = useQuery<Survey[]>({
+  const { data: surveys = [], isLoading } = useQuery<SurveyListItem[]>({
     queryKey: queryKeys.surveys.all(activeOrgId),
     queryFn: fetchSurveys,
   });
@@ -103,9 +86,8 @@ function SurveysContent() {
       } else {
         toast.error(t("Card.Toasts.DeleteFailed") || "Failed to delete survey.");
       }
-    } catch (error) {
-      const errorMsg = await getClientTranslation("An error occurred while deleting.");
-      toast.error(errorMsg);
+    } catch {
+      toast.error("An error occurred while deleting.");
     } finally {
       setIsDeleting(null);
     }
@@ -118,7 +100,7 @@ function SurveysContent() {
   };
 
   // Duplicate survey
-  const handleDuplicate = async (survey: Survey) => {
+  const handleDuplicate = async (survey: SurveyListItem) => {
     setShowMenuFor(null);
     try {
       const result = await duplicateSurveyAction(survey.id);
@@ -129,7 +111,7 @@ function SurveysContent() {
       } else {
         toast.error(t("Card.Toasts.DuplicateFailed") || "Failed to delete survey.");
       }
-    } catch (error) {
+    } catch {
       toast.error(t("Card.Toasts.DuplicateFailed") || "An error occurred during duplication.");
     }
   };
@@ -138,13 +120,30 @@ function SurveysContent() {
     try {
       await navigator.clipboard.writeText(shareableLink);
       toast.success(t("Card.Toasts.LinkCopied") || "Link copied to clipboard!");
-    } catch (error) {
+    } catch {
       toast.error(t("Card.Toasts.CopyFailed") || "Failed to copy link.");
     }
   };
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
+  };
+
+  const handleRequestAccess = async (survey: SurveyListItem) => {
+    setShowMenuFor(null);
+
+    const result = await requestEditAccessAction(survey.id);
+    if (result.success) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all(activeOrgId) });
+      toast.success(
+        survey.pendingAccessRequest
+          ? t("Card.Toasts.AccessPending") || "Access request already pending."
+          : t("Card.Toasts.AccessRequested") || "Access request sent.",
+      );
+      return;
+    }
+
+    toast.error(result.error);
   };
 
   const handlePageSizeChange = (size: number) => {
@@ -358,20 +357,55 @@ function SurveysContent() {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <Link href={`/dashboard/surveys/${survey.id}`} className="block">
-                        <h3 className="text-base font-semibold text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+                      {survey.canOpen ? (
+                        <Link href={`/dashboard/surveys/${survey.id}`} className="block">
+                          <h3 className="text-base font-semibold text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+                            {survey.title}
+                          </h3>
+                        </Link>
+                      ) : (
+                        <h3 className="text-base font-semibold text-gray-900 truncate">
                           {survey.title}
                         </h3>
-                      </Link>
+                      )}
                       {survey.isVoice && (
                         <div className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-50 text-indigo-600" title="Voice Survey">
                           <Mic className="w-3 h-3" />
+                        </div>
+                      )}
+                      {survey.isLocked && (
+                        <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                          <Lock className="h-3 w-3" />
+                          Locked
                         </div>
                       )}
                     </div>
                     <p className="text-sm text-gray-500 truncate max-w-md">
                       {survey.coreObjective || survey.brief?.researchGoal || survey.brief?.learningContext || "No description provided"}
                     </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-medium text-gray-500">
+                      {survey.deliveryMode === "classroom_assigned" ? (
+                        <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-sky-700">
+                          Class-linked
+                        </span>
+                      ) : (
+                        <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-gray-600">
+                          Link survey
+                        </span>
+                      )}
+                      {survey.classroomTitle ? (
+                        <span className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-gray-600">
+                          {survey.classroomTitle}
+                        </span>
+                      ) : null}
+                    </div>
+                    {!survey.canOpen && (
+                      <p className="mt-1 text-xs text-gray-400">
+                        {survey.creatorName
+                          ? `Created by ${survey.creatorName}. Request access to open analytics, creation history, and samples.`
+                          : "Request access to open analytics, creation history, and samples."}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -385,6 +419,15 @@ function SurveysContent() {
                     <span className="text-sm font-medium text-gray-900">{survey.createdAt}</span>
                     <span className="text-xs text-gray-400">{t("Card.Created")}</span>
                   </div>
+
+                  {survey.creatorName && (
+                    <div className="hidden lg:flex flex-col items-end min-w-[120px]">
+                      <span className="text-sm font-medium text-gray-900 truncate">{survey.creatorName}</span>
+                      <span className="text-xs text-gray-400">
+                        {survey.isOwner ? "You" : "Owner"}
+                      </span>
+                    </div>
+                  )}
 
                   <div className={cn(
                     "px-2.5 py-1 rounded-full text-xs font-medium border hidden md:flex items-center gap-1.5",
@@ -407,7 +450,7 @@ function SurveysContent() {
                       <>
                         <div className="fixed inset-0 z-[80]" onClick={() => setShowMenuFor(null)} />
                         <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl border border-gray-100 shadow-xl z-[90] py-1.5 animate-in fade-in zoom-in-95 duration-200">
-                          {survey.status === "creating" && (
+                          {survey.status === "creating" && survey.canEdit && (
                             <>
                               <button
                                 onClick={() => handleContinue(survey.id)}
@@ -420,60 +463,91 @@ function SurveysContent() {
                             </>
                           )}
 
-                          <Link
-                            href={`/dashboard/surveys/${survey.id}`}
-                            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                            onClick={() => setShowMenuFor(null)}
-                          >
-                            <Eye className="w-4 h-4 text-gray-400" />
-                            {t("Card.Menu.ViewDetails")}
-                          </Link>
+                          {survey.canOpen ? (
+                            <>
+                              <Link
+                                href={`/dashboard/surveys/${survey.id}`}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                onClick={() => setShowMenuFor(null)}
+                              >
+                                <Eye className="w-4 h-4 text-gray-400" />
+                                {t("Card.Menu.ViewDetails")}
+                              </Link>
 
-                          <Link
-                            href={`/dashboard/surveys/${survey.id}?tab=settings`}
-                            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                            onClick={() => setShowMenuFor(null)}
-                          >
-                            <Edit className="w-4 h-4 text-gray-400" />
-                            {t("Card.Menu.Edit")}
-                          </Link>
+                              {survey.canEdit && (
+                                <Link
+                                  href={`/dashboard/surveys/${survey.id}?tab=settings`}
+                                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                  onClick={() => setShowMenuFor(null)}
+                                >
+                                  <Edit className="w-4 h-4 text-gray-400" />
+                                  {t("Card.Menu.Edit")}
+                                </Link>
+                              )}
 
-                          <div className="border-t border-gray-100 my-1" />
+                              <div className="border-t border-gray-100 my-1" />
 
-                          {survey.shareableLink && survey.status === "active" && (
+                              {survey.shareableLink &&
+                                survey.status === "active" &&
+                                survey.deliveryMode === "link" && (
+                                <button
+                                  onClick={() => {
+                                    const shareableLink = survey.shareableLink;
+                                    if (!shareableLink) {
+                                      return;
+                                    }
+                                    handleCopyLink(shareableLink);
+                                    setShowMenuFor(null);
+                                  }}
+                                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                >
+                                  <LinkIcon className="w-4 h-4 text-gray-400" />
+                                  {t("Card.Menu.CopyLink")}
+                                </button>
+                              )}
+
+                              {survey.isOwner && (
+                                <button
+                                  onClick={() => handleDuplicate(survey)}
+                                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                >
+                                  <Copy className="w-4 h-4 text-gray-400" />
+                                  {t("Card.Menu.Duplicate")}
+                                </button>
+                              )}
+
+                              {survey.canDelete && (
+                                <>
+                                  <div className="border-t border-gray-100 my-1" />
+
+                                  <button
+                                    onClick={() => handleDelete({ id: survey.id, title: survey.title })}
+                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                                  >
+                                    {isDeleting === survey.id ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="w-4 h-4" />
+                                    )}
+                                    {t("Card.Menu.Delete")}
+                                  </button>
+                                </>
+                              )}
+                            </>
+                          ) : (
                             <button
-                              onClick={() => {
-                                handleCopyLink(survey.shareableLink!);
-                                setShowMenuFor(null);
-                              }}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              onClick={() => void handleRequestAccess(survey)}
+                              disabled={!survey.canRequestAccess || survey.pendingAccessRequest}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                              <LinkIcon className="w-4 h-4 text-gray-400" />
-                              {t("Card.Menu.CopyLink")}
+                              <Lock className="w-4 h-4 text-slate-400" />
+                              {survey.pendingAccessRequest
+                                ? "Access Requested"
+                                : survey.canRequestAccess
+                                  ? "Request Access"
+                                  : "Locked"}
                             </button>
                           )}
-
-                          <button
-                            onClick={() => handleDuplicate(survey)}
-                            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                          >
-                            <Copy className="w-4 h-4 text-gray-400" />
-                            {t("Card.Menu.Duplicate")}
-                          </button>
-
-                          <div className="border-t border-gray-100 my-1" />
-
-                          <button
-                            onClick={() => handleDelete({ id: survey.id, title: survey.title })}
-                            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                          >
-                            {isDeleting === survey.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-4 h-4" />
-                            )}
-                            {t("Card.Menu.Delete")}
-                          </button>
                         </div>
                       </>
                     )}

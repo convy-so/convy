@@ -12,13 +12,14 @@ export const PasswordResetEmail = ({ url, name }: PasswordResetEmailProps) => {
   return (
     <BaseLayout previewText={previewText}>
       <Text style={globalStyles.h1}>Reset your password</Text>
-      
+
       <Text style={globalStyles.text}>
         Hi {name ?? "there"},
       </Text>
-      
+
       <Text style={globalStyles.text}>
-        We received a request to reset the password for your Convyy account. Click the button below to choose a new password.
+        We received a request to reset the password for your Convyy account.
+        Click the button below to choose a new password.
       </Text>
 
       <Section style={globalStyles.buttonContainer}>
@@ -28,7 +29,9 @@ export const PasswordResetEmail = ({ url, name }: PasswordResetEmailProps) => {
       </Section>
 
       <Text style={globalStyles.secondaryText}>
-        This link will expire soon. If you didn't request a password reset, you can safely ignore this email — your password will remain unchanged.
+        This link will expire soon. If you didn&apos;t request a password reset,
+        you can safely ignore this email and your password will remain
+        unchanged.
       </Text>
     </BaseLayout>
   );

@@ -38,7 +38,7 @@ export default function MacWindow() {
           <div className="flex justify-start">
             <div className="bg-gray-200 rounded-[18px] rounded-tl-[4px] px-3 py-2 max-w-[75%]">
               <p className="text-[18px] font-normal text-gray-900 leading-[1.4]">
-                I'm sorry to hear that. Was the estimate inaccurate?
+                I&apos;m sorry to hear that. Was the estimate inaccurate?
               </p>
             </div>
           </div>
@@ -54,7 +54,8 @@ export default function MacWindow() {
           <div className="flex justify-start">
             <div className="bg-gray-200 rounded-[18px] rounded-tl-[4px] px-3 py-2 max-w-[75%]">
               <p className="text-[18px] font-normal text-gray-900 leading-[1.4]">
-                Got it. I'll flag that for our logistics team. What did you like most?
+                Got it. I&apos;ll flag that for our logistics team. What did you
+                like most?
               </p>
             </div>
           </div>
@@ -70,7 +71,7 @@ export default function MacWindow() {
           <div className="flex justify-start">
             <div className="bg-gray-200 rounded-[18px] rounded-tl-[4px] px-3 py-2 max-w-[75%]">
               <p className="text-[18px] font-normal text-gray-900 leading-[1.4]">
-                That’s wonderful! Anything else you'd like to share?
+                That&apos;s wonderful! Anything else you&apos;d like to share?
               </p>
             </div>
           </div>
@@ -78,7 +79,7 @@ export default function MacWindow() {
           <div className="flex justify-end">
             <div className="bg-[#007AFF] rounded-[18px] rounded-tr-[4px] px-3 py-2 max-w-[75%]">
               <p className="text-[18px] font-normal text-white leading-[1.4]">
-                No, that's it. Keep it up!
+                No, that&apos;s it. Keep it up!
               </p>
             </div>
           </div>

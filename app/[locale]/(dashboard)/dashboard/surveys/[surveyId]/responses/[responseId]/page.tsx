@@ -14,13 +14,19 @@ import {
 
 import type { AnalyticsSessionDetail } from "@/lib/analytics";
 import { Link } from "@/i18n/routing";
-import { ClientT } from "@/components/i18n/client-t";
 import { cn } from "@/lib/utils";
 
 export default function ResponseDetailPage() {
-  const params = useParams();
-  const surveyId = params.surveyId as string;
-  const responseId = params.responseId as string;
+  const params = useParams<{
+    surveyId?: string | string[];
+    responseId?: string | string[];
+  }>();
+  const surveyId = Array.isArray(params.surveyId)
+    ? (params.surveyId[0] ?? "")
+    : (params.surveyId ?? "");
+  const responseId = Array.isArray(params.responseId)
+    ? (params.responseId[0] ?? "")
+    : (params.responseId ?? "");
 
   const [response, setResponse] = useState<AnalyticsSessionDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,16 +62,16 @@ export default function ResponseDetailPage() {
 
   if (error || !response) {
     return (
-      <div className="flex min-h-[50vh] flex-col items-center justify-center space-y-4">
-        <p className="text-gray-500">
-          {error ? <ClientT>{error}</ClientT> : <ClientT>Session not found</ClientT>}
-        </p>
+        <div className="flex min-h-[50vh] flex-col items-center justify-center space-y-4">
+          <p className="text-gray-500">
+          {error || "Session not found"}
+          </p>
         <Link
           href={`/dashboard/surveys/${surveyId}/analytics/conversations`}
           className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-white transition-colors hover:bg-gray-800"
         >
           <ArrowLeft className="h-4 w-4" />
-          <ClientT>Back to Sessions</ClientT>
+          Back to Sessions
         </Link>
       </div>
     );
@@ -102,7 +108,7 @@ export default function ResponseDetailPage() {
                 </span>
               </div>
               <p className="text-sm text-gray-500">
-                <ClientT>Analytics drilldown for</ClientT>{" "}
+                Analytics drilldown for{" "}
                 <span className="font-medium text-gray-700">{response.surveyTitle}</span>
               </p>
             </div>
@@ -115,16 +121,16 @@ export default function ResponseDetailPage() {
           <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-5 py-4">
               <h2 className="font-semibold text-gray-900">
-                <ClientT>Transcript</ClientT>
+                Transcript
               </h2>
               <span className="rounded border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-500 shadow-sm">
-                {response.transcript.length} <ClientT>turns</ClientT>
+                {response.transcript.length} turns
               </span>
             </div>
             <div className="max-h-[800px] overflow-y-auto">
               {response.transcript.length === 0 ? (
                 <div className="p-8 text-center italic text-gray-400">
-                  <ClientT>No transcript available.</ClientT>
+                  No transcript available.
                 </div>
               ) : (
                 response.transcript.map((message) => (
@@ -218,7 +224,7 @@ function StatPanel({
   rows,
 }: {
   title: string;
-  rows: Array<{ icon: any; label: string; value: string }>;
+  rows: Array<{ icon: React.ElementType; label: string; value: string }>;
 }) {
   return (
     <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
@@ -261,7 +267,7 @@ function ListPanel({
   title: string;
   items: string[];
   emptyMessage: string;
-  icon: any;
+  icon: React.ElementType;
 }) {
   return (
     <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
@@ -331,7 +337,7 @@ function QuotePanel({
               key={quote.id}
               className="rounded-xl bg-gray-50 p-4 text-sm italic leading-relaxed text-gray-700"
             >
-              "{quote.excerpt}"
+              &quot;{quote.excerpt}&quot;
               <div className="mt-2 text-[11px] font-medium not-italic text-gray-400">
                 {quote.nodeId} • reliability {quote.reliability}%
               </div>

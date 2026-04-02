@@ -6,9 +6,9 @@ import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { type SupportedLanguage } from "@/lib/i18n/ai-translator";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
+import { resolvePreferredUiLocale } from "@/lib/i18n/resolve-locale";
 
 export default function DashboardLayout({
   children,
@@ -39,15 +39,11 @@ async function DashboardLayoutContent({
   const authHeaders = await headers();
   const session = await getCurrentSession(authHeaders);
 
-  // Deep Sync: Verify database preference matches URL locale
   if (session?.user) {
-    const preferredLanguage = (session.user as any)
-      .preferredLanguage as SupportedLanguage;
+    const preferredLocale = await resolvePreferredUiLocale(session);
 
-    if (preferredLanguage && preferredLanguage !== locale) {
-      // 1. Redirect to the sync API to safely update cookies and then land on the correct locale
-      // This is the production-ready way to handle "Deep Sync" in Next.js 16
-      redirect(`/api/user/language/sync?locale=${preferredLanguage}&redirect=/${preferredLanguage}/dashboard`);
+    if (preferredLocale !== locale) {
+      redirect(`/api/user/language/sync?locale=${preferredLocale}&redirect=/${preferredLocale}/dashboard`);
     }
   }
 
@@ -57,9 +53,9 @@ async function DashboardLayoutContent({
     <NextIntlClientProvider messages={messages} locale={locale}>
       <AuthProvider initialSession={session}>
       <div className="min-h-screen bg-[#FAFAFA]">
-        <DashboardSidebar user={session?.user ?? null} />
+        <DashboardSidebar />
         <div className="lg:pl-72 transition-all duration-300 flex flex-col min-h-screen">
-          <DashboardHeader user={session?.user ?? null} />
+          <DashboardHeader />
           <main className="flex-1 p-4 lg:p-6">
             <Suspense fallback={
               <div className="flex items-center justify-center min-h-[50vh]">

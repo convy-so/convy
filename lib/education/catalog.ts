@@ -1,7 +1,9 @@
 import fs from "fs";
 import path from "path";
+import { z } from "zod";
 import {
   EDUCATION_PROGRAM_IDS,
+  coverageNodeSchema,
   type EducationProgramAssets,
   type EducationProgramId,
   type EducationProgramManifest,
@@ -10,6 +12,25 @@ import {
 const BASE_DIR = path.join(process.cwd(), "programs", "education");
 const SKILLS_DIR = path.join(process.cwd(), "skills");
 const cache = new Map<EducationProgramId, EducationProgramAssets>();
+
+const educationProgramManifestSchema = z.object({
+  id: z.enum(EDUCATION_PROGRAM_IDS),
+  displayName: z.string(),
+  description: z.string(),
+  routing: z.object({
+    keywords: z.array(z.string()),
+    examples: z.array(z.string()),
+  }),
+  requiredBriefFields: z.array(z.string()),
+  defaultDurationMinutes: z.number(),
+  analyticsDimensions: z.array(z.string()),
+  policyFlags: z.object({
+    allowSensitiveTopics: z.boolean(),
+    requiresConsent: z.boolean(),
+    piiMaskingRequired: z.boolean(),
+  }),
+  nodes: z.array(coverageNodeSchema),
+}) as z.ZodType<EducationProgramManifest>;
 
 type Phase = "creation" | "conducting" | "analytics";
 
@@ -96,9 +117,9 @@ function loadProgram(programId: EducationProgramId): EducationProgramAssets {
 
   const slug = slugFromProgramId(programId);
   const dir = path.join(BASE_DIR, slug);
-  const manifest = JSON.parse(
+  const manifest = educationProgramManifestSchema.parse(JSON.parse(
     fs.readFileSync(path.join(dir, "manifest.json"), "utf-8"),
-  ) as EducationProgramManifest;
+  ));
   const assets: EducationProgramAssets = {
     manifest,
     creationPrompt: buildPhasePrompt({ manifest, programDir: dir, phase: "creation" }),

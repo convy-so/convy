@@ -7,10 +7,9 @@ import { eq, and, isNull, count, sum, getTableColumns } from "drizzle-orm";
 import { getDb } from "@/db";
 import { projects, surveys, surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { isWorkspaceMember } from "@/lib/workspace-access";
-import { cache, cacheKeys } from "@/lib/cache";
+import { getSurveyPermissionContext, isWorkspaceMember } from "@/lib/workspace-access";
+import { invalidateDashboardCaches } from "@/lib/cache";
 import {
-  publishPendingOutboxEntries,
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
 
@@ -75,15 +74,12 @@ export async function createProjectAction(
       }
     });
 
-    // Invalidate dashboard cache
-    await cache.delete(cacheKeys.dashboardStats(session.user.id, activeOrgId));
-    await cache.delete(
-      cacheKeys.dashboardRecentSurveys(session.user.id, activeOrgId),
-    );
+    await invalidateDashboardCaches(session.user.id, activeOrgId, [
+      "stats",
+      "recentSurveys",
+    ]);
 
-    if (activeOrgId) {
-      await publishPendingOutboxEntries();
-    }
+
 
     return { success: true, data: { id: projectId } };
   } catch (error) {
@@ -122,7 +118,12 @@ export async function getProjectsAction(): Promise<
         })
         .from(projects)
         .leftJoin(surveys, eq(projects.id, surveys.projectId))
-        .where(eq(projects.organizationId, activeOrgId))
+        .where(
+          and(
+            eq(projects.organizationId, activeOrgId),
+            eq(projects.userId, session.user.id),
+          ),
+        )
         .groupBy(projects.id)
         .orderBy(projects.createdAt);
 
@@ -189,21 +190,7 @@ export async function getProjectAction(id: string): Promise<
       return { success: false, error: "Project not found" };
     }
 
-    let isAuthorized = false;
-
-    if (project.organizationId) {
-      const isMember = await isWorkspaceMember(
-        session.user.id,
-        project.organizationId,
-      );
-      if (isMember) {
-        isAuthorized = true;
-      }
-    } else {
-      if (project.userId === session.user.id) {
-        isAuthorized = true;
-      }
-    }
+    const isAuthorized = project.userId === session.user.id;
 
     if (!isAuthorized) {
       return { success: false, error: "Unauthorized" };
@@ -264,21 +251,7 @@ export async function addSurveyToProjectAction(
       return { success: false, error: "Project not found" };
     }
 
-    let isAuthorized = false;
-
-    if (project.organizationId) {
-      const isMember = await isWorkspaceMember(
-        session.user.id,
-        project.organizationId,
-      );
-      if (isMember) {
-        isAuthorized = true;
-      }
-    } else {
-      if (project.userId === session.user.id) {
-        isAuthorized = true;
-      }
-    }
+    const isAuthorized = project.userId === session.user.id;
 
     if (!isAuthorized) {
       return { success: false, error: "Unauthorized access to project" };
@@ -302,6 +275,18 @@ export async function addSurveyToProjectAction(
           error: "Survey belongs to a different workspace",
         };
       }
+
+      const permission = await getSurveyPermissionContext(
+        session.user.id,
+        survey.id,
+        { activeWorkspaceId: project.organizationId },
+      );
+      if (!permission?.canEdit) {
+        return {
+          success: false,
+          error: "You need edit access to organize this survey",
+        };
+      }
     } else {
       if (survey.userId !== session.user.id || survey.organizationId) {
         return { success: false, error: "Unauthorized access to survey" };
@@ -314,13 +299,10 @@ export async function addSurveyToProjectAction(
       .set({ projectId: projectId })
       .where(eq(surveys.id, surveyId));
 
-    // Invalidate dashboard cache
-    await cache.delete(
-      cacheKeys.dashboardStats(session.user.id, project.organizationId),
-    );
-    await cache.delete(
-      cacheKeys.dashboardRecentSurveys(session.user.id, project.organizationId),
-    );
+    await invalidateDashboardCaches(session.user.id, project.organizationId, [
+      "stats",
+      "recentSurveys",
+    ]);
 
     return { success: true, data: undefined };
   } catch (error) {
@@ -350,20 +332,7 @@ export async function removeSurveyFromProjectAction(
       return { success: false, error: "Project not found" };
     }
 
-    let isAuthorized = false;
-    if (project.organizationId) {
-      const isMember = await isWorkspaceMember(
-        session.user.id,
-        project.organizationId,
-      );
-      if (isMember) {
-        isAuthorized = true;
-      }
-    } else {
-      if (project.userId === session.user.id) {
-        isAuthorized = true;
-      }
-    }
+    const isAuthorized = project.userId === session.user.id;
 
     if (!isAuthorized) {
       return { success: false, error: "Unauthorized access to project" };
@@ -380,19 +349,30 @@ export async function removeSurveyFromProjectAction(
       return { success: false, error: "Survey not found in this project" };
     }
 
+    if (project.organizationId) {
+      const permission = await getSurveyPermissionContext(
+        session.user.id,
+        survey.id,
+        { activeWorkspaceId: project.organizationId },
+      );
+      if (!permission?.canEdit) {
+        return {
+          success: false,
+          error: "You need edit access to reorganize this survey",
+        };
+      }
+    }
+
     // 3. Update survey
     await getDb()
       .update(surveys)
       .set({ projectId: null })
       .where(eq(surveys.id, surveyId));
 
-    // Invalidate dashboard cache
-    await cache.delete(
-      cacheKeys.dashboardStats(session.user.id, project.organizationId),
-    );
-    await cache.delete(
-      cacheKeys.dashboardRecentSurveys(session.user.id, project.organizationId),
-    );
+    await invalidateDashboardCaches(session.user.id, project.organizationId, [
+      "stats",
+      "recentSurveys",
+    ]);
 
     return { success: true, data: undefined };
   } catch (error) {
@@ -424,21 +404,7 @@ export async function updateProjectAction(
     if (!project) {
       return { success: false, error: "Project not found" };
     }
-    let isAuthorized = false;
-
-    if (project.organizationId) {
-      const isMember = await isWorkspaceMember(
-        session.user.id,
-        project.organizationId,
-      );
-      if (isMember) {
-        isAuthorized = true;
-      }
-    } else {
-      if (project.userId === session.user.id) {
-        isAuthorized = true;
-      }
-    }
+    const isAuthorized = project.userId === session.user.id;
 
     if (!isAuthorized) {
       return { success: false, error: "Unauthorized" };
@@ -474,20 +440,15 @@ export async function updateProjectAction(
       }
     });
 
-    // Invalidate dashboard cache
-    await cache.delete(
-      cacheKeys.dashboardStats(session.user.id, project.organizationId),
-    );
-    await cache.delete(
-      cacheKeys.dashboardRecentSurveys(session.user.id, project.organizationId),
-    );
+    await invalidateDashboardCaches(session.user.id, project.organizationId, [
+      "stats",
+      "recentSurveys",
+    ]);
 
-    if (project.organizationId) {
-      await publishPendingOutboxEntries();
-    }
+
 
     return { success: true, data: { id: body.id } };
-  } catch (error) {
+  } catch {
     return { success: false, error: "Failed to update project" };
   }
 }
@@ -535,20 +496,15 @@ export async function deleteProjectAction(
       }
     });
 
-    // Invalidate dashboard cache
-    await cache.delete(
-      cacheKeys.dashboardStats(session.user.id, project.organizationId),
-    );
-    await cache.delete(
-      cacheKeys.dashboardRecentSurveys(session.user.id, project.organizationId),
-    );
+    await invalidateDashboardCaches(session.user.id, project.organizationId, [
+      "stats",
+      "recentSurveys",
+    ]);
 
-    if (project.organizationId) {
-      await publishPendingOutboxEntries();
-    }
+
 
     return { success: true, data: undefined };
-  } catch (error) {
+  } catch {
     return { success: false, error: "Failed to delete project" };
   }
 }
@@ -618,7 +574,6 @@ export async function transferProjectOwnershipAction(input: {
         },
       });
     });
-    await publishPendingOutboxEntries();
 
     return { success: true, data: undefined };
   } catch (error) {

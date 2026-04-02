@@ -6,7 +6,6 @@ import { env } from "@/lib/env";
 import { getDb } from "@/db";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
 import {
-  publishPendingOutboxEntries,
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
 
@@ -86,8 +85,6 @@ export async function POST(
 
       return [updated];
     });
-
-    await publishPendingOutboxEntries();
 
     return new Response(
       JSON.stringify({

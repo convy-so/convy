@@ -1,13 +1,13 @@
 import { ChatWithData } from "@/components/analytics/ChatWithData";
 import { ArrowLeft, MessageSquare, Loader2 } from "lucide-react";
 import { Link, redirect } from "@/i18n/routing";
-import { T } from "@/components/i18n/t";
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { Suspense } from "react";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import { getTranslations } from "next-intl/server";
 
 interface PageProps {
     params: Promise<{
@@ -17,6 +17,8 @@ interface PageProps {
 }
 
 async function SurveyChatContent({ surveyId, locale }: { surveyId: string; locale: string }) {
+    const t = await getTranslations({ locale, namespace: "SurveyAnalytics.Chat" });
+    const tt = (key: string, fallback: string) => (t.has(key) ? t(key) : fallback);
     const session = await getVerifiedSession();
     const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
         activeWorkspaceId: session.session.activeOrganizationId ?? null,
@@ -50,11 +52,11 @@ async function SurveyChatContent({ surveyId, locale }: { surveyId: string; local
                         <div className="flex items-center gap-2 mb-1">
                             <MessageSquare className="w-4 h-4 text-gray-400" />
                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">
-                                <T>Data Assistant</T>
+                                {tt("Badge", "Data Assistant")}
                             </span>
                         </div>
                         <h1 className="text-2xl font-black text-gray-900 tracking-tight leading-none">
-                            <T>Intelligence Chat</T>
+                            {tt("Title", "Intelligence Chat")}
                         </h1>
                     </div>
                 </div>
@@ -69,6 +71,8 @@ async function SurveyChatContent({ surveyId, locale }: { surveyId: string; local
 
 export default async function SurveyChatPage({ params }: PageProps) {
     const { surveyId, locale } = await params;
+    const t = await getTranslations({ locale, namespace: "SurveyAnalytics.Chat" });
+    const tt = (key: string, fallback: string) => (t.has(key) ? t(key) : fallback);
 
     return (
         <Suspense fallback={
@@ -85,7 +89,7 @@ export default async function SurveyChatPage({ params }: PageProps) {
                 <div className="flex-1 min-h-0 bg-white rounded-[2.5rem] border border-gray-100/50 shadow-2xl shadow-gray-200/50 overflow-hidden flex flex-col items-center justify-center bg-gray-50/30">
                     <Loader2 className="w-8 h-8 animate-spin text-gray-900 mb-4" />
                     <p className="text-sm text-gray-400 font-medium tracking-wide">
-                        <T>Initializing Data Assistant...</T>
+                        {tt("Loading", "Initializing Data Assistant...")}
                     </p>
                 </div>
             </div>

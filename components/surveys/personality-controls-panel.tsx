@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,7 +32,7 @@ export function PersonalityControlsPanel({ surveyId }: { surveyId: string }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     setIsLoading(true);
     const response = await fetch(`/api/surveys/${surveyId}/personalities`);
     const data = await response.json();
@@ -44,11 +44,11 @@ export function PersonalityControlsPanel({ surveyId }: { surveyId: string }) {
     setProbeOverlay((nextAssignment?.overlay?.probeDirectives || []).join("\n"));
     setOpeningOverlay((nextAssignment?.overlay?.openingDirectives || []).join("\n"));
     setIsLoading(false);
-  }
+  }, [surveyId]);
 
   useEffect(() => {
     load().catch(() => setIsLoading(false));
-  }, [surveyId]);
+  }, [load]);
 
   async function handleSave(applyToLive = false) {
     setIsSaving(true);

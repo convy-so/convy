@@ -14,7 +14,7 @@ export async function POST(
     const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
       activeWorkspaceId: session.session.activeOrganizationId ?? null,
     });
-    if (!permission?.canView || !permission.activeContextMatchesResource) {
+    if (!permission?.canDiscover || !permission.activeContextMatchesResource) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
     if (!permission.collaborationAllowed) {

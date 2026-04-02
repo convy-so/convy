@@ -28,11 +28,15 @@ async function AdminUsersContent() {
     const cookieHeader = (await headers()).get("cookie");
     const userGrowth = await getUserGrowthData(cookieHeader);
 
-    const chartData = userGrowth.map((ug: { date: string; count: number }) => ({
-        date: new Date(ug.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-        newUsers: ug.count,
-        cost: 0 // Not needed here
-    }));
+    const chartData = userGrowth.map((ug) => {
+        const date = typeof ug.date === "string" ? ug.date : "";
+        const count = typeof ug.count === "number" ? ug.count : 0;
+        return {
+            date: new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+            newUsers: count,
+            cost: 0 // Not needed here
+        };
+    });
 
     return (
         <>
@@ -50,12 +54,16 @@ async function AdminUsersContent() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                        {[...userGrowth].reverse().map((ug: { date: string; count: number }) => (
-                            <tr key={ug.date} className="hover:bg-gray-50/50 transition-colors">
-                                <td className="px-6 py-4 text-sm text-gray-600">{new Date(ug.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</td>
-                                <td className="px-6 py-4 text-sm text-gray-900 font-bold text-right">{ug.count} users</td>
-                            </tr>
-                        ))}
+                        {[...userGrowth].reverse().map((ug) => {
+                            const date = typeof ug.date === "string" ? ug.date : "";
+                            const count = typeof ug.count === "number" ? ug.count : 0;
+                            return (
+                                <tr key={date} className="hover:bg-gray-50/50 transition-colors">
+                                    <td className="px-6 py-4 text-sm text-gray-600">{new Date(date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-900 font-bold text-right">{count} users</td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>

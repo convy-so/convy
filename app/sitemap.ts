@@ -20,12 +20,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
         changeFrequency: "weekly" as const,
         priority: route === "" ? 1 : 0.8,
         alternates: {
-          languages: locales.reduce(
+          languages: locales.reduce<Record<string, string>>(
             (acc, l) => {
               acc[l] = `${BASE_URL}/${l}${route}`;
               return acc;
             },
-            {} as Record<string, string>,
+            {},
           ),
         },
       });

@@ -17,7 +17,7 @@ export default function SentryTestPage() {
       if (!response.ok) {
         toast.error("API error returned 500 (Check Sentry)");
       }
-    } catch (error) {
+    } catch {
       toast.error("Fetch failed");
     }
   };

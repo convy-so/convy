@@ -30,16 +30,74 @@ import {
   Check,
   AlertTriangle,
   Trash2,
-  Code,
 } from "lucide-react";
-import { ConversationCard } from "@/components/analytics/ConversationCard";
+
+// Local component for displaying raw transcript response data
+function RawResponseCard({
+  id,
+  surveyId,
+  summary,
+  durationMinutes,
+  messageCount,
+  isCompleted,
+  createdAt,
+}: {
+  id: string;
+  surveyId: string;
+  summary: string;
+  durationMinutes: number;
+  messageCount: number;
+  isCompleted: boolean;
+  createdAt: string;
+}) {
+  const statusTone = isCompleted
+    ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+    : "bg-amber-50 text-amber-700 border-amber-100";
+
+  return (
+    <Link
+      href={`/dashboard/surveys/${surveyId}/responses/${id}`}
+      className="group block rounded-2xl border border-gray-200 bg-white p-5 transition-all duration-200 hover:border-gray-300"
+    >
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${statusTone}`}>
+            {isCompleted ? "Completed" : "In Progress"}
+          </div>
+          <span className="font-mono text-xs text-gray-400">
+            #{id.slice(-4)}
+          </span>
+        </div>
+        <span className="text-xs text-gray-400">
+          {new Date(createdAt).toLocaleDateString()}
+        </span>
+      </div>
+      <p className="mb-3 line-clamp-3 text-sm font-medium leading-relaxed text-gray-700">
+        {summary}
+      </p>
+      <div className="border-t border-gray-50 pt-4 mt-auto">
+        <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+          <div className="flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5 text-gray-400" />
+            {durationMinutes} min
+          </div>
+          <div className="flex items-center gap-1.5">
+            <MessageSquare className="h-3.5 w-3.5 text-gray-400" />
+            {messageCount} msgs
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useTranslations } from "next-intl";
-import { getClientTranslation } from "@/app/actions/translate";
-import { ClientT } from "@/components/i18n/client-t";
-import { getSurveyEmbedCodeAction } from "@/app/actions/survey";
-import { fetchSurveyDetails, fetchSurveyResponses } from "@/lib/api/surveys";
+import {
+  fetchSurveyDetails,
+  fetchSurveyResponses,
+  SurveyApiError,
+} from "@/lib/api/surveys";
 import { queryKeys } from "@/lib/query-keys";
 import { CreatorSettingsPanel } from "@/components/surveys/creator-settings-panel";
 
@@ -61,11 +119,47 @@ interface Response {
 
 type TabType = "overview" | "responses" | "settings";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isTabType(value: string | null): value is TabType {
+  return value === "overview" || value === "responses" || value === "settings";
+}
+
+async function getResponseErrorMessage(
+  response: globalThis.Response,
+  fallback: string,
+): Promise<string> {
+  const contentType = response.headers.get("content-type");
+
+  if (contentType?.includes("application/json")) {
+    const errorData = await response.json();
+
+    if (isRecord(errorData)) {
+      if (typeof errorData.error === "string") {
+        return errorData.error;
+      }
+
+      if (typeof errorData.message === "string") {
+        return errorData.message;
+      }
+    }
+
+    return fallback;
+  }
+
+  const text = await response.text();
+  return text || fallback;
+}
+
 export default function SurveyDetailPage() {
-  const params = useParams();
+  const params = useParams<{ surveyId?: string | string[] }>();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const surveyId = params.surveyId as string;
+  const surveyId = Array.isArray(params.surveyId)
+    ? (params.surveyId[0] ?? "")
+    : (params.surveyId ?? "");
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<TabType>("overview");
@@ -83,23 +177,6 @@ export default function SurveyDetailPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeletingSurvey, setIsDeletingSurvey] = useState(false);
 
-  const [embedCodes, setEmbedCodes] = useState<{
-    iframeCode: string;
-    inlineScriptSnippet: string;
-    popoverScriptSnippet: string;
-    sideTabScriptSnippet: string;
-    url: string;
-  } | null>(null);
-  const [embedError, setEmbedError] = useState<string | null>(null);
-  const [isLoadingEmbed, setIsLoadingEmbed] = useState(false);
-  const [copiedEmbed, setCopiedEmbed] = useState<'iframe' | 'inline' | 'popover' | 'sidetab' | null>(null);
-  const [selectedEmbedType, setSelectedEmbedType] = useState<'inline' | 'popover' | 'sidetab' | 'iframe'>('inline');
-  const [embedOptions, setEmbedOptions] = useState({
-    color: '#4F46E5',
-    text: 'Feedback',
-    position: 'right' as 'left' | 'right'
-  });
-
   const t = useTranslations("Survey.Detail");
   const [searchPlaceholder, setSearchPlaceholder] = useState("Search responses...");
 
@@ -108,11 +185,15 @@ export default function SurveyDetailPage() {
   }, [t]);
 
   // Fetch survey details using React Query
-  const { data: surveyData, isLoading } = useQuery({
+  const detailQuery = useQuery<
+    Awaited<ReturnType<typeof fetchSurveyDetails>>,
+    SurveyApiError
+  >({
     queryKey: queryKeys.surveys.detail(surveyId),
     queryFn: () => fetchSurveyDetails(surveyId),
     enabled: !!surveyId,
   });
+  const { data: surveyData, isLoading } = detailQuery;
 
   // Derive survey and stats from the data
   const survey = surveyData?.survey || null;
@@ -144,8 +225,7 @@ export default function SurveyDetailPage() {
 
   const handleSaveSettings = async () => {
     setIsSavingSettings(true);
-    const savingMsg = await getClientTranslation("Saving settings...");
-    const loadingToast = toast.loading(savingMsg);
+    const loadingToast = toast.loading("Saving settings...");
     try {
       const response = await fetch(`/api/surveys/${surveyId}`, {
         method: "PATCH",
@@ -158,19 +238,12 @@ export default function SurveyDetailPage() {
         // Invalidate survey query to refetch updated data
         queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
       } else {
-        const contentType = response.headers.get("content-type");
-        let errorMsg = "";
-
-        if (contentType && contentType.includes("application/json")) {
-          const errorData = await response.json();
-          errorMsg = errorData.error || errorData.message || t("Toasts.SettingsFailed");
-        } else {
-          errorMsg = await response.text() || t("Toasts.SettingsFailed");
-        }
-
+        const errorMsg = await getResponseErrorMessage(response, t("Toasts.SettingsFailed"));
+        console.error("[SurveyDetailPage] Failed to save settings:", { surveyId, errorMsg });
         toast.error(errorMsg, { id: loadingToast });
       }
-    } catch (_) {
+    } catch (error) {
+      console.error("[SurveyDetailPage] Failed to save settings:", error);
       toast.error(t("Toasts.Error") || "An unexpected error occurred", { id: loadingToast });
     } finally {
       setIsSavingSettings(false);
@@ -179,8 +252,8 @@ export default function SurveyDetailPage() {
 
   // Handle tab from URL
   useEffect(() => {
-    const tabParam = searchParams.get("tab") as TabType;
-    if (tabParam && ["overview", "responses", "settings"].includes(tabParam)) {
+    const tabParam = searchParams.get("tab");
+    if (isTabType(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
@@ -198,9 +271,12 @@ export default function SurveyDetailPage() {
         queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
         toast.success(t("Toasts.StatusUpdated", { status: newStatus === "active" ? "resumed" : "paused" }));
       } else {
-        toast.error(t("Toasts.StatusFailed"));
+        const errorMsg = await getResponseErrorMessage(response, t("Toasts.StatusFailed"));
+        console.error("[SurveyDetailPage] Failed to update status:", { surveyId, newStatus, errorMsg });
+        toast.error(errorMsg);
       }
-    } catch (_) {
+    } catch (error) {
+      console.error("[SurveyDetailPage] Failed to update status:", error);
       toast.error(t("Toasts.Error"));
     }
   };
@@ -216,9 +292,15 @@ export default function SurveyDetailPage() {
         toast.success(t("Toasts.Deleted") || "Survey deleted successfully");
         router.push("/dashboard/surveys");
       } else {
-        toast.error(t("Toasts.DeleteFailed") || "Failed to delete survey");
+        const errorMsg = await getResponseErrorMessage(
+          response,
+          t("Toasts.DeleteFailed") || "Failed to delete survey",
+        );
+        console.error("[SurveyDetailPage] Failed to delete survey:", { surveyId, errorMsg });
+        toast.error(errorMsg);
       }
-    } catch (_) {
+    } catch (error) {
+      console.error("[SurveyDetailPage] Failed to delete survey:", error);
       toast.error(t("Toasts.Error") || "An unexpected error occurred");
     } finally {
       setIsDeletingSurvey(false);
@@ -235,62 +317,6 @@ export default function SurveyDetailPage() {
     }
   };
 
-  const generateEmbedCode = async () => {
-    setIsLoadingEmbed(true);
-    setEmbedError(null);
-
-    try {
-      const result = await getSurveyEmbedCodeAction(surveyId);
-
-      if (result.success) {
-        setEmbedCodes(result.data as any);
-        // toast.success(t("Toasts.EmbedGenerated")); // Remove toast for auto-generation
-      } else {
-        const errorMsg = await getClientTranslation(result.error || "Failed to generate embed code");
-        setEmbedError(errorMsg);
-        toast.error(errorMsg);
-      }
-    } catch (err) {
-      console.error("Embed generation error:", err);
-      const errorMsg = await getClientTranslation("Communication error. Please try refreshing.");
-      setEmbedError(errorMsg);
-      toast.error(errorMsg);
-    } finally {
-      setIsLoadingEmbed(false);
-    }
-  };
-
-  // Auto-generate embed code on mount or when status becomes active
-  useEffect(() => {
-    if (survey?.status === 'active' && !embedCodes && activeTab === 'settings') {
-      generateEmbedCode();
-    }
-  }, [survey?.status, activeTab]);
-
-  const copyEmbedCode = (type: 'iframe' | 'inline' | 'popover' | 'sidetab') => {
-    if (!embedCodes) return;
-
-    let code = '';
-    switch (type) {
-      case 'iframe': code = embedCodes.iframeCode; break;
-      case 'inline': code = embedCodes.inlineScriptSnippet; break;
-      case 'popover':
-        code = embedCodes.popoverScriptSnippet.replace('#4F46E5', embedOptions.color);
-        break;
-      case 'sidetab':
-        code = embedCodes.sideTabScriptSnippet
-          .replace('#4F46E5', embedOptions.color)
-          .replace('Feedback', embedOptions.text)
-          .replace('side-tab"', `side-tab" data-convy-position="${embedOptions.position}"`);
-        break;
-    }
-
-    navigator.clipboard.writeText(code);
-    setCopiedEmbed(type);
-    getClientTranslation("Code copied to clipboard").then(msg => toast.success(msg));
-    setTimeout(() => setCopiedEmbed(null), 2000);
-  };
-
   const tabs: { id: TabType; label: string | React.ReactNode; icon: React.ReactNode }[] = [
     { id: "overview", label: t("Tabs.Overview"), icon: <MessageSquare className="w-4 h-4" /> },
     { id: "responses", label: t("Tabs.Responses"), icon: <Users className="w-4 h-4" /> },
@@ -302,6 +328,33 @@ export default function SurveyDetailPage() {
     return (
       <div className="flex items-center justify-center py-24">
         <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  if (detailQuery.error?.status === 403) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-6">
+        <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+            <AlertTriangle className="h-7 w-7" />
+          </div>
+          <h1 className="mt-6 text-2xl font-semibold tracking-tight text-slate-950">
+            Access required
+          </h1>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-500">
+            This survey exists in the current workspace, but only the creator and invited collaborators can open its analytics, creation history, and sample reviews.
+          </p>
+          <div className="mt-8 flex items-center justify-center gap-3">
+            <Link
+              href="/dashboard/surveys"
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to surveys
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
@@ -458,10 +511,10 @@ export default function SurveyDetailPage() {
             <div className="bg-white rounded-xl border border-gray-100 p-4">
               <div className="flex items-center gap-2 text-gray-500 mb-2">
                 <TrendingUp className="w-4 h-4" />
-                <span className="text-sm"><ClientT>Completion Rate</ClientT></span>
+                <span className="text-sm">Completion Rate</span>
               </div>
               <p className="text-2xl font-bold text-gray-900">{stats?.completionRate || 0}%</p>
-              <p className="text-xs text-gray-400 mt-1"><ClientT>{`${stats?.completedResponses || 0} completions`}</ClientT></p>
+              <p className="text-xs text-gray-400 mt-1">{`${stats?.completedResponses || 0} completions`}</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-100 p-4">
               <div className="flex items-center gap-2 text-gray-500 mb-2">
@@ -645,18 +698,12 @@ export default function SurveyDetailPage() {
                     if (match) durationMinutes = parseInt(match[1]);
                   }
 
-                  // Map sentiment string to score if score is missing (approximate)
-                  let sentimentScore = response.sentimentScore ?? 0;
-                  if (response.sentiment === 'positive' && !response.sentimentScore) sentimentScore = 0.8;
-                  if (response.sentiment === 'negative' && !response.sentimentScore) sentimentScore = -0.8;
-
                   return (
-                    <ConversationCard
+                    <RawResponseCard
                       key={response.id}
                       id={response.id}
                       surveyId={surveyId}
                       summary={response.summary || response.keyInsights?.[0] || t("Responses.Card.NoSummary")}
-                      sentimentScore={sentimentScore}
                       durationMinutes={durationMinutes}
                       messageCount={response.messageCount || 0}
                       isCompleted={response.status === 'completed'}
@@ -774,189 +821,6 @@ export default function SurveyDetailPage() {
           </div>
 
           <CreatorSettingsPanel surveyId={surveyId} />
-
-          {/* Embed Widget Section */}
-          <div className="bg-white rounded-xl border border-gray-100 p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Code className="w-5 h-5 text-gray-700" />
-              <h3 className="font-semibold text-gray-900">{t("Embed.Title")}</h3>
-            </div>
-
-            {survey.status !== "active" ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-amber-900 mb-1">{t("Embed.ActiveWarning.Title")}</p>
-                    <p className="text-sm text-amber-700">{t("Embed.ActiveWarning.Description")}</p>
-                  </div>
-                </div>
-              </div>
-            ) : !embedCodes ? (
-              <div className="text-center py-6">
-                <p className="text-gray-500 mb-4">{t("Embed.Generate.Description")}</p>
-                <button
-                  onClick={generateEmbedCode}
-                  disabled={isLoadingEmbed}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50"
-                >
-                  {isLoadingEmbed ? <Loader2 className="w-4 h-4 animate-spin" /> : <Code className="w-4 h-4" />}
-                  {isLoadingEmbed ? t("Embed.Generate.Generating") : t("Embed.Generate.Button")}
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {/* Embed Type Selector */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {[
-                    { id: 'inline', label: 'Inline', icon: <Code className="w-4 h-4" /> },
-                    { id: 'popover', label: 'Popover', icon: <MessageSquare className="w-4 h-4" /> },
-                    { id: 'sidetab', label: 'Side Tab', icon: <ChevronRight className="w-4 h-4" /> },
-                    { id: 'iframe', label: 'Iframe', icon: <Copy className="w-4 h-4" /> },
-                  ].map((type) => (
-                    <button
-                      key={type.id}
-                      onClick={() => setSelectedEmbedType(type.id as any)}
-                      className={cn(
-                        "flex flex-col items-center gap-2 p-3 rounded-xl border text-sm font-medium transition-all",
-                        selectedEmbedType === type.id
-                          ? "bg-gray-900 text-white border-gray-900 shadow-md"
-                          : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
-                      )}
-                    >
-                      {type.icon}
-                      {t(`Embed.Options.${type.id === 'sidetab' ? 'SideTab' : type.label}`)}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Customization Options */}
-                {(selectedEmbedType === 'popover' || selectedEmbedType === 'sidetab') && (
-                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("Embed.Options.Color")}</label>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="color"
-                          value={embedOptions.color}
-                          onChange={(e) => setEmbedOptions({ ...embedOptions, color: e.target.value })}
-                          className="w-10 h-10 rounded-lg cursor-pointer border-0 p-0"
-                        />
-                        <input
-                          type="text"
-                          value={embedOptions.color}
-                          onChange={(e) => setEmbedOptions({ ...embedOptions, color: e.target.value })}
-                          className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-                        />
-                      </div>
-                    </div>
-                    {selectedEmbedType === 'sidetab' && (
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("Embed.Options.TabText")}</label>
-                        <input
-                          type="text"
-                          value={embedOptions.text}
-                          onChange={(e) => setEmbedOptions({ ...embedOptions, text: e.target.value })}
-                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-                        />
-                      </div>
-                    )}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("Embed.Options.Position.Label")}</label>
-                      <div className="flex bg-white p-1 rounded-lg border border-gray-200">
-                        <button
-                          onClick={() => setEmbedOptions({ ...embedOptions, position: 'left' })}
-                          className={cn("flex-1 py-1 px-3 rounded-md text-xs transition-colors", embedOptions.position === 'left' ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50")}
-                        >
-                          {t("Embed.Options.Position.Left")}
-                        </button>
-                        <button
-                          onClick={() => setEmbedOptions({ ...embedOptions, position: 'right' })}
-                          className={cn("flex-1 py-1 px-3 rounded-md text-xs transition-colors", embedOptions.position === 'right' ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50")}
-                        >
-                          {t("Embed.Options.Position.Right")}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Code Display */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium text-gray-700 capitalize">
-                      {t("Embed.Options.ScriptLabel", { type: selectedEmbedType })}
-                    </label>
-                    <button
-                      onClick={() => copyEmbedCode(selectedEmbedType)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                      {copiedEmbed === selectedEmbedType ? (
-                        <>
-                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                          <span className="text-emerald-600">{t("Toasts.LinkCopied")}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5" />
-                          {t("Embed.Options.Copy")}
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <div className="bg-gray-900 rounded-xl p-4 overflow-x-auto border border-gray-800 shadow-inner">
-                    <pre className="text-xs text-emerald-400 font-mono whitespace-pre-wrap break-all">
-                      {selectedEmbedType === 'inline' && embedCodes.inlineScriptSnippet}
-                      {selectedEmbedType === 'popover' && embedCodes.popoverScriptSnippet.replace('#4F46E5', embedOptions.color)}
-                      {selectedEmbedType === 'sidetab' && embedCodes.sideTabScriptSnippet
-                        .replace('#4F46E5', embedOptions.color)
-                        .replace('Feedback', embedOptions.text)
-                        .replace('side-tab"', `side-tab" data-convy-position="${embedOptions.position}"`)
-                      }
-                      {selectedEmbedType === 'iframe' && embedCodes.iframeCode}
-                    </pre>
-                  </div>
-                </div>
-
-                {/* Usage Instructions */}
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                  <h4 className="font-medium text-blue-900 mb-2 flex items-center gap-2">
-                    <Sparkles className="w-4 h-4" />
-                    {t(`Embed.Instructions.${selectedEmbedType === 'iframe' ? 'IframeTitle' : 'Title'}`)}
-                  </h4>
-                  <ul className="text-sm text-blue-800 space-y-1.5 list-disc list-inside">
-                    {selectedEmbedType === 'iframe' ? (
-                      <>
-                        <li>{t("Embed.Instructions.Step1")}</li>
-                        <li>{t("Embed.Instructions.Step2")}</li>
-                        <li>{t("Embed.Instructions.Step3")}</li>
-                        <li>{t("Embed.Instructions.Step4")}</li>
-                      </>
-                    ) : (
-                      <>
-                        <li>{t("Embed.Instructions.Step1")}</li>
-                        <li>{t("Embed.Instructions.Step2")}</li>
-                        <li>{t("Embed.Instructions.Step3")}</li>
-                        <li>{t("Embed.Instructions.Step4")}</li>
-                      </>
-                    )}
-                  </ul>
-                </div>
-
-                {/* Survey URL */}
-                <div className="pt-3 border-t border-gray-100">
-                  <p className="text-xs text-gray-500 mb-1">{t("Embed.DirectLink")}</p>
-                  <p className="text-sm text-gray-700 font-mono bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 break-all">{embedCodes.url}</p>
-                </div>
-              </div>
-            )}
-
-            {embedError && (
-              <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-4">
-                <p className="text-sm text-red-800">{embedError}</p>
-              </div>
-            )}
-          </div>
         </div>
       )}
 

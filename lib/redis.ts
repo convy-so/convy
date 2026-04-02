@@ -12,7 +12,6 @@ const redisOptions: RedisOptions = {
     const delay = Math.min(times * 50, 2000);
     // Suppress reconnection logs during build to keep output clean, but log in dev/prod
     if (process.env.NEXT_PHASE !== "phase-production-build") {
-      console.log(`[Redis] Reconnecting... attempt ${times}, delay ${delay}ms`);
     }
     return delay;
   },
@@ -41,9 +40,9 @@ const getEffectiveOptions = (url: string) => {
  */
 
 declare global {
-  // eslint-disable-next-line no-var
+   
   var sharedRedisClient: Redis | undefined;
-  // eslint-disable-next-line no-var
+   
   var sharedRedisSubscriber: Redis | undefined;
 }
 
@@ -65,12 +64,8 @@ export function getRedisClient(options?: { fresh?: boolean }): Redis {
     });
 
     if (process.env.NEXT_PHASE !== "phase-production-build") {
-      global.sharedRedisClient.on("connect", () =>
-        console.log("[Redis Client] Connected"),
-      );
-      global.sharedRedisClient.on("ready", () =>
-        console.log("[Redis Client] Ready"),
-      );
+      global.sharedRedisClient.on("connect", () => {});
+      global.sharedRedisClient.on("ready", () => {});
     }
   }
 
@@ -126,19 +121,16 @@ export async function closeRedisConnections(): Promise<void> {
   const promises: Promise<string>[] = [];
 
   if (global.sharedRedisClient) {
-    console.log("[Redis] Closing client connection...");
     promises.push(global.sharedRedisClient.quit());
     global.sharedRedisClient = undefined;
   }
 
   if (global.sharedRedisSubscriber) {
-    console.log("[Redis] Closing subscriber connection...");
     promises.push(global.sharedRedisSubscriber.quit());
     global.sharedRedisSubscriber = undefined;
   }
 
   await Promise.all(promises);
-  console.log("[Redis] All shared connections closed");
 }
 
 /**
@@ -149,7 +141,6 @@ export async function testRedisConnection(): Promise<boolean> {
   try {
     const client = getRedisClient();
     const result = await client.ping();
-    console.log("[Redis] Connection test: PONG -", result);
     return result === "PONG";
   } catch (error) {
     console.error("[Redis] Connection test failed:", error);

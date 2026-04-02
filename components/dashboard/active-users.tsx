@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { usePresence } from "@/hooks/use-presence";
 import { cn } from "@/lib/utils";
 
@@ -22,7 +23,14 @@ export function ActiveUsers({ workspaceId, surveyId, className }: ActiveUsersPro
             className="w-8 h-8 rounded-full border-2 border-white overflow-hidden bg-gray-100 shadow-sm ring-1 ring-black/5"
           >
             {user.image ? (
-              <img src={user.image} alt={user.name} className="w-full h-full object-cover" />
+              <Image
+                src={user.image}
+                alt={user.name}
+                width={32}
+                height={32}
+                unoptimized
+                className="w-full h-full object-cover"
+              />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[10px] font-bold text-white">
                 {user.name && user.name !== "User" ? user.name.charAt(0).toUpperCase() : "U"}

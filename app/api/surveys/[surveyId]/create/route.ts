@@ -1,47 +1,64 @@
-import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
-import { and, eq } from "drizzle-orm";
+import { stepCountIs, tool } from "ai";
+import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
+import { z } from "zod";
 import { surveyCreationConversations, surveys } from "@/db/schema";
+import {
+  normalizeMessages as toModelMessages,
+  streamAIResponse,
+} from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getClientIP, apiRateLimiter } from "@/lib/ratelimit";
+import { toPersistedUIChatMessages, toUIMessages } from "@/lib/chat-ui-messages";
+import { type ChatMessage, type ExtractedData } from "@/lib/chat-types";
 import {
   acquireSurveyLease,
   getActiveSurveyLease,
   getCurrentSurveyRevision,
-  publishPendingOutboxEntries,
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
+import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import { getClientIP, apiRateLimiter } from "@/lib/ratelimit";
+import {
+  buildCreationSystemPrompt,
+  type CreationAgentState,
+} from "@/lib/education/creation-agent";
+import {
+  deriveCreationMediaDecision,
+  getCreationFinishSurveyToolDefinition,
+  getCreationRequestMediaUploadToolDefinition,
+  isCreationMediaDecisionResolved,
+} from "@/lib/education/agent-tools";
+import {
+  buildCreationCollectedInfo,
+  buildCreationExtractedData,
+} from "@/lib/education/creation-state";
 import {
   persistCreationConversation,
   runCreationWorkflow,
-  type CreationMessage,
 } from "@/lib/education/creation-workflow";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
 
 export const maxDuration = 300;
 
-function normalizeMessages(messages: any[]): CreationMessage[] {
-  return messages
-    .map((message) => {
-      const content =
-        typeof message.content === "string"
-          ? message.content
-          : Array.isArray(message.parts)
-            ? message.parts
-                .filter((part: any) => part.type === "text")
-                .map((part: any) => part.text)
-                .join("")
-            : "";
-      return {
-        id: message.id,
-        role: message.role,
-        content,
-        timestamp: message.timestamp || new Date().toISOString(),
-      } as CreationMessage;
-    })
-    .filter((message) => message.role === "user" || message.role === "assistant");
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function normalizeExtractedData(value: unknown): ExtractedData {
+  return isRecord(value) ? value : {};
+}
+
+function normalizeCreationMessages(messages: readonly unknown[]): ChatMessage[] {
+  return toPersistedUIChatMessages(messages, ["user", "assistant", "system", "tool"]).map(
+    (message) => ({
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      parts: message.parts,
+      timestamp: message.timestamp,
+    }),
+  );
 }
 
 async function ensureCreationLease(input: {
@@ -69,7 +86,7 @@ async function ensureCreationLease(input: {
     return { ok: true as const, lease: activeLease };
   }
 
-  return await acquireSurveyLease({
+  return acquireSurveyLease({
     surveyId: input.surveyId,
     stage: "creation",
     userId: input.userId,
@@ -85,16 +102,24 @@ export async function GET(
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
+    const permission = await getSurveyPermissionContext(
+      session.user.id,
+      surveyId,
+      {
+        activeWorkspaceId: session.session.activeOrganizationId ?? null,
+      },
+    );
 
     if (!permission?.canView || !permission.activeContextMatchesResource) {
       return new Response("Unauthorized", { status: 403 });
     }
 
     const [survey, creationConversation, revision, lease] = await Promise.all([
-      getDb().select().from(surveys).where(eq(surveys.id, surveyId)).then((rows) => rows[0]),
+      getDb()
+        .select()
+        .from(surveys)
+        .where(eq(surveys.id, surveyId))
+        .then((rows) => rows[0]),
       getDb()
         .select()
         .from(surveyCreationConversations)
@@ -154,17 +179,37 @@ export async function POST(
     const session = await getVerifiedSession();
     const { surveyId } = await params;
     const body = await request.json();
-    const incomingMessages = Array.isArray(body.messages) ? body.messages : null;
-    if (!incomingMessages) return new Response("Invalid messages", { status: 400 });
+    const incomingMessages = Array.isArray(body.messages)
+      ? body.messages
+      : null;
+    if (!incomingMessages)
+      return new Response("Invalid messages", { status: 400 });
 
-    const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
+    const [survey, existingConversation] = await Promise.all([
+      getDb()
+        .select()
+        .from(surveys)
+        .where(eq(surveys.id, surveyId))
+        .then((rows) => rows[0]),
+      getDb()
+        .select()
+        .from(surveyCreationConversations)
+        .where(eq(surveyCreationConversations.surveyId, surveyId))
+        .then((rows) => rows[0]),
+    ]);
     if (!survey) return new Response("Survey not found", { status: 404 });
 
-    const permission = await getSurveyPermissionContext(session.user.id, survey.id, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
+    const permission = await getSurveyPermissionContext(
+      session.user.id,
+      survey.id,
+      {
+        activeWorkspaceId: session.session.activeOrganizationId ?? null,
+      },
+    );
     if (!permission?.canEdit || !permission.activeContextMatchesResource) {
-      return new Response("Unauthorized: Editor access required", { status: 403 });
+      return new Response("Unauthorized: Editor access required", {
+        status: 403,
+      });
     }
     if (survey.status !== "creating") {
       return new Response(
@@ -191,7 +236,9 @@ export async function POST(
       surveyId,
       userId: session.user.id,
       sessionId:
-        typeof body.sessionId === "string" ? body.sessionId : session.session.id,
+        typeof body.sessionId === "string"
+          ? body.sessionId
+          : session.session.id,
       leaseToken: typeof body.leaseToken === "string" ? body.leaseToken : null,
       force: Boolean(body.forceLease),
     });
@@ -206,109 +253,168 @@ export async function POST(
       );
     }
 
-    const messages = normalizeMessages(incomingMessages);
+    const messages = normalizeCreationMessages(incomingMessages);
     await persistCreationConversation(surveyId, messages);
+
     const result = await runCreationWorkflow({
       surveyId,
       organizationId: survey.organizationId,
       messages,
       userId: session.user.id,
     });
-
-    const assistantMessage: CreationMessage = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: result.responseText,
-      timestamp: new Date().toISOString(),
-    };
-    const persistedMessages = [...messages, assistantMessage];
-    await persistCreationConversation(surveyId, persistedMessages);
-
-    await getDb().transaction(async (tx) => {
-      await tx
-        .update(surveyCreationConversations)
-        .set({
-          extractedData: {
-            programId: result.brief.programId,
-            objective: {
-              goal: result.brief.researchGoal,
-              context: result.brief.learningContext,
-              decision: result.brief.decisionToInform,
-            },
-            targetAudience: {
-              description: result.brief.audienceDefinition,
-              relationship: result.brief.audienceRelationship,
-              knowledgeLevel: result.brief.audienceKnowledgeLevel,
-            },
-            scope: {
-              breadthVsDepth: "balanced",
-              mainTopics: result.brief.requiredTopics,
-              boundaries: result.brief.deliveryContext,
-            },
-            successCriteria: {
-              insightTypes: ["behavioral", "rational"],
-              detailLevel: "high",
-              description: result.brief.successCriteria.join(", "),
-            },
-            constraints: {
-              timeLimit: null,
-              sensitiveTopics: result.brief.riskFlags,
-              otherConstraints: result.brief.constraints.join(", "),
-            },
-            tone: result.brief.tone,
-            requiredQuestions: result.brief.requiredQuestions,
-            metrics: result.brief.metrics,
-            personalInfo: result.brief.personalInfo,
-            brief: result.brief,
-            missingFields: result.validation.missingFields,
-            readyForSampling: result.validation.isReady,
-          },
-          collectedInfo: {
-            objective: Boolean(result.brief.researchGoal),
-            targetAudience: Boolean(result.brief.audienceDefinition),
-            scope: result.brief.requiredTopics.length > 0,
-            successCriteria: result.brief.successCriteria.length > 0,
-            constraints: true,
-            hypotheses: result.brief.assumptions.length > 0,
-            tone: Boolean(result.brief.tone),
-            requiredQuestions: result.brief.requiredQuestions.length > 0,
-            metrics: true,
-            personalInfo: true,
-            subjectDefined: Boolean(result.brief.learningContext),
-            programIdentified: Boolean(result.brief.programId),
-            media: true,
-            subjectModelComplete: result.validation.isReady,
-          },
-          updatedAt: new Date(),
-        })
-        .where(eq(surveyCreationConversations.surveyId, surveyId));
-
-      await recordRealtimeEvent(tx, {
-        scope: "survey",
-        surveyId,
-        workspaceId: permission.workspaceId,
-        eventType: "survey.creation_turn_added",
-        actorId: session.user.id,
-        payload: {
-          surveyId,
-          lease: leaseResult.lease,
-          messages: persistedMessages.slice(-2),
-          status: "creating",
-        },
-      });
+    const mediaDecision = deriveCreationMediaDecision({
+      extractedData: normalizeExtractedData(existingConversation?.extractedData),
+      messages,
     });
-    await publishPendingOutboxEntries();
+    const extractedData = buildCreationExtractedData({
+      brief: result.brief,
+      validation: result.validation,
+      mediaDecision,
+    });
+    const collectedInfo = buildCreationCollectedInfo({
+      brief: result.brief,
+      validation: result.validation,
+      mediaDecision,
+    });
 
-    const response = createUIMessageStreamResponse({
-      stream: createUIMessageStream({
-        execute: async ({ writer }) => {
-          writer.write({
-            type: "text-delta",
-            textDelta: result.responseText,
-          } as any);
+    await getDb()
+      .update(surveyCreationConversations)
+      .set({
+        extractedData,
+        collectedInfo,
+        updatedAt: new Date(),
+      })
+      .where(eq(surveyCreationConversations.surveyId, surveyId));
+
+    const creationState: CreationAgentState = {
+      surveyId,
+      messages: messages
+        .filter(
+          (
+            message,
+          ): message is ChatMessage & { role: "user" | "assistant" } =>
+            message.role === "user" || message.role === "assistant",
+        )
+        .map((message) => ({
+          role: message.role,
+          content: message.content,
+          timestamp: message.timestamp,
+        })),
+      brief: result.brief,
+      missingFields: result.validation.missingFields,
+      readyForSampling:
+        result.validation.isReady &&
+        isCreationMediaDecisionResolved(mediaDecision),
+      mediaDecision,
+    };
+
+    const systemPrompt = await buildCreationSystemPrompt(
+      creationState,
+      survey.organizationId,
+    );
+    const localizedSystemPrompt = `${systemPrompt}
+
+Respond to the creator in the language they are speaking. Match the language of each creator message naturally.`;
+    const modelMessages = await toModelMessages(incomingMessages);
+
+    const tools = {
+      finishSurvey: tool({
+        description: getCreationFinishSurveyToolDefinition().description,
+        inputSchema: z.object({}),
+        execute: async () => {
+          if (!result.validation.isReady) {
+            return {
+              error: "The brief is not complete enough to finish yet",
+              missingFields: result.validation.missingFields,
+            };
+          }
+
+          if (!isCreationMediaDecisionResolved(mediaDecision)) {
+            return {
+              error: "The media decision is not resolved yet",
+              mediaDecision,
+            };
+          }
+
+          return { success: true };
         },
       }),
+      requestMediaUpload: tool({
+        description: getCreationRequestMediaUploadToolDefinition().description,
+        inputSchema: z.object({
+          allowedTypes: z.array(z.string()).describe("Allowed media types, such as image, audio, or video."),
+          recommendation: z.enum(["add_media", "not_needed"]).describe("Whether the assistant recommends adding media or thinks media is optional and not necessary."),
+          rationale: z.string().describe("A short explanation of why media would help or why it is not necessary."),
+          suggestedDescription: z.string().describe("Suggested description to prefill if the creator chooses to upload media."),
+          suggestedFeedbackFocus: z.string().describe("Suggested feedback focus or learning goal for the uploaded media."),
+        }),
+      }),
+    };
+
+    const stream = streamAIResponse(
+      modelMessages,
+      localizedSystemPrompt,
+      {
+        surveyId,
+        userId: session.user.id,
+        organizationId: survey.organizationId ?? undefined,
+        maxTokens: 400,
+        temperature: 0.4,
+        tools,
+        stopWhen: stepCountIs(5),
+      },
+    );
+
+    const response = stream.toUIMessageStreamResponse({
+      originalMessages: toUIMessages(messages),
+      onFinish: async ({ messages: finishedMessages }) => {
+        const persistedMessages = normalizeCreationMessages(finishedMessages);
+        const finalMediaDecision = deriveCreationMediaDecision({
+          extractedData,
+          messages: persistedMessages,
+        });
+        await persistCreationConversation(surveyId, persistedMessages);
+        await getDb()
+          .update(surveyCreationConversations)
+          .set({
+            extractedData: buildCreationExtractedData({
+              brief: result.brief,
+              validation: result.validation,
+              mediaDecision: finalMediaDecision,
+            }),
+            collectedInfo: buildCreationCollectedInfo({
+              brief: result.brief,
+              validation: result.validation,
+              mediaDecision: finalMediaDecision,
+            }),
+            updatedAt: new Date(),
+          })
+          .where(eq(surveyCreationConversations.surveyId, surveyId));
+
+        await getDb().transaction(async (tx) => {
+          await recordRealtimeEvent(tx, {
+            scope: "survey",
+            surveyId,
+            workspaceId: permission.workspaceId,
+            eventType: "survey.creation_turn_added",
+            actorId: session.user.id,
+            payload: {
+              surveyId,
+              lease: leaseResult.lease,
+              messages: persistedMessages.slice(-2).map((message) => ({
+                id: message.id,
+                role: message.role,
+                content: message.content,
+                parts: message.parts,
+                timestamp: message.timestamp,
+              })),
+              status: "creating",
+            },
+          });
+        });
+      },
     });
+
     response.headers.set("X-Survey-Revision", String(currentRevision + 1));
     response.headers.set("X-Lease-Token", leaseResult.lease.leaseToken);
     return response;
@@ -335,14 +441,23 @@ export async function PUT(
     const body = await request.json();
     const incomingMessages = Array.isArray(body.messages) ? body.messages : [];
 
-    const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
+    const [survey] = await getDb()
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
     if (!survey) return new Response("Survey not found", { status: 404 });
 
-    const permission = await getSurveyPermissionContext(session.user.id, survey.id, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
+    const permission = await getSurveyPermissionContext(
+      session.user.id,
+      survey.id,
+      {
+        activeWorkspaceId: session.session.activeOrganizationId ?? null,
+      },
+    );
     if (!permission?.canEdit || !permission.activeContextMatchesResource) {
-      return new Response("Unauthorized: Editor access required", { status: 403 });
+      return new Response("Unauthorized: Editor access required", {
+        status: 403,
+      });
     }
 
     if (
@@ -360,7 +475,9 @@ export async function PUT(
       surveyId,
       userId: session.user.id,
       sessionId:
-        typeof body.sessionId === "string" ? body.sessionId : session.session.id,
+        typeof body.sessionId === "string"
+          ? body.sessionId
+          : session.session.id,
       leaseToken: typeof body.leaseToken === "string" ? body.leaseToken : null,
       force: Boolean(body.forceLease),
     });
@@ -375,7 +492,7 @@ export async function PUT(
       );
     }
 
-    const normalizedMessages = normalizeMessages(incomingMessages);
+    const normalizedMessages = normalizeCreationMessages(incomingMessages);
     await persistCreationConversation(surveyId, normalizedMessages);
 
     await getDb().transaction(async (tx) => {
@@ -393,7 +510,6 @@ export async function PUT(
         },
       });
     });
-    await publishPendingOutboxEntries();
 
     const revision = await getCurrentSurveyRevision(surveyId);
     const response = new Response("OK", { status: 200 });

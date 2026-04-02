@@ -1,12 +1,16 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 
 import {
   buildRefinementAssistantResponse,
   compilePlaybookAuthorInput,
 } from "@/lib/education/playbook-workflow";
-import type { PlaybookAuthorInput } from "@/lib/education/playbooks";
-import type { ResearchBrief } from "@/lib/education/types";
+import {
+  playbookAuthorInputSchema,
+  type PlaybookAuthorInput,
+} from "@/lib/education/playbooks";
+import { researchBriefSchema, type ResearchBrief } from "@/lib/education/types";
 
 type PlaybookEvalCase = {
   id: string;
@@ -44,6 +48,42 @@ type RefinementEvalCase = {
   };
 };
 
+const playbookEvalCaseSchema = z.object({
+  id: z.string(),
+  description: z.string(),
+  input: playbookAuthorInputSchema,
+  expected: z.object({
+    status: z.string(),
+    requiresClarification: z.boolean().optional(),
+    blockedReasonsCount: z.number().optional(),
+    minBlockedReasons: z.number().optional(),
+    minClarificationQuestions: z.number().optional(),
+    minUsefulnessScore: z.number().optional(),
+    minSpecificityScore: z.number().optional(),
+    minDerivedMetrics: z.number().optional(),
+    mustMentionOneOf: z.array(z.string()).optional(),
+  }),
+});
+
+const refinementEvalCaseSchema = z.object({
+  id: z.string(),
+  description: z.string(),
+  input: z.object({
+    creatorMessage: z.string(),
+    surveyTitle: z.string(),
+    currentPersonalityLabel: z.string(),
+    playbookSummaries: z.array(z.string()),
+    latestSampleTranscript: z.string(),
+    brief: researchBriefSchema.partial(),
+  }),
+  expected: z.object({
+    allowedProposalTypes: z.array(z.string()).optional(),
+    disallowedProposalTypes: z.array(z.string()).optional(),
+    maxProposalCount: z.number().optional(),
+    replyShouldAskClarifyingQuestion: z.boolean().optional(),
+  }),
+});
+
 function buildBrief(input: Partial<ResearchBrief>): ResearchBrief {
   return {
     programId: "education.course_efficacy",
@@ -75,9 +115,12 @@ function buildBrief(input: Partial<ResearchBrief>): ResearchBrief {
   };
 }
 
-async function loadJson<T>(filePath: string): Promise<T> {
+async function loadJson<T>(
+  filePath: string,
+  parser: (value: unknown) => T,
+): Promise<T> {
   const raw = await readFile(filePath, "utf8");
-  return JSON.parse(raw) as T;
+  return parser(JSON.parse(raw));
 }
 
 function assert(condition: unknown, message: string) {
@@ -169,12 +212,14 @@ async function runRefinementEvals(cases: RefinementEvalCase[]) {
       );
     }
 
+    const proposalTypes = new Set(types);
+
     for (const allowed of testCase.expected.allowedProposalTypes ?? []) {
-      assert(types.includes(allowed as never), `[${testCase.id}] expected proposal type ${allowed}`);
+      assert((proposalTypes as Set<string>).has(allowed), `[${testCase.id}] expected proposal type ${allowed}`);
     }
 
     for (const disallowed of testCase.expected.disallowedProposalTypes ?? []) {
-      assert(!types.includes(disallowed as never), `[${testCase.id}] did not expect proposal type ${disallowed}`);
+      assert(!(proposalTypes as Set<string>).has(disallowed), `[${testCase.id}] did not expect proposal type ${disallowed}`);
     }
 
     if (testCase.expected.replyShouldAskClarifyingQuestion) {
@@ -189,13 +234,18 @@ async function runRefinementEvals(cases: RefinementEvalCase[]) {
 
 async function main() {
   const baseDir = path.join(process.cwd(), "evals", "creator-playbooks");
-  const playbookCases = await loadJson<PlaybookEvalCase[]>(path.join(baseDir, "playbook-interpretation.json"));
-  const refinementCases = await loadJson<RefinementEvalCase[]>(path.join(baseDir, "refinement-proposals.json"));
+  const playbookCases = await loadJson(
+    path.join(baseDir, "playbook-interpretation.json"),
+    (value) => z.array(playbookEvalCaseSchema).parse(value),
+  );
+  const refinementCases = await loadJson(
+    path.join(baseDir, "refinement-proposals.json"),
+    (value) => z.array(refinementEvalCaseSchema).parse(value),
+  );
 
   await runPlaybookEvals(playbookCases);
   await runRefinementEvals(refinementCases);
 
-  console.log(`Creator playbook evals passed: ${playbookCases.length + refinementCases.length} cases`);
 }
 
 main().catch((error) => {

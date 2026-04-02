@@ -82,7 +82,7 @@ async function SurveysList({ cookieHeader }: { cookieHeader: string | null }) {
                                 <td className="px-6 py-4">
                                     <div className="flex items-center gap-2">
                                         <UserIcon className="w-3 h-3 text-gray-400" />
-                                        <span className="text-sm text-gray-600">{(survey as { user?: { name?: string | null } }).user?.name || "Unknown"}</span>
+                                        <span className="text-sm text-gray-600">{survey.user?.name || "Unknown"}</span>
                                     </div>
                                 </td>
                                 <td className="px-6 py-4">

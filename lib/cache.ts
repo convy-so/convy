@@ -8,6 +8,12 @@ import { getRedisClient } from "./redis";
  */
 
 const DEFAULT_TTL = 3600; // 1 hour
+const inFlightCacheLoads = new Map<string, Promise<unknown>>();
+
+export type DashboardCacheSection =
+  | "stats"
+  | "recentSurveys"
+  | "activity";
 
 export const cache = {
   /**
@@ -18,7 +24,7 @@ export const cache = {
       const redis = getRedisClient();
       const data = await redis.get(key);
       if (!data) return null;
-      return JSON.parse(data) as T;
+      return JSON.parse(data);
     } catch (error) {
       console.error(`[Cache] Error getting key "${key}":`, error);
       return null;
@@ -30,7 +36,7 @@ export const cache = {
    */
   async set(
     key: string,
-    value: any,
+    value: unknown,
     ttlSeconds: number = DEFAULT_TTL,
   ): Promise<void> {
     try {
@@ -97,9 +103,26 @@ export const cache = {
       return cached;
     }
 
-    const fresh = await fn();
-    await this.set(key, fresh, ttlSeconds);
-    return fresh;
+    const inFlight = inFlightCacheLoads.get(key);
+    if (inFlight) {
+      return (await inFlight) as T;
+    }
+
+    const pendingLoad = (async () => {
+      const fresh = await fn();
+      await this.set(key, fresh, ttlSeconds);
+      return fresh;
+    })();
+
+    inFlightCacheLoads.set(key, pendingLoad);
+
+    try {
+      return await pendingLoad;
+    } finally {
+      if (inFlightCacheLoads.get(key) === pendingLoad) {
+        inFlightCacheLoads.delete(key);
+      }
+    }
   },
 };
 
@@ -118,3 +141,23 @@ export const cacheKeys = {
   userScope: (userId: string) => `*:${userId}:*`,
   orgScope: (orgId: string) => `*:*:*:${orgId}`,
 };
+
+export async function invalidateDashboardCaches(
+  userId: string,
+  orgId?: string | null,
+  sections: DashboardCacheSection[] = ["stats", "recentSurveys", "activity"],
+): Promise<void> {
+  const uniqueSections = new Set(sections);
+  const keys = Array.from(uniqueSections, (section) => {
+    switch (section) {
+      case "stats":
+        return cacheKeys.dashboardStats(userId, orgId);
+      case "recentSurveys":
+        return cacheKeys.dashboardRecentSurveys(userId, orgId);
+      case "activity":
+        return cacheKeys.dashboardActivity(userId, orgId);
+    }
+  });
+
+  await Promise.all(keys.map((key) => cache.delete(key)));
+}

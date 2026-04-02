@@ -2,44 +2,288 @@
  * API functions for survey-related data fetching
  */
 
-export async function fetchSurveys() {
-  const res = await fetch('/api/surveys', { credentials: 'include' });
-  if (!res.ok) throw new Error('Failed to fetch surveys');
-  const data = await res.json();
-  return data.surveys || [];
+import { z } from "zod";
+
+export class SurveyApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = "SurveyApiError";
+  }
 }
 
-export async function fetchSurveyDetails(surveyId: string) {
-  const res = await fetch(`/api/surveys/${surveyId}/details`, { credentials: 'include' });
-  if (!res.ok) throw new Error('Failed to fetch survey details');
-  return res.json();
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+async function getErrorMessage(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  const contentType = response.headers.get("content-type");
+
+  if (contentType?.includes("application/json")) {
+    const payload = await response.json().catch(() => null);
+
+    if (isRecord(payload)) {
+      if (typeof payload.error === "string") {
+        return payload.error;
+      }
+
+      if (typeof payload.message === "string") {
+        return payload.message;
+      }
+    }
+  }
+
+  const text = await response.text().catch(() => "");
+  return text || fallback;
+}
+
+async function parseJsonOrThrow<T>(
+  response: Response,
+  fallback: string,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  if (!response.ok) {
+    const message = await getErrorMessage(response, fallback);
+    throw new SurveyApiError(message, response.status);
+  }
+
+  const payload = await response.json();
+  return schema.parse(payload);
+}
+
+const surveyBriefSchema = z
+  .object({
+    researchGoal: z.string().optional(),
+    learningContext: z.string().optional(),
+    audienceDefinition: z.string().optional(),
+    tone: z.string().optional(),
+  })
+  .passthrough();
+
+const surveyListItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  brief: surveyBriefSchema.nullish(),
+  coreObjective: z.string().nullish(),
+  status: z.string(),
+  deliveryMode: z.enum(["link", "classroom_assigned"]),
+  classroomId: z.string().nullish(),
+  classroomTitle: z.string().nullish(),
+  shareableLink: z.string().nullish(),
+  responses: z.number(),
+  completionRate: z.number(),
+  createdAt: z.string(),
+  lastResponse: z.string(),
+  isOwner: z.boolean(),
+  isVoice: z.boolean(),
+  sharedBy: z.string().nullish(),
+  role: z.enum(["owner", "editor", "viewer", "none"]).optional(),
+  creatorName: z.string().nullish(),
+  accessLevel: z.enum(["owner", "editor", "viewer", "none"]),
+  canOpen: z.boolean(),
+  canEdit: z.boolean(),
+  canDelete: z.boolean(),
+  canRequestAccess: z.boolean(),
+  pendingAccessRequest: z.boolean(),
+  isLocked: z.boolean(),
+  projectId: z.string().nullish(),
+  programId: z.string().nullish(),
+  briefStatus: z.string().optional(),
+});
+
+const surveyListResponseSchema = z.object({
+  surveys: z.array(surveyListItemSchema),
+});
+
+const surveyPermissionSchema = z.object({
+  surveyId: z.string(),
+  workspaceId: z.string().nullable(),
+  resourceScope: z.enum(["personal", "workspace"]),
+  activeContextMatchesResource: z.boolean(),
+  collaborationAllowed: z.boolean(),
+  creatorId: z.string(),
+  accessLevel: z.enum(["owner", "editor", "viewer", "none"]),
+  isWorkspaceMember: z.boolean(),
+  isWorkspaceOwner: z.boolean(),
+  isSurveyCreator: z.boolean(),
+  isSurveyEditor: z.boolean(),
+  canDiscover: z.boolean(),
+  canRequestAccess: z.boolean(),
+  canView: z.boolean(),
+  canComment: z.boolean(),
+  canEdit: z.boolean(),
+  canPublish: z.boolean(),
+  canDelete: z.boolean(),
+});
+
+const surveyDetailsResponseSchema = z.object({
+  survey: z.object({
+    id: z.string(),
+    title: z.string(),
+    status: z.string(),
+    description: z.string().nullable().optional(),
+    createdAt: z.union([z.string(), z.date()]).nullable().optional(),
+    updatedAt: z.union([z.string(), z.date()]).nullable().optional(),
+    coreObjective: z.string().nullable().optional(),
+    programId: z.string().nullable().optional(),
+    brief: surveyBriefSchema.nullish(),
+    tone: z.string().nullable().optional(),
+    shareableLink: z.string().nullable().optional(),
+    shareableUrl: z.string().nullable().optional(),
+    participantLimit: z.number(),
+    currentParticipants: z.number(),
+    deliveryMode: z.enum(["link", "classroom_assigned"]),
+    classroomId: z.string().nullable().optional(),
+    classroomTitle: z.string().nullable().optional(),
+    requiredQuestions: z.array(z.string()).nullish(),
+    metrics: z.array(z.string()).nullish(),
+    language: z.string().optional(),
+    isVoice: z.boolean().optional(),
+    media: z.unknown().optional(),
+    sampleConversationCount: z.number().optional(),
+    userId: z.string(),
+    organizationId: z.string().nullable().optional(),
+    editors: z.array(z.string()),
+    permission: surveyPermissionSchema,
+  }),
+  stats: z.object({
+    totalResponses: z.number(),
+    completedResponses: z.number(),
+    completionRate: z.number(),
+    avgDuration: z.string(),
+  }),
+  recentResponses: z.array(
+    z.object({
+      id: z.string(),
+      participantId: z.string().nullable().optional(),
+      completed: z.boolean(),
+      completedAt: z.string().nullable(),
+      createdAt: z.string().nullable().optional(),
+    }),
+  ),
+});
+
+const surveyResponsesResponseSchema = z.object({
+  responses: z.array(
+    z.object({
+      id: z.string(),
+      participantId: z.string(),
+      status: z.enum(["completed", "abandoned"]),
+      completedAt: z.string().nullable(),
+      createdAt: z.string().nullable(),
+      duration: z.string(),
+      sentiment: z.enum(["positive", "neutral", "negative"]).nullable(),
+      keyInsights: z.array(z.string()),
+      messageCount: z.number(),
+      summary: z.string().optional(),
+      sentimentScore: z.number().optional(),
+    }),
+  ),
+  pagination: z.object({
+    page: z.number(),
+    limit: z.number(),
+    total: z.number(),
+    totalPages: z.number(),
+  }),
+});
+
+export type SurveyListItem = z.infer<typeof surveyListItemSchema>;
+export type SurveyDetailsResponse = z.infer<typeof surveyDetailsResponseSchema>;
+export type SurveyResponsesResponse = z.infer<typeof surveyResponsesResponseSchema>;
+
+const surveyDraftCreateResponseSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  deliveryMode: z.enum(["link", "classroom_assigned"]),
+  classroomId: z.string().nullable().optional(),
+});
+
+export async function fetchSurveys(): Promise<SurveyListItem[]> {
+  const response = await fetch("/api/surveys", { credentials: "include" });
+  const data = await parseJsonOrThrow(
+    response,
+    "Failed to fetch surveys",
+    surveyListResponseSchema,
+  );
+  return data.surveys;
+}
+
+export async function createSurveyDraft(input?: {
+  language?: "en" | "fr" | "de" | "es" | "it";
+  isVoice?: boolean;
+  deliveryMode?: "link" | "classroom_assigned";
+  classroomId?: string;
+}): Promise<z.infer<typeof surveyDraftCreateResponseSchema>> {
+  const response = await fetch("/api/surveys", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input ?? {}),
+  });
+
+  return parseJsonOrThrow(
+    response,
+    "Failed to create survey draft",
+    surveyDraftCreateResponseSchema,
+  );
+}
+
+export async function fetchSurveyDetails(
+  surveyId: string,
+): Promise<SurveyDetailsResponse> {
+  const response = await fetch(`/api/surveys/${surveyId}/details`, {
+    credentials: "include",
+  });
+  return parseJsonOrThrow(
+    response,
+    "Failed to fetch survey details",
+    surveyDetailsResponseSchema,
+  );
 }
 
 export async function fetchSurveyResponses(
-  surveyId: string, 
-  page: number, 
-  limit: number, 
-  status: string
-) {
-  const res = await fetch(
+  surveyId: string,
+  page: number,
+  limit: number,
+  status: string,
+): Promise<SurveyResponsesResponse> {
+  const response = await fetch(
     `/api/surveys/${surveyId}/responses?page=${page}&limit=${limit}&status=${status}`,
-    { credentials: 'include' }
+    { credentials: "include" },
   );
-  if (!res.ok) throw new Error('Failed to fetch responses');
-  return res.json();
+  return parseJsonOrThrow(
+    response,
+    "Failed to fetch responses",
+    surveyResponsesResponseSchema,
+  );
 }
 
 export async function fetchSurveyAnalytics(surveyId: string) {
-  const res = await fetch(
-    `/api/surveys/${surveyId}/analytics?format=full`, 
-    { credentials: 'include' }
+  const response = await fetch(
+    `/api/surveys/${surveyId}/analytics?format=full`,
+    { credentials: "include" },
   );
-  if (!res.ok) throw new Error('Failed to fetch analytics');
-  return res.json();
+  return parseJsonOrThrow(
+    response,
+    "Failed to fetch analytics",
+    z.unknown(),
+  );
 }
 
 export async function fetchSurveyExtraction(surveyId: string) {
-  const res = await fetch(`/api/surveys/${surveyId}/create`);
-  if (!res.ok) throw new Error('Failed to fetch extraction data');
-  return res.json();
+  const response = await fetch(`/api/surveys/${surveyId}/create`, {
+    credentials: "include",
+  });
+  return parseJsonOrThrow(
+    response,
+    "Failed to fetch extraction data",
+    z.unknown(),
+  );
 }

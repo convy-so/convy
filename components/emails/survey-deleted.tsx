@@ -21,17 +21,19 @@ export const SurveyDeletedEmail = ({
   return (
     <BaseLayout previewText={previewText}>
       <Text style={globalStyles.h1}>Survey Deleted</Text>
-      
+
       <Text style={globalStyles.text}>
         Hi {name ?? "there"},
       </Text>
-      
+
       <Text style={globalStyles.text}>
-        The survey <strong>"{surveyTitle}"</strong> has been permanently deleted from {workspaceName}.
+        The survey <strong>&quot;{surveyTitle}&quot;</strong> has been
+        permanently deleted from {workspaceName}.
       </Text>
-      
+
       <Text style={globalStyles.text}>
-        This action was performed by <strong>{deletedBy}</strong>. All responses and associated data have been removed.
+        This action was performed by <strong>{deletedBy}</strong>. All responses
+        and associated data have been removed.
       </Text>
 
       <Section style={globalStyles.buttonContainer}>

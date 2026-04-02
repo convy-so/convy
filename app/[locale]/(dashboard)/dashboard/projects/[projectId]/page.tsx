@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/routing";
 import {
@@ -34,16 +34,15 @@ import {
 } from "@/components/dashboard/projects/hooks";
 import { formatDistanceToNow } from "date-fns";
 import toast from "react-hot-toast";
-import { ClientT } from "@/components/i18n/client-t";
 import { Suspense } from "react";
-
-import { getClientTranslation } from "@/app/actions/translate";
 import { authClient } from "@/lib/auth-client";
 
 function ProjectDetailContent() {
-  const params = useParams();
+  const params = useParams<{ projectId?: string | string[] }>();
   const router = useRouter();
-  const projectId = params.projectId as string;
+  const projectId = Array.isArray(params.projectId)
+    ? (params.projectId[0] ?? "")
+    : (params.projectId ?? "");
 
   const { data: project, isLoading, isError } = useProject(projectId);
   const updateProjectMutation = useUpdateProject();
@@ -62,23 +61,13 @@ function ProjectDetailContent() {
   // Edit states
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
-  const [placeholders, setPlaceholders] = useState({
+  const [placeholders] = useState({
     search: "Search surveys...",
     name: "e.g. Q4 User Research",
-    description: "Describe the objective of this project...",
+    description: "Describe the objective of this folder...",
   });
 
   authClient.useSession();
-
-  useEffect(() => {
-    Promise.all([
-      getClientTranslation("Search surveys...", "Project details search"),
-      getClientTranslation("e.g. Q4 User Research", "Project name placeholder"),
-      getClientTranslation("Describe the objective of this project...", "Project description placeholder"),
-    ]).then(([search, name, description]) => {
-      setPlaceholders({ search, name, description });
-    });
-  }, []);
 
   if (isLoading) {
     return (
@@ -91,10 +80,10 @@ function ProjectDetailContent() {
   if (isError || !project) {
     return (
       <div className="flex flex-col items-center justify-center h-[50vh] gap-4">
-        <h2 className="text-xl font-semibold text-gray-900"><ClientT>Project not found</ClientT></h2>
-        <p className="text-gray-500"><ClientT>The project you are looking for does not exist or you don't have permission to view it.</ClientT></p>
+        <h2 className="text-xl font-semibold text-gray-900">Folder not found</h2>
+        <p className="text-gray-500">The folder you are looking for does not exist or you don&apos;t have permission to view it.</p>
         <Link href="/dashboard/projects" className="text-blue-600 hover:underline">
-          <ClientT>Back to Projects</ClientT>
+          Back to folders
         </Link>
       </div>
     );
@@ -177,14 +166,14 @@ function ProjectDetailContent() {
               className="px-4 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors font-medium text-sm flex items-center gap-2"
             >
               <Settings className="w-4 h-4" />
-              <ClientT>Settings</ClientT>
+              Settings
             </button>
             <button
               onClick={() => setShowAddSurveyModal(true)}
               className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors"
             >
               <Plus className="w-4 h-4" />
-              <ClientT>Add Survey</ClientT>
+              Add survey
             </button>
           </div>
         </div>
@@ -198,28 +187,28 @@ function ProjectDetailContent() {
         <div className="bg-white rounded-xl border border-gray-100 p-4">
           <div className="flex items-center gap-2 text-gray-500 mb-2">
             <MessageSquare className="w-4 h-4" />
-            <span className="text-sm"><ClientT>Surveys</ClientT></span>
+            <span className="text-sm">Surveys</span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{stats.totalSurveys}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 p-4">
           <div className="flex items-center gap-2 text-gray-500 mb-2">
             <Users className="w-4 h-4" />
-            <span className="text-sm"><ClientT>Responses</ClientT></span>
+            <span className="text-sm">Responses</span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{stats.totalResponses}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 p-4">
           <div className="flex items-center gap-2 text-gray-500 mb-2">
             <TrendingUp className="w-4 h-4" />
-            <span className="text-sm"><ClientT>Avg. Completion</ClientT></span>
+            <span className="text-sm">Avg. completion</span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{stats.avgCompletion}%</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 p-4">
           <div className="flex items-center gap-2 text-gray-500 mb-2">
             <Clock className="w-4 h-4" />
-            <span className="text-sm"><ClientT>Active</ClientT></span>
+            <span className="text-sm">Active</span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{stats.activeSurveys}</p>
         </div>
@@ -230,19 +219,19 @@ function ProjectDetailContent() {
         <div className="lg:col-span-2">
           <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="font-semibold text-gray-900"><ClientT>Surveys in Project</ClientT></h2>
-              <span className="text-sm text-gray-500">{project.surveys.length} <ClientT>surveys</ClientT></span>
+              <h2 className="font-semibold text-gray-900">Surveys in folder</h2>
+              <span className="text-sm text-gray-500">{project.surveys.length} surveys</span>
             </div>
             <div className="divide-y divide-gray-50">
               {project.surveys.length === 0 ? (
                 <div className="p-8 text-center bg-gray-50/30">
                   <MessageSquare className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500 mb-2"><ClientT>No surveys yet</ClientT></p>
+                  <p className="text-gray-500 mb-2">No surveys yet</p>
                   <button
                     onClick={() => setShowAddSurveyModal(true)}
                     className="text-sm text-blue-600 hover:underline"
                   >
-                    <ClientT>Add your first survey</ClientT>
+                    Add your first survey
                   </button>
                 </div>
               ) : (
@@ -270,9 +259,9 @@ function ProjectDetailContent() {
                             {survey.title}
                           </Link>
                           <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
-                            <span>{survey.currentParticipants || 0} <ClientT>responses</ClientT></span>
+                            <span>{survey.currentParticipants || 0} responses</span>
                             <span>•</span>
-                            <span><ClientT>Created</ClientT> {formatDistanceToNow(new Date(survey.createdAt), { addSuffix: true })}</span>
+                            <span>Created {formatDistanceToNow(new Date(survey.createdAt), { addSuffix: true })}</span>
                           </div>
                         </div>
                       </div>
@@ -284,7 +273,7 @@ function ProjectDetailContent() {
                           survey.status === "draft" && "bg-amber-50 text-amber-700",
                           survey.status === "completed" && "bg-gray-100 text-gray-600"
                         )}>
-                          <ClientT>{survey.status === "active" ? "Active" : survey.status === "completed" ? "Completed" : "Draft"}</ClientT>
+                          {survey.status === "active" ? "Active" : survey.status === "completed" ? "Completed" : "Draft"}
                         </span>
 
                         <div className="relative">
@@ -304,14 +293,14 @@ function ProjectDetailContent() {
                                   className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                 >
                                   <ExternalLink className="w-4 h-4" />
-                                  <ClientT>View Survey</ClientT>
+                                  View survey
                                 </Link>
                                 <Link
                                   href={`/dashboard/surveys/${survey.id}?tab=analytics`}
                                   className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                 >
                                   <BarChart3 className="w-4 h-4" />
-                                  <ClientT>Analytics</ClientT>
+                                  Analytics
                                 </Link>
                                 <div className="border-t border-gray-100 my-1" />
                                 <button
@@ -322,7 +311,7 @@ function ProjectDetailContent() {
                                   className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
                                 >
                                   <Trash2 className="w-4 h-4" />
-                                  <ClientT>Remove</ClientT>
+                                  Remove
                                 </button>
                               </div>
                             </>
@@ -340,7 +329,7 @@ function ProjectDetailContent() {
                 className="w-full p-4 flex items-center justify-center gap-2 text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                <ClientT>Add another survey</ClientT>
+                Add another survey
               </button>
             </div>
           </div>
@@ -348,20 +337,20 @@ function ProjectDetailContent() {
 
         {/* Sidebar */}
         <div className="space-y-4">
-          {/* Project Info */}
+          {/* Folder Info */}
           <div className="bg-white rounded-xl border border-gray-100 p-5">
-            <h3 className="font-semibold text-gray-900 mb-4"><ClientT>Project Info</ClientT></h3>
+            <h3 className="font-semibold text-gray-900 mb-4">Folder info</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500"><ClientT>Created</ClientT></span>
+                <span className="text-sm text-gray-500">Created</span>
                 <span className="text-sm text-gray-900">{new Date(project.createdAt).toLocaleDateString()}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500"><ClientT>Updated</ClientT></span>
+                <span className="text-sm text-gray-500">Updated</span>
                 <span className="text-sm text-gray-900">{project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : '-'}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500"><ClientT>Color</ClientT></span>
+                <span className="text-sm text-gray-500">Color</span>
                 <div className={`w-4 h-4 rounded-full bg-gradient-to-br ${project.color || 'bg-gray-500'}`} />
               </div>
             </div>
@@ -369,14 +358,14 @@ function ProjectDetailContent() {
 
           {/* Quick Actions */}
           <div className="bg-gray-900 rounded-xl p-5 text-white">
-            <h3 className="font-semibold mb-3"><ClientT>Quick Actions</ClientT></h3>
+            <h3 className="font-semibold mb-3">Quick actions</h3>
             <div className="space-y-2">
               <Link
                 href="/dashboard/create"
                 className="flex items-center gap-2 w-full px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                <ClientT>Create New Survey</ClientT>
+                Create new survey
               </Link>
             </div>
           </div>
@@ -392,7 +381,7 @@ function ProjectDetailContent() {
           />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900"><ClientT>Add Survey to Project</ClientT></h3>
+              <h3 className="text-lg font-semibold text-gray-900">Add survey to folder</h3>
               <button
                 onClick={() => setShowAddSurveyModal(false)}
                 className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
@@ -406,7 +395,7 @@ function ProjectDetailContent() {
               ) : !availableSurveys || availableSurveys.length === 0 ? (
                 <div className="text-center py-8">
                   <Check className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
-                  <p className="text-gray-600"><ClientT>All available surveys are already in a project!</ClientT></p>
+                  <p className="text-gray-600">All available surveys are already in a folder.</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -422,7 +411,7 @@ function ProjectDetailContent() {
                         </div>
                         <div>
                           <p className="text-sm font-medium text-gray-900">{survey.title}</p>
-                          <p className="text-xs text-gray-500">{survey.currentParticipants || 0} <ClientT>responses</ClientT></p>
+                          <p className="text-xs text-gray-500">{survey.currentParticipants || 0} responses</p>
                         </div>
                       </div>
                       <Plus className="w-5 h-5 text-gray-400" />
@@ -436,7 +425,7 @@ function ProjectDetailContent() {
                 onClick={() => setShowAddSurveyModal(false)}
                 className="w-full px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <ClientT>Cancel</ClientT>
+                Cancel
               </button>
             </div>
           </div>
@@ -452,7 +441,7 @@ function ProjectDetailContent() {
           />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900"><ClientT>Project Settings</ClientT></h3>
+              <h3 className="text-lg font-semibold text-gray-900">Folder settings</h3>
               <button
                 onClick={() => setShowSettingsModal(false)}
                 className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
@@ -462,7 +451,7 @@ function ProjectDetailContent() {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2"><ClientT>Project Name</ClientT></label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Folder name</label>
                 <input
                   type="text"
                   value={editName}
@@ -472,7 +461,7 @@ function ProjectDetailContent() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2"><ClientT>Description</ClientT></label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
                 <textarea
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
@@ -487,14 +476,14 @@ function ProjectDetailContent() {
                 onClick={() => setShowDeleteModal(true)}
                 className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
               >
-                <ClientT>Delete Project</ClientT>
+                Delete folder
               </button>
               <button
                 onClick={handleUpdate}
                 disabled={!editName.trim() || updateProjectMutation.isPending}
                 className="px-4 py-2.5 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50"
               >
-                {updateProjectMutation.isPending ? <ClientT>Saving...</ClientT> : <ClientT>Save Changes</ClientT>}
+                {updateProjectMutation.isPending ? "Saving..." : "Save changes"}
               </button>
             </div>
           </div>
@@ -504,7 +493,7 @@ function ProjectDetailContent() {
         isOpen={showInviteModal}
         onClose={() => setShowInviteModal(false)}
         onSuccess={() => {
-          getClientTranslation("Invited successfully", "Project member invite success toast").then(msg => toast.success(msg));
+          toast.success("Invited successfully");
         }}
       />
 
@@ -527,10 +516,9 @@ function ProjectDetailContent() {
               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <AlertTriangle className="w-8 h-8 text-red-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2"><ClientT>Delete Project</ClientT></h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Delete folder</h3>
               <p className="text-gray-500">
-                <ClientT>Are you sure you want to delete</ClientT> <span className="font-semibold text-gray-900">"{project.name}"</span>?
-                <ClientT>This action cannot be undone and will remove all survey associations.</ClientT>
+                Are you sure you want to delete <span className="font-semibold text-gray-900">&quot;{project.name}&quot;</span>? This action cannot be undone and will remove all survey associations.
               </p>
             </div>
 
@@ -540,7 +528,7 @@ function ProjectDetailContent() {
                 className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
                 disabled={isDeletingProject}
               >
-                <ClientT>Cancel</ClientT>
+                Cancel
               </button>
               <button
                 onClick={handleDelete}
@@ -550,12 +538,12 @@ function ProjectDetailContent() {
                 {isDeletingProject ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <ClientT>Deleting...</ClientT>
+                    Deleting...
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4" />
-                    <ClientT>Delete Project</ClientT>
+                    Delete folder
                   </>
                 )}
               </button>

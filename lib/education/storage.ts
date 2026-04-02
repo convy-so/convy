@@ -1069,7 +1069,7 @@ export async function updateRefinementProposalStatus(
     .set({
       status,
       proposal: {
-        ...(proposal.proposal as RefinementProposal),
+        ...proposal.proposal,
         status,
       },
       updatedAt: new Date(),

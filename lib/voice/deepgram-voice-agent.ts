@@ -19,7 +19,7 @@ export type SupportedLanguage = "en" | "fr" | "de" | "es" | "it";
 export interface VoiceAgentFunction {
   name: string;
   description: string;
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
   client_side?: boolean;
   endpoint?: {
     url: string;
@@ -43,6 +43,7 @@ export interface VoiceAgentSettings {
         language?: string;
         smart_format?: boolean;
         endpointing?: number;
+        keyterms?: string[];
       };
     };
     think: {
@@ -61,6 +62,7 @@ export interface VoiceAgentSettings {
         model_id?: string;
       };
     };
+    greeting?: string;
     context?: {
       messages: Array<{ role: string; content: string }>;
     };
@@ -78,7 +80,64 @@ export interface ConversationTextEvent {
 export interface FunctionCallRequestEvent {
   function_call_id: string;
   function_name: string;
-  input: Record<string, any>;
+  input: Record<string, unknown>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseConversationTextEvent(
+  value: unknown,
+): ConversationTextEvent | null {
+  if (
+    !isRecord(value) ||
+    (value.role !== "user" && value.role !== "assistant") ||
+    typeof value.content !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    role: value.role,
+    content: value.content,
+  };
+}
+
+function parseFunctionCallRequestEvent(
+  value: unknown,
+): FunctionCallRequestEvent | null {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.name !== "string"
+  ) {
+    return null;
+  }
+
+  let input: Record<string, unknown> = {};
+  if (typeof value.arguments === "string") {
+    try {
+      const parsed = JSON.parse(value.arguments);
+      input = isRecord(parsed) ? parsed : {};
+    } catch {
+      input = {};
+    }
+  }
+
+  return {
+    function_call_id: value.id,
+    function_name: value.name,
+    input,
+  };
+}
+
+function getErrorCode(value: unknown): string {
+  if (typeof value === "number" || typeof value === "string") {
+    return String(value);
+  }
+
+  return "";
 }
 
 // ── Voice/Language Mapping ───────────────────────────────────────────────────
@@ -131,6 +190,7 @@ export function getVoiceModel(
 
 const VOICE_AGENT_ENDPOINT = "wss://agent.deepgram.com/v1/agent/converse";
 const KEEP_ALIVE_INTERVAL_MS = 8000;
+export const VOICE_AGENT_THINK_MODEL = "gpt-4.1-mini";
 
 export class DeepgramVoiceAgentConnection extends EventEmitter {
   private ws: WebSocket | null = null;
@@ -218,7 +278,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
   }
 
   sendInjectAgentMessage(text: string): void {
-    console.log(`[VoiceAgent] Injecting agent message: "${text}"`);
     // Spec: { type: "InjectAgentMessage", message: "..." }
     // Note: InjectUserMessage (old) used { type: "InjectUserMessage", content: "..." }
     // InjectAgentMessage triggers the AGENT to say something.
@@ -230,7 +289,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
 
   /** @deprecated Use InjectAgentMessage instead (agent speaks proactively) */
   sendInjectUserMessage(text: string): void {
-    console.log(`[VoiceAgent] Injecting user message (legacy): "${text}"`);
     this.sendJson({
       type: "InjectUserMessage",
       content: text,
@@ -258,7 +316,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
    * This is preferred for prompt updates as it replaces rather than appends.
    */
   updateThink(think: VoiceAgentSettings["agent"]["think"]): void {
-    console.log("[VoiceAgent] Sending UpdateThink...");
     this.settings.agent.think = think;
     if (this.isWelcomeReceived) {
       this.sendJson({
@@ -273,7 +330,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
    * Note: This appends to the current prompt.
    */
   updatePrompt(prompt: string): void {
-    console.log("[VoiceAgent] Sending UpdatePrompt...");
     if (this.isWelcomeReceived) {
       this.sendJson({
         type: "UpdatePrompt",
@@ -286,7 +342,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
    * Change the Speak model mid-conversation.
    */
   updateSpeak(speak: VoiceAgentSettings["agent"]["speak"]): void {
-    console.log("[VoiceAgent] Sending UpdateSpeak...");
     if (speak) {
       this.settings.agent.speak = speak;
       if (this.isWelcomeReceived) {
@@ -302,7 +357,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
    * Send updated settings (e.g., language change)
    */
   updateSettings(settings: VoiceAgentSettings): void {
-    console.log("[VoiceAgent] Updating settings...");
     this.settings = settings;
     // We must only send settings if we have already received the Welcome message from Deepgram.
     if (this.isWelcomeReceived) {
@@ -314,7 +368,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
    * Close the connection
    */
   close(): void {
-    console.log("[VoiceAgent] Closing connection...");
     this.stopKeepAlive();
     if (this.ws) {
       this.ws.close();
@@ -340,7 +393,7 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
   private handleMessage(data: Buffer | string, isBinary: boolean): void {
     // Binary data = audio from agent
     if (isBinary) {
-      // console.log(`[VoiceAgent] Received audio chunk: ${data.length} bytes`); // Commented out to reduce noise
+      //  // Commented out to reduce noise
       this.emit("audio", data);
       return;
     }
@@ -348,7 +401,10 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
     // String data = JSON event
     try {
       const message = JSON.parse(data.toString());
-      this.handleJsonMessage(message);
+      if (!isRecord(message) || typeof message.type !== "string") {
+        return;
+      }
+      this.handleJsonMessage(message as { type: string; [key: string]: unknown });
     } catch (error) {
       console.error(
         "[VoiceAgent] Failed to parse JSON from Deepgram:",
@@ -357,10 +413,9 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
     }
   }
 
-  private handleJsonMessage(message: any): void {
+  private handleJsonMessage(message: { type: string; [key: string]: unknown }): void {
     switch (message.type) {
       case "Welcome":
-        console.log("[VoiceAgent] Welcome received:", message.request_id);
         this.isWelcomeReceived = true;
         // v1 doc: send Settings only after Welcome, then start KeepAlive
         this.sendSettings();
@@ -375,10 +430,12 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         break;
 
       case "ConversationText":
-        this.emit("conversationText", {
-          role: message.role,
-          content: message.content,
-        } as ConversationTextEvent);
+        {
+          const event = parseConversationTextEvent(message);
+          if (event) {
+            this.emit("conversationText", event);
+          }
+        }
         break;
 
       case "InjectionRefused":
@@ -408,12 +465,10 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         // V1 schema: { type: "FunctionCallRequest", functions: [{ id, name, arguments, client_side, ... }] }
         if (message.functions && Array.isArray(message.functions)) {
           for (const fn of message.functions) {
-            // Emit event for all function calls (client-side or server-side)
-            this.emit("functionCallRequest", {
-              function_call_id: fn.id,
-              function_name: fn.name,
-              input: fn.arguments ? JSON.parse(fn.arguments) : {},
-            } as FunctionCallRequestEvent);
+            const event = parseFunctionCallRequestEvent(fn);
+            if (event) {
+              this.emit("functionCallRequest", event);
+            }
           }
         }
         break;
@@ -421,8 +476,11 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
       case "Error":
         console.error("[VoiceAgent] Error from Deepgram:", message);
         this.emit("error", {
-          description: message.description || JSON.stringify(message),
-          code: message.code,
+          description:
+            typeof message.description === "string"
+              ? message.description
+              : JSON.stringify(message),
+          code: getErrorCode(message.code),
         });
         break;
 
@@ -444,12 +502,11 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         break;
 
       default:
-        console.log("[VoiceAgent] Unhandled message type:", message.type);
         break;
     }
   }
 
-  private sendJson(data: any): void {
+  private sendJson(data: Record<string, unknown>): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(data));
     } else {
@@ -486,6 +543,7 @@ export function buildVoiceAgentSettings(options: {
   systemPrompt: string;
   greeting?: string; // Native Deepgram greeting — spoken before waiting for user
   functions?: VoiceAgentFunction[];
+  keyterms?: string[];
   conversationHistory?: Array<{ role: string; content: string }>;
   /**
    * When set, Deepgram's think block routes to our own endpoint instead of
@@ -508,6 +566,7 @@ export function buildVoiceAgentSettings(options: {
     systemPrompt,
     greeting,
     functions,
+    keyterms,
     conversationHistory,
     agentTurnEndpoint,
   } = options;
@@ -517,14 +576,15 @@ export function buildVoiceAgentSettings(options: {
   const thinkBlock: VoiceAgentSettings["agent"]["think"] = {
     provider: {
       type: "open_ai",
-      model: "gpt-4o-mini",
+      model: VOICE_AGENT_THINK_MODEL,
     },
     prompt: `${systemPrompt}\n\nRespond to the user in the language they are speaking to you in. If the user speaks Spanish, reply in natural Spanish. Match the language of each user message independently to provide seamless multilingual support.`,
     ...(functions && functions.length > 0
       ? {
-          functions: functions.map((f) => {
-            const { client_side, ...rest } = f;
-            return rest;
+          functions: functions.map((fn) => {
+            const functionConfig = { ...fn };
+            delete functionConfig.client_side;
+            return functionConfig;
           }),
         }
       : {}),
@@ -561,6 +621,7 @@ export function buildVoiceAgentSettings(options: {
           language: "multi",
           smart_format: true,
           endpointing: 500, // Wait 500ms of silence before endpointing user speech (300ms was too aggressive — caused fragmented transcriptions)
+          ...(keyterms && keyterms.length > 0 ? { keyterms } : {}),
         },
       },
       think: thinkBlock,
@@ -576,7 +637,6 @@ export function buildVoiceAgentSettings(options: {
         ? {
             context: {
               messages: conversationHistory.map((m) => ({
-                type: "History" as const,
                 role: (m.role === "user" ? "user" : "assistant") as
                   | "user"
                   | "assistant",

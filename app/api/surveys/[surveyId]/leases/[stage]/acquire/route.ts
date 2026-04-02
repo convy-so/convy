@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 
 import {
   acquireSurveyLease,
-  publishPendingOutboxEntries,
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
 import { getVerifiedSession } from "@/lib/auth/session";
@@ -63,7 +62,6 @@ export async function POST(
         },
       });
     });
-    await publishPendingOutboxEntries();
 
     return NextResponse.json(result.lease);
   } catch (error) {

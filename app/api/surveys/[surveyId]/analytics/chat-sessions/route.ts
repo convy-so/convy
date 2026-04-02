@@ -6,12 +6,13 @@ import { surveys, analyticsChatSessions } from "@/db/schema";
 import type { ChatSessionMessage } from "@/db/schema/surveys";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import { z } from "zod";
 
-interface PostBody {
-  sessionId?: string;
-  title?: string;
-  messages: ChatSessionMessage[];
-}
+const analyticsChatSessionRequestSchema = z.object({
+  sessionId: z.string().optional(),
+  title: z.string().optional(),
+  messages: z.custom<ChatSessionMessage[]>((value) => Array.isArray(value)),
+});
 
 /**
  * GET /api/surveys/[surveyId]/analytics/chat-sessions
@@ -81,12 +82,8 @@ export async function POST(
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
-    const body = (await request.json()) as PostBody;
+    const body = analyticsChatSessionRequestSchema.parse(await request.json());
     const { sessionId, title, messages } = body;
-
-    if (!messages || !Array.isArray(messages)) {
-      return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
-    }
 
     const [survey] = await getDb()
       .select({ id: surveys.id })

@@ -65,9 +65,6 @@ export async function POST(
       freeText: freeText ?? null,
     });
 
-    console.log(
-      `[FeedbackAPI] Feedback saved: conversation=${conversationId} rating=${rating ?? "n/a"} discomfort=${uncomfortableTopics}`
-    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

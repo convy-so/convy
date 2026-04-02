@@ -8,26 +8,34 @@ import { getRedisClient } from "@/lib/redis";
  */
 
 declare global {
-  // eslint-disable-next-line no-var
-  var queues: Record<string, Queue<any>> | undefined;
-  // eslint-disable-next-line no-var
+  var conversationInsightsQueue: Queue<ConversationInsightsJobData> | undefined;
+  var surveyAnalyticsQueue: Queue<SurveyAnalyticsJobData> | undefined;
+  var emailQueue: Queue<EmailJobData> | undefined;
+  var imageUploadQueue: Queue<ImageUploadJobData> | undefined;
+  var learningPatternAnalysisQueue:
+    | Queue<LearningPatternAnalysisJobData>
+    | undefined;
+  var contentTranslationQueue: Queue<ContentTranslationJobData> | undefined;
+  var experimentEvaluationQueue: Queue<unknown> | undefined;
+  var notificationQueue:
+    | Queue<{
+        type: "email" | "in_app";
+        userId: string;
+        message: string;
+        metadata?: Record<string, unknown>;
+      }>
+    | undefined;
   var queueEvents: Record<string, QueueEvents> | undefined;
 }
 
-function getQueue<T>(
+function createQueue<T>(
   name: string,
   options: Partial<QueueOptions> = {},
 ): Queue<T> {
-  if (!global.queues) global.queues = {};
-
-  if (!global.queues[name]) {
-    global.queues[name] = new Queue(name, {
-      connection: getRedisClient(),
-      ...options,
-    });
-  }
-
-  return global.queues![name] as Queue<T>;
+  return new Queue(name, {
+    connection: getRedisClient(),
+    ...options,
+  });
 }
 
 export interface ConversationInsightsJobData {
@@ -50,7 +58,8 @@ export interface EmailJobData {
     | "workspace-invitation"
     | "workspace-welcome"
     | "secondary-verification"
-    | "survey-deleted";
+    | "survey-deleted"
+    | "student-activation";
   email: string;
   url: string;
   name?: string | null;
@@ -65,72 +74,155 @@ export interface ImageUploadJobData {
   userId: string;
 }
 
+export interface LearningPatternAnalysisJobData {
+  sourceType: "onboarding" | "session";
+  sourceId: string;
+  organizationId: string;
+  studentUserId: string;
+  classroomStudentId?: string | null;
+  topicId?: string | null;
+  subjectKey?: string | null;
+}
+
+export interface ContentTranslationJobData {
+  resourceType: string;
+  resourceId: string;
+  field: string;
+  sourceLocale: string;
+  targetLocale: string;
+  sourceText: string;
+  context?: string;
+}
+
 // Lazy getters for specific queues
 
-export const getConversationInsightsQueue = () =>
-  getQueue<ConversationInsightsJobData>("conversation-insights", {
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: "exponential", delay: 2000 },
-      removeOnComplete: { age: 24 * 3600, count: 1000 },
-      removeOnFail: { age: 7 * 24 * 3600 },
-    },
-  });
+export const getConversationInsightsQueue = () => {
+  if (!global.conversationInsightsQueue) {
+    global.conversationInsightsQueue = createQueue<ConversationInsightsJobData>(
+      "conversation-insights",
+      {
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: { type: "exponential", delay: 2000 },
+          removeOnComplete: { age: 24 * 3600, count: 1000 },
+          removeOnFail: { age: 7 * 24 * 3600 },
+        },
+      },
+    );
+  }
 
-export const getSurveyAnalyticsQueue = () =>
-  getQueue<SurveyAnalyticsJobData>("survey-analytics", {
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: "exponential", delay: 3000 },
-      removeOnComplete: { age: 24 * 3600, count: 1000 },
-      removeOnFail: { age: 7 * 24 * 3600 },
-    },
-  });
+  return global.conversationInsightsQueue;
+};
 
-export const getEmailQueue = () =>
-  getQueue<EmailJobData>("email", {
-    defaultJobOptions: {
-      attempts: 5,
-      backoff: { type: "exponential", delay: 1000 },
-      removeOnComplete: { age: 24 * 3600, count: 1000 },
-      removeOnFail: { age: 7 * 24 * 3600 },
-    },
-  });
+export const getSurveyAnalyticsQueue = () => {
+  if (!global.surveyAnalyticsQueue) {
+    global.surveyAnalyticsQueue = createQueue<SurveyAnalyticsJobData>(
+      "survey-analytics",
+      {
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: { type: "exponential", delay: 3000 },
+          removeOnComplete: { age: 24 * 3600, count: 1000 },
+          removeOnFail: { age: 7 * 24 * 3600 },
+        },
+      },
+    );
+  }
 
-export const getImageUploadQueue = () =>
-  getQueue<ImageUploadJobData>("image-upload", {
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: "exponential", delay: 2000 },
-      removeOnComplete: { age: 24 * 3600, count: 1000 },
-      removeOnFail: { age: 7 * 24 * 3600 },
-    },
-  });
+  return global.surveyAnalyticsQueue;
+};
 
-export const getExperimentEvaluationQueue = () =>
-  getQueue("experiment-evaluation", {
-    defaultJobOptions: {
-      attempts: 2,
-      backoff: { type: "exponential", delay: 5000 },
-      removeOnComplete: { count: 30 },
-      removeOnFail: { count: 30 },
-    },
-  });
+export const getEmailQueue = () => {
+  if (!global.emailQueue) {
+    global.emailQueue = createQueue<EmailJobData>("email", {
+      defaultJobOptions: {
+        attempts: 5,
+        backoff: { type: "exponential", delay: 1000 },
+        removeOnComplete: { age: 24 * 3600, count: 1000 },
+        removeOnFail: { age: 7 * 24 * 3600 },
+      },
+    });
+  }
 
-export const getNotificationQueue = () =>
-  getQueue<{
-    type: "email" | "in_app";
-    userId: string;
-    message: string;
-    metadata?: Record<string, unknown>;
-  }>("notifications", {
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: "exponential", delay: 2000 },
-      removeOnComplete: { age: 3600, count: 1000 },
-      removeOnFail: { age: 24 * 3600 },
-    },
-  });
+  return global.emailQueue;
+};
+
+export const getImageUploadQueue = () => {
+  if (!global.imageUploadQueue) {
+    global.imageUploadQueue = createQueue<ImageUploadJobData>("image-upload", {
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 2000 },
+        removeOnComplete: { age: 24 * 3600, count: 1000 },
+        removeOnFail: { age: 7 * 24 * 3600 },
+      },
+    });
+  }
+
+  return global.imageUploadQueue;
+};
+
+export const getLearningPatternAnalysisQueue = () => {
+  if (!global.learningPatternAnalysisQueue) {
+    global.learningPatternAnalysisQueue =
+      createQueue<LearningPatternAnalysisJobData>("learning-pattern-analysis", {
+        defaultJobOptions: {
+          attempts: 5,
+          backoff: { type: "exponential", delay: 5000 },
+          removeOnComplete: { age: 24 * 3600, count: 1000 },
+          removeOnFail: { age: 7 * 24 * 3600 },
+        },
+      });
+  }
+
+  return global.learningPatternAnalysisQueue;
+};
+
+export const getContentTranslationQueue = () => {
+  if (!global.contentTranslationQueue) {
+    global.contentTranslationQueue =
+      createQueue<ContentTranslationJobData>("content-translation", {
+        defaultJobOptions: {
+          attempts: 4,
+          backoff: { type: "exponential", delay: 4000 },
+          removeOnComplete: { age: 24 * 3600, count: 1000 },
+          removeOnFail: { age: 7 * 24 * 3600 },
+        },
+      });
+  }
+
+  return global.contentTranslationQueue;
+};
+
+export const getExperimentEvaluationQueue = () => {
+  if (!global.experimentEvaluationQueue) {
+    global.experimentEvaluationQueue = createQueue("experiment-evaluation", {
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: "exponential", delay: 5000 },
+        removeOnComplete: { count: 30 },
+        removeOnFail: { count: 30 },
+      },
+    });
+  }
+
+  return global.experimentEvaluationQueue;
+};
+
+export const getNotificationQueue = () => {
+  if (!global.notificationQueue) {
+    global.notificationQueue = createQueue("notifications", {
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 2000 },
+        removeOnComplete: { age: 3600, count: 1000 },
+        removeOnFail: { age: 24 * 3600 },
+      },
+    });
+  }
+
+  return global.notificationQueue;
+};
 
 // Enqueue helpers
 
@@ -163,6 +255,26 @@ export async function enqueueImageUpload(data: ImageUploadJobData) {
   });
 }
 
+export async function enqueueLearningPatternAnalysis(
+  data: LearningPatternAnalysisJobData,
+) {
+  return await getLearningPatternAnalysisQueue().add(
+    `analyze-${data.sourceType}`,
+    data,
+    {
+      jobId: `learning-pattern-${data.sourceType}-${data.sourceId}`,
+      priority: 2,
+    },
+  );
+}
+
+export async function enqueueContentTranslation(data: ContentTranslationJobData) {
+  return await getContentTranslationQueue().add("translate-content", data, {
+    jobId: `translation-${data.resourceType}-${data.resourceId}-${data.field}-${data.targetLocale}`,
+    priority: 2,
+  });
+}
+
 export async function scheduleExperimentEvaluation() {
   return await getExperimentEvaluationQueue().upsertJobScheduler(
     "experiment-evaluation-nightly",
@@ -189,9 +301,27 @@ export async function enqueueNotification(data: {
 export async function closeQueues() {
   const { closeRedisConnections } = await import("@/lib/redis");
 
-  if (global.queues) {
-    await Promise.all(Object.values(global.queues).map((q) => q.close()));
-    global.queues = undefined;
+  const queues = [
+    global.conversationInsightsQueue,
+    global.surveyAnalyticsQueue,
+    global.emailQueue,
+    global.imageUploadQueue,
+    global.learningPatternAnalysisQueue,
+    global.contentTranslationQueue,
+    global.experimentEvaluationQueue,
+    global.notificationQueue,
+  ].filter((queue): queue is Queue<unknown> => Boolean(queue));
+
+  if (queues.length > 0) {
+    await Promise.all(queues.map((queue) => queue.close()));
+    global.conversationInsightsQueue = undefined;
+    global.surveyAnalyticsQueue = undefined;
+    global.emailQueue = undefined;
+    global.imageUploadQueue = undefined;
+    global.learningPatternAnalysisQueue = undefined;
+    global.contentTranslationQueue = undefined;
+    global.experimentEvaluationQueue = undefined;
+    global.notificationQueue = undefined;
   }
 
   if (global.queueEvents) {

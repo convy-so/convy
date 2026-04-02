@@ -14,11 +14,7 @@ import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
 
-interface AdminSidebarProps {
-    locale: string;
-}
-
-export function AdminSidebar({ locale: _locale }: AdminSidebarProps) {
+export function AdminSidebar() {
     const pathname = usePathname();
     const router = useRouter();
 

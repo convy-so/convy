@@ -7,7 +7,6 @@ import {
   surveyCollaborationComments,
   surveyEditorRequests,
   surveyEditors,
-  surveyEditLeases,
   surveyCreationConversations,
   surveys,
   users,

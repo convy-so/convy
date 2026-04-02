@@ -68,7 +68,7 @@ export async function getWorkspaceOwnerId(
  * Determine a user's survey-scoped access level.
  * - "owner": the survey creator
  * - "editor": an explicitly granted survey editor
- * - "viewer": any other workspace member
+ * - "viewer": any other workspace member who may discover the survey exists
  * - "none": no access
  */
 export async function getSurveyAccessLevel(
@@ -132,6 +132,8 @@ export type SurveyPermissionContext = {
   isWorkspaceOwner: boolean;
   isSurveyCreator: boolean;
   isSurveyEditor: boolean;
+  canDiscover: boolean;
+  canRequestAccess: boolean;
   canView: boolean;
   canComment: boolean;
   canEdit: boolean;
@@ -166,10 +168,10 @@ export async function getSurveyPermissionContext(
         ? options.activeWorkspaceId === survey.organizationId
         : options.activeWorkspaceId == null;
   const isSurveyCreator = survey.userId === userId;
-  const isWorkspaceOwner = survey.organizationId
-    ? await isWorkspaceOwnerOrFalse(userId, survey.organizationId)
+  const isOwnerOfWorkspace = survey.organizationId
+    ? await isWorkspaceOwner(userId, survey.organizationId)
     : false;
-  const isWorkspaceMember = survey.organizationId
+  const isMemberOfWorkspace = survey.organizationId
     ? await isWorkspaceMember(userId, survey.organizationId)
     : survey.userId === userId;
   const [editorRecord] = isSurveyCreator
@@ -184,6 +186,14 @@ export async function getSurveyPermissionContext(
           ),
         );
   const isSurveyEditor = isSurveyCreator || Boolean(editorRecord);
+  const canDiscover = accessLevel !== "none";
+  const canView = isSurveyCreator || accessLevel === "editor";
+  const canEdit = canView;
+  const canRequestAccess =
+    Boolean(survey.organizationId) &&
+    isMemberOfWorkspace &&
+    !isSurveyCreator &&
+    !isSurveyEditor;
 
   return {
     surveyId: survey.id,
@@ -193,28 +203,19 @@ export async function getSurveyPermissionContext(
     collaborationAllowed: Boolean(survey.organizationId),
     creatorId: survey.userId,
     accessLevel,
-    isWorkspaceMember,
-    isWorkspaceOwner,
+    isWorkspaceMember: isMemberOfWorkspace,
+    isWorkspaceOwner: isOwnerOfWorkspace,
     isSurveyCreator,
     isSurveyEditor,
-    canView: accessLevel !== "none",
-    canComment: accessLevel !== "none",
-    canEdit: isSurveyCreator || accessLevel === "editor",
-    canPublish: isSurveyCreator || accessLevel === "editor",
+    canDiscover,
+    canRequestAccess,
+    canView,
+    canComment: canEdit,
+    canEdit,
+    canPublish: canEdit,
     canDelete:
-      isSurveyCreator || (Boolean(survey.organizationId) && isWorkspaceOwner),
+      isSurveyCreator || (Boolean(survey.organizationId) && isOwnerOfWorkspace),
   };
-}
-
-async function isWorkspaceOwnerOrFalse(
-  userId: string,
-  organizationId: string,
-): Promise<boolean> {
-  try {
-    return await isWorkspaceOwner(userId, organizationId);
-  } catch {
-    return false;
-  }
 }
 
 export async function getSurveyEditors(
@@ -244,7 +245,16 @@ export async function getActiveWorkspaceId(): Promise<string | null> {
   try {
     const session = await getVerifiedSession();
     return session.session.activeOrganizationId ?? null;
-  } catch {
-    return null;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message === "UNAUTHENTICATED" ||
+        error.message === "EMAIL_NOT_VERIFIED")
+    ) {
+      return null;
+    }
+
+    console.error("[WorkspaceAccess] Failed to resolve active workspace:", error);
+    throw error;
   }
 }

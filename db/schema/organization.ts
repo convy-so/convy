@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, jsonb, unique } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { timestamps } from "./common";
 import { users } from "./auth";
@@ -50,6 +50,28 @@ export const invitations = pgTable("invitation", {
   }).notNull(),
 });
 
+export const departments = pgTable(
+  "departments",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    code: text("code"),
+    description: text("description"),
+    headUserId: text("head_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+  },
+  (table) => [
+    index("departments_organization_id_idx").on(table.organizationId),
+    index("departments_head_user_id_idx").on(table.headUserId),
+    unique("departments_org_name_unique").on(table.organizationId, table.name),
+  ],
+);
+
 // Projects table
 export const projects = pgTable(
   "projects",
@@ -64,6 +86,9 @@ export const projects = pgTable(
     organizationId: text("organization_id").references(() => organizations.id, {
       onDelete: "cascade",
     }),
+    departmentId: text("department_id").references(() => departments.id, {
+      onDelete: "set null",
+    }),
     // UI customization
     color: text("color"), // hex color for UI display
     icon: text("icon"), // emoji or icon name
@@ -71,6 +96,7 @@ export const projects = pgTable(
   (table) => [
     index("projects_user_id_idx").on(table.userId),
     index("projects_organization_id_idx").on(table.organizationId),
+    index("projects_department_id_idx").on(table.departmentId),
     index("projects_created_by_idx").on(table.userId), // createdBy is same as userId
   ]
 );
@@ -78,6 +104,7 @@ export const projects = pgTable(
 export const organizationsRelations = relations(organizations, ({ many }) => ({
   members: many(members),
   invitations: many(invitations),
+  departments: many(departments),
 }));
 
 export const membersRelations = relations(members, ({ one }) => ({
@@ -102,6 +129,19 @@ export const invitationsRelations = relations(invitations, ({ one }) => ({
   }),
 }));
 
+export const departmentsRelations = relations(departments, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [departments.organizationId],
+    references: [organizations.id],
+  }),
+  headUser: one(users, {
+    fields: [departments.headUserId],
+    references: [users.id],
+  }),
+  projects: many(projects),
+  surveys: many(surveys),
+}));
+
 export const projectsRelations = relations(projects, ({ one, many }) => ({
   user: one(users, {
     fields: [projects.userId],
@@ -110,6 +150,10 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   organization: one(organizations, {
     fields: [projects.organizationId],
     references: [organizations.id],
+  }),
+  department: one(departments, {
+    fields: [projects.departmentId],
+    references: [departments.id],
   }),
   surveys: many(surveys),
 }));

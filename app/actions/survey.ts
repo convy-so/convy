@@ -8,16 +8,19 @@ import { getDb } from "@/db";
 import { surveys, users, organizations, surveyEditors } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
-import { cache, cacheKeys } from "@/lib/cache";
+import { invalidateDashboardCaches } from "@/lib/cache";
 import { env } from "@/lib/env";
 import {
-  publishPendingOutboxEntries,
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
 
 type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
+
+type SurveyPermission = NonNullable<
+  Awaited<ReturnType<typeof getSurveyPermissionContext>>
+>;
 
 /**
  * Schema for updating survey settings
@@ -33,7 +36,7 @@ const updateSurveySchema = z.object({
     .positive()
     .max(50, "Maximum participant limit is 50")
     .optional(),
-  language: z.enum(["en", "fr", "de"]).optional(),
+  language: z.enum(["en", "fr", "de", "es", "it"]).optional(),
   // Note: goal, type, information, requiredQuestions, metrics are auto-generated
   // and should not be manually edited after creation
 });
@@ -107,17 +110,12 @@ export async function updateSurveyAction(
       }
     });
 
-    // Invalidate dashboard cache
-    await cache.delete(
-      cacheKeys.dashboardRecentSurveys(
-        session.user.id,
-        existingSurvey.organizationId,
-      ),
+    await invalidateDashboardCaches(
+      session.user.id,
+      existingSurvey.organizationId,
     );
 
-    if (existingSurvey.organizationId) {
-      await publishPendingOutboxEntries();
-    }
+
 
     return { success: true, data: { id: body.id } };
   } catch (error) {
@@ -153,10 +151,16 @@ export async function getSurveysAction(): Promise<
       currentParticipants: number;
       participantLimit: number;
       shareableLink: string | null;
+      deliveryMode: string;
+      classroomId: string | null;
       projectId: string | null;
+      classroomTitle: string | null;
       creatorName: string | null;
       isOwner: boolean;
       isVoice: boolean;
+      accessLevel: "owner" | "editor" | "viewer" | "none";
+      canOpen: boolean;
+      canEdit: boolean;
     }>
   >
 > {
@@ -165,7 +169,6 @@ export async function getSurveysAction(): Promise<
     const activeOrgId = session.session.activeOrganizationId;
 
     if (activeOrgId) {
-      // Workspace context: Get all surveys in the workspace
       const workspaceSurveys = await getDb()
         .select({
           id: surveys.id,
@@ -175,17 +178,51 @@ export async function getSurveysAction(): Promise<
           currentParticipants: surveys.currentParticipants,
           participantLimit: surveys.participantLimit,
           shareableLink: surveys.shareableLink,
+          deliveryMode: surveys.deliveryMode,
+          classroomId: surveys.classroomId,
           projectId: surveys.projectId,
           creatorName: users.name,
           isOwner: sql<boolean>`${surveys.userId} = ${session.user.id}`,
           isVoice: surveys.isVoice,
+          classroomTitle: sql<string | null>`null`,
         })
         .from(surveys)
         .leftJoin(users, eq(surveys.userId, users.id))
         .where(eq(surveys.organizationId, activeOrgId))
         .orderBy(surveys.createdAt);
 
-      return { success: true, data: workspaceSurveys };
+      const permissionEntries = await Promise.all(
+        workspaceSurveys.map(async (survey) => ({
+          surveyId: survey.id,
+          permission: await getSurveyPermissionContext(session.user.id, survey.id, {
+            activeWorkspaceId: activeOrgId,
+          }),
+        })),
+      );
+      const permissionBySurveyId = new Map<string, SurveyPermission>();
+      for (const entry of permissionEntries) {
+        if (entry.permission) {
+          permissionBySurveyId.set(entry.surveyId, entry.permission);
+        }
+      }
+
+      return {
+        success: true,
+        data: workspaceSurveys.flatMap((survey) => {
+            const permission = permissionBySurveyId.get(survey.id);
+
+            if (!permission?.canView) {
+              return [];
+            }
+
+            return [{
+              ...survey,
+              accessLevel: permission.accessLevel,
+              canOpen: permission.canView,
+              canEdit: permission.canEdit,
+            }];
+          }),
+      };
     } else {
       // Personal context: Get only user's personal surveys (no organizationId)
       const personalSurveys = await getDb()
@@ -197,10 +234,13 @@ export async function getSurveysAction(): Promise<
           currentParticipants: surveys.currentParticipants,
           participantLimit: surveys.participantLimit,
           shareableLink: surveys.shareableLink,
+          deliveryMode: surveys.deliveryMode,
+          classroomId: surveys.classroomId,
           projectId: surveys.projectId,
           creatorName: users.name,
           isOwner: sql<boolean>`${surveys.userId} = ${session.user.id}`,
           isVoice: surveys.isVoice,
+          classroomTitle: sql<string | null>`null`,
         })
         .from(surveys)
         .leftJoin(users, eq(surveys.userId, users.id))
@@ -212,7 +252,15 @@ export async function getSurveysAction(): Promise<
         )
         .orderBy(surveys.createdAt);
 
-      return { success: true, data: personalSurveys };
+      return {
+        success: true,
+        data: personalSurveys.map((survey) => ({
+          ...survey,
+          accessLevel: "owner",
+          canOpen: true,
+          canEdit: true,
+        })),
+      };
     }
   } catch (error) {
     if (error instanceof Error) {
@@ -251,7 +299,7 @@ export async function getSurveyAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    // Access granted (owner or workspace-member)
+    // Access granted (creator, personal owner, or invited editor)
     return { success: true, data: survey };
   } catch (error) {
     if (error instanceof Error) {
@@ -367,13 +415,11 @@ export async function confirmSurveyAction(
       }
     });
 
-    await cache.delete(
-      cacheKeys.dashboardRecentSurveys(session.user.id, survey.organizationId),
-    );
+    await invalidateDashboardCaches(session.user.id, survey.organizationId, [
+      "recentSurveys",
+    ]);
 
-    if (survey.organizationId) {
-      await publishPendingOutboxEntries();
-    }
+
 
     const publicUrl = `/s/${shareableLink}`;
 
@@ -656,96 +702,6 @@ export async function getSurveyPublicUrlsAction(surveyId: string): Promise<
 }
 
 /**
- * Generate embeddable widget code (Typeform-style iframe) for a survey.
- * This does not create any UI route; it only returns HTML snippets your
- * frontend can display to users on eligible plans.
- */
-export async function getSurveyEmbedCodeAction(surveyId: string): Promise<
-  ActionResult<{
-    iframeCode: string;
-    inlineScriptSnippet: string;
-    popoverScriptSnippet: string;
-    sideTabScriptSnippet: string;
-    url: string;
-  }>
-> {
-  try {
-    const session = await getVerifiedSession();
-
-    const [survey] = await getDb()
-      .select()
-      .from(surveys)
-      .where(eq(surveys.id, surveyId));
-
-    if (!survey) {
-      return { success: false, error: "Survey not found" };
-    }
-
-    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
-    if (!permission?.canView) {
-      return { success: false, error: "Unauthorized" };
-    }
-
-    if (survey.status !== "active") {
-      return {
-        success: false,
-        error: "Survey must be active to generate an embed widget",
-      };
-    }
-
-    const baseUrl = env.APP_BASE_URL.replace(/\/+$/, "");
-
-    const identifier = survey.customSlug ?? survey.shareableLink;
-
-    if (!identifier) {
-      return {
-        success: false,
-        error: "Survey does not have a public link yet",
-      };
-    }
-
-    const url = `${baseUrl}/s/${identifier}?embed=true`;
-
-    // Standard Iframe
-    const iframeCode = `<iframe src="${url}" width="100%" height="600" frameborder="0" style="border:0;" allow="microphone; camera; autoplay; encrypted-media"></iframe>`;
-
-    // Modern Loader Script Inline
-    const inlineScriptSnippet = `<convy-widget survey-id="${identifier}" type="inline"></convy-widget>
-<script src="${baseUrl}/embed.js" async></script>`;
-
-    // Modern Loader Script Popover
-    const popoverScriptSnippet = `<convy-widget survey-id="${identifier}" type="popover" color="#4F46E5"></convy-widget>
-<script src="${baseUrl}/embed.js" async></script>`;
-
-    // Modern Loader Script Side Tab
-    const sideTabScriptSnippet = `<convy-widget survey-id="${identifier}" type="side-tab" color="#4F46E5" text="Feedback"></convy-widget>
-<script src="${baseUrl}/embed.js" async></script>`;
-
-    return {
-      success: true,
-      data: {
-        iframeCode,
-        inlineScriptSnippet,
-        popoverScriptSnippet,
-        sideTabScriptSnippet,
-        url,
-      },
-    };
-  } catch (error) {
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return { success: false, error: error.message };
-      }
-      return { success: false, error: error.message };
-    }
-    return { success: false, error: "Failed to generate embed code" };
-  }
-}
-
-/**
  * Deactivate a survey (pause it from receiving new responses)
  */
 export async function deactivateSurveyAction(
@@ -777,13 +733,10 @@ export async function deactivateSurveyAction(
       .set({ status: "completed" })
       .where(eq(surveys.id, surveyId));
 
-    // Invalidate dashboard cache
-    await cache.delete(
-      cacheKeys.dashboardStats(session.user.id, survey.organizationId),
-    );
-    await cache.delete(
-      cacheKeys.dashboardRecentSurveys(session.user.id, survey.organizationId),
-    );
+    await invalidateDashboardCaches(session.user.id, survey.organizationId, [
+      "stats",
+      "recentSurveys",
+    ]);
 
     return { success: true, data: { id: surveyId } };
   } catch (error) {
@@ -840,13 +793,10 @@ export async function reactivateSurveyAction(
       .set({ status: "active" })
       .where(eq(surveys.id, surveyId));
 
-    // Invalidate dashboard cache
-    await cache.delete(
-      cacheKeys.dashboardStats(session.user.id, survey.organizationId),
-    );
-    await cache.delete(
-      cacheKeys.dashboardRecentSurveys(session.user.id, survey.organizationId),
-    );
+    await invalidateDashboardCaches(session.user.id, survey.organizationId, [
+      "stats",
+      "recentSurveys",
+    ]);
 
     return { success: true, data: { id: surveyId } };
   } catch (error) {
@@ -929,48 +879,60 @@ export async function deleteSurveyAction(
       await tx.delete(surveys).where(eq(surveys.id, surveyId));
     });
 
-    await cache.delete(
-      cacheKeys.dashboardActivity(session.user.id, survey.organizationId),
-    );
+    await invalidateDashboardCaches(session.user.id, survey.organizationId);
 
-    if (organizationId) {
-      await publishPendingOutboxEntries();
-    }
+
 
     // Send Notifications if in a workspace
     if (organizationId) {
-      // We run this asynchronously to not block the UI response
-      (async () => {
-        try {
-          const { getWorkspaceMembers } =
-            await import("@/app/actions/workspace");
-          const { sendSurveyDeletedEmail } = await import("@/lib/email");
+      try {
+        const { getWorkspaceMembers } =
+          await import("@/app/actions/workspace");
+        const { sendSurveyDeletedEmail } = await import("@/lib/email");
 
-          const membersResult = await getWorkspaceMembers({ organizationId });
-
+        const membersResult = await getWorkspaceMembers({ organizationId });
+        if (!membersResult.success) {
+          console.error(
+            "[Survey Action] Failed to load workspace members for survey deletion notifications:",
+            membersResult.error,
+          );
+        } else {
           const [org] = await getDb()
             .select({ name: organizations.name })
             .from(organizations)
             .where(eq(organizations.id, organizationId));
 
           const workspaceName = org?.name || "Workspace";
+          const notificationResults = await Promise.allSettled(
+            membersResult.data.flatMap((member) =>
+              member.user.email
+                ? [
+                    sendSurveyDeletedEmail({
+                      email: member.user.email,
+                      surveyTitle,
+                      deletedBy: session.user.name || session.user.email,
+                      workspaceName,
+                    }),
+                  ]
+                : [],
+            ),
+          );
 
-          if (membersResult.success) {
-            for (const member of membersResult.data) {
-              if (member.user.email) {
-                await sendSurveyDeletedEmail({
-                  email: member.user.email,
-                  surveyTitle,
-                  deletedBy: session.user.name || session.user.email,
-                  workspaceName,
-                });
-              }
-            }
+          const failedNotifications = notificationResults.filter(
+            (result) => result.status === "rejected",
+          );
+          if (failedNotifications.length > 0) {
+            console.error(
+              `[Survey Action] Failed to enqueue ${failedNotifications.length} survey deletion notifications for survey ${surveyId}.`,
+            );
           }
-        } catch (e) {
-          console.error("Failed to send delete notifications:", e);
         }
-      })();
+      } catch (error) {
+        console.error(
+          "[Survey Action] Failed to enqueue survey deletion notifications:",
+          error,
+        );
+      }
     }
 
     return { success: true, data: { id: surveyId } };
@@ -993,7 +955,24 @@ export async function deleteSurveyAction(
  */
 export async function duplicateSurveyAction(
   surveyId: string,
-): Promise<ActionResult<{ id: string; survey: any }>> {
+): Promise<
+  ActionResult<{
+    id: string;
+    survey: {
+      id: string;
+      title: string;
+      description: string;
+      status: string;
+      shareableLink: string | null;
+      responses: number;
+      completionRate: number;
+      createdAt: string;
+      lastResponse: string;
+      isOwner: boolean;
+      isVoice: boolean;
+    };
+  }>
+> {
   try {
     const session = await getVerifiedSession();
 
@@ -1080,9 +1059,13 @@ export async function duplicateSurveyAction(
       isVoice: newSurvey.isVoice || false,
     };
 
-    if (existingSurvey.organizationId) {
-      await publishPendingOutboxEntries();
-    }
+    await invalidateDashboardCaches(
+      session.user.id,
+      existingSurvey.organizationId,
+      ["stats", "recentSurveys"],
+    );
+
+
 
     return {
       success: true,
@@ -1184,7 +1167,6 @@ export async function transferSurveyOwnershipAction(input: {
         },
       });
     });
-    await publishPendingOutboxEntries();
 
     return { success: true, data: undefined };
   } catch (error) {

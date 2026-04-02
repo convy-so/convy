@@ -14,8 +14,16 @@ import { WorkspaceInvitationEmail } from "@/components/emails/workspace-invitati
 import { WorkspaceWelcomeEmail } from "@/components/emails/workspace-welcome";
 import { SecondaryVerificationEmail } from "@/components/emails/secondary-verification";
 import { SurveyDeletedEmail } from "@/components/emails/survey-deleted";
+import { StudentActivationEmail } from "@/components/emails/student-activation";
+import { defaultAppLocale, normalizeAppLocale } from "@/lib/i18n/config";
 
-const resend = new Resend(process.env.RESEND_API_KEY!);
+const resendApiKey = process.env.RESEND_API_KEY;
+
+if (!resendApiKey) {
+  throw new Error("RESEND_API_KEY is required for the email worker.");
+}
+
+const resend = new Resend(resendApiKey);
 
 const jobDataSchema = z.object({
   type: z.enum([
@@ -25,12 +33,106 @@ const jobDataSchema = z.object({
     "workspace-welcome",
     "secondary-verification",
     "survey-deleted",
+    "student-activation",
   ]),
   email: z.string().email(),
   url: z.string(),
   name: z.string().nullable().optional(),
   metadata: z.record(z.unknown()).optional(),
 });
+
+function getMetadataText(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+  fallback: string,
+): string {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim().length > 0
+    ? value
+    : fallback;
+}
+
+function getMetadataLocale(metadata: Record<string, unknown> | undefined) {
+  return normalizeAppLocale(metadata?.locale, defaultAppLocale);
+}
+
+function getLocalizedEmailCopy(locale: ReturnType<typeof getMetadataLocale>) {
+  const copy: Record<
+    ReturnType<typeof getMetadataLocale>,
+    {
+      verificationSubject: string;
+      resetSubject: string;
+      invitationSubject: (workspaceName: string) => string;
+      welcomeSubject: (workspaceName: string) => string;
+      secondaryVerificationSubject: string;
+      surveyDeletedSubject: string;
+      studentActivationSubject: (classroomName: string) => string;
+    }
+  > = {
+    en: {
+      verificationSubject: "Verify your Convyy account",
+      resetSubject: "Reset your Convyy password",
+      invitationSubject: (workspaceName: string) =>
+        `You've been invited to join ${workspaceName} on Convyy`,
+      welcomeSubject: (workspaceName: string) =>
+        `Welcome to ${workspaceName} on Convyy`,
+      secondaryVerificationSubject: "Verify your secondary email address",
+      surveyDeletedSubject: "Your survey has been deleted",
+      studentActivationSubject: (classroomName: string) =>
+        `Activate your learning account for ${classroomName}`,
+    },
+    fr: {
+      verificationSubject: "Vérifiez votre compte Convyy",
+      resetSubject: "Réinitialisez votre mot de passe Convyy",
+      invitationSubject: (workspaceName: string) =>
+        `Vous êtes invité à rejoindre ${workspaceName} sur Convyy`,
+      welcomeSubject: (workspaceName: string) =>
+        `Bienvenue dans ${workspaceName} sur Convyy`,
+      secondaryVerificationSubject: "Vérifiez votre adresse e-mail secondaire",
+      surveyDeletedSubject: "Votre sondage a été supprimé",
+      studentActivationSubject: (classroomName: string) =>
+        `Activez votre compte d'apprentissage pour ${classroomName}`,
+    },
+    de: {
+      verificationSubject: "Bestätige dein Convyy-Konto",
+      resetSubject: "Setze dein Convyy-Passwort zurück",
+      invitationSubject: (workspaceName: string) =>
+        `Du wurdest eingeladen, ${workspaceName} auf Convyy beizutreten`,
+      welcomeSubject: (workspaceName: string) =>
+        `Willkommen bei ${workspaceName} auf Convyy`,
+      secondaryVerificationSubject: "Bestätige deine zusätzliche E-Mail-Adresse",
+      surveyDeletedSubject: "Deine Umfrage wurde gelöscht",
+      studentActivationSubject: (classroomName: string) =>
+        `Aktiviere dein Lernkonto für ${classroomName}`,
+    },
+    es: {
+      verificationSubject: "Verifica tu cuenta de Convyy",
+      resetSubject: "Restablece tu contraseña de Convyy",
+      invitationSubject: (workspaceName: string) =>
+        `Te invitaron a unirte a ${workspaceName} en Convyy`,
+      welcomeSubject: (workspaceName: string) =>
+        `Te damos la bienvenida a ${workspaceName} en Convyy`,
+      secondaryVerificationSubject: "Verifica tu dirección de correo secundaria",
+      surveyDeletedSubject: "Tu encuesta ha sido eliminada",
+      studentActivationSubject: (classroomName: string) =>
+        `Activa tu cuenta de aprendizaje para ${classroomName}`,
+    },
+    it: {
+      verificationSubject: "Verifica il tuo account Convyy",
+      resetSubject: "Reimposta la password di Convyy",
+      invitationSubject: (workspaceName: string) =>
+        `Sei stato invitato a unirti a ${workspaceName} su Convyy`,
+      welcomeSubject: (workspaceName: string) =>
+        `Benvenuto in ${workspaceName} su Convyy`,
+      secondaryVerificationSubject: "Verifica il tuo indirizzo email secondario",
+      surveyDeletedSubject: "Il tuo sondaggio è stato eliminato",
+      studentActivationSubject: (classroomName: string) =>
+        `Attiva il tuo account di apprendimento per ${classroomName}`,
+    },
+  };
+
+  return copy[locale];
+}
 
 /**
  * Worker for sending emails
@@ -41,10 +143,10 @@ const emailWorker = new Worker<EmailJobData>(
   async (job: Job<EmailJobData>) => {
     const validatedData = jobDataSchema.parse(job.data);
     const { type, email, url, name } = validatedData;
+    const metadata = validatedData.metadata;
+    const locale = getMetadataLocale(metadata);
+    const localizedCopy = getLocalizedEmailCopy(locale);
 
-    console.log(
-      `[Email Worker] Processing job ${job.id} - ${type} email to ${email}`,
-    );
 
     await job.updateProgress(30);
 
@@ -52,19 +154,19 @@ const emailWorker = new Worker<EmailJobData>(
     let html: string;
 
     if (type === "verification") {
-      subject = "Verify your Convyy account";
+      subject = localizedCopy.verificationSubject;
       html = await render(
         React.createElement(VerificationEmail, { url, name })
       );
     } else if (type === "password-reset") {
-      subject = "Reset your Convyy password";
+      subject = localizedCopy.resetSubject;
       html = await render(
         React.createElement(PasswordResetEmail, { url, name })
       );
     } else if (type === "workspace-invitation") {
-      const workspaceName = (validatedData.metadata?.workspaceName as string) || "a workspace";
-      const invitedBy = (validatedData.metadata?.invitedBy as string) || "someone";
-      subject = `You've been invited to join ${workspaceName} on Convyy`;
+      const workspaceName = getMetadataText(metadata, "workspaceName", "a workspace");
+      const invitedBy = getMetadataText(metadata, "invitedBy", "someone");
+      subject = localizedCopy.invitationSubject(workspaceName);
       html = await render(
         React.createElement(WorkspaceInvitationEmail, {
           invitedBy,
@@ -74,8 +176,8 @@ const emailWorker = new Worker<EmailJobData>(
         })
       );
     } else if (type === "workspace-welcome") {
-      const workspaceName = (validatedData.metadata?.workspaceName as string) || "the workspace";
-      subject = `Welcome to ${workspaceName} on Convyy`;
+      const workspaceName = getMetadataText(metadata, "workspaceName", "the workspace");
+      subject = localizedCopy.welcomeSubject(workspaceName);
       html = await render(
         React.createElement(WorkspaceWelcomeEmail, {
           workspaceName,
@@ -84,15 +186,15 @@ const emailWorker = new Worker<EmailJobData>(
         })
       );
     } else if (type === "secondary-verification") {
-      subject = "Verify your secondary email address";
+      subject = localizedCopy.secondaryVerificationSubject;
       html = await render(
         React.createElement(SecondaryVerificationEmail, { url, name })
       );
     } else if (type === "survey-deleted") {
-      const surveyTitle = (validatedData.metadata?.surveyTitle as string) || "your survey";
-      const deletedBy = (validatedData.metadata?.deletedBy as string) || "someone";
-      const workspaceName = (validatedData.metadata?.workspaceName as string) || "the workspace";
-      subject = "Your survey has been deleted";
+      const surveyTitle = getMetadataText(metadata, "surveyTitle", "your survey");
+      const deletedBy = getMetadataText(metadata, "deletedBy", "someone");
+      const workspaceName = getMetadataText(metadata, "workspaceName", "the workspace");
+      subject = localizedCopy.surveyDeletedSubject;
       
       html = await render(
         React.createElement(SurveyDeletedEmail, {
@@ -101,6 +203,16 @@ const emailWorker = new Worker<EmailJobData>(
           workspaceName,
           url,
           name
+        })
+      );
+    } else if (type === "student-activation") {
+      const classroomName = getMetadataText(metadata, "classroomName", "your class");
+      subject = localizedCopy.studentActivationSubject(classroomName);
+      html = await render(
+        React.createElement(StudentActivationEmail, {
+          studentName: name || "there",
+          classroomName,
+          activationLink: url,
         })
       );
     } else {
@@ -122,9 +234,6 @@ const emailWorker = new Worker<EmailJobData>(
 
     await job.updateProgress(100);
 
-    console.log(
-      `[Email Worker] Completed job ${job.id} - ${type} email to ${email}`,
-    );
 
     return {
       type,
@@ -142,8 +251,7 @@ const emailWorker = new Worker<EmailJobData>(
   },
 );
 
-emailWorker.on("completed", (job) => {
-  console.log(`[Email Worker] Job ${job.id} completed`);
+emailWorker.on("completed", () => {
 });
 
 emailWorker.on("failed", (job, err) => {

@@ -21,11 +21,10 @@ export default function ProfilePage() {
 async function ProfileWrapper() {
     const authHeaders = await headers();
     const session = await getVerifiedSession(authHeaders).catch(() => null);
-    const cookieHeader = authHeaders.get("cookie");
 
     return (
         <AuthProvider initialSession={session}>
-            <ProfileContent cookieHeader={cookieHeader} />
+            <ProfileContent />
         </AuthProvider>
     );
 }

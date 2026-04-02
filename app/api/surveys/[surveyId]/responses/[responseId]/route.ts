@@ -12,6 +12,15 @@ import {
 } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import type { AnalyticsSessionDetail } from "@/lib/analytics";
+import type {
+  ConversationInsight,
+  CoverageNode,
+  EvidenceRecord,
+} from "@/lib/education/types";
+import {
+  conversationInsightSchema,
+  evidenceRecordSchema,
+} from "@/lib/education/types";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
 
 export async function GET(
@@ -83,9 +92,16 @@ export async function GET(
         .then((rows) => rows[0]),
     ]);
 
-    const insight = insightRow?.insight as any;
+    const insightResult = conversationInsightSchema.safeParse(insightRow?.insight);
+    const insight: ConversationInsight | undefined = insightResult.success
+      ? insightResult.data
+      : undefined;
     const nodeCoverageMap = sessionRow.sessionState.coverageByNode || {};
     const planNodes = activePlan?.plan.nodes || [];
+    const evidence = evidenceRows
+      .map((row) => evidenceRecordSchema.safeParse(row.metadata))
+      .filter((result): result is { success: true; data: EvidenceRecord } => result.success)
+      .map((result) => result.data);
 
     const payload: AnalyticsSessionDetail = {
       id: sessionRow.id,
@@ -111,14 +127,14 @@ export async function GET(
       fatiguePercent: Math.round(
         (sessionRow.sessionState.fatigueScore || 0) * 100,
       ),
-      nodeCoverage: planNodes.map((node: any) => ({
+      nodeCoverage: planNodes.map((node: CoverageNode) => ({
         id: node.id,
         label: node.label,
         description: node.description,
         coveragePercent: Math.round((nodeCoverageMap[node.id] || 0) * 100),
       })),
       notableQuotes: Array.isArray(insight?.notableQuotes) ? insight.notableQuotes : [],
-      evidence: evidenceRows.map((row) => row.metadata as any),
+      evidence,
       transcript: turnRows
         .sort((a, b) => a.turnIndex - b.turnIndex)
         .map((turn) => ({

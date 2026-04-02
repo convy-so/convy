@@ -19,7 +19,13 @@ import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 
-type SurveyStatus = "active" | "draft" | "completed" | "paused" | "creating";
+type SurveyStatus =
+    | "active"
+    | "draft"
+    | "completed"
+    | "paused"
+    | "creating"
+    | "archived";
 
 interface SurveyCardProps {
     id: string;
@@ -41,6 +47,7 @@ const statusConfig: Record<SurveyStatus, { key: string; color: string; bgColor: 
     completed: { key: "Completed", color: "text-gray-700", bgColor: "bg-gray-50 border-gray-200" },
     paused: { key: "Paused", color: "text-orange-700", bgColor: "bg-orange-50 border-orange-200" },
     creating: { key: "Creating", color: "text-blue-700", bgColor: "bg-blue-50 border-blue-200" },
+    archived: { key: "Archived", color: "text-slate-700", bgColor: "bg-slate-50 border-slate-200" },
 };
 
 export function SurveyCard({

@@ -21,6 +21,7 @@ const supabase = createClient(
 export const SURVEY_IMAGES_BUCKET = "survey-images";
 export const SURVEY_AUDIO_BUCKET = "survey-audio";
 export const SURVEY_VIDEO_BUCKET = "survey-video";
+export const LEARNING_MATERIALS_BUCKET = "learning-materials";
 
 /**
  * Upload an image to Supabase Storage
@@ -101,6 +102,38 @@ export async function uploadSurveyMedia(
   };
 }
 
+export async function uploadLearningMaterial(
+  file: Buffer | Blob,
+  topicId: string,
+  assetId: string,
+  contentType: string,
+  originalFilename: string,
+): Promise<{ url: string; path: string; bucket: string }> {
+  const safeName = originalFilename.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const filePath = `${topicId}/${assetId}-${safeName}`;
+
+  const { data, error } = await supabase.storage
+    .from(LEARNING_MATERIALS_BUCKET)
+    .upload(filePath, file, {
+      contentType,
+      upsert: true,
+    });
+
+  if (error) {
+    throw new Error(`Failed to upload learning material: ${error.message}`);
+  }
+
+  const { data: urlData } = supabase.storage
+    .from(LEARNING_MATERIALS_BUCKET)
+    .getPublicUrl(data.path);
+
+  return {
+    url: urlData.publicUrl,
+    path: data.path,
+    bucket: LEARNING_MATERIALS_BUCKET,
+  };
+}
+
 /**
  * Delete an image from Supabase Storage
  * @param path - The storage path of the image (e.g., "surveyId/imageId.png")
@@ -135,6 +168,16 @@ export async function deleteSurveyMedia(
 
   if (error) {
     throw new Error(`Failed to delete media: ${error.message}`);
+  }
+}
+
+export async function deleteLearningMaterial(path: string): Promise<void> {
+  const { error } = await supabase.storage
+    .from(LEARNING_MATERIALS_BUCKET)
+    .remove([path]);
+
+  if (error) {
+    throw new Error(`Failed to delete learning material: ${error.message}`);
   }
 }
 

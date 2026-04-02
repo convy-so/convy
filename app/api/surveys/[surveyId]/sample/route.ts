@@ -1,66 +1,138 @@
+import { stepCountIs, tool } from "ai";
 import { and, eq } from "drizzle-orm";
-import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { nanoid } from "nanoid";
+import { z } from "zod";
 import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
+import {
+  normalizeMessages as toModelMessages,
+  streamAIResponse,
+} from "@/lib/ai";
+import {
+  toPersistedUIChatMessages,
+  toUIMessages,
+  toVisibleConversationMessages,
+} from "@/lib/chat-ui-messages";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getClientIP, apiRateLimiter } from "@/lib/ratelimit";
-import { generateAIResponse } from "@/lib/ai";
-import {
-  buildConductingSystemPrompt,
-  createInitialSessionState,
-  finalizeConductingTurn,
-} from "@/lib/education/conducting-runtime";
-import {
-  ensureSession,
-  getActiveConductingProfile,
-  getActiveCoveragePlan,
-  purgeSessionAnalyticsArtifacts,
-  getResearchBrief,
-  getSessionBySourceId,
-} from "@/lib/education/storage";
-import { getConductingRuntimeLayers } from "@/lib/education/runtime-context";
 import {
   acquireSurveyLease,
   getActiveSurveyLease,
   getCurrentSurveyRevision,
-  publishPendingOutboxEntries,
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
+import {
+  buildConductingSystemPromptParts,
+  createInitialSessionState,
+  finalizeConductingTurn,
+} from "@/lib/education/conducting-runtime";
+import {
+  getSampleFinishSurveyToolDefinition,
+  getShowMediaToolDefinition,
+} from "@/lib/education/agent-tools";
+import { getConductingRuntimeLayers } from "@/lib/education/runtime-context";
+import {
+  ensureSession,
+  getActiveConductingProfile,
+  getActiveCoveragePlan,
+  getResearchBrief,
+  getSessionBySourceId,
+  purgeSessionAnalyticsArtifacts,
+  updateSessionState,
+} from "@/lib/education/storage";
+import { getClientIP, apiRateLimiter } from "@/lib/ratelimit";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
 
 export const maxDuration = 300;
 const MAX_SAMPLE_CONVERSATIONS = 3;
-
-type ChatMessage = {
-  id?: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp?: string;
+type SupportedLanguage = "en" | "fr" | "de" | "es" | "it";
+type SampleRouteBody = {
+  conversationNumber?: number;
+  messages?: unknown[];
+  expectedRevision?: number;
+  sessionId?: string;
+  leaseToken?: string;
+  forceLease?: boolean;
 };
 
-function normalizeMessages(messages: any[]): ChatMessage[] {
-  return messages
-    .map((message) => {
-      const content =
-        typeof message.content === "string"
-          ? message.content
-          : Array.isArray(message.parts)
-            ? message.parts
-                .filter((part: any) => part.type === "text")
-                .map((part: any) => part.text)
-                .join("")
-            : "";
-      return {
-        id: message.id,
-        role: message.role,
-        content,
-        timestamp: message.timestamp || new Date().toISOString(),
-      } as ChatMessage;
-    })
-    .filter((message) => message.role === "user" || message.role === "assistant");
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isSupportedLanguage(value: unknown): value is SupportedLanguage {
+  return (
+    value === "en" ||
+    value === "fr" ||
+    value === "de" ||
+    value === "es" ||
+    value === "it"
+  );
+}
+
+function getSurveyLanguage(value: unknown): SupportedLanguage {
+  return isSupportedLanguage(value) ? value : "en";
+}
+
+function parseSampleRouteBody(value: unknown): SampleRouteBody {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return {
+    conversationNumber:
+      typeof value.conversationNumber === "number"
+        ? value.conversationNumber
+        : undefined,
+    messages: Array.isArray(value.messages) ? value.messages : undefined,
+    expectedRevision:
+      typeof value.expectedRevision === "number"
+        ? value.expectedRevision
+        : undefined,
+    sessionId: typeof value.sessionId === "string" ? value.sessionId : undefined,
+    leaseToken:
+      typeof value.leaseToken === "string" ? value.leaseToken : undefined,
+    forceLease: typeof value.forceLease === "boolean" ? value.forceLease : undefined,
+  };
+}
+
+type SurveyMedia = {
+  id: string;
+  type: "image" | "audio" | "video";
+  url: string;
+  description: string;
+  altText?: string;
+  durationMs?: number | null;
+};
+
+function normalizeSurveyMedia(value: unknown): SurveyMedia[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (!isRecord(item) || typeof item.id !== "string" || typeof item.url !== "string") {
+      return [];
+    }
+
+    if (
+      item.type !== "image" &&
+      item.type !== "audio" &&
+      item.type !== "video"
+    ) {
+      return [];
+    }
+
+    return [{
+      id: item.id,
+      type: item.type,
+      url: item.url,
+      description: typeof item.description === "string" ? item.description : "",
+      altText: typeof item.altText === "string" ? item.altText : undefined,
+      durationMs:
+        typeof item.durationMs === "number" ? item.durationMs : undefined,
+    }];
+  });
 }
 
 async function ensureRehearsalLease(input: {
@@ -88,7 +160,7 @@ async function ensureRehearsalLease(input: {
     return { ok: true as const, lease: activeLease };
   }
 
-  return await acquireSurveyLease({
+  return acquireSurveyLease({
     surveyId: input.surveyId,
     stage: "rehearsal",
     userId: input.userId,
@@ -105,13 +177,22 @@ export async function GET(
     const session = await getVerifiedSession();
     const { surveyId } = await params;
     const { searchParams } = new URL(request.url);
-    const conversationNumber = Number(searchParams.get("conversationNumber") || 1);
+    const conversationNumber = Number(
+      searchParams.get("conversationNumber") || 1,
+    );
 
-    const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
+    const [survey] = await getDb()
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
     if (!survey) return new Response("Survey not found", { status: 404 });
 
-    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
-    if (!permission?.canView) return new Response("Unauthorized", { status: 403 });
+    const permission = await getSurveyPermissionContext(
+      session.user.id,
+      survey.id,
+    );
+    if (!permission?.canView)
+      return new Response("Unauthorized", { status: 403 });
 
     const [sample] = await getDb()
       .select()
@@ -125,7 +206,9 @@ export async function GET(
       .limit(1);
 
     return NextResponse.json({
-      messages: sample?.messages || [],
+      messages: toVisibleConversationMessages(
+        toPersistedUIChatMessages(sample?.messages ?? [], ["user", "assistant"]),
+      ),
       lease: await getActiveSurveyLease(surveyId, "rehearsal"),
       revision: await getCurrentSurveyRevision(surveyId),
     });
@@ -157,23 +240,34 @@ export async function POST(
 
     const session = await getVerifiedSession();
     const { surveyId } = await params;
-    const body = await request.json();
+    const body = parseSampleRouteBody(await request.json());
     const conversationNumber = Number(body.conversationNumber || 1);
-    const messages = normalizeMessages(Array.isArray(body.messages) ? body.messages : []);
+    const rawMessages = body.messages ?? [];
 
-    if (conversationNumber < 1 || conversationNumber > MAX_SAMPLE_CONVERSATIONS) {
+    if (
+      conversationNumber < 1 ||
+      conversationNumber > MAX_SAMPLE_CONVERSATIONS
+    ) {
       return new Response(
         `Invalid conversation number. Must be between 1 and ${MAX_SAMPLE_CONVERSATIONS}`,
         { status: 400 },
       );
     }
 
-    const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
+    const [survey] = await getDb()
+      .select()
+      .from(surveys)
+      .where(eq(surveys.id, surveyId));
     if (!survey) return new Response("Survey not found", { status: 404 });
 
-    const permission = await getSurveyPermissionContext(session.user.id, survey.id);
+    const permission = await getSurveyPermissionContext(
+      session.user.id,
+      survey.id,
+    );
     if (!permission?.canEdit) {
-      return new Response("Unauthorized: Editor access required", { status: 403 });
+      return new Response("Unauthorized: Editor access required", {
+        status: 403,
+      });
     }
     if (survey.status !== "draft" && survey.status !== "sample_review") {
       return new Response(
@@ -200,7 +294,9 @@ export async function POST(
       surveyId,
       userId: session.user.id,
       sessionId:
-        typeof body.sessionId === "string" ? body.sessionId : session.session.id,
+        typeof body.sessionId === "string"
+          ? body.sessionId
+          : session.session.id,
       leaseToken: typeof body.leaseToken === "string" ? body.leaseToken : null,
       force: Boolean(body.forceLease),
     });
@@ -272,120 +368,202 @@ export async function POST(
         .where(eq(surveys.id, surveyId));
     }
 
-    let sessionRow = await getSessionBySourceId(sampleConversation.id);
+    const sourceId = sampleConversation.id;
+    let sessionRow = await getSessionBySourceId(sourceId);
     if (!sessionRow) {
       sessionRow = await ensureSession({
         surveyId,
         sessionType: "sample",
-        sourceConversationId: sampleConversation.id,
-        language: survey.language,
+        sourceConversationId: sourceId,
+        language: getSurveyLanguage(survey.language),
         initialState: createInitialSessionState({
           surveyId,
           sessionId: nanoid(),
           sessionType: "sample",
-          language: survey.language as any,
+          language: getSurveyLanguage(survey.language),
           coveragePlan: planRow.plan,
         }),
       });
     }
 
-    const brief = briefRow.brief;
-    const state = sessionRow.sessionState;
-    const systemPrompt = buildConductingSystemPrompt({
-      brief,
+    const promptParts = buildConductingSystemPromptParts({
+      brief: briefRow.brief,
       coveragePlan: planRow.plan,
-      sessionState: state,
+      sessionState: sessionRow.sessionState,
       sessionType: "sample",
       conductingProfile: activeSampleProfile?.profile ?? null,
       playbookContext: runtimeLayers.playbookContext,
       personalityContext: runtimeLayers.personalityContext,
+      toolContext: {
+        canFinishSurvey: true,
+        canShowMedia: (survey.media || []).length > 0,
+      },
     });
+    const systemPrompt = `${promptParts.dynamicSystemPrompt}
 
-    const visibleMessages =
-      messages.length > 0
-        ? messages
-        : [
-            {
-              role: "user",
-              content:
-                "Start the sample interview by greeting the participant and asking the first best question.",
-            } as ChatMessage,
-          ];
+Additional sample-session rules:
+- Treat the creator exactly like a participant so they can feel the real interview flow.
+- Honor the approved sample conducting profile precisely when it is present.
+- Close naturally once the required education evidence is covered.
+- Keep the exchange realistic and participant-centered.
 
-    const responseText = await generateAIResponse(
-      visibleMessages
-        .map((message) => `${message.role}: ${message.content}`)
-        .join("\n\n"),
-      systemPrompt,
-      { surveyId, userId: session.user.id, maxTokens: 500, temperature: 0.4 },
-    );
+Respond to the user in the language they are speaking to you in. Match the language of each user message naturally.`;
 
-    const assistantMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: responseText,
-      timestamp: new Date().toISOString(),
-    };
-    const persistedMessages =
-      messages.length > 0 ? [...messages, assistantMessage] : [assistantMessage];
+    let currentSessionState = sessionRow.sessionState;
+    let completedByTool = false;
+    const surveyMedia = normalizeSurveyMedia(survey.media);
+    const hasMedia = surveyMedia.length > 0;
 
-    await getDb().transaction(async (tx) => {
-      await tx
-        .update(sampleConversations)
-        .set({
-          messages: persistedMessages,
-          updatedAt: new Date(),
-        })
-        .where(eq(sampleConversations.id, sampleConversation.id));
+    const tools = {
+      finishSurvey: tool({
+        description: getSampleFinishSurveyToolDefinition().description,
+        inputSchema: z.object({}),
+        execute: async () => {
+          const threshold =
+            planRow.plan.completionRule.minimumRequiredNodeCoverage;
+          if (
+            currentSessionState.status !== "completed" &&
+            currentSessionState.overallCoverage < threshold
+          ) {
+            return {
+              error: "Interview coverage is not high enough to finish yet",
+              currentCoverage: currentSessionState.overallCoverage,
+              requiredCoverage: threshold,
+            };
+          }
 
-      await recordRealtimeEvent(tx, {
-        scope: "survey",
-        surveyId,
-        workspaceId: permission.workspaceId,
-        eventType: "survey.rehearsal_turn_added",
-        actorId: session.user.id,
-        payload: {
-          surveyId,
-          conversationNumber,
-          sampleConversationId: sampleConversation.id,
-          lease: leaseResult.lease,
-          messages: persistedMessages.slice(-2),
-        },
-      });
-    });
+          if (currentSessionState.status !== "completed") {
+            currentSessionState = {
+              ...currentSessionState,
+              status: "completed",
+              stopReason: "agent_finish_signal",
+            };
+            await updateSessionState(sessionRow.id, currentSessionState);
+          }
 
-    if (visibleMessages.some((message) => message.role === "user")) {
-      await finalizeConductingTurn({
-        surveyId,
-        sessionId: sessionRow.id,
-        brief,
-        coveragePlan: planRow.plan,
-        sessionState: state,
-        messages: persistedMessages,
-      });
-      await purgeSessionAnalyticsArtifacts({
-        surveyId,
-        sessionId: sessionRow.id,
-      }).catch((error) => {
-        console.error(
-          "[Sample Route] Failed to purge rehearsal analytics artifacts:",
-          error,
-        );
-      });
-    }
-
-    await publishPendingOutboxEntries();
-
-    const remainingSamples = MAX_SAMPLE_CONVERSATIONS - conversationNumber;
-    const response = createUIMessageStreamResponse({
-      stream: createUIMessageStream({
-        execute: async ({ writer }) => {
-          writer.write({ type: "text-delta", textDelta: responseText } as any);
+          completedByTool = true;
+          return { success: true, message: "Survey marked as complete" };
         },
       }),
+      ...(hasMedia
+        ? {
+            showMedia: tool({
+              description: getShowMediaToolDefinition().description,
+              inputSchema: z.object({
+                mediaId: z.string().describe("The media identifier to display."),
+              }),
+              execute: async ({ mediaId }: { mediaId: string }) => {
+                const media = surveyMedia.find((item) => item.id === mediaId);
+                if (!media) {
+                  return { error: "Media not found" };
+                }
+
+                return {
+                  success: true,
+                  media: {
+                    id: media.id,
+                    type: media.type,
+                    url: media.url,
+                    description: media.description,
+                    altText: media.altText,
+                    durationMs: media.durationMs,
+                  },
+                };
+              },
+            }),
+          }
+        : {}),
+    };
+
+    const modelMessages =
+      rawMessages.length > 0
+        ? await toModelMessages(rawMessages)
+        : [
+            {
+              role: "user" as const,
+              content:
+                "Start the sample interview by greeting the participant and asking the first best question.",
+            },
+          ];
+
+    const result = streamAIResponse(modelMessages, systemPrompt, {
+      surveyId,
+      userId: session.user.id,
+      maxTokens: 500,
+      temperature: 0.4,
+      promptCache: {
+        namespace: "conducting-sample",
+        staticSystemPrompt: promptParts.staticSystemPrompt,
+      },
+      tools,
+      stopWhen: stepCountIs(5),
     });
+
+    const persistedIncomingMessages = toPersistedUIChatMessages(rawMessages, ["user", "assistant"]);
+    const remainingSamples = MAX_SAMPLE_CONVERSATIONS - conversationNumber;
+    const response = result.toUIMessageStreamResponse({
+      originalMessages: toUIMessages(persistedIncomingMessages),
+      onFinish: async ({ messages }) => {
+        const persistedMessages = toVisibleConversationMessages(
+          toPersistedUIChatMessages(messages, ["user", "assistant"]),
+        );
+
+        await getDb().transaction(async (tx) => {
+          await tx
+            .update(sampleConversations)
+            .set({
+              messages: persistedMessages,
+              updatedAt: new Date(),
+            })
+            .where(eq(sampleConversations.id, sampleConversation.id));
+
+          await recordRealtimeEvent(tx, {
+            scope: "survey",
+            surveyId,
+            workspaceId: permission.workspaceId,
+            eventType: "survey.rehearsal_turn_added",
+            actorId: session.user.id,
+            payload: {
+              surveyId,
+              conversationNumber,
+              sampleConversationId: sampleConversation.id,
+              lease: leaseResult.lease,
+              messages: persistedMessages.slice(-2),
+            },
+          });
+        });
+
+        if (persistedMessages.some((message) => message.role === "user")) {
+          if (!completedByTool) {
+            const { nextState } = await finalizeConductingTurn({
+              surveyId,
+              sessionId: sessionRow.id,
+              brief: briefRow.brief,
+              coveragePlan: planRow.plan,
+              sessionState: currentSessionState,
+              messages: persistedMessages,
+            });
+            currentSessionState = nextState;
+          }
+
+          await purgeSessionAnalyticsArtifacts({
+            surveyId,
+            sessionId: sessionRow.id,
+          }).catch((error) => {
+            console.error(
+              "[Sample Route] Failed to purge rehearsal analytics artifacts:",
+              error,
+            );
+          });
+        }
+      },
+    });
+
     response.headers.set("X-Remaining-Samples", remainingSamples.toString());
-    response.headers.set("X-Conversation-Number", conversationNumber.toString());
+    response.headers.set(
+      "X-Conversation-Number",
+      conversationNumber.toString(),
+    );
     response.headers.set("X-Survey-Revision", String(currentRevision + 1));
     response.headers.set("X-Lease-Token", leaseResult.lease.leaseToken);
     return response;

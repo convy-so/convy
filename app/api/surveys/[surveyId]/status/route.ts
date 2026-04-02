@@ -6,9 +6,12 @@ import { surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getSurveyPermissionContext } from "@/lib/workspace-access";
 import {
-  publishPendingOutboxEntries,
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
+
+function isSurveyStatus(value: unknown): value is "active" | "paused" {
+    return value === "active" || value === "paused";
+}
 
 export async function PATCH(
     request: Request,
@@ -18,9 +21,9 @@ export async function PATCH(
         const session = await getVerifiedSession();
         const { surveyId } = await params;
         const body = await request.json();
-        const { status } = body;
+        const status = typeof body?.status === "string" ? body.status : null;
 
-        if (!status || !['active', 'paused'].includes(status)) {
+        if (!isSurveyStatus(status)) {
             return NextResponse.json({ error: "Invalid status" }, { status: 400 });
         }
 
@@ -44,7 +47,7 @@ export async function PATCH(
             await tx
                 .update(surveys)
                 .set({
-                    status: status as "active" | "paused",
+                    status,
                     updatedAt: new Date(),
                 })
                 .where(eq(surveys.id, surveyId));
@@ -63,8 +66,6 @@ export async function PATCH(
                 });
             }
         });
-
-        await publishPendingOutboxEntries();
 
         return NextResponse.json({ success: true, status });
     } catch (error) {

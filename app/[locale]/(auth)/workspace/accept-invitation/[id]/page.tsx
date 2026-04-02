@@ -16,13 +16,15 @@ import { queryKeys } from "@/lib/query-keys";
 
 function AcceptInvitationContent() {
   const t = useTranslations("Auth.Invitation");
-  const params = useParams();
+  const params = useParams<{ id?: string | string[] }>();
   const router = useRouter();
   const { session, isLoading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const invitationId = params.id as string;
+  const invitationId = Array.isArray(params.id)
+    ? (params.id[0] ?? "")
+    : (params.id ?? "");
   const queryClient = useQueryClient();
   const hasAttemptedAccept = useRef(false);
 

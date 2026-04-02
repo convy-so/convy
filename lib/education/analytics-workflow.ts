@@ -22,26 +22,201 @@ import {
   replaceAnalyticsSnapshot,
   upsertSessionInsight,
 } from "./storage";
-import type {
-  AnalyticsFact,
-  AnalyticsGenerationMetadata,
-  AnalyticsSnapshot,
-  ConversationInsight,
-  EvidenceRecord,
-  ResearchBrief,
+import {
+  analyticsFactSchema,
+  conversationInsightSchema,
+  evidenceRecordSchema,
+  researchBriefSchema,
+  type AnalyticsFact,
+  type AnalyticsGenerationMetadata,
+  type AnalyticsSnapshot,
+  type ConversationInsight,
+  type EvidenceRecord,
+  type ResearchBrief,
 } from "./types";
 import { executeRAGQuery } from "@/lib/rag/search";
 import { renderPlaybookContext } from "./playbooks";
 import { getPhasePlaybookContext } from "./runtime-context";
 
-function safeJsonParse<T>(raw: string): T | null {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function safeJsonParse(raw: string): unknown | null {
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) return null;
   try {
-    return JSON.parse(match[0]) as T;
+    return JSON.parse(match[0]);
   } catch {
     return null;
   }
+}
+
+function normalizeResearchBrief(value: unknown): ResearchBrief | null {
+  const parsed = researchBriefSchema.safeParse(value);
+  if (!parsed.success) {
+    return null;
+  }
+
+  return {
+    ...parsed.data,
+    media: [],
+  };
+}
+
+function normalizeConversationInsights(values: unknown[]): ConversationInsight[] {
+  return values.flatMap((value) => {
+    const parsed = conversationInsightSchema.safeParse(value);
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
+function normalizeEvidenceRecords(values: unknown[]): EvidenceRecord[] {
+  return values.flatMap((value) => {
+    const parsed = evidenceRecordSchema.safeParse(value);
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
+function normalizeAnalyticsFacts(values: unknown[]): AnalyticsFact[] {
+  return values.flatMap((value) => {
+    const parsed = analyticsFactSchema.safeParse(value);
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
+function parseSynthesisResult(value: unknown): {
+  findings?: Array<{
+    title: string;
+    summary: string;
+    nodeIds?: string[];
+    supportingEvidenceIds?: string[];
+    confidence?: number;
+  }>;
+  recommendations?: string[];
+  dataGaps?: string[];
+} | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    findings: Array.isArray(value.findings)
+      ? value.findings.flatMap((finding) => {
+          if (
+            !isRecord(finding) ||
+            typeof finding.title !== "string" ||
+            typeof finding.summary !== "string"
+          ) {
+            return [];
+          }
+
+          return [{
+            title: finding.title,
+            summary: finding.summary,
+            nodeIds: Array.isArray(finding.nodeIds)
+              ? finding.nodeIds.filter((item): item is string => typeof item === "string")
+              : undefined,
+            supportingEvidenceIds: Array.isArray(finding.supportingEvidenceIds)
+              ? finding.supportingEvidenceIds.filter((item): item is string => typeof item === "string")
+              : undefined,
+            confidence:
+              typeof finding.confidence === "number" ? finding.confidence : undefined,
+          }];
+        })
+      : undefined,
+    recommendations: Array.isArray(value.recommendations)
+      ? value.recommendations.filter((item): item is string => typeof item === "string")
+      : undefined,
+    dataGaps: Array.isArray(value.dataGaps)
+      ? value.dataGaps.filter((item): item is string => typeof item === "string")
+      : undefined,
+  };
+}
+
+function parseSessionInsightSummary(value: unknown): {
+  summary?: string;
+  keyFindings?: string[];
+  risks?: string[];
+} | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    summary: typeof value.summary === "string" ? value.summary : undefined,
+    keyFindings: Array.isArray(value.keyFindings)
+      ? value.keyFindings.filter((item): item is string => typeof item === "string")
+      : undefined,
+    risks: Array.isArray(value.risks)
+      ? value.risks.filter((item): item is string => typeof item === "string")
+      : undefined,
+  };
+}
+
+function parseClassifierResult(value: unknown): {
+  intent?: "metric" | "comparison" | "evidence" | "snapshot" | "mixed";
+  needsChart?: boolean;
+  needsTable?: boolean;
+  theme?: string;
+} | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    intent:
+      value.intent === "metric" ||
+      value.intent === "comparison" ||
+      value.intent === "evidence" ||
+      value.intent === "snapshot" ||
+      value.intent === "mixed"
+        ? value.intent
+        : undefined,
+    needsChart:
+      typeof value.needsChart === "boolean" ? value.needsChart : undefined,
+    needsTable:
+      typeof value.needsTable === "boolean" ? value.needsTable : undefined,
+    theme: typeof value.theme === "string" ? value.theme : undefined,
+  };
+}
+
+function parseQuestionAnswerResult(value: unknown): {
+  response?: string;
+  sources?: Array<{ id: string; label: string }>;
+  toolResult?: { toolName: "renderTable" | "renderChart" | null; output: Record<string, unknown> };
+} | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    response: typeof value.response === "string" ? value.response : undefined,
+    sources: Array.isArray(value.sources)
+      ? value.sources.flatMap((source) => {
+          if (
+            !isRecord(source) ||
+            typeof source.id !== "string" ||
+            typeof source.label !== "string"
+          ) {
+            return [];
+          }
+
+          return [{ id: source.id, label: source.label }];
+        })
+      : undefined,
+    toolResult:
+      isRecord(value.toolResult) &&
+      (value.toolResult.toolName === "renderTable" ||
+        value.toolResult.toolName === "renderChart" ||
+        value.toolResult.toolName === null) &&
+      isRecord(value.toolResult.output)
+        ? {
+            toolName: value.toolResult.toolName,
+            output: value.toolResult.output,
+          }
+        : undefined,
+  };
 }
 
 function aggregateCoverage(insights: ConversationInsight[], nodeIds: string[]) {
@@ -142,9 +317,22 @@ async function synthesizeAnalytics(input: {
   evidence: EvidenceRecord[];
 }) {
   const program = getEducationProgram(input.brief.programId);
-  const prompt = `${program.analyticsPrompt}
+  const systemPrompt = `${program.analyticsPrompt}
 
-${input.playbookContext ? `<active-playbooks>\n${input.playbookContext}\n</active-playbooks>\n\n` : ""}<research-brief>
+${input.playbookContext ? `<active-playbooks>\n${input.playbookContext}\n</active-playbooks>\n\n` : ""}<rules>
+- Use only the supplied evidence and insight summaries.
+- Keep findings scoped to the brief and program dimensions.
+- If support is thin or mixed, lower confidence and use the dataGaps field.
+- Put evidence IDs in supportingEvidenceIds only when they exist in the supplied evidence.
+</rules>
+
+Return JSON only.
+{
+  "findings": [{"title":"string","summary":"string","nodeIds":["string"],"supportingEvidenceIds":["string"],"confidence":0.0}],
+  "recommendations": ["string"],
+  "dataGaps": ["string"]
+}`;
+  const prompt = `<research-brief>
 - Goal: ${input.brief.researchGoal}
 - Decision: ${input.brief.decisionToInform}
 - Audience: ${input.brief.audienceDefinition}
@@ -158,32 +346,18 @@ ${input.insights.map((insight) => `Session ${insight.sessionId}: ${insight.summa
 
 <evidence>
 ${buildEvidenceDigest(input.evidence)}
-</evidence>
-
-<rules>
-- Use only the supplied evidence and insight summaries.
-- Keep findings scoped to the brief and program dimensions.
-- If support is thin or mixed, lower confidence and use the dataGaps field.
-- Put evidence IDs in supportingEvidenceIds only when they exist in the supplied evidence.
-</rules>
-
-Return JSON only.
-{
-  "findings": [{"title":"string","summary":"string","nodeIds":["string"],"supportingEvidenceIds":["string"],"confidence":0.0}],
-  "recommendations": ["string"],
-  "dataGaps": ["string"]
-}`;
-  const raw = await generateAIResponse(prompt, undefined, {
+</evidence>`;
+  const raw = await generateAIResponse(prompt, systemPrompt, {
     model: analysisModel,
     temperature: 0.2,
     maxTokens: 1500,
     surveyId: input.surveyId,
+    promptCache: {
+      namespace: "analytics-synthesize",
+      staticSystemPrompt: systemPrompt,
+    },
   });
-  return safeJsonParse<{
-    findings?: Array<{ title: string; summary: string; nodeIds?: string[]; supportingEvidenceIds?: string[]; confidence?: number }>;
-    recommendations?: string[];
-    dataGaps?: string[];
-  }>(raw);
+  return parseSynthesisResult(safeJsonParse(raw));
 }
 
 export async function buildAnalyticsSnapshot(
@@ -202,9 +376,18 @@ export async function buildAnalyticsSnapshot(
 
   if (!briefRow || !planRow) return null;
 
-  const brief = briefRow.brief as ResearchBrief;
+  const brief = normalizeResearchBrief(briefRow.brief);
+  if (!brief) return null;
   const plan = planRow.plan;
-  const insights = insightRows.map((row) => row.insight as ConversationInsight);
+  const insights = normalizeConversationInsights(
+    insightRows.map((row) => row.insight),
+  );
+  const evidenceRecords = normalizeEvidenceRecords(
+    evidence.map((row) => row.metadata),
+  );
+  const analyticsFacts = normalizeAnalyticsFacts(
+    factRows.map((row) => row.fact),
+  );
   const coverage = aggregateCoverage(insights, plan.nodes.map((node) => node.id));
   const completedSessions = insights.filter((insight) => insight.quality.completeness >= 0.8).length;
   const flaggedSessions = insights.filter((insight) => insight.quality.reliability < 0.55).length;
@@ -236,12 +419,12 @@ export async function buildAnalyticsSnapshot(
     playbookContext: analyticsPlaybookContext,
     coverageNodeIds: plan.nodes.map((node) => node.id),
     insights,
-    evidence: evidence.map((row) => row.metadata as EvidenceRecord),
+    evidence: evidenceRecords,
   });
   const derivedMetrics = await computeDerivedMetrics({
     surveyId,
     organizationId: survey?.organizationId ?? null,
-    facts: factRows.map((row) => row.fact as AnalyticsFact),
+    facts: analyticsFacts,
   });
 
   const version = (latestSnapshot?.version ?? 0) + 1;
@@ -273,7 +456,7 @@ export async function buildAnalyticsSnapshot(
     derivedMetrics,
     recommendations: synthesis?.recommendations ?? [],
     dataGaps: synthesis?.dataGaps ?? [],
-    keyQuotes: evidence.slice(0, 8).map((row) => row.metadata as EvidenceRecord),
+    keyQuotes: evidenceRecords.slice(0, 8),
     generation: {
       triggeredBy: generation?.triggeredBy ?? "automatic",
       triggerReason: generation?.triggerReason ?? "automatic_refresh",
@@ -338,11 +521,12 @@ export async function buildSessionInsight(sessionId: string): Promise<Conversati
   ]);
   if (!briefRow || !sessionRow) return null;
 
-  const brief = briefRow.brief as ResearchBrief;
+  const brief = normalizeResearchBrief(briefRow.brief);
+  if (!brief) return null;
   const transcript = turns
     .map((turn) => `${turn.role === "user" ? "Participant" : "Interviewer"}: ${turn.content}`)
     .join("\n\n");
-  const evidence = evidenceRows.map((row) => row.metadata as EvidenceRecord);
+  const evidence = normalizeEvidenceRecords(evidenceRows.map((row) => row.metadata));
 
   const playbookContext = await getPhasePlaybookContext({
     surveyId,
@@ -350,20 +534,14 @@ export async function buildSessionInsight(sessionId: string): Promise<Conversati
     phase: "analytics",
   });
 
-  const prompt = `${getEducationProgram(brief.programId).analyticsPrompt}
+  const systemPrompt = `${getEducationProgram(brief.programId).analyticsPrompt}
 
 <task>
 Summarize one interview session.
 Return JSON only.
 </task>
 
-${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>\n\n` : ""}<transcript>
-${transcript}
-</transcript>
-
-<evidence>
-${buildEvidenceDigest(evidence)}
-</evidence>
+${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>\n\n` : ""}
 
 <rules>
 - Keep the summary grounded in what this one session actually revealed.
@@ -372,13 +550,24 @@ ${buildEvidenceDigest(evidence)}
 </rules>
 
 <schema>{"summary":"string","keyFindings":["string"],"risks":["string"]}</schema>`;
-  const raw = await generateAIResponse(prompt, undefined, {
+  const prompt = `<transcript>
+${transcript}
+</transcript>
+
+<evidence>
+${buildEvidenceDigest(evidence)}
+</evidence>`;
+  const raw = await generateAIResponse(prompt, systemPrompt, {
     model: analysisModel,
     temperature: 0.2,
     maxTokens: 500,
     surveyId,
+    promptCache: {
+      namespace: "analytics-session-insight",
+      staticSystemPrompt: systemPrompt,
+    },
   }).catch(() => "");
-  const parsed = safeJsonParse<{ summary?: string; keyFindings?: string[]; risks?: string[] }>(raw);
+  const parsed = parseSessionInsightSummary(safeJsonParse(raw));
 
   const state = sessionRow.sessionState;
   const insight: ConversationInsight = {
@@ -444,7 +633,7 @@ export async function answerAnalyticsQuestion(input: {
   surveyId: string;
   question: string;
 }) {
-  const [briefRow, snapshotRow, _evidenceRows, factsRows, stateRow, survey] = await Promise.all([
+  const [briefRow, snapshotRow, , factsRows, stateRow, survey] = await Promise.all([
     getResearchBrief(input.surveyId),
     getLatestAnalyticsSnapshot(input.surveyId),
     listEvidenceForSurveyByType(input.surveyId, "live"),
@@ -461,33 +650,40 @@ export async function answerAnalyticsQuestion(input: {
     };
   }
 
-  const brief = briefRow.brief as ResearchBrief;
+  const brief = normalizeResearchBrief(briefRow.brief);
+  if (!brief) {
+    return {
+      response: "Analytics are not ready yet. Run analytics after collecting some completed sessions.",
+      sources: [],
+      toolResult: null,
+    };
+  }
   const program = getEducationProgram(brief.programId);
   const snapshot = snapshotRow.snapshot;
-  const facts = factsRows.map((row) => row.fact as AnalyticsFact);
+  const facts = normalizeAnalyticsFacts(factsRows.map((row) => row.fact));
   const playbookContext = await getPhasePlaybookContext({
     surveyId: input.surveyId,
     organizationId: survey?.organizationId ?? null,
     phase: "analytics",
   });
 
-  const classifierPrompt = `
-Classify this analytics question into one of: metric, comparison, evidence, snapshot, mixed.
-Return JSON only: {"intent":"metric|comparison|evidence|snapshot|mixed","needsChart":boolean,"needsTable":boolean,"theme":"string"}.
-Question: ${input.question}
-`;
-  const classifierRaw = await generateAIResponse(classifierPrompt, undefined, {
+  const classifierSystemPrompt = `Classify this analytics question into one of: metric, comparison, evidence, snapshot, mixed.
+Return JSON only: {"intent":"metric|comparison|evidence|snapshot|mixed","needsChart":boolean,"needsTable":boolean,"theme":"string"}.`;
+  const classifierRaw = await generateAIResponse(`Question: ${input.question}`, classifierSystemPrompt, {
     model: defaultModel,
     temperature: 0,
     maxTokens: 200,
     surveyId: input.surveyId,
+    promptCache: {
+      namespace: "analytics-question-classifier",
+      staticSystemPrompt: classifierSystemPrompt,
+    },
   }).catch(() => "");
-  const classifier = safeJsonParse<{
-    intent?: "metric" | "comparison" | "evidence" | "snapshot" | "mixed";
-    needsChart?: boolean;
-    needsTable?: boolean;
-    theme?: string;
-  }>(classifierRaw) ?? { intent: "mixed", needsChart: false, needsTable: false };
+  const classifier = parseClassifierResult(safeJsonParse(classifierRaw)) ?? {
+    intent: "mixed",
+    needsChart: false,
+    needsTable: false,
+  };
 
   const normalizedQuestion = input.question.toLowerCase();
   const matchingFacts = facts.filter((fact) => {
@@ -531,18 +727,36 @@ Question: ${input.question}
     .map((item) => `- ${item.id} | ${item.sourceType} | ${item.content}`)
     .join("\n");
 
-  const prompt = `${program.analyticsPrompt}
+  const systemPrompt = `${program.analyticsPrompt}
 
 <task>
 Answer the creator's analytics question using the supplied analytics facts, snapshot state, and retrieved evidence.
 Return JSON only.
 </task>
 
-<question>${input.question}</question>
+${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>\n\n` : ""}
+
+<rules>
+- For exact counts or percentages, rely on the fact summary or snapshot fields first.
+- Use retrieved evidence only for qualitative explanation or quotes.
+- Never invent counts.
+- Cite snapshot versions and evidence ids when used.
+- If support is weak, say so.
+</rules>
+
+<schema>
+{
+  "response":"string",
+  "sources":[{"id":"string","label":"string"}],
+  "toolResult":{
+    "toolName":"renderTable|renderChart|null",
+    "output":{}
+  }
+}
+</schema>`;
+  const prompt = `<question>${input.question}</question>
 
 <intent>${classifier.intent}</intent>
-
-${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>\n\n` : ""}
 
 <analytics-state>
 ${JSON.stringify(stateRow?.state ?? null, null, 2)}
@@ -568,37 +782,18 @@ ${JSON.stringify({
 
 <retrieved-evidence>
 ${evidenceContext || "None"}
-</retrieved-evidence>
-
-<rules>
-- For exact counts or percentages, rely on the fact summary or snapshot fields first.
-- Use retrieved evidence only for qualitative explanation or quotes.
-- Never invent counts.
-- Cite snapshot versions and evidence ids when used.
-- If support is weak, say so.
-</rules>
-
-<schema>
-{
-  "response":"string",
-  "sources":[{"id":"string","label":"string"}],
-  "toolResult":{
-    "toolName":"renderTable|renderChart|null",
-    "output":{}
-  }
-}
-</schema>`;
-  const raw = await generateAIResponse(prompt, undefined, {
+</retrieved-evidence>`;
+  const raw = await generateAIResponse(prompt, systemPrompt, {
     model: defaultModel,
     temperature: 0.2,
     maxTokens: 900,
     surveyId: input.surveyId,
+    promptCache: {
+      namespace: "analytics-answer-question",
+      staticSystemPrompt: systemPrompt,
+    },
   });
-  const parsed = safeJsonParse<{
-    response?: string;
-    sources?: Array<{ id: string; label: string }>;
-    toolResult?: { toolName: "renderTable" | "renderChart" | null; output: Record<string, unknown> };
-  }>(raw);
+  const parsed = parseQuestionAnswerResult(safeJsonParse(raw));
   if (parsed?.response) return parsed;
   return {
     response: "I could not ground a reliable answer from the current analytics snapshot.",
