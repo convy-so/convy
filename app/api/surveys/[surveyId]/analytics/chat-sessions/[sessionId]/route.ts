@@ -5,7 +5,6 @@ import { getDb } from "@/db";
 import { surveys, analyticsChatSessions } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
-  getSurveyPermissionContext,
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/workspace-access";

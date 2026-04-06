@@ -1,7 +1,0 @@
-app/[locale]/(auth)/layout.tsx
-app/[locale]/(dashboard)/layout.tsx
-app/[locale]/(legal)/layout.tsx
-app/[locale]/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/(protected)/layout.tsx
-app/[locale]/admin/layout.tsx
-app/[locale]/expert/layout.tsx
-app/[locale]/layout.tsx

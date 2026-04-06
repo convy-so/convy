@@ -38,7 +38,7 @@ export async function updateUserLanguage(language: AppLocale) {
     });
 
     return { success: true };
-  } catch (error) {
+  } catch {
     return { success: false, error: "Failed to update language" };
   }
 }

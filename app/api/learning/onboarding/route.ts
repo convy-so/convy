@@ -66,7 +66,7 @@ export async function GET() {
       sessionId: activeSession.id,
       messages,
     });
-  } catch (error) {
+      } catch (error) {
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Failed to load onboarding",
@@ -167,6 +167,10 @@ export async function POST(request: Request) {
         studentUserId: session.user.id,
         classroomStudentId: membership.id,
       }).catch((error) => {
+        console.error("[learning:onboarding] failed to enqueue pattern analysis", {
+          sessionId: activeSession.id,
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
       });
     }
 

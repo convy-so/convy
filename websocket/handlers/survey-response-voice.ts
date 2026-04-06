@@ -209,6 +209,10 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
       await this.connectVoiceAgent();
     } catch (error) {
+      console.error("[survey-response-voice] failed to initialize voice session", {
+        surveyId: this.state.surveyId,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
       this.sendError("Failed to initialize voice session");
       this.ws.close();
     }
@@ -380,6 +384,11 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       surveyId: this.state.survey!.id,
       userId: this.ownerId || this.state.survey!.userId,
     }).catch((error) => {
+      console.error("[survey-response-voice] failed to enqueue conversation insights", {
+        surveyId: this.state.survey?.id,
+        conversationId: this.state.conversationId,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
     });
 
     this.send({
@@ -519,6 +528,11 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
             userId: this.ownerId || "",
           });
         } catch (error) {
+          console.error("[survey-response-voice] failed to enqueue completion insights", {
+            surveyId: this.state.survey?.id,
+            conversationId: this.state.conversationId,
+            message: error instanceof Error ? error.message : "Unknown error",
+          });
         }
       }
 
@@ -560,6 +574,11 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       });
       this.ws.close();
     } catch (error) {
+      console.error("[survey-response-voice] failed to complete voice survey", {
+        surveyId: this.state.survey?.id,
+        conversationId: this.state.conversationId,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
       this.send({ type: "error", error: "Failed to complete survey" });
     }
   }
@@ -611,6 +630,11 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
           .where(eq(surveyConversations.id, this.state.conversationId));
       }
     } catch (error) {
+      console.error("[survey-response-voice] cleanup failed", {
+        surveyId: this.state.survey?.id,
+        conversationId: this.state.conversationId,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   }
 }

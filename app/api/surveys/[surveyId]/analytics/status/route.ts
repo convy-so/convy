@@ -6,7 +6,6 @@ import { surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getAnalyticsState } from "@/lib/education/storage";
 import {
-  getSurveyPermissionContext,
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/workspace-access";

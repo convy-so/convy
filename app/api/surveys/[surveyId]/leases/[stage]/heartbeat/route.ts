@@ -7,7 +7,6 @@ import {
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
 import {
-  getSurveyPermissionContext,
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/workspace-access";

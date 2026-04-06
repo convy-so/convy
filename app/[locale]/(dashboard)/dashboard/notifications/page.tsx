@@ -98,9 +98,9 @@ export default function NotificationsDashboard() {
               <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
                  <Bell className="h-8 w-8 text-gray-300" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900">You're all caught up!</h3>
+              <h3 className="text-lg font-bold text-gray-900">You&apos;re all caught up!</h3>
               <p className="mt-2 text-sm text-gray-500 max-w-sm">
-                No new notifications right now. When you receive alerts, collaborations or updates, they'll appear here.
+                No new notifications right now. When you receive alerts, collaborations or updates, they&apos;ll appear here.
               </p>
             </div>
           ) : (

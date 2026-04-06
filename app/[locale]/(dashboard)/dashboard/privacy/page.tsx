@@ -1,11 +1,18 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { getPrivacyDashboardData } from "@/app/actions/privacy-dashboard";
+import {
+  getPrivacyDashboardData,
+  type PrivacyDashboardConsentRow,
+} from "@/app/actions/privacy-dashboard";
 import { motion } from "framer-motion";
 import { ShieldCheck, UserCheck, AlertOctagon, FileText, Loader2, Info } from "lucide-react";
 import { useAuth } from "@/components/providers/auth-provider";
 import { format } from "date-fns";
+
+function getEvidenceSource(evidence: PrivacyDashboardConsentRow["evidence"]) {
+  return evidence?.source ?? "api";
+}
 
 export default function PrivacyDashboard() {
   const { session } = useAuth();
@@ -185,7 +192,7 @@ export default function PrivacyDashboard() {
                       </div>
                       <div className="text-xs text-gray-500 flex justify-between bg-gray-50 p-2 rounded-lg">
                         <span>Subject: <strong className="text-gray-700">{c.subjectType}</strong></span>
-                        <span>Evidence: <strong className="text-gray-700">{(c.evidence as any)?.source || 'api'}</strong></span>
+                        <span>Evidence: <strong className="text-gray-700">{getEvidenceSource(c.evidence)}</strong></span>
                       </div>
                     </motion.div>
                   ))}

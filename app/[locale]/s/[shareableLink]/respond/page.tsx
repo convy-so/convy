@@ -674,7 +674,7 @@ function SurveyContent() {
         role: "user",
         parts: [{ type: "text", text: currentInput }],
       });
-    } catch (error) {
+    } catch {
     }
   };
 

@@ -54,7 +54,7 @@ export default function VoiceAnalyticsDashboard() {
           Voice Quality Analytics
         </h1>
         <p className="mt-3 text-base text-gray-500 max-w-2xl">
-          Monitor your workspace's AI voice engine health, latency distributions, and respondent connection stability.
+          Monitor your workspace&apos;s AI voice engine health, latency distributions, and respondent connection stability.
         </p>
       </motion.div>
 
@@ -175,7 +175,7 @@ export default function VoiceAnalyticsDashboard() {
                       </div>
                       <div className="flex justify-between items-center mt-1">
                         <span className="text-xs text-gray-500 font-medium">
-                          {Math.round(s.durationMs / 1000)}s total
+                          {Math.round((s.durationMs ?? 0) / 1000)}s total
                         </span>
                         <span className="text-xs text-gray-400">
                           {s.startedAt ? format(new Date(s.startedAt), 'MMM d, HH:mm') : ''}

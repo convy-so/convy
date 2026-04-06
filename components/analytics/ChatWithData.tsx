@@ -119,7 +119,7 @@ export function ChatWithData({ surveyId }: ChatWithDataProps) {
     const [isSessionsOpen, setIsSessionsOpen] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const [input, setInput] = useState("");
-    const [chatPlaceholder, setChatPlaceholder] = useState("Ask anything about your data...");
+    const [chatPlaceholder] = useState("Ask anything about your data...");
     const [isRecordingAudio, setIsRecordingAudio] = useState(false);
     const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -172,7 +172,7 @@ export function ChatWithData({ surveyId }: ChatWithDataProps) {
                     refetchSessions();
                 }
             }
-        } catch (error) {
+        } catch {
         }
     };
 
@@ -185,7 +185,7 @@ export function ChatWithData({ surveyId }: ChatWithDataProps) {
                 setMessages(session.messages || []);
                 setCurrentSessionId(session.id);
             }
-        } catch (e) {
+        } catch {
         }
     };
 
@@ -306,7 +306,7 @@ export function ChatWithData({ surveyId }: ChatWithDataProps) {
 
             recorder.start(250);
             setIsRecordingAudio(true);
-        } catch (error) {
+        } catch {
             stopAudioStream();
             mediaRecorderRef.current = null;
             setIsRecordingAudio(false);

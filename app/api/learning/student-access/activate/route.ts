@@ -6,7 +6,6 @@ import { getDb } from "@/db";
 import { classroomStudents, studentAccessTokens, users } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { assertWorkspacePrivacyReadiness } from "@/lib/privacy/compliance";
-import { summarizeErrorForLogs } from "@/lib/privacy/logging";
 import { hashOpaqueToken } from "@/lib/learning/tokens";
 
 const studentActivationBodySchema = z.object({

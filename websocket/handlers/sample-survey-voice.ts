@@ -258,6 +258,11 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
 
       await this.connectVoiceAgent();
     } catch (error) {
+      console.error("[sample-survey-voice] failed to initialize voice session", {
+        surveyId: this.state.surveyId,
+        conversationNumber: this.state.conversationNumber,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
       this.sendError("Failed to initialize session");
       this.ws.close();
     }
@@ -422,6 +427,11 @@ Additional sample-session rules:
       surveyId: this.state.surveyId,
       sessionId: this.state.sessionId,
     }).catch((error) => {
+      console.error("[sample-survey-voice] failed to purge analytics artifacts", {
+        surveyId: this.state.surveyId,
+        sessionId: this.state.sessionId,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
     });
 
     this.send({
@@ -552,6 +562,10 @@ Additional sample-session rules:
         userId: this.userId!,
         leaseToken: this.leaseToken,
       }).catch((error) => {
+        console.error("[sample-survey-voice] failed to release rehearsal lease", {
+          surveyId: this.state.surveyId,
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
         return null;
       });
       if (releaseResult?.ok) {

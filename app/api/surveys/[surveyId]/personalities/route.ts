@@ -15,7 +15,6 @@ import {
   replacePersonalityAssignment,
 } from "@/lib/education/storage";
 import {
-  getSurveyPermissionContext,
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/workspace-access";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
@@ -306,12 +306,6 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
 
     return onboardingQuery.data.messages;
   }, [onboardingQuery.data]);
-
-  useEffect(() => {
-    if (isAppLocale(locale)) {
-      setSelectedStudyLanguage(locale);
-    }
-  }, [locale]);
 
   if (!memberships.length) {
     return (
@@ -824,6 +818,7 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
                                   ) : null}
                                   <div className="mt-4 overflow-hidden rounded-[18px] border border-white/80 bg-white">
                                     {tutorMedia.assetType === "image" ? (
+                                      // eslint-disable-next-line @next/next/no-img-element -- tutor media URLs are runtime content and are not currently modeled for next/image optimization
                                       <img
                                         src={tutorMedia.mediaUrl}
                                         alt={tutorMedia.title}

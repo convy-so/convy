@@ -121,12 +121,14 @@ export function getShowMediaToolDefinition() {
 }
 
 export function buildRespondentVoiceFunctions(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- parameter kept for signature compatibility while media support is disabled
   _includeMedia: boolean,
 ): VoiceAgentFunction[] {
   return [getRespondentFinishSurveyToolDefinition()];
 }
 
 export function buildSampleVoiceFunctions(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- parameter kept for signature compatibility while media support is disabled
   _includeMedia: boolean,
 ): VoiceAgentFunction[] {
   return [getSampleFinishSurveyToolDefinition()];
@@ -161,36 +163,6 @@ function normalizeStringArray(value: unknown): string[] {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function parseMaybeJson(value: unknown): Record<string, unknown> | null {
-  if (!value) return null;
-  if (isRecord(value)) {
-    return value;
-  }
-  if (typeof value !== "string") return null;
-
-  try {
-    const parsed = JSON.parse(value);
-    return isRecord(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function getToolPartName(part: unknown): string | null {
-  if (!isRecord(part)) return null;
-  const p = part;
-  if (typeof p.type === "string" && p.type.startsWith("tool-")) {
-    return p.type.replace(/^tool-/, "");
-  }
-  if (
-    (p.type === "tool-invocation" || p.type === "tool-call") &&
-    typeof p.toolName === "string"
-  ) {
-    return p.toolName;
-  }
-  return null;
 }
 
 export function normalizeCreationMediaDecision(

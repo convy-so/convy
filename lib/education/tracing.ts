@@ -20,7 +20,7 @@ export async function recordEducationTrace(input: {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-  } catch (error) {
+  } catch {
   }
 }
 

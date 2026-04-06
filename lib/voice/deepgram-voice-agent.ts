@@ -405,7 +405,7 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         return;
       }
       this.handleJsonMessage(message as { type: string; [key: string]: unknown });
-    } catch (error) {
+    } catch {
     }
   }
 

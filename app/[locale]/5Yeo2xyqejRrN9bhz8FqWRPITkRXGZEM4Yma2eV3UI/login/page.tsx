@@ -27,7 +27,7 @@ export default function AdminLoginPage() {
       // Always show success to prevent email enumeration
       setIsSuccess(true);
       toast.success("Verification link sent to your email");
-    } catch (error) {
+    } catch {
       toast.error("Failed to attempt login");
     } finally {
       setIsLoading(false);

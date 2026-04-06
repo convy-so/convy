@@ -455,7 +455,7 @@ export async function GET(
         messages,
       },
     });
-  } catch (error) {
+      } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to load tutoring session" },
       { status: 400 },
@@ -779,6 +779,11 @@ export async function POST(
         previousReport: previousReport?.report ?? null,
         subjectKey: access.topic.subjectKey,
       }).catch((error) => {
+        console.error("[learning:topic-chat] failed to enqueue tutoring report", {
+          sessionId: tutorSession.id,
+          topicId,
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
       });
     } else {
       await updateLearningSessionState({

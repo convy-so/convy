@@ -491,6 +491,10 @@ export async function buildAnalyticsSnapshot(
       sessionType: "live",
     },
   }).catch((error) => {
+    console.error("[analytics-workflow] failed to replace embedded insight source", {
+      surveyId,
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
   });
   await recordEducationTrace({
     surveyId,
@@ -598,7 +602,7 @@ ${buildEvidenceDigest(evidence)}
       quality: insight.quality,
       sessionType: sessionRow.sessionType,
     },
-  }).catch((error) => {
+  }).catch(() => {
   });
   await replaceAnalyticsFacts(surveyId, sessionId, buildSessionFacts({
     surveyId,
@@ -620,6 +624,12 @@ ${buildEvidenceDigest(evidence)}
           sessionType: sessionRow.sessionType,
         },
       }).catch((error) => {
+        console.error("[analytics-workflow] failed to replace embedded evidence source", {
+          surveyId,
+          sessionId,
+          sourceId: item.id,
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
       }),
     ),
   );

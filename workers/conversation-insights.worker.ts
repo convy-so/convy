@@ -26,6 +26,11 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
         surveyId: validated.surveyId,
         sessionId: session.id,
       }).catch((error) => {
+        console.error("[conversation-insights-worker] failed to purge sample analytics artifacts", {
+          surveyId: validated.surveyId,
+          conversationId: validated.conversationId,
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
       });
       await job.updateProgress(100);
       return {
@@ -42,6 +47,11 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
         surveyId: validated.surveyId,
         userId: validated.userId,
       }).catch((error) => {
+        console.error("[conversation-insights-worker] failed to schedule analytics refresh", {
+          surveyId: validated.surveyId,
+          conversationId: validated.conversationId,
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
       });
     }
     await job.updateProgress(100);

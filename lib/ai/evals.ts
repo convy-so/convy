@@ -134,6 +134,7 @@ export async function recordEvalResult(params: {
   evalCaseId?: string | null;
   aiRunId?: string | null;
   result: EvalJudgeResult;
+  actualOutput?: Record<string, unknown> | null;
   labeledByUserId?: string | null;
   ontologyVersion?: string | null;
 }) {
@@ -150,6 +151,7 @@ export async function recordEvalResult(params: {
     output: {
       notes: params.result.notes,
       failureModeCodes: params.result.failureModeCodes,
+      actualOutput: params.actualOutput ?? null,
     },
     rubricScores: params.result.rubricScores,
     notes: params.result.notes,
@@ -233,6 +235,7 @@ export async function runStoredEvalCaseJudgement(params: {
     evalCaseId: evalCase.id,
     aiRunId: params.aiRunId ?? null,
     result,
+    actualOutput: params.actualOutput,
     labeledByUserId: params.labeledByUserId ?? null,
     ontologyVersion: params.ontologyVersion ?? null,
   });

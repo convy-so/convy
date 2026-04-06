@@ -94,7 +94,7 @@ export async function logUsage(input: UsageLogInput) {
       ...input,
       cost,
     });
-  } catch (error) {
+  } catch {
     // Don't let billing errors crash the main app flow, just log them
   }
 }

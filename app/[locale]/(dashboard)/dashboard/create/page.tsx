@@ -114,8 +114,6 @@ type StoredCreateMessage = {
   timestamp?: string;
 };
 
-const _MERGE_THRESHOLD_MS = 3000;
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -559,9 +557,10 @@ function CreateSurveyContent() {
   }, [status]);
 
   const {
-    activeTarget: transcriptionTarget,
     isSupported: isVoiceInputSupported,
+    phase: transcriptionPhase,
     startTranscription,
+    stopRecording,
   } = useAudioTranscription({
     onError: (message) => {
       setVoiceFallbackNotice(message);
@@ -979,8 +978,10 @@ function CreateSurveyContent() {
     setInput(e.target.value);
   };
 
-  const submitCurrentInput = () => {
-    if (!input?.trim()) {
+  const submitCurrentInput = (transcribedText?: string) => {
+    const textToSubmit = transcribedText || input;
+
+    if (!textToSubmit?.trim()) {
       console.warn("[handleSubmit] Aborting: Input is empty");
       return;
     }
@@ -993,8 +994,11 @@ function CreateSurveyContent() {
       return;
     }
 
-    const currentInput = input;
-    setInput(""); // Clear input locally
+    const currentInput = textToSubmit;
+    if (!transcribedText) {
+      setInput(""); // Clear input locally if it came from the textarea
+    }
+
     sendMessage({
       role: "user",
       parts: [{ type: 'text', text: currentInput }],
@@ -1049,12 +1053,23 @@ function CreateSurveyContent() {
     }
   };
 
-  const toggleVoiceMode = () => {
-    const newMode = !isVoiceMode;
-    setIsVoiceMode(newMode);
-    if (newMode) {
+  const setCreationVoiceMode = (enabled: boolean) => {
+    setIsVoiceMode(enabled);
+
+    if (enabled) {
       setVoiceFallbackNotice(null);
-      // 🔥 Also initiate recording here as this is triggered by a user click
+      // Automatically start recording when voice mode is toggled on
+      void startTranscription({
+        target: "survey-create-input",
+        language,
+        onTranscript: (transcript) => {
+          // Rule: Auto-send to AI as requested by user
+          submitCurrentInput(transcript);
+        },
+      });
+    } else {
+      // Ensure we stop recording if the user manually switches voice mode off
+      stopRecording();
     }
   };
 
@@ -1257,7 +1272,7 @@ function CreateSurveyContent() {
 
                             <div className="grid grid-cols-1 gap-4">
                               <button
-                                onClick={() => setIsVoiceMode(false)}
+                                onClick={() => setCreationVoiceMode(false)}
                                 className={cn(
                                   "flex items-center gap-4 p-5 rounded-xl text-left transition-all duration-200 border",
                                   !isVoiceMode
@@ -1275,7 +1290,7 @@ function CreateSurveyContent() {
                               </button>
 
                               <button
-                                onClick={() => setIsVoiceMode(true)}
+                                onClick={() => setCreationVoiceMode(true)}
                                 className={cn(
                                   "flex items-center gap-4 p-5 rounded-xl text-left transition-all duration-200 border",
                                   isVoiceMode
@@ -1631,6 +1646,12 @@ function CreateSurveyContent() {
                   {/* Main Input - Shown when survey is active and not finished */}
                   {(!isReadyForSample && !isReadOnly && surveyId) && (
                     <div className="max-w-3xl mx-auto space-y-4">
+                      {_isResearching && (
+                        <div className="flex items-center gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+                          <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+                          <p>Researching best practices to refine your survey design...</p>
+                        </div>
+                      )}
                       {voiceFallbackNotice && (
                         <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                           <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
@@ -1663,19 +1684,19 @@ function CreateSurveyContent() {
                                     target: "survey-create-input",
                                     language,
                                     onTranscript: (transcript) => {
-                                      setInput((currentInput) =>
-                                        currentInput.trim()
-                                          ? `${currentInput.trim()} ${transcript}`.trim()
-                                          : transcript,
-                                      );
+                                      // Rule: Auto-send to AI as requested by user
+                                      submitCurrentInput(transcript);
                                     },
                                   })
                                 }
                                 className="p-2.5 rounded-xl text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
                                 title="Use voice input"
                               >
-                                {transcriptionTarget === "survey-create-input" ? (
-                                  <Loader2 className="w-5 h-5 animate-spin" />
+                                {transcriptionPhase === "recording" || transcriptionPhase === "transcribing" ? (
+                                  <div className="relative">
+                                    <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+                                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                                  </div>
                                 ) : (
                                   <Mic className="w-5 h-5" />
                                 )}

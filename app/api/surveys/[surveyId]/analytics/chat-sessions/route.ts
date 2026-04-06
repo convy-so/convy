@@ -6,7 +6,6 @@ import { surveys, analyticsChatSessions } from "@/db/schema";
 import type { ChatSessionMessage } from "@/db/schema/surveys";
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
-  getSurveyPermissionContext,
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/workspace-access";

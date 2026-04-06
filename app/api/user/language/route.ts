@@ -33,7 +33,7 @@ export async function GET() {
       uiLocale,
       preferredLanguage: uiLocale,
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Failed to fetch language" },
       { status: 500 },
@@ -79,7 +79,7 @@ export async function PATCH(request: NextRequest) {
       uiLocale: language,
       preferredLanguage: language,
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Failed to update language" },
       { status: 500 },

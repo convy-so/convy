@@ -27,17 +27,16 @@ function toRecord(value: unknown) {
     : {};
 }
 
-function extractCaseInput(rawInput: Record<string, unknown>) {
-  const {
-    actualOutput,
-    output,
-    aiRunId,
-    outputText,
-    candidateOutput,
-    ...rest
-  } = rawInput;
+function extractCaseInput(rawInput: Record<string, unknown>): Record<string, unknown> {
+  const input = { ...rawInput };
+  // Remove known output/metadata keys that should not be treated as case inputs
+  delete input.actualOutput;
+  delete input.output;
+  delete input.aiRunId;
+  delete input.outputText;
+  delete input.candidateOutput;
 
-  return rest;
+  return input;
 }
 
 async function resolveActualOutput(
@@ -189,6 +188,7 @@ const evalRunWorker = new Worker<EvalRunJobData>(
           evalCaseId: evalCase.id,
           aiRunId,
           result,
+          actualOutput,
           labeledByUserId: data.triggeredByUserId ?? null,
           ontologyVersion: dataset.failureOntologyVersion ?? null,
         });

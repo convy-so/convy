@@ -11,7 +11,6 @@ import {
   listPlaybooksForSurvey,
 } from "@/lib/education/storage";
 import {
-  getSurveyPermissionContext,
   isWorkspaceOwner,
   getSurveyPermissionForSession,
   hasSurveyPermission,

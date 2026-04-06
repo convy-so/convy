@@ -255,9 +255,16 @@ emailWorker.on("completed", () => {
 });
 
 emailWorker.on("failed", (job, err) => {
+  console.error("[email-worker] job failed", {
+    jobId: job?.id,
+    message: err instanceof Error ? err.message : String(err),
+  });
 });
 
 emailWorker.on("error", (err) => {
+  console.error("[email-worker] worker error", {
+    message: err instanceof Error ? err.message : String(err),
+  });
 });
 
 export default emailWorker;

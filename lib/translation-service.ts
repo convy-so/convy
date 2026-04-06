@@ -79,7 +79,7 @@ ${JSON.stringify(normalizedItems, null, 2)}`;
     ) {
       return parsed.items;
     }
-  } catch (error) {
+  } catch {
   }
 
   return normalizedItems;
@@ -216,7 +216,7 @@ Translated Conversation (${appLocaleLabels[targetLanguage]}):`;
       sourceLanguage,
       targetLanguage,
     };
-  } catch (error) {
+  } catch {
     // Fallback: return original conversation
     return {
       translatedConversation: conversation,
@@ -291,7 +291,7 @@ export async function getUserPreferredLanguage(
       default:
         return "en";
     }
-  } catch (error) {
+  } catch {
     return "en";
   }
 }

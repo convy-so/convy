@@ -22,7 +22,6 @@ import {
   evidenceRecordSchema,
 } from "@/lib/education/types";
 import {
-  getSurveyPermissionContext,
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/workspace-access";
