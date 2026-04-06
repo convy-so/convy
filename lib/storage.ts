@@ -36,7 +36,7 @@ export async function uploadSurveyImage(
   surveyId: string,
   imageId: string,
   contentType: string,
-): Promise<{ url: string; path: string }> {
+): Promise<{ path: string; bucket: string }> {
   return uploadSurveyMedia(file, surveyId, imageId, contentType, "image");
 }
 
@@ -54,7 +54,7 @@ export async function uploadSurveyMedia(
   assetId: string,
   contentType: string,
   kind: "image" | "audio" | "video",
-): Promise<{ url: string; path: string }> {
+): Promise<{ path: string; bucket: string }> {
   // Map common MIME types to standard extensions to ensure clean filenames
   const mimeMap: Record<string, string> = {
     "image/jpeg": "jpg",
@@ -92,13 +92,9 @@ export async function uploadSurveyMedia(
   if (error) {
     throw new Error(`Failed to upload ${kind}: ${error.message}`);
   }
-  const { data: urlData } = supabase.storage
-    .from(bucket)
-    .getPublicUrl(data.path);
-
   return {
-    url: urlData.publicUrl,
     path: data.path,
+    bucket,
   };
 }
 
@@ -108,7 +104,7 @@ export async function uploadLearningMaterial(
   assetId: string,
   contentType: string,
   originalFilename: string,
-): Promise<{ url: string; path: string; bucket: string }> {
+): Promise<{ path: string; bucket: string }> {
   const safeName = originalFilename.replace(/[^a-zA-Z0-9._-]/g, "_");
   const filePath = `${topicId}/${assetId}-${safeName}`;
 
@@ -123,15 +119,48 @@ export async function uploadLearningMaterial(
     throw new Error(`Failed to upload learning material: ${error.message}`);
   }
 
-  const { data: urlData } = supabase.storage
-    .from(LEARNING_MATERIALS_BUCKET)
-    .getPublicUrl(data.path);
-
   return {
-    url: urlData.publicUrl,
     path: data.path,
     bucket: LEARNING_MATERIALS_BUCKET,
   };
+}
+
+export async function createSignedSurveyMediaUrl(
+  path: string,
+  kind: "image" | "audio" | "video",
+  expiresInSeconds: number = 60,
+): Promise<string> {
+  const bucket =
+    kind === "audio"
+      ? SURVEY_AUDIO_BUCKET
+      : kind === "video"
+        ? SURVEY_VIDEO_BUCKET
+        : SURVEY_IMAGES_BUCKET;
+
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUrl(path, expiresInSeconds);
+
+  if (error || !data?.signedUrl) {
+    throw new Error(`Failed to create signed survey media URL: ${error?.message ?? "Missing signed URL"}`);
+  }
+
+  return data.signedUrl;
+}
+
+export async function createSignedLearningMaterialUrl(
+  path: string,
+  expiresInSeconds: number = 60,
+): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from(LEARNING_MATERIALS_BUCKET)
+    .createSignedUrl(path, expiresInSeconds);
+
+  if (error || !data?.signedUrl) {
+    throw new Error(`Failed to create signed learning material URL: ${error?.message ?? "Missing signed URL"}`);
+  }
+
+  return data.signedUrl;
 }
 
 /**
@@ -199,10 +228,6 @@ export async function clearSurveyMedia(surveyId: string): Promise<void> {
         .list(surveyId);
 
       if (listError) {
-        console.error(
-          `Failed to list files in bucket ${bucket} for survey ${surveyId}:`,
-          listError,
-        );
         return;
       }
 
@@ -216,10 +241,6 @@ export async function clearSurveyMedia(surveyId: string): Promise<void> {
         .remove(filePaths);
 
       if (deleteError) {
-        console.error(
-          `Failed to delete files in bucket ${bucket}:`,
-          deleteError,
-        );
       }
     }),
   );
@@ -266,3 +287,4 @@ export function validateImageFile(
 
   return { valid: true };
 }
+

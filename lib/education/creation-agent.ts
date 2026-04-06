@@ -4,7 +4,6 @@ import {
 } from "@/lib/education/catalog";
 import {
   createEmptyMediaDecision,
-  isCreationMediaDecisionResolved,
   type CreationMediaDecision,
 } from "@/lib/education/agent-tools";
 import type {
@@ -12,6 +11,10 @@ import type {
 } from "@/lib/education/types";
 import { getPhasePlaybookContext } from "@/lib/education/runtime-context";
 import type { SupportedLanguage } from "@/lib/voice/deepgram-voice-agent";
+import {
+  renderStrictScopePolicyInstructions,
+  renderUntrustedContextBlock,
+} from "@/lib/ai/scope-policy";
 
 export type CreationAgentState = {
   surveyId: string | null;
@@ -69,7 +72,6 @@ export async function buildCreationSystemPrompt(
   const missingFieldText =
     state.missingFields.length > 0 ? state.missingFields.join(", ") : "none";
   const mediaDecision = state.mediaDecision ?? createEmptyMediaDecision();
-  const mediaDecisionResolved = isCreationMediaDecisionResolved(mediaDecision);
   const playbookContext = state.surveyId
     ? await getPhasePlaybookContext({
         surveyId: state.surveyId,
@@ -82,7 +84,7 @@ export async function buildCreationSystemPrompt(
 
 You are helping a creator define an education research study. Keep the exchange concise, clear, and practical.
 
-${playbookContext ? `Approved creation playbooks:\n${playbookContext}\n` : ""}
+${playbookContext ? `${renderUntrustedContextBlock("approved_creation_playbooks", playbookContext)}\n` : ""}
 
 Current draft brief:
 - Program: ${program.manifest.displayName}
@@ -97,20 +99,24 @@ Current draft brief:
 - Success criteria: ${brief?.successCriteria.join(", ") || "Missing"}
 - Analysis questions: ${brief?.analysisQuestions.join(", ") || "Missing"}
 - Missing fields: ${missingFieldText}
-- Media decision: ${mediaDecision.status}
-- Media recommendation: ${mediaDecision.recommendation}
-- Media rationale: ${mediaDecision.rationale || "Not set yet"}
-- Suggested media types: ${mediaDecision.recommendedTypes.join(", ") || "None suggested"}
-- Suggested media description: ${mediaDecision.suggestedDescription || "Not set yet"}
-- Suggested feedback focus: ${mediaDecision.suggestedFeedbackFocus || "Not set yet"}
+- Survey media support: disabled
+- Media rationale: ${mediaDecision.rationale || "Survey media is disabled"}
 - Ready for sampling: ${state.readyForSampling ? "yes" : "no"}
 
 Instructions:
 - Ask exactly one question at a time.
 - Focus on the highest-priority missing field or contradiction.
-- Once the core brief is solid enough to evaluate media, give a short recommendation about whether media would help, explain why, and make it clear the creator chooses whether to add any.
-- If the media decision is still pending, do not call \`finishSurvey\` yet.
-- If you need the creator to make the media decision or upload optional supporting media now, call \`requestMediaUpload\` with concrete recommendation fields instead of describing upload steps yourself.
-- If the brief is ready and the media decision is resolved (${mediaDecisionResolved ? "it is resolved now" : "it is not resolved yet"}), call \`finishSurvey\`, then briefly tell the creator they can move to sample review.
-- Never mention internal JSON, hidden state, or implementation details.`;
+- Survey creation no longer supports media uploads or media recommendations.
+- If the brief is ready, call \`finishSurvey\`, then briefly tell the creator they can move to sample review.
+- Never mention internal JSON, hidden state, or implementation details.
+
+${renderStrictScopePolicyInstructions({
+  objective: "Define a survey brief for an education research study",
+  currentPhase: "survey creation",
+  activeTopic: brief?.title || program.manifest.displayName,
+  allowedDetours: [
+    "brief clarification of the current study-design question",
+    "discussion tied directly to the current survey brief",
+  ],
+})}`;
 }

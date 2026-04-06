@@ -9,8 +9,10 @@ export * from "./notifications";
 export * from "./surveys";
 export * from "./relations";
 export * from "./billing";
+export * from "./ai";
 export * from "./learning";
 export * from "./i18n";
+export * from "./privacy";
 
 // Re-export specific authSchema if needed by better-auth or others
 import { users, accounts, sessions, verificationTokens } from "./auth";

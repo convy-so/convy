@@ -222,7 +222,6 @@ export async function executeRAGQuery(
   language: SupportedLanguage = "en",
 ): Promise<SearchResult[]> {
   if (!filters.organizationId) {
-    console.warn("[RAG] Query executed without strict organizationId. This is a security risk. Proceeding but logged flagged.");
   }
   
   const queriesToRun = [rawQuery];
@@ -244,7 +243,6 @@ export async function executeRAGQuery(
       queriesToRun.push(...object.variants.slice(0, 3));
     }
   } catch (error) {
-    console.error("Query expansion failed, falling back to raw query.", error);
   }
 
   const fetchLimit = filters.limit || 20;
@@ -290,3 +288,4 @@ export async function executeRAGQuery(
     return r;
   });
 }
+

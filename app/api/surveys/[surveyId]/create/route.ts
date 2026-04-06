@@ -1,4 +1,9 @@
-import { stepCountIs, tool } from "ai";
+import {
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  stepCountIs,
+  tool,
+} from "ai";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
@@ -18,7 +23,10 @@ import {
   getCurrentSurveyRevision,
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 import { getClientIP, apiRateLimiter } from "@/lib/ratelimit";
 import {
   buildCreationSystemPrompt,
@@ -27,8 +35,6 @@ import {
 import {
   deriveCreationMediaDecision,
   getCreationFinishSurveyToolDefinition,
-  getCreationRequestMediaUploadToolDefinition,
-  isCreationMediaDecisionResolved,
 } from "@/lib/education/agent-tools";
 import {
   buildCreationCollectedInfo,
@@ -38,6 +44,8 @@ import {
   persistCreationConversation,
   runCreationWorkflow,
 } from "@/lib/education/creation-workflow";
+import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
+import { recordAiFeedbackEvent } from "@/lib/ai/observability";
 
 export const maxDuration = 300;
 
@@ -102,15 +110,9 @@ export async function GET(
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
-    const permission = await getSurveyPermissionContext(
-      session.user.id,
-      surveyId,
-      {
-        activeWorkspaceId: session.session.activeOrganizationId ?? null,
-      },
-    );
+    const permission = await getSurveyPermissionForSession(session, surveyId);
 
-    if (!permission?.canView || !permission.activeContextMatchesResource) {
+    if (!hasSurveyPermission(permission, "canView")) {
       return new Response("Unauthorized", { status: 403 });
     }
 
@@ -199,14 +201,8 @@ export async function POST(
     ]);
     if (!survey) return new Response("Survey not found", { status: 404 });
 
-    const permission = await getSurveyPermissionContext(
-      session.user.id,
-      survey.id,
-      {
-        activeWorkspaceId: session.session.activeOrganizationId ?? null,
-      },
-    );
-    if (!permission?.canEdit || !permission.activeContextMatchesResource) {
+    const permission = await getSurveyPermissionForSession(session, survey.id);
+    if (!hasSurveyPermission(permission, "canEdit")) {
       return new Response("Unauthorized: Editor access required", {
         status: 403,
       });
@@ -254,6 +250,71 @@ export async function POST(
     }
 
     const messages = normalizeCreationMessages(incomingMessages);
+    const latestUserMessage =
+      [...messages].reverse().find((message) => message.role === "user")?.content?.trim() ??
+      "";
+    const priorDriftCount = messages.filter(
+      (message) =>
+        message.role === "assistant" &&
+        /let's stay focused on|we need to stay on the current objective/i.test(
+          message.content,
+        ),
+    ).length;
+
+    if (latestUserMessage) {
+      const scopeDecision = await evaluateScopePolicy({
+        feature: "survey_creation",
+        objective: survey.coreObjective || survey.title,
+        currentPhase: "survey creation",
+        activeTopic: survey.title,
+        latestUserMessage,
+        strictMode: true,
+        driftCount: priorDriftCount,
+        allowedDetours: [
+          "brief clarification of the current survey-design question",
+          "discussion tied directly to the current brief or target audience",
+        ],
+      });
+
+      if (scopeDecision.shouldRedirect) {
+        const redirectMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: scopeDecision.redirectMessage,
+          parts: [{ type: "text", text: scopeDecision.redirectMessage }],
+          timestamp: new Date().toISOString(),
+        };
+        const redirectedMessages = [...messages, redirectMessage];
+        await persistCreationConversation(surveyId, redirectedMessages);
+        await recordAiFeedbackEvent({
+          userId: session.user.id,
+          source: "scope_policy",
+          feedbackType:
+            scopeDecision.promptInjectionSignal === "none"
+              ? "redirected"
+              : "prompt_injection_detected",
+          payload: {
+            surveyId,
+            classification: scopeDecision.classification,
+            promptInjectionSignal: scopeDecision.promptInjectionSignal,
+            reason: scopeDecision.reason,
+          },
+        }).catch(() => undefined);
+
+        return createUIMessageStreamResponse({
+          stream: createUIMessageStream({
+            execute: async ({ writer }) => {
+              writer.write({
+                id: redirectMessage.id,
+                type: "text-delta",
+                delta: scopeDecision.redirectMessage,
+              });
+            },
+          }),
+        });
+      }
+    }
+
     await persistCreationConversation(surveyId, messages);
 
     const result = await runCreationWorkflow({
@@ -302,9 +363,7 @@ export async function POST(
         })),
       brief: result.brief,
       missingFields: result.validation.missingFields,
-      readyForSampling:
-        result.validation.isReady &&
-        isCreationMediaDecisionResolved(mediaDecision),
+      readyForSampling: result.validation.isReady,
       mediaDecision,
     };
 
@@ -329,25 +388,8 @@ Respond to the creator in the language they are speaking. Match the language of 
             };
           }
 
-          if (!isCreationMediaDecisionResolved(mediaDecision)) {
-            return {
-              error: "The media decision is not resolved yet",
-              mediaDecision,
-            };
-          }
-
           return { success: true };
         },
-      }),
-      requestMediaUpload: tool({
-        description: getCreationRequestMediaUploadToolDefinition().description,
-        inputSchema: z.object({
-          allowedTypes: z.array(z.string()).describe("Allowed media types, such as image, audio, or video."),
-          recommendation: z.enum(["add_media", "not_needed"]).describe("Whether the assistant recommends adding media or thinks media is optional and not necessary."),
-          rationale: z.string().describe("A short explanation of why media would help or why it is not necessary."),
-          suggestedDescription: z.string().describe("Suggested description to prefill if the creator chooses to upload media."),
-          suggestedFeedbackFocus: z.string().describe("Suggested feedback focus or learning goal for the uploaded media."),
-        }),
       }),
     };
 
@@ -362,6 +404,13 @@ Respond to the creator in the language they are speaking. Match the language of 
         temperature: 0.4,
         tools,
         stopWhen: stepCountIs(5),
+        observability: {
+          feature: "survey_creation",
+          scenarioType: "creator_turn",
+          resourceType: "survey",
+          resourceId: surveyId,
+          actorRole: session.user.role,
+        },
       },
     );
 
@@ -447,14 +496,8 @@ export async function PUT(
       .where(eq(surveys.id, surveyId));
     if (!survey) return new Response("Survey not found", { status: 404 });
 
-    const permission = await getSurveyPermissionContext(
-      session.user.id,
-      survey.id,
-      {
-        activeWorkspaceId: session.session.activeOrganizationId ?? null,
-      },
-    );
-    if (!permission?.canEdit || !permission.activeContextMatchesResource) {
+    const permission = await getSurveyPermissionForSession(session, survey.id);
+    if (!hasSurveyPermission(permission, "canEdit")) {
       return new Response("Unauthorized: Editor access required", {
         status: 403,
       });

@@ -23,7 +23,6 @@ export async function POST(
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("[Media Upload] Error:", error);
     return new Response(
       JSON.stringify({
         success: false,
@@ -33,3 +32,4 @@ export async function POST(
     );
   }
 }
+

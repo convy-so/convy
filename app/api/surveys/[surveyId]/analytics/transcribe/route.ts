@@ -4,8 +4,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
+import { assertAudioUploadFile } from "@/lib/security/uploads";
 import { transcribeAudioBuffer } from "@/lib/voice/analytics-stt";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import { normalizeSpeechToTextLanguage } from "@/lib/voice/voice-locales";
+import {
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 
 export async function POST(
   request: NextRequest,
@@ -23,20 +28,19 @@ export async function POST(
       return NextResponse.json({ error: "Survey not found" }, { status: 404 });
     }
 
-    const permission = await getSurveyPermissionContext(session.user.id, survey.id, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
-    if (!permission?.canView || !permission.activeContextMatchesResource) {
+    const permission = await getSurveyPermissionForSession(session, survey.id);
+    if (!hasSurveyPermission(permission, "canView")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     const formData = await request.formData();
     const audioFile = formData.get("audio");
-    const language = String(formData.get("language") || "multi");
+    const language = normalizeSpeechToTextLanguage(formData.get("language"));
 
     if (!(audioFile instanceof File)) {
       return NextResponse.json({ error: "Audio file is required" }, { status: 400 });
     }
+    assertAudioUploadFile(audioFile);
 
     const audioBuffer = Buffer.from(await audioFile.arrayBuffer());
     const transcript = await transcribeAudioBuffer(audioBuffer, language);

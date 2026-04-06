@@ -39,7 +39,6 @@ export async function updateUserLanguage(language: AppLocale) {
 
     return { success: true };
   } catch (error) {
-    console.error("[updateUserLanguage] Error:", error);
     return { success: false, error: "Failed to update language" };
   }
 }
@@ -48,3 +47,4 @@ export async function getCurrentUiLocale() {
   const session = await getCurrentSession();
   return normalizeAppLocale(session?.user.uiLocale ?? session?.user.preferredLanguage);
 }
+

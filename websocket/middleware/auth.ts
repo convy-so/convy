@@ -1,8 +1,14 @@
 import { IncomingMessage } from "http";
 import { WebSocket } from "ws";
 import { getDb } from "@/db";
-import { sessions, users, members } from "@/db/schema";
+import { sessions, users, members, surveys } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
+import { getRedisClient } from "@/lib/redis";
+import {
+  RESPONDENT_RESUME_QUERY_PARAM,
+  resolveRespondentAccess,
+} from "@/lib/privacy/respondent";
+import { resolveTrustedNodeClientIp } from "@/lib/security/client-ip";
 
 /**
  * WebSocket Authentication Middleware
@@ -26,11 +32,15 @@ export interface AuthError {
 /**
  * Extract session token from WebSocket request
  */
-function extractSessionToken(request: IncomingMessage): string | null {
+function extractSessionToken(
+  request: IncomingMessage,
+): { token: string; source: "query" | "cookie" | "authorization" } | null {
   // Try to get token from query parameters
   const url = new URL(request.url || "", `http://${request.headers.host}`);
   const tokenFromQuery = url.searchParams.get("token");
-  if (tokenFromQuery) return tokenFromQuery;
+  if (tokenFromQuery) {
+    return { token: tokenFromQuery, source: "query" };
+  }
 
   // Try to get token from cookies
   const cookies = request.headers.cookie;
@@ -44,9 +54,9 @@ function extractSessionToken(request: IncomingMessage): string | null {
     if (sessionCookie) {
       const rawToken = sessionCookie.substring(cookieName.length);
       try {
-        return decodeURIComponent(rawToken);
+        return { token: decodeURIComponent(rawToken), source: "cookie" };
       } catch {
-        return rawToken;
+        return { token: rawToken, source: "cookie" };
       }
     }
   }
@@ -54,10 +64,31 @@ function extractSessionToken(request: IncomingMessage): string | null {
   // Try to get token from Authorization header
   const authHeader = request.headers.authorization;
   if (authHeader?.startsWith("Bearer ")) {
-    return authHeader.substring(7);
+    return { token: authHeader.substring(7), source: "authorization" };
   }
 
   return null;
+}
+
+async function resolveSessionToken(token: string): Promise<string | null> {
+  if (!token.startsWith("ws_")) {
+    return token;
+  }
+
+  try {
+    const redis = getRedisClient();
+    const cacheKey = `ws_ticket:${token}`;
+    const resolvedToken = await redis.get(cacheKey);
+    if (!resolvedToken) {
+      return null;
+    }
+
+    // One-time ticket semantics.
+    await redis.del(cacheKey);
+    return resolvedToken;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -71,9 +102,13 @@ async function verifySessionToken(token: string): Promise<{
   role: "user" | "admin" | "org_admin" | "org_member";
 } | null> {
   try {
+    const resolvedToken = await resolveSessionToken(token);
+    if (!resolvedToken) {
+      return null;
+    }
 
 
-    // Query session from database - check both token and id
+    // Query session from database by session token.
     const [session] = await getDb()
       .select({
         id: sessions.id,
@@ -83,30 +118,10 @@ async function verifySessionToken(token: string): Promise<{
         activeOrganizationId: sessions.activeOrganizationId,
       })
       .from(sessions)
-      .where(eq(sessions.token, token))
+      .where(eq(sessions.token, resolvedToken))
       .limit(1);
 
     if (!session) {
-
-      // Try fallback to ID just in case the cookie contains the ID
-      const [sessionById] = await getDb()
-        .select({
-          id: sessions.id,
-          userId: sessions.userId,
-          expiresAt: sessions.expiresAt,
-          token: sessions.token,
-          activeOrganizationId: sessions.activeOrganizationId,
-        })
-        .from(sessions)
-        .where(eq(sessions.id, token))
-        .limit(1);
-
-      if (sessionById) {
-
-        // Continue with sessionById
-        return processSession(sessionById);
-      }
-
       return null;
     }
 
@@ -196,8 +211,15 @@ export async function authenticateWebSocket(
     };
   }
 
+  if (token.source === "query" && !token.token.startsWith("ws_")) {
+    return {
+      code: "INVALID_TOKEN",
+      message: "WebSocket query tokens must be short-lived auth tickets",
+    };
+  }
+
   // Verify session
-  const userInfo = await verifySessionToken(token);
+  const userInfo = await verifySessionToken(token.token);
 
   if (!userInfo) {
     return {
@@ -225,7 +247,7 @@ export async function authenticateWebSocket(
 }
 
 /**
- * Verify public survey access (no authentication required)
+ * Verify anonymous survey access backed by a respondent session.
  */
 export async function verifyPublicAccess(
   request: IncomingMessage,
@@ -248,8 +270,59 @@ export async function verifyPublicAccess(
     };
   }
 
-  // Additional validation could be added here
-  // e.g., check if survey exists and is active
+  const survey = await getDb()
+    .select({
+      id: surveys.id,
+      status: surveys.status,
+    })
+    .from(surveys)
+    .where(eq(surveys.shareableLink, surveyId))
+    .then((rows) => rows[0]);
+
+  if (!survey) {
+    return {
+      code: "SURVEY_NOT_FOUND",
+      message: "Survey not found",
+    };
+  }
+
+  if (survey.status !== "active") {
+    return {
+      code: "SURVEY_INACTIVE",
+      message: "Survey is not active",
+    };
+  }
+
+  const respondentAccess = await resolveRespondentAccess({
+    cookieHeader: request.headers.cookie ?? null,
+    surveyId: survey.id,
+    conversationId,
+    clientIp:
+      resolveTrustedNodeClientIp({
+        headers: request.headers,
+        socketRemoteAddress: request.socket.remoteAddress,
+      }).ip ?? null,
+    userAgent:
+      Array.isArray(request.headers["user-agent"])
+        ? request.headers["user-agent"][0] ?? null
+        : request.headers["user-agent"] ?? null,
+    explicitToken:
+      url.searchParams.get(RESPONDENT_RESUME_QUERY_PARAM) ??
+      url.searchParams.get("respondentToken"),
+    sessionAllowedScopes: ["respondent_session"],
+    explicitAllowedScopes: [
+      "respondent_resume",
+      "respondent_self_service",
+      "respondent_session",
+    ],
+  });
+
+  if (!respondentAccess) {
+    return {
+      code: "RESPONDENT_UNAUTHORIZED",
+      message: "Respondent session required",
+    };
+  }
 
   return { surveyId, conversationId };
 }
@@ -265,7 +338,6 @@ export function sendAuthError(ws: WebSocket, error: AuthError): void {
       message: error.message,
     },
   };
-  console.log("[WS Auth] Sending auth error:", JSON.stringify(payload));
   ws.send(JSON.stringify(payload));
   ws.close(1008, error.message);
 }
@@ -310,9 +382,11 @@ export function createAuthMiddleware(requireAuth: boolean = true) {
  * Get client IP address from request
  */
 export function getClientIP(request: IncomingMessage): string {
-  const forwarded = request.headers["x-forwarded-for"];
-  if (forwarded) {
-    return Array.isArray(forwarded) ? forwarded[0] : forwarded.split(",")[0];
-  }
-  return request.socket.remoteAddress || "unknown";
+  return (
+    resolveTrustedNodeClientIp({
+      headers: request.headers,
+      socketRemoteAddress: request.socket.remoteAddress,
+    }).ip || "unknown"
+  );
 }
+

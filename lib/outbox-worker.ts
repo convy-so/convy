@@ -22,9 +22,23 @@ export function startOutboxWorker() {
 
   global.outboxWorkerTimer = setInterval(async () => {
     try {
-      await publishPendingOutboxEntries();
+      const result = await publishPendingOutboxEntries();
+      if (result.claimedCount > 0) {
+        console.info("[outbox-worker] published pending entries", {
+          claimedCount: result.claimedCount,
+          publishedCount: result.publishedCount,
+          reclaimedCount: result.reclaimedCount,
+          failedCount: result.failedEntries.length,
+        });
+      }
+
+      for (const failure of result.failedEntries) {
+        console.error("[outbox-worker] publish failed", failure);
+      }
     } catch (err) {
-      console.error("[OutboxWorker] Failed to publish pending outbox entries:", err);
+      console.error("[outbox-worker] publish failed", {
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
     }
   }, OUTBOX_POLL_INTERVAL_MS);
 
@@ -42,3 +56,4 @@ export function stopOutboxWorker() {
     global.outboxWorkerTimer = undefined;
   }
 }
+

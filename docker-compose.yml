@@ -42,6 +42,7 @@ services:
     environment:
       REDIS_URL: "redis://redis:6379"
       NODE_ENV: production
+      OUTBOX_RELAY_ENABLED: "false"
     depends_on:
       redis:
         condition: service_healthy
@@ -93,6 +94,7 @@ services:
       NODE_ENV: production
       BETTER_AUTH_URL: "http://localhost:3000"
       APP_BASE_URL: "http://localhost:3000"
+      OUTBOX_POLLER_ENABLED: "true"
     depends_on:
       redis:
         condition: service_healthy

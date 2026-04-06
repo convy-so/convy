@@ -491,7 +491,6 @@ export async function buildAnalyticsSnapshot(
       sessionType: "live",
     },
   }).catch((error) => {
-    console.error("[Analytics Workflow] Failed to index snapshot:", error);
   });
   await recordEducationTrace({
     surveyId,
@@ -600,7 +599,6 @@ ${buildEvidenceDigest(evidence)}
       sessionType: sessionRow.sessionType,
     },
   }).catch((error) => {
-    console.error("[Analytics Workflow] Failed to index session insight:", error);
   });
   await replaceAnalyticsFacts(surveyId, sessionId, buildSessionFacts({
     surveyId,
@@ -622,7 +620,6 @@ ${buildEvidenceDigest(evidence)}
           sessionType: sessionRow.sessionType,
         },
       }).catch((error) => {
-        console.error("[Analytics Workflow] Failed to index evidence:", error);
       }),
     ),
   );
@@ -632,6 +629,7 @@ ${buildEvidenceDigest(evidence)}
 export async function answerAnalyticsQuestion(input: {
   surveyId: string;
   question: string;
+  language?: string;
 }) {
   const [briefRow, snapshotRow, , factsRows, stateRow, survey] = await Promise.all([
     getResearchBrief(input.surveyId),
@@ -742,6 +740,7 @@ ${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>
 - Never invent counts.
 - Cite snapshot versions and evidence ids when used.
 - If support is weak, say so.
+- Write the final answer in ${input.language ?? "en"}.
 </rules>
 
 <schema>
@@ -820,3 +819,4 @@ ${evidenceContext || "None"}
           : null,
   };
 }
+

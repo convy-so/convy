@@ -26,7 +26,6 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
         surveyId: validated.surveyId,
         sessionId: session.id,
       }).catch((error) => {
-        console.error("[Conversation Insights Worker] Failed to purge sample analytics artifacts:", error);
       });
       await job.updateProgress(100);
       return {
@@ -43,7 +42,6 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
         surveyId: validated.surveyId,
         userId: validated.userId,
       }).catch((error) => {
-        console.error("[Conversation Insights Worker] Snapshot scheduling failed:", error);
       });
     }
     await job.updateProgress(100);
@@ -60,3 +58,4 @@ const conversationInsightsWorker = new Worker<ConversationInsightsJobData>(
 );
 
 export default conversationInsightsWorker;
+

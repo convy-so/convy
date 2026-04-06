@@ -159,7 +159,6 @@ export abstract class BaseVoiceAgentHandler {
         try {
           await this.onConversationText(event);
         } catch (error) {
-          console.error(`[BaseVoiceAgentHandler] Error in onConversationText:`, error);
         }
       },
     );
@@ -170,7 +169,6 @@ export abstract class BaseVoiceAgentHandler {
         try {
           await this.onFunctionCall(event);
         } catch (error) {
-          console.error(`[VoiceAgentHandler] Error in onFunctionCall:`, error);
           // Respond with error so the agent can continue
           this.voiceAgent?.sendFunctionCallResponse(
             event.function_call_id,
@@ -234,10 +232,6 @@ export abstract class BaseVoiceAgentHandler {
     });
 
     this.voiceAgent.on("error", (error: unknown) => {
-      console.error(
-        `[VoiceAgentHandler] Voice Agent error (${this.identifier}):`,
-        error,
-      );
       this.sendError(error, getErrorCode(error));
     });
 
@@ -274,10 +268,6 @@ export abstract class BaseVoiceAgentHandler {
     });
 
     this.ws.on("error", (error) => {
-      console.error(
-        `[VoiceAgentHandler] Browser WebSocket error (${this.identifier}):`,
-        error,
-      );
       this.cleanup();
     });
   }
@@ -326,10 +316,6 @@ export abstract class BaseVoiceAgentHandler {
 
           await this.handleControlMessage(message);
         } catch (error) {
-          console.error(
-            `[BaseVoiceAgent] Failed to parse non-binary message as JSON:`,
-            error,
-          );
         }
       } else {
         // Treat as audio data from browser
@@ -345,8 +331,6 @@ export abstract class BaseVoiceAgentHandler {
     // Check audio chunk rate limit
     const audioCheck = await checkAudioChunkAllowed(this.identifier);
     if (!audioCheck.allowed) {
-      if (Math.random() < 0.01)
-        console.warn(`[BaseVoiceAgent] Audio chunk dropped due to rate limit`);
       return;
     }
 
@@ -367,35 +351,14 @@ export abstract class BaseVoiceAgentHandler {
           isRecord(data) && typeof data.type === "string" ? data.type : undefined;
         if (dataType !== "audio" && dataType !== "pong") {
           if (dataType === "error") {
-            console.error(
-              `[VoiceAgent] 📤 Error sent to browser:`,
-              JSON.stringify(data, null, 2),
-            );
           }
         }
       }
       try {
         this.ws.send(Buffer.isBuffer(data) ? data : JSON.stringify(data));
       } catch (err) {
-        console.error(
-          `[BaseVoiceAgent] Failed to stringify/send data:`,
-          err,
-          data,
-        );
       }
-    } else {
-      const dataType =
-        !Buffer.isBuffer(data) &&
-        typeof data === "object" &&
-        data !== null &&
-        "type" in data &&
-        typeof data.type === "string"
-          ? data.type
-          : "unknown";
-      console.warn(
-        `[BaseVoiceAgent] Cannot send to browser (closed): ${dataType}`,
-      );
-    }
+
   }
 
   protected sendError(errorPayload: unknown, code?: string): void {
@@ -461,3 +424,4 @@ export abstract class BaseVoiceAgentHandler {
     // Subclasses should override and call super.cleanup()
   }
 }
+

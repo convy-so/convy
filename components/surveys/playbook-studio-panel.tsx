@@ -117,7 +117,6 @@ export function PlaybookStudioPanel({ surveyId }: { surveyId: string }) {
       const data = playbooksResponseSchema.parse(await response.json());
       setPlaybooks(data.playbooks ?? []);
     } catch (loadError) {
-      console.error("[PlaybookStudioPanel] Failed to load:", loadError);
       setError(
         loadError instanceof Error ? loadError.message : "Failed to load playbooks.",
       );
@@ -354,3 +353,4 @@ export function PlaybookStudioPanel({ surveyId }: { surveyId: string }) {
     </div>
   );
 }
+

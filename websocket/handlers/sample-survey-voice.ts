@@ -42,6 +42,7 @@ import {
   releaseSurveyLease,
   renewSurveyLease,
 } from "@/lib/collaboration-service";
+import { isSupportedVoiceLocale, normalizeVoiceLocale } from "@/lib/voice/voice-locales";
 
 interface SampleState {
   surveyId: string;
@@ -59,16 +60,6 @@ interface SampleState {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function isSupportedLanguage(value: unknown): value is SupportedLanguage {
-  return (
-    value === "en" ||
-    value === "fr" ||
-    value === "de" ||
-    value === "es" ||
-    value === "it"
-  );
 }
 
 function isChatMessageRole(value: unknown): value is ChatMessage["role"] {
@@ -180,9 +171,9 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       }
 
       this.state.survey = survey;
-      this.state.language = isSupportedLanguage(survey.language)
+      this.state.language = isSupportedVoiceLocale(survey.language)
         ? survey.language
-        : "en";
+        : normalizeVoiceLocale(undefined);
       this.state.brief = briefRow.brief;
       this.state.coveragePlan = planRow.plan;
       this.surveyId = survey.id;
@@ -267,7 +258,6 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
 
       await this.connectVoiceAgent();
     } catch (error) {
-      console.error("[Sample Survey Voice] Initialization error:", error);
       this.sendError("Failed to initialize session");
       this.ws.close();
     }
@@ -304,6 +294,9 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       getConductingRuntimeLayers({
         surveyId: this.state.surveyId,
         organizationId: this.state.survey?.organizationId,
+        classroomId: this.state.survey?.classroomId,
+        programId: this.state.survey?.programId,
+        language: this.state.language,
         mode: "sample",
       }),
     ]);
@@ -316,9 +309,10 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       conductingProfile: activeSampleProfile?.profile ?? null,
       playbookContext: runtimeLayers.playbookContext,
       personalityContext: runtimeLayers.personalityContext,
+      expertGuidanceContext: runtimeLayers.expertGuidanceContext,
       toolContext: {
         canFinishSurvey: true,
-        canShowMedia: (this.state.survey?.media || []).length > 0,
+        canShowMedia: false,
       },
     })}
 
@@ -339,7 +333,7 @@ Additional sample-session rules:
       tone,
       systemPrompt,
       functions: buildSampleVoiceFunctions(
-        (this.state.survey?.media || []).length > 0,
+        false,
       ),
       conversationHistory:
         this.state.messages.length > 0
@@ -428,7 +422,6 @@ Additional sample-session rules:
       surveyId: this.state.surveyId,
       sessionId: this.state.sessionId,
     }).catch((error) => {
-      console.error("[Sample Survey Voice] Failed to purge rehearsal analytics artifacts:", error);
     });
 
     this.send({
@@ -443,6 +436,9 @@ Additional sample-session rules:
       getConductingRuntimeLayers({
         surveyId: this.state.surveyId,
         organizationId: this.state.survey?.organizationId,
+        classroomId: this.state.survey?.classroomId,
+        programId: this.state.survey?.programId,
+        language: this.state.language,
         mode: "sample",
       }),
     ]);
@@ -454,9 +450,10 @@ Additional sample-session rules:
       conductingProfile: refreshedSampleProfile?.profile ?? null,
       playbookContext: refreshedRuntimeLayers.playbookContext,
       personalityContext: refreshedRuntimeLayers.personalityContext,
+      expertGuidanceContext: refreshedRuntimeLayers.expertGuidanceContext,
       toolContext: {
         canFinishSurvey: true,
-        canShowMedia: (this.state.survey?.media || []).length > 0,
+        canShowMedia: false,
       },
     })}
 
@@ -469,52 +466,13 @@ Additional sample-session rules:
       provider: { type: "open_ai", model: VOICE_AGENT_THINK_MODEL },
       prompt: `${refreshedPrompt}\n\nRespond in the language the participant is speaking.`,
       functions: buildSampleVoiceFunctions(
-        (this.state.survey?.media || []).length > 0,
+        false,
       ),
     });
   }
 
   protected async onFunctionCall(event: FunctionCallRequestEvent): Promise<void> {
     switch (event.function_name) {
-      case "showMedia": {
-        const mediaId = event.input?.mediaId;
-        const media = this.state.survey?.media?.find((item) => item.id === mediaId);
-
-        if (!media) {
-          this.voiceAgent?.sendFunctionCallResponse(
-            event.function_call_id,
-            event.function_name,
-            JSON.stringify({ error: "Media not found" }),
-          );
-          return;
-        }
-
-        this.send({
-          type: "display_media",
-          media: {
-            id: media.id,
-            type: media.type,
-            url: media.url,
-            description: media.description,
-            altText: media.altText,
-            durationMs: media.durationMs,
-          },
-        });
-        this.voiceAgent?.sendFunctionCallResponse(
-          event.function_call_id,
-          event.function_name,
-          JSON.stringify({
-            success: true,
-            media: {
-              id: media.id,
-              type: media.type,
-              description: media.description,
-            },
-          }),
-        );
-        return;
-      }
-
       case "finishSurvey": {
         if (!this.state.sessionState || !this.state.sessionId || !this.state.coveragePlan) {
           this.voiceAgent?.sendFunctionCallResponse(
@@ -594,11 +552,10 @@ Additional sample-session rules:
         userId: this.userId!,
         leaseToken: this.leaseToken,
       }).catch((error) => {
-        console.error(error);
         return null;
       });
       if (releaseResult?.ok) {
-        await this.broadcastLeaseEvent("survey.lease_released").catch(console.error);
+        await this.broadcastLeaseEvent("survey.lease_released").catch(() => undefined);
       }
       this.leaseToken = null;
     }
@@ -609,7 +566,7 @@ Additional sample-session rules:
       .update(voiceSessions)
       .set({ status: "completed", endedAt: new Date() })
       .where(eq(voiceSessions.id, this.state.voiceSessionId))
-      .catch(console.error);
+      .catch(() => undefined);
 
     if (!this.state.conversationId) return;
 
@@ -621,7 +578,7 @@ Additional sample-session rules:
         activeDurationMs: Math.round(this.activeDurationMs),
       })
       .where(eq(sampleConversations.id, this.state.conversationId))
-      .catch(console.error);
+      .catch(() => undefined);
   }
 
   private async ensureRehearsalLease() {
@@ -681,3 +638,4 @@ Additional sample-session rules:
     });
   }
 }
+

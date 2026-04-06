@@ -11,10 +11,11 @@
 import { WebSocket } from "ws";
 import { EventEmitter } from "events";
 import { env } from "@/lib/env";
+import type { SupportedVoiceLocale } from "@/lib/voice/voice-locales";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export type SupportedLanguage = "en" | "fr" | "de" | "es" | "it";
+export type SupportedLanguage = SupportedVoiceLocale;
 
 export interface VoiceAgentFunction {
   name: string;
@@ -235,7 +236,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
       });
 
       this.ws.on("error", (error) => {
-        console.error("[VoiceAgent] WebSocket error:", error);
         this.emit("error", error);
         if (!this.isConnected) {
           reject(error);
@@ -406,10 +406,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
       }
       this.handleJsonMessage(message as { type: string; [key: string]: unknown });
     } catch (error) {
-      console.error(
-        "[VoiceAgent] Failed to parse JSON from Deepgram:",
-        error,
-      );
     }
   }
 
@@ -439,9 +435,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         break;
 
       case "InjectionRefused":
-        console.warn(
-          "[VoiceAgent] InjectionRefused received — will retry inject.",
-        );
         this.emit("injectionRefused", message);
         break;
 
@@ -474,7 +467,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         break;
 
       case "Error":
-        console.error("[VoiceAgent] Error from Deepgram:", message);
         this.emit("error", {
           description:
             typeof message.description === "string"
@@ -485,7 +477,6 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
         break;
 
       case "Warning":
-        console.warn("[VoiceAgent] Warning from Deepgram:", message);
         this.emit("warning", message);
         break;
 
@@ -648,3 +639,4 @@ export function buildVoiceAgentSettings(options: {
     },
   };
 }
+

@@ -5,7 +5,11 @@ import { getDb } from "@/db";
 import { surveys, analyticsChatSessions } from "@/db/schema";
 import type { ChatSessionMessage } from "@/db/schema/surveys";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 import { z } from "zod";
 
 const analyticsChatSessionRequestSchema = z.object({
@@ -35,10 +39,8 @@ export async function GET(
       return NextResponse.json({ error: "Survey not found" }, { status: 404 });
     }
 
-    const permission = await getSurveyPermissionContext(session.user.id, survey.id, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
-    if (!permission?.canView || !permission.activeContextMatchesResource) {
+    const permission = await getSurveyPermissionForSession(session, survey.id);
+    if (!hasSurveyPermission(permission, "canView")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -94,10 +96,8 @@ export async function POST(
       return NextResponse.json({ error: "Survey not found" }, { status: 404 });
     }
 
-    const permission = await getSurveyPermissionContext(session.user.id, survey.id, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
-    if (!permission?.canView || !permission.activeContextMatchesResource) {
+    const permission = await getSurveyPermissionForSession(session, survey.id);
+    if (!hasSurveyPermission(permission, "canView")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

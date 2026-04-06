@@ -28,7 +28,6 @@ export default function AdminLoginPage() {
       setIsSuccess(true);
       toast.success("Verification link sent to your email");
     } catch (error) {
-      console.error(error);
       toast.error("Failed to attempt login");
     } finally {
       setIsLoading(false);
@@ -104,3 +103,4 @@ export default function AdminLoginPage() {
     </div>
   );
 }
+

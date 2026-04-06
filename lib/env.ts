@@ -17,12 +17,48 @@ const optional = (key: string): string | undefined => {
   return process.env[key];
 };
 
+const optionalBoolean = (key: string, defaultValue: boolean): boolean => {
+  const value = optional(key);
+  if (value === undefined) {
+    return defaultValue;
+  }
+  return value === "true";
+};
+
+const optionalInt = (key: string, defaultValue: number): number => {
+  const value = optional(key);
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Invalid integer environment variable: ${key}`);
+  }
+
+  return parsed;
+};
+
 const appBaseUrl = optional("APP_BASE_URL") || "http://localhost:3000";
 const betterAuthUrl = optional("BETTER_AUTH_URL") || appBaseUrl;
+const allowInsecureTls = optional("ALLOW_INSECURE_TLS") === "true";
+const outboxNotifyChannel =
+  optional("OUTBOX_NOTIFY_CHANNEL") || "workspace_outbox_wakeup";
+
+if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(outboxNotifyChannel)) {
+  throw new Error("Invalid OUTBOX_NOTIFY_CHANNEL; expected a PostgreSQL identifier");
+}
+
+const voiceAgentInternalKey =
+  optional("VOICE_AGENT_INTERNAL_KEY") ||
+  (process.env.NODE_ENV === "production"
+    ? required("VOICE_AGENT_INTERNAL_KEY")
+    : "dev-internal-key");
 
 export const env = {
   NODE_ENV: process.env.NODE_ENV ?? "development",
   DATABASE_URL: required("DATABASE_URL"),
+  DATABASE_DIRECT_URL: optional("DATABASE_DIRECT_URL"),
   BETTER_AUTH_SECRET: required("BETTER_AUTH_SECRET"),
   BETTER_AUTH_URL: betterAuthUrl,
   GOOGLE_CLIENT_ID: required("GOOGLE_CLIENT_ID"),
@@ -42,12 +78,15 @@ export const env = {
 
   // Encryption for tokens
   ENCRYPTION_KEY: optional("ENCRYPTION_KEY"),
+  ALLOW_INSECURE_TLS: allowInsecureTls,
 
   // Voice/WebSocket Configuration
   WEBSOCKET_PORT: optional("WEBSOCKET_PORT") || "3001",
   DEEPGRAM_API_KEY: optional("DEEPGRAM_API_KEY"),
+  VOICE_STT_PROVIDER: optional("VOICE_STT_PROVIDER"),
+  VOICE_AGENT_PROVIDER: optional("VOICE_AGENT_PROVIDER"),
   /** Shared secret used to authenticate Deepgram → our /api/voice/agent-turn endpoint */
-  VOICE_AGENT_INTERNAL_KEY: optional("VOICE_AGENT_INTERNAL_KEY") || "dev-internal-key",
+  VOICE_AGENT_INTERNAL_KEY: voiceAgentInternalKey,
 
   // Application base URL (for public links & embeds), e.g. https://app.convy.com
   APP_BASE_URL: appBaseUrl,
@@ -59,6 +98,20 @@ export const env = {
 
   NEXT_PUBLIC_WEBSOCKET_URL:
     optional("NEXT_PUBLIC_WEBSOCKET_URL") || "ws://localhost:3001",
+  OUTBOX_NOTIFY_CHANNEL: outboxNotifyChannel,
+  OUTBOX_POLLER_ENABLED: optionalBoolean("OUTBOX_POLLER_ENABLED", true),
+  OUTBOX_RELAY_ENABLED: optionalBoolean("OUTBOX_RELAY_ENABLED", false),
+  OUTBOX_CLAIM_TTL_MS: optionalInt("OUTBOX_CLAIM_TTL_MS", 30_000),
+  OUTBOX_SWEEP_INTERVAL_MS: optionalInt("OUTBOX_SWEEP_INTERVAL_MS", 5_000),
+  OUTBOX_BATCH_SIZE: optionalInt("OUTBOX_BATCH_SIZE", 100),
+  GDPR_EU_MODE: optional("GDPR_EU_MODE") === "true",
+  GDPR_PRIVACY_SECRET: optional("GDPR_PRIVACY_SECRET"),
+  GDPR_EU_APPROVED_PROCESSORS: optional("GDPR_EU_APPROVED_PROCESSORS")
+    ? optional("GDPR_EU_APPROVED_PROCESSORS")!
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+    : [],
 
   ADMIN_EMAILS: optional("ADMIN_EMAILS")
     ? optional("ADMIN_EMAILS")!
@@ -75,6 +128,8 @@ export const env = {
   MEM0_API_KEY: optional("MEM0_API_KEY"),
   MEM0_ORG_ID: optional("MEM0_ORG_ID"),
   MEM0_PROJECT_ID: optional("MEM0_PROJECT_ID"),
+  OPENAI_API_KEY: optional("OPENAI_API_KEY"),
+  SENTRY_DSN: optional("SENTRY_DSN"),
 };
 
 export type Env = typeof env;

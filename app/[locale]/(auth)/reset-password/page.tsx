@@ -71,7 +71,7 @@ function ResetPasswordContent() {
         }
       });
     } catch (error) {
-      console.error(error);
+      console.error("[ResetPassword] Reset failed:", error);
       toast.error(t('Errors.Failed'));
     } finally {
       setIsLoading(false);

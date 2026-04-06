@@ -11,6 +11,7 @@ import { loadEnvConfig } from "@next/env";
 loadEnvConfig(process.cwd());
 
 import * as Sentry from "@sentry/node";
+import { scrubSentryEvent } from "@/lib/privacy/sentry";
 
 // Initialize Sentry for the standalone Node.js Project (Workers)
 Sentry.init({
@@ -18,6 +19,10 @@ Sentry.init({
   tracesSampleRate: 1.0,
   environment: process.env.NODE_ENV || "development",
   serverName: "worker-process",
+  sendDefaultPii: false,
+  beforeSend(event) {
+    return scrubSentryEvent(event);
+  },
 });
 
 process.env.IS_WORKER = "true";
@@ -28,7 +33,10 @@ import conversationInsightsWorker from "./conversation-insights.worker";
 import surveyAnalyticsWorker from "./survey-analytics.worker";
 import emailWorker from "./email.worker";
 import learningPatternsWorker from "./learning-patterns.worker";
+import tutoringReportWorker from "./tutoring-report.worker";
+import evalRunWorker from "./eval-run.worker";
 import contentTranslationWorker from "./content-translation.worker";
+import { startOutboxRelay, type OutboxRelayHandle } from "./outbox-relay";
 
 // Collect all workers for coordinated shutdown
 const workers = [
@@ -36,23 +44,23 @@ const workers = [
   { name: "Survey Analytics", worker: surveyAnalyticsWorker },
   { name: "Email", worker: emailWorker },
   { name: "Learning Patterns", worker: learningPatternsWorker },
+  { name: "Tutoring Report", worker: tutoringReportWorker },
+  { name: "Eval Run", worker: evalRunWorker },
   { name: "Content Translation", worker: contentTranslationWorker },
 ];
+let outboxRelay: OutboxRelayHandle | null = null;
 // Test Redis connection before confirming workers are ready
 (async () => {
   const isConnected = await testRedisConnection();
 
   if (!isConnected) {
-    console.error("\n❌ Redis connection failed!");
-    console.error("Make sure UPSTASH_REDIS_URL is set correctly in .env");
-    console.error(
-      "Get it from: Upstash Console > Your Database > Connect > Redis URL",
-    );
     process.exit(1);
   }
 
 
   // Schedule recurring jobs (none currently)
+  outboxRelay = await startOutboxRelay();
+
   if (process.env.SENTRY_TEST_TRIGGER === "true") {
     throw new Error("Sentry Test Worker Error: This is a test error from the Worker process.");
   }
@@ -75,17 +83,19 @@ async function gracefulShutdown() {
 
   try {
     // Close all workers in parallel
-    const closePromises = workers.map(async ({ name, worker }) => {
+    const closePromises = workers.map(async ({ worker }) => {
       try {
         await worker.close();
       } catch (error) {
-        console.error(`❌ Error closing ${name} Worker:`, error);
       }
     });
 
     // Wait for all workers to close with a timeout
     await Promise.race([
-      Promise.all(closePromises),
+      Promise.all([
+        ...closePromises,
+        outboxRelay?.stop(),
+      ]),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Shutdown timeout")), 30000),
       ),
@@ -93,7 +103,6 @@ async function gracefulShutdown() {
 
     process.exit(0);
   } catch (error) {
-    console.error("\n❌ Error during shutdown:", error);
     process.exit(1);
   }
 }
@@ -101,4 +110,5 @@ async function gracefulShutdown() {
 // Handle shutdown signals
 process.on("SIGTERM", () => void gracefulShutdown());
 process.on("SIGINT", () => void gracefulShutdown());
+
 

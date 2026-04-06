@@ -2,7 +2,7 @@
  * POST /api/surveys/[surveyId]/conversations/[conversationId]/feedback
  *
  * Participant micro-rating submitted at the end of a survey conversation.
- * No authentication required — participants are anonymous.
+ * Anonymous respondents must present a valid survey session.
  *
  * Body: { rating?: 1-5, feltNatural?: bool, uncomfortableTopics?: bool, freeText?: string }
  */
@@ -14,12 +14,15 @@ import { eq, and } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { surveyConversations, participantFeedback } from "@/db/schema";
+import { resolveRespondentAccess } from "@/lib/privacy/respondent";
+import { getClientIP } from "@/lib/ratelimit";
 
 const bodySchema = z.object({
   rating: z.number().int().min(1).max(5).optional(),
   feltNatural: z.boolean().optional(),
   uncomfortableTopics: z.boolean().optional().default(false),
   freeText: z.string().max(1000).optional(),
+  respondentToken: z.string().min(1).optional(),
 });
 
 export async function POST(
@@ -52,7 +55,25 @@ export async function POST(
       return NextResponse.json({ error: "Invalid body", details: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { rating, feltNatural, uncomfortableTopics, freeText } = parsed.data;
+    const { rating, feltNatural, uncomfortableTopics, freeText, respondentToken } = parsed.data;
+
+    const tokenRecord = await resolveRespondentAccess({
+      cookieHeader: request.headers.get("cookie"),
+      surveyId,
+      conversationId,
+      explicitToken: respondentToken ?? null,
+      sessionAllowedScopes: ["respondent_session"],
+      explicitAllowedScopes: [
+        "respondent_resume",
+        "respondent_self_service",
+        "respondent_session",
+      ],
+      clientIp: getClientIP(request),
+      userAgent: request.headers.get("user-agent"),
+    });
+    if (!tokenRecord) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
 
     // Insert feedback record
     await getDb().insert(participantFeedback).values({
@@ -68,7 +89,7 @@ export async function POST(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[FeedbackAPI] Error saving feedback:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+

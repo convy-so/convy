@@ -79,7 +79,7 @@ export function getCreationFinishSurveyToolDefinition() {
   return {
     name: "finishSurvey",
     description:
-      "Call this only when the education study brief is complete, the media decision is resolved, and the survey is ready for sample review.",
+      "Call this only when the education study brief is complete and the survey is ready for sample review.",
     parameters: EMPTY_TOOL_INPUT_SCHEMA,
   } as const;
 }
@@ -88,7 +88,7 @@ export function getCreationRequestMediaUploadToolDefinition() {
   return {
     name: "requestMediaUpload",
     description:
-      "Use this after you advise the creator about media so they can decide whether to continue without media or upload optional supporting media now.",
+      "Legacy survey media tool. Survey media is disabled and this should not be used.",
     parameters: REQUEST_MEDIA_UPLOAD_INPUT_SCHEMA,
   } as const;
 }
@@ -115,49 +115,32 @@ export function getShowMediaToolDefinition() {
   return {
     name: "showMedia",
     description:
-      "Display a survey media asset only when it is directly relevant to the current question.",
+      "Legacy survey media tool. Survey media is disabled and this should not be used.",
     parameters: SHOW_MEDIA_INPUT_SCHEMA,
   } as const;
 }
 
 export function buildRespondentVoiceFunctions(
-  includeMedia: boolean,
+  _includeMedia: boolean,
 ): VoiceAgentFunction[] {
-  const functions: VoiceAgentFunction[] = [
-    getRespondentFinishSurveyToolDefinition(),
-  ];
-
-  if (includeMedia) {
-    functions.unshift(getShowMediaToolDefinition());
-  }
-
-  return functions;
+  return [getRespondentFinishSurveyToolDefinition()];
 }
 
 export function buildSampleVoiceFunctions(
-  includeMedia: boolean,
+  _includeMedia: boolean,
 ): VoiceAgentFunction[] {
-  const functions: VoiceAgentFunction[] = [getSampleFinishSurveyToolDefinition()];
-
-  if (includeMedia) {
-    functions.unshift(getShowMediaToolDefinition());
-  }
-
-  return functions;
+  return [getSampleFinishSurveyToolDefinition()];
 }
 
 export function buildCreationVoiceFunctions(): VoiceAgentFunction[] {
-  return [
-    getCreationFinishSurveyToolDefinition(),
-    getCreationRequestMediaUploadToolDefinition(),
-  ];
+  return [getCreationFinishSurveyToolDefinition()];
 }
 
 export function createEmptyMediaDecision(): CreationMediaDecision {
   return {
-    status: "pending",
+    status: "not_needed",
     recommendation: "not_needed",
-    rationale: "",
+    rationale: "Survey media is disabled for creation, rehearsal, and respondent flows.",
     recommendedTypes: [],
     suggestedDescription: "",
     suggestedFeedbackFocus: "",
@@ -210,39 +193,6 @@ function getToolPartName(part: unknown): string | null {
   return null;
 }
 
-function getToolPartInput(part: unknown): Record<string, unknown> {
-  if (!isRecord(part)) {
-    return {};
-  }
-
-  const candidate = part.input ?? part.args ?? part.parameters;
-  return isRecord(candidate) ? candidate : {};
-}
-
-function getToolPartOutput(part: unknown): Record<string, unknown> | null {
-  if (!isRecord(part)) {
-    return null;
-  }
-
-  const p = part;
-  return parseMaybeJson(p?.output ?? p?.result ?? null);
-}
-
-function getLatestRequestMediaUploadPart(messages: ChatMessage[]): unknown | null {
-  let latest: unknown | null = null;
-
-  for (const message of Array.isArray(messages) ? messages : []) {
-    const parts = Array.isArray(message?.parts) ? message.parts : [];
-    for (const part of parts) {
-      if (getToolPartName(part) === "requestMediaUpload") {
-        latest = part;
-      }
-    }
-  }
-
-  return latest;
-}
-
 export function normalizeCreationMediaDecision(
   value: unknown,
 ): CreationMediaDecision {
@@ -282,69 +232,8 @@ export function deriveCreationMediaDecision(input: {
   extractedData?: ExtractedData | null;
   messages?: ChatMessage[];
 }): CreationMediaDecision {
-  const stored = normalizeCreationMediaDecision(input.extractedData?.mediaDecision);
-  const latestPart = getLatestRequestMediaUploadPart(input.messages || []);
-
-  if (!latestPart) {
-    return stored;
-  }
-
-  const partInput = getToolPartInput(latestPart);
-  const partOutput = getToolPartOutput(latestPart);
-  const recommendation = normalizeRecommendation(partInput.recommendation);
-
-  const next: CreationMediaDecision = {
-    ...stored,
-    recommendation,
-    rationale:
-      typeof partInput.rationale === "string"
-        ? partInput.rationale
-        : stored.rationale,
-    recommendedTypes:
-      normalizeStringArray(partInput.allowedTypes).length > 0
-        ? normalizeStringArray(partInput.allowedTypes)
-        : stored.recommendedTypes,
-    suggestedDescription:
-      typeof partInput.suggestedDescription === "string"
-        ? partInput.suggestedDescription
-        : stored.suggestedDescription,
-    suggestedFeedbackFocus:
-      typeof partInput.suggestedFeedbackFocus === "string"
-        ? partInput.suggestedFeedbackFocus
-        : stored.suggestedFeedbackFocus,
-  };
-
-  if (!partOutput) {
-    return {
-      ...next,
-      status: "pending",
-    };
-  }
-
-  if (
-    partOutput.decision === "uploaded" ||
-    (partOutput.success === true &&
-      Array.isArray(partOutput.media) &&
-      partOutput.media.length > 0)
-  ) {
-    return {
-      ...next,
-      status: "uploaded",
-    };
-  }
-
-  if (
-    partOutput.decision === "declined" ||
-    partOutput.skipped === true ||
-    (partOutput.success === false && partOutput.skipped === true)
-  ) {
-    return {
-      ...next,
-      status: recommendation === "not_needed" ? "not_needed" : "declined",
-    };
-  }
-
-  return next;
+  void input;
+  return createEmptyMediaDecision();
 }
 
 export function applyCreationMediaDecision(

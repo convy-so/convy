@@ -122,7 +122,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 # Pre-compiled static files (CSS, JS chunks, images).
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Agent instructions (skills)
-COPY --from=builder --chown=nextjs:nodejs /app/.agent/skills ./.agent/skills
+COPY --from=builder --chown=nextjs:nodejs /app/.agents/skills ./.agents/skills
 
 USER nextjs
 

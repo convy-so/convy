@@ -2,6 +2,7 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { env } from "./env";
+import { resolveTrustedClientIp } from "@/lib/security/client-ip";
 
 const redis = new Redis({
   url: env.UPSTASH_REDIS_REST_URL,
@@ -22,25 +23,30 @@ export const apiRateLimiter = new Ratelimit({
   prefix: "@upstash/ratelimit/api",
 });
 
+export const authRateLimiter = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(20, "10 m"),
+  analytics: true,
+  prefix: "@upstash/ratelimit/auth",
+});
+
+export const uploadRateLimiter = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(12, "10 m"),
+  analytics: true,
+  prefix: "@upstash/ratelimit/upload",
+});
+
+export const expensiveAiRateLimiter = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(30, "10 m"),
+  analytics: true,
+  prefix: "@upstash/ratelimit/expensive-ai",
+});
+
 /**
  * Get client IP address from request headers
  */
 export function getClientIP(request: Request): string {
-  // 1. Check X-Forwarded-For (Standard for ALB)
-  // AWS ALB appends the client IP to the list: client, proxy1, proxy2...
-  const xForwardedFor = request.headers.get("x-forwarded-for");
-  if (xForwardedFor) {
-    const ips = xForwardedFor.split(",").map((ip) => ip.trim());
-    if (ips.length > 0 && ips[0]) return ips[0];
-  }
-
-  // 2. Check X-Real-IP (Sometimes set by Nginx or other ingress)
-  const xRealIp = request.headers.get("x-real-ip");
-  if (xRealIp) return xRealIp;
-
-  // 3. Fallback to common CDN headers if applicable
-  const cfConnectingIP = request.headers.get("cf-connecting-ip");
-  if (cfConnectingIP) return cfConnectingIP;
-
-  return "unknown";
-}
+  return resolveTrustedClientIp(request.headers).ip || "unknown";
+}

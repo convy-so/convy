@@ -10,8 +10,12 @@ export type SurveyMedia = {
   description?: string;
   mimeType?: string;
   altText?: string;
-  durationMs?: number;
+  durationMs?: number | null;
   id?: string;
+  storageBucket?: string;
+  storagePath?: string;
+  requiresSignedAccess?: boolean;
+  contextForUse?: string;
 };
 
 export type ChatMessagePart =

@@ -4,10 +4,11 @@ import { z } from "zod";
 import { analysisModel } from "@/lib/ai";
 import {
   learningPatternAnalysisOutputSchema,
+  learningTeachingPlaybookSchema,
   patternConfidenceLabelSchema,
   studentLearningPatternProfileSchema,
-  learningTeachingPlaybookSchema,
   type StudentLearningPatternProfile,
+  type LearningTeachingPlaybook,
 } from "@/lib/learning/pattern-types";
 import type {
   LearningSessionState,
@@ -323,6 +324,64 @@ Rules:
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+}
+
+export function renderTeachingPlaybookContext(
+  playbook: LearningTeachingPlaybook | null | undefined,
+) {
+  if (!playbook) return "";
+
+  const sections = [
+    `Confidence: ${Math.round(playbook.overallConfidence * 100)}% (${playbook.confidenceLabel})`,
+    `Behavior weight: ${playbook.behaviorWeight}`,
+    playbook.topExplanationApproaches.length > 0
+      ? `Preferred explanation approaches:\n${playbook.topExplanationApproaches
+          .slice(0, 4)
+          .map((item) => `- ${item}`)
+          .join("\n")}`
+      : null,
+    playbook.preferredInterestDomains.length > 0
+      ? `High-resonance domains:\n${playbook.preferredInterestDomains
+          .slice(0, 4)
+          .map((item) => `- ${item}`)
+          .join("\n")}`
+      : null,
+    playbook.cognitiveGuidance.length > 0
+      ? `Cognitive guidance:\n${playbook.cognitiveGuidance
+          .slice(0, 4)
+          .map((item) => `- ${item}`)
+          .join("\n")}`
+      : null,
+    playbook.motivationalGuidance.length > 0
+      ? `Motivational guidance:\n${playbook.motivationalGuidance
+          .slice(0, 4)
+          .map((item) => `- ${item}`)
+          .join("\n")}`
+      : null,
+    playbook.confidenceGuardrails.length > 0
+      ? `Confidence guardrails:\n${playbook.confidenceGuardrails
+          .slice(0, 4)
+          .map((item) => `- ${item}`)
+          .join("\n")}`
+      : null,
+    playbook.relevantMisconceptions.length > 0
+      ? `Misconceptions to watch:\n${playbook.relevantMisconceptions
+          .slice(0, 3)
+          .map(
+            (item) =>
+              `- ${item.label} (${item.status}): ${item.guidance}`,
+          )
+          .join("\n")}`
+      : null,
+    playbook.usedExampleReferences.length > 0
+      ? `Avoid repeating examples:\n${playbook.usedExampleReferences
+          .slice(-6)
+          .map((item) => `- ${item}`)
+          .join("\n")}`
+      : null,
+  ].filter(Boolean);
+
+  return sections.join("\n\n");
 }
 
 export function buildTeachingPlaybook(params: {

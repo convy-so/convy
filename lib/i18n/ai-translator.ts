@@ -50,7 +50,6 @@ ${appLocaleLabels[targetLanguage]} Translation:`;
 
     return result;
   } catch (error) {
-    console.error("[AI-Translator] Translation failed:", error);
     return text; // Fallback to original
   }
 }
@@ -83,7 +82,6 @@ Code:`;
     }
     return "unknown";
   } catch (error) {
-    console.error("[AI-Translator] Detection failed:", error);
     return "unknown";
   }
 }
@@ -94,3 +92,4 @@ Code:`;
 export function isSupportedLanguage(code: string): code is SupportedLanguage {
   return isAppLocale(code);
 }
+

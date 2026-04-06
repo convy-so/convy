@@ -2,6 +2,13 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 
 import { analysisModel, defaultModel } from "@/lib/ai";
+import {
+  TUTORING_DEFAULT_SYSTEM_PROMPT,
+  renderRetrievedContext,
+  renderStudentProfileContext,
+  renderTutoringScopeInstructions,
+} from "@/lib/learning/prompting";
+import { appLocaleLabels, normalizeAppLocale } from "@/lib/i18n/config";
 import type {
   GradeBand,
   LearningOutcomeDefinition,
@@ -51,6 +58,7 @@ export async function generateOutOfSessionReply(params: {
   studentProfile: StudentInterestProfile;
   question: string;
   retrievedContext: string[];
+  language?: string | null;
 }) {
   if (params.classification === "off_topic") {
     return `That's outside the topic your teacher set right now, so I'm going to keep us inside ${params.topicTitle}. Ask me anything connected to this topic and I'll help.`;
@@ -60,26 +68,37 @@ export async function generateOutOfSessionReply(params: {
     return `I want to keep this grounded in your teacher's material, and I don't have enough teacher-approved context to answer that safely yet. Ask me another question about ${params.topicTitle}, or I can help you unpack one of the ideas already covered.`;
   }
 
+  const responseLanguage = normalizeAppLocale(params.language ?? "en");
   const { text } = await generateText({
     model: defaultModel,
+    system: TUTORING_DEFAULT_SYSTEM_PROMPT,
     prompt: `You are answering a student's out-of-session academic question.
 
 Topic: ${params.topicTitle}
 Learning outcomes:
 ${params.learningOutcomes.map((outcome) => `- ${outcome.title}: ${outcome.description}`).join("\n")}
 Grade band: ${params.gradeBand}
-Student profile: ${JSON.stringify(params.studentProfile)}
+Answer language: ${appLocaleLabels[responseLanguage]}
+Student profile:
+${renderStudentProfileContext(params.studentProfile)}
 Question:
 ${params.question}
 
 Retrieved teacher-approved context:
-${params.retrievedContext.join("\n\n---\n\n")}
+${renderRetrievedContext(params.retrievedContext)}
+
+${renderTutoringScopeInstructions({
+  objective: `Help the student stay within ${params.topicTitle}`,
+  activeTopic: params.topicTitle,
+  currentPhase: "out-of-session support",
+})}
 
 Rules:
 - answer using the retrieved context for factual claims
 - if the question is near_topic, answer it briefly and bring it back to the topic
 - personalize framing using the student profile
 - keep the tone supportive and direct
+- answer in ${appLocaleLabels[responseLanguage]}
 - do not invent facts beyond the material`,
   });
 

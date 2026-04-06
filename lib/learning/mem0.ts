@@ -266,3 +266,25 @@ export async function addLearningPatternObservations(params: {
 
   return references;
 }
+
+export async function deleteLearningPatternMemoriesForUser(studentUserId: string) {
+  const client = getMem0Client();
+
+  await tryCall<unknown>([
+    async () =>
+      await callClientMethod(client, "delete_all", {
+        filters: { AND: [{ user_id: studentUserId }] },
+        version: "v2",
+      }),
+    async () =>
+      await callClientMethod(client, "deleteAll", {
+        filters: { AND: [{ user_id: studentUserId }] },
+        version: "v2",
+      }),
+    async () =>
+      await callClientMethod(client, "delete", {
+        filters: { AND: [{ user_id: studentUserId }] },
+        version: "v2",
+      }),
+  ]);
+}

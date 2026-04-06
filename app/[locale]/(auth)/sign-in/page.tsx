@@ -66,7 +66,7 @@ export default function SignInPage() {
         }
       });
     } catch (error) {
-      console.error(error);
+      console.error("[SignIn] Failed:", error);
     } finally {
       setIsLoading(false);
     }

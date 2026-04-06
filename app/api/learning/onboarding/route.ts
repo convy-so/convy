@@ -167,7 +167,6 @@ export async function POST(request: Request) {
         studentUserId: session.user.id,
         classroomStudentId: membership.id,
       }).catch((error) => {
-        console.error("[Learning Onboarding] Failed to enqueue pattern analysis:", error);
       });
     }
 
@@ -186,3 +185,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

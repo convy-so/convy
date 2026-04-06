@@ -21,7 +21,11 @@ import {
   conversationInsightSchema,
   evidenceRecordSchema,
 } from "@/lib/education/types";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 
 export async function GET(
   _request: Request,
@@ -44,8 +48,8 @@ export async function GET(
       return NextResponse.json({ error: "Survey not found" }, { status: 404 });
     }
 
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
-    if (!permission?.canView) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canView")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

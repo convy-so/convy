@@ -22,6 +22,69 @@ export interface TranslationResult {
   targetLanguage: SupportedLanguage;
 }
 
+export async function translateTextBatch(
+  items: string[],
+  targetLanguage: SupportedLanguage,
+  metadata?: {
+    userId?: string;
+    surveyId?: string;
+    task?: string;
+  },
+): Promise<string[]> {
+  const normalizedItems = items.map((item) => item.trim());
+  if (normalizedItems.length === 0) {
+    return [];
+  }
+
+  const prompt = `You are a professional translator. Translate each item into ${appLocaleLabels[targetLanguage]}.
+
+CRITICAL INSTRUCTIONS:
+1. Return valid JSON only.
+2. Keep array order exactly the same.
+3. Preserve tone, meaning, and specificity.
+4. If an item is already in the target language, keep it natural and unchanged unless a clearer translation is required.
+5. Do not add explanations.
+
+Return this schema exactly:
+{"items":["translated string 1","translated string 2"]}
+
+Task context: ${metadata?.task ?? "product UI content"}
+
+Items:
+${JSON.stringify(normalizedItems, null, 2)}`;
+
+  try {
+    const { text, usage } = await generateText({
+      model: google("gemini-2.5-flash-lite"),
+      prompt,
+      temperature: 0.2,
+    });
+
+    logUsage({
+      userId: metadata?.userId,
+      surveyId: metadata?.surveyId,
+      type: "llm_text",
+      provider: "google",
+      modelName: "gemini-2.5-flash-lite",
+      promptTokens: usage.inputTokens,
+      completionTokens: usage.outputTokens,
+      totalTokens: usage.totalTokens,
+    });
+
+    const parsed = JSON.parse(text) as { items?: unknown };
+    if (
+      Array.isArray(parsed.items) &&
+      parsed.items.length === normalizedItems.length &&
+      parsed.items.every((item) => typeof item === "string")
+    ) {
+      return parsed.items;
+    }
+  } catch (error) {
+  }
+
+  return normalizedItems;
+}
+
 /**
  * Translate a conversation from one language to another
  * Uses Gemini for accurate, context-aware translation
@@ -141,9 +204,6 @@ Translated Conversation (${appLocaleLabels[targetLanguage]}):`;
 
     // Validate we got the same number of messages
     if (translatedMessages.length !== conversation.length) {
-      console.warn(
-        `Translation message count mismatch: expected ${conversation.length}, got ${translatedMessages.length}. Falling back to original.`,
-      );
       return {
         translatedConversation: conversation,
         sourceLanguage,
@@ -157,7 +217,6 @@ Translated Conversation (${appLocaleLabels[targetLanguage]}):`;
       targetLanguage,
     };
   } catch (error) {
-    console.error("[Translation Service] Translation failed:", error);
     // Fallback: return original conversation
     return {
       translatedConversation: conversation,
@@ -233,7 +292,7 @@ export async function getUserPreferredLanguage(
         return "en";
     }
   } catch (error) {
-    console.error("[Translation Service] Failed to get user language:", error);
     return "en";
   }
 }
+

@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -24,6 +25,14 @@ import type {
 } from "@/lib/learning/types";
 import { defaultLearningSessionState } from "@/lib/learning/types";
 import type { StudentLearningPatternProfile } from "@/lib/learning/pattern-types";
+
+export type LearningTeacherChatSessionMessage = {
+  id?: string;
+  role: string;
+  content?: string;
+  parts?: Array<Record<string, unknown>>;
+  createdAt?: string;
+};
 
 export const classrooms = pgTable(
   "classrooms",
@@ -323,6 +332,79 @@ export const learningMaterialEmbeddings = pgTable(
   ],
 );
 
+export const learningEvidenceEmbeddings = pgTable(
+  "learning_evidence_embeddings",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    topicId: text("topic_id").references(() => learningTopics.id, {
+      onDelete: "cascade",
+    }),
+    classroomStudentId: text("classroom_student_id").references(
+      () => classroomStudents.id,
+      { onDelete: "cascade" },
+    ),
+    studentUserId: text("student_user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    sourceType: text("source_type", {
+      enum: ["material", "report", "interaction", "pattern"],
+    }).notNull(),
+    sourceId: text("source_id").notNull(),
+    chunkIndex: integer("chunk_index").notNull(),
+    language: text("language").default("en").notNull(),
+    content: text("content").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    embedding: vector("embedding", { dimensions: 1536 }),
+  },
+  (table) => [
+    index("learning_evidence_embeddings_org_idx").on(table.organizationId),
+    index("learning_evidence_embeddings_topic_idx").on(table.topicId),
+    index("learning_evidence_embeddings_student_idx").on(table.classroomStudentId),
+    index("learning_evidence_embeddings_user_idx").on(table.studentUserId),
+    index("learning_evidence_embeddings_source_idx").on(
+      table.sourceType,
+      table.sourceId,
+    ),
+    index("learning_evidence_embeddings_language_idx").on(table.language),
+    index("learning_evidence_embeddings_embedding_idx").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops"),
+    ),
+  ],
+);
+
+export const learningTeacherChatSessions = pgTable(
+  "learning_teacher_chat_sessions",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    classroomStudentId: text("classroom_student_id")
+      .notNull()
+      .references(() => classroomStudents.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    language: text("language").default("en").notNull(),
+    title: text("title").notNull().default("New Chat"),
+    messages: jsonb("messages")
+      .$type<LearningTeacherChatSessionMessage[]>()
+      .notNull()
+      .default([]),
+  },
+  (table) => [
+    index("learning_teacher_chat_sessions_org_idx").on(table.organizationId),
+    index("learning_teacher_chat_sessions_student_idx").on(table.classroomStudentId),
+    index("learning_teacher_chat_sessions_user_idx").on(table.userId),
+  ],
+);
+
 export const learningMessages = pgTable(
   "learning_messages",
   {
@@ -393,6 +475,49 @@ export const studentProgressReports = pgTable(
   (table) => [
     index("student_progress_reports_topic_id_idx").on(table.topicId),
     index("student_progress_reports_student_id_idx").on(table.classroomStudentId),
+  ],
+);
+
+export const learningInterventions = pgTable(
+  "learning_interventions",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    classroomId: text("classroom_id")
+      .notNull()
+      .references(() => classrooms.id, { onDelete: "cascade" }),
+    topicId: text("topic_id").references(() => learningTopics.id, {
+      onDelete: "set null",
+    }),
+    classroomStudentId: text("classroom_student_id")
+      .notNull()
+      .references(() => classroomStudents.id, { onDelete: "cascade" }),
+    createdByUserId: text("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    interventionType: text("intervention_type").default("reteach").notNull(),
+    status: text("status").default("planned").notNull(),
+    priority: text("priority").default("medium").notNull(),
+    title: text("title").notNull(),
+    notes: text("notes"),
+    dueAt: timestamp("due_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+  },
+  (table) => [
+    index("learning_interventions_org_idx").on(table.organizationId),
+    index("learning_interventions_classroom_idx").on(table.classroomId),
+    index("learning_interventions_topic_idx").on(table.topicId),
+    index("learning_interventions_student_idx").on(table.classroomStudentId),
+    index("learning_interventions_status_idx").on(table.status),
   ],
 );
 
@@ -491,6 +616,145 @@ export const studentLearningPatternAnalyses = pgTable(
   ],
 );
 
+export const teachingMediaAssets = pgTable(
+  "teaching_media_assets",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    classroomId: text("classroom_id").references(() => classrooms.id, {
+      onDelete: "cascade",
+    }),
+    topicId: text("topic_id").references(() => learningTopics.id, {
+      onDelete: "cascade",
+    }),
+    createdByUserId: text("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sourceType: text("source_type").default("teacher_curated").notNull(),
+    assetType: text("asset_type").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    mediaUrl: text("media_url").notNull(),
+    thumbnailUrl: text("thumbnail_url"),
+    transcript: text("transcript"),
+    durationSeconds: integer("duration_seconds"),
+    gradeBand: text("grade_band"),
+    language: text("language").default("en").notNull(),
+    status: text("status").default("draft").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  },
+  (table) => [
+    index("teaching_media_assets_org_idx").on(table.organizationId),
+    index("teaching_media_assets_classroom_idx").on(table.classroomId),
+    index("teaching_media_assets_topic_idx").on(table.topicId),
+    index("teaching_media_assets_status_idx").on(table.status),
+    index("teaching_media_assets_asset_type_idx").on(table.assetType),
+  ],
+);
+
+export const teachingMediaBindings = pgTable(
+  "teaching_media_bindings",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    assetId: text("asset_id")
+      .notNull()
+      .references(() => teachingMediaAssets.id, { onDelete: "cascade" }),
+    topicId: text("topic_id").references(() => learningTopics.id, {
+      onDelete: "cascade",
+    }),
+    classroomId: text("classroom_id").references(() => classrooms.id, {
+      onDelete: "cascade",
+    }),
+    outcomeId: text("outcome_id"),
+    conceptKey: text("concept_key"),
+    phaseType: text("phase_type"),
+    gradeBand: text("grade_band"),
+    priority: integer("priority").default(50).notNull(),
+    isRequired: boolean("is_required").default(false).notNull(),
+    notes: text("notes"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  },
+  (table) => [
+    index("teaching_media_bindings_asset_idx").on(table.assetId),
+    index("teaching_media_bindings_topic_idx").on(table.topicId),
+    index("teaching_media_bindings_classroom_idx").on(table.classroomId),
+    index("teaching_media_bindings_lookup_idx").on(
+      table.topicId,
+      table.conceptKey,
+      table.phaseType,
+      table.priority,
+    ),
+  ],
+);
+
+export const externalMediaCache = pgTable(
+  "external_media_cache",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    provider: text("provider").notNull(),
+    externalId: text("external_id").notNull(),
+    sourceUrl: text("source_url").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    assetType: text("asset_type").notNull(),
+    thumbnailUrl: text("thumbnail_url"),
+    transcript: text("transcript"),
+    durationSeconds: integer("duration_seconds"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    approvedForDirectUse: boolean("approved_for_direct_use").default(false).notNull(),
+  },
+  (table) => [
+    index("external_media_cache_provider_idx").on(table.provider),
+    unique("external_media_cache_provider_external_unique").on(
+      table.provider,
+      table.externalId,
+    ),
+  ],
+);
+
+export const teachingMediaUsageEvents = pgTable(
+  "teaching_media_usage_events",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    assetId: text("asset_id").references(() => teachingMediaAssets.id, {
+      onDelete: "set null",
+    }),
+    externalMediaId: text("external_media_id").references(() => externalMediaCache.id, {
+      onDelete: "set null",
+    }),
+    topicId: text("topic_id").references(() => learningTopics.id, {
+      onDelete: "set null",
+    }),
+    sessionId: text("session_id").references(() => learningSessions.id, {
+      onDelete: "set null",
+    }),
+    classroomStudentId: text("classroom_student_id").references(
+      () => classroomStudents.id,
+      { onDelete: "set null" },
+    ),
+    aiRunId: text("ai_run_id"),
+    selectionSource: text("selection_source").default("teacher_curated").notNull(),
+    reason: text("reason").notNull(),
+    expectedBenefit: text("expected_benefit"),
+    followUpPrompt: text("follow_up_prompt"),
+    relevanceScore: integer("relevance_score"),
+    usefulnessScore: integer("usefulness_score"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  },
+  (table) => [
+    index("teaching_media_usage_events_topic_idx").on(table.topicId),
+    index("teaching_media_usage_events_session_idx").on(table.sessionId),
+    index("teaching_media_usage_events_student_idx").on(table.classroomStudentId),
+    index("teaching_media_usage_events_ai_run_idx").on(table.aiRunId),
+  ],
+);
+
 export const classroomsRelations = relations(classrooms, ({ one, many }) => ({
   organization: one(organizations, {
     fields: [classrooms.organizationId],
@@ -509,6 +773,8 @@ export const classroomsRelations = relations(classrooms, ({ one, many }) => ({
   accessRequests: many(classroomAccessRequests),
   students: many(classroomStudents),
   topics: many(learningTopics),
+  teachingMediaAssets: many(teachingMediaAssets),
+  teachingMediaBindings: many(teachingMediaBindings),
 }));
 
 export const classroomStudentsRelations = relations(
@@ -536,6 +802,7 @@ export const classroomStudentsRelations = relations(
     sessions: many(learningSessions),
     interactions: many(learningInteractions),
     reports: many(studentProgressReports),
+    interventions: many(learningInterventions),
     patternAnalyses: many(studentLearningPatternAnalyses),
   }),
 );
@@ -598,6 +865,9 @@ export const learningTopicsRelations = relations(
     interactions: many(learningInteractions),
     reports: many(studentProgressReports),
     patternAnalyses: many(studentLearningPatternAnalyses),
+    teachingMediaAssets: many(teachingMediaAssets),
+    teachingMediaBindings: many(teachingMediaBindings),
+    teachingMediaUsageEvents: many(teachingMediaUsageEvents),
   }),
 );
 
@@ -638,6 +908,7 @@ export const learningSessionsRelations = relations(
     messages: many(learningMessages),
     interactions: many(learningInteractions),
     reports: many(studentProgressReports),
+    teachingMediaUsageEvents: many(teachingMediaUsageEvents),
   }),
 );
 
@@ -665,6 +936,46 @@ export const learningMaterialEmbeddingsRelations = relations(
     material: one(topicMaterials, {
       fields: [learningMaterialEmbeddings.materialId],
       references: [topicMaterials.id],
+    }),
+  }),
+);
+
+export const learningEvidenceEmbeddingsRelations = relations(
+  learningEvidenceEmbeddings,
+  ({ one }) => ({
+    organization: one(organizations, {
+      fields: [learningEvidenceEmbeddings.organizationId],
+      references: [organizations.id],
+    }),
+    topic: one(learningTopics, {
+      fields: [learningEvidenceEmbeddings.topicId],
+      references: [learningTopics.id],
+    }),
+    classroomStudent: one(classroomStudents, {
+      fields: [learningEvidenceEmbeddings.classroomStudentId],
+      references: [classroomStudents.id],
+    }),
+    studentUser: one(users, {
+      fields: [learningEvidenceEmbeddings.studentUserId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const learningTeacherChatSessionsRelations = relations(
+  learningTeacherChatSessions,
+  ({ one }) => ({
+    organization: one(organizations, {
+      fields: [learningTeacherChatSessions.organizationId],
+      references: [organizations.id],
+    }),
+    classroomStudent: one(classroomStudents, {
+      fields: [learningTeacherChatSessions.classroomStudentId],
+      references: [classroomStudents.id],
+    }),
+    user: one(users, {
+      fields: [learningTeacherChatSessions.userId],
+      references: [users.id],
     }),
   }),
 );
@@ -747,6 +1058,107 @@ export const studentProgressReportsRelations = relations(
     session: one(learningSessions, {
       fields: [studentProgressReports.generatedFromSessionId],
       references: [learningSessions.id],
+    }),
+  }),
+);
+
+export const learningInterventionsRelations = relations(
+  learningInterventions,
+  ({ one }) => ({
+    classroom: one(classrooms, {
+      fields: [learningInterventions.classroomId],
+      references: [classrooms.id],
+    }),
+    topic: one(learningTopics, {
+      fields: [learningInterventions.topicId],
+      references: [learningTopics.id],
+    }),
+    classroomStudent: one(classroomStudents, {
+      fields: [learningInterventions.classroomStudentId],
+      references: [classroomStudents.id],
+    }),
+    createdBy: one(users, {
+      fields: [learningInterventions.createdByUserId],
+      references: [users.id],
+    }),
+    organization: one(organizations, {
+      fields: [learningInterventions.organizationId],
+      references: [organizations.id],
+    }),
+  }),
+);
+
+export const teachingMediaAssetsRelations = relations(
+  teachingMediaAssets,
+  ({ one, many }) => ({
+    organization: one(organizations, {
+      fields: [teachingMediaAssets.organizationId],
+      references: [organizations.id],
+    }),
+    classroom: one(classrooms, {
+      fields: [teachingMediaAssets.classroomId],
+      references: [classrooms.id],
+    }),
+    topic: one(learningTopics, {
+      fields: [teachingMediaAssets.topicId],
+      references: [learningTopics.id],
+    }),
+    createdBy: one(users, {
+      fields: [teachingMediaAssets.createdByUserId],
+      references: [users.id],
+    }),
+    bindings: many(teachingMediaBindings),
+    usageEvents: many(teachingMediaUsageEvents),
+  }),
+);
+
+export const teachingMediaBindingsRelations = relations(
+  teachingMediaBindings,
+  ({ one }) => ({
+    asset: one(teachingMediaAssets, {
+      fields: [teachingMediaBindings.assetId],
+      references: [teachingMediaAssets.id],
+    }),
+    topic: one(learningTopics, {
+      fields: [teachingMediaBindings.topicId],
+      references: [learningTopics.id],
+    }),
+    classroom: one(classrooms, {
+      fields: [teachingMediaBindings.classroomId],
+      references: [classrooms.id],
+    }),
+  }),
+);
+
+export const externalMediaCacheRelations = relations(
+  externalMediaCache,
+  ({ many }) => ({
+    usageEvents: many(teachingMediaUsageEvents),
+  }),
+);
+
+export const teachingMediaUsageEventsRelations = relations(
+  teachingMediaUsageEvents,
+  ({ one }) => ({
+    asset: one(teachingMediaAssets, {
+      fields: [teachingMediaUsageEvents.assetId],
+      references: [teachingMediaAssets.id],
+    }),
+    externalMedia: one(externalMediaCache, {
+      fields: [teachingMediaUsageEvents.externalMediaId],
+      references: [externalMediaCache.id],
+    }),
+    topic: one(learningTopics, {
+      fields: [teachingMediaUsageEvents.topicId],
+      references: [learningTopics.id],
+    }),
+    session: one(learningSessions, {
+      fields: [teachingMediaUsageEvents.sessionId],
+      references: [learningSessions.id],
+    }),
+    classroomStudent: one(classroomStudents, {
+      fields: [teachingMediaUsageEvents.classroomStudentId],
+      references: [classroomStudents.id],
     }),
   }),
 );

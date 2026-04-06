@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getRuntimeProcessorHealth } from "@/lib/privacy/compliance";
 
 /**
  * GET /api/health
@@ -11,12 +12,14 @@ import { NextResponse } from "next/server";
  * You can extend this later to check DB connectivity etc.
  */
 export async function GET() {
+  const processorHealth = getRuntimeProcessorHealth();
+
   return NextResponse.json(
     {
-      status: "ok",
+      status: processorHealth.ok ? "ok" : "degraded",
       timestamp: new Date().toISOString(),
       service: "convy-nextjs",
     },
-    { status: 200 },
+    { status: processorHealth.ok ? 200 : 503 },
   );
 }

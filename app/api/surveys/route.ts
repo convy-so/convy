@@ -19,7 +19,10 @@ import {
 import { resolveUiLocaleForContentCreation } from "@/lib/i18n/resolve-locale";
 import { getWorkspaceLocaleSettings } from "@/lib/i18n/workspace-settings";
 import { getTeacherClassroomAccess } from "@/lib/learning/access";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 import {
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
@@ -115,7 +118,7 @@ export async function GET() {
     return NextResponse.json({
       surveys: rows.map((survey) => {
         const permission = permissionBySurveyId.get(survey.id);
-        const canOpen = permission?.canView ?? false;
+        const canOpen = hasSurveyPermission(permission, "canView");
         const accessLevel = permission?.accessLevel ?? "none";
         const isOwner = permission?.isSurveyCreator ?? false;
 
@@ -138,9 +141,9 @@ export async function GET() {
           isOwner,
           accessLevel,
           canOpen,
-          canEdit: permission?.canEdit ?? false,
-          canDelete: permission?.canDelete ?? false,
-          canRequestAccess: permission?.canRequestAccess ?? false,
+          canEdit: hasSurveyPermission(permission, "canEdit"),
+          canDelete: hasSurveyPermission(permission, "canDelete"),
+          canRequestAccess: hasSurveyPermission(permission, "canRequestAccess"),
           pendingAccessRequest: pendingRequestSurveyIds.has(survey.id),
           isLocked: activeOrgId ? !canOpen : false,
           sharedBy: !isOwner ? (survey.creatorName ?? null) : null,

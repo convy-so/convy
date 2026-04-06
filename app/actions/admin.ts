@@ -7,8 +7,7 @@ import { surveys } from "@/db/schema/surveys";
 import { sql, eq, gte, desc, count, sum } from "drizzle-orm";
 import { headers } from "next/headers";
 
-import { getRedisClient } from "@/lib/redis";
-import { env } from "@/lib/env";
+import { resolveAdminSessionEmail } from "@/lib/admin/session";
 
 /**
  * Helper to check admin access in server actions.
@@ -27,16 +26,8 @@ async function checkAdmin(authHeaders?: Headers | string | null) {
   }
 
   const cookieStr = finalHeaders.get("cookie") || "";
-  const match = cookieStr.match(/admin_session=([^;]+)/);
-  if (!match) {
-    throw new Error("Unauthorized: Admin access required");
-  }
-
-  const token = match[1];
-  const redis = getRedisClient();
-  const email = await redis.get(`admin_session:${token}`);
-
-  if (!email || !env.ADMIN_EMAILS.includes(email)) {
+  const email = await resolveAdminSessionEmail(cookieStr);
+  if (!email) {
     throw new Error("Unauthorized: Admin access required");
   }
 

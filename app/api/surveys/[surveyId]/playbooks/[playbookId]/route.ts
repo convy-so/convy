@@ -13,7 +13,12 @@ import {
   createPlaybookVersion,
   detachPlaybookFromSurvey,
 } from "@/lib/education/storage";
-import { getSurveyPermissionContext, isWorkspaceOwner } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  isWorkspaceOwner,
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 
 export async function PATCH(
   req: NextRequest,
@@ -31,8 +36,8 @@ export async function PATCH(
     ]);
     if (!survey || !playbook) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
-    if (!permission?.canEdit) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canEdit")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

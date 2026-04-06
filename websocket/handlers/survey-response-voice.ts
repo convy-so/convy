@@ -45,6 +45,7 @@ import {
   getUsableRespondentMessages,
   hasUserTurn,
 } from "@/lib/respondent-conversation";
+import { normalizeVoiceLocale } from "@/lib/voice/voice-locales";
 import { BaseVoiceAgentHandler } from "./base-voice-agent-handler";
 
 const ESTIMATED_STT_COST_PER_MINUTE = 0.0059;
@@ -63,24 +64,13 @@ interface ResponseState {
   sessionState: SessionState | null;
 }
 
-function getSupportedLanguage(value: unknown): SupportedLanguage {
-  return (
-    value === "en" ||
-    value === "fr" ||
-    value === "de" ||
-    value === "es" ||
-    value === "it"
-  )
-    ? value
-    : "en";
-}
-
 export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
   private state: ResponseState;
   private participantId: string;
   private sessionStartTime = Date.now();
   private cleanupStarted = false;
   private ownerId: string | null = null;
+  private hasExplicitLanguage: boolean;
 
   constructor(
     ws: WebSocket,
@@ -92,13 +82,14 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
     super(ws, identifier);
 
     this.participantId = "";
+    this.hasExplicitLanguage = typeof language === "string" && language.length > 0;
     this.state = {
       surveyId,
       conversationId,
       voiceSessionId: nanoid(),
       messages: [],
       survey: null,
-      language: getSupportedLanguage(language),
+      language: normalizeVoiceLocale(language),
       brief: null,
       coveragePlan: null,
       sessionId: null,
@@ -143,8 +134,8 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       this.organizationId = survey.organizationId;
       this.ownerId = survey.userId;
 
-      if (!this.state.language || this.state.language === "en") {
-        this.state.language = getSupportedLanguage(survey.language);
+      if (!this.hasExplicitLanguage) {
+        this.state.language = normalizeVoiceLocale(survey.language);
       }
 
       const conversation = await getDb()
@@ -218,7 +209,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
       await this.connectVoiceAgent();
     } catch (error) {
-      console.error("[Survey Response Voice] Initialization error:", error);
       this.sendError("Failed to initialize voice session");
       this.ws.close();
     }
@@ -256,6 +246,9 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       getConductingRuntimeLayers({
         surveyId: this.state.survey!.id,
         organizationId: this.state.survey!.organizationId,
+        classroomId: this.state.survey!.classroomId,
+        programId: this.state.survey!.programId,
+        language: this.state.language,
         mode: "live",
       }),
     ]);
@@ -267,9 +260,10 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       conductingProfile: activeLiveProfile?.profile ?? sampleFallbackProfile?.profile ?? null,
       playbookContext: runtimeLayers.playbookContext,
       personalityContext: runtimeLayers.personalityContext,
+      expertGuidanceContext: runtimeLayers.expertGuidanceContext,
       toolContext: {
         canFinishSurvey: true,
-        canShowMedia: (this.state.survey?.media || []).length > 0,
+        canShowMedia: false,
       },
     });
 
@@ -284,12 +278,12 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       tone,
       systemPrompt,
       functions: buildRespondentVoiceFunctions(
-        (this.state.survey?.media || []).length > 0,
+        false,
       ),
       keyterms: buildVoiceAgentKeyterms({
         surveyTitle: this.state.survey.title,
         requiredQuestions: this.state.survey.requiredQuestions,
-        media: this.state.survey.media,
+        media: [],
         brief: this.state.brief,
       }),
       greeting:
@@ -386,7 +380,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       surveyId: this.state.survey!.id,
       userId: this.ownerId || this.state.survey!.userId,
     }).catch((error) => {
-      console.error("[Survey Response Voice] Failed to enqueue analytics refresh:", error);
     });
 
     this.send({
@@ -402,6 +395,9 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       getConductingRuntimeLayers({
         surveyId: this.state.survey!.id,
         organizationId: this.state.survey!.organizationId,
+        classroomId: this.state.survey!.classroomId,
+        programId: this.state.survey!.programId,
+        language: this.state.language,
         mode: "live",
       }),
     ]);
@@ -413,12 +409,17 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       conductingProfile: refreshedLiveProfile?.profile ?? refreshedSampleProfile?.profile ?? null,
       playbookContext: refreshedRuntimeLayers.playbookContext,
       personalityContext: refreshedRuntimeLayers.personalityContext,
+      expertGuidanceContext: refreshedRuntimeLayers.expertGuidanceContext,
+      toolContext: {
+        canFinishSurvey: true,
+        canShowMedia: false,
+      },
     });
     this.voiceAgent?.updateThink({
       provider: { type: "open_ai", model: VOICE_AGENT_THINK_MODEL },
       prompt: `${refreshedPrompt}\n\nRespond in the language the participant is speaking.`,
       functions: buildRespondentVoiceFunctions(
-        (this.state.survey?.media || []).length > 0,
+        false,
       ),
     });
 
@@ -432,45 +433,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
   protected async onFunctionCall(event: FunctionCallRequestEvent): Promise<void> {
     switch (event.function_name) {
-      case "showMedia": {
-        const mediaId = event.input?.mediaId;
-        const media = this.state.survey?.media?.find((item) => item.id === mediaId);
-
-        if (!media) {
-          this.voiceAgent?.sendFunctionCallResponse(
-            event.function_call_id,
-            event.function_name,
-            JSON.stringify({ error: "Media not found" }),
-          );
-          return;
-        }
-
-        this.send({
-          type: "display_media",
-          media: {
-            id: media.id,
-            type: media.type,
-            url: media.url,
-            description: media.description,
-            altText: media.altText,
-            durationMs: media.durationMs,
-          },
-        });
-        this.voiceAgent?.sendFunctionCallResponse(
-          event.function_call_id,
-          event.function_name,
-          JSON.stringify({
-            success: true,
-            media: {
-              id: media.id,
-              type: media.type,
-              description: media.description,
-            },
-          }),
-        );
-        return;
-      }
-
       case "finishSurvey": {
         if (!this.state.sessionState || !this.state.sessionId || !this.state.coveragePlan) {
           this.voiceAgent?.sendFunctionCallResponse(
@@ -557,7 +519,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
             userId: this.ownerId || "",
           });
         } catch (error) {
-          console.error("[Survey Response Voice] Failed to enqueue insights:", error);
         }
       }
 
@@ -599,7 +560,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       });
       this.ws.close();
     } catch (error) {
-      console.error("[Survey Response Voice] Completion error:", error);
       this.send({ type: "error", error: "Failed to complete survey" });
     }
   }
@@ -651,7 +611,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
           .where(eq(surveyConversations.id, this.state.conversationId));
       }
     } catch (error) {
-      console.error("[Survey Response Voice] Cleanup error:", error);
     }
   }
 }
+

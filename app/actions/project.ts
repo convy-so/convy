@@ -7,7 +7,12 @@ import { eq, and, isNull, count, sum, getTableColumns } from "drizzle-orm";
 import { getDb } from "@/db";
 import { projects, surveys, surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getSurveyPermissionContext, isWorkspaceMember } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  hasSurveyPermission,
+  isWorkspaceMember,
+  isWorkspaceOwner,
+} from "@/lib/workspace-access";
 import { invalidateDashboardCaches } from "@/lib/cache";
 import {
   recordRealtimeEvent,
@@ -23,6 +28,57 @@ const createProjectSchema = z.object({
   color: z.string().optional(),
   icon: z.string().optional(),
 });
+
+type ProjectListRow = typeof projects.$inferSelect & {
+  surveyCount: number;
+  totalResponses: number;
+};
+
+type ProjectSurveySummary = typeof surveys.$inferSelect & {
+  summary: string | null;
+  completedCount: number;
+};
+
+type ProjectPermissions = {
+  canEditMetadata: boolean;
+  canOrganizeSurveys: boolean;
+  canDelete: boolean;
+  isSharedWorkspaceProject: boolean;
+};
+
+type ProjectListItem = ProjectListRow & ProjectPermissions;
+type ProjectDetail = typeof projects.$inferSelect &
+  ProjectPermissions & {
+    surveys: ProjectSurveySummary[];
+  };
+
+async function getProjectPermissions(
+  project: typeof projects.$inferSelect,
+  userId: string,
+): Promise<ProjectPermissions> {
+  if (!project.organizationId) {
+    const isOwner = project.userId === userId;
+    return {
+      canEditMetadata: isOwner,
+      canOrganizeSurveys: isOwner,
+      canDelete: isOwner,
+      isSharedWorkspaceProject: false,
+    };
+  }
+
+  const [member, owner] = await Promise.all([
+    isWorkspaceMember(userId, project.organizationId),
+    isWorkspaceOwner(userId, project.organizationId),
+  ]);
+  const isProjectOwner = project.userId === userId;
+
+  return {
+    canEditMetadata: isProjectOwner || owner,
+    canOrganizeSurveys: member,
+    canDelete: isProjectOwner || owner,
+    isSharedWorkspaceProject: member && !isProjectOwner,
+  };
+}
 
 export async function createProjectAction(
   input: z.infer<typeof createProjectSchema>,
@@ -83,6 +139,7 @@ export async function createProjectAction(
 
     return { success: true, data: { id: projectId } };
   } catch (error) {
+    console.error("[createProjectAction] Failed:", error);
     if (error instanceof Error) {
       return { success: false, error: error.message };
     }
@@ -91,14 +148,7 @@ export async function createProjectAction(
 }
 
 export async function getProjectsAction(): Promise<
-  ActionResult<
-    Array<
-      typeof projects.$inferSelect & {
-        surveyCount: number;
-        totalResponses: number;
-      }
-    >
-  >
+  ActionResult<ProjectListItem[]>
 > {
   try {
     const session = await getVerifiedSession();
@@ -121,17 +171,19 @@ export async function getProjectsAction(): Promise<
         .where(
           and(
             eq(projects.organizationId, activeOrgId),
-            eq(projects.userId, session.user.id),
           ),
         )
         .groupBy(projects.id)
         .orderBy(projects.createdAt);
 
-      const results = projectList.map((p) => ({
-        ...p,
-        surveyCount: Number(p.surveyCount),
-        totalResponses: Number(p.totalResponses || 0),
-      }));
+      const results = await Promise.all(
+        projectList.map(async (project) => ({
+          ...project,
+          surveyCount: Number(project.surveyCount),
+          totalResponses: Number(project.totalResponses || 0),
+          ...(await getProjectPermissions(project, session.user.id)),
+        })),
+      );
 
       return { success: true, data: results };
     } else {
@@ -152,11 +204,14 @@ export async function getProjectsAction(): Promise<
         .groupBy(projects.id)
         .orderBy(projects.createdAt);
 
-      const results = projectList.map((p) => ({
-        ...p,
-        surveyCount: Number(p.surveyCount),
-        totalResponses: Number(p.totalResponses || 0),
-      }));
+      const results = await Promise.all(
+        projectList.map(async (project) => ({
+          ...project,
+          surveyCount: Number(project.surveyCount),
+          totalResponses: Number(project.totalResponses || 0),
+          ...(await getProjectPermissions(project, session.user.id)),
+        })),
+      );
 
       return { success: true, data: results };
     }
@@ -166,18 +221,7 @@ export async function getProjectsAction(): Promise<
   }
 }
 
-export async function getProjectAction(id: string): Promise<
-  ActionResult<
-    typeof projects.$inferSelect & {
-      surveys: Array<
-        typeof surveys.$inferSelect & {
-          summary: string | null;
-          completedCount: number;
-        }
-      >;
-    }
-  >
-> {
+export async function getProjectAction(id: string): Promise<ActionResult<ProjectDetail>> {
   try {
     const session = await getVerifiedSession();
 
@@ -190,9 +234,15 @@ export async function getProjectAction(id: string): Promise<
       return { success: false, error: "Project not found" };
     }
 
-    const isAuthorized = project.userId === session.user.id;
-
-    if (!isAuthorized) {
+    if (project.organizationId) {
+      const isMember = await isWorkspaceMember(
+        session.user.id,
+        project.organizationId,
+      );
+      if (!isMember) {
+        return { success: false, error: "Unauthorized" };
+      }
+    } else if (project.userId !== session.user.id) {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -221,6 +271,7 @@ export async function getProjectAction(id: string): Promise<
       success: true,
       data: {
         ...project,
+        ...(await getProjectPermissions(project, session.user.id)),
         surveys: projectSurveys.map((s) => ({
           ...s,
           summary: null, // Placeholder if needed, or derived from analytics
@@ -251,9 +302,15 @@ export async function addSurveyToProjectAction(
       return { success: false, error: "Project not found" };
     }
 
-    const isAuthorized = project.userId === session.user.id;
-
-    if (!isAuthorized) {
+    if (project.organizationId) {
+      const isMember = await isWorkspaceMember(
+        session.user.id,
+        project.organizationId,
+      );
+      if (!isMember) {
+        return { success: false, error: "Unauthorized access to project" };
+      }
+    } else if (project.userId !== session.user.id) {
       return { success: false, error: "Unauthorized access to project" };
     }
 
@@ -281,7 +338,7 @@ export async function addSurveyToProjectAction(
         survey.id,
         { activeWorkspaceId: project.organizationId },
       );
-      if (!permission?.canEdit) {
+      if (!hasSurveyPermission(permission, "canEdit")) {
         return {
           success: false,
           error: "You need edit access to organize this survey",
@@ -332,9 +389,15 @@ export async function removeSurveyFromProjectAction(
       return { success: false, error: "Project not found" };
     }
 
-    const isAuthorized = project.userId === session.user.id;
-
-    if (!isAuthorized) {
+    if (project.organizationId) {
+      const isMember = await isWorkspaceMember(
+        session.user.id,
+        project.organizationId,
+      );
+      if (!isMember) {
+        return { success: false, error: "Unauthorized access to project" };
+      }
+    } else if (project.userId !== session.user.id) {
       return { success: false, error: "Unauthorized access to project" };
     }
 
@@ -355,7 +418,7 @@ export async function removeSurveyFromProjectAction(
         survey.id,
         { activeWorkspaceId: project.organizationId },
       );
-      if (!permission?.canEdit) {
+      if (!hasSurveyPermission(permission, "canEdit")) {
         return {
           success: false,
           error: "You need edit access to reorganize this survey",
@@ -404,9 +467,15 @@ export async function updateProjectAction(
     if (!project) {
       return { success: false, error: "Project not found" };
     }
-    const isAuthorized = project.userId === session.user.id;
-
-    if (!isAuthorized) {
+    if (project.organizationId) {
+      const canEditMetadata = await isWorkspaceOwner(
+        session.user.id,
+        project.organizationId,
+      );
+      if (!canEditMetadata && project.userId !== session.user.id) {
+        return { success: false, error: "Unauthorized" };
+      }
+    } else if (project.userId !== session.user.id) {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -448,7 +517,8 @@ export async function updateProjectAction(
 
 
     return { success: true, data: { id: body.id } };
-  } catch {
+  } catch (error) {
+    console.error("[updateProjectAction] Failed:", error);
     return { success: false, error: "Failed to update project" };
   }
 }
@@ -468,9 +538,15 @@ export async function deleteProjectAction(
       return { success: false, error: "Project not found" };
     }
 
-    const isAuthorized = project.userId === session.user.id;
-
-    if (!isAuthorized) {
+    if (project.organizationId) {
+      const canDelete = await isWorkspaceOwner(
+        session.user.id,
+        project.organizationId,
+      );
+      if (!canDelete && project.userId !== session.user.id) {
+        return { success: false, error: "Unauthorized" };
+      }
+    } else if (project.userId !== session.user.id) {
       return { success: false, error: "Unauthorized" };
     }
 
@@ -504,7 +580,8 @@ export async function deleteProjectAction(
 
 
     return { success: true, data: undefined };
-  } catch {
+  } catch (error) {
+    console.error("[deleteProjectAction] Failed:", error);
     return { success: false, error: "Failed to delete project" };
   }
 }

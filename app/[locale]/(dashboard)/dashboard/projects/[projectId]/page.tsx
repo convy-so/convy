@@ -161,25 +161,35 @@ function ProjectDetailContent() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={openSettings}
-              className="px-4 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors font-medium text-sm flex items-center gap-2"
-            >
-              <Settings className="w-4 h-4" />
-              Settings
-            </button>
-            <button
-              onClick={() => setShowAddSurveyModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Add survey
-            </button>
+            {project.canEditMetadata ? (
+              <button
+                onClick={openSettings}
+                className="px-4 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors font-medium text-sm flex items-center gap-2"
+              >
+                <Settings className="w-4 h-4" />
+                Settings
+              </button>
+            ) : null}
+            {project.canOrganizeSurveys ? (
+              <button
+                onClick={() => setShowAddSurveyModal(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Add survey
+              </button>
+            ) : null}
           </div>
         </div>
         {project.description && (
           <p className="text-gray-500 mt-3 ml-16 text-sm max-w-2xl">{project.description}</p>
         )}
+        {project.isSharedWorkspaceProject && !project.canEditMetadata ? (
+          <p className="text-gray-500 mt-3 ml-16 text-sm max-w-2xl">
+            This is a shared workspace folder. You can organize surveys here, but only the
+            folder owner or workspace owner can rename or delete it.
+          </p>
+        ) : null}
       </div>
 
       {/* Stats */}
@@ -227,12 +237,14 @@ function ProjectDetailContent() {
                 <div className="p-8 text-center bg-gray-50/30">
                   <MessageSquare className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                   <p className="text-gray-500 mb-2">No surveys yet</p>
-                  <button
-                    onClick={() => setShowAddSurveyModal(true)}
-                    className="text-sm text-blue-600 hover:underline"
-                  >
-                    Add your first survey
-                  </button>
+                  {project.canOrganizeSurveys ? (
+                    <button
+                      onClick={() => setShowAddSurveyModal(true)}
+                      className="text-sm text-blue-600 hover:underline"
+                    >
+                      Add your first survey
+                    </button>
+                  ) : null}
                 </div>
               ) : (
                 project.surveys.map((survey) => (
@@ -302,17 +314,21 @@ function ProjectDetailContent() {
                                   <BarChart3 className="w-4 h-4" />
                                   Analytics
                                 </Link>
-                                <div className="border-t border-gray-100 my-1" />
-                                <button
-                                  onClick={() => {
-                                    removeSurveyMutation.mutate({ projectId, surveyId: survey.id });
-                                    setShowMenuFor(null);
-                                  }}
-                                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                  Remove
-                                </button>
+                                {project.canOrganizeSurveys ? (
+                                  <>
+                                    <div className="border-t border-gray-100 my-1" />
+                                    <button
+                                      onClick={() => {
+                                        removeSurveyMutation.mutate({ projectId, surveyId: survey.id });
+                                        setShowMenuFor(null);
+                                      }}
+                                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                      Remove
+                                    </button>
+                                  </>
+                                ) : null}
                               </div>
                             </>
                           )}
@@ -324,13 +340,15 @@ function ProjectDetailContent() {
               )}
 
               {/* Add Survey Button */}
-              <button
-                onClick={() => setShowAddSurveyModal(true)}
-                className="w-full p-4 flex items-center justify-center gap-2 text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Add another survey
-              </button>
+              {project.canOrganizeSurveys ? (
+                <button
+                  onClick={() => setShowAddSurveyModal(true)}
+                  className="w-full p-4 flex items-center justify-center gap-2 text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add another survey
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

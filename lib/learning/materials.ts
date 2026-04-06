@@ -2,7 +2,12 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 
 import { analysisModel, defaultModel } from "@/lib/ai";
+import { renderUntrustedContextBlock } from "@/lib/ai/scope-policy";
 import { getOpenAIClient } from "@/lib/openai";
+import {
+  clampExtractedTextLength,
+  LEARNING_MATERIAL_MIME_ALLOWLIST,
+} from "@/lib/security/uploads";
 
 const materialAnalysisSchema = z.object({
   summary: z.string(),
@@ -62,24 +67,27 @@ export async function extractLearningMaterialText(params: {
 }) {
   const mime = params.mimeType.toLowerCase();
 
+  if (!LEARNING_MATERIAL_MIME_ALLOWLIST.has(mime)) {
+    throw new Error("Unsupported learning material format");
+  }
+
   if (
     mime.startsWith("text/") ||
     mime === "application/json" ||
     mime === "application/xml"
   ) {
-    return decodeTextBuffer(params.buffer);
+    return clampExtractedTextLength(decodeTextBuffer(params.buffer));
   }
 
   if (mime === "text/html") {
-    return stripHtmlTags(decodeTextBuffer(params.buffer));
+    return clampExtractedTextLength(stripHtmlTags(decodeTextBuffer(params.buffer)));
   }
 
   if (mime === "application/pdf") {
-    return await extractPdfTextWithOpenAI(params);
+    return clampExtractedTextLength(await extractPdfTextWithOpenAI(params));
   }
 
-  // Fall back to the OpenAI file-input path for rich documents we cannot decode locally.
-  return await extractPdfTextWithOpenAI(params);
+  throw new Error("Unsupported learning material format");
 }
 
 export async function analyzeLearningMaterial(params: {
@@ -99,7 +107,7 @@ Learning outcomes:
 ${params.learningOutcomes.map((outcome, index) => `${index + 1}. ${outcome.title}: ${outcome.description}`).join("\n")}
 
 Material excerpt:
-${params.materialText.slice(0, 18000)}
+${renderUntrustedContextBlock("learning_material", params.materialText.slice(0, 18000))}
 
 You are helping a teacher review whether the uploaded source material is sufficient for a tightly grounded tutor.
 - Write a concise summary.
@@ -117,7 +125,7 @@ export async function generateMaterialGroundingSummary(params: {
 }) {
   const { text } = await generateText({
     model: defaultModel,
-    prompt: `Summarize the learning boundaries for the topic "${params.topicTitle}" based only on the source material below in 6 bullet points or fewer.\n\n${params.materialText.slice(0, 16000)}`,
+    prompt: `Summarize the learning boundaries for the topic "${params.topicTitle}" based only on the source material below in 6 bullet points or fewer.\n\n${renderUntrustedContextBlock("learning_material", params.materialText.slice(0, 16000))}`,
   });
 
   return text.trim();

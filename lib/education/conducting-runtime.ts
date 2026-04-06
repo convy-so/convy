@@ -1,6 +1,10 @@
 import { nanoid } from "nanoid";
 
 import { analysisModel, generateAIResponse } from "@/lib/ai";
+import {
+  renderStrictScopePolicyInstructions,
+  renderUntrustedContextBlock,
+} from "@/lib/ai/scope-policy";
 import { getEducationProgram } from "./catalog";
 import { recordEducationTrace } from "./tracing";
 import {
@@ -171,6 +175,7 @@ export function buildConductingSystemPrompt(input: {
   conductingProfile?: SampleConductingProfile | null;
   playbookContext?: string;
   personalityContext?: string;
+  expertGuidanceContext?: string;
   toolContext?: {
     canFinishSurvey?: boolean;
     canShowMedia?: boolean;
@@ -190,6 +195,7 @@ export function buildConductingSystemPromptParts(input: {
   conductingProfile?: SampleConductingProfile | null;
   playbookContext?: string;
   personalityContext?: string;
+  expertGuidanceContext?: string;
   toolContext?: {
     canFinishSurvey?: boolean;
     canShowMedia?: boolean;
@@ -204,9 +210,7 @@ export function buildConductingSystemPromptParts(input: {
     input.toolContext?.canFinishSurvey
       ? "- If required coverage is achieved and the interview should end, call `finishSurvey` instead of only implying the interview is over."
       : "- If required coverage is achieved and the interview should end, close clearly and naturally.",
-    input.toolContext?.canShowMedia
-      ? "- If media is available, call `showMedia` only when a specific media asset is directly relevant to the current question."
-      : null,
+    null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -229,13 +233,11 @@ export function buildConductingSystemPromptParts(input: {
 ${input.coveragePlan.nodes.map((node) => `- ${node.id}: ${node.label} (${node.description})`).join("\n")}
 </coverage-plan>
 
-${input.playbookContext ? `<approved-playbooks>
-${input.playbookContext}
-</approved-playbooks>` : ""}
+${input.playbookContext ? renderUntrustedContextBlock("approved_playbooks", input.playbookContext) : ""}
 
-${input.personalityContext ? `<personality>
-${input.personalityContext}
-</personality>` : ""}
+${input.expertGuidanceContext ? renderUntrustedContextBlock("expert_guidance", input.expertGuidanceContext) : ""}
+
+${input.personalityContext ? renderUntrustedContextBlock("personality_context", input.personalityContext) : ""}
 
 ${input.conductingProfile ? `<approved-adjustments>
 ${input.conductingProfile.toneDirectives.map((item) => `- Tone: ${item}`).join("\n")}
@@ -253,6 +255,16 @@ ${input.conductingProfile.coverageDirectives.map((item) => `- Coverage: ${item}`
 - If fatigue is high and required coverage is achieved, close gracefully.
 ${toolRules}
 - Never mention internal nodes or percentages.
+${renderStrictScopePolicyInstructions({
+  objective: input.brief.researchGoal,
+  currentPhase: input.sessionType,
+  activeTopic: activeNode?.label ?? input.brief.title,
+  allowedDetours: [
+    "brief clarification of the current interview question",
+    "asking what a current term means",
+    "answering in another supported language",
+  ],
+})}
 </response-rules>`;
 
   const dynamicSystemPrompt = `<current-session>

@@ -255,11 +255,10 @@ emailWorker.on("completed", () => {
 });
 
 emailWorker.on("failed", (job, err) => {
-  console.error(`[Email Worker] Job ${job?.id} failed:`, err.message);
 });
 
 emailWorker.on("error", (err) => {
-  console.error("[Email Worker] Worker error:", err);
 });
 
 export default emailWorker;
+

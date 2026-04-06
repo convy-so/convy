@@ -9,7 +9,10 @@ import { getDb } from "@/db";
 import { surveySessionInsights, surveySessions } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { conversationInsightSchema } from "@/lib/education/types";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 import { getTranslations } from "next-intl/server";
 
 interface PageProps {
@@ -42,8 +45,8 @@ async function ConversationsContent({
   const t = await getTranslations({ locale, namespace: "SurveyAnalytics.Conversations" });
   const tt = (key: string, fallback: string) => (t.has(key) ? t(key) : fallback);
   const session = await getVerifiedSession();
-  const permission = await getSurveyPermissionContext(session.user.id, surveyId);
-  if (!permission?.canView) {
+  const permission = await getSurveyPermissionForSession(session, surveyId);
+  if (!hasSurveyPermission(permission, "canView")) {
     redirect({ href: "/dashboard/analytics", locale });
   }
 

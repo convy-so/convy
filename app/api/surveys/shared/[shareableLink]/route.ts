@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
-import { getResearchBrief } from "@/lib/education/storage";
 
 /**
  * Get a survey by its shareable link (public endpoint)
@@ -39,19 +38,14 @@ export async function GET(
       );
     }
 
-    const briefRow = await getResearchBrief(survey.id);
-
     return NextResponse.json({
-      survey: {
-        ...survey,
-        brief: briefRow?.brief || null,
-      },
+      survey,
     });
   } catch (error) {
-    console.error("Error fetching shared survey:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
     );
   }
 }
+

@@ -14,6 +14,9 @@ export const surveyMediaSchema = z.object({
   expectedInsights: z.array(z.enum(["emotional", "behavioral", "rational"])).default([]),
   altText: z.string().optional(),
   thumbnailUrl: z.string().optional(),
+  storageBucket: z.string().optional(),
+  storagePath: z.string().optional(),
+  requiresSignedAccess: z.boolean().optional(),
 });
 
 export type SurveyMedia = z.infer<typeof surveyMediaSchema>;

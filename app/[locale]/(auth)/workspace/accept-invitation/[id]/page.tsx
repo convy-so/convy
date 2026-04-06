@@ -68,8 +68,8 @@ function AcceptInvitationContent() {
         },
       });
     } catch (err) {
+      console.error("[AcceptInvitation] Failed:", err);
       setError(t("GenericError"));
-      console.error(err);
     } finally {
       setIsLoading(false);
     }

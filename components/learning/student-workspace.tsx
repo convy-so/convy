@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
@@ -28,7 +28,12 @@ import {
 } from "@/lib/api/learning";
 import { queryKeys } from "@/lib/query-keys";
 import { useAudioTranscription } from "@/hooks/use-audio-transcription";
-import { isAppLocale } from "@/lib/i18n/config";
+import {
+  appLocaleLabels,
+  appLocales,
+  isAppLocale,
+  type AppLocale,
+} from "@/lib/i18n/config";
 import { GlassPanel } from "@/components/learning/glass-panel";
 import { MetricTile } from "@/components/learning/metric-tile";
 import { SectionHeading } from "@/components/learning/section-heading";
@@ -43,6 +48,55 @@ type LiveMessage = {
   metadata: Record<string, unknown>;
   createdAt?: string | Date;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getTutorMediaMetadata(metadata: Record<string, unknown>) {
+  const tutorMedia = metadata.tutorMedia;
+  if (!isRecord(tutorMedia)) return null;
+
+  const assetType = tutorMedia.assetType;
+  const title = tutorMedia.title;
+  const mediaUrl = tutorMedia.mediaUrl;
+  const reason = tutorMedia.reason;
+  const expectedBenefit = tutorMedia.expectedBenefit;
+  const followUpPrompt = tutorMedia.followUpPrompt;
+  if (
+    (assetType !== "image" && assetType !== "video") ||
+    typeof title !== "string" ||
+    typeof mediaUrl !== "string" ||
+    typeof reason !== "string" ||
+    typeof expectedBenefit !== "string" ||
+    typeof followUpPrompt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    assetType,
+    title,
+    description:
+      typeof tutorMedia.description === "string" ? tutorMedia.description : null,
+    mediaUrl,
+    thumbnailUrl:
+      typeof tutorMedia.thumbnailUrl === "string"
+        ? tutorMedia.thumbnailUrl
+        : null,
+    durationSeconds:
+      typeof tutorMedia.durationSeconds === "number"
+        ? tutorMedia.durationSeconds
+        : null,
+    selectionSource:
+      typeof tutorMedia.selectionSource === "string"
+        ? tutorMedia.selectionSource
+        : "system",
+    reason,
+    expectedBenefit,
+    followUpPrompt,
+  };
+}
 
 type TutoringSessionResponse = Awaited<ReturnType<typeof fetchTutoringSession>>;
 
@@ -69,7 +123,9 @@ function appendTranscript(currentValue: string, transcript: string) {
 export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMeData }) {
   const queryClient = useQueryClient();
   const locale = useLocale();
-  const dictationLocale = isAppLocale(locale) ? locale : "en";
+  const [selectedStudyLanguage, setSelectedStudyLanguage] = useState<AppLocale>(
+    isAppLocale(locale) ? locale : "en",
+  );
   const memberships = learningMe.student;
   const [selectedMembershipId, setSelectedMembershipId] = useState<string | null>(
     memberships[0]?.classroomStudentId ?? null,
@@ -97,9 +153,11 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
     activeTarget: transcriptionTarget,
     phase: transcriptionPhase,
     startTranscription,
+    stopRecording: stopDictation,
   } = useAudioTranscription({
     onError: (message) => toast.error(message),
   });
+  const isDictationSupported = isVoiceInputSupported;
   const isVoiceInputMode = inputMode === "voice";
 
   const onboardingQuery = useQuery({
@@ -115,9 +173,16 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
 
   const tutoringSessionQuery = useQuery({
     queryKey: effectiveSelectedTopicId
-      ? queryKeys.learning.tutoring(effectiveSelectedTopicId)
+      ? queryKeys.learning.tutoring(
+          effectiveSelectedTopicId,
+          selectedStudyLanguage,
+        )
       : ["learningTutoring", "idle"],
-    queryFn: () => fetchTutoringSession(effectiveSelectedTopicId!),
+    queryFn: () =>
+      fetchTutoringSession(
+        effectiveSelectedTopicId!,
+        selectedStudyLanguage,
+      ),
     enabled: Boolean(effectiveSelectedTopicId && !selectedMembership?.needsOnboarding),
   });
   const liveMessages = useMemo<LiveMessage[]>(
@@ -159,7 +224,10 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
     onSuccess: async (data, variables) => {
       setSessionInput("");
       queryClient.setQueryData<TutoringSessionResponse | undefined>(
-        queryKeys.learning.tutoring(variables.topicId),
+        queryKeys.learning.tutoring(
+          variables.topicId,
+          variables.language ?? selectedStudyLanguage,
+        ),
         (current) => {
           if (!current) {
             return current;
@@ -184,9 +252,9 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
                 {
                   id: `assistant-${Date.now() + 1}`,
                   role: "assistant",
-                  content: data.data.response,
-                  metadata: {},
-                  createdAt: now,
+                  content: data.data.assistantMessage.content,
+                  metadata: data.data.assistantMessage.metadata ?? {},
+                  createdAt: data.data.assistantMessage.createdAt ?? now,
                 },
               ],
             },
@@ -195,7 +263,10 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
       );
 
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.learning.tutoring(variables.topicId),
+        queryKey: queryKeys.learning.tutoring(
+          variables.topicId,
+          variables.language ?? selectedStudyLanguage,
+        ),
       });
     },
     onError: (error) => {
@@ -236,6 +307,12 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
     return onboardingQuery.data.messages;
   }, [onboardingQuery.data]);
 
+  useEffect(() => {
+    if (isAppLocale(locale)) {
+      setSelectedStudyLanguage(locale);
+    }
+  }, [locale]);
+
   if (!memberships.length) {
     return (
       <div className="mx-auto max-w-[1200px] px-2 pb-12">
@@ -267,6 +344,27 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
               <p className="max-w-2xl text-sm leading-7 text-slate-600 md:text-base">
                 Your teacher defines the topic and source material. The tutor then adapts explanations, examples, and pacing around the way you learn best.
               </p>
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                  Study language
+                </span>
+                <select
+                  value={selectedStudyLanguage}
+                  onChange={(event) =>
+                    setSelectedStudyLanguage(event.target.value as AppLocale)
+                  }
+                  className="rounded-full border border-slate-200 bg-white/85 px-3 py-2 text-sm font-medium text-slate-700 shadow-sm outline-none transition focus:border-sky-400"
+                >
+                  {appLocales.map((language) => (
+                    <option key={language} value={language}>
+                      {appLocaleLabels[language]}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs leading-6 text-slate-500">
+                  Replies follow this language while the tutor stays grounded in the teacher&apos;s source material.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -467,11 +565,25 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
                           {survey.createdAt ? ` · ${formatDate(survey.createdAt)}` : ""}
                         </div>
                       </div>
+                      <div className="text-right">
+                        <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
+                          {survey.responseStatus.replace("_", " ")}
+                        </div>
+                        {survey.completedAt ? (
+                          <div className="mt-2 text-[11px] text-slate-500">
+                            Completed {formatDate(survey.completedAt)}
+                          </div>
+                        ) : null}
+                      </div>
                       <Link
                         href={`/s/${survey.shareableLink}/respond`}
                         className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
                       >
-                        Open survey
+                        {survey.responseStatus === "completed"
+                          ? "Review survey"
+                          : survey.responseStatus === "in_progress"
+                            ? "Resume survey"
+                            : "Open survey"}
                       </Link>
                     </div>
                   </div>
@@ -586,7 +698,7 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
                           onClick={() =>
                             startTranscription({
                               target: "student-onboarding",
-                              language: dictationLocale,
+                              language: "multi",
                               onTranscript: (transcript) =>
                                 setOnboardingInput((current) =>
                                   appendTranscript(current, transcript),
@@ -683,15 +795,58 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
                         </div>
                       ) : liveMessages.length ? (
                         liveMessages.map((message) => (
-                          <div
-                            key={message.id}
-                            className={`max-w-[88%] rounded-[20px] px-4 py-3 text-sm leading-6 ${
-                              message.role === "assistant"
-                                ? "bg-slate-950 text-white"
-                                : "ml-auto bg-sky-50 text-slate-800"
-                            }`}
-                          >
-                            {message.content}
+                          <div key={message.id} className="space-y-3">
+                            <div
+                              className={`max-w-[88%] rounded-[20px] px-4 py-3 text-sm leading-6 ${
+                                message.role === "assistant"
+                                  ? "bg-slate-950 text-white"
+                                  : "ml-auto bg-sky-50 text-slate-800"
+                              }`}
+                            >
+                              {message.content}
+                            </div>
+                            {message.role === "assistant" && (() => {
+                              const tutorMedia = getTutorMediaMetadata(message.metadata);
+                              if (!tutorMedia) return null;
+
+                              return (
+                                <div className="max-w-[88%] rounded-[22px] border border-sky-100 bg-sky-50/70 p-4 text-slate-800 shadow-sm">
+                                  <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-sky-700">
+                                    Tutor visual aid
+                                  </div>
+                                  <div className="mt-2 text-sm font-semibold text-slate-950">
+                                    {tutorMedia.title}
+                                  </div>
+                                  {tutorMedia.description ? (
+                                    <p className="mt-1 text-sm leading-6 text-slate-600">
+                                      {tutorMedia.description}
+                                    </p>
+                                  ) : null}
+                                  <div className="mt-4 overflow-hidden rounded-[18px] border border-white/80 bg-white">
+                                    {tutorMedia.assetType === "image" ? (
+                                      <img
+                                        src={tutorMedia.mediaUrl}
+                                        alt={tutorMedia.title}
+                                        className="max-h-72 w-full object-cover"
+                                      />
+                                    ) : (
+                                      <video
+                                        controls
+                                        className="max-h-72 w-full bg-slate-950"
+                                        poster={tutorMedia.thumbnailUrl ?? undefined}
+                                      >
+                                        <source src={tutorMedia.mediaUrl} />
+                                      </video>
+                                    )}
+                                  </div>
+                                  <div className="mt-3 space-y-1 text-xs leading-5 text-slate-600">
+                                    <p><span className="font-semibold text-slate-800">Why now:</span> {tutorMedia.reason}</p>
+                                    <p><span className="font-semibold text-slate-800">Benefit:</span> {tutorMedia.expectedBenefit}</p>
+                                    <p><span className="font-semibold text-slate-800">Follow-up:</span> {tutorMedia.followUpPrompt}</p>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                         ))
                       ) : (
@@ -711,6 +866,7 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
                           topicId: effectiveSelectedTopicId,
                           sessionId: tutoringSessionQuery.data?.data.sessionId,
                           message: sessionInput.trim(),
+                          language: selectedStudyLanguage,
                         });
                       }}
                     >
@@ -722,7 +878,7 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
                               onClick={() =>
                                 startTranscription({
                                   target: "student-session",
-                                  language: dictationLocale,
+                                  language: "multi",
                                   onTranscript: (transcript) =>
                                     setSessionInput((current) =>
                                       appendTranscript(current, transcript),
@@ -793,6 +949,7 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
                     outOfSessionMutation.mutate({
                       topicId: effectiveSelectedTopicId,
                       message: questionInput.trim(),
+                      language: selectedStudyLanguage,
                     });
                   }}
                 >
@@ -804,7 +961,7 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
                           onClick={() =>
                             startTranscription({
                               target: "student-question",
-                              language: dictationLocale,
+                              language: "multi",
                               onTranscript: (transcript) =>
                                 setQuestionInput((current) =>
                                   appendTranscript(current, transcript),

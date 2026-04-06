@@ -46,19 +46,33 @@ export const queryKeys = {
       ["learningClassroomRequests", classroomId] as const,
     classroomCollaborators: (classroomId: string) =>
       ["learningClassroomCollaborators", classroomId] as const,
+    assignedSurveys: (classroomId: string) =>
+      ["learningAssignedSurveys", classroomId] as const,
+    interventions: (
+      classroomId: string,
+      classroomStudentId?: string | null,
+      topicId?: string | null,
+    ) =>
+      [
+        "learningInterventions",
+        classroomId,
+        classroomStudentId ?? null,
+        topicId ?? null,
+      ] as const,
     students: (classroomId: string) => ["learningStudents", classroomId] as const,
     topics: (classroomId: string) => ["learningTopics", classroomId] as const,
     materials: (topicId: string) => ["learningMaterials", topicId] as const,
     readiness: (topicId: string) => ["learningReadiness", topicId] as const,
     reports: (topicId: string) => ["learningReports", topicId] as const,
-      questions: (topicId: string) => ["learningQuestions", topicId] as const,
-      studentPatterns: (studentId: string) =>
-        ["learningStudentPatterns", studentId] as const,
-      studentOverview: (studentId: string) =>
-        ["learningStudentOverview", studentId] as const,
-      topicOverview: (topicId: string) =>
-        ["learningTopicOverview", topicId] as const,
-      onboarding: ["learningOnboarding"] as const,
-      tutoring: (topicId: string) => ["learningTutoring", topicId] as const,
+    questions: (topicId: string) => ["learningQuestions", topicId] as const,
+    studentPatterns: (studentId: string) =>
+      ["learningStudentPatterns", studentId] as const,
+    studentOverview: (studentId: string) =>
+      ["learningStudentOverview", studentId] as const,
+    topicOverview: (topicId: string) =>
+      ["learningTopicOverview", topicId] as const,
+    onboarding: ["learningOnboarding"] as const,
+    tutoring: (topicId: string, language?: string | null) =>
+      ["learningTutoring", topicId, language ?? null] as const,
   },
 } as const;

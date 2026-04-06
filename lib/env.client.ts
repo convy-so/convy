@@ -16,6 +16,7 @@ export const clientEnv = {
 
     // WebSocket
     NEXT_PUBLIC_WEBSOCKET_URL: process.env.NEXT_PUBLIC_WEBSOCKET_URL || "ws://localhost:3001",
+    NEXT_PUBLIC_GDPR_EU_MODE: process.env.NEXT_PUBLIC_GDPR_EU_MODE === "true",
 };
 
 export type ClientEnv = typeof clientEnv;

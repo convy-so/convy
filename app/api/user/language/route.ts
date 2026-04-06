@@ -34,7 +34,6 @@ export async function GET() {
       preferredLanguage: uiLocale,
     });
   } catch (error) {
-    console.error("[User Language API] Error fetching language:", error);
     return NextResponse.json(
       { error: "Failed to fetch language" },
       { status: 500 },
@@ -81,10 +80,10 @@ export async function PATCH(request: NextRequest) {
       preferredLanguage: language,
     });
   } catch (error) {
-    console.error("[User Language API] Error updating language:", error);
     return NextResponse.json(
       { error: "Failed to update language" },
       { status: 500 },
     );
   }
 }
+

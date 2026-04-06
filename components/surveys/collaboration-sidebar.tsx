@@ -81,7 +81,6 @@ export function CollaborationSidebar({
         };
 
         loadComments().catch((error) => {
-            console.error("Failed to load collaboration comments", error);
         });
     }, [surveyId, isOpen]);
 
@@ -323,3 +322,4 @@ export function CollaborationSidebar({
         </>
     );
 }
+

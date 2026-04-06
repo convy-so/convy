@@ -15,6 +15,8 @@ import { Suspense } from "react";
 import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 
+import { TeacherReportsPage } from "@/components/learning/teacher-reports-page";
+
 type StatusConfig = {
   color: string;
   bgColor: string;
@@ -59,9 +61,13 @@ function getStatusConfig(status: string | null | undefined): StatusConfig {
 
 async function AnalyticsContent({ authHeaders }: { authHeaders: Headers | string | null }) {
   const session = await getVerifiedSession(authHeaders);
-  const t = await getTranslations("AnalyticsPage");
-
   const activeOrgId = session.session.activeOrganizationId;
+
+  if (activeOrgId) {
+    return <TeacherReportsPage />;
+  }
+
+  const t = await getTranslations("AnalyticsPage");
 
   const userSurveys = await getDb()
     .select({
@@ -94,9 +100,7 @@ async function AnalyticsContent({ authHeaders }: { authHeaders: Headers | string
       and(
         eq(surveys.userId, session.user.id),
         eq(surveys.status, 'active'),
-        activeOrgId
-          ? eq(surveys.organizationId, activeOrgId)
-          : isNull(surveys.organizationId)
+        isNull(surveys.organizationId)
       )
     )
     .groupBy(

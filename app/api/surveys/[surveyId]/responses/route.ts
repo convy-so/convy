@@ -4,7 +4,11 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 
 type ConversationMessage = {
   role: string;
@@ -52,8 +56,8 @@ export async function GET(
     const status = searchParams.get("status") || "all";
     const offset = (page - 1) * limit;
 
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
-    if (!permission?.canView) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canView")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

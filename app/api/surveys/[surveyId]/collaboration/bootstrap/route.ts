@@ -16,7 +16,11 @@ import {
   getActiveSurveyLease,
   getCurrentSurveyRevision,
 } from "@/lib/collaboration-service";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 
 export async function GET(
   _request: Request,
@@ -25,11 +29,9 @@ export async function GET(
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
+    const permission = await getSurveyPermissionForSession(session, surveyId);
 
-    if (!permission?.canView || !permission.activeContextMatchesResource) {
+    if (!hasSurveyPermission(permission, "canView")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
     if (!permission.collaborationAllowed) {

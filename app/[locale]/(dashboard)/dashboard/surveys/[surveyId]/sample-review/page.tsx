@@ -249,7 +249,7 @@ export default function SampleReviewPage() {
                     publishDescription: pDesc
                 });
             } catch (err) {
-                console.error("Failed to translate placeholders", err);
+                console.error("[translatePlaceholders] Failed:", err);
             }
         };
         translatePlaceholders();
@@ -524,7 +524,6 @@ export default function SampleReviewPage() {
                 }).then(() => {
                     setHasAutoGreeted(true);
                 }).catch((err) => {
-                    console.error("[Sample Review] sendMessage failed:", err);
                     isHandlingGreetingRef.current = false;
                 });
             }
@@ -553,7 +552,8 @@ export default function SampleReviewPage() {
             sendMessage({
                 text: currentInput
             });
-        } catch {
+        } catch (error) {
+            console.error("[handleTextSubmit] Failed:", error);
             toast.error(t("Toasts.ResponseFailed"));
         }
     };
@@ -615,7 +615,8 @@ export default function SampleReviewPage() {
             } else {
                 toast.error(t("Toasts.ConfirmFailed"));
             }
-        } catch {
+        } catch (error) {
+            console.error("[submitPublish] Failed:", error);
             toast.error(t("Toasts.ConfirmFailed"));
         } finally {
             setIsConfirming(false);
@@ -641,7 +642,8 @@ export default function SampleReviewPage() {
             } else {
                 toast.error(result.error);
             }
-        } catch {
+        } catch (error) {
+            console.error("[handleAddComment] Failed:", error);
             toast.error("Failed to add comment");
         } finally {
             setIsCommenting(false);
@@ -1067,3 +1069,4 @@ export default function SampleReviewPage() {
         </div>
     );
 }
+

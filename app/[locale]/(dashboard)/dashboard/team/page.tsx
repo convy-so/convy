@@ -188,7 +188,6 @@ export default function TeamPage() {
         queryKey: queryKeys.workspaces.departments(activeWorkspace.id),
       });
     } catch (error) {
-      console.error("Failed to create department:", error);
       toast.error("Failed to create department");
     } finally {
       setIsCreatingDepartment(false);
@@ -239,7 +238,6 @@ export default function TeamPage() {
         setShowDeleteModal(false);
       }
     } catch (error) {
-      console.error("Failed to delete workspace:", error);
       toast.error(t("Toasts.DeleteFailed"));
       setIsProcessing(false);
       setShowDeleteModal(false);
@@ -263,7 +261,6 @@ export default function TeamPage() {
         setShowLeaveModal(false);
       }
     } catch (error) {
-      console.error("Failed to leave workspace:", error);
       toast.error(t("Toasts.LeaveFailed"));
       setIsProcessing(false);
       setShowLeaveModal(false);
@@ -752,3 +749,4 @@ export default function TeamPage() {
     </>
   );
 }
+

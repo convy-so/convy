@@ -168,7 +168,13 @@ export function DashboardHeader() {
                   )}
                 </div>
                 <div className="px-4 py-2 bg-gray-50 border-t border-gray-100">
-                  <button className="text-xs text-gray-600 hover:text-gray-900 font-medium w-full text-center py-1">
+                  <button
+                    onClick={() => {
+                      setIsNotificationsOpen(false);
+                      router.push("/dashboard/notifications");
+                    }}
+                    className="text-xs text-gray-600 hover:text-gray-900 font-medium w-full text-center py-1"
+                  >
                     {t("ViewAll")}
                   </button>
                 </div>

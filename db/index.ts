@@ -23,11 +23,13 @@ const isLocal =
   env.DATABASE_URL.includes("localhost") ||
   env.DATABASE_URL.includes("127.0.0.1");
 
+const shouldUseInsecureTls = env.ALLOW_INSECURE_TLS && !isLocal;
+
 const poolConfig = {
   connectionString: env.DATABASE_URL,
   // Reduce connection limit for dev environment to avoid hitting limits
   max: isLocal ? 10 : 5,
-  ssl: isLocal ? undefined : { rejectUnauthorized: false },
+  ssl: isLocal ? undefined : { rejectUnauthorized: !shouldUseInsecureTls },
 };
 
 declare global {
@@ -44,7 +46,10 @@ export function getDb() {
 
   // Prevent crash on idle client errors
   pool.on("error", (err) => {
-    console.error("Unexpected error on idle client", err);
+    console.error("[db] idle client error", {
+      message: err?.message,
+      name: err?.name,
+    });
   });
 
   const db = drizzle(pool, { schema });
@@ -61,3 +66,4 @@ export function getDb() {
 }
 
 export type DbClient = ReturnType<typeof getDb>;
+

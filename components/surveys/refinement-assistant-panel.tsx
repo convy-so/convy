@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Bot, Loader2, Send } from "lucide-react";
@@ -73,7 +73,6 @@ export function RefinementAssistantPanel({ surveyId }: { surveyId: string }) {
 
   useEffect(() => {
     void load().catch((loadError) => {
-      console.error("[RefinementAssistantPanel] Failed to load:", loadError);
       setError(
         loadError instanceof Error
           ? loadError.message
@@ -101,7 +100,6 @@ export function RefinementAssistantPanel({ surveyId }: { surveyId: string }) {
       setInput("");
       await load();
     } catch (sendError) {
-      console.error("[RefinementAssistantPanel] Failed to send:", sendError);
       setError(
         sendError instanceof Error
           ? sendError.message
@@ -122,7 +120,6 @@ export function RefinementAssistantPanel({ surveyId }: { surveyId: string }) {
 
     if (!response.ok) {
       const message = `Failed to ${action} refinement proposal.`;
-      console.error("[RefinementAssistantPanel]", message, { proposalId, applyToLive });
       setError(message);
       return;
     }
@@ -206,7 +203,7 @@ export function RefinementAssistantPanel({ surveyId }: { surveyId: string }) {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold text-gray-900">{proposal.title}</div>
-                    <div className="mt-1 text-xs text-gray-500">{proposal.type} · {proposal.status}</div>
+                    <div className="mt-1 text-xs text-gray-500">{proposal.type} � {proposal.status}</div>
                   </div>
                 </div>
                 <p className="mt-2 text-sm text-gray-700">{proposal.interpretation}</p>
@@ -252,5 +249,6 @@ export function RefinementAssistantPanel({ surveyId }: { surveyId: string }) {
     </div>
   );
 }
+
 
 

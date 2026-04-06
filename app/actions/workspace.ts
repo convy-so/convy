@@ -21,6 +21,10 @@ import {
   surveys,
   surveyEditors,
   surveyEditLeases,
+  retentionPolicies,
+  workspacePrivacyProfiles,
+  type RetentionPolicySettings,
+  type WorkspacePrivacyProfileSettings,
 } from "@/db/schema";
 import { eq, and, desc, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -38,6 +42,12 @@ import {
 import {
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
+import {
+  ensureWorkspacePrivacyProfile,
+  ensureWorkspaceRetentionPolicy,
+  getWorkspacePrivacyProfileMissingItems,
+  getWorkspacePrivacyState,
+} from "@/lib/privacy/compliance";
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -51,6 +61,42 @@ const workspaceLocalizationSchema = z.object({
   allowedLocales: z.array(z.enum(["en", "fr", "de", "es", "it"])).min(1),
   autoTranslateGeneratedContent: z.boolean(),
 });
+
+const workspacePrivacySettingsSchema = z.object({
+  controllerIdentity: z.string().trim().nullable().optional(),
+  controllerContactName: z.string().trim().nullable().optional(),
+  controllerContactEmail: z.string().trim().nullable().optional(),
+  dpoContactEmail: z.string().trim().nullable().optional(),
+  privacyNoticeUrl: z.string().trim().nullable().optional(),
+  privacyNoticeText: z.string().trim().nullable().optional(),
+  processorRoleAcknowledged: z.boolean(),
+  enabledProcessors: z.array(z.string().trim().min(1)),
+  lawfulBasisDeclarations: z.array(
+    z.object({
+      purpose: z.string().trim().min(1),
+      lawfulBasis: z.string().trim().min(1),
+      notes: z.string().trim().nullable().optional(),
+    }),
+  ),
+  dataResidencyMode: z.enum(["eea_only", "approved_transfers"]),
+  audienceAgeMode: z.enum(["unset", "adult_only", "includes_minors"]),
+});
+
+const workspaceRetentionSettingsSchema = z.object({
+  rawTranscriptDays: z.number().int().positive(),
+  voiceTelemetryDays: z.number().int().positive(),
+  derivedAnalyticsDays: z.number().int().positive(),
+  studentInteractionDays: z.number().int().positive(),
+  privacyRequestDays: z.number().int().positive(),
+});
+
+export type WorkspacePrivacyState = {
+  settings: WorkspacePrivacyProfileSettings;
+  retention: RetentionPolicySettings;
+  missingItems: string[];
+  runtimeEnabledProcessors: string[];
+  runtimeProcessorViolations: string[];
+};
 
 /**
  * Create a new workspace
@@ -186,6 +232,7 @@ export async function getActiveWorkspace(): Promise<
     logo?: string | null;
     plan?: string | null;
     localization: WorkspaceLocaleSettings;
+    privacy: WorkspacePrivacyState;
   } | null>
 > {
   try {
@@ -218,9 +265,10 @@ export async function getActiveWorkspace(): Promise<
         eq(members.userId, session.user.id),
       ),
     });
-    const localization =
-      (await getWorkspaceLocaleSettings(activeOrganizationId)) ??
-      { ...defaultWorkspaceLocaleSettings };
+    const [localization, privacyState] = await Promise.all([
+      getWorkspaceLocaleSettings(activeOrganizationId),
+      getWorkspacePrivacyState(activeOrganizationId),
+    ]);
 
     return {
       success: true,
@@ -231,7 +279,14 @@ export async function getActiveWorkspace(): Promise<
         role: member?.role || "member",
         logo: org.logo || null,
         plan: "Free",
-        localization,
+        localization: localization ?? { ...defaultWorkspaceLocaleSettings },
+        privacy: {
+          settings: privacyState.profile.settings,
+          retention: privacyState.retention.settings,
+          missingItems: privacyState.missingItems,
+          runtimeEnabledProcessors: privacyState.runtimeEnabledProcessors,
+          runtimeProcessorViolations: privacyState.runtimeProcessorViolations,
+        },
       },
     };
   } catch (error) {
@@ -781,6 +836,105 @@ export async function updateWorkspaceLocalizationSettingsAction(data: {
           : error instanceof Error
             ? error.message
             : "Failed to update workspace localization settings",
+    };
+  }
+}
+
+export async function updateWorkspacePrivacyProfileAction(data: {
+  organizationId?: string;
+  settings: WorkspacePrivacyProfileSettings;
+  retention: RetentionPolicySettings;
+}): Promise<ActionResult<WorkspacePrivacyState>> {
+  try {
+    const session = await getVerifiedSession();
+    const organizationId =
+      data.organizationId || session.session.activeOrganizationId;
+
+    if (!organizationId) {
+      return {
+        success: false,
+        error: "No active workspace selected",
+      };
+    }
+
+    const isOwner = await isWorkspaceOwner(session.user.id, organizationId);
+    if (!isOwner) {
+      return {
+        success: false,
+        error:
+          "Unauthorized: Only workspace owners can update workspace privacy settings",
+      };
+    }
+
+    const settings = workspacePrivacySettingsSchema.parse(data.settings);
+    const retention = workspaceRetentionSettingsSchema.parse(data.retention);
+
+    await Promise.all([
+      ensureWorkspacePrivacyProfile(organizationId),
+      ensureWorkspaceRetentionPolicy(organizationId),
+    ]);
+
+    const missingItems = getWorkspacePrivacyProfileMissingItems({
+      settings,
+      retentionSettings: retention,
+      requireAgeMode: true,
+    });
+    const nextStatus = missingItems.length === 0 ? "published" : "draft";
+    const publishedAt = nextStatus === "published" ? new Date() : null;
+
+    await getDb().transaction(async (tx) => {
+      await tx
+        .update(workspacePrivacyProfiles)
+        .set({
+          settings,
+          status: nextStatus,
+          publishedAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(workspacePrivacyProfiles.organizationId, organizationId));
+
+      await tx
+        .update(retentionPolicies)
+        .set({
+          settings: retention,
+          updatedAt: new Date(),
+        })
+        .where(eq(retentionPolicies.organizationId, organizationId));
+    });
+
+    const privacyState = await getWorkspacePrivacyState(organizationId);
+    const payload: WorkspacePrivacyState = {
+      settings: privacyState.profile.settings,
+      retention: privacyState.retention.settings,
+      missingItems: privacyState.missingItems,
+      runtimeEnabledProcessors: privacyState.runtimeEnabledProcessors,
+      runtimeProcessorViolations: privacyState.runtimeProcessorViolations,
+    };
+
+    await getDb().transaction(async (tx) => {
+      await recordRealtimeEvent(tx, {
+        scope: "workspace",
+        workspaceId: organizationId,
+        eventType: "workspace.settings_updated",
+        actorId: session.user.id,
+        payload: {
+          workspaceId: organizationId,
+          privacy: payload,
+        },
+      });
+    });
+
+    return { success: true, data: payload };
+  } catch (error) {
+    console.error("Error updating workspace privacy profile:", error);
+    return {
+      success: false,
+      error:
+        error instanceof z.ZodError
+          ? error.errors[0]?.message ?? "Invalid workspace privacy settings"
+          : error instanceof Error
+            ? error.message
+            : "Failed to update workspace privacy settings",
     };
   }
 }

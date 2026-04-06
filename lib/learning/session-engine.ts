@@ -1,9 +1,23 @@
-import { generateText, Output } from "ai";
+import { Output } from "ai";
 import { z } from "zod";
 
 import { analysisModel, defaultModel } from "@/lib/ai";
+import { generateObservedText } from "@/lib/ai/observed-text";
+import { recordAiStep } from "@/lib/ai/observability";
+import { normalizeAppLocale } from "@/lib/i18n/config";
 import type { LearningTeachingPlaybook } from "@/lib/learning/pattern-types";
-import { searchLearningTopicContext } from "@/lib/learning/rag";
+import {
+  TUTORING_ANALYSIS_SYSTEM_PROMPT,
+  TUTORING_DEFAULT_SYSTEM_PROMPT,
+  buildTutoringObservedOptions,
+  buildTutoringPromptCache,
+  renderLearningStateSnapshot,
+  renderRetrievedContext,
+  renderStudentProfileContext,
+  renderTeachingPlaybookSummary,
+  type TutoringPromptRuntimeContext,
+} from "@/lib/learning/prompting";
+import { findLearningEvidenceContext } from "@/lib/learning/evidence";
 import { generateSessionOpening } from "@/lib/learning/tutor";
 import {
   conceptConfidenceSchema,
@@ -21,7 +35,45 @@ import {
   type QuestionIntent,
   type StudentInterestProfile,
   type TeacherProgressReport,
+  type TopicSourceBoundary,
 } from "@/lib/learning/types";
+
+export type TutoringRuntimeContext = TutoringPromptRuntimeContext;
+
+function renderTutoringRuntimeContext(context?: TutoringRuntimeContext) {
+  if (!context) return "";
+
+  const studyLanguage =
+    typeof context.metadata?.studyLanguage === "string"
+      ? context.metadata.studyLanguage
+      : null;
+  const sourceContentLanguage =
+    typeof context.metadata?.sourceContentLanguage === "string"
+      ? context.metadata.sourceContentLanguage
+      : null;
+  const sections = [
+    studyLanguage
+      ? `Language policy:\n- Write every student-facing response in ${studyLanguage}.\n- If the student writes in a different supported language, adapt to that language for the reply while staying grounded in the same source material.`
+      : null,
+    sourceContentLanguage
+      ? `Grounding language:\n- Teacher-approved source material is anchored in ${sourceContentLanguage}.\n- Use it for facts even when the student-facing reply is in another supported language.`
+      : null,
+    context.expertGuidance
+      ? `Expert guidance:\n${context.expertGuidance}`
+      : null,
+    context.socialGuidance
+      ? `Social tutoring guidance:\n${context.socialGuidance}`
+      : null,
+    context.memoryContext
+      ? `Personalization memory:\n${context.memoryContext}`
+      : null,
+    context.userOverlay
+      ? `User add-ons:\n${context.userOverlay}`
+      : null,
+  ].filter(Boolean);
+
+  return sections.length > 0 ? `${sections.join("\n\n")}\n\n` : "";
+}
 
 const probeEvaluationSchema = z.object({
   strength: z.enum(["strong", "partial", "weak"]),
@@ -92,9 +144,11 @@ type TopicAccess = {
     title: string;
     description: string | null;
     subject: string | null;
+    contentLocale: string;
     learningOutcomes: LearningOutcomeDefinition[];
-    sourceBoundary?: Record<string, unknown> | null;
+    sourceBoundary?: TopicSourceBoundary | null;
     classroom: {
+      organizationId: string;
       gradeBand: string;
     };
   };
@@ -353,6 +407,7 @@ async function classifyQuestionIntent(params: {
   message: string;
   topicTitle: string;
   currentPhase: LearningSessionPhase;
+  runtimeContext?: TutoringRuntimeContext;
 }) {
   const trimmed = params.message.trim();
   const looksLikeQuestion =
@@ -368,8 +423,10 @@ async function classifyQuestionIntent(params: {
     };
   }
 
-  const { output } = await generateText({
+  const { output } = await generateObservedText({
     model: analysisModel,
+    system: TUTORING_ANALYSIS_SYSTEM_PROMPT,
+    promptCache: buildTutoringPromptCache("intent-classification", "analysis"),
     output: Output.object({
       schema: questionIntentEnvelopeSchema,
     }),
@@ -379,25 +436,52 @@ Topic: ${params.topicTitle}
 Current phase: ${params.currentPhase.type}
 Student message: ${params.message}
 
-Rules:
+${renderTutoringRuntimeContext(params.runtimeContext)}Rules:
 - clarification = they did not understand something just explained
 - curiosity = they are extending the topic in a relevant way
 - off_topic = unrelated to the session topic
 - phase_response = they are mainly answering the active phase prompt`,
-  });
+  }, buildTutoringObservedOptions(params.runtimeContext, "intent_classification", {
+    topicTitle: params.topicTitle,
+    phaseType: params.currentPhase.type,
+  }));
 
   return output;
 }
 
 async function retrieveContext(params: {
+  organizationId: string;
   topicId: string;
   query: string;
+  language?: string | null;
+  aiRunId?: string;
 }) {
-  const matches = await searchLearningTopicContext({
+  const matches = await findLearningEvidenceContext({
+    organizationId: params.organizationId,
     topicId: params.topicId,
     query: params.query,
+    language: normalizeAppLocale(params.language ?? "en"),
     limit: 6,
   });
+
+  if (params.aiRunId) {
+    await recordAiStep({
+      runId: params.aiRunId,
+      stepKey: `rag-${slugify(params.query)}`,
+      stepType: "rag_retrieval",
+      payload: {
+        topicId: params.topicId,
+        query: params.query,
+        matchCount: matches.length,
+        sources: matches.slice(0, 4).map((item) => ({
+          sourceId: item.sourceId,
+          sourceType: item.sourceType,
+          score: item.score,
+        })),
+      },
+      outputSummary: `${matches.length} learning material chunks retrieved`,
+    }).catch(() => undefined);
+  }
 
   return matches.map((item) => item.content).slice(0, 4);
 }
@@ -408,24 +492,32 @@ async function generateOpeningProbe(params: {
   studentProfile: StudentInterestProfile;
   teachingPlaybook?: LearningTeachingPlaybook | null;
   gradeBand: GradeBand;
+  runtimeContext?: TutoringRuntimeContext;
 }) {
-  const { text } = await generateText({
+  const { text } = await generateObservedText({
     model: defaultModel,
+    system: TUTORING_DEFAULT_SYSTEM_PROMPT,
+    promptCache: buildTutoringPromptCache("opening-probe", "default"),
     prompt: `Write one low-stakes conversational probe question for the start of a tutoring session.
 
 Topic: ${params.topicTitle}
 Today's concept: ${params.conceptTitle}
-Student profile: ${JSON.stringify(params.studentProfile)}
-Teaching playbook: ${JSON.stringify(params.teachingPlaybook ?? null)}
+Student profile:
+${renderStudentProfileContext(params.studentProfile)}
+Teaching playbook:
+${renderTeachingPlaybookSummary(params.teachingPlaybook)}
 Grade band: ${params.gradeBand}
 
-Rules:
+${renderTutoringRuntimeContext(params.runtimeContext)}Rules:
 - sound casual, not like a test
 - ask what the student thinks right now
 - let the playbook influence tone and framing when confidence is meaningful
 - one short paragraph only
 - no answer or explanation, just the question`,
-  });
+  }, buildTutoringObservedOptions(params.runtimeContext, "opening_probe", {
+    topicTitle: params.topicTitle,
+    conceptTitle: params.conceptTitle,
+  }));
 
   return text.trim();
 }
@@ -435,23 +527,30 @@ async function generateConnectingQuestion(params: {
   studentProfile: StudentInterestProfile;
   teachingPlaybook?: LearningTeachingPlaybook | null;
   gradeBand: GradeBand;
+  runtimeContext?: TutoringRuntimeContext;
 }) {
-  const { text } = await generateText({
+  const { text } = await generateObservedText({
     model: defaultModel,
+    system: TUTORING_DEFAULT_SYSTEM_PROMPT,
+    promptCache: buildTutoringPromptCache("connecting-question", "default"),
     prompt: `Write one conversational question that connects the concept to the student's interests.
 
 Concept: ${params.conceptTitle}
-Student profile: ${JSON.stringify(params.studentProfile)}
-Teaching playbook: ${JSON.stringify(params.teachingPlaybook ?? null)}
+Student profile:
+${renderStudentProfileContext(params.studentProfile)}
+Teaching playbook:
+${renderTeachingPlaybookSummary(params.teachingPlaybook)}
 Grade band: ${params.gradeBand}
 
-Rules:
+${renderTutoringRuntimeContext(params.runtimeContext)}Rules:
 - make it specific to the student's world
 - use the strongest interest domains from the playbook when confidence is high
 - this is not a test question
 - it should naturally make the student curious about the concept
 - one short paragraph only`,
-  });
+  }, buildTutoringObservedOptions(params.runtimeContext, "connecting_question", {
+    conceptTitle: params.conceptTitle,
+  }));
 
   return text.trim();
 }
@@ -465,35 +564,43 @@ async function generateInterruptionReply(params: {
   studentProfile: StudentInterestProfile;
   teachingPlaybook?: LearningTeachingPlaybook | null;
   retrievedContext: string[];
+  runtimeContext?: TutoringRuntimeContext;
 }) {
   if (params.intent !== "off_topic" && params.retrievedContext.length === 0) {
     return `I want to keep this grounded in the material your teacher gave me, and I don't have enough teacher-approved context to answer that safely yet. Let's stay with ${params.conceptTitle} for now, and I'll make sure this gap is visible on the teacher side.`;
   }
 
-  const { text } = await generateText({
+  const { text } = await generateObservedText({
     model: defaultModel,
+    system: TUTORING_DEFAULT_SYSTEM_PROMPT,
+    promptCache: buildTutoringPromptCache("interruption-reply", "default"),
     prompt: `You are responding to a student interruption during a structured tutoring session.
 
 Intent: ${params.intent}
 Topic: ${params.topicTitle}
 Current concept: ${params.conceptTitle}
 Grade band: ${params.gradeBand}
-Student profile: ${JSON.stringify(params.studentProfile)}
-Teaching playbook: ${JSON.stringify(params.teachingPlaybook ?? null)}
+Student profile:
+${renderStudentProfileContext(params.studentProfile)}
+Teaching playbook:
+${renderTeachingPlaybookSummary(params.teachingPlaybook)}
 Retrieved teacher-approved context:
-${params.retrievedContext.join("\n\n---\n\n") || "none"}
+${renderRetrievedContext(params.retrievedContext)}
 
 Student message:
 ${params.message}
 
-Rules:
+${renderTutoringRuntimeContext(params.runtimeContext)}Rules:
 - clarification: answer with a different explanation angle and then invite a one-sentence check-back
 - curiosity: answer warmly, stay topic-adjacent, then return to the session
 - off_topic: redirect warmly and briefly back to the lesson
 - keep factual claims grounded in the retrieved context
 - use the playbook to choose explanation style and encouragement tone when confidence is meaningful
 - if the material does not support the answer, say so clearly`,
-  });
+  }, buildTutoringObservedOptions(params.runtimeContext, "interruption_reply", {
+    intent: params.intent,
+    conceptTitle: params.conceptTitle,
+  }));
 
   return text.trim();
 }
@@ -506,6 +613,7 @@ async function generateConceptIntro(params: {
   teachingPlaybook?: LearningTeachingPlaybook | null;
   gradeBand: GradeBand;
   retrievedContext: string[];
+  runtimeContext?: TutoringRuntimeContext;
 }) {
   if (params.retrievedContext.length === 0) {
     return {
@@ -520,8 +628,10 @@ async function generateConceptIntro(params: {
     };
   }
 
-  const { output } = await generateText({
+  const { output } = await generateObservedText({
     model: defaultModel,
+    system: TUTORING_DEFAULT_SYSTEM_PROMPT,
+    promptCache: buildTutoringPromptCache("concept-intro", "default"),
     output: Output.object({
       schema: conceptIntroSchema,
     }),
@@ -531,13 +641,15 @@ Topic: ${params.topicTitle}
 Concept: ${params.conceptTitle}
 Relevant learning outcomes:
 ${params.learningOutcomes.map((outcome) => `- ${outcome.title}: ${outcome.description}`).join("\n")}
-Student profile: ${JSON.stringify(params.studentProfile)}
-Teaching playbook: ${JSON.stringify(params.teachingPlaybook ?? null)}
+Student profile:
+${renderStudentProfileContext(params.studentProfile)}
+Teaching playbook:
+${renderTeachingPlaybookSummary(params.teachingPlaybook)}
 Grade band: ${params.gradeBand}
 Retrieved teacher-approved context:
-${params.retrievedContext.join("\n\n---\n\n") || "none"}
+${renderRetrievedContext(params.retrievedContext)}
 
-Rules:
+${renderTutoringRuntimeContext(params.runtimeContext)}Rules:
 - plain language first
 - personalized analogy second
 - technical vocabulary only after the idea is clear
@@ -547,7 +659,11 @@ Rules:
 - avoid repeating usedExampleReferences from the playbook
 - all factual claims must come from the retrieved context
 - if the context is too weak, be honest and keep the explanation narrow`,
-  });
+  }, buildTutoringObservedOptions(params.runtimeContext, "concept_intro", {
+    topicTitle: params.topicTitle,
+    conceptTitle: params.conceptTitle,
+    outcomeCount: params.learningOutcomes.length,
+  }));
 
   return output;
 }
@@ -556,9 +672,12 @@ async function evaluateOpeningProbe(params: {
   topicTitle: string;
   conceptTitle: string;
   studentMessage: string;
+  runtimeContext?: TutoringRuntimeContext;
 }) {
-  const { output } = await generateText({
+  const { output } = await generateObservedText({
     model: analysisModel,
+    system: TUTORING_ANALYSIS_SYSTEM_PROMPT,
+    promptCache: buildTutoringPromptCache("opening-probe-eval", "analysis"),
     output: Output.object({
       schema: probeEvaluationSchema,
     }),
@@ -572,7 +691,10 @@ Return:
 - strength = strong, partial, or weak
 - feedback = warm response to the student
 - gap = the missing idea if any`,
-  });
+  }, buildTutoringObservedOptions(params.runtimeContext, "opening_probe_evaluation", {
+    topicTitle: params.topicTitle,
+    conceptTitle: params.conceptTitle,
+  }));
 
   return output;
 }
@@ -582,9 +704,12 @@ async function evaluateHomeworkResponse(params: {
   previousSummary: string;
   homework: string[];
   studentMessage: string;
+  runtimeContext?: TutoringRuntimeContext;
 }) {
-  const { output } = await generateText({
+  const { output } = await generateObservedText({
     model: analysisModel,
+    system: TUTORING_ANALYSIS_SYSTEM_PROMPT,
+    promptCache: buildTutoringPromptCache("continuity-check-eval", "analysis"),
     output: Output.object({
       schema: continuityEvaluationSchema,
     }),
@@ -601,7 +726,10 @@ Return:
 - homeworkStatus using the provided enum
 - feedback to send directly to the student
 - gap if the response shows unresolved confusion`,
-  });
+  }, buildTutoringObservedOptions(params.runtimeContext, "continuity_evaluation", {
+    topicTitle: params.topicTitle,
+    homeworkCount: params.homework.length,
+  }));
 
   return output;
 }
@@ -614,9 +742,12 @@ async function evaluateConceptComprehension(params: {
   teachingPlaybook?: LearningTeachingPlaybook | null;
   gradeBand: GradeBand;
   retrievedContext: string[];
+  runtimeContext?: TutoringRuntimeContext;
 }) {
-  const { output } = await generateText({
+  const { output } = await generateObservedText({
     model: analysisModel,
+    system: TUTORING_ANALYSIS_SYSTEM_PROMPT,
+    promptCache: buildTutoringPromptCache("concept-comprehension-eval", "analysis"),
     output: Output.object({
       schema: conceptComprehensionSchema,
     }),
@@ -624,11 +755,13 @@ async function evaluateConceptComprehension(params: {
 
 Topic: ${params.topicTitle}
 Concept: ${params.conceptTitle}
-Student profile: ${JSON.stringify(params.studentProfile)}
-Teaching playbook: ${JSON.stringify(params.teachingPlaybook ?? null)}
+Student profile:
+${renderStudentProfileContext(params.studentProfile)}
+Teaching playbook:
+${renderTeachingPlaybookSummary(params.teachingPlaybook)}
 Grade band: ${params.gradeBand}
 Retrieved teacher-approved context:
-${params.retrievedContext.join("\n\n---\n\n") || "none"}
+${renderRetrievedContext(params.retrievedContext)}
 Student answer:
 ${params.studentMessage}
 
@@ -638,7 +771,10 @@ Rules:
 - nextQuestion should be a comprehension check when not passed, or a deepening question when passed
 - use the playbook to choose the next explanation route when confidence is meaningful
 - keep all factual claims inside the retrieved context`,
-  });
+  }, buildTutoringObservedOptions(params.runtimeContext, "concept_comprehension_evaluation", {
+    topicTitle: params.topicTitle,
+    conceptTitle: params.conceptTitle,
+  }));
 
   return output;
 }
@@ -648,9 +784,12 @@ async function evaluateDeepening(params: {
   conceptTitle: string;
   nextConceptTitle: string | null;
   studentMessage: string;
+  runtimeContext?: TutoringRuntimeContext;
 }) {
-  const { output } = await generateText({
+  const { output } = await generateObservedText({
     model: analysisModel,
+    system: TUTORING_ANALYSIS_SYSTEM_PROMPT,
+    promptCache: buildTutoringPromptCache("deepening-eval", "analysis"),
     output: Output.object({
       schema: deepeningEvaluationSchema,
     }),
@@ -666,7 +805,11 @@ Rules:
 - readyToAdvance can be true even if the answer is not perfect, as long as the student is ready to move on
 - feedback should affirm what they managed and gently clean up anything important
 - bridge should link naturally to the next concept, or to the quiz if there is no next concept`,
-  });
+  }, buildTutoringObservedOptions(params.runtimeContext, "deepening_evaluation", {
+    topicTitle: params.topicTitle,
+    conceptTitle: params.conceptTitle,
+    nextConceptTitle: params.nextConceptTitle,
+  }));
 
   return output;
 }
@@ -679,9 +822,12 @@ async function generateQuizQuestion(params: {
   gradeBand: GradeBand;
   difficulty: "easy" | "medium" | "hard";
   retrievedContext: string[];
+  runtimeContext?: TutoringRuntimeContext;
 }) {
-  const { output } = await generateText({
+  const { output } = await generateObservedText({
     model: defaultModel,
+    system: TUTORING_DEFAULT_SYSTEM_PROMPT,
+    promptCache: buildTutoringPromptCache("quiz-question", "default"),
     output: Output.object({
       schema: quizQuestionSchema,
     }),
@@ -689,21 +835,27 @@ async function generateQuizQuestion(params: {
 
 Topic: ${params.topicTitle}
 Concept: ${params.conceptTitle}
-Student profile: ${JSON.stringify(params.studentProfile)}
-Teaching playbook: ${JSON.stringify(params.teachingPlaybook ?? null)}
+Student profile:
+${renderStudentProfileContext(params.studentProfile)}
+Teaching playbook:
+${renderTeachingPlaybookSummary(params.teachingPlaybook)}
 Grade band: ${params.gradeBand}
 Difficulty: ${params.difficulty}
 Retrieved teacher-approved context:
-${params.retrievedContext.join("\n\n---\n\n") || "none"}
+${renderRetrievedContext(params.retrievedContext)}
 
-Rules:
+${renderTutoringRuntimeContext(params.runtimeContext)}Rules:
 - personalize the framing to the student's interests where possible
 - prefer high-resonance domains from the playbook and avoid reusing old example references
 - require reasoning, not simple recall
 - expectedAnswer should be concise
 - explanation should explain the answer clearly
 - the question must stay within the retrieved context`,
-  });
+  }, buildTutoringObservedOptions(params.runtimeContext, "quiz_question_generation", {
+    topicTitle: params.topicTitle,
+    conceptTitle: params.conceptTitle,
+    difficulty: params.difficulty,
+  }));
 
   return output;
 }
@@ -716,9 +868,12 @@ async function evaluateQuizAnswer(params: {
   explanation: string;
   difficulty: "easy" | "medium" | "hard";
   studentAnswer: string;
+  runtimeContext?: TutoringRuntimeContext;
 }) {
-  const { output } = await generateText({
+  const { output } = await generateObservedText({
     model: analysisModel,
+    system: TUTORING_ANALYSIS_SYSTEM_PROMPT,
+    promptCache: buildTutoringPromptCache("quiz-answer-eval", "analysis"),
     output: Output.object({
       schema: quizEvaluationSchema,
     }),
@@ -737,7 +892,11 @@ Return:
 - score
 - explanation to say to the student
 - nextDifficulty based on adaptive progression`,
-  });
+  }, buildTutoringObservedOptions(params.runtimeContext, "quiz_answer_evaluation", {
+    topicTitle: params.topicTitle,
+    conceptTitle: params.conceptTitle,
+    difficulty: params.difficulty,
+  }));
 
   return output;
 }
@@ -747,26 +906,36 @@ async function generateSessionClose(params: {
   state: LearningSessionState;
   studentProfile: StudentInterestProfile;
   teachingPlaybook?: LearningTeachingPlaybook | null;
+  runtimeContext?: TutoringRuntimeContext;
 }) {
-  const { output } = await generateText({
+  const { output } = await generateObservedText({
     model: defaultModel,
+    system: TUTORING_DEFAULT_SYSTEM_PROMPT,
+    promptCache: buildTutoringPromptCache("session-close", "default"),
     output: Output.object({
       schema: sessionCloseSchema,
     }),
     prompt: `Write the close of a tutoring session.
 
 Topic: ${params.topicTitle}
-Session state: ${JSON.stringify(params.state)}
-Student profile: ${JSON.stringify(params.studentProfile)}
-Teaching playbook: ${JSON.stringify(params.teachingPlaybook ?? null)}
+Session snapshot:
+${renderLearningStateSnapshot(params.state)}
+Student profile:
+${renderStudentProfileContext(params.studentProfile)}
+Teaching playbook:
+${renderTeachingPlaybookSummary(params.teachingPlaybook)}
 
-Rules:
+${renderTutoringRuntimeContext(params.runtimeContext)}Rules:
 - affirmation must be specific to demonstrated understanding
 - honestGap must be non-judgmental and precise
 - homework must target the remaining gap and be low-pressure
 - let the playbook influence encouragement style without sounding formulaic
 - summary should briefly describe the session outcome for internal storage`,
-  });
+  }, buildTutoringObservedOptions(params.runtimeContext, "session_close_generation", {
+    topicTitle: params.topicTitle,
+    conceptCount: params.state.conceptsToCover.length,
+    gapCount: params.state.gapsIdentified.length,
+  }));
 
   return output;
 }
@@ -781,6 +950,7 @@ function parseConfidenceScore(message: string) {
 async function autoAdvanceUntilPause(params: {
   state: LearningSessionState;
   access: TopicAccess;
+  runtimeContext?: TutoringRuntimeContext;
 }) {
   const state = learningSessionStateSchema.parse(params.state);
   const replies: string[] = [];
@@ -823,6 +993,8 @@ async function autoAdvanceUntilPause(params: {
         studentProfile: params.access.classroomStudent.interestProfile!.profile,
         teachingPlaybook: state.teachingPlaybook,
         learningOutcomes: params.access.topic.learningOutcomes,
+        boundary: params.access.topic.sourceBoundary ?? null,
+        runtimeContext: params.runtimeContext,
       });
       state.openingHook = opening.opening;
       state.usedExampleLog = uniqueStrings([
@@ -845,6 +1017,7 @@ async function autoAdvanceUntilPause(params: {
         studentProfile: params.access.classroomStudent.interestProfile!.profile,
         teachingPlaybook: state.teachingPlaybook,
         gradeBand: params.access.topic.classroom.gradeBand as GradeBand,
+        runtimeContext: params.runtimeContext,
       });
       state.openingProbe = probe;
       replies.push(probe);
@@ -860,6 +1033,7 @@ async function autoAdvanceUntilPause(params: {
         studentProfile: params.access.classroomStudent.interestProfile!.profile,
         teachingPlaybook: state.teachingPlaybook,
         gradeBand: params.access.topic.classroom.gradeBand as GradeBand,
+        runtimeContext: params.runtimeContext,
       });
       state.connectingQuestion = connectingQuestion;
       replies.push(connectingQuestion);
@@ -882,8 +1056,11 @@ async function autoAdvanceUntilPause(params: {
 
       if (conceptState.currentStep === "intro") {
         const retrievedContext = await retrieveContext({
+          organizationId: params.access.topic.classroom.organizationId,
           topicId: params.access.topic.id,
           query: `${params.access.topic.title} ${conceptTitle}`,
+          language: params.access.topic.contentLocale,
+          aiRunId: params.runtimeContext?.aiRunId,
         });
 
         const intro = await generateConceptIntro({
@@ -898,6 +1075,7 @@ async function autoAdvanceUntilPause(params: {
           teachingPlaybook: state.teachingPlaybook,
           gradeBand: params.access.topic.classroom.gradeBand as GradeBand,
           retrievedContext,
+          runtimeContext: params.runtimeContext,
         });
 
         conceptState.explanationAttempts += 1;
@@ -941,8 +1119,11 @@ async function autoAdvanceUntilPause(params: {
               : "easy";
 
       const retrievedContext = await retrieveContext({
+        organizationId: params.access.topic.classroom.organizationId,
         topicId: params.access.topic.id,
         query: `${params.access.topic.title} ${nextConcept?.title ?? ""}`,
+        language: params.access.topic.contentLocale,
+        aiRunId: params.runtimeContext?.aiRunId,
       });
 
       const question = await generateQuizQuestion({
@@ -953,6 +1134,7 @@ async function autoAdvanceUntilPause(params: {
         gradeBand: params.access.topic.classroom.gradeBand as GradeBand,
         difficulty: desiredDifficulty,
         retrievedContext,
+        runtimeContext: params.runtimeContext,
       });
 
       const item = learningQuizItemSchema.parse({
@@ -1000,11 +1182,12 @@ async function autoAdvanceUntilPause(params: {
         state,
         studentProfile: params.access.classroomStudent.interestProfile!.profile,
         teachingPlaybook: state.teachingPlaybook,
+        runtimeContext: params.runtimeContext,
       });
       state.personalizedHomework = close.homework;
       state.reportReady = true;
       replies.push(
-        `${close.affirmation}\n\n${close.honestGap}\n\nBefore next time, think through these:\n${close.homework.map((item, index) => `${index + 1}. ${item}`).join("\n")}`,
+        `${close.affirmation}\n\n${close.honestGap}\n\nBefore next time, think through these:\n${close.homework.map((item: string, index: number) => `${index + 1}. ${item}`).join("\n")}`,
       );
       markPhaseStatus(state, phase.id, "completed");
       break;
@@ -1021,6 +1204,7 @@ export async function runTutoringSessionTurn(params: {
   state: LearningSessionState;
   access: TopicAccess;
   userMessage?: string;
+  runtimeContext?: TutoringRuntimeContext;
 }) {
   const state = learningSessionStateSchema.parse(params.state);
   const currentPhase = getCurrentPhase(state);
@@ -1029,6 +1213,7 @@ export async function runTutoringSessionTurn(params: {
     const auto = await autoAdvanceUntilPause({
       state,
       access: params.access,
+      runtimeContext: params.runtimeContext,
     });
 
     return {
@@ -1052,6 +1237,7 @@ export async function runTutoringSessionTurn(params: {
     message: params.userMessage,
     topicTitle: params.access.topic.title,
     currentPhase,
+    runtimeContext: params.runtimeContext,
   });
 
   if (intentEnvelope.intent !== "phase_response") {
@@ -1060,8 +1246,11 @@ export async function runTutoringSessionTurn(params: {
         ? conceptDisplayName(state, currentPhase.conceptKey)
         : state.conceptsToCover[0]?.title ?? params.access.topic.title;
     const retrievedContext = await retrieveContext({
+      organizationId: params.access.topic.classroom.organizationId,
       topicId: params.access.topic.id,
       query: `${params.access.topic.title} ${activeConceptTitle} ${params.userMessage}`,
+      language: params.access.topic.contentLocale,
+      aiRunId: params.runtimeContext?.aiRunId,
     });
 
     const response = await generateInterruptionReply({
@@ -1073,6 +1262,7 @@ export async function runTutoringSessionTurn(params: {
       studentProfile: params.access.classroomStudent.interestProfile!.profile,
       teachingPlaybook: state.teachingPlaybook,
       retrievedContext,
+      runtimeContext: params.runtimeContext,
     });
 
     return {
@@ -1091,6 +1281,7 @@ export async function runTutoringSessionTurn(params: {
       previousSummary: state.previousSessionSummary,
       homework: state.homeworkFromPreviousSession,
       studentMessage: params.userMessage,
+      runtimeContext: params.runtimeContext,
     });
 
     state.homeworkStatus = evaluation.homeworkStatus;
@@ -1105,6 +1296,7 @@ export async function runTutoringSessionTurn(params: {
       topicTitle: params.access.topic.title,
       conceptTitle: state.conceptsToCover[0]?.title ?? params.access.topic.title,
       studentMessage: params.userMessage,
+      runtimeContext: params.runtimeContext,
     });
     state.openingProbeAssessment = evaluation.strength;
     if (evaluation.gap) {
@@ -1126,8 +1318,11 @@ export async function runTutoringSessionTurn(params: {
       const conceptState = ensureConceptState(state, conceptKey);
       const conceptTitle = conceptDisplayName(state, conceptKey);
       const retrievedContext = await retrieveContext({
+        organizationId: params.access.topic.classroom.organizationId,
         topicId: params.access.topic.id,
         query: `${params.access.topic.title} ${conceptTitle} ${params.userMessage}`,
+        language: params.access.topic.contentLocale,
+        aiRunId: params.runtimeContext?.aiRunId,
       });
 
       if (conceptState.currentStep === "awaiting_comprehension") {
@@ -1139,6 +1334,7 @@ export async function runTutoringSessionTurn(params: {
           teachingPlaybook: state.teachingPlaybook,
           gradeBand: params.access.topic.classroom.gradeBand as GradeBand,
           retrievedContext,
+          runtimeContext: params.runtimeContext,
         });
 
         conceptState.masteryScore = evaluation.score;
@@ -1177,6 +1373,7 @@ export async function runTutoringSessionTurn(params: {
           conceptTitle,
           nextConceptTitle: nextConcept?.title ?? null,
           studentMessage: params.userMessage,
+          runtimeContext: params.runtimeContext,
         });
 
         conceptState.deepeningDone = true;
@@ -1196,6 +1393,7 @@ export async function runTutoringSessionTurn(params: {
       const auto = await autoAdvanceUntilPause({
         state,
         access: params.access,
+        runtimeContext: params.runtimeContext,
       });
 
       return {
@@ -1217,6 +1415,7 @@ export async function runTutoringSessionTurn(params: {
       explanation: currentQuestion.explanation,
       difficulty: currentQuestion.difficulty,
       studentAnswer: params.userMessage,
+      runtimeContext: params.runtimeContext,
     });
 
     currentQuestion.studentAnswer = params.userMessage;
@@ -1256,6 +1455,7 @@ export async function runTutoringSessionTurn(params: {
   const auto = await autoAdvanceUntilPause({
     state,
     access: params.access,
+    runtimeContext: params.runtimeContext,
   });
 
   return {

@@ -61,7 +61,6 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
                 setError(result.error);
             }
         } catch (error) {
-            console.error("Failed to create workspace:", error);
             setError(t("Error"));
         } finally {
             setIsCreating(false);
@@ -163,3 +162,4 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
         document.body
     );
 }
+

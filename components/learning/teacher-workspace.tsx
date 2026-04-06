@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ClipboardList,
   ArrowUpRight,
   BookOpen,
   CheckCircle2,
@@ -24,22 +25,28 @@ import { SectionHeading } from "@/components/learning/section-heading";
 import { Link, useRouter } from "@/i18n/routing";
 import {
   createClassroom,
+  createLearningIntervention,
   createTopic,
+  fetchClassroomAssignedSurveys,
   fetchClassroomCollaborators,
   fetchClassroomAccessRequests,
   fetchClassroomStudents,
   fetchClassroomTopics,
-  revokeClassroomCollaborator,
+  fetchLearningInterventions,
   fetchStudentPatterns,
   fetchTeacherClassrooms,
   fetchTopicMaterials,
   fetchTopicQuestions,
   fetchTopicReadiness,
   fetchTopicReports,
+  grantClassroomCollaborator,
   inviteStudent,
+  inviteStudentsBulk,
   requestClassroomAccess,
+  revokeClassroomCollaborator,
   respondToClassroomAccessRequest,
   updateTopicStatus,
+  updateLearningIntervention,
   uploadTopicMaterial,
 } from "@/lib/api/learning";
 import { createSurveyDraft } from "@/lib/api/surveys";
@@ -81,6 +88,66 @@ function accessMeta(level: "owner" | "collaborator" | "none") {
   return { label: "Locked", tone: "border-slate-200 bg-slate-100 text-slate-600" };
 }
 
+type InterventionType =
+  | "reteach"
+  | "check_in"
+  | "practice"
+  | "family_follow_up";
+
+type InterventionPriority = "low" | "medium" | "high";
+
+function isInterventionType(value: string): value is InterventionType {
+  return (
+    value === "reteach" ||
+    value === "check_in" ||
+    value === "practice" ||
+    value === "family_follow_up"
+  );
+}
+
+function isInterventionPriority(value: string): value is InterventionPriority {
+  return value === "low" || value === "medium" || value === "high";
+}
+
+function parseBulkInviteInput(raw: string) {
+  const students = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => {
+      const [fullNamePart, emailPart] = line.split(",").map((part) => part.trim());
+
+      if (!fullNamePart || !emailPart) {
+        throw new Error(`Line ${index + 1} must use "Full Name, email@example.com".`);
+      }
+
+      return {
+        fullName: fullNamePart,
+        email: emailPart,
+      };
+    });
+
+  if (!students.length) {
+    throw new Error("Add at least one student to import.");
+  }
+
+  return students;
+}
+
+function formatInterventionTypeLabel(value: string) {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatInterventionStatusLabel(value: string) {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export function TeacherWorkspace() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -95,11 +162,26 @@ export function TeacherWorkspace() {
     departmentId: "",
   });
   const [inviteForm, setInviteForm] = useState({ fullName: "", email: "" });
+  const [bulkInviteInput, setBulkInviteInput] = useState("");
+  const [collaboratorInviteEmail, setCollaboratorInviteEmail] = useState("");
   const [topicForm, setTopicForm] = useState({ title: "", description: "", subjectLabel: "", outcomes: "" });
   const [materialTitle, setMaterialTitle] = useState("");
   const [materialDescription, setMaterialDescription] = useState("");
   const [materialFile, setMaterialFile] = useState<File | null>(null);
   const [accessRequestMessage, setAccessRequestMessage] = useState("");
+  const [interventionForm, setInterventionForm] = useState<{
+    title: string;
+    notes: string;
+    interventionType: InterventionType;
+    priority: InterventionPriority;
+    dueAt: string;
+  }>({
+    title: "",
+    notes: "",
+    interventionType: "reteach",
+    priority: "medium",
+    dueAt: "",
+  });
 
   const activeWorkspaceQuery = useQuery({
     queryKey: queryKeys.workspaces.active,
@@ -244,6 +326,39 @@ export function TeacherWorkspace() {
     },
     enabled: classroomAccessLevel === "owner",
   });
+  const assignedSurveysQuery = useQuery({
+    queryKey: selectedAccessibleClassroomId
+      ? queryKeys.learning.assignedSurveys(selectedAccessibleClassroomId)
+      : ["learningAssignedSurveys", "idle"],
+    queryFn: async () => {
+      if (!selectedAccessibleClassroomId) {
+        throw new Error("Missing classroom");
+      }
+      return fetchClassroomAssignedSurveys(selectedAccessibleClassroomId);
+    },
+    enabled: Boolean(selectedAccessibleClassroomId),
+  });
+  const interventionsQuery = useQuery({
+    queryKey:
+      selectedAccessibleClassroomId && selectedStudent
+        ? queryKeys.learning.interventions(
+            selectedAccessibleClassroomId,
+            selectedStudent.id,
+            selectedTopic?.id ?? null,
+          )
+        : ["learningInterventions", "idle"],
+    queryFn: async () => {
+      if (!selectedAccessibleClassroomId || !selectedStudent) {
+        throw new Error("Missing intervention context");
+      }
+      return fetchLearningInterventions({
+        classroomId: selectedAccessibleClassroomId,
+        classroomStudentId: selectedStudent.id,
+        topicId: selectedTopic?.id,
+      });
+    },
+    enabled: Boolean(selectedAccessibleClassroomId && selectedStudent),
+  });
 
   const createClassroomMutation = useMutation({
     mutationFn: createClassroom,
@@ -264,6 +379,37 @@ export function TeacherWorkspace() {
       }
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to invite student"),
+  });
+  const bulkInviteStudentsMutation = useMutation({
+    mutationFn: inviteStudentsBulk,
+    onSuccess: async (data, variables) => {
+      setBulkInviteInput("");
+      const invitedCount = data.data.invited.length;
+      const failedCount = data.data.failed.length;
+
+      if (invitedCount > 0 && failedCount === 0) {
+        toast.success(`${invitedCount} students invited`);
+      } else if (invitedCount > 0) {
+        toast.success(
+          `${invitedCount} students invited, ${failedCount} need attention`,
+        );
+      } else {
+        toast.error("No students were imported");
+      }
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.learning.students(variables.classroomId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.learning.assignedSurveys(variables.classroomId),
+        }),
+      ]);
+    },
+    onError: (error) =>
+      toast.error(
+        error instanceof Error ? error.message : "Failed to import classroom roster",
+      ),
   });
   const createTopicMutation = useMutation({
     mutationFn: createTopic,
@@ -357,13 +503,87 @@ export function TeacherWorkspace() {
         error instanceof Error ? error.message : "Failed to remove collaborator",
       ),
   });
+  const grantCollaboratorMutation = useMutation({
+    mutationFn: grantClassroomCollaborator,
+    onSuccess: async (_, variables) => {
+      setCollaboratorInviteEmail("");
+      toast.success("Collaborator added");
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.learning.classroomCollaborators(variables.classroomId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.learning.classroomRequests(variables.classroomId),
+        }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.learning.classrooms }),
+      ]);
+    },
+    onError: (error) =>
+      toast.error(
+        error instanceof Error ? error.message : "Failed to grant collaborator access",
+      ),
+  });
+  const createInterventionMutation = useMutation({
+    mutationFn: createLearningIntervention,
+    onSuccess: async () => {
+      setInterventionForm({
+        title: "",
+        notes: "",
+        interventionType: "reteach",
+        priority: "medium",
+        dueAt: "",
+      });
+      toast.success("Intervention saved");
+      if (selectedAccessibleClassroomId && selectedStudent) {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.learning.interventions(
+            selectedAccessibleClassroomId,
+            selectedStudent.id,
+            selectedTopic?.id ?? null,
+          ),
+        });
+      }
+    },
+    onError: (error) =>
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create intervention",
+      ),
+  });
+  const updateInterventionMutation = useMutation({
+    mutationFn: updateLearningIntervention,
+    onSuccess: async () => {
+      toast.success("Intervention updated");
+      if (selectedAccessibleClassroomId && selectedStudent) {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.learning.interventions(
+            selectedAccessibleClassroomId,
+            selectedStudent.id,
+            selectedTopic?.id ?? null,
+          ),
+        });
+      }
+    },
+    onError: (error) =>
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update intervention",
+      ),
+  });
 
-  const reports = reportsQuery.data?.data ?? [];
+  const reportsPayload = reportsQuery.data?.data ?? null;
+  const reports = reportsPayload?.reports ?? [];
   const questions = questionsQuery.data?.data ?? [];
+  const assignedSurveys = assignedSurveysQuery.data?.data ?? [];
+  const interventions = interventionsQuery.data?.data ?? [];
   const selectedStudentReport =
     reports.find((report) => report.student.id === selectedStudent?.id) ?? null;
   const pendingAccessRequests = accessRequestsQuery.data?.data ?? [];
   const collaborators = collaboratorsQuery.data?.data ?? [];
+  const selectedStudentAssignedSurveyStates = assignedSurveys.map((survey) => ({
+    ...survey,
+    selectedStudentState:
+      survey.students.find((student) => student.classroomStudentId === selectedStudent?.id) ??
+      null,
+  }));
   const patternSummary = studentPatternsQuery.data?.data.profiles[0]?.studentSummary ?? null;
 
   if (activeWorkspaceQuery.isLoading) {
@@ -543,6 +763,45 @@ export function TeacherWorkspace() {
                     </div>
                   </div>
                 ) : null}
+                {classroomAccessLevel === "owner" ? (
+                  <div className="mt-6 rounded-[20px] border border-white/70 bg-white/75 p-5">
+                    <div className="text-sm font-semibold text-slate-950">
+                      Add collaborator directly
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      Grant classroom access to a teacher who already belongs to this workspace.
+                    </div>
+                    <form
+                      className="mt-4 flex flex-col gap-3 md:flex-row"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        grantCollaboratorMutation.mutate({
+                          classroomId: selectedDirectoryClassroom.id,
+                          email: collaboratorInviteEmail,
+                        });
+                      }}
+                    >
+                      <input
+                        value={collaboratorInviteEmail}
+                        onChange={(event) => setCollaboratorInviteEmail(event.target.value)}
+                        placeholder="teacher@school.org"
+                        className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300"
+                      />
+                      <button
+                        type="submit"
+                        disabled={grantCollaboratorMutation.isPending}
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900"
+                      >
+                        {grantCollaboratorMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <MailPlus className="h-4 w-4" />
+                        )}
+                        Add teacher
+                      </button>
+                    </form>
+                  </div>
+                ) : null}
                 {classroomAccessLevel === "owner" && collaborators.length ? (
                   <div className="mt-6 rounded-[20px] border border-white/70 bg-white/75 p-5">
                     <div className="text-sm font-semibold text-slate-950">Current collaborators</div>
@@ -594,14 +853,60 @@ export function TeacherWorkspace() {
                     <div className="rounded-[20px] border border-white/70 bg-white/70 p-5">
                       <div className="flex items-center gap-2 text-slate-950"><Users className="h-4 w-4 text-sky-700" /><h3 className="text-lg font-semibold tracking-tight">Students</h3></div>
                       {canManageStudents ? (
-                        <form className="mt-4 space-y-3" onSubmit={(event) => {
-                          event.preventDefault();
-                          inviteStudentMutation.mutate({ classroomId: selectedDirectoryClassroom.id, ...inviteForm });
-                        }}>
-                          <input value={inviteForm.fullName} onChange={(event) => setInviteForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="Student full name" className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300" />
-                          <input value={inviteForm.email} onChange={(event) => setInviteForm((current) => ({ ...current, email: event.target.value }))} placeholder="student@email.com" className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300" />
-                          <button type="submit" disabled={inviteStudentMutation.isPending} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900">{inviteStudentMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}Invite student</button>
-                        </form>
+                        <div className="mt-4 space-y-4">
+                          <form className="space-y-3" onSubmit={(event) => {
+                            event.preventDefault();
+                            inviteStudentMutation.mutate({ classroomId: selectedDirectoryClassroom.id, ...inviteForm });
+                          }}>
+                            <input value={inviteForm.fullName} onChange={(event) => setInviteForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="Student full name" className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300" />
+                            <input value={inviteForm.email} onChange={(event) => setInviteForm((current) => ({ ...current, email: event.target.value }))} placeholder="student@email.com" className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300" />
+                            <button type="submit" disabled={inviteStudentMutation.isPending} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900">{inviteStudentMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}Invite student</button>
+                          </form>
+                          <form
+                            className="space-y-3 rounded-[18px] border border-dashed border-slate-200 bg-white/70 p-4"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              try {
+                                bulkInviteStudentsMutation.mutate({
+                                  classroomId: selectedDirectoryClassroom.id,
+                                  students: parseBulkInviteInput(bulkInviteInput),
+                                });
+                              } catch (error) {
+                                toast.error(
+                                  error instanceof Error
+                                    ? error.message
+                                    : "Invalid roster import format",
+                                );
+                              }
+                            }}
+                          >
+                            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                              Bulk roster import
+                            </div>
+                            <textarea
+                              value={bulkInviteInput}
+                              onChange={(event) => setBulkInviteInput(event.target.value)}
+                              rows={5}
+                              placeholder={"Jane Doe, jane@school.org\nJohn Smith, john@school.org"}
+                              className="w-full resize-none rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300"
+                            />
+                            <div className="text-xs text-slate-500">
+                              One student per line using name and email.
+                            </div>
+                            <button
+                              type="submit"
+                              disabled={bulkInviteStudentsMutation.isPending}
+                              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900"
+                            >
+                              {bulkInviteStudentsMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <UploadCloud className="h-4 w-4" />
+                              )}
+                              Import roster
+                            </button>
+                          </form>
+                        </div>
                       ) : <div className="mt-4 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">Only the classroom owner can change the roster.</div>}
                       <div className="mt-4 space-y-3">
                         {students.length ? students.map((student) => (
@@ -609,6 +914,41 @@ export function TeacherWorkspace() {
                             <div className="flex items-center justify-between gap-3"><div><div className="text-sm font-semibold text-slate-950">{student.fullName}</div><div className="mt-1 text-xs text-slate-500">{student.email}</div></div><div className="text-right text-[11px] font-medium text-slate-500"><div>{student.inviteStatus}</div><div className="mt-1">{student.onboardingStatus}</div></div></div>
                           </button>
                         )) : <div className="rounded-[18px] border border-dashed border-slate-200 bg-white/60 px-4 py-5 text-sm text-slate-500">No students yet.</div>}
+                      </div>
+                    </div>
+                    <div className="rounded-[20px] border border-white/70 bg-white/70 p-5">
+                      <div className="flex items-center gap-2 text-slate-950"><ClipboardList className="h-4 w-4 text-indigo-700" /><h3 className="text-lg font-semibold tracking-tight">Assigned surveys</h3></div>
+                      <div className="mt-4 space-y-3">
+                        {assignedSurveysQuery.isLoading ? (
+                          <div className="flex items-center gap-2 text-sm text-slate-500">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Loading class survey progress...
+                          </div>
+                        ) : selectedStudentAssignedSurveyStates.length ? (
+                          selectedStudentAssignedSurveyStates.map((survey) => (
+                            <div key={survey.id} className="rounded-[18px] border border-white/70 bg-white/80 px-4 py-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="text-sm font-semibold text-slate-950">{survey.title}</div>
+                                  <div className="mt-1 text-xs text-slate-500">
+                                    {survey.completedCount}/{survey.assignedCount} completed - {survey.completionRate}% class completion
+                                  </div>
+                                </div>
+                                <div className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+                                  {survey.inProgressCount} in progress
+                                </div>
+                              </div>
+                              {survey.selectedStudentState ? (
+                                <div className="mt-3 text-xs text-slate-600">
+                                  {selectedStudent?.fullName ?? "Selected student"}: {survey.selectedStudentState.responseStatus.replace("_", " ")}
+                                  {survey.selectedStudentState.completedAt ? ` on ${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(survey.selectedStudentState.completedAt))}` : ""}
+                                </div>
+                              ) : null}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="rounded-[18px] border border-dashed border-slate-200 bg-white/60 px-4 py-5 text-sm text-slate-500">No class-linked surveys yet.</div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -698,6 +1038,210 @@ export function TeacherWorkspace() {
                             <div className="rounded-[18px] border border-white/70 bg-white/75 px-4 py-4"><div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Recent question signal</div><div className="mt-2 text-sm text-slate-600">{questions.find((question) => question.student.id === selectedStudent.id)?.content ?? "No extra student questions recorded for this topic yet."}</div></div>
                           </div>
                         ) : <div className="mt-4 rounded-[18px] border border-dashed border-slate-200 bg-white/60 px-4 py-5 text-sm text-slate-500">Select a student to inspect learning signals.</div>}
+                      </div>
+                      <div className="rounded-[20px] border border-white/70 bg-white/70 p-5">
+                        <div className="flex items-center gap-2 text-slate-950"><FileText className="h-4 w-4 text-amber-700" /><h3 className="text-lg font-semibold tracking-tight">Interventions</h3></div>
+                        {selectedStudent ? (
+                          <div className="mt-4 space-y-4">
+                            <form
+                              className="space-y-3 rounded-[18px] border border-white/70 bg-white/80 p-4"
+                                onSubmit={(event) => {
+                                  event.preventDefault();
+                                  if (!selectedAccessibleClassroomId) {
+                                    toast.error("Choose a classroom before saving an intervention.");
+                                    return;
+                                  }
+                                  createInterventionMutation.mutate({
+                                    classroomId: selectedAccessibleClassroomId,
+                                    classroomStudentId: selectedStudent.id,
+                                    topicId: selectedTopic?.id,
+                                    interventionType: interventionForm.interventionType,
+                                    priority: interventionForm.priority,
+                                    title: interventionForm.title,
+                                    notes: interventionForm.notes || undefined,
+                                    dueAt: interventionForm.dueAt || undefined,
+                                  });
+                                }}
+                              >
+                              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                                Plan follow-up
+                              </div>
+                              <input
+                                value={interventionForm.title}
+                                onChange={(event) =>
+                                  setInterventionForm((current) => ({
+                                    ...current,
+                                    title: event.target.value,
+                                  }))
+                                }
+                                placeholder={`Support plan for ${selectedStudent.fullName}`}
+                                className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-amber-300"
+                              />
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <select
+                                  value={interventionForm.interventionType}
+                                  onChange={(event) => {
+                                    const nextType = event.target.value;
+                                    if (!isInterventionType(nextType)) {
+                                      return;
+                                    }
+
+                                    setInterventionForm((current) => ({
+                                      ...current,
+                                      interventionType: nextType,
+                                    }));
+                                  }}
+                                  className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-amber-300"
+                                >
+                                  <option value="reteach">Reteach</option>
+                                  <option value="check_in">Check-in</option>
+                                  <option value="practice">Practice</option>
+                                  <option value="family_follow_up">Family follow-up</option>
+                                </select>
+                                <select
+                                  value={interventionForm.priority}
+                                  onChange={(event) => {
+                                    const nextPriority = event.target.value;
+                                    if (!isInterventionPriority(nextPriority)) {
+                                      return;
+                                    }
+
+                                    setInterventionForm((current) => ({
+                                      ...current,
+                                      priority: nextPriority,
+                                    }));
+                                  }}
+                                  className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-amber-300"
+                                >
+                                  <option value="low">Low priority</option>
+                                  <option value="medium">Medium priority</option>
+                                  <option value="high">High priority</option>
+                                </select>
+                              </div>
+                              <input
+                                type="date"
+                                value={interventionForm.dueAt}
+                                onChange={(event) =>
+                                  setInterventionForm((current) => ({
+                                    ...current,
+                                    dueAt: event.target.value,
+                                  }))
+                                }
+                                className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-amber-300"
+                              />
+                              <textarea
+                                value={interventionForm.notes}
+                                onChange={(event) =>
+                                  setInterventionForm((current) => ({
+                                    ...current,
+                                    notes: event.target.value,
+                                  }))
+                                }
+                                rows={3}
+                                placeholder="What follow-up, misconception, or support is needed?"
+                                className="w-full resize-none rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-amber-300"
+                              />
+                              <button
+                                type="submit"
+                                disabled={createInterventionMutation.isPending}
+                                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white"
+                              >
+                                {createInterventionMutation.isPending ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Sparkles className="h-4 w-4" />
+                                )}
+                                Save intervention
+                              </button>
+                            </form>
+                            <div className="space-y-3">
+                              {interventionsQuery.isLoading ? (
+                                <div className="flex items-center gap-2 text-sm text-slate-500">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Loading interventions...
+                                </div>
+                              ) : interventions.length ? (
+                                interventions.map((intervention) => (
+                                  <div key={intervention.id} className="rounded-[18px] border border-white/70 bg-white/80 px-4 py-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <div className="text-sm font-semibold text-slate-950">{intervention.title}</div>
+                                        <div className="mt-1 text-xs text-slate-500">
+                                          {formatInterventionTypeLabel(intervention.interventionType)} - {intervention.priority} priority
+                                          {intervention.dueAt ? ` - due ${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(intervention.dueAt))}` : ""}
+                                        </div>
+                                      </div>
+                                      <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                                        {formatInterventionStatusLabel(intervention.status)}
+                                      </div>
+                                    </div>
+                                    {intervention.notes ? (
+                                      <div className="mt-3 text-sm text-slate-600">{intervention.notes}</div>
+                                    ) : null}
+                                    <div className="mt-4 flex flex-wrap gap-2">
+                                      {intervention.status !== "in_progress" ? (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            updateInterventionMutation.mutate({
+                                              interventionId: intervention.id,
+                                              status: "in_progress",
+                                              notes: intervention.notes ?? undefined,
+                                              dueAt: intervention.dueAt ?? undefined,
+                                            })
+                                          }
+                                          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                                        >
+                                          Start
+                                        </button>
+                                      ) : null}
+                                      {intervention.status !== "completed" ? (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            updateInterventionMutation.mutate({
+                                              interventionId: intervention.id,
+                                              status: "completed",
+                                              notes: intervention.notes ?? undefined,
+                                              dueAt: intervention.dueAt ?? undefined,
+                                            })
+                                          }
+                                          className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"
+                                        >
+                                          Mark complete
+                                        </button>
+                                      ) : null}
+                                      {intervention.status !== "dismissed" ? (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            updateInterventionMutation.mutate({
+                                              interventionId: intervention.id,
+                                              status: "dismissed",
+                                              notes: intervention.notes ?? undefined,
+                                              dueAt: intervention.dueAt ?? undefined,
+                                            })
+                                          }
+                                          className="rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700"
+                                        >
+                                          Dismiss
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="rounded-[18px] border border-dashed border-slate-200 bg-white/60 px-4 py-5 text-sm text-slate-500">
+                                  No interventions recorded for this student and topic yet.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-4 rounded-[18px] border border-dashed border-slate-200 bg-white/60 px-4 py-5 text-sm text-slate-500">
+                            Select a student to plan follow-up work.
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

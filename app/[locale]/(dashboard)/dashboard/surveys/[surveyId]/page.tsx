@@ -239,11 +239,10 @@ export default function SurveyDetailPage() {
         queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
       } else {
         const errorMsg = await getResponseErrorMessage(response, t("Toasts.SettingsFailed"));
-        console.error("[SurveyDetailPage] Failed to save settings:", { surveyId, errorMsg });
         toast.error(errorMsg, { id: loadingToast });
       }
     } catch (error) {
-      console.error("[SurveyDetailPage] Failed to save settings:", error);
+      console.error("[handleSaveSettings] Failed:", error);
       toast.error(t("Toasts.Error") || "An unexpected error occurred", { id: loadingToast });
     } finally {
       setIsSavingSettings(false);
@@ -272,11 +271,10 @@ export default function SurveyDetailPage() {
         toast.success(t("Toasts.StatusUpdated", { status: newStatus === "active" ? "resumed" : "paused" }));
       } else {
         const errorMsg = await getResponseErrorMessage(response, t("Toasts.StatusFailed"));
-        console.error("[SurveyDetailPage] Failed to update status:", { surveyId, newStatus, errorMsg });
         toast.error(errorMsg);
       }
     } catch (error) {
-      console.error("[SurveyDetailPage] Failed to update status:", error);
+      console.error("[handleStatusUpdate] Failed:", error);
       toast.error(t("Toasts.Error"));
     }
   };
@@ -296,11 +294,10 @@ export default function SurveyDetailPage() {
           response,
           t("Toasts.DeleteFailed") || "Failed to delete survey",
         );
-        console.error("[SurveyDetailPage] Failed to delete survey:", { surveyId, errorMsg });
         toast.error(errorMsg);
       }
     } catch (error) {
-      console.error("[SurveyDetailPage] Failed to delete survey:", error);
+      console.error("[handleDelete] Failed:", error);
       toast.error(t("Toasts.Error") || "An unexpected error occurred");
     } finally {
       setIsDeletingSurvey(false);
@@ -876,3 +873,4 @@ export default function SurveyDetailPage() {
     </div>
   );
 }
+

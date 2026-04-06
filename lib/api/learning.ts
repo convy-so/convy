@@ -94,6 +94,8 @@ const learningStudentMembershipSchema = z.object({
       isVoice: z.boolean(),
       shareableLink: z.string(),
       createdAt: z.string().nullable(),
+      responseStatus: z.enum(["not_started", "in_progress", "completed"]),
+      completedAt: z.string().nullable(),
     }),
   ),
 });
@@ -117,6 +119,41 @@ const onboardingMessageSchema = z.object({
   createdAt: z.union([z.string(), z.date()]).optional(),
 });
 
+const tutorMediaSchema = z.object({
+  assetId: z.string().nullable().optional(),
+  externalMediaId: z.string().nullable().optional(),
+  assetType: z.enum(["image", "video"]),
+  title: z.string(),
+  description: z.string().nullable().optional(),
+  mediaUrl: z.string(),
+  thumbnailUrl: z.string().nullable().optional(),
+  durationSeconds: z.number().nullable().optional(),
+  selectionSource: z.string(),
+  reason: z.string(),
+  expectedBenefit: z.string(),
+  followUpPrompt: z.string(),
+});
+
+const assistantTutoringMessageSchema = onboardingMessageSchema.extend({
+  metadata: z
+    .record(z.string(), z.unknown())
+    .default({})
+    .superRefine((value, context) => {
+      const maybeTutorMedia = value.tutorMedia;
+      if (maybeTutorMedia === undefined) {
+        return;
+      }
+
+      const parsed = tutorMediaSchema.safeParse(maybeTutorMedia);
+      if (!parsed.success) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Invalid tutor media payload",
+        });
+      }
+    }),
+});
+
 const onboardingStateSchema = z.discriminatedUnion("completed", [
   z.object({
     completed: z.literal(true),
@@ -131,6 +168,8 @@ const onboardingStateSchema = z.discriminatedUnion("completed", [
 
 const tutoringSessionSchema = z.object({
   sessionId: z.string(),
+  sessionLocale: z.enum(appLocales).optional(),
+  sourceLocale: z.enum(appLocales).optional(),
   topic: z.object({
     id: z.string(),
     title: z.string(),
@@ -332,19 +371,103 @@ const classroomCollaboratorSchema = z.object({
   grantedAt: z.union([z.string(), z.date()]),
 });
 
-type ApiError = {
-  error?: string;
-};
+const bulkInviteStudentsResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    invited: z.array(
+      z.object({
+        id: z.string(),
+        classroomId: z.string(),
+        fullName: z.string(),
+        email: z.string().email(),
+        inviteStatus: z.string(),
+      }),
+    ),
+    failed: z.array(
+      z.object({
+        fullName: z.string(),
+        email: z.string().email(),
+        error: z.string(),
+      }),
+    ),
+  }),
+});
+
+const classroomAssignedSurveyProgressSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  status: z.string(),
+  shareableLink: z.string().nullable(),
+  createdAt: z.string().nullable(),
+  assignedCount: z.number(),
+  completedCount: z.number(),
+  inProgressCount: z.number(),
+  notStartedCount: z.number(),
+  completionRate: z.number(),
+  students: z.array(
+    z.object({
+      classroomStudentId: z.string(),
+      fullName: z.string(),
+      email: z.string().email(),
+      inviteStatus: z.string(),
+      onboardingStatus: z.string(),
+      responseStatus: z.enum(["not_started", "in_progress", "completed"]),
+      completedAt: z.string().nullable(),
+    }),
+  ),
+});
+
+const learningInterventionSchema = z.object({
+  id: z.string(),
+  classroomId: z.string(),
+  classroomStudentId: z.string(),
+  topicId: z.string().nullable(),
+  interventionType: z.enum([
+    "reteach",
+    "check_in",
+    "practice",
+    "family_follow_up",
+  ]),
+  priority: z.enum(["low", "medium", "high"]),
+  status: z.enum(["planned", "in_progress", "completed", "dismissed"]),
+  title: z.string(),
+  notes: z.string().nullable(),
+  dueAt: z.string().nullable(),
+  completedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  student: z.object({
+    id: z.string(),
+    fullName: z.string(),
+    email: z.string().email(),
+  }),
+});
+
+function getApiErrorMessage(payload: unknown) {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+
+  if (payload instanceof Error) {
+    return payload.message;
+  }
+
+  if (!("error" in payload)) {
+    return null;
+  }
+
+  const error = payload.error;
+  return typeof error === "string" ? error : null;
+}
 
 async function parseResponse<T>(
   response: Response,
   schema: z.ZodSchema<T>,
 ): Promise<T> {
-  const payload = (await response.json()) as unknown;
+  const payload: unknown = await response.json();
 
   if (!response.ok) {
-    const error = payload as ApiError;
-    throw new Error(error.error ?? "Request failed");
+    throw new Error(getApiErrorMessage(payload) ?? "Request failed");
   }
 
   return schema.parse(payload);
@@ -426,6 +549,24 @@ export async function inviteStudent(input: {
         inviteStatus: z.string(),
       }),
     }),
+  );
+}
+
+export async function inviteStudentsBulk(input: {
+  classroomId: string;
+  students: Array<{
+    fullName: string;
+    email: string;
+  }>;
+}) {
+  return await parseResponse(
+    await fetch(`/api/learning/classrooms/${input.classroomId}/students`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ students: input.students }),
+    }),
+    bulkInviteStudentsResponseSchema,
   );
 }
 
@@ -520,6 +661,26 @@ export async function fetchClassroomCollaborators(classroomId: string) {
   );
 }
 
+export async function grantClassroomCollaborator(input: {
+  classroomId: string;
+  email: string;
+}) {
+  return await parseResponse(
+    await fetch(`/api/learning/classrooms/${input.classroomId}/collaborators`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: input.email }),
+    }),
+    z.object({
+      success: z.literal(true),
+      data: classroomCollaboratorSchema.extend({
+        accessLevel: z.literal("collaborator"),
+      }),
+    }),
+  );
+}
+
 export async function revokeClassroomCollaborator(input: {
   classroomId: string;
   teacherUserId: string;
@@ -571,6 +732,94 @@ export async function fetchTopicMaterials(topicId: string) {
       credentials: "include",
     }),
     z.object({ success: z.literal(true), data: z.array(topicMaterialSchema) }),
+  );
+}
+
+export async function fetchClassroomAssignedSurveys(classroomId: string) {
+  return await parseResponse(
+    await fetch(`/api/learning/classrooms/${classroomId}/assigned-surveys`, {
+      credentials: "include",
+    }),
+    z.object({
+      success: z.literal(true),
+      data: z.array(classroomAssignedSurveyProgressSchema),
+    }),
+  );
+}
+
+export async function fetchLearningInterventions(input: {
+  classroomId: string;
+  topicId?: string;
+  classroomStudentId?: string;
+}) {
+  const searchParams = new URLSearchParams({
+    classroomId: input.classroomId,
+  });
+
+  if (input.topicId) {
+    searchParams.set("topicId", input.topicId);
+  }
+
+  if (input.classroomStudentId) {
+    searchParams.set("classroomStudentId", input.classroomStudentId);
+  }
+
+  return await parseResponse(
+    await fetch(`/api/learning/interventions?${searchParams.toString()}`, {
+      credentials: "include",
+    }),
+    z.object({
+      success: z.literal(true),
+      data: z.array(learningInterventionSchema),
+    }),
+  );
+}
+
+export async function createLearningIntervention(input: {
+  classroomId: string;
+  classroomStudentId: string;
+  topicId?: string;
+  interventionType: "reteach" | "check_in" | "practice" | "family_follow_up";
+  priority: "low" | "medium" | "high";
+  title: string;
+  notes?: string;
+  dueAt?: string;
+}) {
+  return await parseResponse(
+    await fetch("/api/learning/interventions", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }),
+    z.object({
+      success: z.literal(true),
+      data: learningInterventionSchema,
+    }),
+  );
+}
+
+export async function updateLearningIntervention(input: {
+  interventionId: string;
+  status: "planned" | "in_progress" | "completed" | "dismissed";
+  notes?: string;
+  dueAt?: string;
+}) {
+  return await parseResponse(
+    await fetch(`/api/learning/interventions/${input.interventionId}`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        status: input.status,
+        notes: input.notes,
+        dueAt: input.dueAt,
+      }),
+    }),
+    z.object({
+      success: z.literal(true),
+      data: learningInterventionSchema,
+    }),
   );
 }
 
@@ -636,22 +885,39 @@ export async function fetchTopicReports(topicId: string) {
     }),
     z.object({
       success: z.literal(true),
-      data: z.array(
-        z.object({
-          id: z.string(),
-          sessionId: z.string().nullable(),
-          masteryPercent: z.number(),
-          sourceLocale: z.string().optional(),
-          createdAt: z.union([z.string(), z.date()]),
-          updatedAt: z.union([z.string(), z.date()]),
-          student: z.object({
+      data: z.object({
+        reports: z.array(
+          z.object({
             id: z.string(),
-            fullName: z.string(),
-            email: z.string().email(),
+            sessionId: z.string().nullable(),
+            masteryPercent: z.number(),
+            sourceLocale: z.string().optional(),
+            createdAt: z.union([z.string(), z.date()]),
+            updatedAt: z.union([z.string(), z.date()]),
+            student: z.object({
+              id: z.string(),
+              fullName: z.string(),
+              email: z.string().email(),
+            }),
+            report: teacherProgressReportSchema,
           }),
-          report: teacherProgressReportSchema,
+        ),
+        summary: z.object({
+          reportCount: z.number(),
+          studentCount: z.number(),
+          averageMasteryPercent: z.number().nullable(),
+          averageConfidenceScore: z.number().nullable(),
+          averageSessionDurationMinutes: z.number().nullable(),
+          studentsNeedingAttention: z.number(),
+          studentsStrongMastery: z.number(),
+          studentsDeveloping: z.number(),
+          studentsWithLowConfidence: z.number(),
+          latestReportAt: z.string().nullable(),
+          commonGaps: z.array(z.string()),
+          commonRiskFlags: z.array(z.string()),
+          recommendedTeacherFocus: z.array(z.string()),
         }),
-      ),
+      }),
     }),
   );
 }
@@ -741,11 +1007,22 @@ export async function sendOnboardingTurn(input: { sessionId?: string; message: s
   );
 }
 
-export async function fetchTutoringSession(topicId: string) {
+export async function fetchTutoringSession(
+  topicId: string,
+  language?: (typeof appLocales)[number],
+) {
+  const searchParams = new URLSearchParams();
+  if (language) {
+    searchParams.set("language", language);
+  }
+
   return await parseResponse(
-    await fetch(`/api/learning/topics/${topicId}/chat`, {
+    await fetch(
+      `/api/learning/topics/${topicId}/chat${searchParams.size ? `?${searchParams.toString()}` : ""}`,
+      {
       credentials: "include",
-    }),
+      },
+    ),
     z.object({ success: z.literal(true), data: tutoringSessionSchema }),
   );
 }
@@ -754,6 +1031,7 @@ export async function sendTutoringMessage(input: {
   topicId: string;
   sessionId?: string;
   message: string;
+  language?: (typeof appLocales)[number];
 }) {
   return await parseResponse(
     await fetch(`/api/learning/topics/${input.topicId}/chat`, {
@@ -763,15 +1041,19 @@ export async function sendTutoringMessage(input: {
       body: JSON.stringify({
         sessionId: input.sessionId,
         message: input.message,
+        language: input.language,
       }),
     }),
     z.object({
       success: z.literal(true),
       data: z.object({
         sessionId: z.string(),
+        sessionLocale: z.enum(appLocales).optional(),
+        sourceLocale: z.enum(appLocales).optional(),
         response: z.string(),
         completed: z.boolean(),
         sessionState: learningSessionStateSchema,
+        assistantMessage: assistantTutoringMessageSchema,
       }),
     }),
   );
@@ -780,13 +1062,17 @@ export async function sendTutoringMessage(input: {
 export async function askOutOfSessionQuestion(input: {
   topicId: string;
   message: string;
+  language?: (typeof appLocales)[number];
 }) {
   return await parseResponse(
     await fetch(`/api/learning/topics/${input.topicId}/questions`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: input.message }),
+      body: JSON.stringify({
+        message: input.message,
+        language: input.language,
+      }),
     }),
     z.object({
       success: z.literal(true),

@@ -14,6 +14,11 @@ import {
   studentProgressReports,
   topicMaterials,
 } from "@/db/schema";
+import {
+  indexLearningInteractionEvidence,
+  indexLearningPatternEvidence,
+  indexLearningReportEvidence,
+} from "@/lib/learning/evidence";
 import type { StudentLearningPatternProfile } from "@/lib/learning/pattern-types";
 import type {
   LearningInteractionType,
@@ -105,6 +110,7 @@ export async function getActiveLearningSession(params: {
   classroomStudentId: string;
   topicId?: string | null;
   sessionType: string;
+  sessionLocale?: string | null;
 }) {
   return await getDb().query.learningSessions.findFirst({
     where:
@@ -113,12 +119,18 @@ export async function getActiveLearningSession(params: {
             eq(learningSessions.classroomStudentId, params.classroomStudentId),
             isNull(learningSessions.topicId),
             eq(learningSessions.sessionType, params.sessionType),
+            params.sessionLocale
+              ? eq(learningSessions.sessionLocale, params.sessionLocale)
+              : undefined,
             eq(learningSessions.sessionStatus, "active"),
           )
         : and(
             eq(learningSessions.classroomStudentId, params.classroomStudentId),
             eq(learningSessions.topicId, params.topicId),
             eq(learningSessions.sessionType, params.sessionType),
+            params.sessionLocale
+              ? eq(learningSessions.sessionLocale, params.sessionLocale)
+              : undefined,
             eq(learningSessions.sessionStatus, "active"),
           ),
     orderBy: [desc(learningSessions.createdAt)],
@@ -217,6 +229,35 @@ export async function logLearningInteraction(params: {
       updatedAt: new Date(),
     })
     .returning();
+
+  const membership = await getDb().query.classroomStudents.findFirst({
+    where: eq(classroomStudents.id, params.classroomStudentId),
+    with: {
+      classroom: true,
+    },
+  });
+
+  const topic = params.topicId
+    ? await getDb().query.learningTopics.findFirst({
+        where: eq(learningTopics.id, params.topicId),
+      })
+    : null;
+
+  if (membership) {
+    void indexLearningInteractionEvidence({
+      organizationId: membership.classroom.organizationId,
+      topicId: params.topicId ?? null,
+      classroomStudentId: params.classroomStudentId,
+      studentUserId: membership.userId ?? null,
+      interactionId: interaction.id,
+      topicTitle: topic?.title ?? null,
+      language: topic?.contentLocale ?? membership.classroom.defaultContentLocale,
+      role: params.role,
+      interactionType: params.interactionType,
+      content: params.content,
+      metadata: interaction.metadata as Record<string, unknown> | null,
+    }).catch(() => undefined);
+  }
 
   return interaction;
 }
@@ -350,6 +391,32 @@ export async function createStudentProgressReport(params: {
     })
     .returning();
 
+  const [membership, topic] = await Promise.all([
+    getDb().query.classroomStudents.findFirst({
+      where: eq(classroomStudents.id, params.classroomStudentId),
+      with: {
+        classroom: true,
+      },
+    }),
+    getDb().query.learningTopics.findFirst({
+      where: eq(learningTopics.id, params.topicId),
+    }),
+  ]);
+
+  if (membership && topic) {
+    void indexLearningReportEvidence({
+      organizationId: membership.classroom.organizationId,
+      topicId: params.topicId,
+      classroomStudentId: params.classroomStudentId,
+      studentUserId: membership.userId ?? null,
+      reportId: created.id,
+      topicTitle: topic.title,
+      masteryPercent: params.masteryPercent,
+      report: params.report,
+      language: params.sourceLocale,
+    }).catch(() => undefined);
+  }
+
   return created;
 }
 
@@ -441,6 +508,19 @@ export async function upsertStudentLearningPatternProfile(params: {
       .where(eq(studentLearningPatternProfiles.id, existing.id))
       .returning();
 
+    void indexLearningPatternEvidence({
+      organizationId: params.organizationId,
+      studentUserId: params.studentUserId,
+      profileId: updated.id,
+      subjectKey: params.subjectKey ?? null,
+      subjectLabel: params.subjectLabel ?? null,
+      scopeType: params.scopeType,
+      summaryLocale: params.summaryLocale ?? "en",
+      teacherSummary: params.teacherSummary,
+      studentSummary: params.studentSummary,
+      profile: params.profile,
+    }).catch(() => undefined);
+
     return updated;
   }
 
@@ -468,6 +548,19 @@ export async function upsertStudentLearningPatternProfile(params: {
       updatedAt: new Date(),
     })
     .returning();
+
+  void indexLearningPatternEvidence({
+    organizationId: params.organizationId,
+    studentUserId: params.studentUserId,
+    profileId: created.id,
+    subjectKey: params.subjectKey ?? null,
+    subjectLabel: params.subjectLabel ?? null,
+    scopeType: params.scopeType,
+    summaryLocale: params.summaryLocale ?? "en",
+    teacherSummary: params.teacherSummary,
+    studentSummary: params.studentSummary,
+    profile: params.profile,
+  }).catch(() => undefined);
 
   return created;
 }

@@ -6,7 +6,10 @@ import { surveys } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { Suspense } from "react";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+    getSurveyPermissionForSession,
+    hasSurveyPermission,
+} from "@/lib/workspace-access";
 import { getTranslations } from "next-intl/server";
 
 interface PageProps {
@@ -20,10 +23,8 @@ async function SurveyChatContent({ surveyId, locale }: { surveyId: string; local
     const t = await getTranslations({ locale, namespace: "SurveyAnalytics.Chat" });
     const tt = (key: string, fallback: string) => (t.has(key) ? t(key) : fallback);
     const session = await getVerifiedSession();
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
-        activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
-    if (!permission?.canView || !permission.activeContextMatchesResource) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canView")) {
         redirect({ href: "/dashboard/analytics", locale });
     }
 

@@ -1,10 +1,11 @@
 import { createClient } from "@deepgram/sdk";
 
 import { env } from "@/lib/env";
-
-export type SupportedSpeechLocale = "en" | "fr" | "de" | "es" | "it";
-export type SpeechToTextLanguage = SupportedSpeechLocale | "multi";
-export type SpeechToTextProviderName = "deepgram";
+import { getSpeechToTextProviderName } from "@/lib/voice/provider-config";
+import {
+  normalizeSpeechToTextLanguage,
+  type SpeechToTextLanguage,
+} from "@/lib/voice/voice-locales";
 
 export type SpeechToTextResult = {
   transcript: string;
@@ -18,18 +19,6 @@ export interface SpeechToTextProvider {
   ): Promise<SpeechToTextResult>;
 }
 
-function normalizeSpeechLanguage(
-  language: string | undefined,
-): SpeechToTextLanguage {
-  return language === "en" ||
-    language === "fr" ||
-    language === "de" ||
-    language === "es" ||
-    language === "it"
-    ? language
-    : "multi";
-}
-
 class DeepgramSpeechToTextProvider implements SpeechToTextProvider {
   async transcribeAudioBuffer(
     buffer: Buffer,
@@ -40,7 +29,7 @@ class DeepgramSpeechToTextProvider implements SpeechToTextProvider {
     }
 
     const deepgram = createClient(env.DEEPGRAM_API_KEY);
-    const normalizedLanguage = normalizeSpeechLanguage(language);
+    const normalizedLanguage = normalizeSpeechToTextLanguage(language);
 
     const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
       buffer,
@@ -69,13 +58,6 @@ class DeepgramSpeechToTextProvider implements SpeechToTextProvider {
         result.results?.channels[0]?.detected_language ?? normalizedLanguage,
     };
   }
-}
-
-function getSpeechToTextProviderName(): SpeechToTextProviderName {
-  const configuredProvider = process.env.VOICE_STT_PROVIDER;
-  return configuredProvider === "deepgram" || !configuredProvider
-    ? "deepgram"
-    : "deepgram";
 }
 
 export function createSpeechToTextProvider(): SpeechToTextProvider {
