@@ -14,7 +14,6 @@ import {
   detachPlaybookFromSurvey,
 } from "@/lib/education/storage";
 import {
-  getSurveyPermissionContext,
   isWorkspaceOwner,
   getSurveyPermissionForSession,
   hasSurveyPermission,

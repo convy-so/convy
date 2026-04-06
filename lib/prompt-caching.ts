@@ -107,14 +107,14 @@ async function getOrCreateGoogleCachedContent(input: {
         return parsed.cachedContent;
       }
     }
-  } catch (error) {
+  } catch {
   }
 
   let lockAcquired = false;
   try {
     const lockResult = await redis.set(lockKey, "1", "EX", 30, "NX");
     lockAcquired = lockResult === "OK";
-  } catch (error) {
+  } catch {
   }
 
   if (!lockAcquired) {
@@ -182,11 +182,11 @@ async function getOrCreateGoogleCachedContent(input: {
         "EX",
         Math.max(60, input.ttlSeconds - GOOGLE_CACHE_REFRESH_WINDOW_SECONDS),
       );
-    } catch (error) {
+    } catch {
     }
 
     return rawPayload.name;
-  } catch (error) {
+  } catch {
     return null;
   } finally {
     try {

@@ -104,6 +104,11 @@ export class PresenceHandler {
       });
 
     } catch (error) {
+      console.error("[presence] failed to initialize connection", {
+        workspaceId: this.workspaceId,
+        surveyId: this.surveyId,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
       this.ws.close(1011, "Internal server error");
     }
   }

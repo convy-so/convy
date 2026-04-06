@@ -242,7 +242,7 @@ export async function executeRAGQuery(
     if (object.variants && object.variants.length > 0) {
       queriesToRun.push(...object.variants.slice(0, 3));
     }
-  } catch (error) {
+  } catch {
   }
 
   const fetchLimit = filters.limit || 20;

@@ -248,12 +248,12 @@ export default function SampleReviewPage() {
                     publishTitle: pTitle,
                     publishDescription: pDesc
                 });
-            } catch (err) {
-                console.error("[translatePlaceholders] Failed:", err);
+            } catch (error) {
+                console.error("[translatePlaceholders] Failed:", error);
             }
         };
         translatePlaceholders();
-    }, []);
+    }, [t]);
 
 
     const { data: surveyData, isLoading, refetch: refetchSurvey } = useQuery({
@@ -523,7 +523,7 @@ export default function SampleReviewPage() {
                         : "The user has returned to this sample survey review. Respond to their last input and continue the interview naturally."
                 }).then(() => {
                     setHasAutoGreeted(true);
-                }).catch((err) => {
+                }).catch(() => {
                     isHandlingGreetingRef.current = false;
                 });
             }

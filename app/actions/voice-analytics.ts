@@ -8,9 +8,24 @@ import { eq, desc, inArray } from "drizzle-orm";
 import { isWorkspaceOwner } from "@/lib/workspace-access";
 import { ActionResult } from "./workspace";
 
+export type VoiceAnalyticsSessionRow = {
+  id: string;
+  surveyId: string | null;
+  startedAt: Date;
+  durationMs: number | null;
+  status: string | null;
+};
+
+export type VoiceAnalyticsMetricsOverview = {
+  avgLatency: number;
+  totalDuration: number;
+  fallbackCount: number;
+  sessionCount: number;
+};
+
 export async function getVoiceAnalyticsData(): Promise<ActionResult<{
-  sessions: any[];
-  metricsOverview: any;
+  sessions: VoiceAnalyticsSessionRow[];
+  metricsOverview: VoiceAnalyticsMetricsOverview;
 }>> {
   try {
     const session = await getVerifiedSession();
@@ -38,7 +53,15 @@ export async function getVoiceAnalyticsData(): Promise<ActionResult<{
     if (surveyIds.length === 0) {
         return {
             success: true,
-            data: { sessions: [], metricsOverview: { avgLatency: 0, totalDuration: 0, fallbackCount: 0 } }
+            data: {
+              sessions: [],
+              metricsOverview: {
+                avgLatency: 0,
+                totalDuration: 0,
+                fallbackCount: 0,
+                sessionCount: 0,
+              },
+            }
         };
     }
 

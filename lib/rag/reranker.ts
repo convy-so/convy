@@ -86,7 +86,7 @@ export async function rerank(
       }
 
       return rankedResults;
-    } catch (error) {
+    } catch {
     }
   } else {
   }
@@ -147,7 +147,7 @@ Rank the top ${topK} results.`,
     }
 
     return rankedResults;
-  } catch (fallbackError) {
+  } catch {
     return candidates.slice(0, topK);
   }
 }

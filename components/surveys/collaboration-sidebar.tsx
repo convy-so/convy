@@ -80,7 +80,7 @@ export function CollaborationSidebar({
             }
         };
 
-        loadComments().catch((error) => {
+        loadComments().catch(() => {
         });
     }, [surveyId, isOpen]);
 

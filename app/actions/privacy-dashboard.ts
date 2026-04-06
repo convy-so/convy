@@ -2,6 +2,7 @@
 
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
+import type { ConsentEvidence } from "@/db/schema/privacy";
 import { privacyRequests, consentEvents } from "@/db/schema/privacy";
 import { users } from "@/db/schema/auth";
 import { eq, desc } from "drizzle-orm";
@@ -11,9 +12,29 @@ export type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
+export type PrivacyDashboardRequestRow = {
+  id: string;
+  requestType: string;
+  status: string;
+  createdAt: Date;
+  user: {
+    name: string | null;
+    email: string | null;
+  };
+};
+
+export type PrivacyDashboardConsentRow = {
+  id: string;
+  subjectType: string;
+  consentKey: string;
+  decision: string;
+  createdAt: Date;
+  evidence: ConsentEvidence;
+};
+
 export async function getPrivacyDashboardData(): Promise<ActionResult<{
-  requests: any[];
-  consents: any[];
+  requests: PrivacyDashboardRequestRow[];
+  consents: PrivacyDashboardConsentRow[];
 }>> {
   try {
     const session = await getVerifiedSession();
@@ -66,7 +87,13 @@ export async function getPrivacyDashboardData(): Promise<ActionResult<{
     return {
       success: true,
       data: {
-        requests,
+        requests: requests.map(r => ({
+          ...r,
+          user: {
+            name: r.user?.name ?? null,
+            email: r.user?.email ?? null,
+          }
+        })),
         consents,
       }
     };

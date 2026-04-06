@@ -218,7 +218,7 @@ export function useVoiceWebSocket({
         const audioBuffer = audioCtx.createBuffer(1, float32Data.length, sampleRate);
         audioBuffer.getChannelData(0).set(float32Data);
         queueAudioBuffer(audioBuffer);
-      } catch (processingError) {
+      } catch {
       }
     },
     [getPlaybackContext, queueAudioBuffer],
@@ -339,7 +339,7 @@ export function useVoiceWebSocket({
           if (!micEnabledRef.current) {
             micEnabledRef.current = true;
             setIsMicEnabled(true);
-            void startRecording().catch((recordingError) => {
+            void startRecording().catch(() => {
             });
           }
           break;
@@ -409,7 +409,7 @@ export function useVoiceWebSocket({
             connectionUrl = urlObject.toString();
           }
         }
-      } catch (tokenError) {
+      } catch {
       }
     }
 
@@ -450,7 +450,7 @@ export function useVoiceWebSocket({
         }
 
         handleJsonMessage(parsed);
-      } catch (messageError) {
+      } catch {
       }
     };
 

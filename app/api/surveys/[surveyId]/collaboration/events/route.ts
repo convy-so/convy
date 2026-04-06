@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getSurveyRealtimeEvents } from "@/lib/collaboration-service";
 import {
-  getSurveyPermissionContext,
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/workspace-access";

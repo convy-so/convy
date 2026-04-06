@@ -17,7 +17,6 @@ import {
   getCurrentSurveyRevision,
 } from "@/lib/collaboration-service";
 import {
-  getSurveyPermissionContext,
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/workspace-access";

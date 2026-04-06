@@ -303,7 +303,7 @@ export function TeacherStudentChat({
           >
             {messages.length === 0 ? (
               <div className="rounded-[18px] border border-dashed border-slate-200 bg-slate-50/80 px-4 py-5 text-sm leading-6 text-slate-500">
-                Ask things like "What evidence suggests this student is improving in fractions?" or "What misconceptions keep showing up in recent sessions?"
+                Ask things like &quot;What evidence suggests this student is improving in fractions?&quot; or &quot;What misconceptions keep showing up in recent sessions?&quot;
               </div>
             ) : (
               messages.map((message) => {

@@ -18,7 +18,7 @@ export async function getCachedTranslation(
   const key = `${CACHE_PREFIX}${targetLanguage}:${Buffer.from(text).toString("base64")}`;
   try {
     return await redis.get<string>(key);
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -34,7 +34,7 @@ export async function setCachedTranslation(
   const key = `${CACHE_PREFIX}${targetLanguage}:${Buffer.from(text).toString("base64")}`;
   try {
     await redis.set(key, translation, { ex: CACHE_TTL });
-  } catch (error) {
+  } catch {
   }
 }
 

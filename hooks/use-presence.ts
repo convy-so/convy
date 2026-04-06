@@ -104,7 +104,7 @@ export function usePresence({
         const { token } = await res.json();
         if (token) url += `&token=${encodeURIComponent(token)}`;
       }
-    } catch (e) {
+    } catch {
     }
 
     const ws = new WebSocket(url);
@@ -152,11 +152,11 @@ export function usePresence({
             }
             break;
         }
-      } catch (e) {
+      } catch {
       }
     };
 
-    ws.onerror = (e) => {
+    ws.onerror = () => {
       setStatus("error");
     };
 

@@ -651,6 +651,10 @@ function initializeRedisSubscriber(): void {
     });
 
     redisSubscriber.on("error", (error) => {
+      console.error("[websocket] redis subscriber error", {
+        message: error instanceof Error ? error.message : "Unknown error",
+        attempt: redisSubscriberReconnectAttempts + 1,
+      });
       if (redisSubscriberReconnectAttempts < MAX_REDIS_RECONNECT_ATTEMPTS) {
         const delay = REDIS_RECONNECT_DELAY_MS * Math.pow(2, redisSubscriberReconnectAttempts);
         redisSubscriberReconnectAttempts++;

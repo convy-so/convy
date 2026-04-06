@@ -9,6 +9,7 @@ type ActionResult<T> =
 const SURVEY_MEDIA_DISABLED_ERROR =
   "Survey media has been removed from creation, rehearsal, and respondent flows.";
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- retained for z.infer action typing while survey media is disabled
 const addSurveyMediaSchema = z.object({
   surveyId: z.string().min(1),
   url: z.string().url("Invalid media URL"),
@@ -23,6 +24,7 @@ const addSurveyMediaSchema = z.object({
   type: z.enum(["image", "audio", "video"]).default("image"),
 });
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- retained for z.infer action typing while survey media is disabled
 const updateSurveyMediaSchema = z.object({
   surveyId: z.string().min(1),
   mediaId: z.string().min(1),
@@ -36,6 +38,7 @@ const updateSurveyMediaSchema = z.object({
   mimeType: z.string().optional(),
 });
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- retained for z.infer action typing while survey media is disabled
 const removeSurveyMediaSchema = z.object({
   surveyId: z.string().min(1),
   mediaId: z.string().min(1),

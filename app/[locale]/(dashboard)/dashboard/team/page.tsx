@@ -187,7 +187,7 @@ export default function TeamPage() {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.workspaces.departments(activeWorkspace.id),
       });
-    } catch (error) {
+    } catch {
       toast.error("Failed to create department");
     } finally {
       setIsCreatingDepartment(false);
@@ -237,7 +237,7 @@ export default function TeamPage() {
         setIsProcessing(false);
         setShowDeleteModal(false);
       }
-    } catch (error) {
+    } catch {
       toast.error(t("Toasts.DeleteFailed"));
       setIsProcessing(false);
       setShowDeleteModal(false);
@@ -260,7 +260,7 @@ export default function TeamPage() {
         setIsProcessing(false);
         setShowLeaveModal(false);
       }
-    } catch (error) {
+    } catch {
       toast.error(t("Toasts.LeaveFailed"));
       setIsProcessing(false);
       setShowLeaveModal(false);

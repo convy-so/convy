@@ -159,6 +159,10 @@ export abstract class BaseVoiceAgentHandler {
         try {
           await this.onConversationText(event);
         } catch (error) {
+          console.error("[voice-agent] failed to handle conversation text", {
+            identifier: this.identifier,
+            message: error instanceof Error ? error.message : "Unknown error",
+          });
         }
       },
     );
@@ -169,6 +173,11 @@ export abstract class BaseVoiceAgentHandler {
         try {
           await this.onFunctionCall(event);
         } catch (error) {
+          console.error("[voice-agent] function call handler failed", {
+            identifier: this.identifier,
+            functionName: event.function_name,
+            message: error instanceof Error ? error.message : "Unknown error",
+          });
           // Respond with error so the agent can continue
           this.voiceAgent?.sendFunctionCallResponse(
             event.function_call_id,
@@ -267,7 +276,7 @@ export abstract class BaseVoiceAgentHandler {
       await this.cleanup();
     });
 
-    this.ws.on("error", (error) => {
+    this.ws.on("error", () => {
       this.cleanup();
     });
   }
@@ -316,6 +325,10 @@ export abstract class BaseVoiceAgentHandler {
 
           await this.handleControlMessage(message);
         } catch (error) {
+          console.error("[voice-agent] failed to parse browser control message", {
+            identifier: this.identifier,
+            message: error instanceof Error ? error.message : "Unknown error",
+          });
         }
       } else {
         // Treat as audio data from browser
@@ -356,9 +369,13 @@ export abstract class BaseVoiceAgentHandler {
       }
       try {
         this.ws.send(Buffer.isBuffer(data) ? data : JSON.stringify(data));
-      } catch (err) {
+      } catch (error) {
+        console.error("[voice-agent] failed to send websocket message", {
+          identifier: this.identifier,
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
       }
-
+    }
   }
 
   protected sendError(errorPayload: unknown, code?: string): void {

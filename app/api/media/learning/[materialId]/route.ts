@@ -5,7 +5,6 @@ import { getDb } from "@/db";
 import { topicMaterials } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getTeacherTopicAccess } from "@/lib/learning/access";
-import { summarizeErrorForLogs } from "@/lib/privacy/logging";
 import { createSignedLearningMaterialUrl } from "@/lib/storage";
 
 export async function GET(

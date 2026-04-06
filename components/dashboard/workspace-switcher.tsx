@@ -63,7 +63,7 @@ export function WorkspaceSwitcher() {
             } else {
                 toast.error(result.error);
             }
-        } catch (error) {
+        } catch {
             toast.error("Failed to switch workspace");
         } finally {
             setIsSwitching(false);

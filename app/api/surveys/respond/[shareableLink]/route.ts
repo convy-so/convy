@@ -422,7 +422,7 @@ export async function GET(
       getRespondentSessionCookieOptions(),
     );
     return response;
-  } catch (error) {
+  } catch {
     return jsonNoStore(
       { error: "Internal server error" },
       { status: 500 },
@@ -790,7 +790,7 @@ Respond to the user in the language they are speaking to you in. Match the langu
             conversationId: conversation.id,
             surveyId: survey.id,
             userId: survey.userId,
-          }).catch((error) => {
+          }).catch(() => {
           });
 
           await getDb()
@@ -804,7 +804,7 @@ Respond to the user in the language they are speaking to you in. Match the langu
         }
       },
     });
-  } catch (error) {
+  } catch {
     return jsonNoStore(
       { error: "Internal server error" },
       { status: 500 },

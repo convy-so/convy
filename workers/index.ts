@@ -87,6 +87,10 @@ async function gracefulShutdown() {
       try {
         await worker.close();
       } catch (error) {
+        console.error("[workers] failed to close worker during shutdown", {
+          name,
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
       }
     });
 
@@ -103,6 +107,9 @@ async function gracefulShutdown() {
 
     process.exit(0);
   } catch (error) {
+    console.error("[workers] graceful shutdown failed", {
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
     process.exit(1);
   }
 }

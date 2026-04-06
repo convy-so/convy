@@ -249,6 +249,9 @@ async function main() {
 }
 
 main().catch((error) => {
+  console.error("[eval-creator-playbooks] execution failed", {
+    message: error instanceof Error ? error.message : "Unknown error",
+  });
   process.exit(1);
 });
 

@@ -7,7 +7,6 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { buildTimelineEntry } from "@/lib/analytics";
 import { listAnalyticsSnapshots } from "@/lib/education/storage";
 import {
-  getSurveyPermissionContext,
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/workspace-access";

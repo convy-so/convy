@@ -49,7 +49,7 @@ ${appLocaleLabels[targetLanguage]} Translation:`;
     await setCachedTranslation(text, targetLanguage, result);
 
     return result;
-  } catch (error) {
+  } catch {
     return text; // Fallback to original
   }
 }
@@ -81,7 +81,7 @@ Code:`;
       return result;
     }
     return "unknown";
-  } catch (error) {
+  } catch {
     return "unknown";
   }
 }
