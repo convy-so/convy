@@ -26,7 +26,10 @@ export const cache = {
       if (!data) return null;
       return JSON.parse(data);
     } catch (error) {
-      console.error(`[Cache] Error getting key "${key}":`, error);
+      console.error("[cache] get failed", {
+        key,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
       return null;
     }
   },
@@ -48,7 +51,11 @@ export const cache = {
         await redis.set(key, serialized);
       }
     } catch (error) {
-      console.error(`[Cache] Error setting key "${key}":`, error);
+      console.error("[cache] set failed", {
+        key,
+        ttlSeconds,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   },
 
@@ -60,7 +67,10 @@ export const cache = {
       const redis = getRedisClient();
       await redis.del(key);
     } catch (error) {
-      console.error(`[Cache] Error deleting key "${key}":`, error);
+      console.error("[cache] delete failed", {
+        key,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   },
 
@@ -86,7 +96,10 @@ export const cache = {
         }
       } while (cursor !== "0");
     } catch (error) {
-      console.error(`[Cache] Error deleting pattern "${pattern}":`, error);
+      console.error("[cache] deletePattern failed", {
+        pattern,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   },
 
@@ -161,3 +174,4 @@ export async function invalidateDashboardCaches(
 
   await Promise.all(keys.map((key) => cache.delete(key)));
 }
+

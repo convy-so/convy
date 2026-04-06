@@ -16,6 +16,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { GlassPanel } from "@/components/learning/glass-panel";
 import { MetricTile } from "@/components/learning/metric-tile";
 import { SectionHeading } from "@/components/learning/section-heading";
+import { TeacherStudentChat } from "@/components/learning/teacher-student-chat";
 
 function formatDate(value: string | Date | null | undefined) {
   if (!value) return "Not yet";
@@ -344,6 +345,8 @@ export function TeacherStudentDetailPage({ studentId }: { studentId: string }) {
           </GlassPanel>
         </div>
       </section>
+
+      <TeacherStudentChat studentId={student.id} studentName={student.fullName} />
     </div>
   );
 }

@@ -7,6 +7,8 @@ import type {
   EvidenceRecord,
   ResearchBrief,
 } from "@/lib/education/types";
+import type { AppLocale } from "@/lib/i18n/config";
+import { translateTextBatch } from "@/lib/translation-service";
 
 function isEvidenceRecord(value: EvidenceRecord | undefined): value is EvidenceRecord {
   return Boolean(value);
@@ -365,4 +367,117 @@ export function buildConversationListItem(input: {
     fatiguePercent: Math.round(input.insight.quality.fatigue * 100),
     notableQuotes: input.insight.notableQuotes,
   };
+}
+
+export async function translateSurveyAnalyticsData(
+  data: SurveyAnalyticsData,
+  targetLanguage: AppLocale,
+  metadata?: {
+    userId?: string;
+    surveyId?: string;
+  },
+): Promise<SurveyAnalyticsData> {
+  const texts: string[] = [
+    data.brief.researchGoal,
+    data.brief.decisionToInform,
+    data.brief.audienceDefinition,
+    ...data.brief.requiredTopics,
+    ...data.brief.successCriteria,
+    ...data.brief.analysisQuestions,
+    ...data.coverage.nodes.flatMap((node) => [node.label, node.description]),
+    ...data.findings.flatMap((finding) => [finding.title, finding.summary]),
+    ...data.findings.flatMap((finding) =>
+      finding.supportingEvidence.map((evidence) => evidence.excerpt),
+    ),
+    ...data.derivedMetrics.flatMap((metric) => [metric.label, metric.description]),
+    ...data.recommendations,
+    ...data.dataGaps,
+    ...data.keyQuotes.map((quote) => quote.excerpt),
+  ];
+
+  const translated = await translateTextBatch(texts, targetLanguage, {
+    ...metadata,
+    task: "survey analytics dashboard content",
+  });
+
+  let index = 0;
+  const next = () => translated[index++] ?? "";
+
+  return {
+    ...data,
+    brief: {
+      ...data.brief,
+      researchGoal: next(),
+      decisionToInform: next(),
+      audienceDefinition: next(),
+      requiredTopics: data.brief.requiredTopics.map(() => next()),
+      successCriteria: data.brief.successCriteria.map(() => next()),
+      analysisQuestions: data.brief.analysisQuestions.map(() => next()),
+    },
+    coverage: {
+      ...data.coverage,
+      nodes: data.coverage.nodes.map((node) => ({
+        ...node,
+        label: next(),
+        description: next(),
+      })),
+    },
+    findings: data.findings.map((finding) => ({
+      ...finding,
+      title: next(),
+      summary: next(),
+      supportingEvidence: finding.supportingEvidence.map((evidence) => ({
+        ...evidence,
+        excerpt: next(),
+      })),
+    })),
+    derivedMetrics: data.derivedMetrics.map((metric) => ({
+      ...metric,
+      label: next(),
+      description: next(),
+    })),
+    recommendations: data.recommendations.map(() => next()),
+    dataGaps: data.dataGaps.map(() => next()),
+    keyQuotes: data.keyQuotes.map((quote) => ({
+      ...quote,
+      excerpt: next(),
+    })),
+  };
+}
+
+export async function translateConversationListItems(
+  conversations: AnalyticsConversationListItem[],
+  targetLanguage: AppLocale,
+  metadata?: {
+    userId?: string;
+    surveyId?: string;
+  },
+): Promise<AnalyticsConversationListItem[]> {
+  if (conversations.length === 0) {
+    return conversations;
+  }
+
+  const texts = conversations.flatMap((conversation) => [
+    conversation.summary,
+    ...conversation.keyFindings,
+    ...conversation.risks,
+    ...conversation.notableQuotes.map((quote) => quote.excerpt),
+  ]);
+  const translated = await translateTextBatch(texts, targetLanguage, {
+    ...metadata,
+    task: "survey analytics conversation summaries",
+  });
+  let index = 0;
+  const next = () => translated[index++] ?? "";
+
+  return conversations.map((conversation) => ({
+    ...conversation,
+    summary: next(),
+    keyFindings: conversation.keyFindings.map(() => next()),
+    risks: conversation.risks.map(() => next()),
+    notableQuotes: conversation.notableQuotes.map((quote) => ({
+      ...quote,
+      excerpt: next(),
+    })),
+  }));
 }

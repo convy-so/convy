@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "workers:dev": "tsx watch --env-file=.env workers/index.ts",
-    "workers:build": "tsc -p workers/tsconfig.json",
+    "workers:build": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -p workers/tsconfig.json",
     "workers:start": "node dist/workers/index.js",
     "websocket:dev": "tsx watch --env-file=.env websocket/server.ts",
     "websocket:build": "tsc -p websocket/tsconfig.json",

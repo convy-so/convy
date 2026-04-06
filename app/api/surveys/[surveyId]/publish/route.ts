@@ -9,7 +9,11 @@ import { env } from "@/lib/env";
 import {
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 import {
   getResearchBrief,
   getActiveCoveragePlan,
@@ -28,8 +32,8 @@ export async function POST(
 
     const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
     if (!survey) return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
-    if (!permission?.canPublish) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canPublish")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

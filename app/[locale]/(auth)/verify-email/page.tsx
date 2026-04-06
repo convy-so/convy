@@ -66,7 +66,8 @@ function VerifyEmailContent() {
               }
             }
           });
-        } catch {
+        } catch (error) {
+          console.error("[verifyEmail] Failed:", error);
           setIsVerifying(false);
           toast.error(t('GenericError'));
         }
@@ -86,7 +87,8 @@ function VerifyEmailContent() {
         callbackURL: `/${locale}/dashboard`
       });
       toast.success(t('ResendSuccess'));
-    } catch {
+    } catch (error) {
+      console.error("[handleResendVerification] Failed:", error);
       toast.error(t('ResendError'));
     } finally {
       setIsResending(false);

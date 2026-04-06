@@ -12,7 +12,10 @@ import { getRedisClient } from "@/lib/redis";
 
 const GOOGLE_CACHE_TTL_SECONDS = 60 * 60;
 const GOOGLE_CACHE_REFRESH_WINDOW_SECONDS = 5 * 60;
-const MIN_CACHEABLE_PREFIX_CHARS = 3500;
+// Keep this low enough that our reusable tutoring/survey prompt frames
+// can participate in provider-side caching, while still avoiding tiny,
+// low-signal prefixes that would churn cache keys.
+const MIN_CACHEABLE_PREFIX_CHARS = 1400;
 
 export type PromptCacheOptions = {
   namespace: string;
@@ -105,7 +108,6 @@ async function getOrCreateGoogleCachedContent(input: {
       }
     }
   } catch (error) {
-    console.error("[Prompt Cache] Failed to read Google cached content:", error);
   }
 
   let lockAcquired = false;
@@ -113,7 +115,6 @@ async function getOrCreateGoogleCachedContent(input: {
     const lockResult = await redis.set(lockKey, "1", "EX", 30, "NX");
     lockAcquired = lockResult === "OK";
   } catch (error) {
-    console.error("[Prompt Cache] Failed to acquire Google cache lock:", error);
   }
 
   if (!lockAcquired) {
@@ -182,15 +183,10 @@ async function getOrCreateGoogleCachedContent(input: {
         Math.max(60, input.ttlSeconds - GOOGLE_CACHE_REFRESH_WINDOW_SECONDS),
       );
     } catch (error) {
-      console.error(
-        "[Prompt Cache] Failed to persist Google cached content metadata:",
-        error,
-      );
     }
 
     return rawPayload.name;
   } catch (error) {
-    console.error("[Prompt Cache] Failed to create Google cached content:", error);
     return null;
   } finally {
     try {
@@ -262,3 +258,4 @@ export async function preparePromptCache(input: {
     systemPrompt,
   };
 }
+

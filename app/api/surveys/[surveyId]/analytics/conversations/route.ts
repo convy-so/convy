@@ -4,9 +4,17 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { surveySessionInsights, surveySessions } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { buildConversationListItem } from "@/lib/analytics";
+import {
+  buildConversationListItem,
+  translateConversationListItems,
+} from "@/lib/analytics";
 import { conversationInsightSchema } from "@/lib/education/types";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
+import { getUserPreferredLanguage } from "@/lib/translation-service";
+import { normalizeAppLocale } from "@/lib/i18n/config";
 
 export async function GET(
   request: Request,
@@ -18,11 +26,13 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20")));
+    const viewerLanguage = normalizeAppLocale(
+      searchParams.get("language") ??
+        (await getUserPreferredLanguage(session.user.id).catch(() => "en")),
+    );
 
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
-    if (!permission?.canView || !permission.activeContextMatchesResource) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canView")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -60,7 +70,14 @@ export async function GET(
         }),
       ];
     });
-    const paginated = conversationItems.slice((page - 1) * limit, page * limit);
+    const paginated = await translateConversationListItems(
+      conversationItems.slice((page - 1) * limit, page * limit),
+      viewerLanguage,
+      {
+        userId: session.user.id,
+        surveyId,
+      },
+    );
     const completedHighQuality = conversationItems.filter(
       (item) => item.completenessPercent >= 80 && item.reliabilityPercent >= 65,
     ).length;

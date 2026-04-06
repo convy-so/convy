@@ -4,6 +4,7 @@ import { eq, and } from "drizzle-orm";
 import { getDb } from "@/db";
 import { members, surveyEditors, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
+import type { AuthSessionWithUser } from "@/lib/auth";
 
 /**
  * Check if a user is a member of a workspace
@@ -68,13 +69,13 @@ export async function getWorkspaceOwnerId(
  * Determine a user's survey-scoped access level.
  * - "owner": the survey creator
  * - "editor": an explicitly granted survey editor
- * - "viewer": any other workspace member who may discover the survey exists
+ * - "discoverer": any other workspace member who may discover the survey exists
  * - "none": no access
  */
 export async function getSurveyAccessLevel(
   userId: string,
   surveyId: string,
-): Promise<"owner" | "editor" | "viewer" | "none"> {
+): Promise<"owner" | "editor" | "discoverer" | "none"> {
   const [survey] = await getDb()
     .select({
       userId: surveys.userId,
@@ -85,7 +86,6 @@ export async function getSurveyAccessLevel(
 
   if (!survey) return "none";
 
-  // Case 1: Survey belongs to a workspace
   // Case 1: Survey belongs to a workspace
   if (survey.organizationId) {
     // Check if user is a member of this workspace
@@ -111,7 +111,7 @@ export async function getSurveyAccessLevel(
     }
 
     // Default for all other workspace members
-    return "viewer";
+    return "discoverer";
   }
 
   // Case 2: Personal Survey (no organization)
@@ -127,7 +127,7 @@ export type SurveyPermissionContext = {
   activeContextMatchesResource: boolean;
   collaborationAllowed: boolean;
   creatorId: string;
-  accessLevel: "owner" | "editor" | "viewer" | "none";
+  accessLevel: "owner" | "editor" | "discoverer" | "none";
   isWorkspaceMember: boolean;
   isWorkspaceOwner: boolean;
   isSurveyCreator: boolean;
@@ -140,6 +140,15 @@ export type SurveyPermissionContext = {
   canPublish: boolean;
   canDelete: boolean;
 };
+
+export type SurveyPermissionCapability =
+  | "canDiscover"
+  | "canRequestAccess"
+  | "canView"
+  | "canComment"
+  | "canEdit"
+  | "canPublish"
+  | "canDelete";
 
 export async function getSurveyPermissionContext(
   userId: string,
@@ -187,6 +196,8 @@ export async function getSurveyPermissionContext(
         );
   const isSurveyEditor = isSurveyCreator || Boolean(editorRecord);
   const canDiscover = accessLevel !== "none";
+  // Discoverers can see that the survey exists, but they still need edit access
+  // before they can open creation history, analytics, or collaboration surfaces.
   const canView = isSurveyCreator || accessLevel === "editor";
   const canEdit = canView;
   const canRequestAccess =
@@ -216,6 +227,31 @@ export async function getSurveyPermissionContext(
     canDelete:
       isSurveyCreator || (Boolean(survey.organizationId) && isOwnerOfWorkspace),
   };
+}
+
+export async function getSurveyPermissionForSession(
+  session: Pick<AuthSessionWithUser, "user" | "session">,
+  surveyId: string,
+): Promise<SurveyPermissionContext | null> {
+  return getSurveyPermissionContext(session.user.id, surveyId, {
+    activeWorkspaceId: session.session.activeOrganizationId ?? null,
+  });
+}
+
+export function hasSurveyPermission(
+  permission: SurveyPermissionContext | null | undefined,
+  capability: SurveyPermissionCapability,
+  options?: { requireActiveContext?: boolean },
+): permission is SurveyPermissionContext {
+  if (!permission || !permission[capability]) {
+    return false;
+  }
+
+  if (options?.requireActiveContext === false) {
+    return true;
+  }
+
+  return permission.activeContextMatchesResource;
 }
 
 export async function getSurveyEditors(
@@ -254,7 +290,7 @@ export async function getActiveWorkspaceId(): Promise<string | null> {
       return null;
     }
 
-    console.error("[WorkspaceAccess] Failed to resolve active workspace:", error);
     throw error;
   }
 }
+

@@ -19,7 +19,6 @@ export async function getCachedTranslation(
   try {
     return await redis.get<string>(key);
   } catch (error) {
-    console.error("[Translation Cache] Get error:", error);
     return null;
   }
 }
@@ -36,6 +35,6 @@ export async function setCachedTranslation(
   try {
     await redis.set(key, translation, { ex: CACHE_TTL });
   } catch (error) {
-    console.error("[Translation Cache] Set error:", error);
   }
 }
+

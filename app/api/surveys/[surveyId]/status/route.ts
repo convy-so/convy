@@ -4,7 +4,10 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 import {
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
@@ -37,8 +40,8 @@ export async function PATCH(
             return NextResponse.json({ error: "Survey not found" }, { status: 404 });
         }
 
-        const permission = await getSurveyPermissionContext(session.user.id, surveyId);
-        if (!permission?.canEdit) {
+        const permission = await getSurveyPermissionForSession(session, surveyId);
+        if (!hasSurveyPermission(permission, "canEdit")) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 

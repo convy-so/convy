@@ -9,9 +9,10 @@ import {
   classifyOutOfSessionQuestion,
   generateOutOfSessionReply,
 } from "@/lib/learning/out-of-session";
-import { searchLearningTopicContext } from "@/lib/learning/rag";
+import { findLearningEvidenceContext } from "@/lib/learning/evidence";
 import { logLearningInteraction } from "@/lib/learning/storage";
 import type { GradeBand } from "@/lib/learning/types";
+import { normalizeAppLocale } from "@/lib/i18n/config";
 
 export async function GET(
   request: Request,
@@ -79,7 +80,7 @@ export async function POST(
     const session = await getVerifiedSession();
     const { topicId } = await params;
     const access = await getStudentTopicAccess(session.user.id, topicId);
-    const body = (await request.json()) as { message?: string };
+    const body = (await request.json()) as { message?: string; language?: string };
 
     if (!access) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
@@ -103,9 +104,11 @@ export async function POST(
       question: body.message.trim(),
     });
 
-    const retrieved = await searchLearningTopicContext({
+    const retrieved = await findLearningEvidenceContext({
+      organizationId: access.topic.classroom.organizationId,
       topicId,
       query: body.message.trim(),
+      language: normalizeAppLocale(access.topic.contentLocale),
       limit: 6,
     });
 
@@ -117,6 +120,7 @@ export async function POST(
       studentProfile: access.classroomStudent.interestProfile.profile,
       question: body.message.trim(),
       retrievedContext: retrieved.map((item) => item.content),
+      language: normalizeAppLocale(body.language ?? access.topic.contentLocale),
     });
 
     await logLearningInteraction({

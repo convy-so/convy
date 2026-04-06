@@ -12,8 +12,12 @@ import {
   extractLearningMaterialText,
   generateMaterialGroundingSummary,
 } from "@/lib/learning/materials";
+import { indexLearningMaterialEvidence } from "@/lib/learning/evidence";
+import { buildLearningMaterialAccessPath } from "@/lib/media-access";
 import { replaceLearningMaterialEmbeddings } from "@/lib/learning/rag";
 import { uploadLearningMaterial } from "@/lib/storage";
+import { assertLearningMaterialFile } from "@/lib/security/uploads";
+import { getClientIP, uploadRateLimiter } from "@/lib/ratelimit";
 
 function inferMaterialKind(mimeType: string) {
   if (mimeType === "application/pdf") return "pdf";
@@ -22,10 +26,19 @@ function inferMaterialKind(mimeType: string) {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ topicId: string }> },
 ) {
   try {
+    const clientIP = getClientIP(request);
+    const rateLimitResult = await uploadRateLimiter.limit(clientIP);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded", retryAfter: rateLimitResult.reset },
+        { status: 429 },
+      );
+    }
+
     const session = await getVerifiedSession();
     const { topicId } = await params;
     const topic = await getTeacherTopicAccess(session.user.id, topicId);
@@ -72,10 +85,16 @@ export async function POST(
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "File is required" }, { status: 400 });
     }
+    assertLearningMaterialFile(file);
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const detected = await fileTypeFromBuffer(buffer);
     const mimeType = detected?.mime || file.type || "application/octet-stream";
+    assertLearningMaterialFile({
+      name: file.name,
+      size: file.size,
+      type: mimeType,
+    });
     const materialId = nanoid();
 
     const uploaded = await uploadLearningMaterial(
@@ -115,7 +134,7 @@ export async function POST(
         materialKind: inferMaterialKind(mimeType),
         storageBucket: uploaded.bucket,
         storagePath: uploaded.path,
-        publicUrl: uploaded.url,
+        publicUrl: buildLearningMaterialAccessPath(materialId),
         mimeType,
         sizeBytes: file.size,
         extractionStatus: "completed",
@@ -138,6 +157,17 @@ export async function POST(
         title: material.title,
         mimeType,
       },
+    });
+
+    await indexLearningMaterialEvidence({
+      organizationId: topic.classroom.organizationId,
+      topicId,
+      materialId,
+      title: material.title,
+      description: material.description,
+      mimeType,
+      content: extractedText,
+      language: topic.contentLocale,
     });
 
     await getDb()

@@ -28,7 +28,6 @@ import {
     isRenderTableResult
 } from "./GenerativeAnalytics";
 import toast from "react-hot-toast";
-import { useLocale } from "next-intl";
 
 interface ChatSession {
     id: string;
@@ -116,7 +115,6 @@ function SuggestionPill({
 }
 
 export function ChatWithData({ surveyId }: ChatWithDataProps) {
-    const locale = useLocale();
     const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
     const [isSessionsOpen, setIsSessionsOpen] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -175,7 +173,6 @@ export function ChatWithData({ surveyId }: ChatWithDataProps) {
                 }
             }
         } catch (error) {
-            console.error("Failed to save session:", error);
         }
     };
 
@@ -189,7 +186,6 @@ export function ChatWithData({ surveyId }: ChatWithDataProps) {
                 setCurrentSessionId(session.id);
             }
         } catch (e) {
-            console.error("Failed to load session:", e);
         }
     };
 
@@ -273,7 +269,7 @@ export function ChatWithData({ surveyId }: ChatWithDataProps) {
                             type: audioBlob.type || "audio/webm",
                         }),
                     );
-                    formData.append("language", locale || "multi");
+                    formData.append("language", "multi");
 
                     const response = await fetch(
                         `/api/surveys/${surveyId}/analytics/transcribe`,
@@ -302,7 +298,6 @@ export function ChatWithData({ surveyId }: ChatWithDataProps) {
                         error instanceof Error
                             ? error.message
                             : "Voice transcription failed";
-                    console.error("[Analytics Chat] Voice input failed:", error);
                     toast.error(message);
                 } finally {
                     setIsTranscribingAudio(false);
@@ -315,7 +310,6 @@ export function ChatWithData({ surveyId }: ChatWithDataProps) {
             stopAudioStream();
             mediaRecorderRef.current = null;
             setIsRecordingAudio(false);
-            console.error("[Analytics Chat] Failed to start voice recording:", error);
             toast.error(
                 "Microphone access failed. Please check your browser permissions.",
             );
@@ -547,4 +541,5 @@ export function ChatWithData({ surveyId }: ChatWithDataProps) {
         </div>
     );
 }
+
 

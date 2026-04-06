@@ -8,7 +8,11 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import {
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 
 export async function POST(
   request: Request,
@@ -18,11 +22,9 @@ export async function POST(
     const session = await getVerifiedSession();
     const { surveyId } = await params;
     const body = await request.json();
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
+    const permission = await getSurveyPermissionForSession(session, surveyId);
 
-    if (!permission?.canComment || !permission.activeContextMatchesResource) {
+    if (!hasSurveyPermission(permission, "canComment")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
     if (!permission.collaborationAllowed) {

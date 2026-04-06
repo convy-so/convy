@@ -236,6 +236,17 @@ export const workspaceOutbox = pgTable(
     channel: text("channel").notNull(),
     eventType: text("event_type").notNull(),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    claimOwner: text("claim_owner"),
+    claimedAt: timestamp("claimed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    claimExpiresAt: timestamp("claim_expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    publishAttempts: integer("publish_attempts").default(0).notNull(),
+    lastError: text("last_error"),
     publishedAt: timestamp("published_at", {
       withTimezone: true,
       mode: "date",
@@ -247,6 +258,11 @@ export const workspaceOutbox = pgTable(
     index("workspace_outbox_survey_idx").on(table.surveyId, table.publishedAt),
     index("workspace_outbox_unpublished_created_idx").on(
       table.publishedAt,
+      table.createdAt,
+    ),
+    index("workspace_outbox_reclaim_idx").on(
+      table.publishedAt,
+      table.claimExpiresAt,
       table.createdAt,
     ),
   ],

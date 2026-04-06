@@ -34,7 +34,7 @@ const PRICING: Record<string, { prompt: number; completion: number }> = {
   "gpt-4.1-mini": { prompt: 0.4, completion: 1.6 },
 };
 
-function calculateCost(input: UsageLogInput): string {
+export function calculateCost(input: UsageLogInput): string {
   if (input.type === "llm_text" && input.modelName) {
     const pricing = PRICING[input.modelName] || PRICING["gemini-2.5-flash"];
     const promptCost = (input.promptTokens || 0) * (pricing.prompt / 1_000_000);
@@ -78,6 +78,10 @@ function calculateCost(input: UsageLogInput): string {
   return "0";
 }
 
+export function estimateUsageCost(input: UsageLogInput) {
+  return Number(calculateCost(input));
+}
+
 /**
  * Log a software usage event to the database.
  */
@@ -92,6 +96,6 @@ export async function logUsage(input: UsageLogInput) {
     });
   } catch (error) {
     // Don't let billing errors crash the main app flow, just log them
-    console.error("Failed to log usage:", error);
   }
 }
+

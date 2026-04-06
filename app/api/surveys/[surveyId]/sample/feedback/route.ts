@@ -4,7 +4,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 import { sampleFeedbackEntryInputSchema } from "@/lib/education/sample-feedback";
 import {
   applyFeedbackBriefPatch,
@@ -66,8 +70,8 @@ export async function POST(
     ]);
 
     if (!survey) return new NextResponse("Survey not found", { status: 404 });
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
-    if (!permission?.canEdit) return new NextResponse("Unauthorized", { status: 403 });
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canEdit")) return new NextResponse("Unauthorized", { status: 403 });
     if (survey.status !== "draft" && survey.status !== "sample_review") {
       return new NextResponse("Feedback can only be applied while the survey is in draft or sample review.", { status: 400 });
     }

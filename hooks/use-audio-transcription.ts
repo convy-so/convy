@@ -2,14 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { AppLocale } from "@/lib/i18n/config";
+import type { SpeechToTextLanguage } from "@/lib/voice/voice-locales";
 
 type SupportedRecordingMimeType = "audio/webm;codecs=opus" | "audio/webm";
 type TranscriptionPhase = "recording" | "transcribing" | null;
 
 type StartTranscriptionParams = {
   target: string;
-  language: AppLocale | "multi";
+  language: SpeechToTextLanguage;
   onTranscript: (transcript: string) => void;
 };
 
@@ -32,7 +32,7 @@ export function useAudioTranscription(params?: {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const pendingTargetRef = useRef<string | null>(null);
-  const pendingLanguageRef = useRef<AppLocale | "multi">("multi");
+  const pendingLanguageRef = useRef<SpeechToTextLanguage>("multi");
   const onTranscriptRef = useRef<((transcript: string) => void) | null>(null);
 
   const [activeTarget, setActiveTarget] = useState<string | null>(null);

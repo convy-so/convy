@@ -10,7 +10,8 @@
     "essential": true,
     "environment": [
       { "name": "NODE_ENV", "value": "production" },
-      { "name": "PORT", "value": "3000" }
+      { "name": "PORT", "value": "3000" },
+      { "name": "OUTBOX_POLLER_ENABLED", "value": "true" }
     ],
     "secrets": [
       { "name": "DATABASE_URL",                         "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/DATABASE_URL" },

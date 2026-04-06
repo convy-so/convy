@@ -10,7 +10,10 @@ import {
   surveys,
 } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 import {
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
@@ -36,8 +39,8 @@ export async function addSampleConversationCommentAction(
       return { success: false, error: "Survey not found" };
     }
 
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
-    if (!permission?.canComment) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canComment")) {
       return { success: false, error: "Unauthorized" };
     }
 

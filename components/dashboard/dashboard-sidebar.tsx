@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, usePathname, useRouter } from "@/i18n/routing";
 import Image from "next/image";
 import {
@@ -15,6 +16,9 @@ import {
   X,
   LogOut,
   User as UserIcon,
+  Bell,
+  Activity,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WorkspaceSwitcher } from "./workspace-switcher";
@@ -23,6 +27,8 @@ import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/providers/auth-provider";
 
 import { authClient } from "@/lib/auth-client";
+import { fetchActiveWorkspace } from "@/lib/api/workspace";
+import { queryKeys } from "@/lib/query-keys";
 import toast from "react-hot-toast";
 
 export function DashboardSidebar() {
@@ -33,6 +39,13 @@ export function DashboardSidebar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const activeOrgId = session?.activeOrganizationId || null;
+  const activeWorkspaceQuery = useQuery({
+    queryKey: queryKeys.workspaces.active,
+    queryFn: fetchActiveWorkspace,
+    enabled: Boolean(activeOrgId),
+  });
+  const activeWorkspace = activeWorkspaceQuery.data;
+  const isWorkspaceOwner = activeWorkspace?.role === "owner";
 
   const navigation = [
     { name: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard },
@@ -40,10 +53,19 @@ export function DashboardSidebar() {
     { name: "Learning", href: "/dashboard/learning", icon: GraduationCap },
     { name: "Folders", href: "/dashboard/projects", icon: FolderOpen },
     { name: t("Analytics"), href: "/dashboard/analytics", icon: BarChart3 },
-    ...(activeOrgId ? [{ name: "Workspace", href: "/dashboard/team", icon: Users }] : []),
+    ...(activeOrgId ? [
+      { name: "Workspace", href: "/dashboard/team", icon: Users },
+      ...(isWorkspaceOwner
+        ? [
+            { name: "Voice Quality", href: "/dashboard/voice-analytics", icon: Activity },
+            { name: "Privacy Hub", href: "/dashboard/privacy", icon: ShieldAlert },
+          ]
+        : []),
+    ] : []),
   ];
 
   const bottomNavigation = [
+    { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
     { name: t("Profile"), href: "/dashboard/profile", icon: UserIcon },
     { name: t("Settings"), href: "/dashboard/settings", icon: Settings },
   ];

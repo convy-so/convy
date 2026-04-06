@@ -4,10 +4,17 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { surveySessions, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { buildDashboardAnalyticsData, buildTimelineEntry } from "@/lib/analytics";
+import {
+  buildDashboardAnalyticsData,
+  buildTimelineEntry,
+  translateSurveyAnalyticsData,
+} from "@/lib/analytics";
 import { scheduleAnalyticsRefresh } from "@/lib/analytics-scheduler";
 import { getEducationProgram } from "@/lib/education/catalog";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 import {
   getActiveCoveragePlan,
   getAnalyticsState,
@@ -16,19 +23,20 @@ import {
   listAnalyticsSnapshots,
   listEvidenceForSurveyByType,
 } from "@/lib/education/storage";
+import { getUserPreferredLanguage } from "@/lib/translation-service";
+import { normalizeAppLocale } from "@/lib/i18n/config";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
+    const { searchParams } = new URL(request.url);
 
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
-    if (!permission?.canView || !permission.activeContextMatchesResource) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canView")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -103,8 +111,11 @@ export async function GET(
     const brief = briefRow.brief;
     const program = getEducationProgram(brief.programId);
 
-    return NextResponse.json(
-      buildDashboardAnalyticsData({
+    const viewerLanguage = normalizeAppLocale(
+      searchParams.get("language") ??
+        (await getUserPreferredLanguage(session.user.id).catch(() => "en")),
+    );
+    const analyticsData = buildDashboardAnalyticsData({
         surveyTitle: survey.title,
         brief,
         briefVersion: briefRow.version,
@@ -115,6 +126,12 @@ export async function GET(
         programDisplayName: program.manifest.displayName,
         programDescription: program.manifest.description,
         evidence: evidenceRows.map((row) => row.metadata),
+      });
+
+    return NextResponse.json(
+      await translateSurveyAnalyticsData(analyticsData, viewerLanguage, {
+        userId: session.user.id,
+        surveyId,
       }),
     );
   } catch (error) {
@@ -134,10 +151,8 @@ export async function POST(
     const session = await getVerifiedSession();
     const { surveyId } = await params;
 
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
-    if (!permission?.canEdit || !permission.activeContextMatchesResource) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canEdit")) {
       return NextResponse.json(
         { error: "Unauthorized. Only owners and editors can trigger analytics." },
         { status: 403 },

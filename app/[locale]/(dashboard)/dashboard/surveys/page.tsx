@@ -86,7 +86,8 @@ function SurveysContent() {
       } else {
         toast.error(t("Card.Toasts.DeleteFailed") || "Failed to delete survey.");
       }
-    } catch {
+    } catch (error) {
+      console.error("[confirmDeleteSurvey] Failed:", error);
       toast.error("An error occurred while deleting.");
     } finally {
       setIsDeleting(null);
@@ -111,7 +112,8 @@ function SurveysContent() {
       } else {
         toast.error(t("Card.Toasts.DuplicateFailed") || "Failed to delete survey.");
       }
-    } catch {
+    } catch (error) {
+      console.error("[handleDuplicate] Failed:", error);
       toast.error(t("Card.Toasts.DuplicateFailed") || "An error occurred during duplication.");
     }
   };
@@ -120,7 +122,8 @@ function SurveysContent() {
     try {
       await navigator.clipboard.writeText(shareableLink);
       toast.success(t("Card.Toasts.LinkCopied") || "Link copied to clipboard!");
-    } catch {
+    } catch (error) {
+      console.error("[handleCopyLink] Failed:", error);
       toast.error(t("Card.Toasts.CopyFailed") || "Failed to copy link.");
     }
   };

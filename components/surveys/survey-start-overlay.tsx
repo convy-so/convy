@@ -56,7 +56,6 @@ export function SurveyStartOverlay({
                 // Permission granted, proceed to start
                 await onStart(selectedLanguage);
             } catch (err: unknown) {
-                console.error("Microphone permission denied:", err);
                 setPermissionError(
                     translations.micPermissionDenied ||
                     "Microphone access is required for this survey. Please enable it in your browser settings to continue.",
@@ -68,7 +67,6 @@ export function SurveyStartOverlay({
             try {
                 await onStart(selectedLanguage);
             } catch (e) {
-                console.error("Failed to start text survey:", e);
                 setIsRequestingPermission(false);
             }
         }
@@ -204,3 +202,4 @@ export function SurveyStartOverlay({
         </div>
     );
 }
+

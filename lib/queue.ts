@@ -15,6 +15,10 @@ declare global {
   var learningPatternAnalysisQueue:
     | Queue<LearningPatternAnalysisJobData>
     | undefined;
+  var tutoringReportQueue:
+    | Queue<TutoringReportJobData>
+    | undefined;
+  var evalRunQueue: Queue<EvalRunJobData> | undefined;
   var contentTranslationQueue: Queue<ContentTranslationJobData> | undefined;
   var experimentEvaluationQueue: Queue<unknown> | undefined;
   var notificationQueue:
@@ -82,6 +86,26 @@ export interface LearningPatternAnalysisJobData {
   classroomStudentId?: string | null;
   topicId?: string | null;
   subjectKey?: string | null;
+}
+
+export interface TutoringReportJobData {
+  sessionId: string;
+  topicId: string;
+  organizationId: string;
+  studentUserId: string;
+  classroomStudentId: string;
+  studentName: string;
+  topicTitle: string;
+  sourceLocale?: string | null;
+  previousReport?: Record<string, unknown> | null;
+  subjectKey?: string | null;
+}
+
+export interface EvalRunJobData {
+  evalRunId: string;
+  datasetId: string;
+  feature: string;
+  triggeredByUserId?: string | null;
 }
 
 export interface ContentTranslationJobData {
@@ -178,6 +202,37 @@ export const getLearningPatternAnalysisQueue = () => {
   return global.learningPatternAnalysisQueue;
 };
 
+export const getTutoringReportQueue = () => {
+  if (!global.tutoringReportQueue) {
+    global.tutoringReportQueue =
+      createQueue<TutoringReportJobData>("tutoring-report", {
+        defaultJobOptions: {
+          attempts: 4,
+          backoff: { type: "exponential", delay: 3000 },
+          removeOnComplete: { age: 24 * 3600, count: 1000 },
+          removeOnFail: { age: 7 * 24 * 3600 },
+        },
+      });
+  }
+
+  return global.tutoringReportQueue;
+};
+
+export const getEvalRunQueue = () => {
+  if (!global.evalRunQueue) {
+    global.evalRunQueue = createQueue<EvalRunJobData>("eval-run", {
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 4000 },
+        removeOnComplete: { age: 24 * 3600, count: 1000 },
+        removeOnFail: { age: 7 * 24 * 3600 },
+      },
+    });
+  }
+
+  return global.evalRunQueue;
+};
+
 export const getContentTranslationQueue = () => {
   if (!global.contentTranslationQueue) {
     global.contentTranslationQueue =
@@ -268,6 +323,22 @@ export async function enqueueLearningPatternAnalysis(
   );
 }
 
+export async function enqueueTutoringReportGeneration(
+  data: TutoringReportJobData,
+) {
+  return await getTutoringReportQueue().add("generate-teacher-report", data, {
+    jobId: `tutoring-report-${data.sessionId}`,
+    priority: 1,
+  });
+}
+
+export async function enqueueEvalRun(data: EvalRunJobData) {
+  return await getEvalRunQueue().add("run-eval-dataset", data, {
+    jobId: `eval-run-${data.evalRunId}`,
+    priority: 2,
+  });
+}
+
 export async function enqueueContentTranslation(data: ContentTranslationJobData) {
   return await getContentTranslationQueue().add("translate-content", data, {
     jobId: `translation-${data.resourceType}-${data.resourceId}-${data.field}-${data.targetLocale}`,
@@ -307,6 +378,8 @@ export async function closeQueues() {
     global.emailQueue,
     global.imageUploadQueue,
     global.learningPatternAnalysisQueue,
+    global.tutoringReportQueue,
+    global.evalRunQueue,
     global.contentTranslationQueue,
     global.experimentEvaluationQueue,
     global.notificationQueue,
@@ -319,6 +392,8 @@ export async function closeQueues() {
     global.emailQueue = undefined;
     global.imageUploadQueue = undefined;
     global.learningPatternAnalysisQueue = undefined;
+    global.tutoringReportQueue = undefined;
+    global.evalRunQueue = undefined;
     global.contentTranslationQueue = undefined;
     global.experimentEvaluationQueue = undefined;
     global.notificationQueue = undefined;

@@ -7,7 +7,10 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import {
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  hasSurveyPermission,
+  getSurveyPermissionForSession,
+} from "@/lib/workspace-access";
 
 export async function POST(
   _request: Request,
@@ -16,9 +19,9 @@ export async function POST(
   try {
     const session = await getVerifiedSession();
     const { surveyId, requestId } = await params;
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
+    const permission = await getSurveyPermissionForSession(session, surveyId);
 
-    if (!permission?.isSurveyCreator) {
+    if (!hasSurveyPermission(permission, "canEdit") || !permission.isSurveyCreator) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

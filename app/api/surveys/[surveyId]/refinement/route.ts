@@ -16,7 +16,11 @@ import {
   listRefinementMessages,
   listRefinementProposals,
 } from "@/lib/education/storage";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 import type { ChatMessage } from "@/lib/chat-types";
 
 export async function GET(
@@ -28,8 +32,8 @@ export async function GET(
     const { surveyId } = await params;
     const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
     if (!survey) return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
-    if (!permission?.canEdit) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canEdit")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -67,8 +71,8 @@ export async function POST(
     const { surveyId } = await params;
     const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
     if (!survey) return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
-    if (!permission?.canEdit) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canEdit")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

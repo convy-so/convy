@@ -219,7 +219,6 @@ export function useVoiceWebSocket({
         audioBuffer.getChannelData(0).set(float32Data);
         queueAudioBuffer(audioBuffer);
       } catch (processingError) {
-        console.error("[Voice WS] Error processing audio chunk:", processingError);
       }
     },
     [getPlaybackContext, queueAudioBuffer],
@@ -238,12 +237,12 @@ export function useVoiceWebSocket({
     }
 
     if (recordingContextRef.current) {
-      void recordingContextRef.current.close().catch(console.error);
+      void recordingContextRef.current.close().catch(() => undefined);
       recordingContextRef.current = null;
     }
 
     if (playbackContextRef.current) {
-      void playbackContextRef.current.close().catch(console.error);
+      void playbackContextRef.current.close().catch(() => undefined);
       playbackContextRef.current = null;
       nextStartTimeRef.current = 0;
     }
@@ -341,7 +340,6 @@ export function useVoiceWebSocket({
             micEnabledRef.current = true;
             setIsMicEnabled(true);
             void startRecording().catch((recordingError) => {
-              console.error("[Voice WS] Failed to auto-start recording:", recordingError);
             });
           }
           break;
@@ -412,7 +410,6 @@ export function useVoiceWebSocket({
           }
         }
       } catch (tokenError) {
-        console.error("[Voice WS] Failed to fetch auth token:", tokenError);
       }
     }
 
@@ -421,7 +418,6 @@ export function useVoiceWebSocket({
       ws = new WebSocket(connectionUrl);
       wsRef.current = ws;
     } catch (connectionError) {
-      console.error("[Voice WS] Failed to create WebSocket instance:", connectionError);
       setStatus("error");
       setError(
         connectionError instanceof Error
@@ -455,16 +451,10 @@ export function useVoiceWebSocket({
 
         handleJsonMessage(parsed);
       } catch (messageError) {
-        console.error(
-          "[Voice WS] Failed to parse JSON message",
-          messageError,
-          event.data,
-        );
       }
     };
 
     ws.onerror = (socketError) => {
-      console.error("[Voice WS] WebSocket error:", socketError);
       setStatus("error");
       onError?.(socketError);
     };
@@ -484,10 +474,6 @@ export function useVoiceWebSocket({
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(data));
     } else {
-      console.warn(
-        "[Voice WS] Cannot send JSON, socket state:",
-        wsRef.current?.readyState,
-      );
     }
   }, []);
 
@@ -542,3 +528,4 @@ export function useVoiceWebSocket({
     lastEventId,
   };
 }
+

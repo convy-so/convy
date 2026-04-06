@@ -249,7 +249,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error("Creator playbook evals failed");
-  console.error(error);
   process.exit(1);
 });
+

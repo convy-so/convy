@@ -81,7 +81,7 @@ export default function SignUpPage() {
         router.push("/dashboard");
       }
     } catch (error) {
-      console.error("Sign-up error:", error);
+      console.error("[SignUp] Failed:", error);
       toast.error(t('Error'));
     } finally {
       setIsLoading(false);

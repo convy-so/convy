@@ -30,7 +30,7 @@ import {
   FileAudio,
   FileVideo,
   Image as ImageIcon,
-  AlertCircle
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -114,7 +114,7 @@ type StoredCreateMessage = {
   timestamp?: string;
 };
 
-const MERGE_THRESHOLD_MS = 3000;
+const _MERGE_THRESHOLD_MS = 3000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -359,7 +359,7 @@ function CreateSurveyContent() {
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [surveyStatus, setSurveyStatus] = useState<string | null>(null);
-  const [isResearching, setIsResearching] = useState(false); // Research animation state
+  const [_isResearching, setIsResearching] = useState(false); // Research animation state
 
   // Language state initialized from locale
   const [language, setLanguage] = useState<SupportedLocale>(getSupportedLocale(locale));
@@ -419,7 +419,7 @@ function CreateSurveyContent() {
           initialGreetingMessages = typeof surveyData === 'string' ? null : surveyData.messages;
         }
       } catch (e) {
-        console.error("Failed to create draft", e);
+        console.error("[Start] Init failed:", e);
         toast.error(t("Toasts.InitFailed"));
         return;
       }
@@ -461,7 +461,7 @@ function CreateSurveyContent() {
             if (greetingData.extractedData) setExtractedData(greetingData.extractedData);
           }
         } catch (greetingErr) {
-          console.error("[Client] Failed to load cached greeting:", greetingErr);
+          console.error("[Start] Greeting failed:", greetingErr);
         }
       }
 
@@ -483,7 +483,7 @@ function CreateSurveyContent() {
           body: JSON.stringify({ isVoice })
         });
       } catch (error) {
-        console.error("[Client] updateSurveyMode ERROR:", error);
+        console.error("[UpdateMode] Failed:", error);
         toast.error(t("Toasts.ModeUpdateFailed"));
       }
     }
@@ -548,6 +548,7 @@ function CreateSurveyContent() {
     },
     onFinish: () => {},
     onError: (error) => {
+      console.error("[Chat] Error:", error);
       console.error("[useChat:onError] Chat encountered an error:", error);
     }
   });
@@ -700,7 +701,7 @@ function CreateSurveyContent() {
 
     setAuthError(null);
     setIsInitializing(false);
-  }, [user, authLoading]);
+  }, [user, authLoading, t]);
 
   // Resolve the initial content language for new drafts:
   // workspace default content locale wins inside a workspace,
@@ -844,7 +845,7 @@ function CreateSurveyContent() {
             }
           }
         } catch (error) {
-          console.error("Failed to load survey data:", error);
+          console.error("[LoadConversation] Failed:", error);
           toast.error("Failed to load conversation.");
         } finally {
           setIsInitializing(false);
@@ -930,6 +931,7 @@ function CreateSurveyContent() {
 
       return surveyData;
     } catch (error) {
+      console.error("[EnsureDraft] Failed:", error);
       toast.error("Failed to initialize draft.");
       setAuthError("Failed to initialize draft.");
       console.error("[Client] ensureDraftExists UNCAUGHT ERROR:", error);
@@ -1083,7 +1085,7 @@ function CreateSurveyContent() {
       // Navigate to sample review page
       router.push(`/dashboard/surveys/${surveyId}/sample-review`);
     } catch (error) {
-      console.error("Error finalizing survey:", error);
+      console.error("[Finalize] Failed:", error);
       toast.error(t("Toasts.GenericError"));
       setIsFinalizing(false);
     }
@@ -1414,257 +1416,7 @@ function CreateSurveyContent() {
                     </div>
                   )}
 
-                  {legacyVoiceSessionEnabled && isVoiceMode && !isReadyForSample && (
-                    <div className="absolute inset-0 z-30 bg-slate-50/95 backdrop-blur-md flex flex-col md:flex-row animate-in fade-in duration-500">
-
-                      {/* Left Side: Chat History (WhatsApp Style) */}
-                      <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth">
-                        <div className="flex flex-col space-y-4 max-w-3xl mx-auto pb-20">
-                          {/* Welcome / Context */}
-                          <div className="text-center py-8 text-gray-400 text-sm">
-                            <p>Voice session started</p>
-                            <p className="text-xs mt-1">Speak naturally to design your survey</p>
-                          </div>
-
-                          {/* Message History */}
-                          {messages.filter(m => m.id !== "init_ping_hidden").map((msg, idx) => (
-                            <div
-                              key={msg.id || idx}
-                              className={cn(
-                                "flex w-full items-end gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300",
-                                msg.role === 'user' ? "justify-end" : "justify-start"
-                              )}
-                            >
-                              {msg.role === 'assistant' && (
-                                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
-                                  <Sparkles className="w-4 h-4 text-indigo-600" />
-                                </div>
-                              )}
-
-                              <div className={cn(
-                                "max-w-[85%] text-base md:text-[17px] leading-relaxed whitespace-pre-wrap py-1",
-                                msg.role === 'user'
-                                  ? "bg-slate-900 text-white rounded-2xl px-4 py-3 shadow-sm"
-                                  : "text-gray-800 flex-1"
-                              )}>
-                                {getDisplayedMessageText(msg)}
-                              </div>
-
-                              {msg.role === 'user' && (
-                                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
-                                  <User className="w-4 h-4 text-gray-600" />
-                                </div>
-                              )}
-                            </div>
-                          ))}
-
-                          {/* Live Transcription Bubble (Pending User Input) */}
-                          {(voiceWs.interimTranscription || voiceWs.isRecording) && (
-                            <div className="flex w-full items-end gap-2 justify-end">
-                              <div className={cn(
-                                "px-4 py-3 max-w-[80%] rounded-2xl rounded-tr-none shadow-sm text-sm md:text-base leading-relaxed",
-                                voiceWs.interimTranscription
-                                  ? "bg-slate-800/80 text-white backdrop-blur-sm"
-                                  : "bg-gray-100 text-gray-400 italic"
-                              )}>
-                                {voiceWs.interimTranscription || t("Chat.Listening")}
-                                {voiceWs.isRecording && <span className="inline-block w-1.5 h-1.5 bg-current rounded-full ml-1 animate-pulse" />}
-                              </div>
-                              <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 animate-pulse">
-                                <div className="w-2 h-2 bg-slate-900 rounded-full" />
-                              </div>
-                            </div>
-                          )}
-
-                          {/* AI Thinking / Speaking Indicator */}
-                          {voiceWs.isPlaying && (
-                            <div className="flex w-full items-end gap-2 justify-start">
-                              <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 animate-bounce">
-                                <Sparkles className="w-4 h-4 text-indigo-600" />
-                              </div>
-                              <div className="px-4 py-3 bg-white/50 border border-gray-100 rounded-2xl rounded-tl-none text-gray-400 text-sm italic">
-                                {t("Chat.Speaking")}
-                                <div className="flex gap-1 mt-1 h-3 items-end">
-                                  <div className="w-1 bg-indigo-400 rounded-full animate-[music-bar_0.5s_ease-in-out_infinite]" style={{ height: '40%' }} />
-                                  <div className="w-1 bg-indigo-400 rounded-full animate-[music-bar_0.5s_ease-in-out_infinite_0.1s]" style={{ height: '80%' }} />
-                                  <div className="w-1 bg-indigo-400 rounded-full animate-[music-bar_0.5s_ease-in-out_infinite_0.2s]" style={{ height: '50%' }} />
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Research Animation Banner */}
-                          {isResearching && (
-                            <div className="flex w-full items-end gap-2 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
-                              <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
-                                <Search className="w-4 h-4 text-indigo-600 animate-pulse" />
-                              </div>
-                              <div className="px-4 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-2xl rounded-tl-none shadow-sm max-w-[85%]">
-                                <p className="text-sm font-medium text-indigo-700">
-                                  Researching best practices for your survey
-                                  <span className="inline-flex gap-0.5 ml-1">
-                                    <span className="w-1 h-1 bg-indigo-500 rounded-full inline-block animate-bounce" style={{ animationDelay: "0ms" }} />
-                                    <span className="w-1 h-1 bg-indigo-500 rounded-full inline-block animate-bounce" style={{ animationDelay: "150ms" }} />
-                                    <span className="w-1 h-1 bg-indigo-500 rounded-full inline-block animate-bounce" style={{ animationDelay: "300ms" }} />
-                                  </span>
-                                </p>
-                                <p className="text-xs text-indigo-400 mt-0.5">✨ Building your personalized survey plan</p>
-                              </div>
-                            </div>
-                          )}
-
-                          <div ref={messagesEndRef} />
-                        </div>
-                      </div>
-
-                      {/* Right Side: Voice Controls Sidebar */}
-                      <div className="w-full md:w-80 h-auto md:h-full border-t md:border-t-0 md:border-l border-gray-100 bg-white shadow-xl z-40 flex flex-col items-center justify-center p-6 md:p-8 relative overflow-hidden flex-shrink-0">
-                        {/* Background Ambient Effect */}
-                        <div className={cn(
-                          "absolute inset-0 bg-gradient-to-br from-indigo-50/50 to-purple-50/50 pointer-events-none transition-opacity duration-1000",
-                          voiceWs.isPlaying || voiceWs.isRecording ? "opacity-100" : "opacity-0"
-                        )} />
-
-                        <div className="relative z-10 flex flex-col items-center gap-8">
-                          {/* Status Label - Shows current conversation state */}
-                          <div className={cn(
-                            "px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-widest transition-all",
-                            isConnecting ? "bg-yellow-100 text-yellow-700 animate-pulse" :
-                              voiceWs.isPlaying ? "bg-indigo-100 text-indigo-700" :
-                                isSpeaking ? "bg-red-100 text-red-700 animate-pulse" :
-                                  voiceWs.isRecording ? "bg-emerald-100 text-emerald-700" :
-                                    "bg-gray-100 text-gray-500"
-                          )}>
-                            {isConnecting ? t("Status.Connecting") :
-                              voiceWs.isPlaying ? t("Status.AISpeaking") :
-                                isSpeaking ? "You are speaking" :
-                                  voiceWs.isRecording ? t("Status.Listening") :
-                                    t("Status.Ready")}
-                          </div>
-
-                          {/* Main Interaction Button */}
-                          <div className="relative group">
-                            {/* Ripple Effects during active states */}
-                            {(isSpeaking || voiceWs.isPlaying || voiceWs.isRecording) && (
-                              <>
-                                <div className={cn("absolute inset-0 rounded-full opacity-20 animate-ping",
-                                  isSpeaking ? "bg-red-500 duration-1000" :
-                                    isConnecting ? "bg-amber-500 duration-[1500ms]" :
-                                      voiceWs.isPlaying ? "bg-indigo-500 duration-[2000ms]" :
-                                        "bg-emerald-500 duration-[1500ms]")} />
-                                <div className={cn("absolute inset-[-12px] rounded-full opacity-10 animate-pulse",
-                                  isSpeaking ? "bg-red-500" :
-                                    isConnecting ? "bg-amber-500" :
-                                      voiceWs.isPlaying ? "bg-indigo-500" :
-                                        "bg-emerald-500")} />
-                              </>
-                            )}
-
-                            <div
-                              className={cn(
-                                "relative w-32 h-32 rounded-full flex flex-col items-center justify-center transition-all duration-300 border-4 shadow-2xl z-20",
-                                isSpeaking
-                                  ? "bg-red-50 border-red-500 text-red-600 scale-110"
-                                  : isConnecting
-                                    ? "bg-amber-50 border-amber-400 text-amber-600 scale-105 animate-pulse"
-                                    : voiceWs.isPlaying
-                                      ? "bg-indigo-50 border-indigo-300 text-indigo-600 scale-105"
-                                      : voiceWs.isRecording
-                                        ? "bg-emerald-50 border-emerald-400 text-emerald-600 scale-105"
-                                        : "bg-white border-gray-200 text-slate-600"
-                              )}
-                            >
-                              <div className="flex flex-col items-center gap-2">
-                                {isSpeaking ? (
-                                  <>
-                                    <div className="flex gap-1 items-center h-8">
-                                      {[40, 70, 50, 90, 60].map((h, i) => (
-                                        <div key={i} className="w-1.5 bg-red-500 rounded-full animate-[music-bar_0.5s_ease-in-out_infinite]"
-                                          style={{
-                                            height: `${h}%`,
-                                            animationDelay: `${i * 0.1}s`
-                                          }}
-                                        />
-                                      ))}
-                                    </div>
-                                    <span className="text-xs font-medium text-red-500">You are speaking</span>
-                                  </>
-                                ) : isConnecting ? (
-                                  <>
-                                    <Loader2 className="h-10 w-10 animate-spin text-amber-500" />
-                                  </>
-                                ) : voiceWs.isPlaying ? (
-                                  <>
-                                    <Sparkles className="w-10 h-10 animate-spin-slow" />
-                                    <span className="text-xs font-medium text-indigo-600">{t("Chat.Speaking")}</span>
-                                  </>
-                                ) : voiceWs.isRecording ? (
-                                  <>
-                                    <div className="flex gap-1.5 items-center h-6">
-                                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
-                                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
-                                    </div>
-                                    <span className="text-xs font-medium text-emerald-600">{t("Status.Listening")}</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <MicOff className="w-10 h-10 opacity-30" />
-                                    <span className="text-xs font-medium text-gray-400">{t("Status.Ready")}</span>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Text Hint */}
-                          <div className="text-center space-y-2 max-w-[200px]">
-                            <h3 className="font-bold text-gray-900">
-                              {voiceWs.isRecording ? t("Chat.Listening") :
-                                voiceWs.isPlaying ? t("Chat.Speaking") :
-                                  t("Chat.VoiceActive")}
-                            </h3>
-                            <p className="text-sm text-gray-500 leading-relaxed">
-                              {voiceWs.isRecording ? "I am listening to your thoughts." :
-                                voiceWs.isPlaying ? "I am responding to your last input." :
-                                  "Start speaking to design your survey."}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                  )}
-
-                  {/* Voice Completion Overlay */}
-                  {legacyVoiceSessionEnabled && isVoiceMode && isReadyForSample && (
-                    <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center p-8 animate-in fade-in">
-                      <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mb-6 animate-in zoom-in duration-300">
-                        <CheckCircle2 className="w-12 h-12 text-emerald-600" />
-                      </div>
-                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Design Complete!</h2>
-                      <p className="text-gray-500 max-w-md text-center mb-8">
-                        Your survey research design is ready. You can now review the sample conversations and finalize the survey.
-                      </p>
-                      <div className="flex flex-col sm:flex-row items-center gap-3">
-                        <button
-                          onClick={handleGoToSampleConversations}
-                          disabled={isFinalizing}
-                          className="px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all hover:-translate-y-0.5 disabled:opacity-60"
-                        >
-                          {isFinalizing ? t("ReadyCard.Finalizing") : "Review Sample Conversations"}
-                        </button>
-                        <button
-                          onClick={toggleVoiceMode}
-                          className="px-8 py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 transition-all hover:-translate-y-0.5"
-                        >
-                          Return to Chat
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Messages Scroll Area */}
+                                    {/* Messages Scroll Area */}
                   <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
                     {messages.map((message) => (
                       <div
@@ -2398,3 +2150,4 @@ export default function CreateSurveyPage() {
     </Suspense>
   );
 }
+

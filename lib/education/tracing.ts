@@ -21,6 +21,6 @@ export async function recordEducationTrace(input: {
       updatedAt: new Date(),
     });
   } catch (error) {
-    console.error("[Education Trace] Failed to persist trace:", error);
   }
 }
+

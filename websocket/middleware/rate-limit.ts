@@ -2,6 +2,7 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { env } from "@/lib/env";
 import { IncomingMessage } from "http";
+import { resolveTrustedNodeClientIp } from "@/lib/security/client-ip";
 
 /**
  * WebSocket Rate Limiting with Upstash Redis
@@ -333,12 +334,11 @@ export function getClientIdentifier(
   }
 
   // Use IP address for unauthenticated connections
-  const forwarded = request.headers["x-forwarded-for"];
-  const ip = forwarded
-    ? Array.isArray(forwarded)
-      ? forwarded[0]
-      : forwarded.split(",")[0]
-    : request.socket.remoteAddress || "unknown";
+  const ip =
+    resolveTrustedNodeClientIp({
+      headers: request.headers,
+      socketRemoteAddress: request.socket.remoteAddress,
+    }).ip || "unknown";
 
   return `ip:${ip}`;
 }

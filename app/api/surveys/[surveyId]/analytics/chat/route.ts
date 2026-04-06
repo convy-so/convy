@@ -7,8 +7,14 @@ import { surveys } from "@/db/schema";
 import type { ChatSessionMessage } from "@/db/schema/surveys";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { answerAnalyticsQuestion } from "@/lib/education/analytics-workflow";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import { normalizeSpeechToTextLanguage } from "@/lib/voice/voice-locales";
+import { getUserPreferredLanguage } from "@/lib/translation-service";
+import {
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 import { z } from "zod";
+import { normalizeAppLocale } from "@/lib/i18n/config";
 
 export const maxDuration = 300;
 
@@ -77,7 +83,7 @@ export async function POST(
         const audioBuffer = Buffer.from(normalizedAudio, "base64");
         const { transcript } = await transcribeAudioBuffer(
           audioBuffer,
-          body.language || "multi",
+          normalizeSpeechToTextLanguage(body.language),
         );
         rawMessages = [...rawMessages, { role: "user", content: transcript }];
       } catch (error) {
@@ -94,14 +100,8 @@ export async function POST(
     if (!survey)
       return NextResponse.json({ error: "Survey not found" }, { status: 404 });
 
-    const permission = await getSurveyPermissionContext(
-      session.user.id,
-      survey.id,
-      {
-        activeWorkspaceId: session.session.activeOrganizationId ?? null,
-      },
-    );
-    if (!permission?.canView || !permission.activeContextMatchesResource) {
+    const permission = await getSurveyPermissionForSession(session, survey.id);
+    if (!hasSurveyPermission(permission, "canView")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -121,7 +121,15 @@ export async function POST(
       );
     }
 
-    const answer = await answerAnalyticsQuestion({ surveyId, question });
+    const responseLanguage = normalizeAppLocale(
+      body.language ??
+        (await getUserPreferredLanguage(session.user.id).catch(() => "en")),
+    );
+    const answer = await answerAnalyticsQuestion({
+      surveyId,
+      question,
+      language: responseLanguage,
+    });
     const responseText = answer.sources?.length
       ? `${answer.response}\n\nSources:\n${answer.sources.map((source) => `- ${source.label} (${source.id})`).join("\n")}`
       : answer.response;

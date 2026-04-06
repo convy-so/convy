@@ -29,7 +29,7 @@ export async function POST(
     ) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    console.error("[Transfer Project Ownership] Error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+

@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 
 import { requestEditAccessAction } from "@/app/actions/collaboration";
 import { getVerifiedSession } from "@/lib/auth/session";
+import {
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 
 export async function POST(
   _request: Request,
@@ -10,11 +14,8 @@ export async function POST(
   try {
     const session = await getVerifiedSession();
     const { surveyId } = await params;
-    const { getSurveyPermissionContext } = await import("@/lib/workspace-access");
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
-    if (!permission?.canDiscover || !permission.activeContextMatchesResource) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canDiscover")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
     if (!permission.collaborationAllowed) {

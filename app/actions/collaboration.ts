@@ -15,7 +15,8 @@ import {
 } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
-  getSurveyPermissionContext,
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
   getSurveyEditors,
 } from "@/lib/workspace-access";
 import {
@@ -42,13 +43,7 @@ export async function grantEditAccessAction(
   try {
     const session = await getVerifiedSession();
     const body = collaboratorSchema.parse(input);
-    const permission = await getSurveyPermissionContext(
-      session.user.id,
-      body.surveyId,
-      {
-        activeWorkspaceId: session.session.activeOrganizationId ?? null,
-      },
-    );
+    const permission = await getSurveyPermissionForSession(session, body.surveyId);
 
     if (!permission?.collaborationAllowed) {
       return {
@@ -56,10 +51,10 @@ export async function grantEditAccessAction(
         error: "Collaboration is only available for workspace surveys",
       };
     }
-    if (!permission.activeContextMatchesResource) {
+    if (!hasSurveyPermission(permission, "canEdit")) {
       return { success: false, error: "Unauthorized" };
     }
-    if (!permission?.isSurveyCreator) {
+    if (!hasSurveyPermission(permission, "canEdit") || !permission.isSurveyCreator) {
       return { success: false, error: "Only the survey creator can grant access" };
     }
 
@@ -147,13 +142,7 @@ export async function revokeEditAccessAction(
   try {
     const session = await getVerifiedSession();
     const body = collaboratorSchema.parse(input);
-    const permission = await getSurveyPermissionContext(
-      session.user.id,
-      body.surveyId,
-      {
-        activeWorkspaceId: session.session.activeOrganizationId ?? null,
-      },
-    );
+    const permission = await getSurveyPermissionForSession(session, body.surveyId);
 
     if (!permission?.collaborationAllowed) {
       return {
@@ -161,10 +150,10 @@ export async function revokeEditAccessAction(
         error: "Collaboration is only available for workspace surveys",
       };
     }
-    if (!permission.activeContextMatchesResource) {
+    if (!hasSurveyPermission(permission, "canEdit")) {
       return { success: false, error: "Unauthorized" };
     }
-    if (!permission?.isSurveyCreator) {
+    if (!hasSurveyPermission(permission, "canEdit") || !permission.isSurveyCreator) {
       return { success: false, error: "Only the survey creator can revoke access" };
     }
 
@@ -203,11 +192,9 @@ export async function requestEditAccessAction(
 ): Promise<ActionResult<{ requestId: string }>> {
   try {
     const session = await getVerifiedSession();
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
+    const permission = await getSurveyPermissionForSession(session, surveyId);
 
-    if (!permission?.canDiscover || !permission.activeContextMatchesResource) {
+    if (!hasSurveyPermission(permission, "canDiscover")) {
       return { success: false, error: "Unauthorized" };
     }
     if (!permission.collaborationAllowed) {
@@ -268,15 +255,9 @@ export async function postCreationCommentAction(
   try {
     const session = await getVerifiedSession();
     const body = commentSchema.parse(input);
-    const permission = await getSurveyPermissionContext(
-      session.user.id,
-      body.surveyId,
-      {
-        activeWorkspaceId: session.session.activeOrganizationId ?? null,
-      },
-    );
+    const permission = await getSurveyPermissionForSession(session, body.surveyId);
 
-    if (!permission?.canComment || !permission.activeContextMatchesResource) {
+    if (!hasSurveyPermission(permission, "canComment")) {
       return { success: false, error: "Unauthorized" };
     }
     if (!permission.collaborationAllowed) {
@@ -342,11 +323,9 @@ export async function getCreationCommentsAction(surveyId: string): Promise<
 > {
   try {
     const session = await getVerifiedSession();
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
+    const permission = await getSurveyPermissionForSession(session, surveyId);
 
-    if (!permission?.canView || !permission.activeContextMatchesResource) {
+    if (!hasSurveyPermission(permission, "canView")) {
       return { success: false, error: "Unauthorized" };
     }
     if (!permission.collaborationAllowed) {
@@ -399,11 +378,9 @@ export async function getSurveyEditorsAction(
 > {
   try {
     const session = await getVerifiedSession();
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
+    const permission = await getSurveyPermissionForSession(session, surveyId);
 
-    if (!permission?.canView || !permission.activeContextMatchesResource) {
+    if (!hasSurveyPermission(permission, "canView")) {
       return { success: false, error: "Unauthorized" };
     }
     if (!permission.collaborationAllowed) {
@@ -459,11 +436,9 @@ export async function getRehearsalCommentsAction(
 > {
   try {
     const session = await getVerifiedSession();
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
+    const permission = await getSurveyPermissionForSession(session, surveyId);
 
-    if (!permission?.canView || !permission.activeContextMatchesResource) {
+    if (!hasSurveyPermission(permission, "canView")) {
       return { success: false, error: "Unauthorized" };
     }
     if (!permission.collaborationAllowed) {
@@ -522,10 +497,8 @@ export async function updatePresenceAction(
 ): Promise<ActionResult<{ activeUsers: Array<{ id: string; name: string }> }>> {
   try {
     const session = await getVerifiedSession();
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
-    if (!permission?.canView || !permission.activeContextMatchesResource) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canView")) {
       return { success: false, error: "Unauthorized" };
     }
     if (!permission.collaborationAllowed) {

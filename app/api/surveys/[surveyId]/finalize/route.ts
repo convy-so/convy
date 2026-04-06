@@ -4,7 +4,11 @@ import { surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { env } from "@/lib/env";
 import { getDb } from "@/db";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 import {
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
@@ -26,8 +30,8 @@ export async function POST(
       return new Response("Survey not found", { status: 404 });
     }
 
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
-    if (!permission?.canPublish) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canPublish")) {
       return new Response("Unauthorized", { status: 403 });
     }
 

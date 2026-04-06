@@ -7,7 +7,10 @@
     "name": "workers",
     "image": "290368114395.dkr.ecr.eu-north-1.amazonaws.com/convy/workers:staging",
     "essential": true,
-    "environment": [{ "name": "NODE_ENV", "value": "production" }],
+    "environment": [
+      { "name": "NODE_ENV", "value": "production" },
+      { "name": "OUTBOX_RELAY_ENABLED", "value": "false" }
+    ],
     "secrets": [
       { "name": "DATABASE_URL",                 "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/DATABASE_URL" },
       { "name": "GOOGLE_GENERATIVE_AI_API_KEY", "valueFrom": "arn:aws:ssm:eu-north-1:290368114395:parameter/convy/staging/GOOGLE_GENERATIVE_AI_API_KEY" },

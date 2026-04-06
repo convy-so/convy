@@ -29,7 +29,12 @@ import {
   updateRefinementProposalStatus,
   upsertResearchBrief,
 } from "@/lib/education/storage";
-import { getSurveyPermissionContext, isWorkspaceOwner } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  isWorkspaceOwner,
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 import { z } from "zod";
 
 const conductingProfilePayloadSchema = z.object({
@@ -58,8 +63,8 @@ export async function POST(
     ]);
     if (!survey || !proposal) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
-    if (!permission?.canEdit) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canEdit")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

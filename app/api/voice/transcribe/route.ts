@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getVerifiedSession } from "@/lib/auth/session";
+import { assertAudioUploadFile } from "@/lib/security/uploads";
 import { transcribeAudioBuffer } from "@/lib/voice/speech-to-text-provider";
+import { normalizeSpeechToTextLanguage } from "@/lib/voice/voice-locales";
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,8 +12,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const audioFile = formData.get("audio");
     const languageValue = formData.get("language");
-    const language =
-      typeof languageValue === "string" ? languageValue : "multi";
+    const language = normalizeSpeechToTextLanguage(languageValue);
 
     if (!(audioFile instanceof File)) {
       return NextResponse.json(
@@ -19,6 +20,7 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+    assertAudioUploadFile(audioFile);
 
     const audioBuffer = Buffer.from(await audioFile.arrayBuffer());
     const transcript = await transcribeAudioBuffer(audioBuffer, language);
@@ -33,7 +35,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
 
-    console.error("[Voice Transcribe API] Error:", error);
     return NextResponse.json(
       {
         error:
@@ -45,3 +46,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+

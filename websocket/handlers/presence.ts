@@ -104,7 +104,6 @@ export class PresenceHandler {
       });
 
     } catch (error) {
-      console.error("[Presence Handler] Initialization error:", error);
       this.ws.close(1011, "Internal server error");
     }
   }
@@ -264,3 +263,4 @@ export class PresenceHandler {
     }
   }
 }
+

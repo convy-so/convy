@@ -1,43 +1,60 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
+import {
+    CONSENT_COOKIE_NAME,
+    parseConsentState,
+} from "@/lib/privacy/shared";
 
-const COOKIE_CONSENT_KEY = "convy_cookie_consent";
-const COOKIE_CONSENT_EVENT = "convy-cookie-consent";
+function readConsentCookie() {
+    const cookie = document.cookie
+        .split(";")
+        .map((entry) => entry.trim())
+        .find((entry) => entry.startsWith(`${CONSENT_COOKIE_NAME}=`))
+        ?.slice(`${CONSENT_COOKIE_NAME}=`.length);
 
-function subscribe(onStoreChange: () => void) {
-    window.addEventListener("storage", onStoreChange);
-    window.addEventListener(COOKIE_CONSENT_EVENT, onStoreChange);
-
-    return () => {
-        window.removeEventListener("storage", onStoreChange);
-        window.removeEventListener(COOKIE_CONSENT_EVENT, onStoreChange);
-    };
-}
-
-function getCookieConsentSnapshot() {
-    return localStorage.getItem(COOKIE_CONSENT_KEY);
+    return parseConsentState(cookie);
 }
 
 export function CookieConsent() {
     const t = useTranslations("Legal.CookieBanner");
-    const consent = useSyncExternalStore(
-        subscribe,
-        getCookieConsentSnapshot,
-        () => "accepted",
-    );
-    const isVisible = consent === null;
+    const [isVisible, setIsVisible] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+        setIsVisible(readConsentCookie() === null);
+    }, []);
+
+    const persistConsent = async (input: { analytics: boolean; marketing: boolean }) => {
+        setIsSaving(true);
+
+        try {
+            const response = await fetch("/api/privacy/consent", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(input),
+            });
+
+            if (!response.ok) {
+                throw new Error("Failed to save consent");
+            }
+
+            setIsVisible(false);
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     const handleAcceptAll = () => {
-        localStorage.setItem(COOKIE_CONSENT_KEY, "all");
-        window.dispatchEvent(new Event(COOKIE_CONSENT_EVENT));
+        void persistConsent({ analytics: true, marketing: true });
     };
 
     const handleAcceptNecessary = () => {
-        localStorage.setItem(COOKIE_CONSENT_KEY, "necessary");
-        window.dispatchEvent(new Event(COOKIE_CONSENT_EVENT));
+        void persistConsent({ analytics: false, marketing: false });
     };
 
     if (!isVisible) return null;
@@ -56,12 +73,14 @@ export function CookieConsent() {
                 <div className="flex shrink-0 w-full md:w-auto mt-2 md:mt-0 gap-3">
                     <button
                         onClick={handleAcceptNecessary}
+                        disabled={isSaving}
                         className="w-full md:w-auto bg-transparent border border-white/20 text-white px-6 py-3 rounded-full font-semibold hover:bg-white/10 transition-colors shadow-sm"
                     >
                         {t("AcceptNecessary")}
                     </button>
                     <button
                         onClick={handleAcceptAll}
+                        disabled={isSaving}
                         className="w-full md:w-auto bg-white text-[#232323] px-6 py-3 rounded-full font-semibold hover:bg-gray-100 transition-colors shadow-sm"
                     >
                         {t("AcceptAll")}

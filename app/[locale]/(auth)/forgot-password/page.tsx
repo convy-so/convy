@@ -42,7 +42,7 @@ function ForgotPasswordContent() {
         }
       });
     } catch (error) {
-      console.error(error);
+      console.error("[ForgotPassword] Request failed:", error);
     } finally {
       setIsLoading(false);
     }

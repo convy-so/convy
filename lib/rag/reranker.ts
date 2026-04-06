@@ -87,10 +87,8 @@ export async function rerank(
 
       return rankedResults;
     } catch (error) {
-      console.warn("Voyage AI reranking failed, falling back to Gemini:", error);
     }
   } else {
-    console.warn("VOYAGE_API_KEY is missing. Falling back to Gemini for reranking.");
   }
 
   try {
@@ -150,7 +148,6 @@ Rank the top ${topK} results.`,
 
     return rankedResults;
   } catch (fallbackError) {
-    console.error("Gemini fallback reranking failed:", fallbackError);
     return candidates.slice(0, topK);
   }
 }
@@ -182,3 +179,4 @@ export async function rerankResults(
     score: r.score
   }));
 }
+

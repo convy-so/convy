@@ -5,6 +5,7 @@ import { getDb } from "@/db";
 import { studentProgressReports } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getTeacherTopicAccess } from "@/lib/learning/access";
+import { buildClassroomTopicReportSummary } from "@/lib/learning/reporting";
 
 export async function GET(
   _request: Request,
@@ -27,22 +28,27 @@ export async function GET(
       orderBy: (table, { desc }) => [desc(table.updatedAt)],
     });
 
+    const serializedReports = reports.map((report) => ({
+      id: report.id,
+      sessionId: report.generatedFromSessionId,
+      masteryPercent: report.masteryPercent,
+      sourceLocale: report.sourceLocale,
+      createdAt: report.createdAt,
+      updatedAt: report.updatedAt,
+      student: {
+        id: report.classroomStudent.id,
+        fullName: report.classroomStudent.fullName,
+        email: report.classroomStudent.email,
+      },
+      report: report.report,
+    }));
+
     return NextResponse.json({
       success: true,
-      data: reports.map((report) => ({
-        id: report.id,
-        sessionId: report.generatedFromSessionId,
-        masteryPercent: report.masteryPercent,
-        sourceLocale: report.sourceLocale,
-        createdAt: report.createdAt,
-        updatedAt: report.updatedAt,
-        student: {
-          id: report.classroomStudent.id,
-          fullName: report.classroomStudent.fullName,
-          email: report.classroomStudent.email,
-        },
-        report: report.report,
-      })),
+      data: {
+        reports: serializedReports,
+        summary: buildClassroomTopicReportSummary(serializedReports),
+      },
     });
   } catch (error) {
     return NextResponse.json(

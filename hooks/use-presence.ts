@@ -102,10 +102,9 @@ export function usePresence({
       const res = await fetch("/api/auth/token");
       if (res.ok) {
         const { token } = await res.json();
-        if (token) url += `&token=${token}`;
+        if (token) url += `&token=${encodeURIComponent(token)}`;
       }
     } catch (e) {
-      console.error("[Presence Hook] Auth token fetch failed:", e);
     }
 
     const ws = new WebSocket(url);
@@ -154,12 +153,10 @@ export function usePresence({
             break;
         }
       } catch (e) {
-        console.error("[Presence Hook] Failed to parse message:", e);
       }
     };
 
     ws.onerror = (e) => {
-      console.error("[Presence Hook] Error:", e);
       setStatus("error");
     };
 
@@ -207,3 +204,4 @@ export function usePresence({
     disconnect
   };
 }
+

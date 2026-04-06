@@ -22,10 +22,11 @@ const redisOptions: RedisOptions = {
 // Only add TLS if using a secure redis URL (rediss://)
 const getEffectiveOptions = (url: string) => {
   if (url.startsWith("rediss://")) {
+    const rejectUnauthorized = !env.ALLOW_INSECURE_TLS;
     return {
       ...redisOptions,
       tls: {
-        rejectUnauthorized: false,
+        rejectUnauthorized,
       },
     };
   }
@@ -60,7 +61,10 @@ export function getRedisClient(options?: { fresh?: boolean }): Redis {
     );
 
     global.sharedRedisClient.on("error", (err) => {
-      console.error("[Redis Client] Error:", err.message);
+      console.error("[redis] shared client error", {
+        message: err?.message,
+        name: err?.name,
+      });
     });
 
     if (process.env.NEXT_PHASE !== "phase-production-build") {
@@ -88,7 +92,10 @@ export function getRedisSubscriber(options?: { fresh?: boolean }): Redis {
     );
 
     global.sharedRedisSubscriber.on("error", (err) => {
-      console.error("[Redis Subscriber] Error:", err.message);
+      console.error("[redis] shared subscriber error", {
+        message: err?.message,
+        name: err?.name,
+      });
     });
   }
 
@@ -107,7 +114,10 @@ export function createBlockingClient(): Redis {
   });
 
   client.on("error", (err) => {
-    console.error("[Redis Blocking Client] Error:", err.message);
+    console.error("[redis] blocking client error", {
+      message: err?.message,
+      name: err?.name,
+    });
   });
 
   return client;
@@ -143,7 +153,10 @@ export async function testRedisConnection(): Promise<boolean> {
     const result = await client.ping();
     return result === "PONG";
   } catch (error) {
-    console.error("[Redis] Connection test failed:", error);
+    console.error("[redis] test connection failed", {
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
     return false;
   }
 }
+

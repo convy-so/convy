@@ -210,32 +210,44 @@ export default function ProjectsPage() {
                               <ExternalLink className="w-4 h-4" />
                               {t("Card.Menu.ViewDetails")}
                             </Link>
-                            <button
-                              onClick={() => {
-                                setShowMenuFor(null);
-                              }}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                            >
-                              <Plus className="w-4 h-4" />
-                              {t("Card.Menu.AddSurvey")}
-                            </button>
-                            <button
-                              onClick={() => {
-                                setShowMenuFor(null);
-                              }}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                            >
-                              <Edit className="w-4 h-4" />
-                              {t("Card.Menu.Edit")}
-                            </button>
-                            <div className="border-t border-gray-100 my-1" />
-                            <button
-                              onClick={() => handleDeleteProject({ id: project.id, name: project.name })}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              {t("Card.Menu.Delete")}
-                            </button>
+                            {project.canOrganizeSurveys ? (
+                              <button
+                                onClick={() => {
+                                  setShowAddSurveyModal(project.id);
+                                  setShowMenuFor(null);
+                                }}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              >
+                                <Plus className="w-4 h-4" />
+                                {t("Card.Menu.AddSurvey")}
+                              </button>
+                            ) : null}
+                            {project.canEditMetadata ? (
+                              <button
+                                onClick={() => {
+                                  setEditingProject({
+                                    id: project.id,
+                                    name: project.name,
+                                    description: project.description,
+                                  });
+                                  setShowMenuFor(null);
+                                }}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              >
+                                <Edit className="w-4 h-4" />
+                                {t("Card.Menu.Edit")}
+                              </button>
+                            ) : null}
+                            {project.canDelete ? <div className="border-t border-gray-100 my-1" /> : null}
+                            {project.canDelete ? (
+                              <button
+                                onClick={() => handleDeleteProject({ id: project.id, name: project.name })}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                {t("Card.Menu.Delete")}
+                              </button>
+                            ) : null}
                           </div>
                         </>
                       )}

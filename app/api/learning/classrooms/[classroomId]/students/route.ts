@@ -1,11 +1,31 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
-import { inviteStudentToClassroomAction } from "@/app/actions/classroom";
+import {
+  bulkInviteStudentsToClassroomAction,
+  inviteStudentToClassroomAction,
+} from "@/app/actions/classroom";
 import { getDb } from "@/db";
 import { classroomStudents } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getTeacherClassroomAccess } from "@/lib/learning/access";
+
+const singleStudentInviteSchema = z.object({
+  fullName: z.string().min(2),
+  email: z.string().email(),
+});
+
+const bulkStudentInviteSchema = z.object({
+  students: z
+    .array(
+      z.object({
+        fullName: z.string().min(2),
+        email: z.string().email(),
+      }),
+    )
+    .min(1),
+});
 
 export async function GET(
   _request: Request,
@@ -50,12 +70,43 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ classroomId: string }> },
 ) {
-  const body = await request.json();
-  const { classroomId } = await params;
-  const result = await inviteStudentToClassroomAction({
-    classroomId,
-    fullName: body.fullName,
-    email: body.email,
-  });
-  return NextResponse.json(result, { status: result.success ? 200 : 400 });
+  try {
+    const payload: unknown = await request.json().catch(() => null);
+    const { classroomId } = await params;
+
+    const bulkInvite = bulkStudentInviteSchema.safeParse(payload);
+    if (bulkInvite.success) {
+      const result = await bulkInviteStudentsToClassroomAction({
+        classroomId,
+        students: bulkInvite.data.students,
+      });
+      return NextResponse.json(result, { status: result.success ? 200 : 400 });
+    }
+
+    const singleInvite = singleStudentInviteSchema.safeParse(payload);
+    if (singleInvite.success) {
+      const result = await inviteStudentToClassroomAction({
+        classroomId,
+        fullName: singleInvite.data.fullName,
+        email: singleInvite.data.email,
+      });
+      return NextResponse.json(result, { status: result.success ? 200 : 400 });
+    }
+
+    return NextResponse.json(
+      {
+        error:
+          "Provide either a single student with fullName and email, or a students array for bulk import.",
+      },
+      { status: 400 },
+    );
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to invite students",
+      },
+      { status: 400 },
+    );
+  }
 }

@@ -9,6 +9,7 @@ import {
   learningTopics,
 } from "@/db/schema";
 import { normalizeAppLocale } from "@/lib/i18n/config";
+import { assertWorkspacePrivacyReadiness } from "@/lib/privacy/compliance";
 import { isWorkspaceMember } from "@/lib/workspace-access";
 
 export type ClassroomTeacherAccessLevel = "owner" | "collaborator" | "none";
@@ -184,6 +185,10 @@ export async function getStudentTopicAccess(userId: string, topicId: string) {
   });
 
   if (!classroomStudent) return null;
+  await assertWorkspacePrivacyReadiness({
+    organizationId: topic.classroom.organizationId,
+    requireAgeMode: true,
+  });
 
   return {
     topic,

@@ -26,7 +26,7 @@ export async function getNotifications(): Promise<ActionResult<NotificationRecor
             data: userNotifications,
         };
     } catch (error) {
-        console.error("Error getting notifications:", error);
+        console.error("[getNotifications] Error fetching notifications:", error);
         return {
             success: false,
             error: "Failed to get notifications",
@@ -51,7 +51,7 @@ export async function markNotificationAsRead(id: string): Promise<ActionResult<v
 
         return { success: true, data: undefined };
     } catch (error) {
-        console.error("Error marking notification as read:", error);
+        console.error("[markNotificationAsRead] Error marking notification as read:", error);
         return { success: false, error: "Failed to mark as read" };
     }
 }

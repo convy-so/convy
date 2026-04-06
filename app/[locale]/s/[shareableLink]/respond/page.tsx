@@ -229,13 +229,15 @@ function getVoiceFallbackMessage(error: unknown): string {
 
 async function initializeSurvey(
   shareableLink: string,
-  conversationId?: string | null,
+  resumeToken?: string | null,
 ): Promise<SurveyInitResponse> {
-  const url = conversationId
-    ? `/api/surveys/respond/${shareableLink}?conversationId=${conversationId}`
+  const url = resumeToken
+    ? `/api/surveys/respond/${shareableLink}?resume=${encodeURIComponent(resumeToken)}`
     : `/api/surveys/respond/${shareableLink}`;
 
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    cache: "no-store",
+  });
 
   if (!response.ok) {
     if (response.status === 404) {
@@ -253,6 +255,41 @@ async function initializeSurvey(
   return response.json();
 }
 
+function getUpdatedQuery(
+  searchParams: { toString(): string },
+  updates: Record<string, string | null>,
+) {
+  const next = new URLSearchParams(searchParams.toString());
+
+  for (const [key, value] of Object.entries(updates)) {
+    if (!value) {
+      next.delete(key);
+      continue;
+    }
+
+    next.set(key, value);
+  }
+
+  return Object.fromEntries(next.entries());
+}
+
+async function copyText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const input = document.createElement("input");
+  input.value = text;
+  input.setAttribute("readonly", "true");
+  input.style.position = "absolute";
+  input.style.left = "-9999px";
+  document.body.appendChild(input);
+  input.select();
+  document.execCommand("copy");
+  input.remove();
+}
+
 function SurveyContent() {
   const params = useParams<{ shareableLink: string }>();
   const searchParams = useSearchParams();
@@ -268,44 +305,18 @@ function SurveyContent() {
     error: initError,
   } = useQuery({
     queryKey: ["survey-respond", shareableLink],
-    queryFn: () => {
-      // Check for existing session
-      let storedConversationId = null;
-      if (typeof window !== "undefined") {
-        try {
-          const stored = localStorage.getItem(`convy_session_${shareableLink}`);
-          if (stored) {
-            storedConversationId = JSON.parse(stored).conversationId;
-          }
-        } catch (e) {
-          console.error("Failed to parse stored session", e);
-        }
-      }
-      return initializeSurvey(shareableLink, storedConversationId);
-    },
+    queryFn: () => initializeSurvey(shareableLink, searchParams.get("resume")),
     enabled: !!shareableLink,
     staleTime: Infinity,
     retry: false,
   });
-
-  // Save session when initialized
-  useEffect(() => {
-    if (initData?.conversationId && initData?.participantId) {
-      localStorage.setItem(
-        `convy_session_${shareableLink}`,
-        JSON.stringify({
-          conversationId: initData.conversationId,
-          participantId: initData.participantId,
-        }),
-      );
-    }
-  }, [initData, shareableLink]);
 
   const survey = initData?.survey ?? null;
   const conversationId = initData?.conversationId ?? null;
   const resumedMessages = initData?.messages ?? [];
   const initiallyCompleted = initData?.completed ?? false;
   const apiEndpoint = `/api/surveys/respond/${shareableLink}`;
+  const hasRespondentSession = Boolean(survey?.id && conversationId);
 
   // State declarations - must be before hooks that reference them
   // State declarations
@@ -313,11 +324,30 @@ function SurveyContent() {
   const [completedOverride, setCompletedOverride] = useState<boolean | null>(null);
   const [startedOverride, setStartedOverride] = useState<boolean | null>(null);
   const [voiceFallbackNotice, setVoiceFallbackNotice] = useState<string | null>(null);
+  const [isPrivacyActionLoading, setIsPrivacyActionLoading] = useState(false);
+  const [isResumeLinkLoading, setIsResumeLinkLoading] = useState(false);
 
   // Derived states to avoid effect-based setState (cascading renders)
   // isCompleted moved below useChat
 
   const hasStarted = startedOverride ?? (searchParams.get("started") === "true" || (resumedMessages && resumedMessages.length > 1));
+
+  useEffect(() => {
+    if (!initData || !searchParams.get("resume")) {
+      return;
+    }
+
+    router.replace(
+      {
+        pathname,
+        query: {
+          shareableLink,
+          ...getUpdatedQuery(searchParams, { resume: null }),
+        },
+      },
+      { locale },
+    );
+  }, [initData, locale, pathname, router, searchParams, shareableLink]);
 
   // Redirect to survey language if different from current locale on first load
   useEffect(() => {
@@ -562,7 +592,6 @@ function SurveyContent() {
       try {
         await voiceWs.connect();
       } catch (e) {
-        console.error("Failed to connect voice:", e);
         handleVoiceFailure(e);
       }
     }
@@ -584,9 +613,18 @@ function SurveyContent() {
   }, [locale, isVoiceMode, conversationId, voiceWs]);
 
   const handleLanguageChange = (newLocale: string) => {
-    router.replace({ pathname, query: { shareableLink, started: "true" } }, {
-      locale: newLocale,
-    });
+    router.replace(
+      {
+        pathname,
+        query: {
+          shareableLink,
+          ...getUpdatedQuery(searchParams, { started: "true" }),
+        },
+      },
+      {
+        locale: newLocale,
+      },
+    );
   };
 
   const toggleVoiceMode = () => {
@@ -637,7 +675,146 @@ function SurveyContent() {
         parts: [{ type: "text", text: currentInput }],
       });
     } catch (error) {
-      console.error("Failed to send message:", error);
+    }
+  };
+
+  const handleRespondentExport = async () => {
+    if (!survey?.id || !conversationId) {
+      return;
+    }
+
+    setIsPrivacyActionLoading(true);
+    try {
+      const response = await fetch("/api/privacy/respondent-export", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          surveyId: survey.id,
+          conversationId,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : "Failed to export your response data.",
+        );
+      }
+
+      const blob = new Blob([JSON.stringify(data.data ?? {}, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `convy-respondent-export-${conversationId}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to export your response data.",
+      );
+    } finally {
+      setIsPrivacyActionLoading(false);
+    }
+  };
+
+  const handleRespondentDelete = async () => {
+    if (!survey?.id || !conversationId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Delete this response and the linked conversation data? This cannot be undone.",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setIsPrivacyActionLoading(true);
+    try {
+      const response = await fetch("/api/privacy/respondent-delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          surveyId: survey.id,
+          conversationId,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : "Failed to delete your response data.",
+        );
+      }
+
+      window.location.reload();
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to delete your response data.",
+      );
+    } finally {
+      setIsPrivacyActionLoading(false);
+    }
+  };
+
+  const handleCopyResumeLink = async () => {
+    if (!conversationId) {
+      return;
+    }
+
+    setIsResumeLinkLoading(true);
+    try {
+      const response = await fetch(
+        `/api/surveys/respond/${shareableLink}/resume-link`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            conversationId,
+            locale,
+          }),
+        },
+      );
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || typeof data.resumeLink !== "string") {
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : "Failed to create a resume link.",
+        );
+      }
+
+      await copyText(data.resumeLink);
+      window.alert(
+        "Resume link copied. Anyone with this link can continue this survey response, so keep it private.",
+      );
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to create a resume link.",
+      );
+    } finally {
+      setIsResumeLinkLoading(false);
     }
   };
 
@@ -697,12 +874,39 @@ function SurveyContent() {
           <p className="text-xl text-gray-500 mb-10 leading-relaxed font-light">
             {t("thankYouMessage")}
           </p>
-          <button
-            onClick={() => window.close()}
-            className="px-8 py-4 bg-gray-900 text-white rounded-2xl font-semibold hover:bg-gray-800 transition-all hover:shadow-md hover:-translate-y-1 active:scale-95 w-full"
-          >
-            {t("close")}
-          </button>
+          <div className="space-y-3">
+            {hasRespondentSession ? (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button
+                  onClick={handleCopyResumeLink}
+                  disabled={isResumeLinkLoading}
+                  className="px-5 py-3 rounded-2xl border border-gray-200 bg-white text-gray-900 font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  {isResumeLinkLoading ? "Preparing resume link..." : "Copy resume link"}
+                </button>
+                <button
+                  onClick={handleRespondentExport}
+                  disabled={isPrivacyActionLoading}
+                  className="px-5 py-3 rounded-2xl border border-gray-200 bg-white text-gray-900 font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Export my data
+                </button>
+                <button
+                  onClick={handleRespondentDelete}
+                  disabled={isPrivacyActionLoading}
+                  className="px-5 py-3 rounded-2xl border border-red-200 bg-red-50 text-red-700 font-medium hover:bg-red-100 transition-colors disabled:opacity-50"
+                >
+                  Delete my data
+                </button>
+              </div>
+            ) : null}
+            <button
+              onClick={() => window.close()}
+              className="px-8 py-4 bg-gray-900 text-white rounded-2xl font-semibold hover:bg-gray-800 transition-all hover:shadow-md hover:-translate-y-1 active:scale-95 w-full"
+            >
+              {t("close")}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -767,6 +971,15 @@ function SurveyContent() {
             </div>
 
             <div className="flex-1 flex items-center justify-end gap-2 sm:gap-4">
+              {conversationId ? (
+                <button
+                  onClick={handleCopyResumeLink}
+                  disabled={isResumeLinkLoading}
+                  className="hidden sm:inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold transition-all bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+                >
+                  {isResumeLinkLoading ? "Preparing link..." : "Copy resume link"}
+                </button>
+              ) : null}
               {survey?.isVoice && (
                 <div className="flex items-center gap-2">
                   <button
@@ -1085,3 +1298,4 @@ export default function SurveyRespondPage() {
     </Suspense>
   );
 }
+

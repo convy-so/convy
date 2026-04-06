@@ -10,7 +10,12 @@ import {
   createPlaybook,
   listPlaybooksForSurvey,
 } from "@/lib/education/storage";
-import { getSurveyPermissionContext, isWorkspaceOwner } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  isWorkspaceOwner,
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 
 export async function GET(
   _req: NextRequest,
@@ -22,8 +27,8 @@ export async function GET(
     const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
     if (!survey) return NextResponse.json({ error: "Survey not found" }, { status: 404 });
 
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
-    if (!permission?.canView) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canView")) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
     const records = await listPlaybooksForSurvey({
       surveyId,
@@ -52,8 +57,8 @@ export async function POST(
     const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
     if (!survey) return NextResponse.json({ error: "Survey not found" }, { status: 404 });
 
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId);
-    if (!permission?.canEdit) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canEdit")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

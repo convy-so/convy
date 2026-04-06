@@ -77,7 +77,8 @@ export function TeacherTopicDetailPage({ topicId }: { topicId: string }) {
 
   const { topic, reportCount, questionCount, activeStudentCount } = overviewQuery.data.data;
   const readiness = readinessQuery.data?.data ?? null;
-  const reports = reportsQuery.data?.data ?? [];
+  const reportsPayload = reportsQuery.data?.data ?? null;
+  const reports = reportsPayload?.reports ?? [];
   const questions = questionsQuery.data?.data ?? [];
   const materials = materialsQuery.data?.data ?? [];
 

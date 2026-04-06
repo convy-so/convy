@@ -5,8 +5,7 @@ import {
   type SupportedLanguage,
   type VoiceAgentSettings,
 } from "@/lib/voice/deepgram-voice-agent";
-
-export type VoiceAgentProviderName = "deepgram";
+import { getVoiceAgentProviderName } from "@/lib/voice/provider-config";
 
 export type VoiceAgentConnection = {
   readonly connected: boolean;
@@ -34,14 +33,8 @@ export type VoiceAgentConnection = {
     output: string,
   ): void;
   sendInjectUserMessage(text: string): void;
+  updateThink(think: VoiceAgentSettings["agent"]["think"]): void;
 };
-
-function getVoiceAgentProviderName(): VoiceAgentProviderName {
-  const configuredProvider = process.env.VOICE_AGENT_PROVIDER;
-  return configuredProvider === "deepgram" || !configuredProvider
-    ? "deepgram"
-    : "deepgram";
-}
 
 export function createVoiceAgentConnection(
   settings: VoiceAgentSettings,

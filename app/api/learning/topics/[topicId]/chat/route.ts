@@ -3,12 +3,28 @@ import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
 import { learningSessions } from "@/db/schema";
+import { assembleAiContext } from "@/lib/ai/context-assembler";
+import { listActiveExpertGuidance, renderExpertGuidanceContext } from "@/lib/ai/guidance";
+import {
+  createAiRunTrace,
+  finishAiRunTrace,
+  recordAiFeedbackEvent,
+  recordAiStep,
+  recordAiContextLayers,
+} from "@/lib/ai/observability";
 import { getVerifiedSession } from "@/lib/auth/session";
+import { getPlatformRole } from "@/lib/auth/roles";
 import { getLearningSessionById } from "@/lib/learning/storage";
 import { getStudentTopicAccess } from "@/lib/learning/access";
-import { buildTeachingPlaybook, deriveSubjectInfo } from "@/lib/learning/patterns";
-import { generateTeacherProgressReport } from "@/lib/learning/reporting";
+import { isMem0Configured, searchLearningPatternMemories } from "@/lib/learning/mem0";
+import { logTutorMediaUsage, selectTutorMedia } from "@/lib/learning/media";
 import {
+  buildTeachingPlaybook,
+  deriveSubjectInfo,
+  renderTeachingPlaybookContext,
+} from "@/lib/learning/patterns";
+import {
+  type TutoringRuntimeContext,
   buildLearningSessionState,
   runTutoringSessionTurn,
 } from "@/lib/learning/session-engine";
@@ -16,37 +32,149 @@ import {
   appendLearningMessage,
   completeLearningSession,
   createLearningSession,
-  createStudentProgressReport,
   getActiveLearningSession,
   getLatestCompletedLearningSession,
   getLatestStudentProgressReport,
-  listLearningInteractions,
   listLearningMessages,
   listStudentLearningPatternProfiles,
   logLearningInteraction,
   updateLearningSessionState,
 } from "@/lib/learning/storage";
-import { enqueueLearningPatternAnalysis } from "@/lib/queue";
+import { enqueueTutoringReportGeneration } from "@/lib/queue";
 import {
   learningSessionStateSchema,
   type LearningSessionState,
   type QuestionIntent,
 } from "@/lib/learning/types";
 import type { LearningTeachingPlaybook } from "@/lib/learning/pattern-types";
-
-function computeMasteryPercent(state: LearningSessionState) {
-  if (state.conceptsToCover.length === 0) return 0;
-
-  const scores = state.conceptsToCover.map((concept) => {
-    const conceptState = state.conceptStates[concept.key];
-    return conceptState?.masteryScore ?? 0;
-  });
-
-  return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
-}
+import { normalizeAppLocale } from "@/lib/i18n/config";
+import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+}
+
+function formatMemoriesAsContext(
+  records: Array<{ memory?: string; metadata?: Record<string, unknown> }>,
+) {
+  if (records.length === 0) return "";
+
+  return records
+    .map((record) => {
+      const memory = record.memory?.trim();
+      if (!memory) return null;
+      const dimension =
+        typeof record.metadata?.dimension === "string"
+          ? ` (${record.metadata.dimension})`
+          : "";
+      return `- ${memory}${dimension}`;
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+async function buildTutoringRuntimeContext(params: {
+  access: NonNullable<Awaited<ReturnType<typeof getStudentTopicAccess>>>;
+  teachingPlaybook: LearningTeachingPlaybook | null;
+}) {
+  const guidance = await listActiveExpertGuidance({
+    feature: "tutoring_chat",
+    artifactTypes: [
+      "pedagogy_strategy",
+      "misconception_rules",
+      "social_tutoring",
+      "media_rules",
+      "grade_band_guidance",
+    ],
+    selectors: {
+      organizationId: params.access.topic.classroom.organizationId,
+      classroomId: params.access.topic.classroomId,
+      topicId: params.access.topic.id,
+      subjectKey: params.access.topic.subjectKey,
+      gradeBand: params.access.topic.classroom.gradeBand,
+    },
+  });
+
+  const memoryRecords =
+    isMem0Configured() && params.access.classroomStudent.userId
+      ? await searchLearningPatternMemories({
+          studentUserId: params.access.classroomStudent.userId,
+          query: `${params.access.topic.title} ${params.access.topic.subject ?? ""}`.trim(),
+          subjectKey: params.access.topic.subjectKey,
+          limit: 4,
+        }).catch(() => [])
+      : [];
+
+  const expertGuidance = renderExpertGuidanceContext(
+    guidance.filter((item) => item.artifactType !== "social_tutoring"),
+  );
+  const socialGuidance = renderExpertGuidanceContext(
+    guidance.filter((item) => item.artifactType === "social_tutoring"),
+  );
+  const memoryContext = formatMemoriesAsContext(memoryRecords);
+  const userOverlay = params.teachingPlaybook
+    ? renderTeachingPlaybookContext(params.teachingPlaybook)
+    : "";
+
+  const contextLayers = assembleAiContext([
+    {
+      kind: "product_policy",
+      label: "Tutoring product policy",
+      content:
+        "Stay grounded in teacher-approved materials for factual claims. Keep the tutor workflow-first, warm, and age-appropriate.",
+      sourceType: "product_policy",
+      sourceId: "tutoring-core",
+      versionId: "v2.2",
+    },
+    {
+      kind: "workflow_state",
+      label: "Active tutoring workflow",
+      content: `Topic: ${params.access.topic.title}\nGrade band: ${params.access.topic.classroom.gradeBand}\nLearning outcomes: ${params.access.topic.learningOutcomes.map((item) => item.title).join(", ")}`,
+      sourceType: "topic",
+      sourceId: params.access.topic.id,
+    },
+    {
+      kind: "expert_guidance",
+      label: "Expert tutor guidance",
+      content: expertGuidance,
+      sourceType: "expert_guidance",
+      sourceId: "tutoring_chat",
+      versionId: guidance.map((item) => item.versionId).join(","),
+    },
+    {
+      kind: "memory",
+      label: "Student learning memory",
+      content: memoryContext,
+      sourceType: "mem0",
+      sourceId: params.access.classroomStudent.userId ?? params.access.classroomStudent.id,
+    },
+    {
+      kind: "user_overlay",
+      label: "Current teaching playbook",
+      content: userOverlay,
+      sourceType: "teaching_playbook",
+      sourceId: params.access.classroomStudent.id,
+    },
+  ]);
+
+  const runtimeContext: TutoringRuntimeContext = {
+    expertGuidance,
+    socialGuidance,
+    memoryContext,
+    userOverlay,
+    organizationId: params.access.topic.classroom.organizationId,
+    metadata: {
+      topicId: params.access.topic.id,
+      classroomStudentId: params.access.classroomStudent.id,
+      subjectKey: params.access.topic.subjectKey,
+      guidanceVersionIds: guidance.map((item) => item.versionId),
+    },
+  };
+
+  return {
+    runtimeContext,
+    contextLayers,
+  };
 }
 
 async function hydrateSessionTeachingPlaybook(params: {
@@ -127,6 +255,7 @@ async function ensureTutoringSession(params: {
   topicId: string;
   access: NonNullable<Awaited<ReturnType<typeof getStudentTopicAccess>>>;
   sessionId?: string;
+  studyLanguage: string;
 }) {
   const previousSession = await getLatestCompletedLearningSession({
     classroomStudentId: params.access.classroomStudent.id,
@@ -152,6 +281,7 @@ async function ensureTutoringSession(params: {
       classroomStudentId: params.access.classroomStudent.id,
       topicId: params.topicId,
       sessionType: "tutoring",
+      sessionLocale: params.studyLanguage,
     }));
 
   if (!tutorSession) {
@@ -173,7 +303,7 @@ async function ensureTutoringSession(params: {
       classroomStudentId: params.access.classroomStudent.id,
       topicId: params.topicId,
       sessionType: "tutoring",
-      sessionLocale: params.access.topic.contentLocale,
+      sessionLocale: params.studyLanguage,
       state,
     });
   }
@@ -223,9 +353,21 @@ async function ensureTutoringSession(params: {
   const messages = await listLearningMessages(tutorSession.id);
 
   if (messages.length === 0) {
+    const { runtimeContext } = await buildTutoringRuntimeContext({
+      access: params.access,
+      teachingPlaybook: parsedState.teachingPlaybook,
+    });
     const result = await runTutoringSessionTurn({
       state: parsedState,
       access: params.access,
+      runtimeContext: {
+        ...runtimeContext,
+        metadata: {
+          ...(runtimeContext.metadata ?? {}),
+          studyLanguage: params.studyLanguage,
+          sourceContentLanguage: params.access.topic.contentLocale,
+        },
+      },
     });
 
     await updateLearningSessionState({
@@ -265,13 +407,17 @@ async function ensureTutoringSession(params: {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ topicId: string }> },
 ) {
   try {
     const session = await getVerifiedSession();
     const { topicId } = await params;
+    const { searchParams } = new URL(request.url);
     const access = await getStudentTopicAccess(session.user.id, topicId);
+    const studyLanguage = normalizeAppLocale(
+      searchParams.get("language") ?? session.user.uiLocale ?? session.user.preferredLanguage ?? "en",
+    );
 
     if (!access) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
@@ -287,6 +433,7 @@ export async function GET(
     const tutorSession = await ensureTutoringSession({
       topicId,
       access,
+      studyLanguage,
     });
     const messages = await listLearningMessages(tutorSession.id);
     const state = learningSessionStateSchema.parse(tutorSession.state ?? {});
@@ -295,6 +442,8 @@ export async function GET(
       success: true,
       data: {
         sessionId: tutorSession.id,
+        sessionLocale: normalizeAppLocale(tutorSession.sessionLocale),
+        sourceLocale: access.topic.contentLocale,
         topic: {
           id: access.topic.id,
           title: access.topic.title,
@@ -318,11 +467,19 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ topicId: string }> },
 ) {
+  let aiRunId: string | null = null;
   try {
     const session = await getVerifiedSession();
     const { topicId } = await params;
     const access = await getStudentTopicAccess(session.user.id, topicId);
-    const body = (await request.json()) as { sessionId?: string; message?: string };
+    const body = (await request.json()) as {
+      sessionId?: string;
+      message?: string;
+      language?: string;
+    };
+    const studyLanguage = normalizeAppLocale(
+      body.language ?? session.user.uiLocale ?? session.user.preferredLanguage ?? "en",
+    );
 
     if (!access) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
@@ -339,13 +496,123 @@ export async function POST(
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
     }
 
+    const scopeDecision = await evaluateScopePolicy({
+      feature: "tutoring_chat",
+      objective: `Help the student learn ${access.topic.title} using teacher-approved material`,
+      currentPhase: "active tutoring session",
+      activeTopic: access.topic.title,
+      latestUserMessage: body.message.trim(),
+      strictMode: true,
+      driftCount: 0,
+      allowedDetours: [
+        "brief clarification of the current concept",
+        "asking what a current term means",
+        "replying in another supported language while staying on lesson",
+      ],
+    });
+
+    if (scopeDecision.shouldRedirect) {
+      const tutorSession = await ensureTutoringSession({
+        topicId,
+        access,
+        sessionId: body.sessionId,
+        studyLanguage,
+      });
+      await appendLearningMessage({
+        sessionId: tutorSession.id,
+        role: "user",
+        content: body.message.trim(),
+        metadata: {
+          phaseType: "scope_redirect",
+        },
+      });
+      await appendLearningMessage({
+        sessionId: tutorSession.id,
+        role: "assistant",
+        content: scopeDecision.redirectMessage,
+        metadata: {
+          phaseType: "scope_redirect",
+          classification: scopeDecision.classification,
+        },
+      });
+      await recordAiFeedbackEvent({
+        userId: session.user.id,
+        source: "scope_policy",
+        feedbackType:
+          scopeDecision.promptInjectionSignal === "none"
+            ? "redirected"
+            : "prompt_injection_detected",
+        payload: {
+          topicId,
+          sessionId: tutorSession.id,
+          classification: scopeDecision.classification,
+          promptInjectionSignal: scopeDecision.promptInjectionSignal,
+          reason: scopeDecision.reason,
+        },
+      }).catch(() => undefined);
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          sessionId: tutorSession.id,
+          sessionLocale: studyLanguage,
+          sourceLocale: access.topic.contentLocale,
+          response: scopeDecision.redirectMessage,
+          completed: false,
+          assistantMessage: {
+            id: `assistant-${Date.now()}`,
+            role: "assistant",
+            content: scopeDecision.redirectMessage,
+            metadata: {
+              phaseType: "scope_redirect",
+              classification: scopeDecision.classification,
+            },
+            createdAt: new Date().toISOString(),
+          },
+        },
+      });
+    }
+
     const tutorSession = await ensureTutoringSession({
       topicId,
       access,
       sessionId: body.sessionId,
+      studyLanguage,
     });
 
     const startingState = learningSessionStateSchema.parse(tutorSession.state ?? {});
+    const { runtimeContext, contextLayers } = await buildTutoringRuntimeContext({
+      access,
+      teachingPlaybook: startingState.teachingPlaybook,
+    });
+    aiRunId = await createAiRunTrace({
+      feature: "tutoring_chat",
+      scenarioType: "session_turn",
+      status: "running",
+      userId: session.user.id,
+      organizationId: access.topic.classroom.organizationId,
+      actorRole: getPlatformRole(session.user),
+      resourceType: "learning_session",
+      resourceId: tutorSession.id,
+      metadata: {
+        topicId,
+        classroomStudentId: access.classroomStudent.id,
+        guidanceVersionIds: runtimeContext.metadata?.guidanceVersionIds,
+        studyLanguage,
+        sourceContentLanguage: access.topic.contentLocale,
+      },
+    });
+    await recordAiContextLayers(aiRunId, contextLayers);
+    runtimeContext.aiRunId = aiRunId;
+    runtimeContext.userId = session.user.id;
+    runtimeContext.organizationId = access.topic.classroom.organizationId;
+    runtimeContext.resourceType = "learning_session";
+    runtimeContext.resourceId = tutorSession.id;
+    runtimeContext.metadata = {
+      ...(runtimeContext.metadata ?? {}),
+      studyLanguage,
+      sourceContentLanguage: access.topic.contentLocale,
+    };
     const startingPhase =
       startingState.phases.find((phase) => phase.id === startingState.currentPhaseId) ??
       null;
@@ -363,10 +630,53 @@ export async function POST(
       state: startingState,
       access,
       userMessage: body.message.trim(),
+      runtimeContext,
     });
 
     const resultingPhase =
       result.state.phases.find((phase) => phase.id === result.state.currentPhaseId) ?? null;
+
+    const currentConceptKey =
+      resultingPhase?.conceptKey ??
+      startingState.conceptsToCover.find((concept) => !startingState.completedConceptKeys.includes(concept.key))
+        ?.key ??
+      null;
+    const currentConceptTitle =
+      startingState.conceptsToCover.find((concept) => concept.key === currentConceptKey)?.title ??
+      startingState.conceptsToCover[0]?.title ??
+      access.topic.title;
+    const mediaRecommendation = await selectTutorMedia({
+      organizationId: access.topic.classroom.organizationId,
+      topicId,
+      classroomId: access.topic.classroomId,
+      gradeBand: access.topic.classroom.gradeBand,
+      currentPhaseType: resultingPhase?.type ?? startingPhase?.type ?? null,
+      conceptKey: currentConceptKey,
+      conceptTitle: currentConceptTitle,
+      gapCount: result.state.gapsIdentified.length,
+    });
+    await recordAiStep({
+      runId: aiRunId,
+      stepKey: "tutoring-media-selection",
+      stepType: "media_selection",
+      payload: {
+        topicId,
+        phaseType: resultingPhase?.type ?? startingPhase?.type ?? null,
+        conceptKey: currentConceptKey,
+        conceptTitle: currentConceptTitle,
+        gapCount: result.state.gapsIdentified.length,
+        selected: mediaRecommendation
+          ? {
+              title: mediaRecommendation.title,
+              assetType: mediaRecommendation.assetType,
+              selectionSource: mediaRecommendation.selectionSource,
+            }
+          : null,
+      },
+      outputSummary: mediaRecommendation
+        ? `Selected ${mediaRecommendation.assetType} from ${mediaRecommendation.selectionSource}`
+        : "No tutoring media selected for this turn",
+    }).catch(() => undefined);
 
     await logLearningInteraction({
       classroomStudentId: access.classroomStudent.id,
@@ -382,14 +692,33 @@ export async function POST(
     });
 
     if (result.response.trim()) {
+      const assistantMetadata = {
+        phaseType: resultingPhase?.type ?? null,
+        completed: result.completed,
+        ...(mediaRecommendation
+          ? {
+              tutorMedia: {
+                assetId: mediaRecommendation.assetId ?? null,
+                externalMediaId: mediaRecommendation.externalMediaId ?? null,
+                assetType: mediaRecommendation.assetType,
+                title: mediaRecommendation.title,
+                description: mediaRecommendation.description,
+                mediaUrl: mediaRecommendation.mediaUrl,
+                thumbnailUrl: mediaRecommendation.thumbnailUrl,
+                durationSeconds: mediaRecommendation.durationSeconds,
+                selectionSource: mediaRecommendation.selectionSource,
+                reason: mediaRecommendation.reason,
+                expectedBenefit: mediaRecommendation.expectedBenefit,
+                followUpPrompt: mediaRecommendation.followUpPrompt,
+              },
+            }
+          : {}),
+      };
       await appendLearningMessage({
         sessionId: tutorSession.id,
         role: "assistant",
         content: result.response,
-        metadata: {
-          phaseType: resultingPhase?.type ?? null,
-          completed: result.completed,
-        },
+        metadata: assistantMetadata,
       });
 
       await logLearningInteraction({
@@ -406,58 +735,50 @@ export async function POST(
         phaseId: resultingPhase?.id ?? null,
         phaseType: resultingPhase?.type ?? null,
         conceptKey: resultingPhase?.conceptKey ?? null,
+        metadata: mediaRecommendation
+          ? {
+              tutorMedia: {
+                title: mediaRecommendation.title,
+                assetType: mediaRecommendation.assetType,
+                selectionSource: mediaRecommendation.selectionSource,
+              },
+            }
+          : undefined,
       });
+
+      if (mediaRecommendation) {
+        await logTutorMediaUsage({
+          topicId,
+          sessionId: tutorSession.id,
+          classroomStudentId: access.classroomStudent.id,
+          aiRunId,
+          recommendation: mediaRecommendation,
+        });
+      }
     }
 
     if (result.completed) {
-      const interactions = await listLearningInteractions({
-        classroomStudentId: access.classroomStudent.id,
-        sessionId: tutorSession.id,
-      });
       const previousReport = await getLatestStudentProgressReport({
         topicId,
         classroomStudentId: access.classroomStudent.id,
       });
-      const report = await generateTeacherProgressReport({
-        studentName: access.classroomStudent.fullName,
-        topicTitle: access.topic.title,
-        state: result.state,
-        interactions: interactions.map((interaction) => ({
-          role: interaction.role,
-          interactionType: interaction.interactionType,
-          content: interaction.content,
-          metadata: interaction.metadata as Record<string, unknown> | null,
-        })),
-        sessionStartedAt: tutorSession.createdAt,
-        sessionCompletedAt: new Date(),
-        previousReport: previousReport?.report ?? null,
-      });
-
-      await createStudentProgressReport({
-        topicId,
-        classroomStudentId: access.classroomStudent.id,
-        generatedFromSessionId: tutorSession.id,
-        masteryPercent: computeMasteryPercent(result.state),
-        sourceLocale: access.topic.contentLocale,
-        report,
-      });
-
       await completeLearningSession({
         sessionId: tutorSession.id,
-        summary: report.studentSummary,
         state: result.state,
       });
 
-      await enqueueLearningPatternAnalysis({
-        sourceType: "session",
-        sourceId: tutorSession.id,
+      await enqueueTutoringReportGeneration({
+        sessionId: tutorSession.id,
+        topicId,
         organizationId: access.topic.classroom.organizationId,
         studentUserId: session.user.id,
         classroomStudentId: access.classroomStudent.id,
-        topicId,
+        studentName: access.classroomStudent.fullName,
+        topicTitle: access.topic.title,
+        sourceLocale: access.topic.contentLocale,
+        previousReport: previousReport?.report ?? null,
         subjectKey: access.topic.subjectKey,
       }).catch((error) => {
-        console.error("[Learning Chat] Failed to enqueue pattern analysis:", error);
       });
     } else {
       await updateLearningSessionState({
@@ -466,19 +787,50 @@ export async function POST(
       });
     }
 
+    await finishAiRunTrace(aiRunId, {
+      status: "completed",
+      outputText: result.response,
+      metadata: {
+        completed: result.completed,
+        gapCount: result.state.gapsIdentified.length,
+        usedMedia: Boolean(mediaRecommendation),
+      },
+    });
+
     return NextResponse.json({
       success: true,
       data: {
         sessionId: tutorSession.id,
+        sessionLocale: studyLanguage,
+        sourceLocale: access.topic.contentLocale,
         response: result.response,
         completed: result.completed,
         sessionState: result.state,
+        assistantMessage: {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: result.response,
+          metadata: {
+            phaseType: resultingPhase?.type ?? null,
+            completed: result.completed,
+            ...(mediaRecommendation ? { tutorMedia: mediaRecommendation } : {}),
+          },
+          createdAt: new Date().toISOString(),
+        },
       },
     });
   } catch (error) {
+    if (aiRunId) {
+      await finishAiRunTrace(aiRunId, {
+        status: "failed",
+        errorMessage:
+          error instanceof Error ? error.message : "Failed to continue tutoring",
+      }).catch(() => undefined);
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to continue tutoring" },
       { status: 400 },
     );
   }
 }
+

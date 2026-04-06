@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import type {
+    RetentionPolicySettings,
+    WorkspacePrivacyProfileSettings,
+} from "@/db/schema";
 import {
     User,
     Bell,
@@ -22,6 +26,7 @@ import {
     getActiveWorkspace,
     updateWorkspace,
     updateWorkspaceLocalizationSettingsAction,
+    updateWorkspacePrivacyProfileAction,
 } from "@/app/actions/workspace";
 import toast from "react-hot-toast";
 import { useTranslations } from "next-intl";
@@ -33,6 +38,7 @@ import {
     type AppLocale,
     type WorkspaceLocaleSettings,
 } from "@/lib/i18n/config";
+import { clientEnv } from "@/lib/env.client";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -101,6 +107,214 @@ const notificationStateKeyMap: Record<NotificationChannel, Partial<Record<Notifi
     },
 };
 
+type WorkspacePrivacyState = {
+    settings: WorkspacePrivacyProfileSettings;
+    retention: RetentionPolicySettings;
+    missingItems: string[];
+    runtimeEnabledProcessors: string[];
+    runtimeProcessorViolations: string[];
+};
+
+type ActiveWorkspaceState = {
+    id: string;
+    name: string;
+    slug: string;
+    role: string;
+    logo?: string | null;
+    plan?: string | null;
+    localization: WorkspaceLocaleSettings;
+    privacy: WorkspacePrivacyState;
+};
+
+const defaultWorkspacePrivacySettings: WorkspacePrivacyProfileSettings = {
+    controllerIdentity: null,
+    controllerContactName: null,
+    controllerContactEmail: null,
+    dpoContactEmail: null,
+    privacyNoticeUrl: null,
+    privacyNoticeText: null,
+    processorRoleAcknowledged: false,
+    enabledProcessors: [],
+    lawfulBasisDeclarations: [],
+    dataResidencyMode: "eea_only",
+    audienceAgeMode: "unset",
+};
+
+const defaultRetentionPolicySettings: RetentionPolicySettings = {
+    rawTranscriptDays: 30,
+    voiceTelemetryDays: 7,
+    derivedAnalyticsDays: 180,
+    studentInteractionDays: 90,
+    privacyRequestDays: 365,
+};
+
+const defaultWorkspacePrivacyState: WorkspacePrivacyState = {
+    settings: defaultWorkspacePrivacySettings,
+    retention: defaultRetentionPolicySettings,
+    missingItems: [],
+    runtimeEnabledProcessors: [],
+    runtimeProcessorViolations: [],
+};
+
+function normalizeWorkspacePrivacyInput(
+    value: unknown,
+    fallback: WorkspacePrivacyProfileSettings,
+): WorkspacePrivacyProfileSettings {
+    if (!isRecord(value)) {
+        return fallback;
+    }
+
+    const lawfulBasisDeclarations = Array.isArray(value.lawfulBasisDeclarations)
+        ? value.lawfulBasisDeclarations.flatMap((item) => {
+            if (!isRecord(item) || typeof item.purpose !== "string" || typeof item.lawfulBasis !== "string") {
+                return [];
+            }
+
+            return [{
+                purpose: item.purpose,
+                lawfulBasis: item.lawfulBasis,
+                notes: typeof item.notes === "string" ? item.notes : null,
+            }];
+        })
+        : fallback.lawfulBasisDeclarations;
+
+    return {
+        controllerIdentity:
+            typeof value.controllerIdentity === "string" || value.controllerIdentity === null
+                ? value.controllerIdentity
+                : fallback.controllerIdentity,
+        controllerContactName:
+            typeof value.controllerContactName === "string" || value.controllerContactName === null
+                ? value.controllerContactName
+                : fallback.controllerContactName,
+        controllerContactEmail:
+            typeof value.controllerContactEmail === "string" || value.controllerContactEmail === null
+                ? value.controllerContactEmail
+                : fallback.controllerContactEmail,
+        dpoContactEmail:
+            typeof value.dpoContactEmail === "string" || value.dpoContactEmail === null
+                ? value.dpoContactEmail
+                : fallback.dpoContactEmail,
+        privacyNoticeUrl:
+            typeof value.privacyNoticeUrl === "string" || value.privacyNoticeUrl === null
+                ? value.privacyNoticeUrl
+                : fallback.privacyNoticeUrl,
+        privacyNoticeText:
+            typeof value.privacyNoticeText === "string" || value.privacyNoticeText === null
+                ? value.privacyNoticeText
+                : fallback.privacyNoticeText,
+        processorRoleAcknowledged:
+            typeof value.processorRoleAcknowledged === "boolean"
+                ? value.processorRoleAcknowledged
+                : fallback.processorRoleAcknowledged,
+        enabledProcessors: Array.isArray(value.enabledProcessors)
+            ? value.enabledProcessors.filter((item): item is string => typeof item === "string")
+            : fallback.enabledProcessors,
+        lawfulBasisDeclarations,
+        dataResidencyMode:
+            value.dataResidencyMode === "approved_transfers" || value.dataResidencyMode === "eea_only"
+                ? value.dataResidencyMode
+                : fallback.dataResidencyMode,
+        audienceAgeMode:
+            value.audienceAgeMode === "adult_only" ||
+                value.audienceAgeMode === "includes_minors" ||
+                value.audienceAgeMode === "unset"
+                ? value.audienceAgeMode
+                : fallback.audienceAgeMode,
+    };
+}
+
+function normalizeRetentionInput(
+    value: unknown,
+    fallback: RetentionPolicySettings,
+): RetentionPolicySettings {
+    if (!isRecord(value)) {
+        return fallback;
+    }
+
+    const readDays = (nextValue: unknown, fallbackValue: number) =>
+        typeof nextValue === "number" && Number.isFinite(nextValue) && nextValue > 0
+            ? Math.round(nextValue)
+            : fallbackValue;
+
+    return {
+        rawTranscriptDays: readDays(value.rawTranscriptDays, fallback.rawTranscriptDays),
+        voiceTelemetryDays: readDays(value.voiceTelemetryDays, fallback.voiceTelemetryDays),
+        derivedAnalyticsDays: readDays(value.derivedAnalyticsDays, fallback.derivedAnalyticsDays),
+        studentInteractionDays: readDays(value.studentInteractionDays, fallback.studentInteractionDays),
+        privacyRequestDays: readDays(value.privacyRequestDays, fallback.privacyRequestDays),
+    };
+}
+
+function normalizeWorkspacePrivacyState(
+    value: unknown,
+    fallback: WorkspacePrivacyState = defaultWorkspacePrivacyState,
+): WorkspacePrivacyState {
+    if (!isRecord(value)) {
+        return fallback;
+    }
+
+    return {
+        settings: normalizeWorkspacePrivacyInput(
+            value.settings,
+            fallback.settings,
+        ),
+        retention: normalizeRetentionInput(
+            value.retention,
+            fallback.retention,
+        ),
+        missingItems: Array.isArray(value.missingItems)
+            ? value.missingItems.filter((item): item is string => typeof item === "string")
+            : fallback.missingItems,
+        runtimeEnabledProcessors: Array.isArray(value.runtimeEnabledProcessors)
+            ? value.runtimeEnabledProcessors.filter((item): item is string => typeof item === "string")
+            : fallback.runtimeEnabledProcessors,
+        runtimeProcessorViolations: Array.isArray(value.runtimeProcessorViolations)
+            ? value.runtimeProcessorViolations.filter((item): item is string => typeof item === "string")
+            : fallback.runtimeProcessorViolations,
+    };
+}
+
+function parseProcessorList(value: string): string[] {
+    return Array.from(
+        new Set(
+            value
+                .split(",")
+                .map((item) => item.trim().toLowerCase())
+                .filter(Boolean),
+        ),
+    );
+}
+
+function formatPrivacyMissingItem(item: string): string {
+    if (item.startsWith("enabledProcessor:")) {
+        return `Missing runtime processor acknowledgement: ${item.replace("enabledProcessor:", "")}`;
+    }
+
+    switch (item) {
+        case "controllerIdentity":
+            return "Controller identity";
+        case "controllerContactEmail":
+            return "Controller contact email";
+        case "privacyNotice":
+            return "Privacy notice URL or notice text";
+        case "processorRoleAcknowledged":
+            return "Processor role acknowledgement";
+        case "lawfulBasisDeclarations":
+            return "Lawful basis declarations";
+        case "enabledProcessors":
+            return "Enabled subprocessors";
+        case "dataResidencyMode":
+            return "EEA-only residency mode";
+        case "audienceAgeMode":
+            return "Learning audience age mode";
+        case "retentionPolicy":
+            return "Retention policy";
+        default:
+            return item;
+    }
+}
+
 export default function SettingsPage() {
     const { user, session } = useAuth();
 
@@ -120,19 +334,14 @@ export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState("profile");
     const [isSaving, setIsSaving] = useState(false);
     const [profileImage, setProfileImage] = useState<string | null>(null);
+    const [isPrivacyActionLoading, setIsPrivacyActionLoading] = useState(false);
+    const [privacyRequestNotes, setPrivacyRequestNotes] = useState("");
 
     // Workspace state
-    const [activeWorkspace, setActiveWorkspace] = useState<{
-        id: string;
-        name: string;
-        slug: string;
-        role: string;
-        logo?: string | null;
-        plan?: string | null;
-        localization: WorkspaceLocaleSettings;
-    } | null>(null);
+    const [activeWorkspace, setActiveWorkspace] = useState<ActiveWorkspaceState | null>(null);
 
     const isOwner = activeWorkspace?.role === "owner";
+    const isEuMode = clientEnv.NEXT_PUBLIC_GDPR_EU_MODE;
 
     const tabs = [
         { id: "profile", name: t("Tabs.Profile"), icon: User },
@@ -140,6 +349,7 @@ export default function SettingsPage() {
         ...(isWorkspaceContext && isOwner ? [{ id: "billing", name: tt("Tabs.Billing", "Billing"), icon: CreditCard }] : []),
         { id: "notifications", name: t("Tabs.Notifications"), icon: Bell },
         { id: "preferences", name: t("Tabs.Preferences"), icon: Globe },
+        { id: "privacy", name: tt("Tabs.Privacy", "Privacy"), icon: AlertCircle },
         { id: "security", name: t("Tabs.Security"), icon: Shield },
     ];
 
@@ -160,6 +370,9 @@ export default function SettingsPage() {
         allowedLocales: ["en", "fr", "de", "es", "it"],
         autoTranslateGeneratedContent: true,
     });
+    const [workspacePrivacy, setWorkspacePrivacy] = useState<WorkspacePrivacyState>(
+        defaultWorkspacePrivacyState,
+    );
 
     const [notifications, setNotifications] = useState<NotificationSettings>(initialNotifications);
 
@@ -188,6 +401,7 @@ export default function SettingsPage() {
                 setWsSlug(result.data.slug);
                 setWsLogo(result.data.logo || null);
                 setWorkspaceLocalization(result.data.localization);
+                setWorkspacePrivacy(result.data.privacy);
             }
         }
         loadWorkspace();
@@ -214,11 +428,18 @@ export default function SettingsPage() {
                     workspaceLocalization,
                 )
                 : undefined;
+            const privacy = payload.privacy
+                ? normalizeWorkspacePrivacyState(
+                    payload.privacy,
+                    workspacePrivacy,
+                )
+                : undefined;
 
             if (name) setWsName(name);
             if (slug) setWsSlug(slug);
             if (logo !== undefined) setWsLogo(logo);
             if (localization) setWorkspaceLocalization(localization);
+            if (privacy) setWorkspacePrivacy(privacy);
 
             setActiveWorkspace(prev => prev ? {
                 ...prev,
@@ -226,6 +447,7 @@ export default function SettingsPage() {
                 slug: slug || prev.slug,
                 logo: logo !== undefined ? logo : prev.logo,
                 localization: localization || prev.localization,
+                privacy: privacy || prev.privacy,
             } : null);
         },
     });
@@ -245,7 +467,8 @@ export default function SettingsPage() {
                     }
                 }
             });
-        } catch {
+        } catch (error) {
+            console.error("[handleProfileSave] Failed:", error);
             toast.error(tt("Error", "An error occurred while saving profile"));
         } finally {
             setIsSaving(false);
@@ -276,7 +499,8 @@ export default function SettingsPage() {
                     }
                 }
             });
-        } catch {
+        } catch (error) {
+            console.error("[handlePasswordUpdate] Failed:", error);
             toast.error(tt("Security.Error", "An error occurred while updating password"));
         } finally {
             setIsSaving(false);
@@ -291,7 +515,7 @@ export default function SettingsPage() {
         }
         setIsSaving(true);
         try {
-            const [workspaceResult, localizationResult] = await Promise.all([
+            const [workspaceResult, localizationResult, privacyResult] = await Promise.all([
                 updateWorkspace({
                     organizationId: activeWorkspace.id,
                     name: wsName,
@@ -302,8 +526,13 @@ export default function SettingsPage() {
                     organizationId: activeWorkspace.id,
                     settings: workspaceLocalization,
                 }),
+                updateWorkspacePrivacyProfileAction({
+                    organizationId: activeWorkspace.id,
+                    settings: workspacePrivacy.settings,
+                    retention: workspacePrivacy.retention,
+                }),
             ]);
-            if (workspaceResult.success && localizationResult.success) {
+            if (workspaceResult.success && localizationResult.success && privacyResult.success) {
                 toast.success(tt("Workspace.Updated", "Workspace updated successfully"));
                 setActiveWorkspace({
                     ...activeWorkspace,
@@ -311,18 +540,23 @@ export default function SettingsPage() {
                     slug: wsSlug,
                     logo: wsLogo,
                     localization: localizationResult.data,
+                    privacy: privacyResult.data,
                 });
+                setWorkspacePrivacy(privacyResult.data);
             } else {
                 const errorMessage = !workspaceResult.success
                     ? workspaceResult.error || "Failed to update workspace"
                     : !localizationResult.success
                         ? localizationResult.error || "Failed to update workspace language settings"
-                        : "Failed to update workspace";
+                        : !privacyResult.success
+                            ? privacyResult.error || "Failed to update workspace privacy settings"
+                            : "Failed to update workspace";
                 toast.error(
                     errorMessage,
                 );
             }
-        } catch {
+        } catch (error) {
+            console.error("[handleWorkspaceSave] Failed:", error);
             toast.error(tt("Workspace.UpdateError", "An error occurred while updating workspace"));
         } finally {
             setIsSaving(false);
@@ -347,6 +581,129 @@ export default function SettingsPage() {
             ...prev,
             [stateKey]: !prev[stateKey],
         }));
+    };
+
+    const handlePrivacyRequest = async (
+        requestType: "rectification" | "restriction" | "objection" | "delete_workspace_content",
+        scope: "user" | "workspace",
+    ) => {
+        setIsPrivacyActionLoading(true);
+        try {
+            const response = await fetch("/api/privacy/request", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    requestType,
+                    scope,
+                    organizationId: scope === "workspace" ? activeWorkspace?.id : undefined,
+                    details: privacyRequestNotes || undefined,
+                }),
+            });
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                toast.error(
+                    typeof data.error === "string"
+                        ? data.error
+                        : tt("Privacy.RequestError", "Failed to create privacy request"),
+                );
+                return;
+            }
+
+            setPrivacyRequestNotes("");
+            toast.success(tt("Privacy.RequestCreated", "Privacy request created"));
+        } catch (error) {
+            console.error("[handlePrivacyRequest] Failed:", error);
+            toast.error(tt("Privacy.RequestError", "Failed to create privacy request"));
+        } finally {
+            setIsPrivacyActionLoading(false);
+        }
+    };
+
+    const handlePrivacyExport = async (scope: "user" | "workspace") => {
+        setIsPrivacyActionLoading(true);
+        try {
+            const response = await fetch("/api/privacy/export", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    scope,
+                    organizationId: scope === "workspace" ? activeWorkspace?.id : undefined,
+                }),
+            });
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                toast.error(
+                    typeof data.error === "string"
+                        ? data.error
+                        : tt("Privacy.ExportError", "Failed to export privacy data"),
+                );
+                return;
+            }
+
+            if (typeof window !== "undefined") {
+                const blob = new Blob([JSON.stringify(data.data ?? {}, null, 2)], {
+                    type: "application/json",
+                });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download =
+                    scope === "workspace"
+                        ? `convy-workspace-privacy-export-${activeWorkspace?.slug ?? "workspace"}.json`
+                        : "convy-account-privacy-export.json";
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                URL.revokeObjectURL(url);
+            }
+
+            toast.success(tt("Privacy.ExportReady", "Privacy export downloaded"));
+        } catch (error) {
+            console.error("[handlePrivacyExport] Failed:", error);
+            toast.error(tt("Privacy.ExportError", "Failed to export privacy data"));
+        } finally {
+            setIsPrivacyActionLoading(false);
+        }
+    };
+
+    const handleDeleteAccount = async () => {
+        const confirmed = window.confirm(
+            tt("Privacy.DeleteAccountConfirm", "Delete your account and remove your personal data? This cannot be undone."),
+        );
+        if (!confirmed) {
+            return;
+        }
+
+        setIsPrivacyActionLoading(true);
+        try {
+            const response = await fetch("/api/privacy/delete-account", {
+                method: "POST",
+            });
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                toast.error(
+                    typeof data.error === "string"
+                        ? data.error
+                        : tt("Privacy.DeleteAccountError", "Failed to delete account"),
+                );
+                return;
+            }
+
+            toast.success(tt("Privacy.DeleteAccountSuccess", "Account deletion completed"));
+            window.location.href = "/";
+        } catch (error) {
+            console.error("[handleDeleteAccount] Failed:", error);
+            toast.error(tt("Privacy.DeleteAccountError", "Failed to delete account"));
+        } finally {
+            setIsPrivacyActionLoading(false);
+        }
     };
 
     const handleSave = async () => {
@@ -814,6 +1171,339 @@ export default function SettingsPage() {
                                                 <span>{tt("Workspace.Language.AutoTranslateDescription", "Automatically translate generated summaries when a translated version is requested and missing.")}</span>
                                             </label>
                                         </div>
+
+                                        <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-5 space-y-5">
+                                            <div className="flex flex-col gap-2">
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="text-sm font-semibold text-gray-900">{tt("Workspace.Privacy.Title", "Workspace Privacy Profile")}</h3>
+                                                    {isEuMode ? (
+                                                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                                                            EU mode
+                                                        </span>
+                                                    ) : null}
+                                                </div>
+                                                <p className="text-sm text-gray-500">
+                                                    {tt("Workspace.Privacy.Description", "This profile blocks survey publishing and classroom activation in EU mode until controller details, lawful basis, retention, age mode, and processor acknowledgements are complete.")}
+                                                </p>
+                                            </div>
+
+                                            {workspacePrivacy.missingItems.length > 0 ? (
+                                                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                                    <p className="font-medium">{tt("Workspace.Privacy.MissingTitle", "Still required before GDPR readiness")}</p>
+                                                    <p className="mt-2">
+                                                        {workspacePrivacy.missingItems.map(formatPrivacyMissingItem).join(", ")}
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                                                    {tt("Workspace.Privacy.Ready", "This workspace privacy profile is currently complete for the configured EU rules.")}
+                                                </div>
+                                            )}
+
+                                            {workspacePrivacy.runtimeProcessorViolations.length > 0 ? (
+                                                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                                                    {tt("Workspace.Privacy.ProcessorWarning", "Some enabled processors are not approved for EU mode")}: {workspacePrivacy.runtimeProcessorViolations.join(", ")}
+                                                </div>
+                                            ) : null}
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        {tt("Workspace.Privacy.ControllerIdentity", "Controller legal name")}
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={workspacePrivacy.settings.controllerIdentity ?? ""}
+                                                        onChange={(e) =>
+                                                            setWorkspacePrivacy((prev) => ({
+                                                                ...prev,
+                                                                settings: {
+                                                                    ...prev.settings,
+                                                                    controllerIdentity: e.target.value || null,
+                                                                },
+                                                            }))
+                                                        }
+                                                        disabled={!isOwner}
+                                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        {tt("Workspace.Privacy.ControllerContactName", "Controller contact name")}
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={workspacePrivacy.settings.controllerContactName ?? ""}
+                                                        onChange={(e) =>
+                                                            setWorkspacePrivacy((prev) => ({
+                                                                ...prev,
+                                                                settings: {
+                                                                    ...prev.settings,
+                                                                    controllerContactName: e.target.value || null,
+                                                                },
+                                                            }))
+                                                        }
+                                                        disabled={!isOwner}
+                                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        {tt("Workspace.Privacy.ControllerContactEmail", "Controller contact email")}
+                                                    </label>
+                                                    <input
+                                                        type="email"
+                                                        value={workspacePrivacy.settings.controllerContactEmail ?? ""}
+                                                        onChange={(e) =>
+                                                            setWorkspacePrivacy((prev) => ({
+                                                                ...prev,
+                                                                settings: {
+                                                                    ...prev.settings,
+                                                                    controllerContactEmail: e.target.value || null,
+                                                                },
+                                                            }))
+                                                        }
+                                                        disabled={!isOwner}
+                                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        {tt("Workspace.Privacy.DpoContactEmail", "DPO contact email")}
+                                                    </label>
+                                                    <input
+                                                        type="email"
+                                                        value={workspacePrivacy.settings.dpoContactEmail ?? ""}
+                                                        onChange={(e) =>
+                                                            setWorkspacePrivacy((prev) => ({
+                                                                ...prev,
+                                                                settings: {
+                                                                    ...prev.settings,
+                                                                    dpoContactEmail: e.target.value || null,
+                                                                },
+                                                            }))
+                                                        }
+                                                        disabled={!isOwner}
+                                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        {tt("Workspace.Privacy.NoticeUrl", "Privacy notice URL")}
+                                                    </label>
+                                                    <input
+                                                        type="url"
+                                                        value={workspacePrivacy.settings.privacyNoticeUrl ?? ""}
+                                                        onChange={(e) =>
+                                                            setWorkspacePrivacy((prev) => ({
+                                                                ...prev,
+                                                                settings: {
+                                                                    ...prev.settings,
+                                                                    privacyNoticeUrl: e.target.value || null,
+                                                                },
+                                                            }))
+                                                        }
+                                                        disabled={!isOwner}
+                                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        {tt("Workspace.Privacy.EnabledProcessors", "Enabled processor IDs")}
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={workspacePrivacy.settings.enabledProcessors.join(", ")}
+                                                        onChange={(e) =>
+                                                            setWorkspacePrivacy((prev) => ({
+                                                                ...prev,
+                                                                settings: {
+                                                                    ...prev.settings,
+                                                                    enabledProcessors: parseProcessorList(e.target.value),
+                                                                },
+                                                            }))
+                                                        }
+                                                        disabled={!isOwner}
+                                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                                    />
+                                                    <p className="mt-2 text-xs text-gray-500">
+                                                        {tt("Workspace.Privacy.EnabledProcessorsHint", "Runtime processors detected")}: {workspacePrivacy.runtimeEnabledProcessors.join(", ") || tt("Workspace.Privacy.None", "none")}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    {tt("Workspace.Privacy.NoticeText", "Embedded privacy notice text")}
+                                                </label>
+                                                <textarea
+                                                    value={workspacePrivacy.settings.privacyNoticeText ?? ""}
+                                                    onChange={(e) =>
+                                                        setWorkspacePrivacy((prev) => ({
+                                                            ...prev,
+                                                            settings: {
+                                                                ...prev.settings,
+                                                                privacyNoticeText: e.target.value || null,
+                                                            },
+                                                        }))
+                                                    }
+                                                    disabled={!isOwner}
+                                                    rows={4}
+                                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    {tt("Workspace.Privacy.LawfulBasis", "Lawful basis declarations")}
+                                                </label>
+                                                <textarea
+                                                    value={workspacePrivacy.settings.lawfulBasisDeclarations
+                                                        .map((entry) => `${entry.purpose}: ${entry.lawfulBasis}${entry.notes ? ` (${entry.notes})` : ""}`)
+                                                        .join("\n")}
+                                                    onChange={(e) =>
+                                                        setWorkspacePrivacy((prev) => ({
+                                                            ...prev,
+                                                            settings: {
+                                                                ...prev.settings,
+                                                                lawfulBasisDeclarations: e.target.value
+                                                                    .split("\n")
+                                                                    .map((line) => line.trim())
+                                                                    .filter(Boolean)
+                                                                    .map((line) => {
+                                                                        const [purposePart, ...rest] = line.split(":");
+                                                                        const purpose = purposePart?.trim() || line;
+                                                                        const lawfulBasis = rest.join(":").trim() || "contract";
+                                                                        return {
+                                                                            purpose,
+                                                                            lawfulBasis,
+                                                                            notes: null,
+                                                                        };
+                                                                    }),
+                                                            },
+                                                        }))
+                                                    }
+                                                    disabled={!isOwner}
+                                                    rows={4}
+                                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                                />
+                                                <p className="mt-2 text-xs text-gray-500">
+                                                    {tt("Workspace.Privacy.LawfulBasisHint", "One line per purpose, formatted as `purpose: lawful basis`.")}
+                                                </p>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        {tt("Workspace.Privacy.ResidencyMode", "Data residency mode")}
+                                                    </label>
+                                                    <select
+                                                        value={workspacePrivacy.settings.dataResidencyMode}
+                                                        onChange={(e) =>
+                                                            setWorkspacePrivacy((prev) => ({
+                                                                ...prev,
+                                                                settings: {
+                                                                    ...prev.settings,
+                                                                    dataResidencyMode:
+                                                                        e.target.value === "approved_transfers"
+                                                                            ? "approved_transfers"
+                                                                            : "eea_only",
+                                                                },
+                                                            }))
+                                                        }
+                                                        disabled={!isOwner}
+                                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-white text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                                    >
+                                                        <option value="eea_only">{tt("Workspace.Privacy.ResidencyEeaOnly", "EEA only")}</option>
+                                                        <option value="approved_transfers">{tt("Workspace.Privacy.ResidencyApprovedTransfers", "Approved transfers")}</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        {tt("Workspace.Privacy.AudienceAgeMode", "Learning audience age mode")}
+                                                    </label>
+                                                    <select
+                                                        value={workspacePrivacy.settings.audienceAgeMode}
+                                                        onChange={(e) =>
+                                                            setWorkspacePrivacy((prev) => ({
+                                                                ...prev,
+                                                                settings: {
+                                                                    ...prev.settings,
+                                                                    audienceAgeMode:
+                                                                        e.target.value === "adult_only" ||
+                                                                            e.target.value === "includes_minors" ||
+                                                                            e.target.value === "unset"
+                                                                            ? e.target.value
+                                                                            : "unset",
+                                                                },
+                                                            }))
+                                                        }
+                                                        disabled={!isOwner}
+                                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-white text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                                    >
+                                                        <option value="unset">{tt("Workspace.Privacy.AudienceUnset", "Unset")}</option>
+                                                        <option value="adult_only">{tt("Workspace.Privacy.AudienceAdultOnly", "Adult only")}</option>
+                                                        <option value="includes_minors">{tt("Workspace.Privacy.AudienceIncludesMinors", "Includes minors")}</option>
+                                                    </select>
+                                                </div>
+                                                <div className="flex items-end">
+                                                    <label className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 w-full">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={workspacePrivacy.settings.processorRoleAcknowledged}
+                                                            onChange={(e) =>
+                                                                setWorkspacePrivacy((prev) => ({
+                                                                    ...prev,
+                                                                    settings: {
+                                                                        ...prev.settings,
+                                                                        processorRoleAcknowledged: e.target.checked,
+                                                                    },
+                                                                }))
+                                                            }
+                                                            disabled={!isOwner}
+                                                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                                                        />
+                                                        <span>{tt("Workspace.Privacy.ProcessorAcknowledgement", "We act as processor for customer content and controller only for service account, security, billing, and operations data.")}</span>
+                                                    </label>
+                                                </div>
+                                            </div>
+
+                                            <div className="rounded-xl border border-gray-200 bg-white p-4">
+                                                <h4 className="text-sm font-semibold text-gray-900">{tt("Workspace.Privacy.RetentionTitle", "Retention windows (days)")}</h4>
+                                                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+                                                    {([
+                                                        ["rawTranscriptDays", tt("Workspace.Privacy.RawTranscriptDays", "Raw transcripts")],
+                                                        ["voiceTelemetryDays", tt("Workspace.Privacy.VoiceTelemetryDays", "Voice telemetry")],
+                                                        ["derivedAnalyticsDays", tt("Workspace.Privacy.DerivedAnalyticsDays", "Derived analytics")],
+                                                        ["studentInteractionDays", tt("Workspace.Privacy.StudentInteractionDays", "Student interactions")],
+                                                        ["privacyRequestDays", tt("Workspace.Privacy.PrivacyRequestDays", "Privacy request logs")],
+                                                    ] as const).map(([key, label]) => (
+                                                        <label key={key} className="block">
+                                                            <span className="block text-sm font-medium text-gray-700 mb-2">{label}</span>
+                                                            <input
+                                                                type="number"
+                                                                min={1}
+                                                                value={workspacePrivacy.retention[key]}
+                                                                onChange={(e) =>
+                                                                    setWorkspacePrivacy((prev) => ({
+                                                                        ...prev,
+                                                                        retention: {
+                                                                            ...prev.retention,
+                                                                            [key]: Math.max(1, Number(e.target.value) || 1),
+                                                                        },
+                                                                    }))
+                                                                }
+                                                                disabled={!isOwner}
+                                                                className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                                            />
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -933,14 +1623,7 @@ export default function SettingsPage() {
                                         <h3 className="font-medium text-gray-900">{t("Preferences.Language")}</h3>
                                     </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        {localeOptions.map((lang) => (<>
-                                            {/*
-                                            { code: "en", name: "English", flag: "🇺🇸" },
-                                            { code: "fr", name: "Français", flag: "🇫🇷" },
-                                            { code: "de", name: "Deutsch", flag: "🇩🇪" },
-                                            { code: "es", name: "Español", flag: "🇪🇸" },
-                                            { code: "it", name: "Italiano", flag: "🇮🇹" },
-                                            */}
+                                        {localeOptions.map((lang) => (
                                             <button
                                                 key={lang.code}
                                                 onClick={() => handleLanguageChange(lang.code)}
@@ -963,8 +1646,112 @@ export default function SettingsPage() {
                                                         <Check className="w-4 h-4 text-gray-900" />
                                                     </div>
                                                 )}
-                                            </button></>
+                                            </button>
                                         ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === "privacy" && (
+                        <div className="space-y-6">
+                            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                                <div className="px-6 py-4 border-b border-gray-100">
+                                    <h2 className="text-lg font-semibold text-gray-900">{tt("Privacy.Title", "Privacy Center")}</h2>
+                                    <p className="text-sm text-gray-500">
+                                        {tt("Privacy.Description", "Export your data, submit GDPR rights requests, and manage workspace privacy operations.")}
+                                    </p>
+                                </div>
+
+                                <div className="p-6 space-y-6">
+                                    <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-5 space-y-4">
+                                        <div>
+                                            <h3 className="text-sm font-semibold text-gray-900">{tt("Privacy.AccountTitle", "Your account data")}</h3>
+                                            <p className="mt-1 text-sm text-gray-500">
+                                                {tt("Privacy.AccountDescription", "Download your account data, request rectification or restriction, object to processing, or delete your account.")}
+                                            </p>
+                                        </div>
+
+                                        <div className="flex flex-col sm:flex-row gap-3">
+                                            <button
+                                                onClick={() => handlePrivacyExport("user")}
+                                                disabled={isPrivacyActionLoading}
+                                                className="px-4 py-3 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
+                                            >
+                                                {tt("Privacy.ExportAccount", "Export my data")}
+                                            </button>
+                                            <button
+                                                onClick={() => handlePrivacyRequest("rectification", "user")}
+                                                disabled={isPrivacyActionLoading}
+                                                className="px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                                            >
+                                                {tt("Privacy.Rectification", "Request rectification")}
+                                            </button>
+                                            <button
+                                                onClick={() => handlePrivacyRequest("restriction", "user")}
+                                                disabled={isPrivacyActionLoading}
+                                                className="px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                                            >
+                                                {tt("Privacy.Restriction", "Request restriction")}
+                                            </button>
+                                            <button
+                                                onClick={() => handlePrivacyRequest("objection", "user")}
+                                                disabled={isPrivacyActionLoading}
+                                                className="px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                                            >
+                                                {tt("Privacy.Objection", "Object to processing")}
+                                            </button>
+                                        </div>
+
+                                        <button
+                                            onClick={handleDeleteAccount}
+                                            disabled={isPrivacyActionLoading}
+                                            className="px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-sm font-medium text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
+                                        >
+                                            {tt("Privacy.DeleteAccount", "Delete my account")}
+                                        </button>
+                                    </div>
+
+                                    {activeWorkspace && isOwner ? (
+                                        <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-5 space-y-4">
+                                            <div>
+                                                <h3 className="text-sm font-semibold text-gray-900">{tt("Privacy.WorkspaceTitle", "Workspace controller operations")}</h3>
+                                                <p className="mt-1 text-sm text-gray-500">
+                                                    {tt("Privacy.WorkspaceDescription", "Export workspace data or create a tracked request to delete workspace-controlled content.")}
+                                                </p>
+                                            </div>
+
+                                            <div className="flex flex-col sm:flex-row gap-3">
+                                                <button
+                                                    onClick={() => handlePrivacyExport("workspace")}
+                                                    disabled={isPrivacyActionLoading}
+                                                    className="px-4 py-3 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
+                                                >
+                                                    {tt("Privacy.ExportWorkspace", "Export workspace data")}
+                                                </button>
+                                                <button
+                                                    onClick={() => handlePrivacyRequest("delete_workspace_content", "workspace")}
+                                                    disabled={isPrivacyActionLoading}
+                                                    className="px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                                                >
+                                                    {tt("Privacy.DeleteWorkspaceContent", "Request workspace content deletion")}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : null}
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            {tt("Privacy.Notes", "Request notes")}
+                                        </label>
+                                        <textarea
+                                            value={privacyRequestNotes}
+                                            onChange={(e) => setPrivacyRequestNotes(e.target.value)}
+                                            rows={4}
+                                            placeholder={tt("Privacy.NotesPlaceholder", "Add context for your request, such as which fields need correction or which processing you object to.")}
+                                            className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -1084,8 +1871,12 @@ export default function SettingsPage() {
                                             </p>
                                         </div>
                                     </div>
-                                    <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                                        {t("Security.TwoFactor.Enable")}
+                                    <button
+                                        type="button"
+                                        disabled
+                                        className="cursor-not-allowed px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-400 bg-gray-50"
+                                    >
+                                        {t("Security.TwoFactor.Enable")} (Coming soon)
                                     </button>
                                 </div>
                             </div>
@@ -1099,7 +1890,12 @@ export default function SettingsPage() {
                                         <p className="text-sm text-red-700 mt-1 mb-4">
                                             {tt("Security.Delete.FullDescription", "Permanently delete your account and all associated data. This action cannot be undone.")}
                                         </p>
-                                        <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
+                                        <button
+                                            type="button"
+                                            onClick={handleDeleteAccount}
+                                            disabled={isPrivacyActionLoading}
+                                            className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                                        >
                                             {t("Security.Delete.Button")}
                                         </button>
                                     </div>

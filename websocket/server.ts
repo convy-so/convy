@@ -7,6 +7,7 @@ const projectDir = process.cwd();
 loadEnvConfig(projectDir);
 
 import * as Sentry from "@sentry/node";
+import { scrubSentryEvent } from "@/lib/privacy/sentry";
 
 // Initialize Sentry for the standalone Node.js Project
 Sentry.init({
@@ -14,6 +15,10 @@ Sentry.init({
   tracesSampleRate: 1.0,
   environment: process.env.NODE_ENV || "development",
   serverName: "websocket-server",
+  sendDefaultPii: false,
+  beforeSend(event) {
+    return scrubSentryEvent(event);
+  },
 });
 
 
@@ -116,14 +121,21 @@ function cleanupStaleConnections(): void {
         }
         if (hasCleanupMethod(connection.handler)) {
           void connection.handler.cleanup().catch((error) => {
-            console.error("[WebSocket] Failed to cleanup stale connection:", error);
+            console.error("[websocket] handler cleanup failed", {
+              connectionId,
+              message: error instanceof Error ? error.message : "Unknown error",
+            });
           });
         }
         activeConnections.delete(connectionId);
         cleanedCount++;
 
       }
-    } catch {
+    } catch (error) {
+      console.error("[websocket] stale connection cleanup failed", {
+        connectionId,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
       // If we can't check the connection, remove it to be safe
       if (presenceConnections.has(connectionId)) {
         presenceConnections.delete(connectionId);
@@ -230,7 +242,6 @@ wss.on("connection", async (ws: WebSocket, req) => {
       ws.close();
     }
   } catch (error) {
-    console.error(`[WebSocket] Connection error at ${pathname}:`, error);
     ws.send(
       JSON.stringify({
         type: "error",
@@ -301,7 +312,6 @@ async function handleSurveyResponse(
     });
 
   } catch (error) {
-    console.error("[WebSocket] Survey response handler error:", error);
     await releaseConnection(identifier);
     ws.send(
       JSON.stringify({
@@ -384,7 +394,6 @@ async function handleSampleConversation(
     });
 
   } catch (error) {
-    console.error("[WebSocket] Sample voice handler error:", error);
     await releaseConnection(identifier);
     ws.send(
       JSON.stringify({
@@ -463,7 +472,9 @@ async function handlePresence(
     });
 
   } catch (error) {
-    console.error("[WebSocket] Presence handler error:", error);
+    console.error("[websocket] presence handler initialization failed", {
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
     await releaseConnection(identifier);
     ws.close();
   }
@@ -633,12 +644,13 @@ function initializeRedisSubscriber(): void {
           }
         }
       } catch (error) {
-        console.error("[Redis Pub/Sub] Error processing message:", error);
+        console.error("[websocket] redis message handling failed", {
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
       }
     });
 
     redisSubscriber.on("error", (error) => {
-      console.error("[Redis Pub/Sub] Subscriber error:", error);
       if (redisSubscriberReconnectAttempts < MAX_REDIS_RECONNECT_ATTEMPTS) {
         const delay = REDIS_RECONNECT_DELAY_MS * Math.pow(2, redisSubscriberReconnectAttempts);
         redisSubscriberReconnectAttempts++;
@@ -658,7 +670,9 @@ function initializeRedisSubscriber(): void {
     });
 
   } catch (error) {
-    console.error("[Redis Pub/Sub] Failed to initialize subscriber:", error);
+    console.error("[websocket] redis subscriber initialization failed", {
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
     if (redisSubscriberReconnectAttempts < MAX_REDIS_RECONNECT_ATTEMPTS) {
       redisSubscriberReconnectAttempts++;
       setTimeout(initializeRedisSubscriber, REDIS_RECONNECT_DELAY_MS);
@@ -670,7 +684,9 @@ function initializeRedisSubscriber(): void {
  * Handle server errors
  */
 wss.on("error", (error) => {
-  console.error("[WebSocket] Server error:", error);
+  console.error("[websocket] server error", {
+    message: error instanceof Error ? error.message : "Unknown error",
+  });
 });
 
 /**
@@ -704,7 +720,9 @@ process.on("SIGTERM", async () => {
       await redisSubscriber.punsubscribe("pubsub:realtime:*");
       await redisSubscriber.quit();
     } catch (error) {
-      console.error("[Redis Pub/Sub] Error disconnecting subscriber:", error);
+      console.error("[websocket] redis subscriber shutdown failed", {
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   }
 
@@ -715,10 +733,10 @@ process.on("SIGTERM", async () => {
         await handler.cleanup();
       }
     } catch (error) {
-      console.error(
-        `[WebSocket] Error cleaning up connection ${connectionId}:`,
-        error,
-      );
+      console.error("[websocket] handler shutdown failed", {
+        connectionId,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   }
 
@@ -739,7 +757,6 @@ process.on("SIGTERM", async () => {
 
   // Force exit after 10 seconds
   setTimeout(() => {
-    console.error("[WebSocket] Forced shutdown after timeout");
     process.exit(1);
   }, 10000);
 });
@@ -747,3 +764,4 @@ process.on("SIGTERM", async () => {
 process.on("SIGINT", async () => {
   process.emit("SIGTERM");
 });
+

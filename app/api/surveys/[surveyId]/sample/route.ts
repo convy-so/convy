@@ -1,4 +1,9 @@
-import { stepCountIs, tool } from "ai";
+import {
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  stepCountIs,
+  tool,
+} from "ai";
 import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
@@ -29,7 +34,6 @@ import {
 } from "@/lib/education/conducting-runtime";
 import {
   getSampleFinishSurveyToolDefinition,
-  getShowMediaToolDefinition,
 } from "@/lib/education/agent-tools";
 import { getConductingRuntimeLayers } from "@/lib/education/runtime-context";
 import {
@@ -42,7 +46,12 @@ import {
   updateSessionState,
 } from "@/lib/education/storage";
 import { getClientIP, apiRateLimiter } from "@/lib/ratelimit";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
+import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
+import { recordAiFeedbackEvent } from "@/lib/ai/observability";
 
 export const maxDuration = 300;
 const MAX_SAMPLE_CONVERSATIONS = 3;
@@ -95,46 +104,6 @@ function parseSampleRouteBody(value: unknown): SampleRouteBody {
     forceLease: typeof value.forceLease === "boolean" ? value.forceLease : undefined,
   };
 }
-
-type SurveyMedia = {
-  id: string;
-  type: "image" | "audio" | "video";
-  url: string;
-  description: string;
-  altText?: string;
-  durationMs?: number | null;
-};
-
-function normalizeSurveyMedia(value: unknown): SurveyMedia[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.flatMap((item) => {
-    if (!isRecord(item) || typeof item.id !== "string" || typeof item.url !== "string") {
-      return [];
-    }
-
-    if (
-      item.type !== "image" &&
-      item.type !== "audio" &&
-      item.type !== "video"
-    ) {
-      return [];
-    }
-
-    return [{
-      id: item.id,
-      type: item.type,
-      url: item.url,
-      description: typeof item.description === "string" ? item.description : "",
-      altText: typeof item.altText === "string" ? item.altText : undefined,
-      durationMs:
-        typeof item.durationMs === "number" ? item.durationMs : undefined,
-    }];
-  });
-}
-
 async function ensureRehearsalLease(input: {
   surveyId: string;
   userId: string;
@@ -187,11 +156,8 @@ export async function GET(
       .where(eq(surveys.id, surveyId));
     if (!survey) return new Response("Survey not found", { status: 404 });
 
-    const permission = await getSurveyPermissionContext(
-      session.user.id,
-      survey.id,
-    );
-    if (!permission?.canView)
+    const permission = await getSurveyPermissionForSession(session, survey.id,);
+    if (!hasSurveyPermission(permission, "canView"))
       return new Response("Unauthorized", { status: 403 });
 
     const [sample] = await getDb()
@@ -243,6 +209,12 @@ export async function POST(
     const body = parseSampleRouteBody(await request.json());
     const conversationNumber = Number(body.conversationNumber || 1);
     const rawMessages = body.messages ?? [];
+    const persistedIncomingMessages = toPersistedUIChatMessages(rawMessages, ["user", "assistant"]);
+    const latestUserMessage =
+      [...persistedIncomingMessages]
+        .reverse()
+        .find((message) => message.role === "user")
+        ?.content?.trim() ?? "";
 
     if (
       conversationNumber < 1 ||
@@ -260,11 +232,8 @@ export async function POST(
       .where(eq(surveys.id, surveyId));
     if (!survey) return new Response("Survey not found", { status: 404 });
 
-    const permission = await getSurveyPermissionContext(
-      session.user.id,
-      survey.id,
-    );
-    if (!permission?.canEdit) {
+    const permission = await getSurveyPermissionForSession(session, survey.id,);
+    if (!hasSurveyPermission(permission, "canEdit")) {
       return new Response("Unauthorized: Editor access required", {
         status: 403,
       });
@@ -327,6 +296,9 @@ export async function POST(
       getConductingRuntimeLayers({
         surveyId,
         organizationId: survey.organizationId,
+        classroomId: survey.classroomId,
+        programId: survey.programId,
+        language: getSurveyLanguage(survey.language),
         mode: "sample",
       }),
     ]);
@@ -394,9 +366,10 @@ export async function POST(
       conductingProfile: activeSampleProfile?.profile ?? null,
       playbookContext: runtimeLayers.playbookContext,
       personalityContext: runtimeLayers.personalityContext,
+      expertGuidanceContext: runtimeLayers.expertGuidanceContext,
       toolContext: {
         canFinishSurvey: true,
-        canShowMedia: (survey.media || []).length > 0,
+        canShowMedia: false,
       },
     });
     const systemPrompt = `${promptParts.dynamicSystemPrompt}
@@ -411,8 +384,6 @@ Respond to the user in the language they are speaking to you in. Match the langu
 
     let currentSessionState = sessionRow.sessionState;
     let completedByTool = false;
-    const surveyMedia = normalizeSurveyMedia(survey.media);
-    const hasMedia = surveyMedia.length > 0;
 
     const tools = {
       finishSurvey: tool({
@@ -445,35 +416,81 @@ Respond to the user in the language they are speaking to you in. Match the langu
           return { success: true, message: "Survey marked as complete" };
         },
       }),
-      ...(hasMedia
-        ? {
-            showMedia: tool({
-              description: getShowMediaToolDefinition().description,
-              inputSchema: z.object({
-                mediaId: z.string().describe("The media identifier to display."),
-              }),
-              execute: async ({ mediaId }: { mediaId: string }) => {
-                const media = surveyMedia.find((item) => item.id === mediaId);
-                if (!media) {
-                  return { error: "Media not found" };
-                }
-
-                return {
-                  success: true,
-                  media: {
-                    id: media.id,
-                    type: media.type,
-                    url: media.url,
-                    description: media.description,
-                    altText: media.altText,
-                    durationMs: media.durationMs,
-                  },
-                };
-              },
-            }),
-          }
-        : {}),
     };
+
+    const priorDriftCount = toPersistedUIChatMessages(
+      sampleConversation.messages ?? [],
+      ["user", "assistant"],
+    ).filter(
+      (message) =>
+        message.role === "assistant" &&
+        /let's stay focused on|we need to stay on the current objective/i.test(
+          message.content,
+        ),
+    ).length;
+    if (latestUserMessage) {
+      const scopeDecision = await evaluateScopePolicy({
+        feature: "survey_sample",
+        objective: briefRow.brief.researchGoal,
+        currentPhase: "sample review",
+        activeTopic: briefRow.brief.title,
+        latestUserMessage,
+        strictMode: true,
+        driftCount: priorDriftCount,
+        allowedDetours: [
+          "brief clarification of the current interview question",
+          "discussion tied directly to the approved survey brief",
+        ],
+      });
+
+      if (scopeDecision.shouldRedirect) {
+        const redirectMessage = {
+          id: crypto.randomUUID(),
+          role: "assistant" as const,
+          content: scopeDecision.redirectMessage,
+          parts: [{ type: "text" as const, text: scopeDecision.redirectMessage }],
+          timestamp: new Date().toISOString(),
+        };
+        const redirectedMessages = toVisibleConversationMessages([
+          ...persistedIncomingMessages,
+          redirectMessage,
+        ]);
+        await getDb()
+          .update(sampleConversations)
+          .set({
+            messages: redirectedMessages,
+            updatedAt: new Date(),
+          })
+          .where(eq(sampleConversations.id, sampleConversation.id));
+        await recordAiFeedbackEvent({
+          userId: session.user.id,
+          source: "scope_policy",
+          feedbackType:
+            scopeDecision.promptInjectionSignal === "none"
+              ? "redirected"
+              : "prompt_injection_detected",
+          payload: {
+            surveyId,
+            conversationNumber,
+            classification: scopeDecision.classification,
+            promptInjectionSignal: scopeDecision.promptInjectionSignal,
+            reason: scopeDecision.reason,
+          },
+        }).catch(() => undefined);
+
+        return createUIMessageStreamResponse({
+          stream: createUIMessageStream({
+            execute: async ({ writer }) => {
+              writer.write({
+                id: redirectMessage.id,
+                type: "text-delta",
+                delta: scopeDecision.redirectMessage,
+              });
+            },
+          }),
+        });
+      }
+    }
 
     const modelMessages =
       rawMessages.length > 0
@@ -497,9 +514,18 @@ Respond to the user in the language they are speaking to you in. Match the langu
       },
       tools,
       stopWhen: stepCountIs(5),
+      observability: {
+        feature: "survey_conducting",
+        scenarioType: "sample_turn",
+        resourceType: "survey_session",
+        resourceId: sessionRow.id,
+        metadata: {
+          surveyId,
+          guidanceVersionIds: runtimeLayers.expertGuidanceVersionIds,
+        },
+      },
     });
 
-    const persistedIncomingMessages = toPersistedUIChatMessages(rawMessages, ["user", "assistant"]);
     const remainingSamples = MAX_SAMPLE_CONVERSATIONS - conversationNumber;
     const response = result.toUIMessageStreamResponse({
       originalMessages: toUIMessages(persistedIncomingMessages),

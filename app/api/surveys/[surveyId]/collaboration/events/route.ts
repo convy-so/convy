@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getSurveyRealtimeEvents } from "@/lib/collaboration-service";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 
 export async function GET(
   request: Request,
@@ -15,10 +19,8 @@ export async function GET(
       new URL(request.url).searchParams.get("afterRevision") || "0",
     );
 
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
-    if (!permission?.canView || !permission.activeContextMatchesResource) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canView")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
     if (!permission.collaborationAllowed) {

@@ -1,12 +1,19 @@
 import { getPersonalityPreset, renderPersonalityContext, renderPlaybookContext } from "./playbooks";
 import { getActivePersonalityAssignment, listEffectivePlaybooks } from "./storage";
+import {
+  listActiveExpertGuidance,
+  renderExpertGuidanceContext,
+} from "@/lib/ai/guidance";
 
 export async function getConductingRuntimeLayers(params: {
   surveyId: string;
   organizationId?: string | null;
+  classroomId?: string | null;
+  programId?: string | null;
+  language?: string | null;
   mode: "sample" | "live";
 }) {
-  const [playbooks, assignment, sampleFallback] = await Promise.all([
+  const [playbooks, assignment, sampleFallback, expertGuidance] = await Promise.all([
     listEffectivePlaybooks({
       surveyId: params.surveyId,
       organizationId: params.organizationId ?? null,
@@ -16,6 +23,22 @@ export async function getConductingRuntimeLayers(params: {
     params.mode === "live"
       ? getActivePersonalityAssignment(params.surveyId, "sample")
       : Promise.resolve(null),
+    listActiveExpertGuidance({
+      feature: "survey_conducting",
+      artifactTypes: [
+        "interviewing_strategy",
+        "coverage_rules",
+        "participant_safety",
+        "language_style",
+      ],
+      selectors: {
+        organizationId: params.organizationId ?? null,
+        classroomId: params.classroomId ?? null,
+        topicId: params.surveyId,
+        programId: params.programId ?? null,
+        language: params.language ?? null,
+      },
+    }),
   ]);
 
   const resolvedAssignment = assignment ?? sampleFallback;
@@ -33,9 +56,12 @@ export async function getConductingRuntimeLayers(params: {
       preset,
       resolvedAssignment?.assignment.overlay ?? null,
     ),
+    expertGuidanceContext: renderExpertGuidanceContext(expertGuidance),
+    expertGuidanceVersionIds: expertGuidance.map((item) => item.versionId),
     personalityAssignment: resolvedAssignment,
     personalityPreset: preset,
     playbooks,
+    expertGuidance,
   };
 }
 

@@ -1,0 +1,125 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+
+import {
+  createDeletionJob,
+  createPrivacyRequest,
+  deleteRespondentPrivacyData,
+  markDeletionJobStatus,
+  markPrivacyRequestResolved,
+} from "@/lib/privacy/service";
+import {
+  getRespondentSessionCookieName,
+  getRespondentSessionCookieOptions,
+  resolveRespondentAccess,
+} from "@/lib/privacy/respondent";
+import { getClientIP } from "@/lib/ratelimit";
+
+const bodySchema = z.object({
+  conversationId: z.string().min(1),
+  surveyId: z.string().min(1),
+  respondentToken: z.string().min(1).optional(),
+});
+
+export async function POST(request: Request) {
+  let privacyRequestId: string | null = null;
+  let deletionJobId: string | null = null;
+
+  try {
+    const body = bodySchema.parse(await request.json());
+    const tokenRecord = await resolveRespondentAccess({
+      cookieHeader: request.headers.get("cookie"),
+      surveyId: body.surveyId,
+      conversationId: body.conversationId,
+      explicitToken: body.respondentToken ?? null,
+      sessionAllowedScopes: ["respondent_session"],
+      explicitAllowedScopes: [
+        "respondent_resume",
+        "respondent_self_service",
+        "respondent_session",
+      ],
+      clientIp: getClientIP(request),
+      userAgent: request.headers.get("user-agent"),
+    });
+
+    if (!tokenRecord) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    const privacyRequest = await createPrivacyRequest({
+      surveyId: body.surveyId,
+      subjectType: "respondent",
+      requestType: "respondent_delete",
+      requestPayload: {
+        conversationId: body.conversationId,
+      },
+    });
+    privacyRequestId = privacyRequest.id;
+    const deletionJob = await createDeletionJob({
+      privacyRequestId: privacyRequest.id,
+      jobType: "delete_respondent_conversation",
+      targetType: "survey_conversation",
+      targetId: body.conversationId,
+    });
+    deletionJobId = deletionJob.id;
+
+    await markDeletionJobStatus({
+      deletionJobId,
+      status: "in_progress",
+    });
+
+    await deleteRespondentPrivacyData(body.conversationId);
+
+    await markDeletionJobStatus({
+      deletionJobId,
+      status: "completed",
+    });
+    await markPrivacyRequestResolved({
+      requestId: privacyRequest.id,
+      status: "completed",
+      resultPayload: {
+        deletionJobId: deletionJob.id,
+      },
+    });
+
+    const response = NextResponse.json({
+      success: true,
+      requestId: privacyRequest.id,
+      deletionJobId: deletionJob.id,
+    });
+    response.cookies.set(
+      getRespondentSessionCookieName(body.surveyId),
+      "",
+      {
+        ...getRespondentSessionCookieOptions(),
+        maxAge: 0,
+      },
+    );
+    return response;
+  } catch (error) {
+    if (deletionJobId) {
+      await markDeletionJobStatus({
+        deletionJobId,
+        status: "failed",
+        lastError: error instanceof Error ? error.message : "Unknown error",
+      }).catch(() => undefined);
+    }
+    if (privacyRequestId) {
+      await markPrivacyRequestResolved({
+        requestId: privacyRequestId,
+        status: "failed",
+        resultPayload: {
+          error: error instanceof Error ? error.message : "Unknown error",
+        },
+      }).catch(() => undefined);
+    }
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: error.errors[0]?.message ?? "Invalid request body" },
+        { status: 400 },
+      );
+    }
+
+    return NextResponse.json({ error: "Failed to delete respondent data" }, { status: 400 });
+  }
+}

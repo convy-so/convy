@@ -7,7 +7,11 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import {
   recordRealtimeEvent,
 } from "@/lib/collaboration-service";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 
 /**
  * DELETE - Delete a survey
@@ -20,10 +24,8 @@ export async function DELETE(
     const session = await getVerifiedSession();
     const { surveyId } = await params;
 
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
-    if (!permission?.canDelete || !permission.activeContextMatchesResource) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canDelete")) {
       return NextResponse.json(
         { error: "Unauthorized. You do not have permission to delete this survey." },
         { status: 403 },
@@ -102,10 +104,8 @@ export async function PATCH(
     const { surveyId } = await params;
     const body = await request.json();
 
-    const permission = await getSurveyPermissionContext(session.user.id, surveyId, {
-      activeWorkspaceId: session.session.activeOrganizationId ?? null,
-    });
-    if (!permission?.canEdit || !permission.activeContextMatchesResource) {
+    const permission = await getSurveyPermissionForSession(session, surveyId);
+    if (!hasSurveyPermission(permission, "canEdit")) {
       return NextResponse.json(
         { error: "Unauthorized. Only the creator and approved editors can modify surveys." },
         { status: 403 },

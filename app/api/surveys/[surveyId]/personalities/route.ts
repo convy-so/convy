@@ -14,7 +14,11 @@ import {
   getActivePersonalityAssignment,
   replacePersonalityAssignment,
 } from "@/lib/education/storage";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
+import {
+  getSurveyPermissionContext,
+  getSurveyPermissionForSession,
+  hasSurveyPermission,
+} from "@/lib/workspace-access";
 
 export async function GET(
   _req: NextRequest,
@@ -29,11 +33,8 @@ export async function GET(
       .where(eq(surveys.id, surveyId));
     if (!survey)
       return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    const permission = await getSurveyPermissionContext(
-      session.user.id,
-      surveyId,
-    );
-    if (!permission?.canView)
+    const permission = await getSurveyPermissionForSession(session, surveyId,);
+    if (!hasSurveyPermission(permission, "canView"))
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
     const [sampleAssignment, liveAssignment] = await Promise.all([
@@ -70,11 +71,8 @@ export async function POST(
       .where(eq(surveys.id, surveyId));
     if (!survey)
       return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    const permission = await getSurveyPermissionContext(
-      session.user.id,
-      surveyId,
-    );
-    if (!permission?.canEdit) {
+    const permission = await getSurveyPermissionForSession(session, surveyId,);
+    if (!hasSurveyPermission(permission, "canEdit")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
