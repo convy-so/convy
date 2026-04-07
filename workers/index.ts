@@ -83,7 +83,7 @@ async function gracefulShutdown() {
 
   try {
     // Close all workers in parallel
-    const closePromises = workers.map(async ({ worker }) => {
+    const closePromises = workers.map(async ({ name, worker }) => {
       try {
         await worker.close();
       } catch (error) {
