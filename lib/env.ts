@@ -99,7 +99,6 @@ export const env = {
   NEXT_PUBLIC_WEBSOCKET_URL:
     optional("NEXT_PUBLIC_WEBSOCKET_URL") || "ws://localhost:3001",
   OUTBOX_NOTIFY_CHANNEL: outboxNotifyChannel,
-  OUTBOX_POLLER_ENABLED: optionalBoolean("OUTBOX_POLLER_ENABLED", true),
   OUTBOX_RELAY_ENABLED: optionalBoolean("OUTBOX_RELAY_ENABLED", false),
   OUTBOX_CLAIM_TTL_MS: optionalInt("OUTBOX_CLAIM_TTL_MS", 30_000),
   OUTBOX_SWEEP_INTERVAL_MS: optionalInt("OUTBOX_SWEEP_INTERVAL_MS", 5_000),

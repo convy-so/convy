@@ -442,7 +442,10 @@ export async function acquireSurveyLease(input: {
   sessionId?: string | null;
   force?: boolean;
 }) {
-  const permission = await getSurveyPermissionContext(input.userId, input.surveyId);
+  const permission = await getSurveyPermissionContext(
+    input.userId,
+    input.surveyId,
+  );
   if (!permission || !permission.canEdit) {
     return { ok: false as const, error: "EDITOR_ACCESS_REQUIRED" };
   }
@@ -510,7 +513,10 @@ export async function renewSurveyLease(input: {
   if (!lease) {
     return { ok: false as const, error: "LEASE_NOT_FOUND" };
   }
-  if (lease.holderUserId !== input.userId || lease.leaseToken !== input.leaseToken) {
+  if (
+    lease.holderUserId !== input.userId ||
+    lease.leaseToken !== input.leaseToken
+  ) {
     return { ok: false as const, error: "LEASE_CONFLICT", lease };
   }
 
@@ -548,7 +554,10 @@ export async function releaseSurveyLease(input: {
   if (!lease) {
     return { ok: true as const };
   }
-  if (lease.holderUserId !== input.userId || lease.leaseToken !== input.leaseToken) {
+  if (
+    lease.holderUserId !== input.userId ||
+    lease.leaseToken !== input.leaseToken
+  ) {
     return { ok: false as const, error: "LEASE_CONFLICT", lease };
   }
 
