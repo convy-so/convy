@@ -116,20 +116,20 @@ export function TeamMemberList({
     };
 
     return (
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
                 <div>
-                    <h3 className="text-base font-semibold text-gray-900">{mlT("Header")}</h3>
-                    <p className="text-sm text-gray-500 mt-0.5">
-                        {mlT("Count", { count: members.length })}
-                        {pendingInvites.length > 0 && <span> {mlT("PendingCount", { count: pendingInvites.length })}</span>}
+                    <h3 className="text-lg font-bold text-slate-950">{mlT("Header")}</h3>
+                    <p className="text-sm text-slate-500 mt-1">
+                        {mlT("Count", { count: members.length })} members recorded
+                        {pendingInvites.length > 0 && <span> · {mlT("PendingCount", { count: pendingInvites.length })} pending</span>}
                     </p>
                 </div>
                 {isOwner && (
                     <button
                         onClick={() => setShowInviteModal(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-950 text-white rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-slate-900 transition-colors"
                     >
                         <UserPlus className="w-4 h-4" />
                         {mlT("InviteButton")}
@@ -138,7 +138,7 @@ export function TeamMemberList({
             </div>
 
             {/* Members List */}
-            <div className="divide-y divide-gray-50">
+            <div className="bg-slate-50/30">
                 {members.map((member) => {
                     const isCurrentUser = member.userId === currentUserId;
                     const canRemove = isOwner && !isCurrentUser && member.role !== "owner";
@@ -146,7 +146,7 @@ export function TeamMemberList({
                     return (
                         <div
                             key={member.id}
-                            className="px-6 py-4 flex items-center justify-between hover:bg-gray-50/50 transition-colors"
+                            className="px-6 py-4 flex items-center justify-between border-b border-slate-50/50 last:border-0 hover:bg-white transition-colors"
                         >
                             <div className="flex items-center gap-3">
                                 {/* Avatar */}
@@ -155,18 +155,18 @@ export function TeamMemberList({
                                         <Image
                                             src={member.user.image}
                                             alt={member.user.name}
-                                            width={40}
-                                            height={40}
+                                            width={44}
+                                            height={44}
                                             unoptimized
-                                            className="w-10 h-10 rounded-full object-cover"
+                                            className="w-11 h-11 rounded-full object-cover ring-2 ring-slate-50"
                                         />
                                     ) : (
-                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-white font-semibold text-sm">
+                                        <div className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-sm">
                                             {member.user.name?.charAt(0)?.toUpperCase() || "U"}
                                         </div>
                                     )}
                                     {member.role === "owner" && (
-                                        <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-amber-400 rounded-full flex items-center justify-center border-2 border-white">
+                                        <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-amber-400 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
                                             <Crown className="w-2.5 h-2.5 text-white" />
                                         </div>
                                     )}
@@ -175,24 +175,24 @@ export function TeamMemberList({
                                 {/* Info */}
                                 <div>
                                     <div className="flex items-center gap-2">
-                                        <p className="text-sm font-semibold text-gray-900">
+                                        <p className="text-sm font-bold text-slate-950">
                                             {member.user.name}
                                         </p>
                                         {isCurrentUser && (
-                                            <span className="text-xs text-gray-400">{mlT("You")}</span>
+                                            <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">{mlT("You")}</span>
                                         )}
                                     </div>
-                                    <p className="text-sm text-gray-500">{member.user.email}</p>
+                                    <p className="text-[13px] text-slate-500 font-medium">{member.user.email}</p>
                                 </div>
                             </div>
 
                             {/* Role & Actions */}
                             <div className="flex items-center gap-3">
                                 <span className={cn(
-                                    "px-2.5 py-1 rounded-full text-xs font-medium capitalize",
+                                    "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
                                     member.role === "owner"
-                                        ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                        : "bg-gray-50 text-gray-600 border border-gray-200"
+                                        ? "bg-amber-50 text-amber-700 border border-amber-100"
+                                        : "bg-slate-50 text-slate-500 border border-slate-100"
                                 )}>
                                     {t(`Roles.${member.role === 'owner' ? 'Owner' : 'Member'}`)}
                                 </span>
@@ -201,7 +201,7 @@ export function TeamMemberList({
                                     <div className="relative">
                                         <button
                                             onClick={() => setShowMenuFor(showMenuFor === member.id ? null : member.id)}
-                                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                                            className="p-2 rounded-xl text-slate-400 hover:text-slate-900 border border-transparent hover:border-slate-100 hover:bg-white transition"
                                         >
                                             <MoreVertical className="w-4 h-4" />
                                         </button>
@@ -212,11 +212,11 @@ export function TeamMemberList({
                                                     className="fixed inset-0 z-40"
                                                     onClick={() => setShowMenuFor(null)}
                                                 />
-                                                <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-xl border border-gray-200 shadow-xl z-50 py-1">
+                                                <div className="absolute right-0 top-full mt-2 w-44 bg-white rounded-2xl border border-slate-100 shadow-xl z-50 py-1.5 p-1 animate-in fade-in slide-in-from-top-1 duration-200">
                                                     <button
                                                         onClick={() => handleRemoveMember(member.userId)}
                                                         disabled={removingMemberId === member.userId}
-                                                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition disabled:opacity-50"
                                                     >
                                                         {removingMemberId === member.userId ? (
                                                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -239,31 +239,31 @@ export function TeamMemberList({
                 {pendingInvites.map((invite) => (
                     <div
                         key={invite.id}
-                        className="px-6 py-4 flex items-center justify-between bg-gray-50/50"
+                        className="px-6 py-4 flex items-center justify-between border-b border-slate-50/50 last:border-0 bg-slate-50/30"
                     >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 opacity-60">
                             {/* Pending Avatar */}
-                            <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center border-2 border-dashed border-gray-300">
-                                <Mail className="w-4 h-4 text-gray-400" />
+                            <div className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center border border-dashed border-slate-300">
+                                <Mail className="w-4 h-4 text-slate-400" />
                             </div>
 
                             {/* Info */}
                             <div>
-                                <p className="text-sm font-medium text-gray-700">{invite.email}</p>
-                                <p className="text-xs text-gray-400">{mlT("Pending.Status")}</p>
+                                <p className="text-sm font-bold text-slate-700">{invite.email}</p>
+                                <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">{mlT("Pending.Status")}</p>
                             </div>
                         </div>
 
                         {/* Status */}
                         <div className="flex items-center gap-2">
-                            <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-600 border border-blue-200">
+                            <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-sky-50 text-sky-700 border border-sky-100">
                                 {mlT("Pending.Badge")}
                             </span>
                             {isOwner && (
                                 <button
                                     onClick={() => handleRemoveMember(invite.email)}
                                     disabled={removingMemberId === invite.email}
-                                    className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                    className="p-2 rounded-xl text-slate-400 hover:text-rose-600 border border-transparent hover:border-rose-100 hover:bg-rose-50 transition"
                                 >
                                     {removingMemberId === invite.email ? (
                                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -279,18 +279,18 @@ export function TeamMemberList({
 
             {/* Empty State */}
             {members.length === 0 && pendingInvites.length === 0 && (
-                <div className="px-6 py-12 text-center">
-                    <div className="w-16 h-16 rounded-full bg-gray-50 flex items-center justify-center mx-auto mb-4">
-                        <User className="w-8 h-8 text-gray-400" />
+                <div className="px-6 py-16 text-center bg-slate-50/20">
+                    <div className="w-16 h-16 rounded-full bg-white border border-slate-100 flex items-center justify-center mx-auto mb-5">
+                        <User className="w-8 h-8 text-slate-200" />
                     </div>
-                    <h4 className="text-base font-semibold text-gray-900 mb-1">{mlT("Empty.Title")}</h4>
-                    <p className="text-sm text-gray-500 mb-4">
+                    <h4 className="text-lg font-bold text-slate-950 mb-1">{mlT("Empty.Title")}</h4>
+                    <p className="text-sm text-slate-500 mb-6 max-w-xs mx-auto">
                         {mlT("Empty.Description")}
                     </p>
                     {isOwner && (
                         <button
                             onClick={() => setShowInviteModal(true)}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors"
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-slate-950 text-white rounded-2xl font-bold text-sm hover:bg-slate-900 transition-colors"
                         >
                             <UserPlus className="w-4 h-4" />
                             {mlT("Button")}
@@ -301,75 +301,76 @@ export function TeamMemberList({
 
             {/* Invite Modal */}
             {showInviteModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                     {/* Backdrop */}
                     <div
-                        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                        className="absolute inset-0 bg-slate-950/20 backdrop-blur-sm"
                         onClick={() => setShowInviteModal(false)}
                     />
 
                     {/* Modal */}
-                    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="relative bg-white rounded-3xl w-full max-w-md animate-in fade-in zoom-in-95 duration-200 overflow-hidden shadow-2xl">
                         {/* Header */}
-                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                            <h3 className="text-lg font-semibold text-gray-900">{mlT("InviteModal.Title")}</h3>
+                        <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
+                            <h3 className="text-xl font-bold text-slate-950">{mlT("InviteModal.Title")}</h3>
                             <button
                                 onClick={() => setShowInviteModal(false)}
-                                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                                className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-50 transition"
                             >
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
 
                         {/* Body */}
-                        <div className="px-6 py-5 space-y-5">
+                        <div className="px-8 py-8 space-y-6">
                             {/* Email Input */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    {mlT("InviteModal.EmailLabel")}
+                                <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-3 ml-1">
+                                    Recipient Email
                                 </label>
                                 <div className="relative">
-                                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300" />
                                     <input
                                         type="email"
                                         value={inviteEmail}
                                         onChange={(e) => setInviteEmail(e.target.value)}
-                                        placeholder={mlT("InviteModal.EmailPlaceholder")}
-                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all"
+                                        placeholder="teacher@academy.edu"
+                                        className="w-full pl-12 pr-4 py-4 border border-slate-200 rounded-2xl focus:border-slate-950 outline-none transition-all placeholder:text-slate-300"
                                     />
                                 </div>
                             </div>
 
-                            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <Shield className="w-4 h-4 text-gray-600" />
-                                    <span className="font-semibold text-gray-900">{t("Permissions.Member.Title")}</span>
+                            <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-5">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-widest">
+                                        {t("Permissions.Member.Title")} Role
+                                    </span>
                                 </div>
-                                <p className="text-xs text-gray-500">
-                                    {t("Permissions.Member.Description")}
+                                <p className="text-xs text-slate-500 leading-relaxed">
+                                    Standard academic access. Members can collaborate on subjects and view the classroom directory.
                                 </p>
                             </div>
 
                             {/* Error Message */}
                             {inviteError && (
-                                <div className="p-3 rounded-lg bg-red-50 border border-red-200">
-                                    <p className="text-sm text-red-600">{inviteError}</p>
+                                <div className="p-4 rounded-2xl bg-rose-50 border border-rose-100">
+                                    <p className="text-xs font-bold text-rose-600">{inviteError}</p>
                                 </div>
                             )}
                         </div>
 
                         {/* Footer */}
-                        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
+                        <div className="px-8 py-6 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50/30">
                             <button
                                 onClick={() => setShowInviteModal(false)}
-                                className="px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                className="px-5 py-3 text-sm font-bold text-slate-500 hover:text-slate-950 transition"
                             >
                                 {mlT("InviteModal.Cancel")}
                             </button>
                             <button
                                 onClick={handleInvite}
                                 disabled={!inviteEmail.trim() || isInviting}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-slate-950 text-white rounded-2xl font-bold text-sm hover:bg-slate-900 transition-colors disabled:opacity-50"
                             >
                                 {isInviting ? (
                                     <>

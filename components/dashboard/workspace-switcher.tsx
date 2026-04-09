@@ -11,6 +11,7 @@ import { fetchWorkspaces, fetchActiveWorkspace } from "@/lib/api/workspace";
 import { queryKeys } from "@/lib/query-keys";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/routing";
+import { CreateWorkspaceModal } from "./create-workspace-modal";
 
 type Workspace = {
     id: string;
@@ -26,6 +27,7 @@ export function WorkspaceSwitcher() {
     const router = useRouter();
     const queryClient = useQueryClient();
     const [isOpen, setIsOpen] = useState(false);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isSwitching, setIsSwitching] = useState(false);
     const t = useTranslations("Workspace.Switcher");
 
@@ -214,7 +216,7 @@ export function WorkspaceSwitcher() {
                             <button
                                 onClick={() => {
                                     setIsOpen(false);
-                                    router.push("/dashboard/workspaces/new");
+                                    setIsCreateModalOpen(true);
                                 }}
                                 className="w-full flex items-center gap-3 p-3 text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                             >
@@ -227,7 +229,11 @@ export function WorkspaceSwitcher() {
                     </div>
                 </>
             )}
+
+            <CreateWorkspaceModal 
+                isOpen={isCreateModalOpen}
+                onClose={() => setIsCreateModalOpen(false)}
+            />
         </div>
     );
 }
-

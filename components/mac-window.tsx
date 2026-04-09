@@ -1,85 +1,88 @@
 export default function MacWindow() {
   return (
-    <div className="w-full max-w-4xl mx-auto mt-12">
-      <div className="bg-[#FAFAFA] rounded-lg overflow-hidden border border-gray-200">
-        <div className="bg-[#FAFAFA] px-6 py-4 flex items-center gap-2 border-b border-gray-200">
+    <div className="mx-auto mt-12 w-full max-w-4xl">
+      <div className="overflow-hidden rounded-lg border border-gray-200 bg-[#FAFAFA]">
+        <div className="flex items-center gap-2 border-b border-gray-200 bg-[#FAFAFA] px-6 py-4">
           <div className="flex gap-2">
-            <div className="w-3 h-3 rounded-full bg-gray-300"></div>
-            <div className="w-3 h-3 rounded-full bg-gray-300"></div>
-            <div className="w-3 h-3 rounded-full bg-gray-300"></div>
+            <div className="h-3 w-3 rounded-full bg-gray-300" />
+            <div className="h-3 w-3 rounded-full bg-gray-300" />
+            <div className="h-3 w-3 rounded-full bg-gray-300" />
           </div>
         </div>
 
-        <div className="bg-[#FAFAFA] p-4 min-h-[600px] flex flex-col gap-2">
+        <div className="flex min-h-[600px] flex-col gap-2 bg-[#FAFAFA] p-4">
           <div className="flex justify-start">
-            <div className="bg-gray-200 rounded-[18px] rounded-tl-[4px] px-3 py-2 max-w-[75%]">
-              <p className="text-[18px] font-normal text-gray-900 leading-[1.4]">
-                Hi! Thanks for your recent order. How was the experience?
+            <div className="max-w-[75%] rounded-[18px] rounded-tl-[4px] bg-gray-200 px-3 py-2">
+              <p className="text-[18px] font-normal leading-[1.4] text-gray-900">
+                Hi Amina, what would you like help with today?
               </p>
             </div>
           </div>
 
           <div className="flex justify-start">
-            <div className="bg-gray-200 rounded-[18px] rounded-tl-[4px] px-3 py-2 max-w-[75%]">
-              <p className="text-[18px] font-normal text-gray-900 leading-[1.4]">
-                That is the Convyy experience.
+            <div className="max-w-[75%] rounded-[18px] rounded-tl-[4px] bg-gray-200 px-3 py-2">
+              <p className="text-[18px] font-normal leading-[1.4] text-gray-900">
+                I can help you revise Newton&apos;s Laws, run a quick check-in,
+                or prepare practice questions.
               </p>
             </div>
           </div>
 
           <div className="flex justify-end">
-            <div className="bg-[#007AFF] rounded-[18px] rounded-tr-[4px] px-3 py-2 max-w-[75%]">
-              <p className="text-[18px] font-normal text-white leading-[1.4]">
-                It was mostly great, but the shipping felt a bit long.
+            <div className="max-w-[75%] rounded-[18px] rounded-tr-[4px] bg-[#007AFF] px-3 py-2">
+              <p className="text-[18px] font-normal leading-[1.4] text-white">
+                I&apos;m revising forces, but I keep confusing mass and weight.
               </p>
             </div>
           </div>
 
           <div className="flex justify-start">
-            <div className="bg-gray-200 rounded-[18px] rounded-tl-[4px] px-3 py-2 max-w-[75%]">
-              <p className="text-[18px] font-normal text-gray-900 leading-[1.4]">
-                I&apos;m sorry to hear that. Was the estimate inaccurate?
+            <div className="max-w-[75%] rounded-[18px] rounded-tl-[4px] bg-gray-200 px-3 py-2">
+              <p className="text-[18px] font-normal leading-[1.4] text-gray-900">
+                Got it. Do you want a quick explanation first, or a worked
+                example?
               </p>
             </div>
           </div>
 
           <div className="flex justify-end">
-            <div className="bg-[#007AFF] rounded-[18px] rounded-tr-[4px] px-3 py-2 max-w-[75%]">
-              <p className="text-[18px] font-normal text-white leading-[1.4]">
-                Yes, it took 3 days longer than the checkout date.
+            <div className="max-w-[75%] rounded-[18px] rounded-tr-[4px] bg-[#007AFF] px-3 py-2">
+              <p className="text-[18px] font-normal leading-[1.4] text-white">
+                Start with a worked example.
               </p>
             </div>
           </div>
 
           <div className="flex justify-start">
-            <div className="bg-gray-200 rounded-[18px] rounded-tl-[4px] px-3 py-2 max-w-[75%]">
-              <p className="text-[18px] font-normal text-gray-900 leading-[1.4]">
-                Got it. I&apos;ll flag that for our logistics team. What did you
-                like most?
+            <div className="max-w-[75%] rounded-[18px] rounded-tl-[4px] bg-gray-200 px-3 py-2">
+              <p className="text-[18px] font-normal leading-[1.4] text-gray-900">
+                Perfect. Imagine you&apos;re holding a 2kg textbook. Its mass
+                stays the same, but its weight changes with gravity.
               </p>
             </div>
           </div>
 
           <div className="flex justify-end">
-            <div className="bg-[#007AFF] rounded-[18px] rounded-tr-[4px] px-3 py-2 max-w-[75%]">
-              <p className="text-[18px] font-normal text-white leading-[1.4]">
-                The product quality is incredible.
+            <div className="max-w-[75%] rounded-[18px] rounded-tr-[4px] bg-[#007AFF] px-3 py-2">
+              <p className="text-[18px] font-normal leading-[1.4] text-white">
+                So weight is the force, and mass is the amount of matter?
               </p>
             </div>
           </div>
 
           <div className="flex justify-start">
-            <div className="bg-gray-200 rounded-[18px] rounded-tl-[4px] px-3 py-2 max-w-[75%]">
-              <p className="text-[18px] font-normal text-gray-900 leading-[1.4]">
-                That&apos;s wonderful! Anything else you&apos;d like to share?
+            <div className="max-w-[75%] rounded-[18px] rounded-tl-[4px] bg-gray-200 px-3 py-2">
+              <p className="text-[18px] font-normal leading-[1.4] text-gray-900">
+                Exactly. Nice catch. Want me to turn that into two practice
+                questions and a short recap for later?
               </p>
             </div>
           </div>
 
           <div className="flex justify-end">
-            <div className="bg-[#007AFF] rounded-[18px] rounded-tr-[4px] px-3 py-2 max-w-[75%]">
-              <p className="text-[18px] font-normal text-white leading-[1.4]">
-                No, that&apos;s it. Keep it up!
+            <div className="max-w-[75%] rounded-[18px] rounded-tr-[4px] bg-[#007AFF] px-3 py-2">
+              <p className="text-[18px] font-normal leading-[1.4] text-white">
+                Yes please, and keep it simple.
               </p>
             </div>
           </div>

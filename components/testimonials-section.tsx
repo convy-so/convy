@@ -3,93 +3,85 @@ import Image from "next/image";
 const testimonials = [
   {
     quote:
-      "We switched from a traditional form tool and our completion rates jumped by 40%. People actually enjoy filling in surveys with Convyy.",
+      "We started with one support program, then quickly expanded into classroom tutoring and student check-ins. It felt like the platform had been designed for school reality.",
     name: "Alyssa Chen",
-    role: "Product Manager",
+    role: "Academic Director",
     image: "https://i.pravatar.cc/160?img=47",
-    social: null,
   },
   {
     quote:
-      "Convyy feels like chatting with a colleague, not filling out a form. The AI follow-ups make every response richer.",
+      "Convyy feels less like software and more like an extra teaching layer. The follow-ups are natural, and the summaries save our team hours every week.",
     name: "Marcus Reed",
-    role: "UX Researcher",
+    role: "Learning Lead",
     image: "https://i.pravatar.cc/160?img=12",
-    social: null,
   },
   {
     quote:
-      "I'm not even exaggerating — this saved me weeks of work.\nInstead of designing complex logic branches, I just describe what I want and Convyy builds the flow.\nIt's the first time I've felt in control of the entire survey process.",
+      "The learning side is what sold us.\nWe can define topics, invite students, and let the AI adapt to each learner without rebuilding the experience from scratch.\nIt finally feels like personalized support at scale.",
     name: "Sophia Kim",
-    role: "Startup Founder",
+    role: "School Founder",
     image: "https://i.pravatar.cc/160?img=32",
-    social: null,
   },
   {
     quote:
-      "I've used other survey tools before but this one feels built by someone who actually cares about the respondent experience.\nThe little details — onboarding, conversation flow, voice mode — make it production-grade out of the box.",
+      "I've used LMS tools, survey tools, and student support tools before, but this is the first product that makes those workflows feel connected.\nVoice mode and the conversation design make it feel ready for real students.",
     name: "Jordan Patel",
-    role: "Customer Success Lead",
+    role: "Student Success Lead",
     image: "https://i.pravatar.cc/160?img=19",
-    social: null,
   },
   {
     quote:
-      "Set it up on a Friday afternoon, had real insights by Monday.\nEverything just clicked — no complicated setup, no headaches.",
+      "Set it up on a Friday afternoon, had usable learning signals by Monday.\nWe could see what students needed, where they struggled, and which follow-ups actually mattered.",
     name: "Noah Garcia",
-    role: "Growth Lead",
+    role: "School Operations Lead",
     image: "https://i.pravatar.cc/160?img=67",
-    social: null,
   },
   {
     quote:
-      "I was burned out from building survey logic in spreadsheets.\nThis made me fall in love with collecting feedback again.\nI opened my laptop, ran one command, and started designing instead of debugging.",
+      "I was burned out from stitching together forms, reports, and separate learning tools.\nConvyy brought the flow back together.\nWe spend less time managing systems and more time improving the actual experience.",
     name: "Mia Johnson",
-    role: "Research Analyst",
+    role: "Learning Experience Manager",
     image: "https://i.pravatar.cc/160?img=22",
-    social: null,
   },
 ];
 
 export default function TestimonialsSection() {
   return (
-    <section className="p-[12px] bg-[#FAFAFA]">
-      <div className="mx-auto max-w-[1920px] py-10 sm:py-12 px-4 sm:px-6 lg:px-12">
-        <div className="max-w-5xl mx-auto">
-          {/* Header */}
-          <div className="text-center mb-12 md:mb-16">
+    <section className="bg-[#FAFAFA] p-[12px]">
+      <div className="mx-auto max-w-[1920px] px-4 py-10 sm:px-6 sm:py-12 lg:px-12">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-12 text-center md:mb-16">
             <p
-              className="text-[#8D8D8D] italic text-[20px] md:text-[32px] font-normal leading-[30px] md:leading-[44px] tracking-[-0.24px] md:tracking-[-0.32px] mb-4"
+              className="mb-4 text-[20px] font-normal italic leading-[30px] tracking-[-0.24px] text-[#8D8D8D] md:text-[32px] md:leading-[44px] md:tracking-[-0.32px]"
               style={{ fontFamily: "var(--font-fasthand)" }}
             >
               Testimonials
             </p>
-            <h2 className="text-[28px] md:text-[40px] font-[500] text-[#080808] leading-[36px] md:leading-[50px] tracking-[-0.48px] md:tracking-[-0.64px] mb-4">
-              Trusted by teams who value real feedback
+            <h2 className="mb-4 text-[28px] font-[500] leading-[36px] tracking-[-0.48px] text-[#080808] md:text-[40px] md:leading-[50px] md:tracking-[-0.64px]">
+              Trusted by educators building more personal learning experiences
             </h2>
-            <p className="text-[18px] md:text-[22px] font-normal text-[#696969] leading-[26px] md:leading-[32px] tracking-normal max-w-3xl mx-auto">
-              See what builders are saying about Convyy
+            <p className="mx-auto max-w-3xl text-[18px] font-normal leading-[26px] tracking-normal text-[#696969] md:text-[22px] md:leading-[32px]">
+              See how school teams use Convyy to support learners more
+              intentionally
             </p>
           </div>
 
-          {/* Testimonial grid — connected cells like the reference */}
-          <div className="border border-gray-200 rounded-[16px] overflow-hidden">
-            {/* Row 1 */}
+          <div className="overflow-hidden rounded-[16px] border border-gray-200">
             <div className="grid grid-cols-1 md:grid-cols-3">
               {testimonials.slice(0, 3).map((testimonial, i) => (
                 <article
                   key={testimonial.name}
-                  className={`p-6 md:p-7 flex flex-col justify-between gap-5 min-h-[200px] ${
-                    i < 2 ? "border-b md:border-b-0 md:border-r border-gray-200" : "border-b md:border-b-0 border-gray-200"
+                  className={`flex min-h-[200px] flex-col justify-between gap-5 p-6 md:p-7 ${
+                    i < 2
+                      ? "border-b border-gray-200 md:border-r md:border-b-0"
+                      : "border-b border-gray-200 md:border-b-0"
                   }`}
                 >
-                  {/* Quote */}
-                  <p className="text-[14px] font-normal text-[#080808] leading-[22px] whitespace-pre-line">
+                  <p className="whitespace-pre-line text-[14px] font-normal leading-[22px] text-[#080808]">
                     &ldquo;{testimonial.quote}&rdquo;
                   </p>
 
-                  {/* Author */}
-                  <div className="flex items-center gap-3 mt-auto pt-2">
+                  <div className="mt-auto flex items-center gap-3 pt-2">
                     <Image
                       src={testimonial.image}
                       alt={testimonial.name}
@@ -99,10 +91,10 @@ export default function TestimonialsSection() {
                       className="h-9 w-9 rounded-full object-cover"
                     />
                     <div>
-                      <h3 className="text-[14px] font-[600] text-[#080808] leading-[18px]">
+                      <h3 className="text-[14px] font-[600] leading-[18px] text-[#080808]">
                         {testimonial.name}
                       </h3>
-                      <p className="text-[12px] font-normal text-[#696969] leading-[16px]">
+                      <p className="text-[12px] font-normal leading-[16px] text-[#696969]">
                         {testimonial.role}
                       </p>
                     </div>
@@ -111,25 +103,21 @@ export default function TestimonialsSection() {
               ))}
             </div>
 
-            {/* Divider between rows */}
             <div className="border-t border-gray-200" />
 
-            {/* Row 2 */}
             <div className="grid grid-cols-1 md:grid-cols-3">
               {testimonials.slice(3, 6).map((testimonial, i) => (
                 <article
                   key={testimonial.name}
-                  className={`p-6 md:p-7 flex flex-col justify-between gap-5 min-h-[200px] ${
-                    i < 2 ? "border-b md:border-b-0 md:border-r border-gray-200" : ""
+                  className={`flex min-h-[200px] flex-col justify-between gap-5 p-6 md:p-7 ${
+                    i < 2 ? "border-b border-gray-200 md:border-r md:border-b-0" : ""
                   }`}
                 >
-                  {/* Quote */}
-                  <p className="text-[14px] font-normal text-[#080808] leading-[22px] whitespace-pre-line">
+                  <p className="whitespace-pre-line text-[14px] font-normal leading-[22px] text-[#080808]">
                     &ldquo;{testimonial.quote}&rdquo;
                   </p>
 
-                  {/* Author */}
-                  <div className="flex items-center gap-3 mt-auto pt-2">
+                  <div className="mt-auto flex items-center gap-3 pt-2">
                     <Image
                       src={testimonial.image}
                       alt={testimonial.name}
@@ -139,10 +127,10 @@ export default function TestimonialsSection() {
                       className="h-9 w-9 rounded-full object-cover"
                     />
                     <div>
-                      <h3 className="text-[14px] font-[600] text-[#080808] leading-[18px]">
+                      <h3 className="text-[14px] font-[600] leading-[18px] text-[#080808]">
                         {testimonial.name}
                       </h3>
-                      <p className="text-[12px] font-normal text-[#696969] leading-[16px]">
+                      <p className="text-[12px] font-normal leading-[16px] text-[#696969]">
                         {testimonial.role}
                       </p>
                     </div>
