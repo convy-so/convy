@@ -9,6 +9,10 @@ import { createWorkspace, setActiveWorkspace } from "@/app/actions/workspace";
 import { queryKeys } from "@/lib/query-keys";
 import { useRouter, Link } from "@/i18n/routing";
 
+import { AuthCard } from "@/components/auth/auth-card";
+import { InputField } from "@/components/auth/input-field";
+import { SubmitButton } from "@/components/auth/submit-button";
+
 export function WorkspaceCreatePage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -17,50 +21,14 @@ export function WorkspaceCreatePage() {
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-8 px-2 pb-12">
-      <div className="rounded-[28px] border border-white/60 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.16),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.14),_transparent_22%),linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,255,255,0.74))] px-6 py-8 shadow-[0_30px_90px_-60px_rgba(15,23,42,0.32)] backdrop-blur-xl md:px-8 md:py-10">
-        <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="space-y-5">
-            <div className="inline-flex items-center gap-2 rounded-full border border-sky-200/70 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-sky-700">
-              <Sparkles className="h-3.5 w-3.5" />
-              Workspace setup
-            </div>
-            <div className="space-y-3">
-              <h1 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 md:text-5xl">
-                Create a shared workspace for teachers, classrooms, departments, and surveys.
-              </h1>
-              <p className="max-w-2xl text-sm leading-7 text-slate-600 md:text-base">
-                Your personal account stays private. A workspace is the shared institutional space where teachers can invite one another, organize departments, and collaborate through explicit access approvals.
-              </p>
-            </div>
-          </div>
-
-          <div className="rounded-[24px] border border-white/70 bg-white/75 p-6">
-            <div className="text-sm font-semibold text-slate-950">What changes inside a workspace</div>
-            <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-              <div>Teachers can be invited into the same institution space.</div>
-              <div>Classrooms belong to owners and stay private until access is granted.</div>
-              <div>Departments keep large schools organized without weakening privacy.</div>
-              <div>Class-linked surveys and shared folders can live alongside learning features.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,560px)_minmax(0,1fr)]">
-        <div className="rounded-[24px] border border-white/70 bg-white/80 p-6 shadow-[0_20px_50px_-40px_rgba(15,23,42,0.32)] backdrop-blur-xl">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-white">
-              <Building2 className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-lg font-semibold text-slate-950">Create workspace</div>
-              <div className="text-sm text-slate-500">This creates the shared institution container.</div>
-            </div>
-          </div>
-
+    <div className="flex min-h-[80vh] items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md">
+        <AuthCard
+          title="Create a workspace"
+          subtitle="Set up your shared educational hub to manage departments and classrooms."
+        >
           <form
-            className="mt-6 space-y-4"
+            className="space-y-4"
             onSubmit={async (event) => {
               event.preventDefault();
               setError(null);
@@ -96,73 +64,75 @@ export function WorkspaceCreatePage() {
                   queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.active }),
                 ]);
 
-                toast.success("Workspace created");
+                toast.success("Workspace established");
                 router.push("/dashboard/team");
                 router.refresh();
               } catch (submissionError) {
                 setError(
                   submissionError instanceof Error
                     ? submissionError.message
-                    : "Failed to create workspace",
+                    : "Failed to build workspace",
                 );
               } finally {
                 setIsSubmitting(false);
               }
             }}
           >
-            <input
+            <InputField
+              label="Institution Name"
+              id="name"
+              placeholder="e.g. Greenfield Academy"
+              icon={Building2}
               value={form.name}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, name: event.target.value }))
-              }
-              placeholder="e.g. Greenfield Secondary School"
-              className="w-full rounded-2xl border border-white/70 bg-white/90 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300"
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              required
             />
-            <input
+
+            <InputField
+              label="Short Code (Optional)"
+              id="slug"
+              placeholder="e.g. greenfield"
               value={form.slug}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, slug: event.target.value }))
-              }
-              placeholder="Optional slug"
-              className="w-full rounded-2xl border border-white/70 bg-white/90 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300"
+              onChange={(e) => setForm({ ...form, slug: e.target.value })}
             />
-            <textarea
-              value={form.description}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, description: event.target.value }))
-              }
-              rows={4}
-              placeholder="Optional internal note about this workspace."
-              className="w-full resize-none rounded-2xl border border-white/70 bg-white/90 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300"
-            />
-            {error ? (
-              <div className="rounded-[18px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-[#292929]">
+                Description (Optional)
+              </label>
+              <textarea
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                rows={3}
+                placeholder="What is this workspace for?"
+                className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm focus:ring-2 focus:ring-[#292929] focus:border-transparent outline-none transition-all"
+              />
+            </div>
+
+            {error && (
+              <div className="rounded-xl border border-red-100 bg-red-50 p-4 text-sm font-medium text-red-600">
                 {error}
               </div>
-            ) : null}
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="submit"
-                disabled={isSubmitting || !form.name.trim()}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Building2 className="h-4 w-4" />
-                )}
+            )}
+
+            <div className="pt-2">
+              <SubmitButton isLoading={isSubmitting} loadingText="Building...">
                 Create workspace
-              </button>
+              </SubmitButton>
+            </div>
+
+            <div className="text-center mt-4">
               <Link
                 href="/dashboard"
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300"
+                className="text-sm font-medium text-[#696969] hover:text-[#292929] transition-colors"
               >
-                Stay in personal account
+                Skip and stay on personal account
               </Link>
             </div>
           </form>
-        </div>
+        </AuthCard>
       </div>
     </div>
   );
 }
+ 

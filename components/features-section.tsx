@@ -1,97 +1,85 @@
-import {
-  FaMagic,
-  FaDatabase,
-  FaBrain,
-  FaFileAlt,
-} from "react-icons/fa";
+import { FaMagic, FaDatabase, FaBrain, FaFileAlt } from "react-icons/fa";
+
+const featureCards = [
+  {
+    icon: FaMagic,
+    iconBg: "bg-[#0BA5EC]",
+    title: "Design learning flows with AI",
+    description:
+      "Describe the topic, goal, or teaching outcome you want and Convyy helps shape the tutoring flow for you.",
+  },
+  {
+    icon: FaDatabase,
+    iconBg: "bg-[#22C55E]",
+    title: "Personalized learning spaces",
+    description:
+      "Create teacher-owned classrooms, invite students, define topics, and support learners with adaptive AI tutoring.",
+  },
+  {
+    icon: FaBrain,
+    iconBg: "bg-[#6366F1]",
+    title: "Teacher and team workspaces",
+    description:
+      "Give educators and school teams a shared place to manage classrooms, students, topics, and learning progress.",
+  },
+  {
+    icon: FaFileAlt,
+    iconBg: "bg-[#0EA5E9]",
+    title: "Reports that guide intervention",
+    description:
+      "Get summaries, patterns, readiness signals, and next actions from each student conversation without manual review.",
+  },
+];
 
 export default function FeaturesSection() {
   return (
-    <section className="p-[12px] bg-[#FAFAFA]">
-      <div className="mx-auto max-w-[1920px] py-10 sm:py-12 px-4 sm:px-6 lg:px-12">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="text-center mb-12 md:mb-16">
+    <section className="bg-[#FAFAFA] p-[12px]">
+      <div className="mx-auto max-w-[1920px] px-4 py-10 sm:px-6 sm:py-12 lg:px-12">
+        <div className="mx-auto max-w-4xl">
+          <div className="mb-12 text-center md:mb-16">
             <p
-              className="text-[#8D8D8D] italic text-[20px] md:text-[32px] font-normal leading-[30px] md:leading-[44px] tracking-[-0.24px] md:tracking-[-0.32px] mb-4"
+              className="mb-4 text-[20px] font-normal italic leading-[30px] tracking-[-0.24px] text-[#8D8D8D] md:text-[32px] md:leading-[44px] md:tracking-[-0.32px]"
               style={{ fontFamily: "var(--font-fasthand)" }}
             >
               What you get
             </p>
-            <h2 className="text-[28px] md:text-[40px] font-[500] text-[#080808] leading-[36px] md:leading-[50px] tracking-[-0.48px] md:tracking-[-0.64px] mb-4">
-              Everything you need to build smarter forms.
+            <h2 className="mb-4 text-[28px] font-[500] leading-[36px] tracking-[-0.48px] text-[#080808] md:text-[40px] md:leading-[50px] md:tracking-[-0.64px]">
+              Everything you need to deliver adaptive learning.
             </h2>
-            <p className="text-[18px] md:text-[22px] font-normal text-[#696969] leading-[26px] md:leading-[32px] tracking-normal max-w-3xl mx-auto">
-              Design your form, share it in seconds, and get AI-powered insights from every response.
+            <p className="mx-auto max-w-3xl text-[18px] font-normal leading-[26px] tracking-normal text-[#696969] md:text-[22px] md:leading-[32px]">
+              Build classroom experiences that help students learn in a more
+              personal, responsive, and measurable way.
             </p>
           </div>
 
-          {/* Feature cards - bento-style grid */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6">
-            {/* Card 1 */}
-            <div className="bg-[#FAFAFA] border border-gray-200 rounded-[24px] p-6 flex flex-col gap-4 md:col-span-6">
-              <div className="w-[44px] h-[44px] rounded-full bg-[#0BA5EC] flex items-center justify-center">
-                <FaMagic className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h3 className="text-[20px] font-[500] text-[#080808] leading-[26px] tracking-[-0.24px] mb-1">
-                  Design with AI
-                </h3>
-                <p className="text-[16px] font-normal text-[#696969] leading-[22px]">
-                  Describe your form&apos;s goal and Convyy builds the conversational flow for you.
-                </p>
-              </div>
-            </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-6">
+            {featureCards.map((card) => {
+              const Icon = card.icon;
 
-            {/* Card 2 */}
-            <div className="bg-[#FAFAFA] border border-gray-200 rounded-[24px] p-6 flex flex-col gap-4 md:col-span-6">
-              <div className="w-[44px] h-[44px] rounded-full bg-[#22C55E] flex items-center justify-center">
-                <FaDatabase className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h3 className="text-[20px] font-[500] text-[#080808] leading-[26px] tracking-[-0.24px] mb-1">
-                  Share with one link
-                </h3>
-                <p className="text-[16px] font-normal text-[#696969] leading-[22px]">
-                  Publish your form and share a clean, branded experience instantly.
-                </p>
-              </div>
-            </div>
-
-            {/* Card 3 */}
-            <div className="bg-[#FAFAFA] border border-gray-200 rounded-[24px] p-6 flex flex-col gap-4 md:col-span-6">
-              <div className="w-[44px] h-[44px] rounded-full bg-[#6366F1] flex items-center justify-center">
-                <FaBrain className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h3 className="text-[20px] font-[500] text-[#080808] leading-[26px] tracking-[-0.24px] mb-1">
-                  Smart follow-ups
-                </h3>
-                <p className="text-[16px] font-normal text-[#696969] leading-[22px]">
-                  Questions adapt to each answer — no rigid scripts or manual branching logic.
-                </p>
-              </div>
-            </div>
-
-            {/* Card 4 */}
-            <div className="bg-[#FAFAFA] border border-gray-200 rounded-[24px] p-6 flex flex-col gap-4 md:col-span-6">
-              <div className="w-[44px] h-[44px] rounded-full bg-[#0EA5E9] flex items-center justify-center">
-                <FaFileAlt className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h3 className="text-[20px] font-[500] text-[#080808] leading-[26px] tracking-[-0.24px] mb-1">
-                  AI-powered summaries
-                </h3>
-                <p className="text-[16px] font-normal text-[#696969] leading-[22px]">
-                  Get structured insights from every form response without reading through raw data.
-                </p>
-              </div>
-            </div>
+              return (
+                <div
+                  key={card.title}
+                  className="flex flex-col gap-4 rounded-[24px] border border-gray-200 bg-[#FAFAFA] p-6 md:col-span-6"
+                >
+                  <div
+                    className={`flex h-[44px] w-[44px] items-center justify-center rounded-full ${card.iconBg}`}
+                  >
+                    <Icon className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="mb-1 text-[20px] font-[500] leading-[26px] tracking-[-0.24px] text-[#080808]">
+                      {card.title}
+                    </h3>
+                    <p className="text-[16px] font-normal leading-[22px] text-[#696969]">
+                      {card.description}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
     </section>
   );
 }
-
-

@@ -1,4 +1,4 @@
-"use server";
+// "use server";
 
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/db";

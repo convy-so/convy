@@ -481,7 +481,7 @@
     },
     "Dashboard": {
         "Welcome": {
-            "Title": "Welcome back! ðŸ‘‹",
+            "Title": "Welcome back 👋",
             "Subtitle": "Here's what's happening with your surveys today."
         },
         "CreateSurvey": "Create Survey",
@@ -894,7 +894,7 @@
     },
     "Auth": {
         "SignIn": {
-            "Title": "Welcome back",
+            "Title": "Welcome back 👋",
             "Subtitle": "Sign in to your account to continue",
             "EmailLabel": "Email address",
             "EmailPlaceholder": "Enter your email",
@@ -1537,4 +1537,3 @@
         }
     }
 }
-

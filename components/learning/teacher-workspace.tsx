@@ -3,8 +3,10 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Building2,
   ClipboardList,
   ArrowUpRight,
+  ArrowRight,
   BookOpen,
   CheckCircle2,
   FileText,
@@ -12,10 +14,13 @@ import {
   Loader2,
   Lock,
   MailPlus,
+  Layout,
   Sparkles,
   Unplug,
   UploadCloud,
   Users,
+  Plus,
+  PlusIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -24,9 +29,6 @@ import { MetricTile } from "@/components/learning/metric-tile";
 import { SectionHeading } from "@/components/learning/section-heading";
 import { Link, useRouter } from "@/i18n/routing";
 import {
-  createClassroom,
-  createLearningIntervention,
-  createTopic,
   fetchClassroomAssignedSurveys,
   fetchClassroomCollaborators,
   fetchClassroomAccessRequests,
@@ -40,8 +42,6 @@ import {
   fetchTopicReadiness,
   fetchTopicReports,
   grantClassroomCollaborator,
-  inviteStudent,
-  inviteStudentsBulk,
   requestClassroomAccess,
   revokeClassroomCollaborator,
   respondToClassroomAccessRequest,
@@ -55,28 +55,18 @@ import {
   fetchWorkspaceDepartments,
 } from "@/lib/api/workspace";
 import { queryKeys } from "@/lib/query-keys";
+import { CreateWorkspaceModal } from "@/components/dashboard/create-workspace-modal";
+import { CreateClassroomModal } from "@/components/learning/create-classroom-modal";
+import { CreateTopicModal } from "@/components/learning/create-topic-modal";
+import { InviteStudentModal } from "@/components/learning/invite-student-modal";
+import { LogInterventionModal } from "@/components/learning/log-intervention-modal";
+import { StatsCard } from "@/components/dashboard/stats-card";
 
 function countReadyTopics(statuses: string[]) {
   return statuses.filter((status) => status === "active").length;
 }
 
-function parseOutcomes(raw: string) {
-  return raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line, index) => {
-      const [titlePart, ...rest] = line.split("::");
-      const title = titlePart?.trim() ?? "";
-      const description = rest.join("::").trim();
 
-      if (!title || !description) {
-        throw new Error(`Outcome line ${index + 1} must follow "Title :: Description".`);
-      }
-
-      return { id: `outcome-${index + 1}`, title, description };
-    });
-}
 
 function accessMeta(level: "owner" | "collaborator" | "none") {
   if (level === "owner") {
@@ -109,31 +99,6 @@ function isInterventionPriority(value: string): value is InterventionPriority {
   return value === "low" || value === "medium" || value === "high";
 }
 
-function parseBulkInviteInput(raw: string) {
-  const students = raw
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line, index) => {
-      const [fullNamePart, emailPart] = line.split(",").map((part) => part.trim());
-
-      if (!fullNamePart || !emailPart) {
-        throw new Error(`Line ${index + 1} must use "Full Name, email@example.com".`);
-      }
-
-      return {
-        fullName: fullNamePart,
-        email: emailPart,
-      };
-    });
-
-  if (!students.length) {
-    throw new Error("Add at least one student to import.");
-  }
-
-  return students;
-}
-
 function formatInterventionTypeLabel(value: string) {
   return value
     .split("_")
@@ -151,37 +116,19 @@ function formatInterventionStatusLabel(value: string) {
 export function TeacherWorkspace() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
+  const [isCreateClassModalOpen, setIsCreateClassModalOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
+  const [isInterventionModalOpen, setIsInterventionModalOpen] = useState(false);
   const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(null);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
-  const [classroomForm, setClassroomForm] = useState({
-    title: "",
-    description: "",
-    subject: "",
-    gradeLabel: "",
-    departmentId: "",
-  });
-  const [inviteForm, setInviteForm] = useState({ fullName: "", email: "" });
-  const [bulkInviteInput, setBulkInviteInput] = useState("");
   const [collaboratorInviteEmail, setCollaboratorInviteEmail] = useState("");
-  const [topicForm, setTopicForm] = useState({ title: "", description: "", subjectLabel: "", outcomes: "" });
   const [materialTitle, setMaterialTitle] = useState("");
   const [materialDescription, setMaterialDescription] = useState("");
   const [materialFile, setMaterialFile] = useState<File | null>(null);
   const [accessRequestMessage, setAccessRequestMessage] = useState("");
-  const [interventionForm, setInterventionForm] = useState<{
-    title: string;
-    notes: string;
-    interventionType: InterventionType;
-    priority: InterventionPriority;
-    dueAt: string;
-  }>({
-    title: "",
-    notes: "",
-    interventionType: "reteach",
-    priority: "medium",
-    dueAt: "",
-  });
 
   const activeWorkspaceQuery = useQuery({
     queryKey: queryKeys.workspaces.active,
@@ -360,68 +307,7 @@ export function TeacherWorkspace() {
     enabled: Boolean(selectedAccessibleClassroomId && selectedStudent),
   });
 
-  const createClassroomMutation = useMutation({
-    mutationFn: createClassroom,
-    onSuccess: async () => {
-      setClassroomForm({ title: "", description: "", subject: "", gradeLabel: "", departmentId: "" });
-      toast.success("Classroom created");
-      await queryClient.invalidateQueries({ queryKey: queryKeys.learning.classrooms });
-    },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to create classroom"),
-  });
-  const inviteStudentMutation = useMutation({
-    mutationFn: inviteStudent,
-    onSuccess: async () => {
-      setInviteForm({ fullName: "", email: "" });
-      toast.success("Student invited");
-      if (selectedAccessibleClassroomId) {
-        await queryClient.invalidateQueries({ queryKey: queryKeys.learning.students(selectedAccessibleClassroomId) });
-      }
-    },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to invite student"),
-  });
-  const bulkInviteStudentsMutation = useMutation({
-    mutationFn: inviteStudentsBulk,
-    onSuccess: async (data, variables) => {
-      setBulkInviteInput("");
-      const invitedCount = data.data.invited.length;
-      const failedCount = data.data.failed.length;
 
-      if (invitedCount > 0 && failedCount === 0) {
-        toast.success(`${invitedCount} students invited`);
-      } else if (invitedCount > 0) {
-        toast.success(
-          `${invitedCount} students invited, ${failedCount} need attention`,
-        );
-      } else {
-        toast.error("No students were imported");
-      }
-
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.learning.students(variables.classroomId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.learning.assignedSurveys(variables.classroomId),
-        }),
-      ]);
-    },
-    onError: (error) =>
-      toast.error(
-        error instanceof Error ? error.message : "Failed to import classroom roster",
-      ),
-  });
-  const createTopicMutation = useMutation({
-    mutationFn: createTopic,
-    onSuccess: async () => {
-      setTopicForm({ title: "", description: "", subjectLabel: "", outcomes: "" });
-      toast.success("Topic created");
-      if (selectedAccessibleClassroomId) {
-        await queryClient.invalidateQueries({ queryKey: queryKeys.learning.topics(selectedAccessibleClassroomId) });
-      }
-    },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to create topic"),
-  });
   const requestClassroomAccessMutation = useMutation({
     mutationFn: requestClassroomAccess,
     onSuccess: async () => {
@@ -523,32 +409,7 @@ export function TeacherWorkspace() {
         error instanceof Error ? error.message : "Failed to grant collaborator access",
       ),
   });
-  const createInterventionMutation = useMutation({
-    mutationFn: createLearningIntervention,
-    onSuccess: async () => {
-      setInterventionForm({
-        title: "",
-        notes: "",
-        interventionType: "reteach",
-        priority: "medium",
-        dueAt: "",
-      });
-      toast.success("Intervention saved");
-      if (selectedAccessibleClassroomId && selectedStudent) {
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.learning.interventions(
-            selectedAccessibleClassroomId,
-            selectedStudent.id,
-            selectedTopic?.id ?? null,
-          ),
-        });
-      }
-    },
-    onError: (error) =>
-      toast.error(
-        error instanceof Error ? error.message : "Failed to create intervention",
-      ),
-  });
+
   const updateInterventionMutation = useMutation({
     mutationFn: updateLearningIntervention,
     onSuccess: async () => {
@@ -592,665 +453,579 @@ export function TeacherWorkspace() {
 
   if (!activeWorkspace) {
     return (
-      <div className="mx-auto max-w-[1200px] px-2 pb-12">
-        <GlassPanel className="p-8">
-          <SectionHeading
-            eyebrow="Workspace required"
-            title="Classrooms and departments live inside a workspace."
-            description="Use your personal account for private survey work. Create or join a workspace to run classrooms, invite teachers, and collaborate safely."
-            action={<Link href="/dashboard/workspaces/new" className="inline-flex items-center rounded-full border border-slate-200 bg-slate-950 px-4 py-2 text-sm font-semibold text-white">Create workspace</Link>}
-          />
-        </GlassPanel>
+      <div className="mx-auto flex max-w-2xl flex-col items-center justify-center px-4 py-24 text-center">
+        <div className="mb-8 flex h-20 w-20 items-center justify-center rounded-[24px] border border-slate-100 bg-white text-slate-400">
+          <Building2 className="h-10 w-10" />
+        </div>
+        
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">
+            Create a workspace
+          </h1>
+          <p className="mx-auto max-w-sm text-[15px] leading-relaxed text-slate-500">
+            Classrooms, departments, and academic units are organized within workspaces. Set up your first one to get started.
+          </p>
+        </div>
+
+        <div className="mt-8">
+          <button
+            onClick={() => setIsWorkspaceModalOpen(true)}
+            className="group inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-6 py-3 text-sm font-bold text-white transition hover:bg-slate-900"
+          >
+            Create workspace
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </button>
+        </div>
+
+        <CreateWorkspaceModal 
+          isOpen={isWorkspaceModalOpen}
+          onClose={() => setIsWorkspaceModalOpen(false)}
+        />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-8 px-2 pb-12">
-      <div className="rounded-[28px] border border-white/60 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.16),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.14),_transparent_22%),linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,255,255,0.74))] px-6 py-8 shadow-[0_30px_90px_-60px_rgba(15,23,42,0.32)] backdrop-blur-xl md:px-8 md:py-10">
-        <div className="grid gap-8 lg:grid-cols-[1.35fr_0.9fr]">
-          <div className="space-y-5">
-            <div className="inline-flex items-center gap-2 rounded-full border border-sky-200/70 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-sky-700"><Sparkles className="h-3.5 w-3.5" />Workspace learning</div>
-            <div className="space-y-3">
-              <h1 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 md:text-5xl">Manage classrooms, departments, and AI teaching safely inside one institution workspace.</h1>
-              <p className="max-w-2xl text-sm leading-7 text-slate-600 md:text-base">Teachers can discover classrooms in the workspace directory, but only owners and approved collaborators can open the internals.</p>
-            </div>
-          </div>
-          <GlassPanel className="grid gap-4 p-5">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">Workspace snapshot</div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <MetricTile label="Visible classrooms" value={String(classrooms.length)} helper="All classrooms in this workspace directory." />
-              <MetricTile label="Accessible classrooms" value={String(classrooms.filter((classroom) => classroom.accessLevel !== "none").length)} helper="Classrooms you can actively open." />
-              <MetricTile label="Students" value={String(students.length)} helper="Students in the selected classroom." />
-              <MetricTile label="Topics" value={String(topics.length)} helper={`${countReadyTopics(topics.map((topic) => topic.status))} active right now.`} />
-            </div>
-          </GlassPanel>
+    <div className="space-y-8 max-w-7xl mx-auto pb-12">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl lg:text-3xl font-bold text-[#111111] tracking-tight">
+            Learning Hub
+          </h1>
+          <p className="text-[#666666] mt-1 lg:mt-2 text-sm lg:text-base">
+            Manage classrooms, AI tutors, and student performance.
+          </p>
         </div>
+        <button
+          onClick={() => setIsCreateClassModalOpen(true)}
+          className="flex items-center justify-center gap-2 px-5 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors group w-full sm:w-auto"
+        >
+          <PlusIcon className="w-5 h-5" />
+          New classroom
+          <ArrowUpRight className="w-4 h-4 opacity-50 group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+        </button>
       </div>
 
-      <section className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <div className="space-y-6">
-          <GlassPanel className="p-5">
-            <SectionHeading eyebrow="Setup" title="Create a classroom" description="Create a teacher-owned classroom and optionally place it in a department." />
-            <form className="mt-6 space-y-4" onSubmit={(event) => {
-              event.preventDefault();
-              createClassroomMutation.mutate({
-                title: classroomForm.title,
-                description: classroomForm.description || undefined,
-                subject: classroomForm.subject || undefined,
-                gradeLabel: classroomForm.gradeLabel,
-                departmentId: classroomForm.departmentId || undefined,
-              });
-            }}>
-              <input value={classroomForm.title} onChange={(event) => setClassroomForm((current) => ({ ...current, title: event.target.value }))} placeholder="Senior Physics Cohort" className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300" />
-              <input value={classroomForm.gradeLabel} onChange={(event) => setClassroomForm((current) => ({ ...current, gradeLabel: event.target.value }))} placeholder="Grade / stage" className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300" />
-              <input value={classroomForm.subject} onChange={(event) => setClassroomForm((current) => ({ ...current, subject: event.target.value }))} placeholder="Core subject" className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300" />
-              <select value={classroomForm.departmentId} onChange={(event) => setClassroomForm((current) => ({ ...current, departmentId: event.target.value }))} className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300">
-                <option value="">No department</option>
-                {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
-              </select>
-              <textarea value={classroomForm.description} onChange={(event) => setClassroomForm((current) => ({ ...current, description: event.target.value }))} rows={4} placeholder="Short description" className="w-full resize-none rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300" />
-              <button type="submit" disabled={createClassroomMutation.isPending} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white">{createClassroomMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <GraduationCap className="h-4 w-4" />}Create classroom</button>
-            </form>
-          </GlassPanel>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <StatsCard
+          title="Classrooms"
+          value={classrooms.length}
+          icon={<GraduationCap className="w-6 h-6" />}
+          iconColor="bg-blue-50 text-blue-600"
+          description="Total classes in this workspace"
+        />
+        <StatsCard
+          title="Accessible"
+          value={classrooms.filter((c) => c.accessLevel !== "none").length}
+          icon={<Lock className="w-6 h-6" />}
+          iconColor="bg-emerald-50 text-emerald-600"
+          description="Classes you can manage"
+        />
+        <StatsCard
+          title="Students"
+          value={students.length}
+          icon={<Users className="w-6 h-6" />}
+          iconColor="bg-purple-50 text-purple-600"
+          description={selectedDirectoryClassroom ? `In ${selectedDirectoryClassroom.title}` : "Select a class"}
+        />
+        <StatsCard
+          title="Active Tutors"
+          value={countReadyTopics(topics.map((t) => t.status))}
+          icon={<Sparkles className="w-6 h-6" />}
+          iconColor="bg-amber-50 text-amber-600"
+          description="Ready for interaction"
+        />
+      </div>
 
-          <GlassPanel className="p-4">
-            <div className="mb-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">Workspace classrooms</div>
-              <div className="mt-1 text-lg font-semibold tracking-tight text-slate-950">Discover and request access</div>
-            </div>
-            <div className="space-y-3">
-              {classrooms.length ? classrooms.map((classroom) => {
-                const meta = accessMeta(classroom.accessLevel);
-                const isActive = classroom.id === selectedDirectoryClassroom?.id;
-                return (
-                  <button key={classroom.id} type="button" onClick={() => { setSelectedClassroomId(classroom.id); setSelectedTopicId(null); setSelectedStudentId(null); }} className={`w-full rounded-[18px] border px-4 py-4 text-left transition ${isActive ? "border-sky-300 bg-sky-50/80" : "border-white/70 bg-white/75 hover:border-slate-200 hover:bg-white"}`}>
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-2">
-                        <div className="text-base font-semibold text-slate-950">{classroom.title}</div>
-                        <div className="text-sm text-slate-600">{classroom.gradeLabel} · {classroom.subject ?? "General"}</div>
-                        <div className="flex flex-wrap gap-2 text-xs text-slate-500">
-                          {classroom.departmentName ? <span className="rounded-full border border-white/70 bg-white px-2.5 py-1">{classroom.departmentName}</span> : null}
-                          <span className="rounded-full border border-white/70 bg-white px-2.5 py-1">{classroom.teacherName}</span>
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${meta.tone}`}>{meta.label}</span>
-                        {classroom.accessRequestStatus === "pending" ? <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">Request pending</span> : null}
-                        <ArrowUpRight className={`h-4 w-4 ${isActive ? "text-sky-700" : "text-slate-400"}`} />
+      <CreateClassroomModal
+        isOpen={isCreateClassModalOpen}
+        onClose={() => setIsCreateClassModalOpen(false)}
+        onSuccess={(id) => setSelectedClassroomId(id)}
+        departments={departments}
+      />
+
+      {selectedAccessibleClassroomId && (
+        <>
+          <InviteStudentModal
+            isOpen={isInviteModalOpen}
+            onClose={() => setIsInviteModalOpen(false)}
+            classroomId={selectedAccessibleClassroomId}
+          />
+          <CreateTopicModal
+            isOpen={isTopicModalOpen}
+            onClose={() => setIsTopicModalOpen(false)}
+            classroomId={selectedAccessibleClassroomId}
+          />
+          {selectedStudent && (
+            <LogInterventionModal
+              isOpen={isInterventionModalOpen}
+              onClose={() => setIsInterventionModalOpen(false)}
+              classroomId={selectedAccessibleClassroomId}
+              studentId={selectedStudent.id}
+              studentName={selectedStudent.fullName}
+              topicId={selectedTopic?.id}
+            />
+          )}
+        </>
+      )}
+
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 gap-6">
+        {/* Left Sidebar — Classroom Directory */}
+        <div className="lg:col-span-1 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Classrooms</h2>
+          </div>
+          <div className="space-y-3">
+            {classrooms.length ? classrooms.map((classroom) => {
+              const meta = accessMeta(classroom.accessLevel);
+              const isActive = classroom.id === selectedDirectoryClassroom?.id;
+              return (
+                <button
+                  key={classroom.id}
+                  type="button"
+                  onClick={() => { setSelectedClassroomId(classroom.id); setSelectedTopicId(null); setSelectedStudentId(null); }}
+                  className={`group w-full bg-white rounded-2xl border p-4 text-left transition-all duration-300 ${isActive ? "" : ""}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-gray-900 truncate">{classroom.title}</div>
+                      <div className="mt-1 text-sm text-gray-500">{classroom.gradeLabel} · {classroom.subject ?? "General"}</div>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {classroom.departmentName && (
+                          <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-0.5 text-xs text-gray-600 border border-gray-100">{classroom.departmentName}</span>
+                        )}
+                        <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-0.5 text-xs text-gray-600 border border-gray-100">{classroom.teacherName}</span>
                       </div>
                     </div>
-                  </button>
-                );
-              }) : <div className="rounded-[18px] border border-dashed border-slate-200 bg-white/60 px-4 py-6 text-sm text-slate-500">No classrooms yet.</div>}
-            </div>
-          </GlassPanel>
+                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                      <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${meta.tone}`}>{meta.label}</span>
+                      {classroom.accessRequestStatus === "pending" && (
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700">Pending</span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            }) : (
+              <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-4">
+                  <GraduationCap className="w-7 h-7 text-gray-400" />
+                </div>
+                <h3 className="font-semibold text-gray-900 mb-1">No classrooms yet</h3>
+                <p className="text-sm text-gray-500 max-w-[220px] mx-auto">Create your first classroom to start managing students.</p>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="space-y-6">
+        {/* Right Panel — Classroom Detail */}
+        <div className="lg:col-span-2 space-y-6">
           {!selectedDirectoryClassroom ? (
-            <GlassPanel className="p-6">
-              <SectionHeading eyebrow="Classroom operations" title="Choose a classroom" description="Select a classroom from the workspace directory." />
-            </GlassPanel>
+            <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center flex flex-col items-center justify-center min-h-[400px]">
+              <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mb-4">
+                <Layout className="w-8 h-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Select a classroom</h3>
+              <p className="text-gray-500 max-w-sm mx-auto">
+                Choose a classroom from the left to manage students, topics, and AI tutors.
+              </p>
+            </div>
           ) : !canCollaborate ? (
-            <GlassPanel className="p-6">
-              <SectionHeading eyebrow="Classroom access" title={selectedDirectoryClassroom.title} description="You can see this classroom exists because you share the workspace, but the roster, reports, and topic internals stay private until the owner grants access." />
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                <div className="rounded-[20px] border border-white/70 bg-white/75 p-5 text-sm text-slate-600">
-                  <div className="flex items-center gap-2 text-slate-950"><Lock className="h-4 w-4 text-slate-600" /><h3 className="text-lg font-semibold tracking-tight">Directory details</h3></div>
-                  <div className="mt-4 space-y-2">
+            /* Locked classroom — request access */
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                <h2 className="text-lg font-semibold text-gray-900">{selectedDirectoryClassroom.title}</h2>
+                <p className="mt-1 text-sm text-gray-500">This classroom is visible but locked. Request access from the owner.</p>
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  <div className="rounded-xl bg-gray-50 p-4 text-sm space-y-2 text-gray-600">
+                    <div className="font-medium text-gray-900 flex items-center gap-2"><Lock className="w-4 h-4 text-gray-400" /> Details</div>
                     <div>Owner: {selectedDirectoryClassroom.teacherName}</div>
                     <div>Grade: {selectedDirectoryClassroom.gradeLabel}</div>
-                    <div>Department: {selectedDirectoryClassroom.departmentName ?? "Not assigned"}</div>
-                    <div>Students: {selectedDirectoryClassroom.studentCount}</div>
-                    <div>Topics: {selectedDirectoryClassroom.topicCount}</div>
+                    <div>Department: {selectedDirectoryClassroom.departmentName ?? "None"}</div>
+                    <div>Students: {selectedDirectoryClassroom.studentCount} · Topics: {selectedDirectoryClassroom.topicCount}</div>
                   </div>
-                </div>
-                <div className="rounded-[20px] border border-white/70 bg-white/75 p-5">
-                  <div className="flex items-center gap-2 text-slate-950"><MailPlus className="h-4 w-4 text-sky-700" /><h3 className="text-lg font-semibold tracking-tight">Request collaboration</h3></div>
-                  {selectedDirectoryClassroom.accessRequestStatus === "pending" ? (
-                    <div className="mt-4 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">Your access request is pending review.</div>
-                  ) : (
-                    <form className="mt-4 space-y-3" onSubmit={(event) => {
-                      event.preventDefault();
-                      requestClassroomAccessMutation.mutate({ classroomId: selectedDirectoryClassroom.id, message: accessRequestMessage || undefined });
-                    }}>
-                      <textarea value={accessRequestMessage} onChange={(event) => setAccessRequestMessage(event.target.value)} rows={4} placeholder="Short note for the owner" className="w-full resize-none rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300" />
-                      <button type="submit" disabled={requestClassroomAccessMutation.isPending} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white">{requestClassroomAccessMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}Request access</button>
-                    </form>
-                  )}
+                  <div className="rounded-xl bg-gray-50 p-4">
+                    <div className="font-medium text-gray-900 text-sm flex items-center gap-2 mb-3"><MailPlus className="w-4 h-4 text-gray-400" /> Request access</div>
+                    {selectedDirectoryClassroom.accessRequestStatus === "pending" ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">Your request is pending review.</div>
+                    ) : (
+                      <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); requestClassroomAccessMutation.mutate({ classroomId: selectedDirectoryClassroom.id, message: accessRequestMessage || undefined }); }}>
+                        <textarea value={accessRequestMessage} onChange={(e) => setAccessRequestMessage(e.target.value)} rows={3} placeholder="Short note for the owner…" className="w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-gray-400 transition-colors" />
+                        <button type="submit" disabled={requestClassroomAccessMutation.isPending} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors">
+                          {requestClassroomAccessMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <MailPlus className="w-4 h-4" />}
+                          Request access
+                        </button>
+                      </form>
+                    )}
+                  </div>
                 </div>
               </div>
-            </GlassPanel>
+            </div>
           ) : (
-            <>
-              <GlassPanel className="p-6">
-                <SectionHeading
-                  eyebrow="Classroom operations"
-                  title={selectedDirectoryClassroom.title}
-                  description="Invite students, define topics, ground the tutor, and launch surveys that are assigned automatically to this class."
-                  action={
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          createClassSurveyMutation.mutate(selectedDirectoryClassroom.id)
-                        }
-                        disabled={createClassSurveyMutation.isPending}
-                        className="inline-flex items-center rounded-full border border-slate-200 bg-white/90 px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-white disabled:opacity-60"
-                      >
-                        {createClassSurveyMutation.isPending ? "Creating..." : "Create class survey"}
-                      </button>
-                      <Link href="/dashboard/learning/reports" className="inline-flex items-center rounded-full border border-white/70 bg-white/80 px-4 py-2 text-xs font-semibold text-slate-700">Open report center</Link>
-                    </div>
-                  }
-                />
-                {classroomAccessLevel === "owner" && pendingAccessRequests.length ? (
-                  <div className="mt-6 rounded-[20px] border border-amber-200 bg-amber-50/80 p-5">
-                    <div className="text-sm font-semibold text-slate-950">Pending collaborator requests</div>
-                    <div className="mt-4 space-y-3">
-                      {pendingAccessRequests.map((request) => (
-                        <div key={request.id} className="rounded-[18px] border border-white/70 bg-white/85 px-4 py-4">
-                          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                            <div className="text-sm text-slate-600"><div className="font-semibold text-slate-950">{request.requester.name}</div><div className="text-xs">{request.requester.email}</div>{request.message ? <div className="mt-2">{request.message}</div> : null}</div>
-                            <div className="flex gap-2">
-                              <button type="button" onClick={() => respondToRequestMutation.mutate({ classroomId: selectedDirectoryClassroom.id, requestId: request.id, decision: "rejected" })} className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700">Decline</button>
-                              <button type="button" onClick={() => respondToRequestMutation.mutate({ classroomId: selectedDirectoryClassroom.id, requestId: request.id, decision: "approved" })} className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700">Approve</button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+            /* Active classroom management */
+            <div className="space-y-6">
+              {/* Classroom Actions Bar */}
+              <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">{selectedDirectoryClassroom.title}</h2>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      {selectedDirectoryClassroom.gradeLabel} · {selectedDirectoryClassroom.subject ?? "General"}
+                      {classroomAccessLevel === "owner" ? " · Owner" : " · Collaborator"}
+                    </p>
                   </div>
-                ) : null}
-                {classroomAccessLevel === "owner" ? (
-                  <div className="mt-6 rounded-[20px] border border-white/70 bg-white/75 p-5">
-                    <div className="text-sm font-semibold text-slate-950">
-                      Add collaborator directly
-                    </div>
-                    <div className="mt-1 text-sm text-slate-600">
-                      Grant classroom access to a teacher who already belongs to this workspace.
-                    </div>
-                    <form
-                      className="mt-4 flex flex-col gap-3 md:flex-row"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        grantCollaboratorMutation.mutate({
-                          classroomId: selectedDirectoryClassroom.id,
-                          email: collaboratorInviteEmail,
-                        });
-                      }}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => createClassSurveyMutation.mutate(selectedDirectoryClassroom.id)}
+                      disabled={createClassSurveyMutation.isPending}
+                      className="text-sm font-medium text-gray-500 hover:text-gray-900 flex items-center gap-1 transition-colors px-3 py-2 rounded-lg hover:bg-gray-50"
                     >
-                      <input
-                        value={collaboratorInviteEmail}
-                        onChange={(event) => setCollaboratorInviteEmail(event.target.value)}
-                        placeholder="teacher@school.org"
-                        className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300"
-                      />
-                      <button
-                        type="submit"
-                        disabled={grantCollaboratorMutation.isPending}
-                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900"
-                      >
-                        {grantCollaboratorMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <MailPlus className="h-4 w-4" />
-                        )}
-                        Add teacher
-                      </button>
-                    </form>
-                  </div>
-                ) : null}
-                {classroomAccessLevel === "owner" && collaborators.length ? (
-                  <div className="mt-6 rounded-[20px] border border-white/70 bg-white/75 p-5">
-                    <div className="text-sm font-semibold text-slate-950">Current collaborators</div>
-                    <div className="mt-4 space-y-3">
-                      {collaborators.map((collaborator) => (
-                        <div
-                          key={collaborator.id}
-                          className="flex flex-col gap-3 rounded-[18px] border border-white/70 bg-white/85 px-4 py-4 md:flex-row md:items-center md:justify-between"
-                        >
-                          <div className="text-sm text-slate-600">
-                            <div className="font-semibold text-slate-950">
-                              {collaborator.name}
-                            </div>
-                            <div className="text-xs">{collaborator.email}</div>
-                            <div className="mt-1 text-xs text-slate-500">
-                              {collaborator.accessLevel === "owner"
-                                ? "Classroom owner"
-                                : `Collaborator since ${new Intl.DateTimeFormat(undefined, {
-                                    month: "short",
-                                    day: "numeric",
-                                  }).format(new Date(collaborator.grantedAt))}`}
-                            </div>
-                          </div>
-                          {collaborator.accessLevel === "collaborator" ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                revokeCollaboratorMutation.mutate({
-                                  classroomId: selectedDirectoryClassroom.id,
-                                  teacherUserId: collaborator.teacherUserId,
-                                })
-                              }
-                              className="inline-flex items-center justify-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
-                            >
-                              <Unplug className="h-3.5 w-3.5" />
-                              Remove access
-                            </button>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </GlassPanel>
-
-              <GlassPanel className="p-6">
-                <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-                  <div className="space-y-6">
-                    <div className="rounded-[20px] border border-white/70 bg-white/70 p-5">
-                      <div className="flex items-center gap-2 text-slate-950"><Users className="h-4 w-4 text-sky-700" /><h3 className="text-lg font-semibold tracking-tight">Students</h3></div>
-                      {canManageStudents ? (
-                        <div className="mt-4 space-y-4">
-                          <form className="space-y-3" onSubmit={(event) => {
-                            event.preventDefault();
-                            inviteStudentMutation.mutate({ classroomId: selectedDirectoryClassroom.id, ...inviteForm });
-                          }}>
-                            <input value={inviteForm.fullName} onChange={(event) => setInviteForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="Student full name" className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300" />
-                            <input value={inviteForm.email} onChange={(event) => setInviteForm((current) => ({ ...current, email: event.target.value }))} placeholder="student@email.com" className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300" />
-                            <button type="submit" disabled={inviteStudentMutation.isPending} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900">{inviteStudentMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />}Invite student</button>
-                          </form>
-                          <form
-                            className="space-y-3 rounded-[18px] border border-dashed border-slate-200 bg-white/70 p-4"
-                            onSubmit={(event) => {
-                              event.preventDefault();
-                              try {
-                                bulkInviteStudentsMutation.mutate({
-                                  classroomId: selectedDirectoryClassroom.id,
-                                  students: parseBulkInviteInput(bulkInviteInput),
-                                });
-                              } catch (error) {
-                                toast.error(
-                                  error instanceof Error
-                                    ? error.message
-                                    : "Invalid roster import format",
-                                );
-                              }
-                            }}
-                          >
-                            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                              Bulk roster import
-                            </div>
-                            <textarea
-                              value={bulkInviteInput}
-                              onChange={(event) => setBulkInviteInput(event.target.value)}
-                              rows={5}
-                              placeholder={"Jane Doe, jane@school.org\nJohn Smith, john@school.org"}
-                              className="w-full resize-none rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300"
-                            />
-                            <div className="text-xs text-slate-500">
-                              One student per line using name and email.
-                            </div>
-                            <button
-                              type="submit"
-                              disabled={bulkInviteStudentsMutation.isPending}
-                              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900"
-                            >
-                              {bulkInviteStudentsMutation.isPending ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <UploadCloud className="h-4 w-4" />
-                              )}
-                              Import roster
-                            </button>
-                          </form>
-                        </div>
-                      ) : <div className="mt-4 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">Only the classroom owner can change the roster.</div>}
-                      <div className="mt-4 space-y-3">
-                        {students.length ? students.map((student) => (
-                          <button key={student.id} type="button" onClick={() => setSelectedStudentId(student.id)} className={`w-full rounded-[18px] border px-4 py-3 text-left transition ${selectedStudent?.id === student.id ? "border-sky-300 bg-sky-50/80" : "border-white/70 bg-white/70 hover:border-slate-200"}`}>
-                            <div className="flex items-center justify-between gap-3"><div><div className="text-sm font-semibold text-slate-950">{student.fullName}</div><div className="mt-1 text-xs text-slate-500">{student.email}</div></div><div className="text-right text-[11px] font-medium text-slate-500"><div>{student.inviteStatus}</div><div className="mt-1">{student.onboardingStatus}</div></div></div>
-                          </button>
-                        )) : <div className="rounded-[18px] border border-dashed border-slate-200 bg-white/60 px-4 py-5 text-sm text-slate-500">No students yet.</div>}
-                      </div>
-                    </div>
-                    <div className="rounded-[20px] border border-white/70 bg-white/70 p-5">
-                      <div className="flex items-center gap-2 text-slate-950"><ClipboardList className="h-4 w-4 text-indigo-700" /><h3 className="text-lg font-semibold tracking-tight">Assigned surveys</h3></div>
-                      <div className="mt-4 space-y-3">
-                        {assignedSurveysQuery.isLoading ? (
-                          <div className="flex items-center gap-2 text-sm text-slate-500">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Loading class survey progress...
-                          </div>
-                        ) : selectedStudentAssignedSurveyStates.length ? (
-                          selectedStudentAssignedSurveyStates.map((survey) => (
-                            <div key={survey.id} className="rounded-[18px] border border-white/70 bg-white/80 px-4 py-4">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <div className="text-sm font-semibold text-slate-950">{survey.title}</div>
-                                  <div className="mt-1 text-xs text-slate-500">
-                                    {survey.completedCount}/{survey.assignedCount} completed - {survey.completionRate}% class completion
-                                  </div>
-                                </div>
-                                <div className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
-                                  {survey.inProgressCount} in progress
-                                </div>
-                              </div>
-                              {survey.selectedStudentState ? (
-                                <div className="mt-3 text-xs text-slate-600">
-                                  {selectedStudent?.fullName ?? "Selected student"}: {survey.selectedStudentState.responseStatus.replace("_", " ")}
-                                  {survey.selectedStudentState.completedAt ? ` on ${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(survey.selectedStudentState.completedAt))}` : ""}
-                                </div>
-                              ) : null}
-                            </div>
-                          ))
-                        ) : (
-                          <div className="rounded-[18px] border border-dashed border-slate-200 bg-white/60 px-4 py-5 text-sm text-slate-500">No class-linked surveys yet.</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    <div className="rounded-[20px] border border-white/70 bg-white/70 p-5">
-                      <div className="flex items-center gap-2 text-slate-950"><BookOpen className="h-4 w-4 text-emerald-700" /><h3 className="text-lg font-semibold tracking-tight">Create topic and outcomes</h3></div>
-                      <form className="mt-4 space-y-3" onSubmit={(event) => {
-                        event.preventDefault();
-                        const subjectLabel = topicForm.subjectLabel.trim() || "General";
-                        const subjectKey = subjectLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "general";
-                        createTopicMutation.mutate({
-                          classroomId: selectedDirectoryClassroom.id,
-                          title: topicForm.title,
-                          description: topicForm.description,
-                          subject: subjectLabel,
-                          subjectKey,
-                          subjectLabel,
-                          learningOutcomes: parseOutcomes(topicForm.outcomes),
-                          sourceBoundary: { groundingMode: "teacher_material_plus_web_opening", webOpeningEnabled: true, teacherSummary: topicForm.description },
-                        });
-                      }}>
-                        <input value={topicForm.title} onChange={(event) => setTopicForm((current) => ({ ...current, title: event.target.value }))} placeholder="Topic title" className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-emerald-300" />
-                        <input value={topicForm.subjectLabel} onChange={(event) => setTopicForm((current) => ({ ...current, subjectLabel: event.target.value }))} placeholder="Subject label" className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-emerald-300" />
-                        <textarea value={topicForm.description} onChange={(event) => setTopicForm((current) => ({ ...current, description: event.target.value }))} rows={3} placeholder="Topic description" className="w-full resize-none rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-emerald-300" />
-                        <textarea value={topicForm.outcomes} onChange={(event) => setTopicForm((current) => ({ ...current, outcomes: event.target.value }))} rows={5} placeholder="Outcome :: Description" className="w-full resize-none rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-emerald-300" />
-                        <button type="submit" disabled={createTopicMutation.isPending} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white">{createTopicMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}Create topic</button>
-                      </form>
-                    </div>
-
-                    <div className="rounded-[20px] border border-white/70 bg-white/70 p-5">
-                      <div className="flex items-center justify-between gap-3">
-                        <div><div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">Topics</div><div className="mt-1 text-lg font-semibold tracking-tight text-slate-950">Classroom curriculum</div></div>
-                        {selectedTopic ? <button type="button" onClick={() => updateTopicStatusMutation.mutate({ topicId: selectedTopic.id, status: selectedTopic.status === "active" ? "paused" : "active" })} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">{selectedTopic.status === "active" ? "Pause" : "Activate"}</button> : null}
-                      </div>
-                      <div className="mt-4 space-y-3">
-                        {topics.length ? topics.map((topic) => (
-                          <button key={topic.id} type="button" onClick={() => setSelectedTopicId(topic.id)} className={`w-full rounded-[18px] border px-4 py-4 text-left transition ${selectedTopic?.id === topic.id ? "border-emerald-300 bg-emerald-50/80" : "border-white/70 bg-white/70 hover:border-slate-200"}`}>
-                            <div className="flex items-start justify-between gap-3"><div><div className="text-sm font-semibold text-slate-950">{topic.title}</div><div className="mt-1 text-xs text-slate-500">{topic.subjectLabel ?? topic.subject ?? "General"} - {topic.status}</div></div><ArrowUpRight className="h-4 w-4 text-slate-400" /></div>
-                          </button>
-                        )) : <div className="rounded-[18px] border border-dashed border-slate-200 bg-white/60 px-4 py-5 text-sm text-slate-500">No topics yet.</div>}
-                      </div>
-                    </div>
+                      {createClassSurveyMutation.isPending ? "Creating…" : "Create survey"}
+                    </button>
+                    <Link href="/dashboard/learning/reports" className="text-sm font-medium text-gray-500 hover:text-gray-900 flex items-center gap-1 transition-colors px-3 py-2 rounded-lg hover:bg-gray-50">
+                      Reports <ArrowUpRight className="w-3.5 h-3.5" />
+                    </Link>
                   </div>
                 </div>
-              </GlassPanel>
+              </div>
 
-              <GlassPanel className="p-6">
-                <SectionHeading eyebrow="Selected topic" title={selectedTopic?.title ?? "Choose a topic"} description={selectedTopic ? "Upload source material, review grounding readiness, and inspect student signals." : "Once a topic is selected, this panel becomes the operational center for grounding and review."} action={selectedTopic ? <div className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-600"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{selectedTopic.subjectLabel ?? selectedTopic.subject ?? "General"}</div> : null} />
-                {selectedTopic ? (
-                  <div className="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+              {/* Pending access requests (owner only) */}
+              {classroomAccessLevel === "owner" && pendingAccessRequests.length > 0 && (
+                <div className="bg-amber-50 rounded-2xl border border-amber-100 p-5">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Pending access requests</h3>
+                  <div className="space-y-2">
+                    {pendingAccessRequests.map((request) => (
+                      <div key={request.id} className="bg-white rounded-xl border border-amber-100 p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div className="text-sm">
+                          <div className="font-medium text-gray-900">{request.requester.name}</div>
+                          <div className="text-gray-500 text-xs">{request.requester.email}</div>
+                          {request.message && <div className="text-gray-600 mt-1">{request.message}</div>}
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button type="button" onClick={() => respondToRequestMutation.mutate({ classroomId: selectedDirectoryClassroom.id, requestId: request.id, decision: "rejected" })} className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors">Decline</button>
+                          <button type="button" onClick={() => respondToRequestMutation.mutate({ classroomId: selectedDirectoryClassroom.id, requestId: request.id, decision: "approved" })} className="px-3 py-1.5 rounded-lg bg-gray-900 text-xs font-medium text-white hover:bg-gray-800 transition-colors">Approve</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Collaborator management (owner only) */}
+              {classroomAccessLevel === "owner" && (
+                <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-gray-900">Collaborators</h3>
+                  </div>
+                  <form
+                    className="flex gap-2 mb-4"
+                    onSubmit={(e) => { e.preventDefault(); grantCollaboratorMutation.mutate({ classroomId: selectedDirectoryClassroom.id, email: collaboratorInviteEmail }); }}
+                  >
+                    <input
+                      value={collaboratorInviteEmail}
+                      onChange={(e) => setCollaboratorInviteEmail(e.target.value)}
+                      placeholder="teacher@school.org"
+                      className="flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-gray-400 transition-colors"
+                    />
+                    <button type="submit" disabled={grantCollaboratorMutation.isPending} className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors flex-shrink-0">
+                      {grantCollaboratorMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <MailPlus className="w-4 h-4" />}
+                      Add
+                    </button>
+                  </form>
+                  {collaborators.length > 0 && (
+                    <div className="space-y-2">
+                      {collaborators.map((collaborator) => (
+                        <div key={collaborator.id} className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-4 py-3">
+                          <div className="text-sm min-w-0">
+                            <div className="font-medium text-gray-900 truncate">{collaborator.name}</div>
+                            <div className="text-xs text-gray-500">{collaborator.email} · {collaborator.accessLevel === "owner" ? "Owner" : `Since ${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(collaborator.grantedAt))}`}</div>
+                          </div>
+                          {collaborator.accessLevel === "collaborator" && (
+                            <button type="button" onClick={() => revokeCollaboratorMutation.mutate({ classroomId: selectedDirectoryClassroom.id, teacherUserId: collaborator.teacherUserId })} className="text-xs font-medium text-red-600 hover:text-red-700 transition-colors flex-shrink-0">
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Students & Topics — two column grid */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                {/* Students */}
+                <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-gray-900">Students</h3>
+                    {canManageStudents && (
+                      <button type="button" onClick={() => setIsInviteModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-100 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors">
+                        <Plus className="w-3.5 h-3.5" /> Invite
+                      </button>
+                    )}
+                  </div>
+                  {!canManageStudents && <p className="text-xs text-gray-500 mb-3">Only the owner can manage the roster.</p>}
+                  <div className="space-y-2">
+                    {students.length ? students.map((student) => (
+                      <button
+                        key={student.id}
+                        type="button"
+                        onClick={() => setSelectedStudentId(student.id)}
+                        className={`w-full rounded-xl border p-3 text-left transition-all duration-200 ${selectedStudent?.id === student.id ? "border-gray-300 bg-gray-50" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50/50"}`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-gray-900 truncate">{student.fullName}</div>
+                            <div className="text-xs text-gray-500 truncate">{student.email}</div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <div className="text-[11px] text-gray-400">{student.inviteStatus}</div>
+                            <div className="text-[11px] text-gray-400 mt-0.5">{student.onboardingStatus}</div>
+                          </div>
+                        </div>
+                      </button>
+                    )) : (
+                      <div className="rounded-xl bg-gray-50 p-8 text-center">
+                        <Users className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                        <p className="text-sm text-gray-500">No students yet</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Topics */}
+                <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-gray-900">Topics</h3>
+                    <div className="flex items-center gap-2">
+                      {selectedTopic && (
+                        <button type="button" onClick={() => updateTopicStatusMutation.mutate({ topicId: selectedTopic.id, status: selectedTopic.status === "active" ? "paused" : "active" })} className="text-xs font-medium text-gray-500 hover:text-gray-900 transition-colors">
+                          {selectedTopic.status === "active" ? "Pause" : "Activate"}
+                        </button>
+                      )}
+                      <button type="button" onClick={() => setIsTopicModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-100 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors">
+                        <Plus className="w-3.5 h-3.5" /> New topic
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {topics.length ? topics.map((topic) => (
+                      <button
+                        key={topic.id}
+                        type="button"
+                        onClick={() => setSelectedTopicId(topic.id)}
+                        className={`w-full rounded-xl border p-3 text-left transition-all duration-200 ${selectedTopic?.id === topic.id ? "border-gray-300 bg-gray-50" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50/50"}`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-gray-900 truncate">{topic.title}</div>
+                            <div className="text-xs text-gray-500">{topic.subjectLabel ?? topic.subject ?? "General"} · {topic.status}</div>
+                          </div>
+                          <ArrowUpRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        </div>
+                      </button>
+                    )) : (
+                      <div className="rounded-xl bg-gray-50 p-8 text-center">
+                        <BookOpen className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                        <p className="text-sm text-gray-500">No topics yet</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Active Surveys */}
+              <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                <h3 className="text-sm font-semibold text-gray-900 mb-4">Active Surveys</h3>
+                {assignedSurveysQuery.isLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</div>
+                ) : selectedStudentAssignedSurveyStates.length ? (
+                  <div className="space-y-2">
+                    {selectedStudentAssignedSurveyStates.map((survey) => (
+                      <div key={survey.id} className="rounded-xl bg-gray-50 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{survey.title}</div>
+                            <div className="mt-1 text-xs text-gray-500">{survey.completedCount}/{survey.assignedCount} done — {survey.completionRate}%</div>
+                          </div>
+                          <span className="rounded-md bg-blue-50 border border-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-600">{survey.inProgressCount} active</span>
+                        </div>
+                        {survey.selectedStudentState && (
+                          <div className="mt-2 text-xs text-gray-500">
+                            {selectedStudent?.fullName}: {survey.selectedStudentState.responseStatus.replace("_", " ")}
+                            {survey.selectedStudentState.completedAt ? ` · ${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(survey.selectedStudentState.completedAt))}` : ""}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">No active surveys for this class.</div>
+                )}
+              </div>
+
+              {/* Course Hub — Topic Details */}
+              {selectedTopic ? (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900">{selectedTopic.title}</h2>
+                      <p className="text-sm text-gray-500 mt-0.5">Upload materials, check grounding, and review student progress.</p>
+                    </div>
+                    <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      {selectedTopic.subjectLabel ?? selectedTopic.subject ?? "General"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    {/* Left — Upload & Status */}
                     <div className="space-y-6">
-                      <div className="rounded-[20px] border border-white/70 bg-white/70 p-5">
-                        <div className="flex items-center gap-2 text-slate-950"><UploadCloud className="h-4 w-4 text-sky-700" /><h3 className="text-lg font-semibold tracking-tight">Upload material</h3></div>
-                        <form className="mt-4 space-y-3" onSubmit={(event) => {
-                          event.preventDefault();
-                          if (!materialFile) { toast.error("Add a file before uploading."); return; }
+                      <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                          <UploadCloud className="w-4 h-4 text-gray-400" /> Source Material
+                        </h3>
+                        <form className="space-y-3" onSubmit={(e) => {
+                          e.preventDefault();
+                          if (!materialFile) { toast.error("Choose a file first."); return; }
                           uploadMaterialMutation.mutate({ topicId: selectedTopic.id, file: materialFile, title: materialTitle || undefined, description: materialDescription || undefined });
                         }}>
-                          <input value={materialTitle} onChange={(event) => setMaterialTitle(event.target.value)} placeholder="Material title" className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300" />
-                          <textarea value={materialDescription} onChange={(event) => setMaterialDescription(event.target.value)} rows={3} placeholder="Optional note" className="w-full resize-none rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-sky-300" />
-                          <label className="flex cursor-pointer flex-col items-center justify-center rounded-[20px] border border-dashed border-slate-300 bg-white/75 px-4 py-6 text-center">
-                            <UploadCloud className="h-5 w-5 text-sky-700" />
-                            <div className="mt-3 text-sm font-medium text-slate-800">{materialFile ? materialFile.name : "Choose PDF or notes"}</div>
-                            <input type="file" accept=".pdf,.txt,.md,.doc,.docx" className="hidden" onChange={(event) => setMaterialFile(event.target.files?.[0] ?? null)} />
+                          <input value={materialTitle} onChange={(e) => setMaterialTitle(e.target.value)} placeholder="Material name (e.g. Chapter 1)" className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-gray-400 transition-colors" />
+                          <textarea value={materialDescription} onChange={(e) => setMaterialDescription(e.target.value)} rows={2} placeholder="Brief description…" className="w-full resize-none rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-gray-400 transition-colors" />
+                          <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center transition-colors hover:border-gray-300 hover:bg-gray-100/50">
+                            <UploadCloud className="w-6 h-6 text-gray-400 mb-2" />
+                            <div className="text-sm font-medium text-gray-700">{materialFile ? materialFile.name : "Select file"}</div>
+                            <div className="text-xs text-gray-400 mt-1">PDF, TXT, DOC — max 20MB</div>
+                            <input type="file" accept=".pdf,.txt,.md,.doc,.docx" className="hidden" onChange={(e) => setMaterialFile(e.target.files?.[0] ?? null)} />
                           </label>
-                          <button type="submit" disabled={uploadMaterialMutation.isPending || !materialFile} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white">{uploadMaterialMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}Upload and index</button>
+                          <button type="submit" disabled={uploadMaterialMutation.isPending || !materialFile} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50">
+                            {uploadMaterialMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+                            Upload & Index
+                          </button>
                         </form>
                       </div>
 
-                      <div className="rounded-[20px] border border-white/70 bg-white/70 p-5">
-                        <div className="flex items-center gap-2 text-slate-950"><FileText className="h-4 w-4 text-emerald-700" /><h3 className="text-lg font-semibold tracking-tight">Readiness and reports</h3></div>
-                        <div className="mt-4 grid gap-4 md:grid-cols-2">
-                          <div className="rounded-[18px] border border-white/70 bg-white/75 p-4"><div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Grounding readiness</div><div className="mt-2 text-sm font-semibold text-slate-950">{readinessQuery.data?.data.ready ? "Ready to publish" : "Needs more grounding"}</div><div className="mt-2 text-sm text-slate-600">{readinessQuery.data?.data.summary ?? "Readiness appears after processing."}</div></div>
-                          <div className="rounded-[18px] border border-white/70 bg-white/75 p-4"><div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Indexed materials</div><div className="mt-2 text-sm font-semibold text-slate-950">{materialsQuery.data?.data.length ?? 0} files</div><div className="mt-2 text-sm text-slate-600">{reports[0] ? `${reports[0].masteryPercent}% mastery in latest report` : "No report yet."}</div></div>
+                      <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-gray-400" /> Status
+                        </h3>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="rounded-xl bg-gray-50 p-3">
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Grounding</div>
+                            <div className="text-sm font-semibold text-gray-900">{readinessQuery.data?.data.ready ? "Ready" : "Needed"}</div>
+                            <div className="text-xs text-gray-500 mt-1">{readinessQuery.data?.data.summary ?? "Upload material first."}</div>
+                          </div>
+                          <div className="rounded-xl bg-gray-50 p-3">
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Data</div>
+                            <div className="text-sm font-semibold text-gray-900">{materialsQuery.data?.data.length ?? 0} files</div>
+                            <div className="text-xs text-gray-500 mt-1">{reports[0] ? `${reports[0].masteryPercent}% avg mastery` : "No insights yet."}</div>
+                          </div>
                         </div>
                       </div>
                     </div>
 
+                    {/* Right — Insights & Interventions */}
                     <div className="space-y-6">
-                      <div className="rounded-[20px] border border-white/70 bg-white/70 p-5">
-                        <div className="flex items-center gap-2 text-slate-950"><Users className="h-4 w-4 text-sky-700" /><h3 className="text-lg font-semibold tracking-tight">Student snapshot</h3></div>
+                      <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                          <Users className="w-4 h-4 text-gray-400" /> Student Insights
+                        </h3>
                         {selectedStudent ? (
-                          <div className="mt-4 space-y-4">
-                            <div className="rounded-[18px] border border-white/70 bg-white/75 px-4 py-4"><div className="text-sm font-semibold text-slate-950">{selectedStudent.fullName}</div><div className="mt-2 text-sm text-slate-600">{patternSummary ?? "Learning pattern memory is still warming up for this student."}</div></div>
-                            {selectedStudentReport ? <div className="rounded-[18px] border border-white/70 bg-white/75 px-4 py-4"><div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Latest mastery</div><div className="mt-2 text-sm font-semibold text-slate-950">{selectedStudentReport.masteryPercent}% mastery</div><div className="mt-2 text-sm text-slate-600">{selectedStudentReport.report.studentSummary}</div></div> : null}
-                            <div className="rounded-[18px] border border-white/70 bg-white/75 px-4 py-4"><div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Recent question signal</div><div className="mt-2 text-sm text-slate-600">{questions.find((question) => question.student.id === selectedStudent.id)?.content ?? "No extra student questions recorded for this topic yet."}</div></div>
-                          </div>
-                        ) : <div className="mt-4 rounded-[18px] border border-dashed border-slate-200 bg-white/60 px-4 py-5 text-sm text-slate-500">Select a student to inspect learning signals.</div>}
-                      </div>
-                      <div className="rounded-[20px] border border-white/70 bg-white/70 p-5">
-                        <div className="flex items-center gap-2 text-slate-950"><FileText className="h-4 w-4 text-amber-700" /><h3 className="text-lg font-semibold tracking-tight">Interventions</h3></div>
-                        {selectedStudent ? (
-                          <div className="mt-4 space-y-4">
-                            <form
-                              className="space-y-3 rounded-[18px] border border-white/70 bg-white/80 p-4"
-                                onSubmit={(event) => {
-                                  event.preventDefault();
-                                  if (!selectedAccessibleClassroomId) {
-                                    toast.error("Choose a classroom before saving an intervention.");
-                                    return;
-                                  }
-                                  createInterventionMutation.mutate({
-                                    classroomId: selectedAccessibleClassroomId,
-                                    classroomStudentId: selectedStudent.id,
-                                    topicId: selectedTopic?.id,
-                                    interventionType: interventionForm.interventionType,
-                                    priority: interventionForm.priority,
-                                    title: interventionForm.title,
-                                    notes: interventionForm.notes || undefined,
-                                    dueAt: interventionForm.dueAt || undefined,
-                                  });
-                                }}
-                              >
-                              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                                Plan follow-up
+                          <div className="space-y-3">
+                            <div className="rounded-xl bg-gray-50 p-4">
+                              <div className="text-sm font-medium text-gray-900">{selectedStudent.fullName}</div>
+                              <div className="text-xs text-gray-500 mt-1">{patternSummary ?? "Learning patterns appear after more activity."}</div>
+                            </div>
+                            {selectedStudentReport && (
+                              <div className="rounded-xl bg-gray-50 p-4">
+                                <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Performance</div>
+                                <div className="text-sm font-semibold text-gray-900">{selectedStudentReport.masteryPercent}% mastery</div>
+                                <div className="text-xs text-gray-500 mt-1">{selectedStudentReport.report.studentSummary}</div>
                               </div>
-                              <input
-                                value={interventionForm.title}
-                                onChange={(event) =>
-                                  setInterventionForm((current) => ({
-                                    ...current,
-                                    title: event.target.value,
-                                  }))
-                                }
-                                placeholder={`Support plan for ${selectedStudent.fullName}`}
-                                className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-amber-300"
-                              />
-                              <div className="grid gap-3 md:grid-cols-2">
-                                <select
-                                  value={interventionForm.interventionType}
-                                  onChange={(event) => {
-                                    const nextType = event.target.value;
-                                    if (!isInterventionType(nextType)) {
-                                      return;
-                                    }
-
-                                    setInterventionForm((current) => ({
-                                      ...current,
-                                      interventionType: nextType,
-                                    }));
-                                  }}
-                                  className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-amber-300"
-                                >
-                                  <option value="reteach">Reteach</option>
-                                  <option value="check_in">Check-in</option>
-                                  <option value="practice">Practice</option>
-                                  <option value="family_follow_up">Family follow-up</option>
-                                </select>
-                                <select
-                                  value={interventionForm.priority}
-                                  onChange={(event) => {
-                                    const nextPriority = event.target.value;
-                                    if (!isInterventionPriority(nextPriority)) {
-                                      return;
-                                    }
-
-                                    setInterventionForm((current) => ({
-                                      ...current,
-                                      priority: nextPriority,
-                                    }));
-                                  }}
-                                  className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-amber-300"
-                                >
-                                  <option value="low">Low priority</option>
-                                  <option value="medium">Medium priority</option>
-                                  <option value="high">High priority</option>
-                                </select>
-                              </div>
-                              <input
-                                type="date"
-                                value={interventionForm.dueAt}
-                                onChange={(event) =>
-                                  setInterventionForm((current) => ({
-                                    ...current,
-                                    dueAt: event.target.value,
-                                  }))
-                                }
-                                className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-amber-300"
-                              />
-                              <textarea
-                                value={interventionForm.notes}
-                                onChange={(event) =>
-                                  setInterventionForm((current) => ({
-                                    ...current,
-                                    notes: event.target.value,
-                                  }))
-                                }
-                                rows={3}
-                                placeholder="What follow-up, misconception, or support is needed?"
-                                className="w-full resize-none rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-amber-300"
-                              />
-                              <button
-                                type="submit"
-                                disabled={createInterventionMutation.isPending}
-                                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white"
-                              >
-                                {createInterventionMutation.isPending ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Sparkles className="h-4 w-4" />
-                                )}
-                                Save intervention
-                              </button>
-                            </form>
-                            <div className="space-y-3">
-                              {interventionsQuery.isLoading ? (
-                                <div className="flex items-center gap-2 text-sm text-slate-500">
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                  Loading interventions...
-                                </div>
-                              ) : interventions.length ? (
-                                interventions.map((intervention) => (
-                                  <div key={intervention.id} className="rounded-[18px] border border-white/70 bg-white/80 px-4 py-4">
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div>
-                                        <div className="text-sm font-semibold text-slate-950">{intervention.title}</div>
-                                        <div className="mt-1 text-xs text-slate-500">
-                                          {formatInterventionTypeLabel(intervention.interventionType)} - {intervention.priority} priority
-                                          {intervention.dueAt ? ` - due ${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(intervention.dueAt))}` : ""}
-                                        </div>
-                                      </div>
-                                      <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                                        {formatInterventionStatusLabel(intervention.status)}
-                                      </div>
-                                    </div>
-                                    {intervention.notes ? (
-                                      <div className="mt-3 text-sm text-slate-600">{intervention.notes}</div>
-                                    ) : null}
-                                    <div className="mt-4 flex flex-wrap gap-2">
-                                      {intervention.status !== "in_progress" ? (
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            updateInterventionMutation.mutate({
-                                              interventionId: intervention.id,
-                                              status: "in_progress",
-                                              notes: intervention.notes ?? undefined,
-                                              dueAt: intervention.dueAt ?? undefined,
-                                            })
-                                          }
-                                          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-                                        >
-                                          Start
-                                        </button>
-                                      ) : null}
-                                      {intervention.status !== "completed" ? (
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            updateInterventionMutation.mutate({
-                                              interventionId: intervention.id,
-                                              status: "completed",
-                                              notes: intervention.notes ?? undefined,
-                                              dueAt: intervention.dueAt ?? undefined,
-                                            })
-                                          }
-                                          className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"
-                                        >
-                                          Mark complete
-                                        </button>
-                                      ) : null}
-                                      {intervention.status !== "dismissed" ? (
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            updateInterventionMutation.mutate({
-                                              interventionId: intervention.id,
-                                              status: "dismissed",
-                                              notes: intervention.notes ?? undefined,
-                                              dueAt: intervention.dueAt ?? undefined,
-                                            })
-                                          }
-                                          className="rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700"
-                                        >
-                                          Dismiss
-                                        </button>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                ))
-                              ) : (
-                                <div className="rounded-[18px] border border-dashed border-slate-200 bg-white/60 px-4 py-5 text-sm text-slate-500">
-                                  No interventions recorded for this student and topic yet.
-                                </div>
-                              )}
+                            )}
+                            <div className="rounded-xl bg-gray-50 p-4">
+                              <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Questions</div>
+                              <div className="text-xs text-gray-500 italic">{questions.find((q) => q.student.id === selectedStudent.id)?.content ?? "No questions yet."}</div>
                             </div>
                           </div>
                         ) : (
-                          <div className="mt-4 rounded-[18px] border border-dashed border-slate-200 bg-white/60 px-4 py-5 text-sm text-slate-500">
-                            Select a student to plan follow-up work.
+                          <div className="rounded-xl bg-gray-50 p-8 text-center">
+                            <Users className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                            <p className="text-sm text-gray-500">Select a student to view insights.</p>
                           </div>
+                        )}
+                      </div>
+
+                      <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-gray-400" /> Support Actions
+                          </h3>
+                          {selectedStudent && (
+                            <button type="button" onClick={() => setIsInterventionModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-100 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors">
+                              <Plus className="w-3.5 h-3.5" /> Log
+                            </button>
+                          )}
+                        </div>
+                        {selectedStudent ? (
+                          <div className="space-y-2">
+                            {interventionsQuery.isLoading ? (
+                              <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</div>
+                            ) : interventions.length ? (
+                              interventions.map((intervention) => (
+                                <div key={intervention.id} className="rounded-xl bg-gray-50 p-4">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <div className="text-sm font-medium text-gray-900">{intervention.title}</div>
+                                      <div className="text-xs text-gray-500 mt-1">
+                                        {formatInterventionTypeLabel(intervention.interventionType)} · {intervention.priority}
+                                        {intervention.dueAt ? ` · due ${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(intervention.dueAt))}` : ""}
+                                      </div>
+                                    </div>
+                                    <span className="rounded-md bg-amber-50 border border-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">{formatInterventionStatusLabel(intervention.status)}</span>
+                                  </div>
+                                  {intervention.notes && <div className="mt-2 text-xs text-gray-600">{intervention.notes}</div>}
+                                  <div className="mt-3 flex flex-wrap gap-1.5">
+                                    {intervention.status !== "in_progress" && (
+                                      <button type="button" onClick={() => updateInterventionMutation.mutate({ interventionId: intervention.id, status: "in_progress", notes: intervention.notes ?? undefined, dueAt: intervention.dueAt ?? undefined })} className="px-2.5 py-1 rounded-md border border-gray-200 text-[11px] font-medium text-gray-700 hover:bg-gray-50 transition-colors">Start</button>
+                                    )}
+                                    {intervention.status !== "completed" && (
+                                      <button type="button" onClick={() => updateInterventionMutation.mutate({ interventionId: intervention.id, status: "completed", notes: intervention.notes ?? undefined, dueAt: intervention.dueAt ?? undefined })} className="px-2.5 py-1 rounded-md border border-emerald-200 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 transition-colors">Complete</button>
+                                    )}
+                                    {intervention.status !== "dismissed" && (
+                                      <button type="button" onClick={() => updateInterventionMutation.mutate({ interventionId: intervention.id, status: "dismissed", notes: intervention.notes ?? undefined, dueAt: intervention.dueAt ?? undefined })} className="px-2.5 py-1 rounded-md border border-red-200 text-[11px] font-medium text-red-600 hover:bg-red-50 transition-colors">Dismiss</button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">No interventions recorded yet.</div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">Select a student to plan actions.</div>
                         )}
                       </div>
                     </div>
                   </div>
-                ) : <div className="mt-6 rounded-[20px] border border-dashed border-slate-200 bg-white/60 px-5 py-10 text-sm text-slate-500">Choose a topic to upload materials and inspect report signals.</div>}
-              </GlassPanel>
-            </>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-4">
+                    <BookOpen className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Select a topic</h3>
+                  <p className="text-gray-500 max-w-sm mx-auto">Choose a topic to manage source materials and review student progress.</p>
+                </div>
+              )}
+            </div>
           )}
         </div>
-      </section>
+      </div>
     </div>
   );
 }

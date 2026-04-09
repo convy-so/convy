@@ -23,12 +23,8 @@ export function LearningWorkspace() {
   if (learningMeQuery.isLoading || activeWorkspaceQuery.isLoading) {
     return (
       <div className="mx-auto flex min-h-[60vh] max-w-[1200px] items-center justify-center px-6 py-12">
-        <GlassPanel className="flex w-full max-w-md items-center justify-center gap-3 px-6 py-8">
           <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
-          <span className="text-sm font-medium text-slate-600">
-            Loading learning workspace...
-          </span>
-        </GlassPanel>
+          
       </div>
     );
   }
