@@ -38,11 +38,13 @@ import { Suspense } from "react";
 import { authClient } from "@/lib/auth-client";
 
 function ProjectDetailContent() {
-  const params = useParams<{ projectId?: string | string[] }>();
+  const params = useParams<{ projectId?: string | string[]; folderId?: string | string[] }>();
   const router = useRouter();
   const projectId = Array.isArray(params.projectId)
     ? (params.projectId[0] ?? "")
-    : (params.projectId ?? "");
+    : Array.isArray(params.folderId)
+      ? (params.folderId[0] ?? "")
+      : (params.projectId ?? params.folderId ?? "");
 
   const { data: project, isLoading, isError } = useProject(projectId);
   const updateProjectMutation = useUpdateProject();
@@ -82,7 +84,7 @@ function ProjectDetailContent() {
       <div className="flex flex-col items-center justify-center h-[50vh] gap-4">
         <h2 className="text-xl font-semibold text-gray-900">Folder not found</h2>
         <p className="text-gray-500">The folder you are looking for does not exist or you don&apos;t have permission to view it.</p>
-        <Link href="/dashboard/projects" className="text-blue-600 hover:underline">
+        <Link href="/dashboard/folders" className="text-blue-600 hover:underline">
           Back to folders
         </Link>
       </div>
@@ -105,7 +107,7 @@ function ProjectDetailContent() {
     setIsDeletingProject(true);
     deleteProjectMutation.mutate(projectId, {
       onSuccess: () => {
-        router.push("/dashboard/projects");
+        router.push("/dashboard/folders");
       },
       onSettled: () => {
         setIsDeletingProject(false);
@@ -147,7 +149,7 @@ function ProjectDetailContent() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link
-              href="/dashboard/projects"
+              href="/dashboard/folders"
               className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />

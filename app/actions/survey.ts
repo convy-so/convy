@@ -165,7 +165,7 @@ export async function getSurveysAction(): Promise<
       creatorName: string | null;
       isOwner: boolean;
       isVoice: boolean;
-      accessLevel: "owner" | "editor" | "discoverer" | "none";
+      accessLevel: "owner" | "editor" | "none";
       canOpen: boolean;
       canEdit: boolean;
     }>
@@ -1205,3 +1205,4 @@ export async function transferSurveyOwnershipAction(input: {
     return { success: false, error: "Failed to transfer survey ownership" };
   }
 }
+

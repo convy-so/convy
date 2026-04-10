@@ -23,6 +23,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
     const [name, setName] = useState("");
     const [slug, setSlug] = useState("");
     const [description, setDescription] = useState("");
+    const [workspaceType, setWorkspaceType] = useState<"collaborative" | "institutional">("collaborative");
     const [isCreating, setIsCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [mounted, setMounted] = useState(false);
@@ -44,6 +45,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
             const result = await createWorkspace({
                 name: name.trim(),
                 slug: finalSlug,
+                type: workspaceType,
             });
 
             if (result.success) {
@@ -93,7 +95,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
                             <Building2 className="w-6 h-6 text-gray-900" />
                         </div>
                         <h3 className="text-xl font-bold text-gray-900 mb-1">Create Workspace</h3>
-                        <p className="text-xs text-gray-500">Classrooms and units are organized within workspaces.</p>
+                        <p className="text-xs text-gray-500">Choose a collaborative teacher workspace or an institutional workspace with departments and staff roles.</p>
                     </div>
 
                     <button
@@ -111,14 +113,46 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
                     )}
 
                     <InputField
-                        label="Institution Name"
+                        label="Workspace Name"
                         id="name"
-                        placeholder="e.g. Greenfield Academy"
+                        placeholder="e.g. Greenfield Teaching Team"
                         icon={Building2}
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         required
                     />
+
+                    <div className="space-y-2">
+                        <label className="block text-sm font-medium text-[#292929]">
+                            Workspace Type
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setWorkspaceType("collaborative")}
+                                className={`rounded-xl border px-4 py-3 text-left text-sm transition ${
+                                    workspaceType === "collaborative"
+                                        ? "border-gray-900 bg-gray-900 text-white"
+                                        : "border-gray-200 bg-white text-gray-700"
+                                }`}
+                            >
+                                <div className="font-semibold">Collaborative</div>
+                                <div className="mt-1 text-xs opacity-80">For paid teacher teams working together.</div>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setWorkspaceType("institutional")}
+                                className={`rounded-xl border px-4 py-3 text-left text-sm transition ${
+                                    workspaceType === "institutional"
+                                        ? "border-gray-900 bg-gray-900 text-white"
+                                        : "border-gray-200 bg-white text-gray-700"
+                                }`}
+                            >
+                                <div className="font-semibold">Institutional</div>
+                                <div className="mt-1 text-xs opacity-80">For schools with departments, staff roles, and governance.</div>
+                            </button>
+                        </div>
+                    </div>
 
                     <InputField
                         label="Short Code (Optional)"
@@ -136,7 +170,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSuccess }: CreateWorks
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
                             rows={3}
-                            placeholder="Primary purpose of this institution..."
+                            placeholder="Who will use this workspace and why?"
                             className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm focus:ring-2 focus:ring-[#292929] focus:border-transparent outline-none transition-all placeholder:text-gray-400"
                         />
                     </div>

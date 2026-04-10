@@ -26,10 +26,14 @@ export const queryKeys = {
     extraction: (surveyId: string) => ["surveyExtraction", surveyId] as const,
   },
 
-  // Project-related queries
+  // Folder-related queries
+  folders: {
+    all: (orgId?: string | null) => ["folders", orgId] as const,
+    detail: (folderId: string) => ["folder", folderId] as const,
+  },
   projects: {
-    all: (orgId?: string | null) => ["projects", orgId] as const,
-    detail: (projectId: string) => ["project", projectId] as const,
+    all: (orgId?: string | null) => ["folders", orgId] as const,
+    detail: (projectId: string) => ["folder", projectId] as const,
   },
 
   // Notifications

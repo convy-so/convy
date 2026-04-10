@@ -12,11 +12,16 @@ import { useRouter, Link } from "@/i18n/routing";
 import { AuthCard } from "@/components/auth/auth-card";
 import { InputField } from "@/components/auth/input-field";
 import { SubmitButton } from "@/components/auth/submit-button";
+import { useSearchParams } from "next/navigation";
 
 export function WorkspaceCreatePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ name: "", slug: "", description: "" });
+  const [workspaceType, setWorkspaceType] = useState<"collaborative" | "institutional">(
+    searchParams.get("type") === "institutional" ? "institutional" : "collaborative",
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,7 +30,7 @@ export function WorkspaceCreatePage() {
       <div className="w-full max-w-md">
         <AuthCard
           title="Create a workspace"
-          subtitle="Set up your shared educational hub to manage departments and classrooms."
+          subtitle="Choose a collaborative teacher workspace or an institutional workspace with governance controls."
         >
           <form
             className="space-y-4"
@@ -46,6 +51,7 @@ export function WorkspaceCreatePage() {
                 const created = await createWorkspace({
                   name: form.name.trim(),
                   slug,
+                  type: workspaceType,
                 });
 
                 if (!created.success) {
@@ -79,14 +85,41 @@ export function WorkspaceCreatePage() {
             }}
           >
             <InputField
-              label="Institution Name"
+              label="Workspace Name"
               id="name"
-              placeholder="e.g. Greenfield Academy"
+              placeholder="e.g. Greenfield Teaching Team"
               icon={Building2}
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
             />
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setWorkspaceType("collaborative")}
+                className={`rounded-xl border px-4 py-3 text-left text-sm transition ${
+                  workspaceType === "collaborative"
+                    ? "border-[#292929] bg-[#292929] text-white"
+                    : "border-gray-200 bg-white text-[#292929]"
+                }`}
+              >
+                <div className="font-medium">Collaborative</div>
+                <div className="mt-1 text-xs opacity-80">Teacher team workspace</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setWorkspaceType("institutional")}
+                className={`rounded-xl border px-4 py-3 text-left text-sm transition ${
+                  workspaceType === "institutional"
+                    ? "border-[#292929] bg-[#292929] text-white"
+                    : "border-gray-200 bg-white text-[#292929]"
+                }`}
+              >
+                <div className="font-medium">Institutional</div>
+                <div className="mt-1 text-xs opacity-80">Departments and staff roles</div>
+              </button>
+            </div>
 
             <InputField
               label="Short Code (Optional)"
@@ -126,7 +159,7 @@ export function WorkspaceCreatePage() {
                 href="/dashboard"
                 className="text-sm font-medium text-[#696969] hover:text-[#292929] transition-colors"
               >
-                Skip and stay on personal account
+                Skip and stay in personal space
               </Link>
             </div>
           </form>

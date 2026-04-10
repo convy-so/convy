@@ -37,12 +37,20 @@ import { Link, useRouter } from "@/i18n/routing";
 import { AcademyUnitModal } from "@/components/dashboard/academy-unit-modal";
 import { CreateWorkspaceModal } from "@/components/dashboard/create-workspace-modal";
 
-
-type WorkspaceRole = "owner" | "member";
+type WorkspaceRole = "owner" | "admin" | "teacher" | "staff_viewer";
 type InvitationStatus = "pending" | "expired";
 
 function getWorkspaceRole(value: unknown): WorkspaceRole {
-  return value === "owner" ? "owner" : "member";
+  if (
+    value === "owner" ||
+    value === "admin" ||
+    value === "teacher" ||
+    value === "staff_viewer"
+  ) {
+    return value;
+  }
+
+  return "teacher";
 }
 
 function getInvitationStatus(value: unknown): InvitationStatus {
@@ -63,7 +71,6 @@ export default function TeamPage() {
     name: string;
     code: string;
     description: string;
-    headUserId: string;
   } | null>(null);
   const t = useTranslations("TeamPage");
 
@@ -133,6 +140,9 @@ export default function TeamPage() {
     isLoadingMembers ||
     isLoadingInvites ||
     isLoadingDepartments;
+  const canManageMembers = Boolean(activeWorkspace?.capabilities.manageMembers);
+  const canManageDepartments = Boolean(activeWorkspace?.capabilities.manageDepartments);
+  const canManageWorkspace = Boolean(activeWorkspace?.capabilities.manageWorkspace);
 
   // Function for refreshing team data (for backwards compatibility)
   const loadTeamData = () => {
@@ -233,9 +243,9 @@ export default function TeamPage() {
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto">
             <Building2 className="w-8 h-8 text-gray-400" />
           </div>
-          <h2 className="text-2xl font-semibold text-gray-900">You are in your personal account</h2>
+          <h2 className="text-2xl font-semibold text-gray-900">You are in your personal space</h2>
           <p className="text-gray-500 max-w-md mx-auto">
-            Personal mode is for private surveys and folders. Create a workspace when you need shared teachers, departments, classrooms, and controlled collaboration.
+            Personal space is your full solo-teacher workspace for classes, students, surveys, materials, and folders. Create a shared workspace when you want to collaborate with other teachers.
           </p>
           <div className="pt-2">
             <button
@@ -263,7 +273,9 @@ export default function TeamPage() {
             Academy Center
           </h1>
           <p className="text-sm text-slate-500 max-w-2xl">
-            Manage your institution's departments, team members, and shared academic infrastructure. {activeWorkspace.name} serving as your central workspace.
+            {activeWorkspace.type === "institutional"
+              ? `Manage departments, teacher roles, and shared academic infrastructure for ${activeWorkspace.name}.`
+              : `Manage your shared teacher workspace, invitations, and collaboration settings for ${activeWorkspace.name}.`}
           </p>
         </div>
 
@@ -282,13 +294,14 @@ export default function TeamPage() {
           <div className="bg-white rounded-2xl border border-slate-100 p-5 flex items-start justify-between">
             <div>
               <p className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-2">{t("Stats.YourRole")}</p>
-              <p className="text-2xl font-bold text-slate-950 capitalize">{t(`Roles.${activeWorkspace.role === 'owner' ? 'Owner' : 'Member'}`)}</p>
+              <p className="text-2xl font-bold text-slate-950 capitalize">{activeWorkspace.role.replace("_", " ")}</p>
             </div>
             <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
               <Shield className="w-5 h-5" />
             </div>
           </div>
 
+          {activeWorkspace.type === "institutional" && (
           <div className="bg-white rounded-2xl border border-slate-100 p-5 flex items-start justify-between">
             <div>
               <p className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-2">Academy Units</p>
@@ -298,6 +311,7 @@ export default function TeamPage() {
               <Building2 className="w-5 h-5" />
             </div>
           </div>
+          )}
         </div>
 
         {/* Main Content */}
@@ -308,8 +322,9 @@ export default function TeamPage() {
               members={members}
               pendingInvites={filteredInvites}
               currentUserId={user?.id || ""}
-              isOwner={activeWorkspace.role === "owner"}
+              canManageMembers={canManageMembers}
               workspaceId={activeWorkspace.id}
+              workspaceType={activeWorkspace.type}
               onMemberRemoved={handleMemberRemoved}
               onInviteSent={() => {
                 toast.success(t("Toasts.InvitationSent"));
@@ -317,6 +332,7 @@ export default function TeamPage() {
               }}
             />
 
+            {activeWorkspace.type === "institutional" && (
             <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
               <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white">
                 <div>
@@ -325,7 +341,7 @@ export default function TeamPage() {
                     Organize your institution into subjects or administrative groups.
                     </p>
                 </div>
-                {activeWorkspace.role === "owner" && (
+                {canManageDepartments && (
                     <button
                         onClick={() => {
                             setEditingUnit(null);
@@ -353,9 +369,6 @@ export default function TeamPage() {
                               <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">{department.code}</span>
                             )}
                           </div>
-                          <div className="text-xs text-slate-500 mb-3 font-medium">
-                            Head: {department.headName || "Unassigned"}
-                          </div>
                           {department.description && (
                             <p className="text-sm text-slate-600 mb-4 line-clamp-2">{department.description}</p>
                           )}
@@ -368,7 +381,7 @@ export default function TeamPage() {
                               </span>
                           </div>
                         </div>
-                        {activeWorkspace.role === "owner" && (
+                        {canManageDepartments && (
                           <div className="flex flex-col gap-2">
                              <button
                                 type="button"
@@ -378,7 +391,6 @@ export default function TeamPage() {
                                     name: department.name,
                                     code: department.code ?? "",
                                     description: department.description ?? "",
-                                    headUserId: department.headUserId ?? "",
                                   });
                                   setIsAcademyModalOpen(true);
                                 }}
@@ -406,6 +418,7 @@ export default function TeamPage() {
                 </div>
               </div>
             </div>
+            )}
           </div>
 
           {/* Sidebar Info */}
@@ -434,13 +447,43 @@ export default function TeamPage() {
                 <div>
                   <div className="flex items-center gap-2 mb-1.5">
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-50 text-slate-600 border border-slate-100 uppercase tracking-widest">
-                      {t("Permissions.Member.Title")}
+                      Admin
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Access to shared directories and internal subject collaboration.
+                    Manages membership, shared settings, and governance without inheriting survey or class internals.
                   </p>
                 </div>
+
+                <div className="h-px bg-slate-50" />
+
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-50 text-slate-600 border border-slate-100 uppercase tracking-widest">
+                      Teacher
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Creates classes, surveys, materials, and folders. Collaboration is granted per class or survey.
+                  </p>
+                </div>
+
+                {activeWorkspace.type === "institutional" && (
+                  <>
+                    <div className="h-px bg-slate-50" />
+
+                    <div>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-50 text-slate-600 border border-slate-100 uppercase tracking-widest">
+                          Staff Viewer
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        Sees workspace structure and class directory metadata, but not class internals or surveys by default.
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -464,7 +507,7 @@ export default function TeamPage() {
                 System Actions
               </h3>
 
-              {activeWorkspace.role === "owner" ? (
+              {canManageWorkspace && activeWorkspace.role === "owner" ? (
                 <div>
                   <p className="text-xs text-slate-500 mb-4 leading-relaxed">
                     Permanently delete this academy and all associated classroom data.
@@ -479,7 +522,7 @@ export default function TeamPage() {
               ) : (
                 <div>
                   <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-                    Revoke your access to this institution.
+                    Leave this shared workspace and return to your personal space.
                   </p>
                   <button
                     onClick={() => setShowLeaveModal(true)}

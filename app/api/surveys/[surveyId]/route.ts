@@ -155,7 +155,7 @@ export async function PATCH(
             {
               error:
                 "Limit reached: You can only have 2 voice surveys per " +
-                (survey.organizationId ? "workspace" : "personal account"),
+                (survey.organizationId ? "workspace" : "personal space"),
             },
             { status: 403 },
           );

@@ -60,7 +60,7 @@ export function WorkspaceNotifications({
   const invalidateRelevantQueries = (event: RecordedRealtimeEvent) => {
     const payload = asRecord(event.payload);
     const surveyPayload = asRecord(payload.survey);
-    const projectPayload = asRecord(payload.project);
+    const folderPayload = asRecord(payload.folder);
 
     if (event.eventType?.startsWith("workspace.survey_")) {
       queryClient.invalidateQueries({
@@ -76,15 +76,21 @@ export function WorkspaceNotifications({
       return;
     }
 
-    if (event.eventType?.startsWith("workspace.project_")) {
+    if (
+      event.eventType?.startsWith("workspace.folder_") ||
+      event.eventType?.startsWith("workspace.project_")
+    ) {
       queryClient.invalidateQueries({
-        queryKey: queryKeys.projects.all(event.workspaceId),
+        queryKey: queryKeys.folders.all(event.workspaceId),
       });
-      const projectId =
-        getNestedString(projectPayload, "id") || getNestedString(payload, "projectId");
-      if (projectId) {
+      const folderId =
+        getNestedString(folderPayload, "id") ||
+        getNestedString(payload, "folderId") ||
+        getNestedString(asRecord(payload.project), "id") ||
+        getNestedString(payload, "projectId");
+      if (folderId) {
         queryClient.invalidateQueries({
-          queryKey: queryKeys.projects.detail(projectId),
+          queryKey: queryKeys.folders.detail(folderId),
         });
       }
     }
@@ -100,7 +106,7 @@ export function WorkspaceNotifications({
 
       const payload = asRecord(realtimeEvent.payload);
       const surveyPayload = asRecord(payload.survey);
-      const projectPayload = asRecord(payload.project);
+      const folderPayload = asRecord(payload.folder);
 
       if (realtimeEvent.actorId === user?.id) {
         invalidateRelevantQueries(realtimeEvent);
@@ -128,9 +134,14 @@ export function WorkspaceNotifications({
             { duration: 5000 },
           );
           break;
+        case "workspace.folder_created":
         case "workspace.project_created":
           toast.success(
-            `A workspace member created a new project: ${getNestedString(projectPayload, "name") || "Untitled"}`,
+            `A workspace member created a new folder: ${
+              getNestedString(folderPayload, "name") ||
+              getNestedString(asRecord(payload.project), "name") ||
+              "Untitled"
+            }`,
             { duration: 5000 },
           );
           break;

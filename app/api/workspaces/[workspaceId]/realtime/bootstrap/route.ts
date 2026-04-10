@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
-import { members, projects, surveys } from "@/db/schema";
+import { folders, members, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getCurrentWorkspaceRevision } from "@/lib/collaboration-service";
 import { isWorkspaceMember } from "@/lib/workspace-access";
@@ -20,7 +20,7 @@ export async function GET(
     }
 
     const db = getDb();
-    const [workspaceMembers, workspaceProjects, workspaceSurveys, revision] =
+    const [workspaceMembers, workspaceFolders, workspaceSurveys, revision] =
       await Promise.all([
         db
           .select({
@@ -32,24 +32,24 @@ export async function GET(
           .where(eq(members.organizationId, workspaceId)),
         db
           .select({
-            id: projects.id,
-            name: projects.name,
-            description: projects.description,
-            userId: projects.userId,
-            color: projects.color,
-            icon: projects.icon,
-            createdAt: projects.createdAt,
-            updatedAt: projects.updatedAt,
+            id: folders.id,
+            name: folders.name,
+            description: folders.description,
+            userId: folders.userId,
+            color: folders.color,
+            icon: folders.icon,
+            createdAt: folders.createdAt,
+            updatedAt: folders.updatedAt,
           })
-          .from(projects)
-          .where(eq(projects.organizationId, workspaceId)),
+          .from(folders)
+          .where(eq(folders.organizationId, workspaceId)),
         db
           .select({
             id: surveys.id,
             title: surveys.title,
             status: surveys.status,
             userId: surveys.userId,
-            projectId: surveys.projectId,
+            folderId: surveys.projectId,
             shareableLink: surveys.shareableLink,
             createdAt: surveys.createdAt,
             updatedAt: surveys.updatedAt,
@@ -63,7 +63,7 @@ export async function GET(
       workspaceId,
       revision,
       members: workspaceMembers,
-      projects: workspaceProjects,
+      folders: workspaceFolders,
       surveys: workspaceSurveys,
     });
   } catch (error) {

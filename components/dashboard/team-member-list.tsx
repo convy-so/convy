@@ -6,12 +6,15 @@ import {
     UserPlus,
     Mail,
     Crown,
-    Shield,
     MoreVertical,
     Trash2,
     User,
     X,
     Loader2,
+    ChevronDown,
+    Check,
+    Shield,
+    Eye,
 } from "lucide-react";
 import { inviteToWorkspace, removeWorkspaceMember } from "@/app/actions/workspace";
 import toast from "react-hot-toast";
@@ -21,7 +24,7 @@ import { cn } from "@/lib/utils";
 interface TeamMember {
     id: string;
     userId: string;
-    role: "owner" | "member";
+    role: "owner" | "admin" | "teacher" | "staff_viewer";
     user: {
         id: string;
         name: string;
@@ -42,8 +45,9 @@ interface TeamMemberListProps {
     members: TeamMember[];
     pendingInvites?: PendingInvite[];
     currentUserId: string;
-    isOwner: boolean;
+    canManageMembers: boolean;
     workspaceId: string;
+    workspaceType: "collaborative" | "institutional";
     onMemberRemoved?: (memberId: string) => void;
     onInviteSent?: () => void;
 }
@@ -52,19 +56,60 @@ export function TeamMemberList({
     members,
     pendingInvites = [],
     currentUserId,
-    isOwner,
+    canManageMembers,
     workspaceId,
+    workspaceType,
     onMemberRemoved,
     onInviteSent,
 }: TeamMemberListProps) {
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [inviteEmail, setInviteEmail] = useState("");
+    const [inviteRole, setInviteRole] = useState<"admin" | "teacher" | "staff_viewer">("teacher");
+    const [isRoleOpen, setIsRoleOpen] = useState(false);
     const [isInviting, setIsInviting] = useState(false);
     const [inviteError, setInviteError] = useState<string | null>(null);
     const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
     const [showMenuFor, setShowMenuFor] = useState<string | null>(null);
     const t = useTranslations("TeamPage");
     const mlT = useTranslations("TeamPage.MemberList");
+
+    const inviteRoles = workspaceType === "institutional"
+        ? [
+            {
+                id: "teacher" as const,
+                label: "Teacher",
+                description: "Creates classes, surveys, materials, and folders",
+                icon: User,
+            },
+            {
+                id: "admin" as const,
+                label: "Admin",
+                description: "Manages members, settings, and departments",
+                icon: Shield,
+            },
+            {
+                id: "staff_viewer" as const,
+                label: "Staff Viewer",
+                description: "Sees workspace structure and class metadata only",
+                icon: Eye,
+            },
+        ]
+        : [
+            {
+                id: "teacher" as const,
+                label: "Teacher",
+                description: "Creates and collaborates on teaching content",
+                icon: User,
+            },
+            {
+                id: "admin" as const,
+                label: "Admin",
+                description: "Manages members and workspace settings",
+                icon: Shield,
+            },
+        ];
+
+    const selectedInviteRole = inviteRoles.find((role) => role.id === inviteRole) ?? inviteRoles[0];
 
     const handleInvite = async () => {
         if (!inviteEmail.trim()) return;
@@ -75,18 +120,19 @@ export function TeamMemberList({
         try {
             const result = await inviteToWorkspace({
                 email: inviteEmail,
-                role: "member",
+                role: inviteRole,
                 organizationId: workspaceId,
             });
 
             if (result.success) {
                 setShowInviteModal(false);
                 setInviteEmail("");
+                setInviteRole("teacher");
                 toast.success(t("Toasts.InvitationSent"));
                 onInviteSent?.();
             } else {
                 setInviteError(result.error);
-            toast.error(mlT("InviteModal.Error"));
+                toast.error(result.error);
             }
         } finally {
             setIsInviting(false);
@@ -105,7 +151,7 @@ export function TeamMemberList({
                 toast.success(t("Toasts.MemberRemoved"));
                 onMemberRemoved?.(memberIdOrEmail);
             } else {
-                toast.error(t("Toasts.RemoveFailed"));
+                toast.error(result.error);
             }
         } catch {
             toast.error(t("Toasts.RemoveFailed"));
@@ -117,16 +163,17 @@ export function TeamMemberList({
 
     return (
         <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
-            {/* Header */}
             <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
                 <div>
                     <h3 className="text-lg font-bold text-slate-950">{mlT("Header")}</h3>
                     <p className="text-sm text-slate-500 mt-1">
                         {mlT("Count", { count: members.length })} members recorded
-                        {pendingInvites.length > 0 && <span> · {mlT("PendingCount", { count: pendingInvites.length })} pending</span>}
+                        {pendingInvites.length > 0 && (
+                            <span> · {mlT("PendingCount", { count: pendingInvites.length })} pending</span>
+                        )}
                     </p>
                 </div>
-                {isOwner && (
+                {canManageMembers && (
                     <button
                         onClick={() => setShowInviteModal(true)}
                         className="flex items-center gap-2 px-4 py-2 bg-slate-950 text-white rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-slate-900 transition-colors"
@@ -137,11 +184,10 @@ export function TeamMemberList({
                 )}
             </div>
 
-            {/* Members List */}
             <div className="bg-slate-50/30">
                 {members.map((member) => {
                     const isCurrentUser = member.userId === currentUserId;
-                    const canRemove = isOwner && !isCurrentUser && member.role !== "owner";
+                    const canRemove = canManageMembers && !isCurrentUser && member.role !== "owner";
 
                     return (
                         <div
@@ -149,7 +195,6 @@ export function TeamMemberList({
                             className="px-6 py-4 flex items-center justify-between border-b border-slate-50/50 last:border-0 hover:bg-white transition-colors"
                         >
                             <div className="flex items-center gap-3">
-                                {/* Avatar */}
                                 <div className="relative">
                                     {member.user.image ? (
                                         <Image
@@ -172,7 +217,6 @@ export function TeamMemberList({
                                     )}
                                 </div>
 
-                                {/* Info */}
                                 <div>
                                     <div className="flex items-center gap-2">
                                         <p className="text-sm font-bold text-slate-950">
@@ -186,15 +230,18 @@ export function TeamMemberList({
                                 </div>
                             </div>
 
-                            {/* Role & Actions */}
                             <div className="flex items-center gap-3">
                                 <span className={cn(
                                     "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
                                     member.role === "owner"
                                         ? "bg-amber-50 text-amber-700 border border-amber-100"
-                                        : "bg-slate-50 text-slate-500 border border-slate-100"
+                                        : member.role === "admin"
+                                            ? "bg-sky-50 text-sky-700 border border-sky-100"
+                                            : member.role === "staff_viewer"
+                                                ? "bg-violet-50 text-violet-700 border border-violet-100"
+                                                : "bg-slate-50 text-slate-500 border border-slate-100"
                                 )}>
-                                    {t(`Roles.${member.role === 'owner' ? 'Owner' : 'Member'}`)}
+                                    {member.role.replace("_", " ")}
                                 </span>
 
                                 {canRemove && (
@@ -235,31 +282,27 @@ export function TeamMemberList({
                     );
                 })}
 
-                {/* Pending Invites */}
                 {pendingInvites.map((invite) => (
                     <div
                         key={invite.id}
                         className="px-6 py-4 flex items-center justify-between border-b border-slate-50/50 last:border-0 bg-slate-50/30"
                     >
                         <div className="flex items-center gap-3 opacity-60">
-                            {/* Pending Avatar */}
                             <div className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center border border-dashed border-slate-300">
                                 <Mail className="w-4 h-4 text-slate-400" />
                             </div>
 
-                            {/* Info */}
                             <div>
                                 <p className="text-sm font-bold text-slate-700">{invite.email}</p>
                                 <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">{mlT("Pending.Status")}</p>
                             </div>
                         </div>
 
-                        {/* Status */}
                         <div className="flex items-center gap-2">
                             <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-sky-50 text-sky-700 border border-sky-100">
-                                {mlT("Pending.Badge")}
+                                {invite.role.replace("_", " ")}
                             </span>
-                            {isOwner && (
+                            {canManageMembers && (
                                 <button
                                     onClick={() => handleRemoveMember(invite.email)}
                                     disabled={removingMemberId === invite.email}
@@ -277,7 +320,6 @@ export function TeamMemberList({
                 ))}
             </div>
 
-            {/* Empty State */}
             {members.length === 0 && pendingInvites.length === 0 && (
                 <div className="px-6 py-16 text-center bg-slate-50/20">
                     <div className="w-16 h-16 rounded-full bg-white border border-slate-100 flex items-center justify-center mx-auto mb-5">
@@ -287,7 +329,7 @@ export function TeamMemberList({
                     <p className="text-sm text-slate-500 mb-6 max-w-xs mx-auto">
                         {mlT("Empty.Description")}
                     </p>
-                    {isOwner && (
+                    {canManageMembers && (
                         <button
                             onClick={() => setShowInviteModal(true)}
                             className="inline-flex items-center gap-2 px-6 py-3 bg-slate-950 text-white rounded-2xl font-bold text-sm hover:bg-slate-900 transition-colors"
@@ -299,18 +341,14 @@ export function TeamMemberList({
                 </div>
             )}
 
-            {/* Invite Modal */}
             {showInviteModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    {/* Backdrop */}
                     <div
                         className="absolute inset-0 bg-slate-950/20 backdrop-blur-sm"
                         onClick={() => setShowInviteModal(false)}
                     />
 
-                    {/* Modal */}
                     <div className="relative bg-white rounded-3xl w-full max-w-md animate-in fade-in zoom-in-95 duration-200 overflow-hidden shadow-2xl">
-                        {/* Header */}
                         <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
                             <h3 className="text-xl font-bold text-slate-950">{mlT("InviteModal.Title")}</h3>
                             <button
@@ -321,9 +359,7 @@ export function TeamMemberList({
                             </button>
                         </div>
 
-                        {/* Body */}
                         <div className="px-8 py-8 space-y-6">
-                            {/* Email Input */}
                             <div>
                                 <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-3 ml-1">
                                     Recipient Email
@@ -340,18 +376,48 @@ export function TeamMemberList({
                                 </div>
                             </div>
 
-                            <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-5">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-widest">
-                                        {t("Permissions.Member.Title")} Role
-                                    </span>
+                            <div className="space-y-3">
+                                <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 ml-1">
+                                    Invite Role
+                                </label>
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setIsRoleOpen((open) => !open)}
+                                        className="w-full flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left"
+                                    >
+                                        <div>
+                                            <div className="text-sm font-semibold text-slate-950">{selectedInviteRole.label}</div>
+                                            <div className="text-xs text-slate-500 mt-1">{selectedInviteRole.description}</div>
+                                        </div>
+                                        <ChevronDown className={cn("w-4 h-4 text-slate-400 transition-transform", isRoleOpen && "rotate-180")} />
+                                    </button>
+
+                                    {isRoleOpen && (
+                                        <>
+                                            <div className="fixed inset-0 z-40" onClick={() => setIsRoleOpen(false)} />
+                                            <div className="absolute inset-x-0 top-full mt-2 z-50 rounded-2xl border border-slate-100 bg-white p-2 shadow-xl">
+                                                {inviteRoles.map((role) => (
+                                                    <button
+                                                        key={role.id}
+                                                        onClick={() => {
+                                                            setInviteRole(role.id);
+                                                            setIsRoleOpen(false);
+                                                        }}
+                                                        className="flex w-full items-start justify-between rounded-xl px-3 py-3 text-left hover:bg-slate-50 transition"
+                                                    >
+                                                        <div className="pr-4">
+                                                            <div className="text-sm font-semibold text-slate-950">{role.label}</div>
+                                                            <div className="text-xs text-slate-500 mt-1">{role.description}</div>
+                                                        </div>
+                                                        {inviteRole === role.id ? <Check className="w-4 h-4 text-slate-900 mt-0.5 shrink-0" /> : null}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
-                                <p className="text-xs text-slate-500 leading-relaxed">
-                                    Standard academic access. Members can collaborate on subjects and view the classroom directory.
-                                </p>
                             </div>
 
-                            {/* Error Message */}
                             {inviteError && (
                                 <div className="p-4 rounded-2xl bg-rose-50 border border-rose-100">
                                     <p className="text-xs font-bold text-rose-600">{inviteError}</p>
@@ -359,7 +425,6 @@ export function TeamMemberList({
                             )}
                         </div>
 
-                        {/* Footer */}
                         <div className="px-8 py-6 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50/30">
                             <button
                                 onClick={() => setShowInviteModal(false)}

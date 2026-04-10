@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import Image, { type ImageLoaderProps } from "next/image";
@@ -18,6 +18,7 @@ type Workspace = {
     name: string;
     slug: string;
     role: string;
+    type?: "collaborative" | "institutional";
     logo?: string | null;
 };
 
@@ -50,7 +51,7 @@ export function WorkspaceSwitcher() {
             queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all }),
             queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.active }),
             queryClient.invalidateQueries({ queryKey: ["surveys"] }),
-            queryClient.invalidateQueries({ queryKey: ["projects"] }),
+            queryClient.invalidateQueries({ queryKey: ["folders"] }),
             queryClient.invalidateQueries({ queryKey: ["notifications"] }),
         ]);
         router.refresh();
@@ -120,10 +121,10 @@ export function WorkspaceSwitcher() {
                 {/* Name & Role */}
                 <div className="flex-1 text-left min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">
-                        {activeWorkspace?.name || t("PersonalAccount")}
+                        {activeWorkspace?.name || "Personal Space"}
                     </p>
                     <p className="text-xs text-gray-500 truncate">
-                        {activeWorkspace ? <>{t(`Roles.${activeWorkspace.role === 'owner' ? 'Owner' : 'Member'}`)} • {t("Workspace")}</> : t("Individual")}
+                        {activeWorkspace ? <>{activeWorkspace.role.replace("_", " ")} • {activeWorkspace.type === "institutional" ? "Institutional workspace" : "Collaborative workspace"}</> : "Solo teacher space"}
                     </p>
                 </div>
 
@@ -149,7 +150,7 @@ export function WorkspaceSwitcher() {
 
                     {/* Menu */}
                     <div className="absolute left-4 right-4 top-full mt-1 bg-white rounded-xl border border-gray-200 shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                        {/* Personal Account */}
+                        {/* Personal Space */}
                         <button
                             onClick={() => handleSwitchWorkspace(null)}
                             className={cn(
@@ -161,8 +162,8 @@ export function WorkspaceSwitcher() {
                                 <User className="w-4 h-4" />
                             </div>
                             <div className="flex-1 text-left">
-                                <p className="text-sm font-medium text-gray-900">{t("PersonalAccount")}</p>
-                                <p className="text-xs text-gray-500">{t("PersonalDesc")}</p>
+                                <p className="text-sm font-medium text-gray-900">{"Personal Space"}</p>
+                                <p className="text-xs text-gray-500">{"Your private teacher workspace for classes, surveys, materials, and folders."}</p>
                             </div>
                             {!activeWorkspace && (
                                 <Check className="w-4 h-4 text-green-500" />
@@ -202,7 +203,7 @@ export function WorkspaceSwitcher() {
                                     </div>
                                     <div className="flex-1 text-left min-w-0">
                                         <p className="text-sm font-medium text-gray-900 truncate">{workspace.name}</p>
-                                        <p className="text-xs text-gray-500 capitalize">{t(`Roles.${workspace.role === 'owner' ? 'Owner' : 'Member'}`)}</p>
+                                        <p className="text-xs text-gray-500 capitalize">{workspace.role.replace("_", " ")}</p>
                                     </div>
                                     {activeWorkspace?.id === workspace.id && (
                                         <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
@@ -237,3 +238,7 @@ export function WorkspaceSwitcher() {
         </div>
     );
 }
+
+
+
+

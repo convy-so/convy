@@ -13,22 +13,32 @@ import { getDb } from "@/db";
 import {
   classrooms,
   departments,
+  departmentMemberships,
+  folders,
   organizations,
   members,
   invitations,
   users,
-  projects,
   surveys,
   surveyEditors,
   surveyEditLeases,
   retentionPolicies,
   workspacePrivacyProfiles,
+  workspaceProfiles,
+  type WorkspaceRole,
+  type WorkspaceType,
   type RetentionPolicySettings,
   type WorkspacePrivacyProfileSettings,
 } from "@/db/schema";
 import { eq, and, desc, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import { isWorkspaceOwner } from "@/lib/workspace-access";
+import {
+  getWorkspaceCapabilities,
+  hasWorkspaceCapability,
+  getWorkspaceProfile,
+  getWorkspaceRole,
+  isWorkspaceOwner,
+} from "@/lib/workspace-access";
 import {
   defaultWorkspaceLocaleSettings,
   normalizeAppLocale,
@@ -98,12 +108,23 @@ export type WorkspacePrivacyState = {
   runtimeProcessorViolations: string[];
 };
 
+function capabilitiesForWorkspace(params: {
+  role: WorkspaceRole;
+  profile: Awaited<ReturnType<typeof getWorkspaceProfile>>;
+}) {
+  return getWorkspaceCapabilities({
+    role: params.role,
+    profile: params.profile,
+  });
+}
+
 /**
  * Create a new workspace
  */
 export async function createWorkspace(data: {
   name: string;
   slug: string;
+  type?: WorkspaceType;
 }): Promise<ActionResult<{ id: string; name: string; slug: string }>> {
   try {
     const session = await getVerifiedSession();
@@ -137,6 +158,17 @@ export async function createWorkspace(data: {
         error: "Failed to create workspace",
       };
     }
+
+    const workspaceType = data.type ?? "collaborative";
+    await getDb().insert(workspaceProfiles).values({
+      organizationId: result.id,
+      type: workspaceType,
+      departmentsEnabled: workspaceType === "institutional",
+      staffRolesEnabled: workspaceType === "institutional",
+      privacyControlsEnabled: workspaceType === "institutional",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
     const creatorLocale = normalizeAppLocale(
       session.user.uiLocale ?? session.user.preferredLanguage,
@@ -181,6 +213,7 @@ export async function getUserWorkspaces(): Promise<
       name: string;
       slug: string;
       role: string;
+      type: WorkspaceType;
       logo?: string | null;
     }>
   >
@@ -200,13 +233,24 @@ export async function getUserWorkspaces(): Promise<
       };
     }
 
+    const profiles = await getDb().query.workspaceProfiles.findMany({
+      where: inArray(
+        workspaceProfiles.organizationId,
+        result.map((org: { id: string }) => org.id),
+      ),
+    });
+    const profileById = new Map(
+      profiles.map((profile) => [profile.organizationId, profile]),
+    );
+
     return {
       success: true,
       data: result.map((org: { id: string; name: string; slug: string; role?: string; logo?: string | null }) => ({
         id: org.id,
         name: org.name,
         slug: org.slug,
-        role: org.role || "member",
+        role: org.role || "teacher",
+        type: profileById.get(org.id)?.type ?? "collaborative",
         logo: org.logo || null,
       })),
     };
@@ -229,8 +273,10 @@ export async function getActiveWorkspace(): Promise<
     name: string;
     slug: string;
     role: string;
+    type: WorkspaceType;
     logo?: string | null;
     plan?: string | null;
+    capabilities: ReturnType<typeof capabilitiesForWorkspace>;
     localization: WorkspaceLocaleSettings;
     privacy: WorkspacePrivacyState;
   } | null>
@@ -265,10 +311,12 @@ export async function getActiveWorkspace(): Promise<
         eq(members.userId, session.user.id),
       ),
     });
+    const profile = await getWorkspaceProfile(activeOrganizationId);
     const [localization, privacyState] = await Promise.all([
       getWorkspaceLocaleSettings(activeOrganizationId),
       getWorkspacePrivacyState(activeOrganizationId),
     ]);
+    const role = (member?.role as WorkspaceRole | undefined) ?? "teacher";
 
     return {
       success: true,
@@ -276,9 +324,14 @@ export async function getActiveWorkspace(): Promise<
         id: org.id,
         name: org.name,
         slug: org.slug,
-        role: member?.role || "member",
+        role,
+        type: profile?.type ?? "collaborative",
         logo: org.logo || null,
         plan: "Free",
+        capabilities: capabilitiesForWorkspace({
+          role,
+          profile,
+        }),
         localization: localization ?? { ...defaultWorkspaceLocaleSettings },
         privacy: {
           settings: privacyState.profile.settings,
@@ -339,7 +392,7 @@ export async function setActiveWorkspace(
  */
 export async function inviteToWorkspace(data: {
   email: string;
-  role?: "member";
+  role?: WorkspaceRole;
   organizationId?: string;
 }): Promise<ActionResult<{ invitationId: string }>> {
   try {
@@ -355,18 +408,35 @@ export async function inviteToWorkspace(data: {
       };
     }
 
-    if (data.role && data.role !== "member") {
+    const profile = await getWorkspaceProfile(organizationId);
+    const role = data.role ?? "teacher";
+
+    if (!["owner", "admin", "teacher", "staff_viewer"].includes(role)) {
       return {
         success: false,
-        error: "Invalid role: workspace invitations can only grant member access",
+        error: "Invalid role",
       };
     }
 
-    const isOwner = await isWorkspaceOwner(session.user.id, organizationId);
-    if (!isOwner) {
+    const inviterRole = await getWorkspaceRole(session.user.id, organizationId);
+    if (inviterRole !== "owner" && inviterRole !== "admin") {
       return {
         success: false,
-        error: "Unauthorized: Only workspace owners can invite members",
+        error: "Unauthorized: Only workspace owners or admins can invite members",
+      };
+    }
+
+    if (role === "owner") {
+      return {
+        success: false,
+        error: "Invite the user first, then transfer ownership separately.",
+      };
+    }
+
+    if (role === "staff_viewer" && profile?.type !== "institutional") {
+      return {
+        success: false,
+        error: "Staff viewer is only available in institutional workspaces.",
       };
     }
 
@@ -410,7 +480,7 @@ export async function inviteToWorkspace(data: {
     const result = await auth.api.createInvitation({
       body: {
         email: normalizedEmail,
-        role: "member",
+        role,
         organizationId,
       },
       headers: await getSessionHeaders(),
@@ -458,11 +528,11 @@ export async function removeWorkspaceMember(data: {
       };
     }
 
-    const isOwner = await isWorkspaceOwner(session.user.id, organizationId);
-    if (!isOwner) {
+    const actorRole = await getWorkspaceRole(session.user.id, organizationId);
+    if (actorRole !== "owner" && actorRole !== "admin") {
       return {
         success: false,
-        error: "Unauthorized: Only workspace owners can remove members",
+        error: "Unauthorized: Only workspace owners or admins can remove members",
       };
     }
 
@@ -480,6 +550,17 @@ export async function removeWorkspaceMember(data: {
       };
     }
 
+    if (
+      actorRole === "admin" &&
+      targetMember &&
+      (targetMember.role === "admin" || targetMember.role === "owner")
+    ) {
+      return {
+        success: false,
+        error: "Workspace admins can only remove teachers or staff viewers.",
+      };
+    }
+
     if (targetMember) {
       const [ownedSurveys, ownedProjects] = await Promise.all([
         getDb()
@@ -492,12 +573,12 @@ export async function removeWorkspaceMember(data: {
             ),
           ),
         getDb()
-          .select({ id: projects.id })
-          .from(projects)
+          .select({ id: folders.id })
+          .from(folders)
           .where(
             and(
-              eq(projects.organizationId, organizationId),
-              eq(projects.userId, targetMember.userId),
+              eq(folders.organizationId, organizationId),
+              eq(folders.userId, targetMember.userId),
             ),
           ),
       ]);
@@ -506,7 +587,7 @@ export async function removeWorkspaceMember(data: {
         return {
           success: false,
           error:
-            "This member still owns surveys or projects. Transfer ownership before removing them.",
+            "This member still owns surveys or folders. Transfer ownership before removing them.",
         };
       }
 
@@ -1034,11 +1115,11 @@ export async function getWorkspaceInvitations(organizationId: string): Promise<
 > {
   try {
     const session = await getVerifiedSession();
-    const isOwner = await isWorkspaceOwner(session.user.id, organizationId);
-    if (!isOwner) {
+    const role = await getWorkspaceRole(session.user.id, organizationId);
+    if (role !== "owner" && role !== "admin") {
       return {
         success: false,
-        error: "Unauthorized: Only workspace owners can view invitations",
+        error: "Unauthorized: Only workspace owners or admins can view invitations",
       };
     }
 
@@ -1151,7 +1232,6 @@ export async function createDepartment(data: {
   name: string;
   code?: string;
   description?: string;
-  headUserId?: string | null;
   organizationId?: string;
 }): Promise<
   ActionResult<{
@@ -1159,7 +1239,6 @@ export async function createDepartment(data: {
     name: string;
     code: string | null;
     description: string | null;
-    headUserId: string | null;
   }>
 > {
   try {
@@ -1171,11 +1250,23 @@ export async function createDepartment(data: {
       return { success: false, error: "No active workspace selected" };
     }
 
-    const isOwner = await isWorkspaceOwner(session.user.id, organizationId);
-    if (!isOwner) {
+    const profile = await getWorkspaceProfile(organizationId);
+    if (profile?.type !== "institutional" || !profile.departmentsEnabled) {
       return {
         success: false,
-        error: "Unauthorized: Only workspace owners can create departments",
+        error: "Departments are only available in institutional workspaces.",
+      };
+    }
+
+    const canManageDepartments = await hasWorkspaceCapability(
+      session.user.id,
+      organizationId,
+      "manageDepartments",
+    );
+    if (!canManageDepartments) {
+      return {
+        success: false,
+        error: "Unauthorized: Only workspace owners or admins can create departments",
       };
     }
 
@@ -1201,22 +1292,6 @@ export async function createDepartment(data: {
       };
     }
 
-    if (data.headUserId) {
-      const headMember = await getDb().query.members.findFirst({
-        where: and(
-          eq(members.organizationId, organizationId),
-          eq(members.userId, data.headUserId),
-        ),
-      });
-
-      if (!headMember) {
-        return {
-          success: false,
-          error: "The selected department head must belong to this workspace.",
-        };
-      }
-    }
-
     const departmentId = `dept_${nanoid()}`;
     await getDb().insert(departments).values({
       id: departmentId,
@@ -1224,7 +1299,6 @@ export async function createDepartment(data: {
       name: normalizedName,
       code: normalizedCode,
       description: normalizedDescription,
-      headUserId: data.headUserId ?? null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -1236,7 +1310,6 @@ export async function createDepartment(data: {
         name: normalizedName,
         code: normalizedCode,
         description: normalizedDescription,
-        headUserId: data.headUserId ?? null,
       },
     };
   } catch (error) {
@@ -1258,8 +1331,6 @@ export async function getWorkspaceDepartments(data?: {
       name: string;
       code: string | null;
       description: string | null;
-      headUserId: string | null;
-      headName: string | null;
       classroomCount: number;
       surveyCount: number;
       folderCount: number;
@@ -1289,15 +1360,6 @@ export async function getWorkspaceDepartments(data?: {
     const rows = await getDb().query.departments.findMany({
       where: eq(departments.organizationId, organizationId),
       orderBy: (table, { asc }) => [asc(table.name)],
-      with: {
-        headUser: {
-          columns: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
     });
 
     const departmentIds = rows.map((department) => department.id);
@@ -1325,12 +1387,12 @@ export async function getWorkspaceDepartments(data?: {
           .groupBy(surveys.departmentId),
         getDb()
           .select({
-            departmentId: projects.departmentId,
+            departmentId: folders.departmentId,
             count: sql<number>`count(*)`,
           })
-          .from(projects)
-          .where(inArray(projects.departmentId, departmentIds))
-          .groupBy(projects.departmentId),
+          .from(folders)
+          .where(inArray(folders.departmentId, departmentIds))
+          .groupBy(folders.departmentId),
       ]);
     }
 
@@ -1357,9 +1419,6 @@ export async function getWorkspaceDepartments(data?: {
         name: department.name,
         code: department.code,
         description: department.description,
-        headUserId: department.headUserId ?? null,
-        headName:
-          department.headUser?.name || department.headUser?.email || null,
         classroomCount: classroomCountByDepartment.get(department.id) ?? 0,
         surveyCount: surveyCountByDepartment.get(department.id) ?? 0,
         folderCount: folderCountByDepartment.get(department.id) ?? 0,
@@ -1380,14 +1439,12 @@ export async function updateDepartment(data: {
   name: string;
   code?: string;
   description?: string;
-  headUserId?: string | null;
 }): Promise<
   ActionResult<{
     id: string;
     name: string;
     code: string | null;
     description: string | null;
-    headUserId: string | null;
   }>
 > {
   try {
@@ -1405,11 +1462,23 @@ export async function updateDepartment(data: {
       return { success: false, error: "Department not found." };
     }
 
-    const isOwner = await isWorkspaceOwner(session.user.id, department.organizationId);
-    if (!isOwner) {
+    const profile = await getWorkspaceProfile(department.organizationId);
+    if (profile?.type !== "institutional" || !profile.departmentsEnabled) {
       return {
         success: false,
-        error: "Unauthorized: Only workspace owners can update departments",
+        error: "Departments are only available in institutional workspaces.",
+      };
+    }
+
+    const canManageDepartments = await hasWorkspaceCapability(
+      session.user.id,
+      department.organizationId,
+      "manageDepartments",
+    );
+    if (!canManageDepartments) {
+      return {
+        success: false,
+        error: "Unauthorized: Only workspace owners or admins can update departments",
       };
     }
 
@@ -1428,23 +1497,6 @@ export async function updateDepartment(data: {
       };
     }
 
-    const nextHeadUserId = data.headUserId ?? null;
-    if (nextHeadUserId) {
-      const headMember = await getDb().query.members.findFirst({
-        where: and(
-          eq(members.organizationId, department.organizationId),
-          eq(members.userId, nextHeadUserId),
-        ),
-      });
-
-      if (!headMember) {
-        return {
-          success: false,
-          error: "The selected department head must belong to this workspace.",
-        };
-      }
-    }
-
     const normalizedCode = data.code?.trim() || null;
     const normalizedDescription = data.description?.trim() || null;
 
@@ -1454,7 +1506,6 @@ export async function updateDepartment(data: {
         name: normalizedName,
         code: normalizedCode,
         description: normalizedDescription,
-        headUserId: nextHeadUserId,
         updatedAt: new Date(),
       })
       .where(eq(departments.id, department.id));
@@ -1466,7 +1517,6 @@ export async function updateDepartment(data: {
         name: normalizedName,
         code: normalizedCode,
         description: normalizedDescription,
-        headUserId: nextHeadUserId,
       },
     };
   } catch (error) {
@@ -1492,11 +1542,23 @@ export async function deleteDepartment(data: {
       return { success: false, error: "Department not found." };
     }
 
-    const isOwner = await isWorkspaceOwner(session.user.id, department.organizationId);
-    if (!isOwner) {
+    const profile = await getWorkspaceProfile(department.organizationId);
+    if (profile?.type !== "institutional" || !profile.departmentsEnabled) {
       return {
         success: false,
-        error: "Unauthorized: Only workspace owners can delete departments",
+        error: "Departments are only available in institutional workspaces.",
+      };
+    }
+
+    const canManageDepartments = await hasWorkspaceCapability(
+      session.user.id,
+      department.organizationId,
+      "manageDepartments",
+    );
+    if (!canManageDepartments) {
+      return {
+        success: false,
+        error: "Unauthorized: Only workspace owners or admins can delete departments",
       };
     }
 
@@ -1511,8 +1573,8 @@ export async function deleteDepartment(data: {
         .where(eq(surveys.departmentId, department.id)),
       getDb()
         .select({ count: sql<number>`count(*)` })
-        .from(projects)
-        .where(eq(projects.departmentId, department.id)),
+        .from(folders)
+        .where(eq(folders.departmentId, department.id)),
     ]);
 
     const classroomCount = Number(classroomUsage[0]?.count ?? 0);
@@ -1539,3 +1601,4 @@ export async function deleteDepartment(data: {
     };
   }
 }
+

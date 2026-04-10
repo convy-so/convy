@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
 
@@ -7,7 +7,6 @@ import {
   classrooms,
   surveyBriefs,
   surveyCreationConversations,
-  surveyEditorRequests,
   surveys,
   users,
 } from "@/db/schema";
@@ -82,25 +81,6 @@ export async function GET() {
       })
       .from(surveyBriefs);
     const briefBySurveyId = new Map(briefs.map((row) => [row.surveyId, row]));
-    const surveyIds = rows.map((row) => row.id);
-    const pendingRequests =
-      activeOrgId && surveyIds.length > 0
-        ? await getDb()
-            .select({
-              surveyId: surveyEditorRequests.surveyId,
-            })
-            .from(surveyEditorRequests)
-            .where(
-              and(
-                inArray(surveyEditorRequests.surveyId, surveyIds),
-                eq(surveyEditorRequests.requesterId, session.user.id),
-                eq(surveyEditorRequests.status, "pending"),
-              ),
-            )
-        : [];
-    const pendingRequestSurveyIds = new Set(
-      pendingRequests.map((request) => request.surveyId),
-    );
     const permissions = await Promise.all(
       rows.map((survey) =>
         getSurveyPermissionContext(session.user.id, survey.id, {
@@ -116,13 +96,17 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      surveys: rows.map((survey) => {
+      surveys: rows.flatMap((survey) => {
         const permission = permissionBySurveyId.get(survey.id);
         const canOpen = hasSurveyPermission(permission, "canView");
         const accessLevel = permission?.accessLevel ?? "none";
         const isOwner = permission?.isSurveyCreator ?? false;
 
-        return {
+        if (activeOrgId && !canOpen) {
+          return [];
+        }
+
+        return [{
           id: survey.id,
           title: survey.title || "Untitled Survey",
           status: survey.status,
@@ -143,8 +127,10 @@ export async function GET() {
           canOpen,
           canEdit: hasSurveyPermission(permission, "canEdit"),
           canDelete: hasSurveyPermission(permission, "canDelete"),
-          canRequestAccess: hasSurveyPermission(permission, "canRequestAccess"),
-          pendingAccessRequest: pendingRequestSurveyIds.has(survey.id),
+          canManageCollaborators: hasSurveyPermission(
+            permission,
+            "canManageCollaborators",
+          ),
           isLocked: activeOrgId ? !canOpen : false,
           sharedBy: !isOwner ? (survey.creatorName ?? null) : null,
           role: accessLevel,
@@ -153,7 +139,7 @@ export async function GET() {
           brief: briefBySurveyId.get(survey.id)?.brief || null,
           briefStatus:
             briefBySurveyId.get(survey.id)?.completenessStatus || "draft",
-        };
+        }];
       }),
     });
   } catch (error) {
@@ -195,13 +181,6 @@ export async function POST(request: Request) {
       );
     }
 
-    if (classroomId && !activeOrgId) {
-      return NextResponse.json(
-        { error: "Class-linked surveys can only be created inside a workspace." },
-        { status: 400 },
-      );
-    }
-
     if (
       activeOrgId &&
       requestedLanguage &&
@@ -236,6 +215,13 @@ export async function POST(request: Request) {
       );
     }
 
+    if (classroomAccess && !activeOrgId && classroomAccess.organizationId) {
+      return NextResponse.json(
+        { error: "Open the matching workspace before using a workspace classroom." },
+        { status: 400 },
+      );
+    }
+
     const existingSurveys = await getDb()
       .select({ id: surveys.id, isVoice: surveys.isVoice })
       .from(surveys)
@@ -248,13 +234,13 @@ export async function POST(request: Request) {
     const isVoice = typeof body.isVoice === "boolean" ? body.isVoice : false;
     if (existingSurveys.length >= 5) {
       return NextResponse.json(
-        { error: `Limit reached: You can only have 5 surveys per ${activeOrgId ? "workspace" : "personal account"}` },
+        { error: `Limit reached: You can only have 5 surveys per ${activeOrgId ? "workspace" : "personal space"}` },
         { status: 403 },
       );
     }
     if (isVoice && existingSurveys.filter((item) => item.isVoice).length >= 2) {
       return NextResponse.json(
-        { error: `Limit reached: You can only have 2 voice surveys per ${activeOrgId ? "workspace" : "personal account"}` },
+        { error: `Limit reached: You can only have 2 voice surveys per ${activeOrgId ? "workspace" : "personal space"}` },
         { status: 403 },
       );
     }
