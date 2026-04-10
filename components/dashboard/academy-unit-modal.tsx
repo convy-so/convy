@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X, Loader2, Plus, Building2, Sparkles, User, Hash, AlignLeft, ChevronDown, Check } from "lucide-react";
+import { X, Loader2, Plus, Building2, Sparkles, Hash, AlignLeft } from "lucide-react";
 import { createDepartment, updateDepartment } from "@/app/actions/workspace";
 import { useRouter } from "@/i18n/routing";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,7 +29,6 @@ type AcademyUnitModalProps = {
         name: string;
         code: string;
         description: string;
-        headUserId: string;
     } | null;
 };
 
@@ -45,8 +44,6 @@ export function AcademyUnitModal({
     const [name, setName] = useState("");
     const [code, setCode] = useState("");
     const [description, setDescription] = useState("");
-    const [headUserId, setHeadUserId] = useState("");
-    const [isHeadDropdownOpen, setIsHeadDropdownOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [mounted, setMounted] = useState(false);
@@ -60,12 +57,10 @@ export function AcademyUnitModal({
             setName(editingUnit.name);
             setCode(editingUnit.code);
             setDescription(editingUnit.description);
-            setHeadUserId(editingUnit.headUserId);
         } else {
             setName("");
             setCode("");
             setDescription("");
-            setHeadUserId("");
         }
     }, [editingUnit, isOpen]);
 
@@ -82,14 +77,12 @@ export function AcademyUnitModal({
                     name: name.trim(),
                     code: code.trim() || undefined,
                     description: description.trim() || undefined,
-                    headUserId: headUserId || null,
                   })
                 : await createDepartment({
                     organizationId: workspaceId,
                     name: name.trim(),
                     code: code.trim() || undefined,
                     description: description.trim() || undefined,
-                    headUserId: headUserId || null,
                   });
 
             if (result.success) {
@@ -107,8 +100,6 @@ export function AcademyUnitModal({
             setIsSubmitting(false);
         }
     };
-
-    const selectedHead = members.find(m => m.userId === headUserId);
 
     if (!isOpen || !mounted) return null;
 
@@ -166,60 +157,8 @@ export function AcademyUnitModal({
                             value={code}
                             onChange={(e) => setCode(e.target.value)}
                         />
-                        
-                        <div className="space-y-2">
-                            <label className="block text-sm font-medium text-[#292929]">
-                                Head of Unit
-                            </label>
-                            <div className="relative">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsHeadDropdownOpen(!isHeadDropdownOpen)}
-                                    className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl hover:border-gray-300 focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all text-left bg-white text-sm flex items-center justify-between"
-                                >
-                                    <div className="flex items-center gap-2 truncate">
-                                        <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#696969] w-4 h-4" />
-                                        <span className={cn(headUserId ? "text-gray-900" : "text-gray-400")}>
-                                            {selectedHead ? selectedHead.user.name : "Unassigned"}
-                                        </span>
-                                    </div>
-                                    <ChevronDown className={cn("w-4 h-4 text-gray-400 transition-transform", isHeadDropdownOpen && "rotate-180")} />
-                                </button>
-
-                                {isHeadDropdownOpen && (
-                                    <>
-                                        <div className="fixed inset-0 z-[110]" onClick={() => setIsHeadDropdownOpen(false)} />
-                                        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-100 rounded-xl shadow-xl z-[120] py-2 max-h-[200px] overflow-y-auto animate-in fade-in zoom-in-95">
-                                            <button
-                                                type="button"
-                                                onClick={() => { setHeadUserId(""); setIsHeadDropdownOpen(false); }}
-                                                className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                            >
-                                                <span className="text-gray-500">Unassigned</span>
-                                                {!headUserId && <Check className="w-4 h-4 text-gray-900" />}
-                                            </button>
-                                            <div className="h-px bg-gray-50 my-1" />
-                                            {members.map((member) => (
-                                                <button
-                                                    key={member.userId}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setHeadUserId(member.userId);
-                                                        setIsHeadDropdownOpen(false);
-                                                    }}
-                                                    className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                                >
-                                                    <div className="flex flex-col">
-                                                        <span className="font-medium text-gray-900">{member.user.name}</span>
-                                                        <span className="text-xs text-gray-500">{member.user.email}</span>
-                                                    </div>
-                                                    {headUserId === member.userId && <Check className="w-4 h-4 text-gray-900" />}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
+                        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                            Department admins are now assigned from membership controls, not a single head-of-unit field.
                         </div>
                     </div>
 

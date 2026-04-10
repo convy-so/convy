@@ -9,7 +9,6 @@ import {
   sampleConversations,
   surveyCollaborationComments,
   surveyCreationComments,
-  surveyEditorRequests,
   surveyEditors,
   users,
 } from "@/db/schema";
@@ -51,11 +50,14 @@ export async function grantEditAccessAction(
         error: "Collaboration is only available for workspace surveys",
       };
     }
-    if (!hasSurveyPermission(permission, "canEdit")) {
+    if (!hasSurveyPermission(permission, "canView")) {
       return { success: false, error: "Unauthorized" };
     }
-    if (!hasSurveyPermission(permission, "canEdit") || !permission.isSurveyCreator) {
-      return { success: false, error: "Only the survey creator can grant access" };
+    if (!hasSurveyPermission(permission, "canManageCollaborators")) {
+      return {
+        success: false,
+        error: "Only the survey owner or workspace admins can manage collaborators",
+      };
     }
 
     if (body.userIdToGrant === permission.creatorId) {
@@ -85,35 +87,6 @@ export async function grantEditAccessAction(
           grantedBy: session.user.id,
         })
         .onConflictDoNothing();
-
-      await tx
-        .update(surveyEditorRequests)
-        .set({
-          status: "approved",
-          resolvedAt: new Date(),
-          resolvedBy: session.user.id,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(surveyEditorRequests.surveyId, body.surveyId),
-            eq(surveyEditorRequests.requesterId, body.userIdToGrant),
-            eq(surveyEditorRequests.status, "pending"),
-          ),
-        );
-
-      await recordRealtimeEvent(tx, {
-        scope: "survey",
-        surveyId: body.surveyId,
-        workspaceId: permission.workspaceId,
-        eventType: "survey.editor_request_resolved",
-        actorId: session.user.id,
-        payload: {
-          surveyId: body.surveyId,
-          requesterId: body.userIdToGrant,
-          status: "approved",
-        },
-      });
 
       await recordRealtimeEvent(tx, {
         scope: "survey",
@@ -150,11 +123,14 @@ export async function revokeEditAccessAction(
         error: "Collaboration is only available for workspace surveys",
       };
     }
-    if (!hasSurveyPermission(permission, "canEdit")) {
+    if (!hasSurveyPermission(permission, "canView")) {
       return { success: false, error: "Unauthorized" };
     }
-    if (!hasSurveyPermission(permission, "canEdit") || !permission.isSurveyCreator) {
-      return { success: false, error: "Only the survey creator can revoke access" };
+    if (!hasSurveyPermission(permission, "canManageCollaborators")) {
+      return {
+        success: false,
+        error: "Only the survey owner or workspace admins can manage collaborators",
+      };
     }
 
     await getDb().transaction(async (tx) => {
@@ -190,63 +166,11 @@ export async function revokeEditAccessAction(
 export async function requestEditAccessAction(
   surveyId: string,
 ): Promise<ActionResult<{ requestId: string }>> {
-  try {
-    const session = await getVerifiedSession();
-    const permission = await getSurveyPermissionForSession(session, surveyId);
-
-    if (!hasSurveyPermission(permission, "canDiscover")) {
-      return { success: false, error: "Unauthorized" };
-    }
-    if (!permission.collaborationAllowed) {
-      return {
-        success: false,
-        error: "Editor requests are only available for workspace surveys",
-      };
-    }
-    if (permission.canEdit) {
-      return { success: false, error: "You already have editor access" };
-    }
-
-    const existing = await getDb().query.surveyEditorRequests.findFirst({
-      where: and(
-        eq(surveyEditorRequests.surveyId, surveyId),
-        eq(surveyEditorRequests.requesterId, session.user.id),
-        eq(surveyEditorRequests.status, "pending"),
-      ),
-    });
-
-    if (existing) {
-      return { success: true, data: { requestId: existing.id } };
-    }
-
-    const requestId = nanoid();
-    await getDb().transaction(async (tx) => {
-      await tx.insert(surveyEditorRequests).values({
-        id: requestId,
-        surveyId,
-        requesterId: session.user.id,
-        status: "pending",
-      });
-
-      await recordRealtimeEvent(tx, {
-        scope: "survey",
-        surveyId,
-        workspaceId: permission.workspaceId,
-        eventType: "survey.editor_request_created",
-        actorId: session.user.id,
-        payload: {
-          surveyId,
-          requestId,
-          requesterId: session.user.id,
-        },
-      });
-    });
-
-    return { success: true, data: { requestId } };
-  } catch (error) {
-    console.error("Error requesting edit access:", error);
-    return { success: false, error: "Failed to request edit access" };
-  }
+  void surveyId;
+  return {
+    success: false,
+    error: "Survey access requests have been removed. Ask an owner or admin to add you.",
+  };
 }
 
 export async function postCreationCommentAction(

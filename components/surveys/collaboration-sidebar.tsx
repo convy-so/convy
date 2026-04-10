@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/components/providers/auth-provider";
-import { getCreationCommentsAction, postCreationCommentAction, grantEditAccessAction, requestEditAccessAction, revokeEditAccessAction } from "@/app/actions/collaboration";
+import { getCreationCommentsAction, postCreationCommentAction, grantEditAccessAction, revokeEditAccessAction } from "@/app/actions/collaboration";
 import { getWorkspaceMembers } from "@/app/actions/workspace";
 import { Users, Send, ShieldPlus, Loader2, X } from "lucide-react";
 import toast from "react-hot-toast";
@@ -36,14 +36,14 @@ type WorkspaceMember = {
 export function CollaborationSidebar({ 
     surveyId, 
     workspaceId,
-    isOwner, 
+    canManageCollaborators,
     editors = [], 
     isOpen, 
     onClose 
 }: { 
     surveyId: string; 
     workspaceId?: string | null;
-    isOwner: boolean; 
+    canManageCollaborators: boolean; 
     editors?: string[];
     isOpen: boolean;
     onClose: () => void;
@@ -58,8 +58,6 @@ export function CollaborationSidebar({
     const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
     const [isLoadingMembers, setIsLoadingMembers] = useState(false);
     const [currentEditors, setCurrentEditors] = useState<string[]>(editors);
-    const [isRequestingAccess, setIsRequestingAccess] = useState(false);
-
     const commentsEndRef = useRef<HTMLDivElement>(null);
     const presence = usePresence({
         workspaceId: workspaceId || "",
@@ -162,17 +160,6 @@ export function CollaborationSidebar({
         }
     };
 
-    const handleRequestAccess = async () => {
-        setIsRequestingAccess(true);
-        const result = await requestEditAccessAction(surveyId);
-        if (result.success) {
-            toast.success("Editor access request sent");
-        } else {
-            toast.error(result.error);
-        }
-        setIsRequestingAccess(false);
-    };
-
     return (
         <>
             <div className={cn(
@@ -198,7 +185,7 @@ export function CollaborationSidebar({
                             </div>
                         ))}
                     </div>
-                    {isOwner && (
+                    {canManageCollaborators && (
                         <button
                             onClick={() => {
                                 setShowAccessModal(true);
@@ -208,16 +195,6 @@ export function CollaborationSidebar({
                         >
                             <ShieldPlus className="w-3.5 h-3.5" />
                             Access
-                        </button>
-                    )}
-                    {!isOwner && user && !currentEditors.includes(user.id) && (
-                        <button
-                            onClick={handleRequestAccess}
-                            disabled={isRequestingAccess}
-                            className="text-xs font-medium text-indigo-600 bg-white hover:bg-indigo-50 px-2.5 py-1.5 rounded-md flex items-center gap-1 transition border border-indigo-100 disabled:opacity-50"
-                        >
-                            {isRequestingAccess ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldPlus className="w-3.5 h-3.5" />}
-                            Request Edit Access
                         </button>
                     )}
                 </div>
@@ -280,7 +257,7 @@ export function CollaborationSidebar({
                         </div>
 
                         <p className="text-sm text-gray-500">
-                            Select workspace members who can open and edit this survey alongside you. Teachers without access can still discover that the survey exists, but they cannot open its internals.
+                            Select workspace members who can open and edit this survey alongside you. Non-invited teammates should not see this survey at all.
                         </p>
 
                         <div className="space-y-3 max-h-60 overflow-y-auto">

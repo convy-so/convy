@@ -14,7 +14,12 @@ export async function POST(
     const result = await inviteToWorkspace({
       email: body.email,
       organizationId: workspaceId,
-      role: "member",
+      role:
+        body.role === "admin" ||
+        body.role === "teacher" ||
+        body.role === "staff_viewer"
+          ? body.role
+          : "teacher",
     });
 
     if (!result.success) {

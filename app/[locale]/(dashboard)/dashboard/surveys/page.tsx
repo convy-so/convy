@@ -32,7 +32,6 @@ import {
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { deleteSurveyAction, duplicateSurveyAction } from "@/app/actions/survey";
-import { requestEditAccessAction } from "@/app/actions/collaboration";
 import { fetchSurveys, type SurveyListItem } from "@/lib/api/surveys";
 import { queryKeys } from "@/lib/query-keys";
 import { useAuth } from "@/components/providers/auth-provider";
@@ -130,23 +129,6 @@ function SurveysContent() {
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
-  };
-
-  const handleRequestAccess = async (survey: SurveyListItem) => {
-    setShowMenuFor(null);
-
-    const result = await requestEditAccessAction(survey.id);
-    if (result.success) {
-      queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all(activeOrgId) });
-      toast.success(
-        survey.pendingAccessRequest
-          ? t("Card.Toasts.AccessPending") || "Access request already pending."
-          : t("Card.Toasts.AccessRequested") || "Access request sent.",
-      );
-      return;
-    }
-
-    toast.error(result.error);
   };
 
   const handlePageSizeChange = (size: number) => {
@@ -538,18 +520,10 @@ function SurveysContent() {
                               )}
                             </>
                           ) : (
-                            <button
-                              onClick={() => void handleRequestAccess(survey)}
-                              disabled={!survey.canRequestAccess || survey.pendingAccessRequest}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
+                            <div className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-500">
                               <Lock className="w-4 h-4 text-slate-400" />
-                              {survey.pendingAccessRequest
-                                ? "Access Requested"
-                                : survey.canRequestAccess
-                                  ? "Request Access"
-                                  : "Locked"}
-                            </button>
+                              Invite only
+                            </div>
                           )}
                         </div>
                       </>

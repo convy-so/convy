@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import {
@@ -10,7 +10,10 @@ import {
 } from "@/db/schema";
 import { normalizeAppLocale } from "@/lib/i18n/config";
 import { assertWorkspacePrivacyReadiness } from "@/lib/privacy/compliance";
-import { isWorkspaceMember } from "@/lib/workspace-access";
+import {
+  getWorkspaceRole,
+  isWorkspaceMember,
+} from "@/lib/workspace-access";
 
 export type ClassroomTeacherAccessLevel = "owner" | "collaborator" | "none";
 
@@ -138,6 +141,61 @@ export async function getWorkspaceClassroomDirectory(
   });
 }
 
+export async function getPersonalClassroomDirectory(userId: string) {
+  const directory = await getDb().query.classrooms.findMany({
+    where: and(
+      eq(classrooms.teacherUserId, userId),
+      isNull(classrooms.organizationId),
+    ),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
+    with: {
+      teacherAccess: true,
+      students: {
+        columns: {
+          id: true,
+        },
+      },
+      topics: {
+        columns: {
+          id: true,
+        },
+      },
+    },
+  });
+
+  return directory.map((classroom) => ({
+    id: classroom.id,
+    title: classroom.title,
+    description: classroom.description,
+    subject: classroom.subject,
+    defaultContentLocale: normalizeAppLocale(classroom.defaultContentLocale),
+    departmentId: null,
+    departmentName: null,
+    gradeBand: classroom.gradeBand,
+    gradeLabel: classroom.gradeLabel,
+    status: classroom.status,
+    teacherUserId: classroom.teacherUserId,
+    teacherName: "You",
+    accessLevel: "owner" as const,
+    accessRequestStatus: null,
+    studentCount: classroom.students.length,
+    topicCount: classroom.topics.length,
+  }));
+}
+
+export async function canViewWorkspaceClassroomMetadata(
+  userId: string,
+  organizationId: string,
+) {
+  const role = await getWorkspaceRole(userId, organizationId);
+  return (
+    role === "owner" ||
+    role === "admin" ||
+    role === "teacher" ||
+    role === "staff_viewer"
+  );
+}
+
 export async function getTeacherTopicAccess(userId: string, topicId: string) {
   const topic = await getDb().query.learningTopics.findFirst({
     where: eq(learningTopics.id, topicId),
@@ -185,10 +243,12 @@ export async function getStudentTopicAccess(userId: string, topicId: string) {
   });
 
   if (!classroomStudent) return null;
-  await assertWorkspacePrivacyReadiness({
-    organizationId: topic.classroom.organizationId,
-    requireAgeMode: true,
-  });
+  if (topic.classroom.organizationId) {
+    await assertWorkspacePrivacyReadiness({
+      organizationId: topic.classroom.organizationId,
+      requireAgeMode: true,
+    });
+  }
 
   return {
     topic,

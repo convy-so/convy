@@ -40,7 +40,6 @@ export const classrooms = pgTable(
     id: text("id").primaryKey(),
     ...timestamps,
     organizationId: text("organization_id")
-      .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     departmentId: text("department_id").references(() => departments.id, {
       onDelete: "set null",
@@ -338,7 +337,6 @@ export const learningEvidenceEmbeddings = pgTable(
     id: text("id").primaryKey(),
     ...timestamps,
     organizationId: text("organization_id")
-      .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     topicId: text("topic_id").references(() => learningTopics.id, {
       onDelete: "cascade",
@@ -383,7 +381,6 @@ export const learningTeacherChatSessions = pgTable(
     id: text("id").primaryKey(),
     ...timestamps,
     organizationId: text("organization_id")
-      .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     classroomStudentId: text("classroom_student_id")
       .notNull()
@@ -484,7 +481,6 @@ export const learningInterventions = pgTable(
     id: text("id").primaryKey(),
     ...timestamps,
     organizationId: text("organization_id")
-      .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     classroomId: text("classroom_id")
       .notNull()
@@ -527,7 +523,6 @@ export const studentLearningPatternProfiles = pgTable(
     id: text("id").primaryKey(),
     ...timestamps,
     organizationId: text("organization_id")
-      .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     studentUserId: text("student_user_id")
       .notNull()
@@ -573,7 +568,6 @@ export const studentLearningPatternAnalyses = pgTable(
     id: text("id").primaryKey(),
     ...timestamps,
     organizationId: text("organization_id")
-      .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     studentUserId: text("student_user_id")
       .notNull()
@@ -622,7 +616,6 @@ export const teachingMediaAssets = pgTable(
     id: text("id").primaryKey(),
     ...timestamps,
     organizationId: text("organization_id")
-      .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     classroomId: text("classroom_id").references(() => classrooms.id, {
       onDelete: "cascade",

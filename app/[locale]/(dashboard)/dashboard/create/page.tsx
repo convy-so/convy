@@ -364,7 +364,7 @@ function CreateSurveyContent() {
   const [availableLanguages, setAvailableLanguages] = useState<SupportedLocale[]>([...appLocales]);
   const [isVoiceSurvey, setIsVoiceSurvey] = useState(false);
 
-  const [isOwner, setIsOwner] = useState(false);
+  const [canManageCollaborators, setCanManageCollaborators] = useState(false);
   const [editors, setEditors] = useState<string[]>([]);
   const [orgId, setOrgId] = useState<string | null>(null);
   const [isCollaborationOpen, setIsCollaborationOpen] = useState(false);
@@ -811,17 +811,13 @@ function CreateSurveyContent() {
             setOrgId(organizationId);
 
 
-            let isUserOwner = false;
-            let currentEditors: string[] = [];
-            let hasEditAccess = false;
+              let currentEditors: string[] = [];
+              let hasEditAccess = false;
 
-            if (surveyData.survey?.userId) {
-              isUserOwner = surveyData.survey.userId === user?.id;
-              setIsOwner(isUserOwner);
-            }
-            if (surveyData.survey?.editors) {
-              currentEditors = surveyData.survey.editors;
-              setEditors(currentEditors);
+              setCanManageCollaborators(Boolean(surveyData.survey?.permission?.canManageCollaborators));
+              if (surveyData.survey?.editors) {
+                currentEditors = surveyData.survey.editors;
+                setEditors(currentEditors);
             }
             hasEditAccess = Boolean(surveyData.survey?.permission?.canEdit);
 
@@ -1751,7 +1747,7 @@ function CreateSurveyContent() {
           <CollaborationSidebar
             surveyId={surveyId}
             workspaceId={orgId}
-            isOwner={isOwner}
+            canManageCollaborators={canManageCollaborators}
             editors={editors}
             isOpen={isCollaborationOpen}
             onClose={() => setIsCollaborationOpen(false)}

@@ -18,8 +18,8 @@ import {
   surveys,
   users,
 } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
 import {
+  getPersonalClassroomDirectory,
   getTeacherClassroomAccess,
   getWorkspaceClassroomDirectory,
 } from "@/lib/learning/access";
@@ -34,6 +34,7 @@ import { provisionManagedStudentAccount } from "@/lib/learning/provisioning";
 import { resolveUiLocaleForContentCreation } from "@/lib/i18n/resolve-locale";
 import type { AppLocale } from "@/lib/i18n/config";
 import { getWorkspaceLocaleSettings } from "@/lib/i18n/workspace-settings";
+import { getTeachingContext } from "@/lib/teaching-context";
 
 const appLocaleSchema = z.enum(["en", "fr", "de", "es", "it"]);
 
@@ -154,12 +155,21 @@ type LearningInterventionRecord = {
   };
 };
 
-async function requireActiveWorkspace() {
-  const session = await getVerifiedSession();
-  const organizationId = session.session.activeOrganizationId;
+async function requireTeachingSession() {
+  const context = await getTeachingContext();
 
-  if (!organizationId) {
-    throw new Error("Please select a workspace before using classrooms.");
+  return {
+    context,
+    session: context.session,
+    organizationId: context.organizationId,
+  };
+}
+
+async function requireWorkspaceContext() {
+  const { context, session, organizationId } = await requireTeachingSession();
+
+  if (context.scope !== "workspace" || !organizationId) {
+    throw new Error("Please open a workspace before using this feature.");
   }
 
   const canAccess = await isWorkspaceMember(session.user.id, organizationId);
@@ -167,7 +177,7 @@ async function requireActiveWorkspace() {
     throw new Error("Unauthorized");
   }
 
-  return { session, organizationId };
+  return { context, session, organizationId };
 }
 
 async function ensureClassroomOwnerAccess(
@@ -323,7 +333,7 @@ export async function createClassroomAction(
 > {
   try {
     const body = createClassroomSchema.parse(input);
-    const { session, organizationId } = await requireActiveWorkspace();
+    const { session, organizationId } = await requireTeachingSession();
     const classroomId = nanoid();
     const accessId = nanoid();
     const now = new Date();
@@ -332,9 +342,11 @@ export async function createClassroomAction(
     const defaultContentLocale = await resolveUiLocaleForContentCreation({
       explicitLocale: body.defaultContentLocale ?? null,
       session,
-      workspaceId: organizationId,
+      workspaceId: organizationId ?? undefined,
     });
-    const workspaceSettings = await getWorkspaceLocaleSettings(organizationId);
+    const workspaceSettings = organizationId
+      ? await getWorkspaceLocaleSettings(organizationId)
+      : null;
     let departmentName: string | null = null;
 
     if (
@@ -348,7 +360,14 @@ export async function createClassroomAction(
       };
     }
 
-    if (departmentId) {
+    if (departmentId && !organizationId) {
+      return {
+        success: false,
+        error: "Departments are only available inside workspaces.",
+      };
+    }
+
+    if (departmentId && organizationId) {
       const department = await getDb().query.departments.findFirst({
         where: and(
           eq(departments.id, departmentId),
@@ -436,7 +455,7 @@ export async function inviteStudentToClassroomAction(
 > {
   try {
     const body = inviteStudentSchema.parse(input);
-    const { session } = await requireActiveWorkspace();
+    const { session } = await requireTeachingSession();
     const classroomAccess = await ensureClassroomOwnerAccess(
       session.user.id,
       body.classroomId,
@@ -487,7 +506,7 @@ export async function bulkInviteStudentsToClassroomAction(
 > {
   try {
     const body = bulkInviteStudentsSchema.parse(input);
-    const { session } = await requireActiveWorkspace();
+    const { session } = await requireTeachingSession();
     const classroomAccess = await ensureClassroomOwnerAccess(
       session.user.id,
       body.classroomId,
@@ -573,7 +592,7 @@ export async function createLearningTopicAction(
 > {
   try {
     const body = createLearningTopicSchema.parse(input);
-    const { session } = await requireActiveWorkspace();
+    const { session } = await requireTeachingSession();
 
     const classroomAccess = await getTeacherClassroomAccess(
       session.user.id,
@@ -585,9 +604,9 @@ export async function createLearningTopicAction(
     }
 
     const topicId = nanoid();
-    const workspaceSettings = await getWorkspaceLocaleSettings(
-      classroomAccess.organizationId,
-    );
+    const workspaceSettings = classroomAccess.organizationId
+      ? await getWorkspaceLocaleSettings(classroomAccess.organizationId)
+      : null;
     if (
       body.contentLocale &&
       workspaceSettings &&
@@ -601,7 +620,7 @@ export async function createLearningTopicAction(
     const contentLocale = await resolveUiLocaleForContentCreation({
       explicitLocale: body.contentLocale ?? null,
       session,
-      workspaceId: classroomAccess.organizationId,
+      workspaceId: classroomAccess.organizationId ?? undefined,
     });
     const learningOutcomes = body.learningOutcomes.map((outcome, index) =>
       learningOutcomeDefinitionSchema.parse({
@@ -690,11 +709,10 @@ export async function getTeacherClassroomsAction(): Promise<
   >
 > {
   try {
-    const { session, organizationId } = await requireActiveWorkspace();
-    const data = await getWorkspaceClassroomDirectory(
-      session.user.id,
-      organizationId,
-    );
+    const { session, organizationId } = await requireTeachingSession();
+    const data = organizationId
+      ? await getWorkspaceClassroomDirectory(session.user.id, organizationId)
+      : await getPersonalClassroomDirectory(session.user.id);
 
     return {
       success: true,
@@ -714,7 +732,7 @@ export async function requestClassroomAccessAction(
 ): Promise<ActionResult<{ requestId: string; status: "pending" }>> {
   try {
     const body = classroomAccessRequestSchema.parse(input);
-    const { session, organizationId } = await requireActiveWorkspace();
+    const { session, organizationId } = await requireWorkspaceContext();
 
     const classroom = await getDb().query.classrooms.findFirst({
       where: and(
@@ -805,7 +823,7 @@ export async function getClassroomAccessRequestsAction(
   >
 > {
   try {
-    const { session } = await requireActiveWorkspace();
+    const { session } = await requireWorkspaceContext();
     const classroomAccess = await getTeacherClassroomAccess(session.user.id, classroomId);
 
     if (!classroomAccess || classroomAccess.accessLevel !== "owner") {
@@ -867,7 +885,7 @@ export async function getClassroomCollaboratorsAction(
   >
 > {
   try {
-    const { session } = await requireActiveWorkspace();
+    const { session } = await requireWorkspaceContext();
     const classroomAccess = await getTeacherClassroomAccess(session.user.id, classroomId);
 
     if (!classroomAccess) {
@@ -928,7 +946,7 @@ export async function grantClassroomCollaboratorAccessAction(
 > {
   try {
     const body = classroomCollaboratorInviteSchema.parse(input);
-    const { session, organizationId } = await requireActiveWorkspace();
+    const { session, organizationId } = await requireWorkspaceContext();
     const classroomAccess = await ensureClassroomOwnerAccess(
       session.user.id,
       body.classroomId,
@@ -1042,7 +1060,7 @@ export async function respondToClassroomAccessRequestAction(
 ): Promise<ActionResult<{ requestId: string; status: "approved" | "rejected" }>> {
   try {
     const body = classroomAccessDecisionSchema.parse(input);
-    const { session } = await requireActiveWorkspace();
+    const { session } = await requireWorkspaceContext();
     const classroomAccess = await getTeacherClassroomAccess(
       session.user.id,
       body.classroomId,
@@ -1116,7 +1134,7 @@ export async function revokeClassroomCollaboratorAccessAction(
 ): Promise<ActionResult<{ teacherUserId: string }>> {
   try {
     const body = classroomCollaboratorRevocationSchema.parse(input);
-    const { session } = await requireActiveWorkspace();
+    const { session } = await requireWorkspaceContext();
     const classroomAccess = await getTeacherClassroomAccess(
       session.user.id,
       body.classroomId,
@@ -1203,7 +1221,7 @@ export async function getClassroomAssignedSurveyProgressAction(
   >
 > {
   try {
-    const { session } = await requireActiveWorkspace();
+    const { session } = await requireTeachingSession();
     const classroomAccess = await getTeacherClassroomAccess(session.user.id, classroomId);
 
     if (!classroomAccess) {
@@ -1346,7 +1364,7 @@ export async function getLearningInterventionsAction(input: {
   classroomStudentId?: string;
 }): Promise<ActionResult<LearningInterventionRecord[]>> {
   try {
-    const { session } = await requireActiveWorkspace();
+    const { session } = await requireTeachingSession();
     const classroomAccess = await getTeacherClassroomAccess(session.user.id, input.classroomId);
 
     if (!classroomAccess) {
@@ -1399,7 +1417,7 @@ export async function createLearningInterventionAction(
 ): Promise<ActionResult<LearningInterventionRecord>> {
   try {
     const body = learningInterventionSchema.parse(input);
-    const { session } = await requireActiveWorkspace();
+    const { session } = await requireTeachingSession();
     const classroomAccess = await getTeacherClassroomAccess(
       session.user.id,
       body.classroomId,
@@ -1498,7 +1516,7 @@ export async function updateLearningInterventionAction(
 ): Promise<ActionResult<LearningInterventionRecord>> {
   try {
     const body = learningInterventionUpdateSchema.parse(input);
-    const { session } = await requireActiveWorkspace();
+    const { session } = await requireTeachingSession();
     const intervention = await getDb().query.learningInterventions.findFirst({
       where: eq(learningInterventions.id, body.interventionId),
       with: {
@@ -1576,3 +1594,5 @@ export async function updateLearningInterventionAction(
     };
   }
 }
+
+

@@ -162,7 +162,7 @@ export default function ProjectsPage() {
                     </div>
 
                     <div>
-                      <Link href={`/dashboard/projects/${project.id}`} className="font-semibold text-gray-900 text-lg hover:text-blue-600 transition-colors">
+                      <Link href={`/dashboard/folders/${project.id}`} className="font-semibold text-gray-900 text-lg hover:text-blue-600 transition-colors">
                         {project.name}
                       </Link>
                       {project.description && (
@@ -203,7 +203,7 @@ export default function ProjectsPage() {
                           <div className="fixed inset-0 z-[80]" onClick={() => setShowMenuFor(null)} />
                           <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl border border-gray-200 shadow-xl z-[90] py-1">
                             <Link
-                              href={`/dashboard/projects/${project.id}`}
+                              href={`/dashboard/folders/${project.id}`}
                               className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                               onClick={() => setShowMenuFor(null)}
                             >

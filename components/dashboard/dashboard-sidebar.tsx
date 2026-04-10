@@ -51,7 +51,7 @@ export function DashboardSidebar() {
     { name: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard },
     { name: t("Surveys"), href: "/dashboard/surveys", icon: MessageSquare },
     { name: "Learning", href: "/dashboard/learning", icon: GraduationCap },
-    { name: "Folders", href: "/dashboard/projects", icon: FolderOpen },
+    { name: "Folders", href: "/dashboard/folders", icon: FolderOpen },
     { name: t("Analytics"), href: "/dashboard/analytics", icon: BarChart3 },
     ...(activeOrgId ? [
       { name: "Workspace", href: "/dashboard/team", icon: Users },

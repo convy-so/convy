@@ -1,7 +1,7 @@
 ---
-name: education-analytics-synthesis
+
+## name: education-analytics-synthesis
 description: Synthesize evidence-backed analytics for education studies. Use when Codex or the app needs to summarize interview sessions, aggregate findings across sessions, answer creator questions from stored analytics, or write recommendations without overstating certainty.
----
 
 Turn structured evidence into grounded findings that a program owner can trust.
 
