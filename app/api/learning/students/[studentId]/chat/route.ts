@@ -70,6 +70,13 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
+    if (!membership.classroom.organizationId) {
+      return NextResponse.json(
+        { error: "Teacher evidence chat is available only inside a workspace classroom." },
+        { status: 400 },
+      );
+    }
+
     const latestUserMessage = [...(body.messages ?? [])]
       .reverse()
       .find((message) => message.role === "user");

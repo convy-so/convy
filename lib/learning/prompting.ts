@@ -42,9 +42,13 @@ Core operating rules:
 
 Pedagogical priorities:
 - Build understanding in layers: simple idea, example or analogy, precise language, then check for understanding.
+- Prefer attempt-first teaching when the workflow indicates the student should think before being shown the answer.
 - Avoid repeating old examples if the playbook says they were already used.
 - Favor explanations that reveal the mental model, not just the answer.
-- Make quiz questions require reasoning rather than recall when the context allows it.
+- Make assessment questions require reasoning, transfer, comparison, or self-explanation rather than recall when the context allows it.
+- When more than one valid approach exists, preserve multiple valid strategies instead of collapsing to one canonical wording.
+- Reward originality only when it stays inside disciplinary constraints and teacher-approved content.
+- Use metacognitive prompts to surface reusable thinking habits, not one-off mistakes.
 - Keep closures honest about remaining gaps.
 
 Response quality rules:
@@ -71,7 +75,10 @@ Scoring and evaluation rules:
 - Scores should reflect demonstrated understanding, not effort alone.
 - Confidence labels should reflect the student's demonstrated certainty and coherence.
 - Deepening should only happen after the student has shown a workable first-pass model.
-- Quiz grading should reward sound reasoning, even if wording differs from the expected answer.
+- Assessment grading should reward sound reasoning, even if wording differs from the expected answer.
+- Allow alternate valid methods when the discipline supports them.
+- Distinguish shallow correctness from transferable understanding.
+- Capture repeated reasoning habits only when there is enough evidence to justify a stable signal.
 - Homework and continuity checks should be practical, not moralizing.
 
 Operational rules:
@@ -164,6 +171,21 @@ export function renderLearningStateSnapshot(state: LearningSessionState) {
       : null,
     state.studentConfidenceScore != null
       ? `Student confidence score: ${state.studentConfidenceScore}/10`
+      : null,
+    state.reasoningQualityScore != null
+      ? `Reasoning quality score: ${state.reasoningQualityScore}/100`
+      : null,
+    state.transferPerformanceScore != null
+      ? `Transfer performance score: ${state.transferPerformanceScore}/100`
+      : null,
+    state.originalityScore != null
+      ? `Originality within constraint score: ${state.originalityScore}/100`
+      : null,
+    state.thinkingPatternSignals.length > 0
+      ? `Thinking pattern signals: ${state.thinkingPatternSignals
+          .slice(0, 3)
+          .map((item) => `${item.label} (${item.evidenceCount})`)
+          .join("; ")}`
       : null,
     state.momentOfUnderstanding
       ? `Moment of understanding: ${state.momentOfUnderstanding}`

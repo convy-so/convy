@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 import { getDb } from "@/db";
 import {
   classroomStudents,
+  learningExpertAnnotations,
   learningInteractions,
   learningMessages,
   learningSessions,
@@ -28,6 +29,7 @@ import type {
   TeacherProgressReport,
 } from "@/lib/learning/types";
 import { createDefaultLearningSessionState } from "@/lib/learning/types";
+import type { ExpertAnnotation } from "@/lib/learning/expert-types";
 
 export async function getTopicWithMaterials(topicId: string) {
   return await getDb().query.learningTopics.findFirst({
@@ -243,7 +245,7 @@ export async function logLearningInteraction(params: {
       })
     : null;
 
-  if (membership) {
+  if (membership?.classroom.organizationId) {
     void indexLearningInteractionEvidence({
       organizationId: membership.classroom.organizationId,
       topicId: params.topicId ?? null,
@@ -403,7 +405,7 @@ export async function createStudentProgressReport(params: {
     }),
   ]);
 
-  if (membership && topic) {
+  if (membership?.classroom.organizationId && topic) {
     void indexLearningReportEvidence({
       organizationId: membership.classroom.organizationId,
       topicId: params.topicId,
@@ -697,4 +699,110 @@ export async function listRecentOutOfSessionInteractions(params: {
     where: and(...conditions),
     orderBy: [asc(learningInteractions.createdAt)],
   });
+}
+
+export async function listExpertReviewQueue(params: {
+  organizationId: string;
+  limit?: number;
+}) {
+  const reports = await getDb().query.studentProgressReports.findMany({
+    where: eq(studentProgressReports.visibility, "teacher_only"),
+    with: {
+      classroomStudent: true,
+      topic: {
+        with: {
+          classroom: true,
+        },
+      },
+    },
+    orderBy: [desc(studentProgressReports.updatedAt)],
+    limit: params.limit ?? 24,
+  });
+
+  return reports
+    .filter(
+      (report) =>
+        report.topic?.classroom?.organizationId === params.organizationId,
+    )
+    .map((report) => {
+      const reasons = [
+        ...(report.report.persistentMisconceptions ?? []),
+        ...(report.report.riskFlags ?? []),
+        ...(report.report.transferReadiness === "not_yet"
+          ? ["Transfer readiness is still low."]
+          : []),
+        ...(report.report.originalityWithinConstraint === "low"
+          ? ["Originality within constraint is still weak."]
+          : []),
+      ];
+      return {
+        key: report.id,
+        sessionId: report.generatedFromSessionId ?? null,
+        topicId: report.topicId,
+        classroomStudentId: report.classroomStudentId,
+        studentName: report.classroomStudent?.fullName ?? null,
+        topicTitle: report.topic?.title ?? null,
+        subjectKey: report.topic?.subjectKey ?? null,
+        subjectLabel: report.topic?.subjectLabel ?? null,
+        priority:
+          (report.report.riskFlags?.length ?? 0) > 0 ||
+          report.report.transferReadiness === "not_yet"
+            ? "high"
+            : (report.report.persistentMisconceptions?.length ?? 0) > 0
+              ? "medium"
+              : "low",
+        reasons: reasons.slice(0, 4),
+        createdAt: report.updatedAt.toISOString(),
+      };
+    });
+}
+
+export async function listLearningExpertAnnotations(params: {
+  organizationId: string;
+  topicId?: string | null;
+  sessionId?: string | null;
+}) {
+  return await getDb().query.learningExpertAnnotations.findMany({
+    where:
+      params.sessionId != null
+        ? and(
+            eq(learningExpertAnnotations.organizationId, params.organizationId),
+            eq(learningExpertAnnotations.sessionId, params.sessionId),
+          )
+        : params.topicId != null
+          ? and(
+              eq(learningExpertAnnotations.organizationId, params.organizationId),
+              eq(learningExpertAnnotations.topicId, params.topicId),
+            )
+          : eq(learningExpertAnnotations.organizationId, params.organizationId),
+    orderBy: [desc(learningExpertAnnotations.updatedAt)],
+  });
+}
+
+export async function createLearningExpertAnnotation(params: {
+  annotation: ExpertAnnotation;
+}) {
+  const [created] = await getDb()
+    .insert(learningExpertAnnotations)
+    .values({
+      id: params.annotation.id,
+      organizationId: params.annotation.organizationId,
+      topicId: params.annotation.topicId,
+      classroomStudentId: params.annotation.classroomStudentId,
+      sessionId: params.annotation.sessionId,
+      interactionId: params.annotation.interactionId,
+      subjectKey: params.annotation.subjectKey,
+      curriculumFrameworkKey: params.annotation.curriculumFrameworkKey,
+      annotationType: params.annotation.annotationType,
+      status: params.annotation.status,
+      summary: params.annotation.summary,
+      evidence: params.annotation.evidence,
+      metadata: params.annotation.metadata,
+      createdByUserId: params.annotation.createdByUserId,
+      createdAt: new Date(params.annotation.createdAt),
+      updatedAt: new Date(params.annotation.updatedAt),
+    })
+    .returning();
+
+  return created;
 }

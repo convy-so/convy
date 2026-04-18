@@ -7,12 +7,12 @@ import { cn } from "@/lib/utils";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 
 import { InferSelectModel } from "drizzle-orm";
-import { projects, surveys } from "@/db/schema";
+import { folders, surveys } from "@/db/schema";
 
-type Project = InferSelectModel<typeof projects>;
+type Folder = InferSelectModel<typeof folders>;
 type Survey = InferSelectModel<typeof surveys>;
 
-type ProjectWithSurveys = Project & {
+type FolderWithSurveys = Folder & {
     surveys: Survey[];
     stats?: {
         totalSurveys: number;
@@ -21,15 +21,15 @@ type ProjectWithSurveys = Project & {
     }
 };
 
-type ProjectAIChatProps = {
-    project: ProjectWithSurveys;
+type FolderAIChatProps = {
+    folder: FolderWithSurveys;
 };
 
-export function ProjectAIChat({ project }: ProjectAIChatProps) {
+export function FolderAIChat({ folder }: FolderAIChatProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [aiQuery, setAiQuery] = useState("");
     const [aiMessages, setAiMessages] = useState<Array<{ role: 'user' | 'assistant', content: string }>>([
-        { role: 'assistant', content: `Hi! I've analyzed your project "${project.name}". Ask me anything about your surveys or responses!` }
+        { role: 'assistant', content: `Hi! I've analyzed your folder "${folder.name}". Ask me anything about your surveys or responses!` }
     ]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -47,7 +47,7 @@ export function ProjectAIChat({ project }: ProjectAIChatProps) {
         setAiQuery("");
 
         // Mock AI response
-        const totalSurveys = project.surveys?.length || project.stats?.totalSurveys || 0;
+        const totalSurveys = folder.surveys?.length || folder.stats?.totalSurveys || 0;
         
         setTimeout(() => {
             setAiMessages(prev => [...prev, {
@@ -121,7 +121,7 @@ export function ProjectAIChat({ project }: ProjectAIChatProps) {
                             value={aiQuery}
                             onChange={(e) => setAiQuery(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                            placeholder="Ask about your project..."
+                            placeholder="Ask about your folder..."
                             className="flex-1 bg-transparent text-sm outline-none min-w-0"
                         />
                         <button 
@@ -149,3 +149,5 @@ export function ProjectAIChat({ project }: ProjectAIChatProps) {
         document.body
     );
 }
+
+

@@ -37,6 +37,20 @@ function topEntries(items: string[], limit = 3) {
     .map(([value]) => value);
 }
 
+function readinessLabel(score: number | null | undefined) {
+  if (score == null) return "not_yet" as const;
+  if (score >= 75) return "ready" as const;
+  if (score >= 50) return "emerging" as const;
+  return "not_yet" as const;
+}
+
+function originalityLabel(score: number | null | undefined) {
+  if (score == null) return "low" as const;
+  if (score >= 75) return "strong" as const;
+  if (score >= 50) return "emerging" as const;
+  return "low" as const;
+}
+
 export function buildClassroomTopicReportSummary(
   reports: Array<{
     masteryPercent: number;
@@ -255,6 +269,45 @@ export async function generateTeacherProgressReport(params: {
       difficulty: item.difficulty,
       explanation: item.explanation,
     }));
+  const reasoningStrengths = topEntries(
+    params.state.quizItems
+      .flatMap((item) => item.rubric)
+      .filter((rubric) => rubric.score >= 70)
+      .map((rubric) => rubric.note || rubric.dimension),
+    3,
+  );
+  const persistentMisconceptions = topEntries(
+    [
+      ...params.state.gapsIdentified,
+      ...params.state.quizItems.flatMap((item) => item.diagnosticTags),
+    ],
+    4,
+  );
+  const confidenceGap =
+    params.state.studentConfidenceScore == null || params.state.reasoningQualityScore == null
+      ? ""
+      : params.state.studentConfidenceScore * 10 > params.state.reasoningQualityScore + 15
+        ? "Confidence appears higher than demonstrated reasoning."
+        : params.state.studentConfidenceScore * 10 < params.state.reasoningQualityScore - 15
+          ? "The student appears less confident than their demonstrated reasoning."
+          : "Confidence is broadly aligned with demonstrated reasoning.";
+  const metacognitiveMirror =
+    params.state.thinkingPatternSignals.find((item) => item.evidenceCount >= 2)
+      ?.teacherSummary ?? "";
+  const recommendedInterventionType =
+    params.state.transferPerformanceScore != null &&
+    params.state.transferPerformanceScore < 50
+      ? "reteach"
+      : (params.state.reasoningQualityScore ?? 0) >= 75 &&
+          (params.state.transferPerformanceScore ?? 0) >= 65
+        ? "challenge"
+        : params.state.studentConfidenceScore != null &&
+            params.state.confidenceCalibrationScore != null &&
+            params.state.confidenceCalibrationScore < 60
+          ? "confidence_check"
+          : persistentMisconceptions.length > 0
+            ? "practice"
+            : "none";
 
   const currentAverage = average(performanceByConcept.map((item) => item.score));
   const previousAverage = average(
@@ -328,6 +381,10 @@ Rules:
     studentName: params.studentName,
     topicTitle: params.topicTitle,
     studentSummary: narrative.studentSummary,
+    reasoningSummary:
+      params.state.reasoningQualityScore == null
+        ? "Still gathering enough reasoning evidence."
+        : `Reasoning quality ${params.state.reasoningQualityScore}/100, transfer ${params.state.transferPerformanceScore ?? 0}/100, originality within constraint ${params.state.originalityScore ?? 0}/100.`,
     conceptsCovered: params.state.conceptsToCover.map((concept) => concept.title),
     sessionDurationMinutes,
     sessionCompleted: params.state.reportReady,
@@ -344,5 +401,12 @@ Rules:
     recommendedTeacherActions: narrative.recommendedTeacherActions,
     evidence,
     riskFlags: narrative.riskFlags,
+    reasoningStrengths,
+    persistentMisconceptions,
+    transferReadiness: readinessLabel(params.state.transferPerformanceScore),
+    originalityWithinConstraint: originalityLabel(params.state.originalityScore),
+    confidenceGap,
+    recommendedInterventionType,
+    metacognitiveMirror,
   });
 }

@@ -59,7 +59,7 @@ export async function GET() {
         participantLimit: surveys.participantLimit,
         isVoice: surveys.isVoice,
         programId: surveys.programId,
-        projectId: surveys.projectId,
+        folderId: surveys.folderId,
         creatorName: users.name,
         classroomTitle: classrooms.title,
       })
@@ -120,7 +120,7 @@ export async function GET() {
           lastResponse: "Never",
           isVoice: survey.isVoice || false,
           programId: survey.programId,
-          projectId: survey.projectId,
+          folderId: survey.folderId,
           creatorName: survey.creatorName ?? null,
           isOwner,
           accessLevel,
@@ -334,3 +334,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+

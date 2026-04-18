@@ -70,7 +70,7 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
     },
     {
       title: "Folders",
-      description: "Organize surveys into teacher-friendly folders instead of generic projects.",
+      description: "Organize surveys into teacher-friendly folders for better structure.",
       icon: FolderOpen,
       href: "/dashboard/folders",
       color: "from-amber-500 to-orange-500",
@@ -149,7 +149,7 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
           updatedAt: survey.updatedAt,
           createdAt: survey.createdAt,
           isVoice: survey.isVoice,
-          folderId: survey.projectId,
+          folderId: survey.folderId,
         }));
       },
       60 * 2 // Cache for 2 minutes
@@ -196,7 +196,7 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
     status: normalizeDashboardSurveyStatus(survey.status),
     lastActivity: new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(survey.updatedAt)),
     createdAtFormatted: new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(survey.createdAt)),
-    projectName: survey.folderId ? "Folder" : "Unsorted",
+    folderName: survey.folderId ? "Folder" : "Unsorted",
   }));
 
   const formattedActivities = activities.map(activity => ({
@@ -335,3 +335,4 @@ async function DashboardContentWrapper() {
   const authHeaders = await headers();
   return <DashboardContent authHeaders={authHeaders} />;
 }
+

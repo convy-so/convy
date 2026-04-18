@@ -68,19 +68,15 @@ export function CreateClassroomModal({
                 description: description.trim() || undefined,
             });
 
-            if (result.success) {
-                toast.success("Classroom established");
-                await queryClient.invalidateQueries({
-                    queryKey: queryKeys.learning.classrooms,
-                });
-                onSuccess?.(result.data.id);
-                resetForm();
-                onClose();
-            } else {
-                setError(result.error || "Failed to create classroom");
-            }
+            toast.success("Classroom established");
+            await queryClient.invalidateQueries({
+                queryKey: queryKeys.learning.classrooms,
+            });
+            onSuccess?.(result.data.id);
+            resetForm();
+            onClose();
         } catch (err) {
-            setError("An unexpected error occurred");
+            setError(err instanceof Error ? err.message : "An unexpected error occurred");
         } finally {
             setIsSubmitting(false);
         }

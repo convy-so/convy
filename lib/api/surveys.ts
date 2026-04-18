@@ -90,7 +90,7 @@ const surveyListItemSchema = z.object({
   canDelete: z.boolean(),
   canManageCollaborators: z.boolean().optional(),
   isLocked: z.boolean(),
-  projectId: z.string().nullish(),
+  folderId: z.string().nullish(),
   programId: z.string().nullish(),
   briefStatus: z.string().optional(),
 });
@@ -287,3 +287,4 @@ export async function fetchSurveyExtraction(surveyId: string) {
     z.unknown(),
   );
 }
+

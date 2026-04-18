@@ -82,6 +82,10 @@ async function buildTutoringRuntimeContext(params: {
     artifactTypes: [
       "pedagogy_strategy",
       "misconception_rules",
+      "question_pattern",
+      "rubric_set",
+      "hint_ladder",
+      "reflection_template",
       "social_tutoring",
       "media_rules",
       "grade_band_guidance",
@@ -92,6 +96,7 @@ async function buildTutoringRuntimeContext(params: {
       topicId: params.access.topic.id,
       subjectKey: params.access.topic.subjectKey,
       gradeBand: params.access.topic.classroom.gradeBand,
+      language: params.access.topic.contentLocale,
     },
   });
 
@@ -162,7 +167,7 @@ async function buildTutoringRuntimeContext(params: {
     socialGuidance,
     memoryContext,
     userOverlay,
-    organizationId: params.access.topic.classroom.organizationId,
+    organizationId: params.access.topic.classroom.organizationId ?? undefined,
     metadata: {
       topicId: params.access.topic.id,
       classroomStudentId: params.access.classroomStudent.id,
@@ -184,6 +189,10 @@ async function hydrateSessionTeachingPlaybook(params: {
   previousReport?: Awaited<ReturnType<typeof getLatestStudentProgressReport>> | null;
 }) {
   if (!params.access.classroomStudent.userId) {
+    return params.state;
+  }
+
+  if (!params.access.topic.classroom.organizationId) {
     return params.state;
   }
 
@@ -233,8 +242,15 @@ async function hydrateSessionTeachingPlaybook(params: {
 
 function mapUserInteractionType(currentPhaseType: string | null, intent: QuestionIntent | null) {
   if (intent && intent !== "phase_response") return "student_question" as const;
-  if (currentPhaseType === "quiz") return "quiz_answer" as const;
-  if (currentPhaseType === "self_reflection") return "reflection" as const;
+  if (currentPhaseType === "assessment" || currentPhaseType === "quiz") {
+    return "assessment_answer" as const;
+  }
+  if (
+    currentPhaseType === "metacognitive_reflection" ||
+    currentPhaseType === "self_reflection"
+  ) {
+    return "reflection" as const;
+  }
   if (currentPhaseType === "continuity_check") return "homework_check" as const;
   return "student_response" as const;
 }
@@ -246,8 +262,15 @@ function mapAssistantInteractionType(
 ) {
   if (intent && intent !== "phase_response") return "agent_answer" as const;
   if (completed) return "session_event" as const;
-  if (currentPhaseType === "quiz") return "quiz_question" as const;
-  if (currentPhaseType === "self_reflection") return "reflection" as const;
+  if (currentPhaseType === "assessment" || currentPhaseType === "quiz") {
+    return "assessment_question" as const;
+  }
+  if (
+    currentPhaseType === "metacognitive_reflection" ||
+    currentPhaseType === "self_reflection"
+  ) {
+    return "reflection" as const;
+  }
   return "phase_prompt" as const;
 }
 
@@ -590,7 +613,7 @@ export async function POST(
       scenarioType: "session_turn",
       status: "running",
       userId: session.user.id,
-      organizationId: access.topic.classroom.organizationId,
+      organizationId: access.topic.classroom.organizationId ?? undefined,
       actorRole: getPlatformRole(session.user),
       resourceType: "learning_session",
       resourceId: tutorSession.id,
@@ -605,7 +628,7 @@ export async function POST(
     await recordAiContextLayers(aiRunId, contextLayers);
     runtimeContext.aiRunId = aiRunId;
     runtimeContext.userId = session.user.id;
-    runtimeContext.organizationId = access.topic.classroom.organizationId;
+    runtimeContext.organizationId = access.topic.classroom.organizationId ?? undefined;
     runtimeContext.resourceType = "learning_session";
     runtimeContext.resourceId = tutorSession.id;
     runtimeContext.metadata = {
@@ -645,16 +668,18 @@ export async function POST(
       startingState.conceptsToCover.find((concept) => concept.key === currentConceptKey)?.title ??
       startingState.conceptsToCover[0]?.title ??
       access.topic.title;
-    const mediaRecommendation = await selectTutorMedia({
-      organizationId: access.topic.classroom.organizationId,
-      topicId,
-      classroomId: access.topic.classroomId,
-      gradeBand: access.topic.classroom.gradeBand,
-      currentPhaseType: resultingPhase?.type ?? startingPhase?.type ?? null,
-      conceptKey: currentConceptKey,
-      conceptTitle: currentConceptTitle,
-      gapCount: result.state.gapsIdentified.length,
-    });
+    const mediaRecommendation = access.topic.classroom.organizationId
+      ? await selectTutorMedia({
+          organizationId: access.topic.classroom.organizationId,
+          topicId,
+          classroomId: access.topic.classroomId,
+          gradeBand: access.topic.classroom.gradeBand,
+          currentPhaseType: resultingPhase?.type ?? startingPhase?.type ?? null,
+          conceptKey: currentConceptKey,
+          conceptTitle: currentConceptTitle,
+          gapCount: result.state.gapsIdentified.length,
+        })
+      : null;
     await recordAiStep({
       runId: aiRunId,
       stepKey: "tutoring-media-selection",
@@ -767,24 +792,26 @@ export async function POST(
         state: result.state,
       });
 
-      await enqueueTutoringReportGeneration({
-        sessionId: tutorSession.id,
-        topicId,
-        organizationId: access.topic.classroom.organizationId,
-        studentUserId: session.user.id,
-        classroomStudentId: access.classroomStudent.id,
-        studentName: access.classroomStudent.fullName,
-        topicTitle: access.topic.title,
-        sourceLocale: access.topic.contentLocale,
-        previousReport: previousReport?.report ?? null,
-        subjectKey: access.topic.subjectKey,
-      }).catch((error) => {
-        console.error("[learning:topic-chat] failed to enqueue tutoring report", {
+      if (access.topic.classroom.organizationId) {
+        await enqueueTutoringReportGeneration({
           sessionId: tutorSession.id,
           topicId,
-          message: error instanceof Error ? error.message : "Unknown error",
+          organizationId: access.topic.classroom.organizationId,
+          studentUserId: session.user.id,
+          classroomStudentId: access.classroomStudent.id,
+          studentName: access.classroomStudent.fullName,
+          topicTitle: access.topic.title,
+          sourceLocale: access.topic.contentLocale,
+          previousReport: previousReport?.report ?? null,
+          subjectKey: access.topic.subjectKey,
+        }).catch((error) => {
+          console.error("[learning:topic-chat] failed to enqueue tutoring report", {
+            sessionId: tutorSession.id,
+            topicId,
+            message: error instanceof Error ? error.message : "Unknown error",
+          });
         });
-      });
+      }
     } else {
       await updateLearningSessionState({
         sessionId: tutorSession.id,

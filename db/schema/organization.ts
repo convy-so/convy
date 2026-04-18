@@ -239,9 +239,6 @@ export const foldersRelations = relations(folders, ({ one, many }) => ({
   surveys: many(surveys),
 }));
 
-export const projects = folders;
-export const projectsRelations = foldersRelations;
-
 export {
   // All tables and relations are now exported directly using 'export const'
 };

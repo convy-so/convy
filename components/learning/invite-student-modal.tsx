@@ -90,16 +90,12 @@ export function InviteStudentModal({
                 email: email.trim(),
             });
 
-            if (result.success) {
-                toast.success("Invitation sent");
-                await queryClient.invalidateQueries({
-                    queryKey: queryKeys.learning.students(classroomId),
-                });
-                resetForm();
-                onClose();
-            } else {
-                setError(result.error || "Failed to invite student");
-            }
+            toast.success("Invitation sent");
+            await queryClient.invalidateQueries({
+                queryKey: queryKeys.learning.students(classroomId),
+            });
+            resetForm();
+            onClose();
         } catch (err) {
             setError(err instanceof Error ? err.message : "An unexpected error occurred");
         } finally {
@@ -120,27 +116,23 @@ export function InviteStudentModal({
                 students,
             });
 
-            if (result.success) {
-                const invitedCount = result.data.invited.length;
-                const failedCount = result.data.failed.length;
+            const invitedCount = result.data.invited.length;
+            const failedCount = result.data.failed.length;
 
-                if (invitedCount > 0 && failedCount === 0) {
-                    toast.success(`${invitedCount} students invited`);
-                } else if (invitedCount > 0) {
-                    toast.success(`${invitedCount} invited, ${failedCount} failed`);
-                } else {
-                    toast.error("No students were imported");
-                }
-
-                await Promise.all([
-                    queryClient.invalidateQueries({ queryKey: queryKeys.learning.students(classroomId) }),
-                    queryClient.invalidateQueries({ queryKey: queryKeys.learning.assignedSurveys(classroomId) }),
-                ]);
-                resetForm();
-                onClose();
+            if (invitedCount > 0 && failedCount === 0) {
+                toast.success(`${invitedCount} students invited`);
+            } else if (invitedCount > 0) {
+                toast.success(`${invitedCount} invited, ${failedCount} failed`);
             } else {
-                setError(result.error || "Failed to import roster");
+                toast.error("No students were imported");
             }
+
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: queryKeys.learning.students(classroomId) }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.learning.assignedSurveys(classroomId) }),
+            ]);
+            resetForm();
+            onClose();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Invalid roster format");
         } finally {

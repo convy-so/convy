@@ -29,6 +29,8 @@ const tutoringBlueprint: EvalFeatureBlueprint = {
     "concept_type",
     "difficulty_band",
     "student_profile_signal",
+    "reasoning_mode",
+    "transfer_level",
   ],
   dimensions: [
     {
@@ -48,11 +50,35 @@ const tutoringBlueprint: EvalFeatureBlueprint = {
       passFloor: 0.8,
     },
     {
+      key: "reasoning_depth",
+      label: "Reasoning Depth",
+      description:
+        "The tutor elicits explanation, justification, or comparison instead of rewarding surface correctness alone.",
+      weight: 0.12,
+      passFloor: 0.78,
+    },
+    {
+      key: "transfer_quality",
+      label: "Transfer Quality",
+      description:
+        "The tutor pushes application to a new or harder context when the workflow calls for it.",
+      weight: 0.1,
+      passFloor: 0.72,
+    },
+    {
+      key: "originality_within_constraint",
+      label: "Originality Within Constraint",
+      description:
+        "Multiple valid strategies are preserved when appropriate, without rewarding invalid novelty.",
+      weight: 0.08,
+      passFloor: 0.7,
+    },
+    {
       key: "misconception_handling",
       label: "Misconception Handling",
       description:
         "Likely misconceptions are addressed clearly and gently without reinforcing the wrong model.",
-      weight: 0.14,
+      weight: 0.1,
       passFloor: 0.75,
     },
     {
@@ -92,7 +118,7 @@ const tutoringBlueprint: EvalFeatureBlueprint = {
       label: "Teacher Visibility",
       description:
         "When the case matters for teacher follow-up, the output preserves a clear signal for reporting and review.",
-      weight: 0.06,
+      weight: 0.04,
       passFloor: 0.65,
     },
   ],
@@ -100,6 +126,8 @@ const tutoringBlueprint: EvalFeatureBlueprint = {
     "Do not over-score charming but weak explanations.",
     "A tutoring answer fails if it is fluent but unsupported by source material.",
     "Prefer evidence of conceptual transfer over surface-level correctness.",
+    "Do not collapse multiple valid methods into one if the student is reasoning soundly.",
+    "Metacognitive mirrors should be grounded in repeated evidence, not single isolated mistakes.",
     "Personalization is positive only when it strengthens comprehension.",
   ],
 };
