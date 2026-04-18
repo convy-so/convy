@@ -159,16 +159,18 @@ export async function POST(
       },
     });
 
-    await indexLearningMaterialEvidence({
-      organizationId: topic.classroom.organizationId,
-      topicId,
-      materialId,
-      title: material.title,
-      description: material.description,
-      mimeType,
-      content: extractedText,
-      language: topic.contentLocale,
-    });
+    if (topic.classroom.organizationId) {
+      await indexLearningMaterialEvidence({
+        organizationId: topic.classroom.organizationId,
+        topicId,
+        materialId,
+        title: material.title,
+        description: material.description,
+        mimeType,
+        content: extractedText,
+        language: topic.contentLocale,
+      });
+    }
 
     await getDb()
       .update(learningTopics)

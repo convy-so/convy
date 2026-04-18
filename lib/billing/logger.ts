@@ -5,7 +5,7 @@ import { nanoid } from "nanoid";
 export type UsageLogInput = {
   userId?: string;
   organizationId?: string;
-  projectId?: string;
+  folderId?: string;
   surveyId?: string;
   type:
     | "llm_text"
@@ -98,4 +98,5 @@ export async function logUsage(input: UsageLogInput) {
     // Don't let billing errors crash the main app flow, just log them
   }
 }
+
 

@@ -381,12 +381,20 @@ function buildReportEvidenceContent(params: {
     `Topic: ${params.topicTitle}`,
     `Mastery: ${params.masteryPercent}%`,
     `Student summary: ${params.report.studentSummary}`,
+    `Reasoning summary: ${params.report.reasoningSummary ?? "none"}`,
     `Comparison to previous session: ${params.report.comparisonToPreviousSession}`,
     `Identified gaps: ${(params.report.identifiedGaps ?? []).join("; ") || "none"}`,
+    `Reasoning strengths: ${(params.report.reasoningStrengths ?? []).join("; ") || "none"}`,
+    `Persistent misconceptions: ${(params.report.persistentMisconceptions ?? []).join("; ") || "none"}`,
+    `Transfer readiness: ${params.report.transferReadiness ?? "not_yet"}`,
+    `Originality within constraint: ${params.report.originalityWithinConstraint ?? "low"}`,
+    `Confidence gap: ${params.report.confidenceGap ?? "none"}`,
+    `Recommended intervention type: ${params.report.recommendedInterventionType ?? "none"}`,
     `Recommended teacher actions: ${(params.report.recommendedTeacherActions ?? []).join("; ") || "none"}`,
     `Risk flags: ${(params.report.riskFlags ?? []).join("; ") || "none"}`,
     `Questions asked by student: ${(params.report.questionsAskedByStudent ?? []).map((item) => item.content).join("; ") || "none"}`,
     `Moment of understanding: ${params.report.momentOfUnderstanding ?? "none"}`,
+    `Metacognitive mirror: ${params.report.metacognitiveMirror ?? "none"}`,
   ].join("\n");
 }
 
@@ -930,6 +938,10 @@ export async function syncLearningInteractionEvidence(interactionId: string) {
         where: eq(learningTopics.id, interaction.topicId),
       })
     : null;
+
+  if (!membership.classroom.organizationId) {
+    return null;
+  }
 
   return await indexLearningInteractionEvidence({
     organizationId: membership.classroom.organizationId,

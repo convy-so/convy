@@ -6,13 +6,11 @@ import {
   Building2,
   Users,
   Shield,
-  Settings,
   AlertCircle,
   AlertTriangle,
   Trash2,
   Loader2,
   LogOut,
-  Plus,
   Edit,
 } from "lucide-react";
 import { useAuth } from "@/components/providers/auth-provider";
@@ -25,15 +23,13 @@ import {
   fetchWorkspaceMembers,
 } from "@/lib/api/workspace";
 import {
-  createDepartment,
   deleteDepartment,
   deleteWorkspace,
   leaveWorkspace,
-  updateDepartment,
 } from "@/app/actions/workspace";
 import { queryKeys } from "@/lib/query-keys";
 import { useTranslations } from "next-intl";
-import { Link, useRouter } from "@/i18n/routing";
+import { useRouter } from "@/i18n/routing";
 import { AcademyUnitModal } from "@/components/dashboard/academy-unit-modal";
 import { CreateWorkspaceModal } from "@/components/dashboard/create-workspace-modal";
 

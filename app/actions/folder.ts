@@ -5,7 +5,7 @@ import { z } from "zod";
 import { eq, and, isNull, count, sum, getTableColumns } from "drizzle-orm";
 
 import { getDb } from "@/db";
-import { projects, surveys, surveyConversations } from "@/db/schema";
+import { folders, surveys, surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
   getSurveyPermissionContext,
@@ -22,70 +22,70 @@ type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
-const createProjectSchema = z.object({
+const createFolderSchema = z.object({
   name: z.string().min(1).max(50),
   description: z.string().optional(),
   color: z.string().optional(),
   icon: z.string().optional(),
 });
 
-type ProjectListRow = typeof projects.$inferSelect & {
+type FolderListRow = typeof folders.$inferSelect & {
   surveyCount: number;
   totalResponses: number;
 };
 
-type ProjectSurveySummary = typeof surveys.$inferSelect & {
+type FolderSurveySummary = typeof surveys.$inferSelect & {
   summary: string | null;
   completedCount: number;
 };
 
-type ProjectPermissions = {
+type FolderPermissions = {
   canEditMetadata: boolean;
   canOrganizeSurveys: boolean;
   canDelete: boolean;
-  isSharedWorkspaceProject: boolean;
+  isSharedWorkspaceFolder: boolean;
 };
 
-type ProjectListItem = ProjectListRow & ProjectPermissions;
-type ProjectDetail = typeof projects.$inferSelect &
-  ProjectPermissions & {
-    surveys: ProjectSurveySummary[];
+type FolderListItem = FolderListRow & FolderPermissions;
+type FolderDetail = typeof folders.$inferSelect &
+  FolderPermissions & {
+    surveys: FolderSurveySummary[];
   };
 
-async function getProjectPermissions(
-  project: typeof projects.$inferSelect,
+async function getFolderPermissions(
+  folder: typeof folders.$inferSelect,
   userId: string,
-): Promise<ProjectPermissions> {
-  if (!project.organizationId) {
-    const isOwner = project.userId === userId;
+): Promise<FolderPermissions> {
+  if (!folder.organizationId) {
+    const isOwner = folder.userId === userId;
     return {
       canEditMetadata: isOwner,
       canOrganizeSurveys: isOwner,
       canDelete: isOwner,
-      isSharedWorkspaceProject: false,
+      isSharedWorkspaceFolder: false,
     };
   }
 
   const [member, owner] = await Promise.all([
-    isWorkspaceMember(userId, project.organizationId),
-    isWorkspaceOwner(userId, project.organizationId),
+    isWorkspaceMember(userId, folder.organizationId),
+    isWorkspaceOwner(userId, folder.organizationId),
   ]);
-  const isProjectOwner = project.userId === userId;
+  const isFolderOwner = folder.userId === userId;
 
   return {
-    canEditMetadata: isProjectOwner || owner,
+    canEditMetadata: isFolderOwner || owner,
     canOrganizeSurveys: member,
-    canDelete: isProjectOwner || owner,
-    isSharedWorkspaceProject: member && !isProjectOwner,
+    canDelete: isFolderOwner || owner,
+    isSharedWorkspaceFolder: member && !isFolderOwner,
   };
 }
 
-export async function createProjectAction(
-  input: z.infer<typeof createProjectSchema>,
+export async function createFolderAction(
+  input: z.infer<typeof createFolderSchema>,
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const session = await getVerifiedSession();
-    const body = createProjectSchema.parse(input);
+    const body = createFolderSchema.parse(input);
     const activeOrgId = session.session.activeOrganizationId;
 
     if (activeOrgId) {
@@ -96,11 +96,11 @@ export async function createProjectAction(
       }
     }
 
-    const projectId = nanoid();
+    const folderId = nanoid();
 
     await getDb().transaction(async (tx) => {
-      await tx.insert(projects).values({
-        id: projectId,
+      await tx.insert(folders).values({
+        id: folderId,
         userId: session.user.id,
         organizationId: activeOrgId,
         name: body.name,
@@ -113,12 +113,12 @@ export async function createProjectAction(
         await recordRealtimeEvent(tx, {
           scope: "workspace",
           workspaceId: activeOrgId,
-          eventType: "workspace.project_created",
+          eventType: "workspace.folder_created",
           actorId: session.user.id,
           payload: {
             workspaceId: activeOrgId,
-            project: {
-              id: projectId,
+            folder: {
+              id: folderId,
               name: body.name,
               description: body.description ?? null,
               color: body.color ?? null,
@@ -137,18 +137,18 @@ export async function createProjectAction(
 
 
 
-    return { success: true, data: { id: projectId } };
+    return { success: true, data: { id: folderId } };
   } catch (error) {
-    console.error("[createProjectAction] Failed:", error);
+    console.error("[createFolderAction] Failed:", error);
     if (error instanceof Error) {
       return { success: false, error: error.message };
     }
-    return { success: false, error: "Failed to create project" };
+    return { success: false, error: "Failed to create folder" };
   }
 }
 
-export async function getProjectsAction(): Promise<
-  ActionResult<ProjectListItem[]>
+export async function getFoldersAction(): Promise<
+  ActionResult<FolderListItem[]>
 > {
   try {
     const session = await getVerifiedSession();
@@ -160,93 +160,93 @@ export async function getProjectsAction(): Promise<
         return { success: false, error: "Unauthorized" };
       }
 
-      const projectList = await getDb()
+      const folderList = await getDb()
         .select({
-          ...getTableColumns(projects),
+          ...getTableColumns(folders),
           surveyCount: count(surveys.id),
           totalResponses: sum(surveys.currentParticipants),
         })
-        .from(projects)
-        .leftJoin(surveys, eq(projects.id, surveys.projectId))
+        .from(folders)
+        .leftJoin(surveys, eq(folders.id, surveys.folderId))
         .where(
           and(
-            eq(projects.organizationId, activeOrgId),
+            eq(folders.organizationId, activeOrgId),
           ),
         )
-        .groupBy(projects.id)
-        .orderBy(projects.createdAt);
+        .groupBy(folders.id)
+        .orderBy(folders.createdAt);
 
       const results = await Promise.all(
-        projectList.map(async (project) => ({
-          ...project,
-          surveyCount: Number(project.surveyCount),
-          totalResponses: Number(project.totalResponses || 0),
-          ...(await getProjectPermissions(project, session.user.id)),
+        folderList.map(async (folder) => ({
+          ...folder,
+          surveyCount: Number(folder.surveyCount),
+          totalResponses: Number(folder.totalResponses || 0),
+          ...(await getFolderPermissions(folder, session.user.id)),
         })),
       );
 
       return { success: true, data: results };
     } else {
-      const projectList = await getDb()
+      const folderList = await getDb()
         .select({
-          ...getTableColumns(projects),
+          ...getTableColumns(folders),
           surveyCount: count(surveys.id),
           totalResponses: sum(surveys.currentParticipants),
         })
-        .from(projects)
-        .leftJoin(surveys, eq(projects.id, surveys.projectId))
+        .from(folders)
+        .leftJoin(surveys, eq(folders.id, surveys.folderId))
         .where(
           and(
-            eq(projects.userId, session.user.id),
-            isNull(projects.organizationId),
+            eq(folders.userId, session.user.id),
+            isNull(folders.organizationId),
           ),
         )
-        .groupBy(projects.id)
-        .orderBy(projects.createdAt);
+        .groupBy(folders.id)
+        .orderBy(folders.createdAt);
 
       const results = await Promise.all(
-        projectList.map(async (project) => ({
-          ...project,
-          surveyCount: Number(project.surveyCount),
-          totalResponses: Number(project.totalResponses || 0),
-          ...(await getProjectPermissions(project, session.user.id)),
+        folderList.map(async (folder) => ({
+          ...folder,
+          surveyCount: Number(folder.surveyCount),
+          totalResponses: Number(folder.totalResponses || 0),
+          ...(await getFolderPermissions(folder, session.user.id)),
         })),
       );
 
       return { success: true, data: results };
     }
   } catch (error) {
-    console.error("Error fetching projects:", error);
-    return { success: false, error: "Failed to fetch projects" };
+    console.error("Error fetching folders:", error);
+    return { success: false, error: "Failed to fetch folders" };
   }
 }
 
-export async function getProjectAction(id: string): Promise<ActionResult<ProjectDetail>> {
+export async function getFolderAction(id: string): Promise<ActionResult<FolderDetail>> {
   try {
     const session = await getVerifiedSession();
 
-    const [project] = await getDb()
+    const [folder] = await getDb()
       .select()
-      .from(projects)
-      .where(eq(projects.id, id));
+      .from(folders)
+      .where(eq(folders.id, id));
 
-    if (!project) {
-      return { success: false, error: "Project not found" };
+    if (!folder) {
+      return { success: false, error: "Folder not found" };
     }
 
-    if (project.organizationId) {
+    if (folder.organizationId) {
       const isMember = await isWorkspaceMember(
         session.user.id,
-        project.organizationId,
+        folder.organizationId,
       );
       if (!isMember) {
         return { success: false, error: "Unauthorized" };
       }
-    } else if (project.userId !== session.user.id) {
+    } else if (folder.userId !== session.user.id) {
       return { success: false, error: "Unauthorized" };
     }
 
-    const projectSurveys = await getDb()
+    const folderSurveys = await getDb()
       .select({
         ...getTableColumns(surveys),
         completedCount: count(surveyConversations.id),
@@ -259,7 +259,7 @@ export async function getProjectAction(id: string): Promise<ActionResult<Project
           eq(surveyConversations.completed, true),
         ),
       )
-      .where(eq(surveys.projectId, id))
+      .where(eq(surveys.folderId, id))
       .groupBy(surveys.id);
 
     // We add a summary field to match the frontend expectations if needed,
@@ -270,9 +270,9 @@ export async function getProjectAction(id: string): Promise<ActionResult<Project
     return {
       success: true,
       data: {
-        ...project,
-        ...(await getProjectPermissions(project, session.user.id)),
-        surveys: projectSurveys.map((s) => ({
+        ...folder,
+        ...(await getFolderPermissions(folder, session.user.id)),
+        surveys: folderSurveys.map((s) => ({
           ...s,
           summary: null, // Placeholder if needed, or derived from analytics
           completedCount: Number(s.completedCount),
@@ -280,38 +280,38 @@ export async function getProjectAction(id: string): Promise<ActionResult<Project
       },
     };
   } catch (error) {
-    console.error("Error fetching project:", error);
-    return { success: false, error: "Failed to fetch project" };
+    console.error("Error fetching folder:", error);
+    return { success: false, error: "Failed to fetch folder" };
   }
 }
 
-export async function addSurveyToProjectAction(
-  projectId: string,
+export async function addSurveyToFolderAction(
+  folderId: string,
   surveyId: string,
 ): Promise<ActionResult<void>> {
   try {
     const session = await getVerifiedSession();
 
-    // 1. Verify project access
-    const [project] = await getDb()
+    // 1. Verify folder access
+    const [folder] = await getDb()
       .select()
-      .from(projects)
-      .where(eq(projects.id, projectId));
+      .from(folders)
+      .where(eq(folders.id, folderId));
 
-    if (!project) {
-      return { success: false, error: "Project not found" };
+    if (!folder) {
+      return { success: false, error: "Folder not found" };
     }
 
-    if (project.organizationId) {
+    if (folder.organizationId) {
       const isMember = await isWorkspaceMember(
         session.user.id,
-        project.organizationId,
+        folder.organizationId,
       );
       if (!isMember) {
-        return { success: false, error: "Unauthorized access to project" };
+        return { success: false, error: "Unauthorized access to folder" };
       }
-    } else if (project.userId !== session.user.id) {
-      return { success: false, error: "Unauthorized access to project" };
+    } else if (folder.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized access to folder" };
     }
 
     // 2. Verify survey access
@@ -325,8 +325,8 @@ export async function addSurveyToProjectAction(
     }
 
     // Check if survey belongs to same org/user context
-    if (project.organizationId) {
-      if (survey.organizationId !== project.organizationId) {
+    if (folder.organizationId) {
+      if (survey.organizationId !== folder.organizationId) {
         return {
           success: false,
           error: "Survey belongs to a different workspace",
@@ -336,7 +336,7 @@ export async function addSurveyToProjectAction(
       const permission = await getSurveyPermissionContext(
         session.user.id,
         survey.id,
-        { activeWorkspaceId: project.organizationId },
+        { activeWorkspaceId: folder.organizationId },
       );
       if (!hasSurveyPermission(permission, "canEdit")) {
         return {
@@ -353,70 +353,70 @@ export async function addSurveyToProjectAction(
     // 3. Update survey
     await getDb()
       .update(surveys)
-      .set({ projectId: projectId })
+      .set({ folderId: folderId })
       .where(eq(surveys.id, surveyId));
 
-    await invalidateDashboardCaches(session.user.id, project.organizationId, [
+    await invalidateDashboardCaches(session.user.id, folder.organizationId, [
       "stats",
       "recentSurveys",
     ]);
 
     return { success: true, data: undefined };
   } catch (error) {
-    console.error("Error adding survey to project:", error);
-    return { success: false, error: "Failed to add survey to project" };
+    console.error("Error adding survey to folder:", error);
+    return { success: false, error: "Failed to add survey to folder" };
   }
 }
 
-export async function removeSurveyFromProjectAction(
-  projectId: string,
+export async function removeSurveyFromFolderAction(
+  folderId: string,
   surveyId: string,
 ): Promise<ActionResult<void>> {
   try {
     const session = await getVerifiedSession();
 
-    // 1. Verify project access (mostly to ensure user has right to modify this project content)
-    const [project] = await getDb()
+    // 1. Verify folder access (mostly to ensure user has right to modify this folder content)
+    const [folder] = await getDb()
       .select()
-      .from(projects)
-      .where(eq(projects.id, projectId));
+      .from(folders)
+      .where(eq(folders.id, folderId));
 
-    if (!project) {
-      // Even if project doesn't exist, if we are just removing the link from survey,
-      // we mainly need to check survey access. But for consistency, let's enforce project existence verification
+    if (!folder) {
+      // Even if folder doesn't exist, if we are just removing the link from survey,
+      // we mainly need to check survey access. But for consistency, let's enforce folder existence verification
       // or just verify survey access is enough?
-      // Let's stick to verifying project access to be safe.
-      return { success: false, error: "Project not found" };
+      // Let's stick to verifying folder access to be safe.
+      return { success: false, error: "Folder not found" };
     }
 
-    if (project.organizationId) {
+    if (folder.organizationId) {
       const isMember = await isWorkspaceMember(
         session.user.id,
-        project.organizationId,
+        folder.organizationId,
       );
       if (!isMember) {
-        return { success: false, error: "Unauthorized access to project" };
+        return { success: false, error: "Unauthorized access to folder" };
       }
-    } else if (project.userId !== session.user.id) {
-      return { success: false, error: "Unauthorized access to project" };
+    } else if (folder.userId !== session.user.id) {
+      return { success: false, error: "Unauthorized access to folder" };
     }
 
-    // 2. Verify survey is indeed in this project
+    // 2. Verify survey is indeed in this folder
     const [survey] = await getDb()
       .select()
       .from(surveys)
-      .where(and(eq(surveys.id, surveyId), eq(surveys.projectId, projectId)));
+      .where(and(eq(surveys.id, surveyId), eq(surveys.folderId, folderId)));
 
     if (!survey) {
-      // Survey not in this project or doesn't exist
-      return { success: false, error: "Survey not found in this project" };
+      // Survey not in this folder or doesn't exist
+      return { success: false, error: "Survey not found in this folder" };
     }
 
-    if (project.organizationId) {
+    if (folder.organizationId) {
       const permission = await getSurveyPermissionContext(
         session.user.id,
         survey.id,
-        { activeWorkspaceId: project.organizationId },
+        { activeWorkspaceId: folder.organizationId },
       );
       if (!hasSurveyPermission(permission, "canEdit")) {
         return {
@@ -429,22 +429,22 @@ export async function removeSurveyFromProjectAction(
     // 3. Update survey
     await getDb()
       .update(surveys)
-      .set({ projectId: null })
+      .set({ folderId: null })
       .where(eq(surveys.id, surveyId));
 
-    await invalidateDashboardCaches(session.user.id, project.organizationId, [
+    await invalidateDashboardCaches(session.user.id, folder.organizationId, [
       "stats",
       "recentSurveys",
     ]);
 
     return { success: true, data: undefined };
   } catch (error) {
-    console.error("Error removing survey from project:", error);
-    return { success: false, error: "Failed to remove survey from project" };
+    console.error("Error removing survey from folder:", error);
+    return { success: false, error: "Failed to remove survey from folder" };
   }
 }
 
-const updateProjectSchema = z.object({
+const updateFolderSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).max(50).optional(),
   description: z.string().optional(),
@@ -452,34 +452,34 @@ const updateProjectSchema = z.object({
   icon: z.string().optional(),
 });
 
-export async function updateProjectAction(
-  input: z.infer<typeof updateProjectSchema>,
+export async function updateFolderAction(
+  input: z.infer<typeof updateFolderSchema>,
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const session = await getVerifiedSession();
-    const body = updateProjectSchema.parse(input);
+    const body = updateFolderSchema.parse(input);
 
-    const [project] = await getDb()
+    const [folder] = await getDb()
       .select()
-      .from(projects)
-      .where(eq(projects.id, body.id));
+      .from(folders)
+      .where(eq(folders.id, body.id));
 
-    if (!project) {
-      return { success: false, error: "Project not found" };
+    if (!folder) {
+      return { success: false, error: "Folder not found" };
     }
-    if (project.organizationId) {
+    if (folder.organizationId) {
       const canEditMetadata = await isWorkspaceOwner(
         session.user.id,
-        project.organizationId,
+        folder.organizationId,
       );
-      if (!canEditMetadata && project.userId !== session.user.id) {
+      if (!canEditMetadata && folder.userId !== session.user.id) {
         return { success: false, error: "Unauthorized" };
       }
-    } else if (project.userId !== session.user.id) {
+    } else if (folder.userId !== session.user.id) {
       return { success: false, error: "Unauthorized" };
     }
 
-    const updateData: Partial<typeof projects.$inferInsert> = {};
+    const updateData: Partial<typeof folders.$inferInsert> = {};
     if (body.name !== undefined) updateData.name = body.name;
     if (body.description !== undefined)
       updateData.description = body.description;
@@ -488,19 +488,19 @@ export async function updateProjectAction(
 
     await getDb().transaction(async (tx) => {
       await tx
-        .update(projects)
+        .update(folders)
         .set(updateData)
-        .where(eq(projects.id, body.id));
+        .where(eq(folders.id, body.id));
 
-      if (project.organizationId) {
+      if (folder.organizationId) {
         await recordRealtimeEvent(tx, {
           scope: "workspace",
-          workspaceId: project.organizationId,
-          eventType: "workspace.project_updated",
+          workspaceId: folder.organizationId,
+          eventType: "workspace.folder_updated",
           actorId: session.user.id,
           payload: {
-            workspaceId: project.organizationId,
-            project: {
+            workspaceId: folder.organizationId,
+            folder: {
               id: body.id,
               ...updateData,
             },
@@ -509,7 +509,7 @@ export async function updateProjectAction(
       }
     });
 
-    await invalidateDashboardCaches(session.user.id, project.organizationId, [
+    await invalidateDashboardCaches(session.user.id, folder.organizationId, [
       "stats",
       "recentSurveys",
     ]);
@@ -518,61 +518,61 @@ export async function updateProjectAction(
 
     return { success: true, data: { id: body.id } };
   } catch (error) {
-    console.error("[updateProjectAction] Failed:", error);
-    return { success: false, error: "Failed to update project" };
+    console.error("[updateFolderAction] Failed:", error);
+    return { success: false, error: "Failed to update folder" };
   }
 }
 
-export async function deleteProjectAction(
+export async function deleteFolderAction(
   id: string,
 ): Promise<ActionResult<void>> {
   try {
     const session = await getVerifiedSession();
 
-    const [project] = await getDb()
+    const [folder] = await getDb()
       .select()
-      .from(projects)
-      .where(eq(projects.id, id));
+      .from(folders)
+      .where(eq(folders.id, id));
 
-    if (!project) {
-      return { success: false, error: "Project not found" };
+    if (!folder) {
+      return { success: false, error: "Folder not found" };
     }
 
-    if (project.organizationId) {
+    if (folder.organizationId) {
       const canDelete = await isWorkspaceOwner(
         session.user.id,
-        project.organizationId,
+        folder.organizationId,
       );
-      if (!canDelete && project.userId !== session.user.id) {
+      if (!canDelete && folder.userId !== session.user.id) {
         return { success: false, error: "Unauthorized" };
       }
-    } else if (project.userId !== session.user.id) {
+    } else if (folder.userId !== session.user.id) {
       return { success: false, error: "Unauthorized" };
     }
 
     await getDb().transaction(async (tx) => {
       await tx
         .update(surveys)
-        .set({ projectId: null })
-        .where(eq(surveys.projectId, id));
+        .set({ folderId: null })
+        .where(eq(surveys.folderId, id));
 
-      await tx.delete(projects).where(eq(projects.id, id));
+      await tx.delete(folders).where(eq(folders.id, id));
 
-      if (project.organizationId) {
+      if (folder.organizationId) {
         await recordRealtimeEvent(tx, {
           scope: "workspace",
-          workspaceId: project.organizationId,
-          eventType: "workspace.project_deleted",
+          workspaceId: folder.organizationId,
+          eventType: "workspace.folder_deleted",
           actorId: session.user.id,
           payload: {
-            workspaceId: project.organizationId,
-            projectId: id,
+            workspaceId: folder.organizationId,
+            folderId: id,
           },
         });
       }
     });
 
-    await invalidateDashboardCaches(session.user.id, project.organizationId, [
+    await invalidateDashboardCaches(session.user.id, folder.organizationId, [
       "stats",
       "recentSurveys",
     ]);
@@ -581,37 +581,37 @@ export async function deleteProjectAction(
 
     return { success: true, data: undefined };
   } catch (error) {
-    console.error("[deleteProjectAction] Failed:", error);
-    return { success: false, error: "Failed to delete project" };
+    console.error("[deleteFolderAction] Failed:", error);
+    return { success: false, error: "Failed to delete folder" };
   }
 }
 
-export async function transferProjectOwnershipAction(input: {
-  projectId: string;
+export async function transferFolderOwnershipAction(input: {
+  folderId: string;
   newOwnerUserId: string;
 }): Promise<ActionResult<void>> {
   try {
     const session = await getVerifiedSession();
 
-    const [project] = await getDb()
+    const [folder] = await getDb()
       .select()
-      .from(projects)
-      .where(eq(projects.id, input.projectId));
+      .from(folders)
+      .where(eq(folders.id, input.folderId));
 
-    if (!project) {
-      return { success: false, error: "Project not found" };
+    if (!folder) {
+      return { success: false, error: "Folder not found" };
     }
 
-    if (!project.organizationId) {
+    if (!folder.organizationId) {
       return {
         success: false,
-        error: "Project ownership transfer is only supported in workspaces",
+        error: "Folder ownership transfer is only supported in workspaces",
       };
     }
 
     const isMember = await isWorkspaceMember(
       input.newOwnerUserId,
-      project.organizationId,
+      folder.organizationId,
     );
     if (!isMember) {
       return {
@@ -620,11 +620,11 @@ export async function transferProjectOwnershipAction(input: {
       };
     }
 
-    if (project.userId !== session.user.id) {
+    if (folder.userId !== session.user.id) {
       const { isWorkspaceOwner } = await import("@/lib/workspace-access");
       const isOwner = await isWorkspaceOwner(
         session.user.id,
-        project.organizationId,
+        folder.organizationId,
       );
       if (!isOwner) {
         return { success: false, error: "Unauthorized" };
@@ -633,19 +633,19 @@ export async function transferProjectOwnershipAction(input: {
 
     await getDb().transaction(async (tx) => {
       await tx
-        .update(projects)
+        .update(folders)
         .set({ userId: input.newOwnerUserId, updatedAt: new Date() })
-        .where(eq(projects.id, input.projectId));
+        .where(eq(folders.id, input.folderId));
 
       await recordRealtimeEvent(tx, {
         scope: "workspace",
-        workspaceId: project.organizationId,
-        eventType: "workspace.project_updated",
+        workspaceId: folder.organizationId,
+        eventType: "workspace.folder_updated",
         actorId: session.user.id,
         payload: {
-          workspaceId: project.organizationId,
-          project: {
-            id: project.id,
+          workspaceId: folder.organizationId,
+          folder: {
+            id: folder.id,
             userId: input.newOwnerUserId,
           },
         },
@@ -654,7 +654,9 @@ export async function transferProjectOwnershipAction(input: {
 
     return { success: true, data: undefined };
   } catch (error) {
-    console.error("Error transferring project ownership:", error);
-    return { success: false, error: "Failed to transfer project ownership" };
+    console.error("Error transferring folder ownership:", error);
+    return { success: false, error: "Failed to transfer folder ownership" };
   }
 }
+
+

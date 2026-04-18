@@ -36,7 +36,7 @@ interface SurveyCardProps {
     lastActivity: string;
     createdAt: string;
     isVoice?: boolean;
-    projectName?: string;
+    folderName?: string;
     onDelete?: (id: string) => void;
     onDuplicate?: (id: string) => void;
 }
@@ -59,7 +59,7 @@ export function SurveyCard({
     lastActivity,
     createdAt,
     isVoice = false,
-    projectName,
+    folderName,
     onDelete,
     onDuplicate,
 }: SurveyCardProps) {
@@ -90,9 +90,9 @@ export function SurveyCard({
                         >
                             {title}
                         </Link>
-                        {projectName && (
+                        {folderName && (
                             <p className="text-xs text-gray-400 truncate">
-                                {t("Card.InProject", { name: projectName })}
+                                {t("Card.InProject", { name: folderName })}
                             </p>
                         )}
                     </div>

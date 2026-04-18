@@ -475,6 +475,49 @@ export const studentProgressReports = pgTable(
   ],
 );
 
+export const learningExpertAnnotations = pgTable(
+  "learning_expert_annotations",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    organizationId: text("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    topicId: text("topic_id").references(() => learningTopics.id, {
+      onDelete: "set null",
+    }),
+    classroomStudentId: text("classroom_student_id").references(
+      () => classroomStudents.id,
+      { onDelete: "set null" },
+    ),
+    sessionId: text("session_id").references(() => learningSessions.id, {
+      onDelete: "set null",
+    }),
+    interactionId: text("interaction_id").references(() => learningInteractions.id, {
+      onDelete: "set null",
+    }),
+    subjectKey: text("subject_key"),
+    curriculumFrameworkKey: text("curriculum_framework_key")
+      .default("kmk_de_sek1")
+      .notNull(),
+    annotationType: text("annotation_type").notNull(),
+    status: text("status").default("pending").notNull(),
+    summary: text("summary").notNull(),
+    evidence: text("evidence"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+  },
+  (table) => [
+    index("learning_expert_annotations_org_idx").on(table.organizationId),
+    index("learning_expert_annotations_topic_idx").on(table.topicId),
+    index("learning_expert_annotations_student_idx").on(table.classroomStudentId),
+    index("learning_expert_annotations_session_idx").on(table.sessionId),
+    index("learning_expert_annotations_status_idx").on(table.status),
+  ],
+);
+
 export const learningInterventions = pgTable(
   "learning_interventions",
   {
@@ -1051,6 +1094,36 @@ export const studentProgressReportsRelations = relations(
     session: one(learningSessions, {
       fields: [studentProgressReports.generatedFromSessionId],
       references: [learningSessions.id],
+    }),
+  }),
+);
+
+export const learningExpertAnnotationsRelations = relations(
+  learningExpertAnnotations,
+  ({ one }) => ({
+    organization: one(organizations, {
+      fields: [learningExpertAnnotations.organizationId],
+      references: [organizations.id],
+    }),
+    topic: one(learningTopics, {
+      fields: [learningExpertAnnotations.topicId],
+      references: [learningTopics.id],
+    }),
+    classroomStudent: one(classroomStudents, {
+      fields: [learningExpertAnnotations.classroomStudentId],
+      references: [classroomStudents.id],
+    }),
+    session: one(learningSessions, {
+      fields: [learningExpertAnnotations.sessionId],
+      references: [learningSessions.id],
+    }),
+    interaction: one(learningInteractions, {
+      fields: [learningExpertAnnotations.interactionId],
+      references: [learningInteractions.id],
+    }),
+    createdBy: one(users, {
+      fields: [learningExpertAnnotations.createdByUserId],
+      references: [users.id],
     }),
   }),
 );

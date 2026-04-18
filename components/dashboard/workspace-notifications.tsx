@@ -76,18 +76,13 @@ export function WorkspaceNotifications({
       return;
     }
 
-    if (
-      event.eventType?.startsWith("workspace.folder_") ||
-      event.eventType?.startsWith("workspace.project_")
-    ) {
+    if (event.eventType?.startsWith("workspace.folder_")) {
       queryClient.invalidateQueries({
         queryKey: queryKeys.folders.all(event.workspaceId),
       });
       const folderId =
         getNestedString(folderPayload, "id") ||
-        getNestedString(payload, "folderId") ||
-        getNestedString(asRecord(payload.project), "id") ||
-        getNestedString(payload, "projectId");
+        getNestedString(payload, "folderId");
       if (folderId) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.folders.detail(folderId),
@@ -135,11 +130,9 @@ export function WorkspaceNotifications({
           );
           break;
         case "workspace.folder_created":
-        case "workspace.project_created":
           toast.success(
             `A workspace member created a new folder: ${
               getNestedString(folderPayload, "name") ||
-              getNestedString(asRecord(payload.project), "name") ||
               "Untitled"
             }`,
             { duration: 5000 },
@@ -153,3 +146,4 @@ export function WorkspaceNotifications({
 
   return null;
 }
+

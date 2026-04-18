@@ -20,14 +20,25 @@ import {
 import { findLearningEvidenceContext } from "@/lib/learning/evidence";
 import { generateSessionOpening } from "@/lib/learning/tutor";
 import {
+  assessmentQuestionTypeSchema,
+  assessmentReasoningSkillSchema,
+  getDefaultChallengeSequence,
+  getSubjectPackage,
+  type AssessmentQuestionType,
+} from "@/lib/learning/subject-packages";
+import {
   conceptConfidenceSchema,
   homeworkStatusSchema,
+  learningAssessmentItemSchema,
   learningQuizItemSchema,
+  metacognitiveMirrorStateSchema,
   learningReflectionStateSchema,
   learningSessionPhaseSchema,
   learningSessionStateSchema,
+  reasoningPatternSignalSchema,
   questionIntentSchema,
   quizDifficultySchema,
+  type LearningAssessmentItem,
   type GradeBand,
   type LearningOutcomeDefinition,
   type LearningSessionPhase,
@@ -117,18 +128,49 @@ const deepeningEvaluationSchema = z.object({
   bridge: z.string(),
 });
 
-const quizQuestionSchema = z.object({
+const assessmentQuestionSchema = z.object({
   prompt: z.string(),
   expectedAnswer: z.string(),
   explanation: z.string(),
   difficulty: quizDifficultySchema,
+  questionType: assessmentQuestionTypeSchema,
+  reasoningSkill: assessmentReasoningSkillSchema,
+  acceptedStrategies: z.array(z.string()).default([]),
+  hintLadder: z.array(z.string()).default([]),
+  diagnosticTags: z.array(z.string()).default([]),
+  evidenceRequirements: z.array(z.string()).default([]),
 });
 
-const quizEvaluationSchema = z.object({
+const assessmentEvaluationSchema = z.object({
   correct: z.boolean(),
   score: z.number().min(0).max(100),
   explanation: z.string(),
-  nextDifficulty: quizDifficultySchema,
+  reasoningScore: z.number().min(0).max(100),
+  transferScore: z.number().min(0).max(100),
+  originalityScore: z.number().min(0).max(100),
+  nextDifficulty: quizDifficultySchema.default("medium"),
+  reasoningStrength: z.string().default(""),
+  misconception: z.string().nullable().default(null),
+  thinkingPatternSignals: z
+    .array(
+      z.object({
+        key: z.string(),
+        label: z.string(),
+        studentFacingSummary: z.string(),
+        teacherSummary: z.string(),
+      }),
+    )
+    .default([]),
+});
+
+const attemptPromptSchema = z.object({
+  prompt: z.string(),
+  whyThisMatters: z.string(),
+});
+
+const metacognitiveMirrorPromptSchema = z.object({
+  mirror: z.string(),
+  followUpQuestion: z.string(),
 });
 
 const sessionCloseSchema = z.object({
@@ -144,11 +186,12 @@ type TopicAccess = {
     title: string;
     description: string | null;
     subject: string | null;
+    subjectKey?: string | null;
     contentLocale: string;
     learningOutcomes: LearningOutcomeDefinition[];
     sourceBoundary?: TopicSourceBoundary | null;
     classroom: {
-      organizationId: string;
+      organizationId: string | null;
       gradeBand: string;
     };
   };
@@ -222,6 +265,145 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
 }
 
+function average(values: number[]) {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function computeQuestionMix(items: LearningAssessmentItem[]) {
+  const retrievalCount = items.filter((item) => item.questionType === "retrieval_check").length;
+  const hasExplanation = items.some((item) => item.questionType === "self_explanation");
+  const hasTransfer = items.some((item) => item.questionType === "transfer_challenge");
+  const hasMetacognition = items.some(
+    (item) => item.questionType === "metacognitive_reflection",
+  );
+
+  return {
+    retrievalCount,
+    hasExplanation,
+    hasTransfer,
+    hasMetacognition,
+  };
+}
+
+function chooseNextQuestionType(params: {
+  subjectKey?: string | null;
+  usedItems: LearningAssessmentItem[];
+  forceMetacognition?: boolean;
+}) {
+  if (params.forceMetacognition) return "metacognitive_reflection" as const;
+
+  const packageDefinition = getSubjectPackage(params.subjectKey);
+  const sequence = getDefaultChallengeSequence(packageDefinition.key);
+  const mix = computeQuestionMix(params.usedItems);
+
+  if (!mix.hasExplanation) return "self_explanation" as const;
+  if (!mix.hasTransfer) return "transfer_challenge" as const;
+
+  const sequenceCandidate = sequence.find(
+    (questionType) =>
+      !params.usedItems.some((item) => item.questionType === questionType) &&
+      !(questionType === "retrieval_check" && mix.retrievalCount >= 1),
+  );
+  if (sequenceCandidate) return sequenceCandidate;
+
+  if (mix.retrievalCount === 0) return "retrieval_check" as const;
+  return packageDefinition.challengeSequence.at(-1) ?? "compare_two_solutions";
+}
+
+function updateReasoningPatternSignals(
+  state: LearningSessionState,
+  signals: Array<{
+    key: string;
+    label: string;
+    studentFacingSummary: string;
+    teacherSummary: string;
+  }>,
+) {
+  const now = isoNow();
+  const next = [...state.thinkingPatternSignals];
+
+  for (const signal of signals) {
+    const existing = next.find((item) => item.key === signal.key);
+    if (existing) {
+      existing.evidenceCount += 1;
+      existing.lastSeenAt = now;
+      existing.studentFacingSummary = signal.studentFacingSummary;
+      existing.teacherSummary = signal.teacherSummary;
+      continue;
+    }
+
+    next.push(
+      reasoningPatternSignalSchema.parse({
+        key: signal.key,
+        label: signal.label,
+        evidenceCount: 1,
+        lastSeenAt: now,
+        studentFacingSummary: signal.studentFacingSummary,
+        teacherSummary: signal.teacherSummary,
+      }),
+    );
+  }
+
+  state.thinkingPatternSignals = next
+    .sort((left, right) => right.evidenceCount - left.evidenceCount)
+    .slice(0, 8);
+}
+
+function recomputeReasoningScores(state: LearningSessionState) {
+  const gradedItems = state.quizItems.filter((item) => item.score != null);
+  if (gradedItems.length === 0) {
+    return state;
+  }
+
+  state.reasoningQualityScore = Math.round(
+    average(gradedItems.map((item) => item.reasoningScore ?? item.score ?? 0)),
+  );
+  state.transferPerformanceScore = Math.round(
+    average(gradedItems.map((item) => item.transferScore ?? 0)),
+  );
+  state.originalityScore = Math.round(
+    average(gradedItems.map((item) => item.originalityScore ?? 0)),
+  );
+  const uniqueStrategies = new Set(
+    gradedItems.flatMap((item) =>
+      item.acceptedStrategies
+        .map((strategy) => strategy.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  );
+  state.strategyDiversityScore = Math.min(100, uniqueStrategies.size * 25);
+  state.helpDependenceScore = Math.max(
+    0,
+    100 - Math.round(average(gradedItems.map((item) => item.helpUsed ?? 0)) * 18),
+  );
+  if (state.studentConfidenceScore != null) {
+    const normalizedConfidence = state.studentConfidenceScore * 10;
+    state.confidenceCalibrationScore = Math.max(
+      0,
+      100 - Math.abs(normalizedConfidence - (state.reasoningQualityScore ?? 0)),
+    );
+  }
+
+  const habits = [
+    state.thinkingPatternSignals.some((item) => item.key.includes("units"))
+      ? "Needs to slow down and verify constraints or units."
+      : null,
+    state.thinkingPatternSignals.some((item) => item.key.includes("alternative"))
+      ? "Benefits from being asked for a second valid strategy."
+      : null,
+    state.thinkingPatternSignals.some((item) => item.key.includes("justify"))
+      ? "Needs to justify steps more explicitly."
+      : null,
+  ];
+  state.metacognitiveHabits = uniqueStrings([
+    ...state.metacognitiveHabits,
+    ...habits,
+  ]);
+
+  return state;
+}
+
 function conceptDisplayName(state: LearningSessionState, conceptKey: string | null) {
   if (!conceptKey) return "this concept";
   return (
@@ -240,17 +422,22 @@ function ensureConceptState(state: LearningSessionState, conceptKey: string) {
     state.conceptStates[conceptKey] = {
       conceptKey,
       conceptTitle: concept.title,
+      attemptPrompt: "",
+      attemptEvaluated: false,
       explanationAttempts: 0,
       comprehensionPassed: false,
       deepeningDone: false,
       studentExplanationGiven: false,
-      currentStep: "intro",
+      currentStep: "attempt",
       masteryScore: null,
       confidence: null,
       gaps: [],
       notes: [],
       lastAnalogy: "",
       realWorldAnchor: "",
+      reasoningScore: null,
+      transferScore: null,
+      originalityScore: null,
     };
   }
 
@@ -291,6 +478,7 @@ export function buildLearningSessionState(params: {
   previousSession?: PreviousSessionContext | null;
   previousReport?: TeacherProgressReport | null;
 }) {
+  const subjectPackage = getSubjectPackage(params.topic.subjectKey ?? params.topic.subject);
   const conceptsToCover = determineConceptsForSession({
     topic: params.topic,
     previousReport: params.previousReport,
@@ -326,6 +514,12 @@ export function buildLearningSessionState(params: {
     phases.push(
       learningSessionPhaseSchema.parse({
         id: phaseId++,
+        type: "attempt_first",
+        status: "pending",
+        conceptKey: concept.key,
+      }),
+      learningSessionPhaseSchema.parse({
+        id: phaseId++,
         type: "concept_teaching",
         status: "pending",
         conceptKey: concept.key,
@@ -336,12 +530,12 @@ export function buildLearningSessionState(params: {
   phases.push(
     learningSessionPhaseSchema.parse({
       id: phaseId++,
-      type: "quiz",
+      type: "assessment",
       status: "pending",
     }),
     learningSessionPhaseSchema.parse({
       id: phaseId++,
-      type: "self_reflection",
+      type: "metacognitive_reflection",
       status: "pending",
     }),
     learningSessionPhaseSchema.parse({
@@ -358,23 +552,31 @@ export function buildLearningSessionState(params: {
       {
         conceptKey: concept.key,
         conceptTitle: concept.title,
+        attemptPrompt: "",
+        attemptEvaluated: false,
         explanationAttempts: 0,
         comprehensionPassed: false,
         deepeningDone: false,
         studentExplanationGiven: false,
-        currentStep: "intro" as const,
+        currentStep: "attempt" as const,
         masteryScore: null,
         confidence: null,
         gaps: [],
         notes: [],
         lastAnalogy: "",
         realWorldAnchor: "",
+        reasoningScore: null,
+        transferScore: null,
+        originalityScore: null,
       },
     ]),
   );
 
   return learningSessionStateSchema.parse({
     topicTitle: params.topic.title,
+    subjectPackageKey: subjectPackage.key,
+    curriculumFrameworkKey:
+      params.topic.learningOutcomes[0]?.curriculumFrameworkKey ?? "kmk_de_sek1",
     conceptsToCover,
     phases,
     currentPhaseId: firstPending.id,
@@ -390,9 +592,18 @@ export function buildLearningSessionState(params: {
     openingProbeAssessment: null,
     connectingQuestion: "",
     quizItems: [],
-    quizTargetCount: 5,
+    quizTargetCount: 4,
     quizCurrentIndex: 0,
     reflection: learningReflectionStateSchema.parse({}),
+    reasoningQualityScore: null,
+    strategyDiversityScore: null,
+    transferPerformanceScore: null,
+    helpDependenceScore: null,
+    confidenceCalibrationScore: null,
+    originalityScore: null,
+    metacognitiveHabits: [],
+    thinkingPatternSignals: [],
+    metacognitiveMirror: metacognitiveMirrorStateSchema.parse({}),
     personalizedHomework: [],
     studentConfidenceScore: null,
     momentOfUnderstanding: null,
@@ -450,12 +661,16 @@ ${renderTutoringRuntimeContext(params.runtimeContext)}Rules:
 }
 
 async function retrieveContext(params: {
-  organizationId: string;
+  organizationId?: string | null;
   topicId: string;
   query: string;
   language?: string | null;
   aiRunId?: string;
 }) {
+  if (!params.organizationId) {
+    return [];
+  }
+
   const matches = await findLearningEvidenceContext({
     organizationId: params.organizationId,
     topicId: params.topicId,
@@ -814,27 +1029,80 @@ Rules:
   return output;
 }
 
-async function generateQuizQuestion(params: {
+async function generateAttemptPrompt(params: {
   topicTitle: string;
   conceptTitle: string;
+  subjectKey?: string | null;
+  learningOutcomes: LearningOutcomeDefinition[];
+  studentProfile: StudentInterestProfile;
+  teachingPlaybook?: LearningTeachingPlaybook | null;
+  gradeBand: GradeBand;
+  runtimeContext?: TutoringRuntimeContext;
+}) {
+  const subjectPackage = getSubjectPackage(params.subjectKey);
+  const { output } = await generateObservedText({
+    model: defaultModel,
+    system: TUTORING_DEFAULT_SYSTEM_PROMPT,
+    promptCache: buildTutoringPromptCache("attempt-first", "default"),
+    output: Output.object({
+      schema: attemptPromptSchema,
+    }),
+    prompt: `Write an attempt-first prompt before teaching a concept.
+
+Topic: ${params.topicTitle}
+Concept: ${params.conceptTitle}
+Subject package: ${subjectPackage.label}
+Learning outcomes:
+${params.learningOutcomes.map((outcome) => `- ${outcome.title}: ${outcome.description}`).join("\n")}
+Student profile:
+${renderStudentProfileContext(params.studentProfile)}
+Teaching playbook:
+${renderTeachingPlaybookSummary(params.teachingPlaybook)}
+Grade band: ${params.gradeBand}
+
+${renderTutoringRuntimeContext(params.runtimeContext)}Rules:
+- ask the student to attempt, predict, or explain before you teach
+- prefer explanation or strategy over final answer only
+- keep it emotionally safe and low-stakes
+- one question only
+- whyThisMatters should be one concise coaching sentence`,
+  }, buildTutoringObservedOptions(params.runtimeContext, "attempt_first_generation", {
+    topicTitle: params.topicTitle,
+    conceptTitle: params.conceptTitle,
+  }));
+
+  return output;
+}
+
+async function generateAssessmentQuestion(params: {
+  topicTitle: string;
+  conceptTitle: string;
+  subjectKey?: string | null;
   studentProfile: StudentInterestProfile;
   teachingPlaybook?: LearningTeachingPlaybook | null;
   gradeBand: GradeBand;
   difficulty: "easy" | "medium" | "hard";
+  questionType: AssessmentQuestionType;
   retrievedContext: string[];
   runtimeContext?: TutoringRuntimeContext;
 }) {
+  const subjectPackage = getSubjectPackage(params.subjectKey);
   const { output } = await generateObservedText({
     model: defaultModel,
     system: TUTORING_DEFAULT_SYSTEM_PROMPT,
-    promptCache: buildTutoringPromptCache("quiz-question", "default"),
+    promptCache: buildTutoringPromptCache("assessment-question", "default"),
     output: Output.object({
-      schema: quizQuestionSchema,
+      schema: assessmentQuestionSchema,
     }),
-    prompt: `Generate one adaptive mini-quiz question for a tutoring session.
+    prompt: `Generate one reasoning-first assessment item for a tutoring session.
 
 Topic: ${params.topicTitle}
 Concept: ${params.conceptTitle}
+Subject package: ${subjectPackage.label}
+Question type: ${params.questionType}
+Accepted competencies: ${subjectPackage.competencyModel.join(", ")}
+Teacher guidance:
+${subjectPackage.teacherGuidance.map((item) => `- ${item}`).join("\n")}
 Student profile:
 ${renderStudentProfileContext(params.studentProfile)}
 Teaching playbook:
@@ -848,54 +1116,185 @@ ${renderTutoringRuntimeContext(params.runtimeContext)}Rules:
 - personalize the framing to the student's interests where possible
 - prefer high-resonance domains from the playbook and avoid reusing old example references
 - require reasoning, not simple recall
+- multiple valid approaches are allowed when the subject permits them
+- acceptedStrategies should name valid approaches, not just the expected answer
+- hintLadder should move from nudge to stronger scaffold without giving away the full solution
+- diagnosticTags should capture likely misconception patterns
+- evidenceRequirements should say what a good answer must show
 - expectedAnswer should be concise
 - explanation should explain the answer clearly
 - the question must stay within the retrieved context`,
-  }, buildTutoringObservedOptions(params.runtimeContext, "quiz_question_generation", {
+  }, buildTutoringObservedOptions(params.runtimeContext, "assessment_question_generation", {
     topicTitle: params.topicTitle,
     conceptTitle: params.conceptTitle,
     difficulty: params.difficulty,
+    questionType: params.questionType,
   }));
 
   return output;
 }
 
-async function evaluateQuizAnswer(params: {
+export async function previewAssessmentQuestionForTopic(params: {
+  topic: TopicAccess["topic"];
+  conceptTitle?: string | null;
+  questionType?: AssessmentQuestionType;
+  difficulty?: "easy" | "medium" | "hard";
+  studentProfile?: StudentInterestProfile | null;
+  teachingPlaybook?: LearningTeachingPlaybook | null;
+  runtimeContext?: TutoringRuntimeContext;
+}) {
+  const subjectKey = params.topic.subjectKey ?? params.topic.subject;
+  const conceptTitle =
+    params.conceptTitle?.trim() ||
+    params.topic.learningOutcomes[0]?.title ||
+    params.topic.title;
+  const questionType =
+    params.questionType ??
+    chooseNextQuestionType({
+      subjectKey,
+      usedItems: [],
+    });
+  const studentProfile =
+    params.studentProfile ??
+    ({
+      primaryInterests: [
+        {
+          label: "problem solving",
+          details: "Enjoys working through challenging school problems step by step.",
+        },
+      ],
+      aspirations: [],
+      curiosityAreas: [params.topic.subject ?? params.topic.title],
+      motivationalStyle: ["personal_mastery"],
+      learningRelationship: "neutral",
+      contextTags: [],
+      privateNotes: [],
+      lastUpdated: isoNow(),
+    } satisfies StudentInterestProfile);
+  const retrievedContext = await retrieveContext({
+    organizationId: params.topic.classroom.organizationId,
+    topicId: params.topic.id,
+    query: `${params.topic.title} ${conceptTitle}`,
+    language: params.topic.contentLocale,
+    aiRunId: params.runtimeContext?.aiRunId,
+  });
+
+  return await generateAssessmentQuestion({
+    topicTitle: params.topic.title,
+    conceptTitle,
+    subjectKey,
+    studentProfile,
+    teachingPlaybook: params.teachingPlaybook,
+    gradeBand: params.topic.classroom.gradeBand as GradeBand,
+    difficulty: params.difficulty ?? "medium",
+    questionType,
+    retrievedContext,
+    runtimeContext: params.runtimeContext,
+  });
+}
+
+async function evaluateAssessmentAnswer(params: {
   topicTitle: string;
   conceptTitle: string;
+  questionType: AssessmentQuestionType;
+  subjectKey?: string | null;
   prompt: string;
   expectedAnswer: string;
   explanation: string;
+  acceptedStrategies: string[];
+  evidenceRequirements: string[];
+  diagnosticTags: string[];
   difficulty: "easy" | "medium" | "hard";
   studentAnswer: string;
   runtimeContext?: TutoringRuntimeContext;
 }) {
+  const subjectPackage = getSubjectPackage(params.subjectKey);
   const { output } = await generateObservedText({
     model: analysisModel,
     system: TUTORING_ANALYSIS_SYSTEM_PROMPT,
-    promptCache: buildTutoringPromptCache("quiz-answer-eval", "analysis"),
+    promptCache: buildTutoringPromptCache("assessment-answer-eval", "analysis"),
     output: Output.object({
-      schema: quizEvaluationSchema,
+      schema: assessmentEvaluationSchema,
     }),
-    prompt: `Evaluate the student's answer to a tutoring mini-quiz question.
+    prompt: `Evaluate the student's answer to a reasoning-first tutoring assessment item.
 
 Topic: ${params.topicTitle}
 Concept: ${params.conceptTitle}
+Subject package: ${subjectPackage.label}
+Question type: ${params.questionType}
 Difficulty: ${params.difficulty}
 Question: ${params.prompt}
 Expected answer: ${params.expectedAnswer}
 Reference explanation: ${params.explanation}
+Accepted strategies:
+${params.acceptedStrategies.map((item) => `- ${item}`).join("\n") || "- none provided"}
+Evidence requirements:
+${params.evidenceRequirements.map((item) => `- ${item}`).join("\n") || "- none provided"}
+Diagnostic tags:
+${params.diagnosticTags.map((item) => `- ${item}`).join("\n") || "- none provided"}
 Student answer: ${params.studentAnswer}
 
 Return:
 - correct
 - score
 - explanation to say to the student
+- reasoningScore
+- transferScore
+- originalityScore
+- reasoningStrength
+- misconception if visible
+- thinkingPatternSignals only when the answer shows a reusable reasoning habit
 - nextDifficulty based on adaptive progression`,
-  }, buildTutoringObservedOptions(params.runtimeContext, "quiz_answer_evaluation", {
+  }, buildTutoringObservedOptions(params.runtimeContext, "assessment_answer_evaluation", {
     topicTitle: params.topicTitle,
     conceptTitle: params.conceptTitle,
     difficulty: params.difficulty,
+    questionType: params.questionType,
+  }));
+
+  return output;
+}
+
+async function generateMetacognitiveMirrorPrompt(params: {
+  topicTitle: string;
+  state: LearningSessionState;
+  studentProfile: StudentInterestProfile;
+  runtimeContext?: TutoringRuntimeContext;
+}) {
+  const signal = params.state.thinkingPatternSignals.find((item) => item.evidenceCount >= 2);
+  if (!signal) {
+    return {
+      mirror:
+        "You stayed with some genuinely hard thinking today. Before we finish, tell me one move that helped you understand more deeply.",
+      followUpQuestion:
+        "What would you like to remember next time when a problem feels confusing at first?",
+    };
+  }
+
+  const { output } = await generateObservedText({
+    model: defaultModel,
+    system: TUTORING_DEFAULT_SYSTEM_PROMPT,
+    promptCache: buildTutoringPromptCache("metacognitive-mirror", "default"),
+    output: Output.object({
+      schema: metacognitiveMirrorPromptSchema,
+    }),
+    prompt: `Write a metacognitive mirror for a student at the end of a tutoring session.
+
+Topic: ${params.topicTitle}
+Signal label: ${signal.label}
+Student-facing summary: ${signal.studentFacingSummary}
+Student profile:
+${renderStudentProfileContext(params.studentProfile)}
+Session snapshot:
+${renderLearningStateSnapshot(params.state)}
+
+${renderTutoringRuntimeContext(params.runtimeContext)}Rules:
+- mirror a repeated reasoning habit, not a one-off mistake
+- be specific, calm, and non-judgmental
+- invite the student to reflect on how they will handle it next time`,
+  }, buildTutoringObservedOptions(params.runtimeContext, "metacognitive_mirror_generation", {
+    topicTitle: params.topicTitle,
+    signalKey: signal.key,
   }));
 
   return output;
@@ -1041,6 +1440,38 @@ async function autoAdvanceUntilPause(params: {
       continue;
     }
 
+    if (phase.type === "attempt_first") {
+      markPhaseStatus(state, phase.id, "in_progress");
+      const conceptKey = phase.conceptKey;
+      if (!conceptKey) {
+        markPhaseStatus(state, phase.id, "skipped");
+        const next = advanceToNextPendingPhase(state);
+        if (!next) break;
+        continue;
+      }
+
+      const conceptState = ensureConceptState(state, conceptKey);
+      const conceptTitle = conceptDisplayName(state, conceptKey);
+      const attempt = await generateAttemptPrompt({
+        topicTitle: params.access.topic.title,
+        conceptTitle,
+        subjectKey: state.subjectPackageKey,
+        learningOutcomes: params.access.topic.learningOutcomes.filter((outcome) =>
+          state.conceptsToCover
+            .find((concept) => concept.key === conceptKey)
+            ?.outcomeIds.includes(outcome.id),
+        ),
+        studentProfile: params.access.classroomStudent.interestProfile!.profile,
+        teachingPlaybook: state.teachingPlaybook,
+        gradeBand: params.access.topic.classroom.gradeBand as GradeBand,
+        runtimeContext: params.runtimeContext,
+      });
+      conceptState.attemptPrompt = attempt.prompt;
+      replies.push(`${attempt.whyThisMatters}\n\n${attempt.prompt}`);
+      waitingForStudent = true;
+      continue;
+    }
+
     if (phase.type === "concept_teaching") {
       markPhaseStatus(state, phase.id, "in_progress");
       const conceptKey = phase.conceptKey;
@@ -1053,6 +1484,10 @@ async function autoAdvanceUntilPause(params: {
 
       const conceptState = ensureConceptState(state, conceptKey);
       const conceptTitle = conceptDisplayName(state, conceptKey);
+
+      if (conceptState.currentStep === "attempt") {
+        conceptState.currentStep = "intro";
+      }
 
       if (conceptState.currentStep === "intro") {
         const retrievedContext = await retrieveContext({
@@ -1098,8 +1533,15 @@ async function autoAdvanceUntilPause(params: {
       continue;
     }
 
-    if (phase.type === "quiz") {
+    if (phase.type === "assessment" || phase.type === "quiz") {
       markPhaseStatus(state, phase.id, "in_progress");
+      if (state.quizCurrentIndex >= state.quizTargetCount) {
+        markPhaseStatus(state, phase.id, "completed");
+        const next = advanceToNextPendingPhase(state);
+        if (!next) break;
+        continue;
+      }
+
       const nextConcept =
         state.conceptsToCover[
           Math.min(state.quizCurrentIndex, state.conceptsToCover.length - 1)
@@ -1126,21 +1568,42 @@ async function autoAdvanceUntilPause(params: {
         aiRunId: params.runtimeContext?.aiRunId,
       });
 
-      const question = await generateQuizQuestion({
+      const questionType = chooseNextQuestionType({
+        subjectKey: state.subjectPackageKey,
+        usedItems: state.quizItems,
+      });
+      const question = await generateAssessmentQuestion({
         topicTitle: params.access.topic.title,
         conceptTitle: nextConcept?.title ?? params.access.topic.title,
+        subjectKey: state.subjectPackageKey,
         studentProfile: params.access.classroomStudent.interestProfile!.profile,
         teachingPlaybook: state.teachingPlaybook,
         gradeBand: params.access.topic.classroom.gradeBand as GradeBand,
         difficulty: desiredDifficulty,
+        questionType,
         retrievedContext,
         runtimeContext: params.runtimeContext,
       });
 
-      const item = learningQuizItemSchema.parse({
+      const item = learningAssessmentItemSchema.parse({
         id: `${phase.id}-${state.quizItems.length + 1}`,
         conceptKey: nextConcept?.key ?? "general",
         prompt: question.prompt,
+        questionType: question.questionType,
+        primaryCompetency:
+          getSubjectPackage(state.subjectPackageKey).competencyModel[0] ??
+          "conceptual_understanding",
+        reasoningSkill: question.reasoningSkill,
+        transferLevel:
+          question.questionType === "transfer_challenge" ? "far" : "near",
+        originalityMode:
+          state.subjectPackageKey === "mathematics"
+            ? "multiple_valid_strategies"
+            : "constrained_originality",
+        acceptedStrategies: question.acceptedStrategies,
+        hintLadder: question.hintLadder,
+        diagnosticTags: question.diagnosticTags,
+        evidenceRequirements: question.evidenceRequirements,
         expectedAnswer: question.expectedAnswer,
         explanation: question.explanation,
         difficulty: question.difficulty,
@@ -1156,22 +1619,62 @@ async function autoAdvanceUntilPause(params: {
       continue;
     }
 
-    if (phase.type === "self_reflection") {
+    if (phase.type === "metacognitive_reflection" || phase.type === "self_reflection") {
       markPhaseStatus(state, phase.id, "in_progress");
-      if (state.reflection.currentStep === "awaiting_confidence") {
-        replies.push(
-          "On a scale of 1 to 10, how confident do you feel about what we covered today?",
-        );
-        waitingForStudent = true;
-        continue;
-      }
+      if (phase.type === "metacognitive_reflection") {
+        state.metacognitiveMirror.highlightedPatternKey =
+          state.thinkingPatternSignals.find((item) => item.evidenceCount >= 2)?.key ?? null;
+        const mirror = await generateMetacognitiveMirrorPrompt({
+          topicTitle: params.access.topic.title,
+          state,
+          studentProfile: params.access.classroomStudent.interestProfile!.profile,
+          runtimeContext: params.runtimeContext,
+        });
+        if (state.metacognitiveMirror.currentStep === "awaiting_pattern_reflection") {
+          replies.push(`${mirror.mirror}\n\n${mirror.followUpQuestion}`);
+          waitingForStudent = true;
+          continue;
+        }
 
-      if (state.reflection.currentStep === "awaiting_click_moment") {
-        replies.push(
-          "Was there a moment in this session where something clicked and suddenly made sense? What was happening right before that moment?",
-        );
-        waitingForStudent = true;
-        continue;
+        if (state.metacognitiveMirror.currentStep === "awaiting_strategy_commitment") {
+          replies.push(
+            "What is one concrete thing you want to do next time so your thinking stays stronger when the problem gets hard?",
+          );
+          waitingForStudent = true;
+          continue;
+        }
+
+        if (state.metacognitiveMirror.currentStep === "awaiting_confidence") {
+          replies.push(
+            "On a scale from 1 to 10, how confident do you feel now that you could reason through a similar problem on your own?",
+          );
+          waitingForStudent = true;
+          continue;
+        }
+
+        if (state.metacognitiveMirror.currentStep === "awaiting_click_moment") {
+          replies.push(
+            "Was there a moment where something clicked more deeply for you today? What changed in your thinking right before that happened?",
+          );
+          waitingForStudent = true;
+          continue;
+        }
+      } else {
+        if (state.reflection.currentStep === "awaiting_confidence") {
+          replies.push(
+            "On a scale of 1 to 10, how confident do you feel about what we covered today?",
+          );
+          waitingForStudent = true;
+          continue;
+        }
+
+        if (state.reflection.currentStep === "awaiting_click_moment") {
+          replies.push(
+            "Was there a moment in this session where something clicked and suddenly made sense? What was happening right before that moment?",
+          );
+          waitingForStudent = true;
+          continue;
+        }
       }
     }
 
@@ -1309,6 +1812,30 @@ export async function runTutoringSessionTurn(params: {
     replies.push("Nice. Keep that picture in your head while we work through this.");
     markPhaseStatus(state, currentPhase.id, "completed");
     advanceToNextPendingPhase(state);
+  } else if (currentPhase.type === "attempt_first") {
+    const conceptKey = currentPhase.conceptKey;
+    if (!conceptKey) {
+      markPhaseStatus(state, currentPhase.id, "skipped");
+      advanceToNextPendingPhase(state);
+    } else {
+      const conceptState = ensureConceptState(state, conceptKey);
+      conceptState.attemptEvaluated = true;
+      conceptState.notes = uniqueStrings([
+        ...conceptState.notes,
+        `Initial attempt: ${params.userMessage.trim()}`,
+      ]);
+      if (params.userMessage.trim().length < 20) {
+        state.gapsIdentified = uniqueStrings([
+          ...state.gapsIdentified,
+          `${conceptState.conceptTitle}: initial attempt was too brief to reveal reasoning`,
+        ]);
+      }
+      replies.push(
+        "Good. I wanted to see your first instinct before I explained anything. Let's build from what you just showed me.",
+      );
+      markPhaseStatus(state, currentPhase.id, "completed");
+      advanceToNextPendingPhase(state);
+    }
   } else if (currentPhase.type === "concept_teaching") {
     const conceptKey = currentPhase.conceptKey;
     if (!conceptKey) {
@@ -1349,6 +1876,7 @@ export async function runTutoringSessionTurn(params: {
         if (evaluation.passed) {
           conceptState.comprehensionPassed = true;
           conceptState.currentStep = "awaiting_deepening";
+          conceptState.reasoningScore = evaluation.score;
           replies.push(`${evaluation.feedback}\n\n${evaluation.nextQuestion}`);
         } else {
           conceptState.explanationAttempts += 1;
@@ -1378,6 +1906,7 @@ export async function runTutoringSessionTurn(params: {
 
         conceptState.deepeningDone = true;
         conceptState.currentStep = "bridge";
+        conceptState.transferScore = evaluation.readyToAdvance ? 75 : 45;
         state.completedConceptKeys = uniqueStrings([
           ...state.completedConceptKeys,
           conceptKey,
@@ -1387,7 +1916,7 @@ export async function runTutoringSessionTurn(params: {
         advanceToNextPendingPhase(state);
       }
     }
-  } else if (currentPhase.type === "quiz") {
+  } else if (currentPhase.type === "assessment" || currentPhase.type === "quiz") {
     const currentQuestion = state.quizItems[state.quizItems.length - 1];
     if (!currentQuestion || currentQuestion.studentAnswer !== null) {
       const auto = await autoAdvanceUntilPause({
@@ -1407,12 +1936,17 @@ export async function runTutoringSessionTurn(params: {
     const conceptTitle =
       state.conceptsToCover.find((concept) => concept.key === currentQuestion.conceptKey)
         ?.title ?? currentQuestion.conceptKey;
-    const evaluation = await evaluateQuizAnswer({
+    const evaluation = await evaluateAssessmentAnswer({
       topicTitle: params.access.topic.title,
       conceptTitle,
+      questionType: currentQuestion.questionType,
+      subjectKey: state.subjectPackageKey,
       prompt: currentQuestion.prompt,
       expectedAnswer: currentQuestion.expectedAnswer,
       explanation: currentQuestion.explanation,
+      acceptedStrategies: currentQuestion.acceptedStrategies,
+      evidenceRequirements: currentQuestion.evidenceRequirements,
+      diagnosticTags: currentQuestion.diagnosticTags,
       difficulty: currentQuestion.difficulty,
       studentAnswer: params.userMessage,
       runtimeContext: params.runtimeContext,
@@ -1421,11 +1955,73 @@ export async function runTutoringSessionTurn(params: {
     currentQuestion.studentAnswer = params.userMessage;
     currentQuestion.correct = evaluation.correct;
     currentQuestion.score = evaluation.score;
+    currentQuestion.reasoningScore = evaluation.reasoningScore;
+    currentQuestion.transferScore = evaluation.transferScore;
+    currentQuestion.originalityScore = evaluation.originalityScore;
     currentQuestion.explanation = evaluation.explanation;
+    currentQuestion.rubric = [
+      {
+        dimension: "reasoning",
+        score: evaluation.reasoningScore,
+        note: evaluation.reasoningStrength,
+      },
+      {
+        dimension: "transfer",
+        score: evaluation.transferScore,
+        note:
+          currentQuestion.questionType === "transfer_challenge"
+            ? "Transfer performance on harder application."
+            : "",
+      },
+      {
+        dimension: "originality",
+        score: evaluation.originalityScore,
+        note: "Validity and independence of approach.",
+      },
+    ];
+    if (evaluation.misconception) {
+      state.gapsIdentified = uniqueStrings([
+        ...state.gapsIdentified,
+        evaluation.misconception,
+      ]);
+    }
+    updateReasoningPatternSignals(state, evaluation.thinkingPatternSignals);
+    recomputeReasoningScores(state);
     state.quizCurrentIndex += 1;
     replies.push(evaluation.explanation);
 
     if (state.quizCurrentIndex >= state.quizTargetCount) {
+      markPhaseStatus(state, currentPhase.id, "completed");
+      advanceToNextPendingPhase(state);
+    }
+  } else if (currentPhase.type === "metacognitive_reflection") {
+    if (state.metacognitiveMirror.currentStep === "awaiting_pattern_reflection") {
+      state.metacognitiveMirror.patternReflection = params.userMessage.trim();
+      state.metacognitiveMirror.currentStep = "awaiting_strategy_commitment";
+    } else if (state.metacognitiveMirror.currentStep === "awaiting_strategy_commitment") {
+      state.metacognitiveMirror.nextStrategyCommitment = params.userMessage.trim();
+      state.metacognitiveMirror.currentStep = "awaiting_confidence";
+    } else if (state.metacognitiveMirror.currentStep === "awaiting_confidence") {
+      const score = parseConfidenceScore(params.userMessage);
+      if (score == null) {
+        return {
+          state,
+          response:
+            "Give me a number from 1 to 10 so I can understand how strong this feels in your own head right now.",
+          userIntent: intentEnvelope.intent,
+          completed: state.reportReady,
+        };
+      }
+      state.studentConfidenceScore = score;
+      state.reflection.confidenceScore = score;
+      state.reflection.currentStep = "awaiting_click_moment";
+      recomputeReasoningScores(state);
+      state.metacognitiveMirror.currentStep = "awaiting_click_moment";
+    } else {
+      state.momentOfUnderstanding = params.userMessage.trim();
+      state.reflection.momentOfUnderstanding = params.userMessage.trim();
+      state.reflection.currentStep = "complete";
+      state.metacognitiveMirror.currentStep = "complete";
       markPhaseStatus(state, currentPhase.id, "completed");
       advanceToNextPendingPhase(state);
     }

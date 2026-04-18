@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
 
-import { transferProjectOwnershipAction } from "@/app/actions/project";
+import { transferFolderOwnershipAction } from "@/app/actions/folder";
 import { getVerifiedSession } from "@/lib/auth/session";
 
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ projectId: string }> },
+  { params }: { params: Promise<{ folderId: string }> },
 ) {
   try {
     await getVerifiedSession();
-    const { projectId } = await params;
+    const { folderId } = await params;
     const body = await request.json();
-    const result = await transferProjectOwnershipAction({
-      projectId,
+    const result = await transferFolderOwnershipAction({
+      folderId,
       newOwnerUserId: body.newOwnerUserId,
     });
 
@@ -32,4 +32,6 @@ export async function POST(
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+
 

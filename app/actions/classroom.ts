@@ -29,6 +29,13 @@ import {
   learningOutcomeDefinitionSchema,
   topicSourceBoundarySchema,
 } from "@/lib/learning/types";
+import {
+  assessmentQuestionTypeSchema,
+  curriculumFrameworkKeySchema,
+  reasoningGoalSchema,
+  subjectCompetencySchema,
+  transferExpectationSchema,
+} from "@/lib/learning/subject-packages";
 import { isWorkspaceMember } from "@/lib/workspace-access";
 import { provisionManagedStudentAccount } from "@/lib/learning/provisioning";
 import { resolveUiLocaleForContentCreation } from "@/lib/i18n/resolve-locale";
@@ -84,6 +91,12 @@ const createLearningTopicSchema = z.object({
         description: z.string().min(1),
         evidenceSignals: z.array(z.string()).optional(),
         masteryThreshold: z.number().min(0).max(100).optional(),
+        competencyTargets: z.array(subjectCompetencySchema).optional(),
+        reasoningGoals: z.array(reasoningGoalSchema).optional(),
+        misconceptionTags: z.array(z.string()).optional(),
+        questionModes: z.array(assessmentQuestionTypeSchema).optional(),
+        transferExpectation: transferExpectationSchema.optional(),
+        curriculumFrameworkKey: curriculumFrameworkKeySchema.optional(),
       }),
     )
     .min(1),
@@ -629,6 +642,12 @@ export async function createLearningTopicAction(
         description: outcome.description.trim(),
         evidenceSignals: outcome.evidenceSignals ?? [],
         masteryThreshold: outcome.masteryThreshold ?? 70,
+        competencyTargets: outcome.competencyTargets ?? [],
+        reasoningGoals: outcome.reasoningGoals ?? [],
+        misconceptionTags: outcome.misconceptionTags ?? [],
+        questionModes: outcome.questionModes ?? [],
+        transferExpectation: outcome.transferExpectation ?? "near",
+        curriculumFrameworkKey: outcome.curriculumFrameworkKey ?? "kmk_de_sek1",
       }),
     );
 

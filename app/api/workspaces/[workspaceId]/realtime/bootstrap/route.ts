@@ -49,7 +49,7 @@ export async function GET(
             title: surveys.title,
             status: surveys.status,
             userId: surveys.userId,
-            folderId: surveys.projectId,
+            folderId: surveys.folderId,
             shareableLink: surveys.shareableLink,
             createdAt: surveys.createdAt,
             updatedAt: surveys.updatedAt,
@@ -82,3 +82,4 @@ export async function GET(
     );
   }
 }
+

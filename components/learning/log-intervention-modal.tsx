@@ -84,22 +84,18 @@ export function LogInterventionModal({
                 dueAt: dueAt || undefined,
             });
 
-            if (result.success) {
-                toast.success(`Intervention logged for ${studentName}`);
-                await queryClient.invalidateQueries({
-                    queryKey: queryKeys.learning.interventions(
-                        classroomId, 
-                        studentId, 
-                        topicId ?? undefined
-                    ),
-                });
-                resetForm();
-                onClose();
-            } else {
-                toast.error(result.error || "Failed to log intervention");
-            }
+            toast.success(`Intervention logged for ${studentName}`);
+            await queryClient.invalidateQueries({
+                queryKey: queryKeys.learning.interventions(
+                    classroomId, 
+                    studentId, 
+                    topicId ?? undefined
+                ),
+            });
+            resetForm();
+            onClose();
         } catch (err) {
-            toast.error("An unexpected error occurred");
+            toast.error(err instanceof Error ? err.message : "An unexpected error occurred");
         } finally {
             setIsSubmitting(false);
         }

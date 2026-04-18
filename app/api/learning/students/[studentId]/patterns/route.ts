@@ -33,6 +33,13 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
+    if (!membership.classroom.organizationId) {
+      return NextResponse.json(
+        { error: "Learning pattern analytics are available only inside a workspace classroom." },
+        { status: 400 },
+      );
+    }
+
     const profiles = await listStudentLearningPatternProfiles({
       organizationId: membership.classroom.organizationId,
       studentUserId: membership.userId,

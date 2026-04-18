@@ -160,7 +160,7 @@ export async function getSurveysAction(): Promise<
       shareableLink: string | null;
       deliveryMode: string;
       classroomId: string | null;
-      projectId: string | null;
+      folderId: string | null;
       classroomTitle: string | null;
       creatorName: string | null;
       isOwner: boolean;
@@ -187,7 +187,7 @@ export async function getSurveysAction(): Promise<
           shareableLink: surveys.shareableLink,
           deliveryMode: surveys.deliveryMode,
           classroomId: surveys.classroomId,
-          projectId: surveys.projectId,
+          folderId: surveys.folderId,
           creatorName: users.name,
           isOwner: sql<boolean>`${surveys.userId} = ${session.user.id}`,
           isVoice: surveys.isVoice,
@@ -243,7 +243,7 @@ export async function getSurveysAction(): Promise<
           shareableLink: surveys.shareableLink,
           deliveryMode: surveys.deliveryMode,
           classroomId: surveys.classroomId,
-          projectId: surveys.projectId,
+          folderId: surveys.folderId,
           creatorName: users.name,
           isOwner: sql<boolean>`${surveys.userId} = ${session.user.id}`,
           isVoice: surveys.isVoice,
@@ -1205,4 +1205,5 @@ export async function transferSurveyOwnershipAction(input: {
     return { success: false, error: "Failed to transfer survey ownership" };
   }
 }
+
 

@@ -490,6 +490,44 @@ export function TeacherReportsPage() {
                         </div>
                       </div>
 
+                      <div className="mt-4 grid gap-4 md:grid-cols-3">
+                        <div className="rounded-[16px] border border-white/70 bg-white/80 px-4 py-3">
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                            Transfer readiness
+                          </div>
+                          <div className="mt-2 text-sm text-slate-700">
+                            {(report.report.transferReadiness ?? "not_yet").replace("_", " ")}
+                          </div>
+                        </div>
+                        <div className="rounded-[16px] border border-white/70 bg-white/80 px-4 py-3">
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                            Originality
+                          </div>
+                          <div className="mt-2 text-sm text-slate-700">
+                            {(report.report.originalityWithinConstraint ?? "low").replace("_", " ")}
+                          </div>
+                        </div>
+                        <div className="rounded-[16px] border border-white/70 bg-white/80 px-4 py-3">
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                            Next intervention
+                          </div>
+                          <div className="mt-2 text-sm text-slate-700">
+                            {(report.report.recommendedInterventionType ?? "none").replace("_", " ")}
+                          </div>
+                        </div>
+                      </div>
+
+                      {report.report.metacognitiveMirror ? (
+                        <div className="mt-4 rounded-[18px] border border-violet-100 bg-violet-50/70 px-4 py-4">
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-violet-700">
+                            Thinking pattern
+                          </div>
+                          <div className="mt-2 text-sm leading-6 text-violet-950">
+                            {report.report.metacognitiveMirror}
+                          </div>
+                        </div>
+                      ) : null}
+
                       {riskFlags.length ? (
                         <div className="mt-4 rounded-[18px] border border-amber-100 bg-amber-50/80 px-4 py-4">
                           <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">

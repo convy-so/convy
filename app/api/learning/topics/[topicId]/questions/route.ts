@@ -104,13 +104,15 @@ export async function POST(
       question: body.message.trim(),
     });
 
-    const retrieved = await findLearningEvidenceContext({
-      organizationId: access.topic.classroom.organizationId,
-      topicId,
-      query: body.message.trim(),
-      language: normalizeAppLocale(access.topic.contentLocale),
-      limit: 6,
-    });
+    const retrieved = access.topic.classroom.organizationId
+      ? await findLearningEvidenceContext({
+          organizationId: access.topic.classroom.organizationId,
+          topicId,
+          query: body.message.trim(),
+          language: normalizeAppLocale(access.topic.contentLocale),
+          limit: 6,
+        })
+      : [];
 
     const response = await generateOutOfSessionReply({
       classification: classification.classification,

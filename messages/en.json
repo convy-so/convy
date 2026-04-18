@@ -461,7 +461,7 @@
     "Sidebar": {
         "Dashboard": "Dashboard",
         "Surveys": "Surveys",
-        "Projects": "Projects",
+        "Projects": "Folders",
         "Analytics": "Analytics",
         "Team": "Team",
         "Profile": "Profile",
@@ -502,7 +502,7 @@
                 "Description": "Insights & reports"
             },
             "ManageProjects": {
-                "Title": "Manage Projects",
+                "Title": "Manage Folders",
                 "Description": "Organize your surveys"
             },
             "TeamManagement": {
@@ -527,12 +527,12 @@
     },
     "ProjectsPage": {
         "Header": {
-            "Title": "Projects",
-            "Description": "Organize your surveys into projects to keep things tidy and systematic.",
-            "CreateButton": "Create Project"
+            "Title": "Folders",
+            "Description": "Organize your surveys into folders to keep things tidy and systematic.",
+            "CreateButton": "Create Folder"
         },
         "Search": {
-            "Placeholder": "Search projects..."
+            "Placeholder": "Search folders..."
         },
         "Card": {
             "Surveys": "Surveys",
@@ -546,14 +546,14 @@
         },
         "Empty": {
             "CreateNew": {
-                "Title": "Create New Project",
+                "Title": "Create New Folder",
                 "Description": "Group related surveys for better tracking."
             },
-            "NoMatching": "No matching projects found."
+            "NoMatching": "No matching folders found."
         },
         "CreateModal": {
-            "Title": "Create Project",
-            "NameLabel": "Project Name",
+            "Title": "Create Folder",
+            "NameLabel": "Folder Name",
             "NamePlaceholder": "e.g. Q4 User Research",
             "DescriptionLabel": "Description",
             "DescriptionPlaceholder": "Describe the objective of this project...",
@@ -562,8 +562,8 @@
             "Confirm": "Confirm"
         },
         "EditModal": {
-            "Title": "Edit Project",
-            "NameLabel": "Project Name",
+            "Title": "Edit Folder",
+            "NameLabel": "Folder Name",
             "NamePlaceholder": "Enter project name",
             "DescriptionLabel": "Description",
             "DescriptionPlaceholder": "Enter project description",
@@ -571,7 +571,7 @@
             "Confirm": "Save Changes"
         },
         "DeleteModal": {
-            "Title": "Delete Project",
+            "Title": "Delete Folder",
             "Description": "Are you sure you want to delete this project? Surveys won't be deleted, only removed from this folder.",
             "Cancel": "Cancel",
             "Deleting": "Deleting...",
@@ -585,7 +585,7 @@
             "AddAnother": "Add More Surveys"
         },
         "AddSurveyModal": {
-            "Title": "Add Survey to Project",
+            "Title": "Add Survey to Folder",
             "Empty": "All your surveys are already in this project.",
             "Cancel": "Cancel"
         }

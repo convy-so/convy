@@ -8,7 +8,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { users } from "./auth";
-import { organizations, projects } from "./organization";
+import { organizations, folders } from "./organization";
 import { surveys } from "./surveys";
 
 export { usageLogs, usageLogsRelations };
@@ -27,7 +27,7 @@ const usageLogs = pgTable(
     organizationId: text("organization_id").references(() => organizations.id, {
       onDelete: "cascade",
     }),
-    projectId: text("project_id").references(() => projects.id, {
+    folderId: text("project_id").references(() => folders.id, {
       onDelete: "cascade",
     }),
     surveyId: text("survey_id").references(() => surveys.id, {
@@ -67,12 +67,13 @@ const usageLogsRelations = relations(usageLogs, ({ one }) => ({
     fields: [usageLogs.organizationId],
     references: [organizations.id],
   }),
-  project: one(projects, {
-    fields: [usageLogs.projectId],
-    references: [projects.id],
+  folder: one(folders, {
+    fields: [usageLogs.folderId],
+    references: [folders.id],
   }),
   survey: one(surveys, {
     fields: [usageLogs.surveyId],
     references: [surveys.id],
   }),
 }));
+

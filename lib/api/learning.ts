@@ -2,6 +2,13 @@ import { z } from "zod";
 
 import { learningSessionStateSchema, teacherProgressReportSchema } from "@/lib/learning/types";
 import { explanationApproachTypeSchema } from "@/lib/learning/pattern-types";
+import {
+  assessmentQuestionTypeSchema,
+  curriculumFrameworkKeySchema,
+  reasoningGoalSchema,
+  subjectCompetencySchema,
+  transferExpectationSchema,
+} from "@/lib/learning/subject-packages";
 import { appLocales } from "@/lib/i18n/config";
 
 const classroomSchema = z.object({
@@ -592,6 +599,12 @@ export async function createTopic(input: {
     description: string;
     evidenceSignals?: string[];
     masteryThreshold?: number;
+    competencyTargets?: Array<z.infer<typeof subjectCompetencySchema>>;
+    reasoningGoals?: Array<z.infer<typeof reasoningGoalSchema>>;
+    misconceptionTags?: string[];
+    questionModes?: Array<z.infer<typeof assessmentQuestionTypeSchema>>;
+    transferExpectation?: z.infer<typeof transferExpectationSchema>;
+    curriculumFrameworkKey?: z.infer<typeof curriculumFrameworkKeySchema>;
   }>;
   sourceBoundary?: Record<string, unknown>;
   contentLocale?: (typeof appLocales)[number];

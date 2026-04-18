@@ -85,16 +85,12 @@ export function CreateTopicModal({
                 learningOutcomes: parsedOutcomes,
             });
 
-            if (result.success) {
-                toast.success("Topic curriculum defined");
-                await queryClient.invalidateQueries({
-                    queryKey: queryKeys.learning.topics(classroomId),
-                });
-                resetForm();
-                onClose();
-            } else {
-                setError(result.error || "Failed to create topic");
-            }
+            toast.success("Topic curriculum defined");
+            await queryClient.invalidateQueries({
+                queryKey: queryKeys.learning.topics(classroomId),
+            });
+            resetForm();
+            onClose();
         } catch (err) {
             setError(err instanceof Error ? err.message : "An unexpected error occurred");
         } finally {

@@ -3,27 +3,27 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import {
-  getProjectsAction,
-  getProjectAction,
-  createProjectAction,
-  updateProjectAction,
-  deleteProjectAction,
-  addSurveyToProjectAction,
-  removeSurveyFromProjectAction,
-} from "@/app/actions/project";
+  getFoldersAction,
+  getFolderAction,
+  createFolderAction,
+  updateFolderAction,
+  deleteFolderAction,
+  addSurveyToFolderAction,
+  removeSurveyFromFolderAction,
+} from "@/app/actions/folder";
 import { getSurveysAction } from "@/app/actions/survey";
 import { useAuth } from "@/components/providers/auth-provider";
 
-type ProjectResponse = Awaited<ReturnType<typeof getProjectsAction>>;
-type ProjectList = Extract<ProjectResponse, { success: true }>["data"];
-type ProjectListItem = ProjectList extends Array<infer T> ? T : never;
+type FolderResponse = Awaited<ReturnType<typeof getFoldersAction>>;
+type FolderList = Extract<FolderResponse, { success: true }>["data"];
+type FolderListItem = FolderList extends Array<infer T> ? T : never;
 
 // Keys
-export const projectKeys = {
-  all: (orgId?: string | null) => ["projects", orgId] as const,
+export const folderKeys = {
+  all: (orgId?: string | null) => ["folders", orgId] as const,
   lists: (orgId?: string | null) =>
-    [...projectKeys.all(orgId), "list"] as const,
-  detail: (id: string) => ["projects", "detail", id] as const,
+    [...folderKeys.all(orgId), "list"] as const,
+  detail: (id: string) => ["folders", "detail", id] as const,
 };
 
 export const surveyKeys = {
@@ -32,25 +32,25 @@ export const surveyKeys = {
 };
 
 // Queries
-export function useProjects() {
+export function useFolders() {
   const { session } = useAuth();
   const activeOrgId = session?.activeOrganizationId || null;
 
   return useQuery({
-    queryKey: projectKeys.lists(activeOrgId),
+    queryKey: folderKeys.lists(activeOrgId),
     queryFn: async () => {
-      const result = await getProjectsAction();
+      const result = await getFoldersAction();
       if (!result.success) throw new Error(result.error);
       return result.data;
     },
   });
 }
 
-export function useProject(id: string) {
+export function useFolder(id: string) {
   return useQuery({
-    queryKey: projectKeys.detail(id),
+    queryKey: folderKeys.detail(id),
     queryFn: async () => {
-      const result = await getProjectAction(id);
+      const result = await getFolderAction(id);
       if (!result.success) throw new Error(result.error);
       return result.data;
     },
@@ -58,7 +58,7 @@ export function useProject(id: string) {
   });
 }
 
-// Helper query to get surveys available for assignment (no project)
+// Helper query to get surveys available for assignment (no folder)
 export function useAvailableSurveys() {
   const { session } = useAuth();
   const activeOrgId = session?.activeOrganizationId || null;
@@ -69,13 +69,13 @@ export function useAvailableSurveys() {
       const result = await getSurveysAction();
       if (!result.success) throw new Error(result.error);
       // Filter client-side for simplicity, or backend action could optionally filter
-      return result.data.filter((s) => !s.projectId);
+      return result.data.filter((s) => !s.folderId);
     },
   });
 }
 
 // Mutations
-export function useCreateProject() {
+export function useCreateFolder() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const activeOrgId = session?.activeOrganizationId || null;
@@ -86,51 +86,51 @@ export function useCreateProject() {
       description?: string;
       color?: string;
     }) => {
-      const result = await createProjectAction(data);
+      const result = await createFolderAction(data);
       if (!result.success) throw new Error(result.error);
       return result.data;
     },
-    onMutate: async (newProject) => {
+    onMutate: async (newFolder) => {
       // Cancel any outgoing refetches
       await queryClient.cancelQueries({
-        queryKey: projectKeys.lists(activeOrgId),
+        queryKey: folderKeys.lists(activeOrgId),
       });
 
       // Snapshot the previous value
-      const previousProjects = queryClient.getQueryData(
-        projectKeys.lists(activeOrgId),
+      const previousFolders = queryClient.getQueryData(
+        folderKeys.lists(activeOrgId),
       );
 
       // Optimistically update to the new value
-      queryClient.setQueryData(projectKeys.lists(activeOrgId), (old: Record<string, unknown>[] | undefined) => [
+      queryClient.setQueryData(folderKeys.lists(activeOrgId), (old: Record<string, unknown>[] | undefined) => [
         ...(old || []),
-        { ...newProject, id: "temp-id", createdAt: new Date() },
+        { ...newFolder, id: "temp-id", createdAt: new Date() },
       ]);
 
       // Return a context object with the snapshotted value
-      return { previousProjects };
+      return { previousFolders };
     },
     onSuccess: () => {
-      toast.success("Project created");
+      toast.success("Folder created");
     },
-    onError: (err, _newProject, context: { previousProjects?: unknown } | undefined) => {
+    onError: (err, _newFolder, context: { previousFolders?: unknown } | undefined) => {
       toast.error(err.message);
       // Rollback to the previous value
       queryClient.setQueryData(
-        projectKeys.lists(activeOrgId),
-        context?.previousProjects,
+        folderKeys.lists(activeOrgId),
+        context?.previousFolders,
       );
     },
     onSettled: () => {
       // Always refetch after error or success to ensure sync
       queryClient.invalidateQueries({
-        queryKey: projectKeys.lists(activeOrgId),
+        queryKey: folderKeys.lists(activeOrgId),
       });
     },
   });
 }
 
-export function useUpdateProject() {
+export function useUpdateFolder() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const activeOrgId = session?.activeOrganizationId || null;
@@ -141,101 +141,101 @@ export function useUpdateProject() {
       name?: string;
       description?: string;
     }) => {
-      const result = await updateProjectAction(data);
+      const result = await updateFolderAction(data);
       if (!result.success) throw new Error(result.error);
       return result.data;
     },
-    onMutate: async (updatedProject) => {
+    onMutate: async (updatedFolder) => {
       await queryClient.cancelQueries({
-        queryKey: projectKeys.lists(activeOrgId),
+        queryKey: folderKeys.lists(activeOrgId),
       });
       await queryClient.cancelQueries({
-        queryKey: projectKeys.detail(updatedProject.id),
+        queryKey: folderKeys.detail(updatedFolder.id),
       });
 
-      const previousProjects = queryClient.getQueryData(
-        projectKeys.lists(activeOrgId),
+      const previousFolders = queryClient.getQueryData(
+        folderKeys.lists(activeOrgId),
       );
-      const previousProject = queryClient.getQueryData(
-        projectKeys.detail(updatedProject.id),
+      const previousFolder = queryClient.getQueryData(
+        folderKeys.detail(updatedFolder.id),
       );
 
-      queryClient.setQueryData(projectKeys.lists(activeOrgId), (old: ProjectList | undefined) =>
-        old?.map((p: ProjectListItem) =>
-          p.id === updatedProject.id ? { ...p, ...updatedProject } : p,
+      queryClient.setQueryData(folderKeys.lists(activeOrgId), (old: FolderList | undefined) =>
+        old?.map((p: FolderListItem) =>
+          p.id === updatedFolder.id ? { ...p, ...updatedFolder } : p,
         ),
       );
       queryClient.setQueryData(
-        projectKeys.detail(updatedProject.id),
-        (old: Record<string, unknown> | undefined) => ({ ...(old || {}), ...updatedProject }),
+        folderKeys.detail(updatedFolder.id),
+        (old: Record<string, unknown> | undefined) => ({ ...(old || {}), ...updatedFolder }),
       );
 
-      return { previousProjects, previousProject };
+      return { previousFolders, previousFolder };
     },
     onSuccess: () => {
-      toast.success("Project updated");
+      toast.success("Folder updated");
     },
-    onError: (err, updatedProject, context: { previousProjects?: unknown, previousProject?: unknown } | undefined) => {
+    onError: (err, updatedFolder, context: { previousFolders?: unknown, previousFolder?: unknown } | undefined) => {
       toast.error(err.message);
       queryClient.setQueryData(
-        projectKeys.lists(activeOrgId),
-        context?.previousProjects,
+        folderKeys.lists(activeOrgId),
+        context?.previousFolders,
       );
       queryClient.setQueryData(
-        projectKeys.detail(updatedProject.id),
-        context?.previousProject,
+        folderKeys.detail(updatedFolder.id),
+        context?.previousFolder,
       );
     },
     onSettled: (_, __, variables) => {
       queryClient.invalidateQueries({
-        queryKey: projectKeys.lists(activeOrgId),
+        queryKey: folderKeys.lists(activeOrgId),
       });
       queryClient.invalidateQueries({
-        queryKey: projectKeys.detail(variables.id),
+        queryKey: folderKeys.detail(variables.id),
       });
     },
   });
 }
 
-export function useDeleteProject() {
+export function useDeleteFolder() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const activeOrgId = session?.activeOrganizationId || null;
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const result = await deleteProjectAction(id);
+      const result = await deleteFolderAction(id);
       if (!result.success) throw new Error(result.error);
       return result.data;
     },
     onMutate: async (id) => {
       await queryClient.cancelQueries({
-        queryKey: projectKeys.lists(activeOrgId),
+        queryKey: folderKeys.lists(activeOrgId),
       });
 
-      const previousProjects = queryClient.getQueryData(
-        projectKeys.lists(activeOrgId),
+      const previousFolders = queryClient.getQueryData(
+        folderKeys.lists(activeOrgId),
       );
 
-      queryClient.setQueryData(projectKeys.lists(activeOrgId), (old: ProjectList | undefined) =>
-        old?.filter((p: ProjectListItem) => p.id !== id),
+      queryClient.setQueryData(folderKeys.lists(activeOrgId), (old: FolderList | undefined) =>
+        old?.filter((p: FolderListItem) => p.id !== id),
       );
 
-      return { previousProjects };
+      return { previousFolders };
     },
     onSuccess: () => {
-      toast.success("Project deleted");
+      toast.success("Folder deleted");
     },
-    onError: (err, _, context: { previousProjects?: unknown } | undefined) => {
+    onError: (err, _, context: { previousFolders?: unknown } | undefined) => {
       toast.error(err.message);
       queryClient.setQueryData(
-        projectKeys.lists(activeOrgId),
-        context?.previousProjects,
+        folderKeys.lists(activeOrgId),
+        context?.previousFolders,
       );
     },
     onSettled: () => {
       queryClient.invalidateQueries({
-        queryKey: projectKeys.lists(activeOrgId),
+        queryKey: folderKeys.lists(activeOrgId),
       });
       queryClient.invalidateQueries({
         queryKey: surveyKeys.lists(activeOrgId),
@@ -244,30 +244,30 @@ export function useDeleteProject() {
   });
 }
 
-export function useAddSurveyToProject() {
+export function useAddSurveyToFolder() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const activeOrgId = session?.activeOrganizationId || null;
 
   return useMutation({
     mutationFn: async ({
-      projectId,
+      folderId,
       surveyId,
     }: {
-      projectId: string;
+      folderId: string;
       surveyId: string;
     }) => {
-      const result = await addSurveyToProjectAction(projectId, surveyId);
+      const result = await addSurveyToFolderAction(folderId, surveyId);
       if (!result.success) throw new Error(result.error);
       return result.data;
     },
     onSuccess: (_, variables) => {
-      toast.success("Survey added to project");
+      toast.success("Survey added to folder");
       queryClient.invalidateQueries({
-        queryKey: projectKeys.detail(variables.projectId),
+        queryKey: folderKeys.detail(variables.folderId),
       });
       queryClient.invalidateQueries({
-        queryKey: projectKeys.lists(activeOrgId),
+        queryKey: folderKeys.lists(activeOrgId),
       }); // Update counts
       queryClient.invalidateQueries({
         queryKey: surveyKeys.lists(activeOrgId),
@@ -279,30 +279,30 @@ export function useAddSurveyToProject() {
   });
 }
 
-export function useRemoveSurveyFromProject() {
+export function useRemoveSurveyFromFolder() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const activeOrgId = session?.activeOrganizationId || null;
 
   return useMutation({
     mutationFn: async ({
-      projectId,
+      folderId,
       surveyId,
     }: {
-      projectId: string;
+      folderId: string;
       surveyId: string;
     }) => {
-      const result = await removeSurveyFromProjectAction(projectId, surveyId);
+      const result = await removeSurveyFromFolderAction(folderId, surveyId);
       if (!result.success) throw new Error(result.error);
       return result.data;
     },
     onSuccess: (_, variables) => {
-      toast.success("Survey removed from project");
+      toast.success("Survey removed from folder");
       queryClient.invalidateQueries({
-        queryKey: projectKeys.detail(variables.projectId),
+        queryKey: folderKeys.detail(variables.folderId),
       });
       queryClient.invalidateQueries({
-        queryKey: projectKeys.lists(activeOrgId),
+        queryKey: folderKeys.lists(activeOrgId),
       }); // Update counts
       queryClient.invalidateQueries({
         queryKey: surveyKeys.lists(activeOrgId),
@@ -313,3 +313,5 @@ export function useRemoveSurveyFromProject() {
     },
   });
 }
+
+

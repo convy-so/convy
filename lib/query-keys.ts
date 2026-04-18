@@ -29,11 +29,7 @@ export const queryKeys = {
   // Folder-related queries
   folders: {
     all: (orgId?: string | null) => ["folders", orgId] as const,
-    detail: (folderId: string) => ["folder", folderId] as const,
-  },
-  projects: {
-    all: (orgId?: string | null) => ["folders", orgId] as const,
-    detail: (projectId: string) => ["folder", projectId] as const,
+    detail: (folderId: string) => ["folders", "detail", folderId] as const,
   },
 
   // Notifications

@@ -13,7 +13,6 @@ import { getDb } from "@/db";
 import {
   classrooms,
   departments,
-  departmentMemberships,
   folders,
   organizations,
   members,
@@ -477,7 +476,20 @@ export async function inviteToWorkspace(data: {
     }
 
     // Use Better Auth API to invite member
-    const result = await auth.api.createInvitation({
+    // Better Auth's generated types do not reflect our custom workspace roles,
+    // but the underlying organization schema stores role as free text and the
+    // rest of the workspace layer expects values like "teacher" and
+    // "staff_viewer".
+    const createInvitation = auth.api.createInvitation as unknown as (input: {
+      body: {
+        email: string;
+        role: WorkspaceRole;
+        organizationId: string;
+      };
+      headers: HeadersInit;
+    }) => Promise<{ id: string } | null>;
+
+    const result = await createInvitation({
       body: {
         email: normalizedEmail,
         role,
@@ -562,7 +574,7 @@ export async function removeWorkspaceMember(data: {
     }
 
     if (targetMember) {
-      const [ownedSurveys, ownedProjects] = await Promise.all([
+      const [ownedSurveys, ownedFolders] = await Promise.all([
         getDb()
           .select({ id: surveys.id })
           .from(surveys)
@@ -583,7 +595,7 @@ export async function removeWorkspaceMember(data: {
           ),
       ]);
 
-      if (ownedSurveys.length > 0 || ownedProjects.length > 0) {
+      if (ownedSurveys.length > 0 || ownedFolders.length > 0) {
         return {
           success: false,
           error:

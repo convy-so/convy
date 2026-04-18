@@ -163,16 +163,6 @@ export async function revokeEditAccessAction(
   }
 }
 
-export async function requestEditAccessAction(
-  surveyId: string,
-): Promise<ActionResult<{ requestId: string }>> {
-  void surveyId;
-  return {
-    success: false,
-    error: "Survey access requests have been removed. Ask an owner or admin to add you.",
-  };
-}
-
 export async function postCreationCommentAction(
   input: z.infer<typeof commentSchema>,
 ): Promise<ActionResult<{ id: string }>> {

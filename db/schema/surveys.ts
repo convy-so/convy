@@ -11,7 +11,7 @@ import {
 import { relations } from "drizzle-orm";
 import { timestamps } from "./common";
 import { users } from "./auth";
-import { departments, organizations, projects } from "./organization";
+import { departments, organizations, folders } from "./organization";
 import { classrooms } from "./learning";
 import type {
   AnalyticsFact,
@@ -105,7 +105,7 @@ const surveys = pgTable(
     classroomId: text("classroom_id").references(() => classrooms.id, {
       onDelete: "cascade",
     }),
-    projectId: text("project_id").references(() => projects.id, {
+    folderId: text("project_id").references(() => folders.id, {
       onDelete: "cascade",
     }),
     deliveryMode: text("delivery_mode").default("link").notNull(),
@@ -741,9 +741,9 @@ const surveysRelations = relations(surveys, ({ one, many }) => ({
     fields: [surveys.classroomId],
     references: [classrooms.id],
   }),
-  project: one(projects, {
-    fields: [surveys.projectId],
-    references: [projects.id],
+  folder: one(folders, {
+    fields: [surveys.folderId],
+    references: [folders.id],
   }),
   creationConversation: one(surveyCreationConversations, {
     fields: [surveys.id],
@@ -1131,3 +1131,4 @@ export {
   surveyAnalyticsStatesRelations,
   surveyAnalyticsFactsRelations,
 };
+

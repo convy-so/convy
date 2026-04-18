@@ -160,18 +160,20 @@ export async function POST(request: Request) {
         summary: "Interest profile completed.",
       });
 
-      await enqueueLearningPatternAnalysis({
-        sourceType: "onboarding",
-        sourceId: activeSession.id,
-        organizationId: membership.classroom.organizationId,
-        studentUserId: session.user.id,
-        classroomStudentId: membership.id,
-      }).catch((error) => {
-        console.error("[learning:onboarding] failed to enqueue pattern analysis", {
-          sessionId: activeSession.id,
-          message: error instanceof Error ? error.message : "Unknown error",
+      if (membership.classroom.organizationId) {
+        await enqueueLearningPatternAnalysis({
+          sourceType: "onboarding",
+          sourceId: activeSession.id,
+          organizationId: membership.classroom.organizationId,
+          studentUserId: session.user.id,
+          classroomStudentId: membership.id,
+        }).catch((error) => {
+          console.error("[learning:onboarding] failed to enqueue pattern analysis", {
+            sessionId: activeSession.id,
+            message: error instanceof Error ? error.message : "Unknown error",
+          });
         });
-      });
+      }
     }
 
     return NextResponse.json({
