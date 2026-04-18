@@ -56,6 +56,25 @@ export async function POST(request: Request) {
     }
 
     const body = createAnnotationSchema.parse(await request.json());
+    const reviewQueueKey =
+      typeof body.metadata?.reviewQueueKey === "string"
+        ? body.metadata.reviewQueueKey
+        : null;
+    if (reviewQueueKey) {
+      const existing = await listLearningExpertAnnotations({
+        organizationId: context.organizationId,
+      });
+      const existingReviewed = existing.find(
+        (annotation) =>
+          annotation.status === "reviewed" &&
+          typeof annotation.metadata?.reviewQueueKey === "string" &&
+          annotation.metadata.reviewQueueKey === reviewQueueKey,
+      );
+      if (existingReviewed) {
+        return NextResponse.json({ success: true, data: existingReviewed });
+      }
+    }
+
     const now = new Date().toISOString();
     const annotation = expertAnnotationSchema.parse({
       ...body,

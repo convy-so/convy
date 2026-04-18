@@ -2,7 +2,10 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { createExpertGuidanceVersion } from "@/app/actions/ai-ops";
+import {
+  createExpertGuidanceVersion,
+  getExpertGuidanceVersionReleaseReadiness,
+} from "@/app/actions/ai-ops";
 import { getDb } from "@/db";
 import { expertGuidanceVersions } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
@@ -25,7 +28,16 @@ export async function GET(
       where: eq(expertGuidanceVersions.packId, packId),
       orderBy: (table, { desc }) => [desc(table.version)],
     });
-    return NextResponse.json({ success: true, data: versions });
+    const versionsWithReadiness = await Promise.all(
+      versions.map(async (version) => ({
+        ...version,
+        releaseReadiness: await getExpertGuidanceVersionReleaseReadiness({
+          packId,
+          versionId: version.id,
+        }),
+      })),
+    );
+    return NextResponse.json({ success: true, data: versionsWithReadiness });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to load versions" },

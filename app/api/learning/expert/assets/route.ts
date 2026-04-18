@@ -10,8 +10,53 @@ const createPackSchema = z.object({
   artifactType: z.string().min(1),
   name: z.string().min(2),
   description: z.string().optional(),
-  targetScope: z.string().default("global"),
+  targetScope: z.enum([
+    "global",
+    "organization",
+    "classroom",
+    "topic",
+    "subject",
+    "grade_band",
+    "program",
+    "language",
+  ]).default("global"),
   metadata: z.record(z.string(), z.unknown()).default({}),
+}).superRefine((value, context) => {
+  const requireField = (field: string) => {
+    if (typeof value.metadata[field] !== "string" || !String(value.metadata[field]).trim()) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `metadata.${field} is required for ${value.targetScope} packs`,
+        path: ["metadata", field],
+      });
+    }
+  };
+
+  switch (value.targetScope) {
+    case "organization":
+      requireField("organizationId");
+      break;
+    case "classroom":
+      requireField("classroomId");
+      break;
+    case "topic":
+      requireField("topicId");
+      break;
+    case "subject":
+      requireField("subjectKey");
+      break;
+    case "grade_band":
+      requireField("gradeBand");
+      break;
+    case "program":
+      requireField("programId");
+      break;
+    case "language":
+      requireField("language");
+      break;
+    default:
+      break;
+  }
 });
 
 export async function GET() {

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
@@ -719,10 +719,57 @@ export async function listExpertReviewQueue(params: {
     limit: params.limit ?? 24,
   });
 
+  const reportIds = reports.map((report) => report.id);
+  const sessionIds = reports
+    .map((report) => report.generatedFromSessionId)
+    .filter((value): value is string => Boolean(value));
+  const topicIds = reports
+    .map((report) => report.topicId)
+    .filter((value): value is string => Boolean(value));
+  const reviewedAnnotations =
+    reportIds.length === 0
+      ? []
+      : await getDb().query.learningExpertAnnotations.findMany({
+          where: and(
+            eq(learningExpertAnnotations.organizationId, params.organizationId),
+            inArray(learningExpertAnnotations.status, ["reviewed", "published"]),
+            sessionIds.length > 0 && topicIds.length > 0
+              ? or(
+                  inArray(learningExpertAnnotations.sessionId, sessionIds),
+                  inArray(learningExpertAnnotations.topicId, topicIds),
+                )
+              : sessionIds.length > 0
+                ? inArray(learningExpertAnnotations.sessionId, sessionIds)
+                : topicIds.length > 0
+                  ? inArray(learningExpertAnnotations.topicId, topicIds)
+                  : undefined,
+          ),
+        });
+  const reviewedQueueKeys = new Set(
+    reviewedAnnotations.flatMap((annotation) => {
+      const reviewQueueKey =
+        typeof annotation.metadata?.reviewQueueKey === "string"
+          ? annotation.metadata.reviewQueueKey
+          : null;
+      if (reviewQueueKey && reportIds.includes(reviewQueueKey)) {
+        return [reviewQueueKey];
+      }
+
+      const matchedReport = reports.find(
+        (report) =>
+          (annotation.sessionId && report.generatedFromSessionId === annotation.sessionId) ||
+          (annotation.topicId && report.topicId === annotation.topicId &&
+            annotation.classroomStudentId === report.classroomStudentId),
+      );
+      return matchedReport ? [matchedReport.id] : [];
+    }),
+  );
+
   return reports
     .filter(
       (report) =>
-        report.topic?.classroom?.organizationId === params.organizationId,
+        report.topic?.classroom?.organizationId === params.organizationId &&
+        !reviewedQueueKeys.has(report.id),
     )
     .map((report) => {
       const reasons = [

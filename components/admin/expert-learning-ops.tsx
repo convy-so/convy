@@ -43,6 +43,14 @@ type AssetVersion = {
   version: number;
   status: string;
   notes: string | null;
+  releaseReadiness?: {
+    ready: boolean;
+    reason: string | null;
+    latestEvalRunId: string | null;
+    latestEvalStatus: string | null;
+    passRate: number | null;
+    qualityGatePassed: boolean;
+  };
 };
 
 type PreviewPayload = {
@@ -130,6 +138,16 @@ export function ExpertLearningOps() {
     queueQuery.data?.find((item) => item.key === selectedQueueKey) ?? queueQuery.data?.[0] ?? null;
   const selectedPack =
     assetsQuery.data?.find((item) => item.id === selectedPackId) ?? assetsQuery.data?.[0] ?? null;
+  const selectedSubjectKey =
+    selectedQueueItem?.subjectKey ??
+    (typeof selectedPack?.metadata?.subjectKey === "string"
+      ? selectedPack.metadata.subjectKey
+      : null);
+  const selectedSubjectLabel =
+    selectedQueueItem?.subjectLabel ??
+    (typeof selectedPack?.metadata?.subjectLabel === "string"
+      ? selectedPack.metadata.subjectLabel
+      : null);
 
   const versionsQuery = useQuery({
     queryKey: ["expertLearningAssetVersions", selectedPack?.id],
@@ -176,8 +194,12 @@ export function ExpertLearningOps() {
   });
 
   const createPackMutation = useMutation({
-    mutationFn: async () =>
-      (
+    mutationFn: async () => {
+      if (!selectedSubjectKey) {
+        throw new Error("Select a review item with a subject before creating a subject-scoped pack.");
+      }
+
+      return (
         await fetchJson<{ success: true; data: AssetPack }>("/api/learning/expert/assets", {
           method: "POST",
           body: JSON.stringify({
@@ -187,10 +209,13 @@ export function ExpertLearningOps() {
             metadata: {
               program: "germany_secondary",
               curriculumFrameworkKey: "kmk_de_sek1",
+              subjectKey: selectedSubjectKey,
+              ...(selectedSubjectLabel ? { subjectLabel: selectedSubjectLabel } : {}),
             },
           }),
         })
-      ).data,
+      ).data;
+    },
     onSuccess: async (pack) => {
       setPackName("");
       setSelectedPackId(pack.id);
@@ -268,6 +293,7 @@ export function ExpertLearningOps() {
           method: "POST",
           body: JSON.stringify({
             topicId: selectedQueueItem.topicId,
+            classroomStudentId: selectedQueueItem.classroomStudentId,
             questionType: previewQuestionType,
             difficulty: previewDifficulty,
           }),
@@ -446,6 +472,9 @@ export function ExpertLearningOps() {
           </div>
 
           <div className="mt-5 grid gap-3">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              Subject scope: {selectedSubjectLabel ?? selectedSubjectKey ?? "Select a review item first"}
+            </div>
             <input
               value={packName}
               onChange={(event) => setPackName(event.target.value)}
@@ -467,7 +496,7 @@ export function ExpertLearningOps() {
             <button
               type="button"
               onClick={() => createPackMutation.mutate()}
-              disabled={createPackMutation.isPending || !packName.trim()}
+              disabled={createPackMutation.isPending || !packName.trim() || !selectedSubjectKey}
               className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-950 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
             >
               {createPackMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -549,11 +578,20 @@ export function ExpertLearningOps() {
                         <div className="mt-1 text-sm text-slate-600">
                           {version.status} {version.notes ? `| ${version.notes}` : ""}
                         </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {version.releaseReadiness?.ready
+                            ? `Release ready${typeof version.releaseReadiness.passRate === "number" ? ` | pass rate ${Math.round(version.releaseReadiness.passRate * 100)}%` : ""}`
+                            : version.releaseReadiness?.reason ?? "Release readiness not available"}
+                        </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => activateVersionMutation.mutate(version.id)}
-                        disabled={activateVersionMutation.isPending || version.status === "approved"}
+                        disabled={
+                          activateVersionMutation.isPending ||
+                          version.status === "approved" ||
+                          !version.releaseReadiness?.ready
+                        }
                         className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 disabled:opacity-60"
                       >
                         <CheckCircle2 className="h-3.5 w-3.5" />

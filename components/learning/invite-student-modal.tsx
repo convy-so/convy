@@ -84,7 +84,7 @@ export function InviteStudentModal({
         setError(null);
 
         try {
-            const result = await inviteStudent({
+            await inviteStudent({
                 classroomId,
                 fullName: fullName.trim(),
                 email: email.trim(),

@@ -30,7 +30,6 @@ import {
   conceptConfidenceSchema,
   homeworkStatusSchema,
   learningAssessmentItemSchema,
-  learningQuizItemSchema,
   metacognitiveMirrorStateSchema,
   learningReflectionStateSchema,
   learningSessionPhaseSchema,
@@ -1086,6 +1085,31 @@ async function generateAssessmentQuestion(params: {
   retrievedContext: string[];
   runtimeContext?: TutoringRuntimeContext;
 }) {
+  if (params.retrievedContext.length === 0) {
+    return {
+      prompt: `I don't have enough teacher-approved material to create a fair challenge on ${params.conceptTitle} yet. Tell me which part still feels unclear, and I'll make sure that gap is captured precisely for your teacher.`,
+      expectedAnswer: "The student identifies the unclear part of the concept.",
+      explanation:
+        "I stayed narrow here because the source material is too thin for a grounded assessment item.",
+      difficulty: params.difficulty,
+      questionType: params.questionType,
+      reasoningSkill: "metacognition" as const,
+      acceptedStrategies: [
+        "name the unclear part precisely",
+        "describe where reasoning breaks down",
+      ],
+      hintLadder: [
+        "Point to the exact step or idea that feels shaky.",
+        "Say whether the confusion is about meaning, method, or evidence.",
+      ],
+      diagnosticTags: ["insufficient_grounding"],
+      evidenceRequirements: [
+        "identifies a specific uncertainty",
+        "does not invent unsupported facts",
+      ],
+    };
+  }
+
   const subjectPackage = getSubjectPackage(params.subjectKey);
   const { output } = await generateObservedText({
     model: defaultModel,
@@ -1178,6 +1202,12 @@ export async function previewAssessmentQuestionForTopic(params: {
     language: params.topic.contentLocale,
     aiRunId: params.runtimeContext?.aiRunId,
   });
+
+  if (retrievedContext.length === 0) {
+    throw new Error(
+      `Preview blocked: there is not enough teacher-approved evidence indexed for ${conceptTitle}. Add or sync source material first.`,
+    );
+  }
 
   return await generateAssessmentQuestion({
     topicTitle: params.topic.title,

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getDb } from "@/db";
-import { learningTopics } from "@/db/schema";
+import { classroomStudents, learningTopics } from "@/db/schema";
 import { listActiveExpertGuidance, renderExpertGuidanceContext } from "@/lib/ai/guidance";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { assertAiOpsUser } from "@/lib/auth/expert";
@@ -13,6 +13,7 @@ import { getTeachingContext } from "@/lib/teaching-context";
 
 const previewSchema = z.object({
   topicId: z.string().min(1),
+  classroomStudentId: z.string().optional(),
   conceptTitle: z.string().optional(),
   difficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
   questionType: assessmentQuestionTypeSchema.optional(),
@@ -40,6 +41,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Topic not found" }, { status: 404 });
     }
 
+    const studentSeat = body.classroomStudentId
+      ? await getDb().query.classroomStudents.findFirst({
+          where: eq(classroomStudents.id, body.classroomStudentId),
+          with: {
+            interestProfile: true,
+          },
+        })
+      : null;
+    if (body.classroomStudentId && (!studentSeat || studentSeat.classroomId !== topic.classroomId)) {
+      return NextResponse.json(
+        { error: "Student preview context does not belong to this topic's classroom" },
+        { status: 400 },
+      );
+    }
+
     const guidance = await listActiveExpertGuidance({
       feature: "tutoring_chat",
       artifactTypes: [
@@ -61,6 +77,7 @@ export async function POST(request: Request) {
 
     const question = await previewAssessmentQuestionForTopic({
       topic,
+      studentProfile: studentSeat?.interestProfile?.profile ?? null,
       conceptTitle: body.conceptTitle,
       difficulty: body.difficulty,
       questionType: body.questionType,
