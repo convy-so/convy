@@ -1,6 +1,6 @@
 "use server";
 
-import { count, desc, eq, gte, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { nanoid } from "nanoid";
 
@@ -245,6 +245,144 @@ export async function createExpertGuidanceVersion(input: {
   return version;
 }
 
+function readMetadataString(metadata: Record<string, unknown> | null | undefined, key: string) {
+  return typeof metadata?.[key] === "string" ? (metadata[key] as string) : null;
+}
+
+function getPackScopeValidation(pack: {
+  targetScope: string;
+  metadata: Record<string, unknown> | null;
+}) {
+  const metadata = pack.metadata ?? {};
+
+  switch (pack.targetScope) {
+    case "global":
+      return { valid: true, reason: null as string | null };
+    case "organization":
+      return {
+        valid: Boolean(readMetadataString(metadata, "organizationId")),
+        reason: "organization-scoped packs must include metadata.organizationId",
+      };
+    case "classroom":
+      return {
+        valid: Boolean(readMetadataString(metadata, "classroomId")),
+        reason: "classroom-scoped packs must include metadata.classroomId",
+      };
+    case "topic":
+      return {
+        valid: Boolean(readMetadataString(metadata, "topicId")),
+        reason: "topic-scoped packs must include metadata.topicId",
+      };
+    case "subject":
+      return {
+        valid: Boolean(readMetadataString(metadata, "subjectKey")),
+        reason: "subject-scoped packs must include metadata.subjectKey",
+      };
+    case "grade_band":
+      return {
+        valid: Boolean(readMetadataString(metadata, "gradeBand")),
+        reason: "grade-band-scoped packs must include metadata.gradeBand",
+      };
+    case "language":
+      return {
+        valid: Boolean(readMetadataString(metadata, "language")),
+        reason: "language-scoped packs must include metadata.language",
+      };
+    case "program":
+      return {
+        valid: Boolean(readMetadataString(metadata, "programId")),
+        reason: "program-scoped packs must include metadata.programId",
+      };
+    default:
+      return {
+        valid: false,
+        reason: `Unsupported target scope: ${pack.targetScope}`,
+      };
+  }
+}
+
+export async function getExpertGuidanceVersionReleaseReadiness(input: {
+  packId: string;
+  versionId: string;
+}) {
+  await requireAiOpsSession();
+
+  const pack = await getDb().query.expertGuidancePacks.findFirst({
+    where: eq(expertGuidancePacks.id, input.packId),
+  });
+  if (!pack) {
+    throw new Error("Guidance pack not found");
+  }
+
+  const version = await getDb().query.expertGuidanceVersions.findFirst({
+    where: eq(expertGuidanceVersions.id, input.versionId),
+  });
+  if (!version || version.packId !== input.packId) {
+    throw new Error("Guidance version not found");
+  }
+
+  const scopeValidation = getPackScopeValidation({
+    targetScope: pack.targetScope,
+    metadata: (pack.metadata as Record<string, unknown>) ?? {},
+  });
+  if (!scopeValidation.valid) {
+    return {
+      ready: false,
+      reason: scopeValidation.reason,
+      latestEvalRunId: null as string | null,
+      latestEvalStatus: null as string | null,
+      passRate: null as number | null,
+      qualityGatePassed: false,
+    };
+  }
+
+  const latestEvalRun = await getDb().query.evalRuns.findFirst({
+    where: and(
+      eq(evalRuns.feature, "tutoring_chat"),
+      eq(evalRuns.targetVersionId, input.versionId),
+    ),
+    orderBy: [desc(evalRuns.createdAt)],
+  });
+
+  if (!latestEvalRun) {
+    return {
+      ready: false,
+      reason: "Run an eval for this version before activation.",
+      latestEvalRunId: null as string | null,
+      latestEvalStatus: null as string | null,
+      passRate: null as number | null,
+      qualityGatePassed: false,
+    };
+  }
+
+  if (latestEvalRun.status !== "completed") {
+    return {
+      ready: false,
+      reason: `Latest eval run is ${latestEvalRun.status}. Wait for it to complete successfully.`,
+      latestEvalRunId: latestEvalRun.id,
+      latestEvalStatus: latestEvalRun.status,
+      passRate: null as number | null,
+      qualityGatePassed: false,
+    };
+  }
+
+  const summary = (latestEvalRun.summary ?? {}) as Record<string, unknown>;
+  const qualityGatePassed = summary.qualityGatePassed === true;
+  const passRate =
+    typeof summary.passRate === "number" ? summary.passRate : null;
+
+  return {
+    ready: qualityGatePassed,
+    reason: qualityGatePassed
+      ? null
+      : "Latest eval run did not pass the quality gate for release.",
+    latestEvalRunId: latestEvalRun.id,
+    latestEvalStatus: latestEvalRun.status,
+    passRate,
+    qualityGatePassed,
+  };
+}
+
 export async function activateExpertGuidanceVersion(input: {
   packId: string;
   versionId: string;
@@ -256,6 +394,11 @@ export async function activateExpertGuidanceVersion(input: {
   });
   if (!version || version.packId !== input.packId) {
     throw new Error("Guidance version not found");
+  }
+
+  const readiness = await getExpertGuidanceVersionReleaseReadiness(input);
+  if (!readiness.ready) {
+    throw new Error(readiness.reason ?? "This version is not ready for activation.");
   }
 
   await getDb()

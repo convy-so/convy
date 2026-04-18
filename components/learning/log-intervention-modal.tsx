@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X, Loader2, Sparkles, AlignLeft, Calendar, Flag, MessageSquare, Check, ChevronDown } from "lucide-react";
+import { X, Loader2, Sparkles, AlignLeft, Calendar, Check, ChevronDown } from "lucide-react";
 import { createLearningIntervention } from "@/lib/api/learning";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
@@ -73,7 +73,7 @@ export function LogInterventionModal({
         setIsSubmitting(true);
 
         try {
-            const result = await createLearningIntervention({
+            await createLearningIntervention({
                 classroomId,
                 classroomStudentId: studentId,
                 topicId: topicId ?? undefined,

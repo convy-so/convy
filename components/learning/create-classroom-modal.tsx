@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X, Loader2, Plus, GraduationCap, Sparkles, BookOpen, Layers, Hash, AlignLeft, ChevronDown, Check } from "lucide-react";
+import { X, Loader2, Plus, GraduationCap, Sparkles, BookOpen, Layers, Hash, ChevronDown, Check } from "lucide-react";
 import { createClassroom } from "@/lib/api/learning";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";

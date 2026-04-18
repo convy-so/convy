@@ -77,7 +77,7 @@ export function CreateTopicModal({
         try {
             const parsedOutcomes = parseOutcomes(outcomes);
             
-            const result = await createTopic({
+            await createTopic({
                 classroomId,
                 title: title.trim(),
                 description: description.trim() || undefined,
