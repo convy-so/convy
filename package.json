@@ -13,7 +13,6 @@
     "websocket:dev": "tsx watch --env-file=.env websocket/server.ts",
     "websocket:build": "tsc -p websocket/tsconfig.json",
     "websocket:start": "node dist/websocket/server.js",
-    "eval:creator-playbooks": "tsx scripts/eval-creator-playbooks.ts",
     "dev:all": "concurrently \"pnpm dev\" \"pnpm workers:dev\" \"pnpm websocket:dev\"",
     "email:dev": "email dev --dir components/emails"
   },

@@ -109,6 +109,7 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
       sessionId: data.sessionId,
       state,
       summary: report.studentSummary,
+      expectedStateVersion: tutoringSession.stateVersion ?? 1,
     });
 
     await enqueueLearningPatternAnalysis({

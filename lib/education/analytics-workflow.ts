@@ -1,6 +1,8 @@
 import { nanoid } from "nanoid";
 
 import { analysisModel, defaultModel, generateAIResponse } from "@/lib/ai";
+import { chooseOrchestrationMode } from "@/lib/ai-core";
+import { getPromptSpec } from "@/lib/ai/prompt-specs";
 import { replaceEmbeddedSource } from "@/lib/rag/indexer";
 import { getEducationProgram } from "./catalog";
 import { recordEducationTrace } from "./tracing";
@@ -352,6 +354,7 @@ ${buildEvidenceDigest(input.evidence)}
     temperature: 0.2,
     maxTokens: 1500,
     surveyId: input.surveyId,
+    promptSpec: getPromptSpec("survey.analytics") ?? undefined,
     promptCache: {
       namespace: "analytics-synthesize",
       staticSystemPrompt: systemPrompt,
@@ -479,6 +482,11 @@ export async function buildAnalyticsSnapshot(
     surveyId,
     sourceType: "analytics",
     sourceId: `snapshot:${snapshot.version}`,
+    organizationId: survey?.organizationId ?? null,
+    language: survey?.language ?? "en",
+    sessionType: "live",
+    documentTitle: `Analytics snapshot v${snapshot.version}`,
+    sourceUpdatedAt: new Date(snapshot.generatedAt),
     content: [
       `Program: ${brief.programId}`,
       ...snapshot.findings.map((finding) => `${finding.title}: ${finding.summary}`),
@@ -500,6 +508,10 @@ export async function buildAnalyticsSnapshot(
     surveyId,
     traceType: "analytics_snapshot",
     payload: {
+      orchestrationMode: chooseOrchestrationMode({
+        needsDeterministicStateMachine: true,
+        needsOpenEndedDialogue: false,
+      }),
       version,
       totalSessions: snapshot.participation.totalSessions,
       findings: snapshot.findings.length,
@@ -596,6 +608,12 @@ ${buildEvidenceDigest(evidence)}
     surveyId,
     sourceType: "insight",
     sourceId: sessionId,
+    organizationId: survey?.organizationId ?? null,
+    language: survey?.language ?? "en",
+    sessionType:
+      sessionRow.sessionType === "sample" ? "sample" : "live",
+    documentTitle: `Session insight ${sessionId}`,
+    sourceUpdatedAt: sessionRow.updatedAt,
     content: [insight.summary, ...insight.keyFindings, ...insight.risks].join("\n"),
     metadata: {
       sessionId,
@@ -615,6 +633,12 @@ ${buildEvidenceDigest(evidence)}
         surveyId,
         sourceType: "response",
         sourceId: item.id,
+        organizationId: survey?.organizationId ?? null,
+        language: survey?.language ?? "en",
+        sessionType:
+          sessionRow.sessionType === "sample" ? "sample" : "live",
+        documentTitle: `Evidence ${item.nodeId}`,
+        sourceUpdatedAt: sessionRow.updatedAt,
         content: item.excerpt,
         metadata: {
           sessionId,

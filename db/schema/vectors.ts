@@ -4,11 +4,14 @@ import {
   jsonb,
   pgTable,
   text,
+  timestamp,
+  uniqueIndex,
   vector,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { timestamps } from "./common";
 import { surveys } from "./surveys";
+import { organizations } from "./organization";
 
 export const documentEmbeddings = pgTable(
   "document_embeddings",
@@ -23,12 +26,32 @@ export const documentEmbeddings = pgTable(
     }).notNull(),
     sourceId: text("source_id").notNull(),
     chunkIndex: integer("chunk_index").notNull(),
+    organizationId: text("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    language: text("language").default("en"),
+    sessionType: text("session_type"),
+    documentTitle: text("document_title"),
+    embeddingModel: text("embedding_model"),
+    embeddingVersion: text("embedding_version"),
+    chunkingVersion: text("chunking_version"),
+    contentHash: text("content_hash"),
+    sourceUpdatedAt: timestamp("source_updated_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    tokenCount: integer("token_count"),
+    rawContent: text("raw_content").notNull().default(""),
+    retrievalContent: text("retrieval_content").notNull().default(""),
     content: text("content").notNull(),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
     embedding: vector("embedding", { dimensions: 1536 }),
   },
   (table) => [
     index("document_embeddings_survey_id_idx").on(table.surveyId),
+    index("document_embeddings_org_id_idx").on(table.organizationId),
+    index("document_embeddings_language_idx").on(table.language),
+    index("document_embeddings_session_type_idx").on(table.sessionType),
     index("document_embeddings_source_idx").on(
       table.sourceType,
       table.sourceId,
@@ -36,6 +59,32 @@ export const documentEmbeddings = pgTable(
     index("document_embeddings_embedding_idx").using(
       "hnsw",
       table.embedding.op("vector_cosine_ops"),
+    ),
+    uniqueIndex("document_embeddings_source_chunk_unique").on(
+      table.surveyId,
+      table.sourceType,
+      table.sourceId,
+      table.chunkIndex,
+    ),
+    index("document_embeddings_retrieval_en_idx").using(
+      "gin",
+      sql`to_tsvector('english', ${table.retrievalContent})`,
+    ),
+    index("document_embeddings_retrieval_de_idx").using(
+      "gin",
+      sql`to_tsvector('german', ${table.retrievalContent})`,
+    ),
+    index("document_embeddings_retrieval_fr_idx").using(
+      "gin",
+      sql`to_tsvector('french', ${table.retrievalContent})`,
+    ),
+    index("document_embeddings_retrieval_es_idx").using(
+      "gin",
+      sql`to_tsvector('spanish', ${table.retrievalContent})`,
+    ),
+    index("document_embeddings_retrieval_it_idx").using(
+      "gin",
+      sql`to_tsvector('italian', ${table.retrievalContent})`,
     ),
   ],
 );

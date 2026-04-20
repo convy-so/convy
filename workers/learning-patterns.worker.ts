@@ -116,6 +116,9 @@ const learningPatternsWorker = new Worker<LearningPatternAnalysisJobData>(
       ).map((item) => item.profile);
 
       let nextProfiles: StudentLearningPatternProfile[] = [];
+      let sourceCreatedAt: string | null = null;
+      let classroomId: string | null = null;
+      let topicIdForMemory: string | null = validated.topicId ?? null;
       let observations:
         | Awaited<ReturnType<typeof analyzeOnboardingLearningPatterns>>["observations"]
         | Awaited<ReturnType<typeof analyzeSessionLearningPatterns>>["observations"] = [];
@@ -151,6 +154,9 @@ const learningPatternsWorker = new Worker<LearningPatternAnalysisJobData>(
           studentUserId: validated.studentUserId,
           limit: 20,
         });
+        sourceCreatedAt = onboardingSession.createdAt.toISOString();
+        classroomId = onboardingSession.classroomStudent.classroomId;
+        topicIdForMemory = null;
 
         const result = await analyzeOnboardingLearningPatterns({
           studentName: onboardingSession.classroomStudent.fullName,
@@ -267,15 +273,20 @@ const learningPatternsWorker = new Worker<LearningPatternAnalysisJobData>(
 
         nextProfiles = result.profiles;
         observations = result.observations;
+        sourceCreatedAt = tutoringSession.createdAt.toISOString();
+        classroomId = tutoringSession.classroomStudent.classroomId;
+        topicIdForMemory = tutoringSession.topic.id;
       }
 
       const mem0References = await addLearningPatternObservations({
         studentUserId: validated.studentUserId,
         organizationId: validated.organizationId,
+        classroomId,
         classroomStudentId: validated.classroomStudentId ?? null,
-        topicId: validated.topicId ?? null,
+        topicId: topicIdForMemory,
         sourceType: validated.sourceType,
         sourceId: validated.sourceId,
+        sourceCreatedAt,
         observations: [...observations, ...buildPlaybookObservations(nextProfiles)],
       });
 

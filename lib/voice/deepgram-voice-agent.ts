@@ -197,9 +197,8 @@ export class DeepgramVoiceAgentConnection extends EventEmitter {
   private ws: WebSocket | null = null;
   private keepAliveInterval: NodeJS.Timeout | null = null;
   private isConnected: boolean = false;
-  // v1 sequencing gates (per Deepgram message flow docs)
   private isWelcomeReceived: boolean = false;
-  private isSettingsApplied: boolean = false; // Set on SettingsApplied → enables audio streaming
+  private isSettingsApplied: boolean = false;
   private settings: VoiceAgentSettings;
 
   constructor(settings: VoiceAgentSettings) {

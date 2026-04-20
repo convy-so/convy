@@ -1,4 +1,5 @@
 import type { ObservedTextOptions } from "@/lib/ai/observed-text";
+import type { ContextBundle } from "@/lib/ai-core";
 import {
   renderStrictScopePolicyInstructions,
   renderUntrustedContextBlock,
@@ -13,6 +14,7 @@ import type {
 
 export type TutoringPromptRuntimeContext = {
   aiRunId?: string;
+  contextBundle?: ContextBundle | null;
   expertGuidance?: string;
   socialGuidance?: string;
   userOverlay?: string;
@@ -157,6 +159,7 @@ export function renderTutoringScopeInstructions(input: {
 
 export function renderLearningStateSnapshot(state: LearningSessionState) {
   const sections = [
+    `Framework: ${state.frameworkKey} / current stage ${state.stageState.currentStage}`,
     `Concepts covered or in scope: ${state.conceptsToCover
       .map((concept) => concept.title)
       .join(", ")}`,
@@ -165,6 +168,12 @@ export function renderLearningStateSnapshot(state: LearningSessionState) {
       : null,
     state.gapsIdentified.length > 0
       ? `Identified gaps: ${state.gapsIdentified.join("; ")}`
+      : null,
+    state.modelFingerprint.summary
+      ? `Model fingerprint: ${state.modelFingerprint.summary}`
+      : null,
+    state.productiveGap.description
+      ? `Most productive gap: ${state.productiveGap.description}`
       : null,
     state.personalizedHomework.length > 0
       ? `Current homework ideas: ${state.personalizedHomework.join("; ")}`
@@ -228,6 +237,7 @@ export function buildTutoringObservedOptions(
     organizationId: runtimeContext.organizationId ?? null,
     resourceType: runtimeContext.resourceType ?? "learning_session",
     resourceId: runtimeContext.resourceId ?? null,
+    contextLayers: runtimeContext.contextBundle?.layers,
     metadata: {
       ...(runtimeContext.metadata ?? {}),
       ...(metadata ?? {}),

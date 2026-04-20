@@ -21,9 +21,18 @@ import type { StudentLearningPatternProfile } from "@/lib/learning/pattern-types
 import type { TeacherProgressReport } from "@/lib/learning/types";
 import { appLocaleLabels, normalizeAppLocale } from "@/lib/i18n/config";
 import type { SupportedLanguage } from "@/lib/translation-service";
-import { generateEmbedding, generateEmbeddings, chunkText } from "@/lib/rag/embeddings";
+import {
+  chunkText,
+  countTokens,
+  DEFAULT_CHUNKING_VERSION,
+  EMBEDDING_MODEL_NAME,
+  EMBEDDING_VERSION,
+  generateEmbedding,
+  generateEmbeddings,
+} from "@/lib/rag/embeddings";
 import { rerank } from "@/lib/rag/reranker";
 import type { SearchResult } from "@/lib/rag/search";
+import { buildRetrievalContent, hashContent } from "@/lib/retrieval/metadata";
 
 export type LearningEvidenceSourceType =
   | "material"
@@ -34,8 +43,16 @@ export type LearningEvidenceSourceType =
 export interface LearningEvidenceSearchFilters {
   organizationId: string;
   topicId?: string;
+  classroomId?: string;
   classroomStudentId?: string;
   studentUserId?: string;
+  subjectKey?: string;
+  gradeBand?: string;
+  curriculumFrameworkKey?: string;
+  interactionType?: string[];
+  phaseType?: string[];
+  conceptKey?: string;
+  scopeType?: ("global" | "subject")[];
   sourceType?: LearningEvidenceSourceType[];
   minDate?: Date;
   limit?: number;
@@ -83,55 +100,133 @@ function buildLearningSourceLabel(result: LearningEvidenceSearchResult) {
   }
 }
 
+function buildLearningEvidenceRetrievalContent(params: {
+  rawContent: string;
+  sourceType: LearningEvidenceSourceType;
+  sourceTitle?: string | null;
+  topicTitle?: string | null;
+  subjectKey?: string | null;
+  gradeBand?: string | null;
+  language?: string | null;
+  interactionType?: string | null;
+  phaseType?: string | null;
+  conceptKey?: string | null;
+  scopeType?: string | null;
+}) {
+  return buildRetrievalContent({
+    headerEntries: [
+      { label: "Source type", value: params.sourceType },
+      { label: "Title", value: params.sourceTitle },
+      { label: "Topic", value: params.topicTitle },
+      { label: "Subject", value: params.subjectKey },
+      { label: "Grade band", value: params.gradeBand },
+      { label: "Language", value: params.language },
+      { label: "Interaction type", value: params.interactionType },
+      { label: "Phase", value: params.phaseType },
+      { label: "Concept", value: params.conceptKey },
+      { label: "Scope", value: params.scopeType },
+    ],
+    rawContent: params.rawContent,
+  });
+}
+
 export async function replaceLearningEvidenceSource(params: {
   organizationId: string;
   topicId?: string | null;
+  classroomId?: string | null;
   classroomStudentId?: string | null;
   studentUserId?: string | null;
   sourceType: LearningEvidenceSourceType;
   sourceId: string;
   content: string;
   language?: SupportedLanguage | string | null;
+  sourceTitle?: string | null;
+  subjectKey?: string | null;
+  gradeBand?: string | null;
+  curriculumFrameworkKey?: string | null;
+  interactionType?: string | null;
+  phaseType?: string | null;
+  conceptKey?: string | null;
+  scopeType?: string | null;
+  sourceUpdatedAt?: Date | null;
   metadata?: Record<string, unknown>;
 }) {
-  await getDb()
-    .delete(learningEvidenceEmbeddings)
-    .where(
-      and(
-        eq(learningEvidenceEmbeddings.organizationId, params.organizationId),
-        eq(learningEvidenceEmbeddings.sourceType, params.sourceType),
-        eq(learningEvidenceEmbeddings.sourceId, params.sourceId),
-      ),
-    );
-
   const chunks = chunkText(params.content, { maxTokens: 300, overlap: 40 });
   if (chunks.length === 0) return [];
+  const normalizedLanguage = normalizeAppLocale(params.language ?? "en");
+  const retrievalChunks = chunks.map((chunk) =>
+    buildLearningEvidenceRetrievalContent({
+      rawContent: chunk,
+      sourceType: params.sourceType,
+      sourceTitle: params.sourceTitle,
+      subjectKey: params.subjectKey,
+      gradeBand: params.gradeBand,
+      language: normalizedLanguage,
+      interactionType: params.interactionType,
+      phaseType: params.phaseType,
+      conceptKey: params.conceptKey,
+      scopeType: params.scopeType,
+      topicTitle:
+        typeof params.metadata?.topicTitle === "string"
+          ? params.metadata.topicTitle
+          : params.sourceTitle,
+    }),
+  );
 
-  const embeddings = await generateEmbeddings(chunks, {
+  const embeddings = await generateEmbeddings(retrievalChunks, {
     organizationId: params.organizationId,
   });
 
-  return await getDb()
-    .insert(learningEvidenceEmbeddings)
-    .values(
-      chunks.map((content, index) => ({
-        id: nanoid(),
-        organizationId: params.organizationId,
-        topicId: params.topicId ?? null,
-        classroomStudentId: params.classroomStudentId ?? null,
-        studentUserId: params.studentUserId ?? null,
-        sourceType: params.sourceType,
-        sourceId: params.sourceId,
-        chunkIndex: index,
-        language: normalizeAppLocale(params.language ?? "en"),
-        content,
-        metadata: params.metadata ?? {},
-        embedding: embeddings[index],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })),
-    )
-    .returning();
+  return await getDb().transaction(async (tx) => {
+    await tx
+      .delete(learningEvidenceEmbeddings)
+      .where(
+        and(
+          eq(learningEvidenceEmbeddings.organizationId, params.organizationId),
+          eq(learningEvidenceEmbeddings.sourceType, params.sourceType),
+          eq(learningEvidenceEmbeddings.sourceId, params.sourceId),
+        ),
+      );
+
+    return await tx
+      .insert(learningEvidenceEmbeddings)
+      .values(
+        chunks.map((content, index) => ({
+          id: nanoid(),
+          organizationId: params.organizationId,
+          topicId: params.topicId ?? null,
+          classroomId: params.classroomId ?? null,
+          classroomStudentId: params.classroomStudentId ?? null,
+          studentUserId: params.studentUserId ?? null,
+          sourceType: params.sourceType,
+          sourceId: params.sourceId,
+          chunkIndex: index,
+          language: normalizedLanguage,
+          subjectKey: params.subjectKey ?? null,
+          gradeBand: params.gradeBand ?? null,
+          curriculumFrameworkKey: params.curriculumFrameworkKey ?? null,
+          interactionType: params.interactionType ?? null,
+          phaseType: params.phaseType ?? null,
+          conceptKey: params.conceptKey ?? null,
+          scopeType: params.scopeType ?? null,
+          sourceTitle: params.sourceTitle ?? null,
+          embeddingModel: EMBEDDING_MODEL_NAME,
+          embeddingVersion: EMBEDDING_VERSION,
+          chunkingVersion: DEFAULT_CHUNKING_VERSION,
+          contentHash: hashContent(content),
+          sourceUpdatedAt: params.sourceUpdatedAt ?? new Date(),
+          tokenCount: countTokens(content),
+          rawContent: content,
+          retrievalContent: retrievalChunks[index],
+          content,
+          metadata: params.metadata ?? {},
+          embedding: embeddings[index],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })),
+      )
+      .returning();
+  });
 }
 
 async function vectorSearchLearning(
@@ -146,7 +241,8 @@ async function vectorSearchLearning(
   const rows = await getDb()
     .select({
       id: learningEvidenceEmbeddings.id,
-      content: learningEvidenceEmbeddings.content,
+      content: learningEvidenceEmbeddings.rawContent,
+      retrievalContent: learningEvidenceEmbeddings.retrievalContent,
       metadata: learningEvidenceEmbeddings.metadata,
       sourceType: learningEvidenceEmbeddings.sourceType,
       sourceId: learningEvidenceEmbeddings.sourceId,
@@ -160,6 +256,9 @@ async function vectorSearchLearning(
         filters.topicId
           ? eq(learningEvidenceEmbeddings.topicId, filters.topicId)
           : undefined,
+        filters.classroomId
+          ? eq(learningEvidenceEmbeddings.classroomId, filters.classroomId)
+          : undefined,
         filters.classroomStudentId
           ? eq(
               learningEvidenceEmbeddings.classroomStudentId,
@@ -168,6 +267,33 @@ async function vectorSearchLearning(
           : undefined,
         filters.studentUserId
           ? eq(learningEvidenceEmbeddings.studentUserId, filters.studentUserId)
+          : undefined,
+        filters.subjectKey
+          ? eq(learningEvidenceEmbeddings.subjectKey, filters.subjectKey)
+          : undefined,
+        filters.gradeBand
+          ? eq(learningEvidenceEmbeddings.gradeBand, filters.gradeBand)
+          : undefined,
+        filters.curriculumFrameworkKey
+          ? eq(
+              learningEvidenceEmbeddings.curriculumFrameworkKey,
+              filters.curriculumFrameworkKey,
+            )
+          : undefined,
+        filters.interactionType?.length
+          ? inArray(
+              learningEvidenceEmbeddings.interactionType,
+              filters.interactionType,
+            )
+          : undefined,
+        filters.phaseType?.length
+          ? inArray(learningEvidenceEmbeddings.phaseType, filters.phaseType)
+          : undefined,
+        filters.conceptKey
+          ? eq(learningEvidenceEmbeddings.conceptKey, filters.conceptKey)
+          : undefined,
+        filters.scopeType?.length
+          ? inArray(learningEvidenceEmbeddings.scopeType, filters.scopeType)
           : undefined,
         filters.sourceType
           ? inArray(learningEvidenceEmbeddings.sourceType, filters.sourceType)
@@ -187,6 +313,7 @@ async function vectorSearchLearning(
   return rows.map((row) => ({
     id: row.id,
     content: row.content,
+    retrievalContent: row.retrievalContent,
     metadata: normalizeMetadata(row.metadata),
     sourceType: row.sourceType,
     sourceId: row.sourceId,
@@ -205,12 +332,13 @@ async function fullTextSearchLearning(
   const tsConfig = langConfigMap[effectiveLanguage] ?? "english";
   const tsQuery = sql`websearch_to_tsquery(${tsConfig}, ${query})`;
   const rank =
-    sql<number>`ts_rank(to_tsvector(${tsConfig}, ${learningEvidenceEmbeddings.content}), ${tsQuery})`;
+    sql<number>`ts_rank(to_tsvector(${tsConfig}, ${learningEvidenceEmbeddings.retrievalContent}), ${tsQuery})`;
 
   const rows = await getDb()
     .select({
       id: learningEvidenceEmbeddings.id,
-      content: learningEvidenceEmbeddings.content,
+      content: learningEvidenceEmbeddings.rawContent,
+      retrievalContent: learningEvidenceEmbeddings.retrievalContent,
       metadata: learningEvidenceEmbeddings.metadata,
       sourceType: learningEvidenceEmbeddings.sourceType,
       sourceId: learningEvidenceEmbeddings.sourceId,
@@ -224,6 +352,9 @@ async function fullTextSearchLearning(
         filters.topicId
           ? eq(learningEvidenceEmbeddings.topicId, filters.topicId)
           : undefined,
+        filters.classroomId
+          ? eq(learningEvidenceEmbeddings.classroomId, filters.classroomId)
+          : undefined,
         filters.classroomStudentId
           ? eq(
               learningEvidenceEmbeddings.classroomStudentId,
@@ -232,6 +363,33 @@ async function fullTextSearchLearning(
           : undefined,
         filters.studentUserId
           ? eq(learningEvidenceEmbeddings.studentUserId, filters.studentUserId)
+          : undefined,
+        filters.subjectKey
+          ? eq(learningEvidenceEmbeddings.subjectKey, filters.subjectKey)
+          : undefined,
+        filters.gradeBand
+          ? eq(learningEvidenceEmbeddings.gradeBand, filters.gradeBand)
+          : undefined,
+        filters.curriculumFrameworkKey
+          ? eq(
+              learningEvidenceEmbeddings.curriculumFrameworkKey,
+              filters.curriculumFrameworkKey,
+            )
+          : undefined,
+        filters.interactionType?.length
+          ? inArray(
+              learningEvidenceEmbeddings.interactionType,
+              filters.interactionType,
+            )
+          : undefined,
+        filters.phaseType?.length
+          ? inArray(learningEvidenceEmbeddings.phaseType, filters.phaseType)
+          : undefined,
+        filters.conceptKey
+          ? eq(learningEvidenceEmbeddings.conceptKey, filters.conceptKey)
+          : undefined,
+        filters.scopeType?.length
+          ? inArray(learningEvidenceEmbeddings.scopeType, filters.scopeType)
           : undefined,
         filters.sourceType
           ? inArray(learningEvidenceEmbeddings.sourceType, filters.sourceType)
@@ -242,7 +400,7 @@ async function fullTextSearchLearning(
         filters.language
           ? eq(learningEvidenceEmbeddings.language, effectiveLanguage)
           : undefined,
-        sql`to_tsvector(${tsConfig}, ${learningEvidenceEmbeddings.content}) @@ ${tsQuery}`,
+        sql`to_tsvector(${tsConfig}, ${learningEvidenceEmbeddings.retrievalContent}) @@ ${tsQuery}`,
       ),
     )
     .orderBy(desc(rank))
@@ -251,6 +409,7 @@ async function fullTextSearchLearning(
   return rows.map((row) => ({
     id: row.id,
     content: row.content,
+    retrievalContent: row.retrievalContent,
     metadata: normalizeMetadata(row.metadata),
     sourceType: row.sourceType,
     sourceId: row.sourceId,
@@ -354,6 +513,7 @@ export async function executeLearningEvidenceQuery(
       const result = resultsMap.get(id)!;
       return {
         ...result,
+        content: result.retrievalContent ?? result.content,
         score,
       };
     });
@@ -444,24 +604,35 @@ function buildPatternEvidenceContent(params: {
 
 export async function indexLearningMaterialEvidence(params: {
   organizationId: string;
+  classroomId?: string | null;
   topicId: string;
   materialId: string;
+  topicTitle?: string | null;
   title: string;
   description?: string | null;
   mimeType: string;
   content: string;
+  subjectKey?: string | null;
+  gradeBand?: string | null;
   language?: SupportedLanguage | string | null;
+  sourceUpdatedAt?: Date | null;
 }) {
   return await replaceLearningEvidenceSource({
     organizationId: params.organizationId,
+    classroomId: params.classroomId ?? null,
     topicId: params.topicId,
     sourceType: "material",
     sourceId: params.materialId,
     language: params.language,
+    sourceTitle: params.title,
+    subjectKey: params.subjectKey ?? null,
+    gradeBand: params.gradeBand ?? null,
+    sourceUpdatedAt: params.sourceUpdatedAt ?? null,
     metadata: {
       title: params.title,
       description: params.description ?? "",
       mimeType: params.mimeType,
+      topicTitle: params.topicTitle ?? params.title,
     },
     content: `Material title: ${params.title}
 Description: ${params.description ?? "none"}
@@ -471,29 +642,46 @@ ${params.content}`.trim(),
 
 export async function indexLearningInteractionEvidence(params: {
   organizationId: string;
+  classroomId?: string | null;
   topicId?: string | null;
   classroomStudentId: string;
   studentUserId?: string | null;
   interactionId: string;
   topicTitle?: string | null;
+  subjectKey?: string | null;
+  gradeBand?: string | null;
+  curriculumFrameworkKey?: string | null;
   language?: SupportedLanguage | string | null;
   role: string;
   interactionType: string;
   content: string;
+  phaseType?: string | null;
+  conceptKey?: string | null;
+  sourceUpdatedAt?: Date | null;
   metadata?: Record<string, unknown> | null;
 }) {
   return await replaceLearningEvidenceSource({
     organizationId: params.organizationId,
+    classroomId: params.classroomId ?? null,
     topicId: params.topicId ?? null,
     classroomStudentId: params.classroomStudentId,
     studentUserId: params.studentUserId ?? null,
     sourceType: "interaction",
     sourceId: params.interactionId,
     language: params.language,
+    sourceTitle: params.topicTitle ?? params.interactionType,
+    subjectKey: params.subjectKey ?? null,
+    gradeBand: params.gradeBand ?? null,
+    curriculumFrameworkKey: params.curriculumFrameworkKey ?? null,
+    interactionType: params.interactionType,
+    phaseType: params.phaseType ?? null,
+    conceptKey: params.conceptKey ?? null,
+    sourceUpdatedAt: params.sourceUpdatedAt ?? null,
     metadata: {
       title: params.topicTitle ?? params.interactionType,
       interactionType: params.interactionType,
       role: params.role,
+      topicTitle: params.topicTitle ?? "",
       ...(params.metadata ?? {}),
     },
     content: buildInteractionEvidenceContent({
@@ -508,25 +696,37 @@ export async function indexLearningInteractionEvidence(params: {
 
 export async function indexLearningReportEvidence(params: {
   organizationId: string;
+  classroomId?: string | null;
   topicId: string;
   classroomStudentId: string;
   studentUserId?: string | null;
   reportId: string;
   topicTitle: string;
+  subjectKey?: string | null;
+  gradeBand?: string | null;
+  curriculumFrameworkKey?: string | null;
   masteryPercent: number;
   report: TeacherProgressReport;
   language?: SupportedLanguage | string | null;
+  sourceUpdatedAt?: Date | null;
 }) {
   return await replaceLearningEvidenceSource({
     organizationId: params.organizationId,
+    classroomId: params.classroomId ?? null,
     topicId: params.topicId,
     classroomStudentId: params.classroomStudentId,
     studentUserId: params.studentUserId ?? null,
     sourceType: "report",
     sourceId: params.reportId,
     language: params.language,
+    sourceTitle: params.topicTitle,
+    subjectKey: params.subjectKey ?? null,
+    gradeBand: params.gradeBand ?? null,
+    curriculumFrameworkKey: params.curriculumFrameworkKey ?? null,
+    sourceUpdatedAt: params.sourceUpdatedAt ?? null,
     metadata: {
       title: params.topicTitle,
+      topicTitle: params.topicTitle,
       masteryPercent: params.masteryPercent,
       riskFlags: params.report.riskFlags ?? [],
       identifiedGaps: params.report.identifiedGaps ?? [],
@@ -541,22 +741,34 @@ export async function indexLearningReportEvidence(params: {
 
 export async function indexLearningPatternEvidence(params: {
   organizationId: string;
+  classroomId?: string | null;
   studentUserId: string;
   profileId: string;
   subjectKey?: string | null;
   subjectLabel?: string | null;
   scopeType: "global" | "subject";
+  gradeBand?: string | null;
   summaryLocale?: SupportedLanguage | string | null;
   teacherSummary: string;
   studentSummary: string;
   profile: StudentLearningPatternProfile;
+  sourceUpdatedAt?: Date | null;
 }) {
   return await replaceLearningEvidenceSource({
     organizationId: params.organizationId,
+    classroomId: params.classroomId ?? null,
     studentUserId: params.studentUserId,
     sourceType: "pattern",
     sourceId: params.profileId,
     language: params.summaryLocale,
+    sourceTitle:
+      params.scopeType === "global"
+        ? "Cross-subject learning pattern"
+        : params.subjectLabel ?? params.subjectKey ?? "Subject learning pattern",
+    subjectKey: params.subjectKey ?? null,
+    gradeBand: params.gradeBand ?? null,
+    scopeType: params.scopeType,
+    sourceUpdatedAt: params.sourceUpdatedAt ?? null,
     metadata: {
       title:
         params.scopeType === "global"
@@ -684,6 +896,19 @@ ${memoryContext || "None"}
         namespace: "teacher-student-chat-answer",
         staticSystemPrompt: systemPrompt,
       },
+      observability: {
+        feature: "tutoring_chat",
+        scenarioType: "teacher_evidence_answer",
+        organizationId: params.organizationId,
+        resourceType: "classroom_student",
+        resourceId: params.classroomStudentId,
+        metadata: {
+          classroomStudentId: params.classroomStudentId,
+          studentUserId: params.studentUserId ?? null,
+          mem0MemoryIds: mem0Results.map((item) => item.id).filter(Boolean),
+          evidenceSourceIds: retrieved.slice(0, 6).map((item) => item.id),
+        },
+      },
     },
   );
 
@@ -747,6 +972,7 @@ export async function ensureLearningTopicMaterialEvidence(params: {
     getDb().query.learningTopics.findFirst({
       where: eq(learningTopics.id, params.topicId),
       with: {
+        classroom: true,
         materials: true,
       },
       }),
@@ -771,13 +997,18 @@ export async function ensureLearningTopicMaterialEvidence(params: {
     materialsToIndex.map((material) =>
       indexLearningMaterialEvidence({
         organizationId: params.organizationId,
+        classroomId: topic.classroomId,
         topicId: params.topicId,
         materialId: material.id,
+        topicTitle: topic.title,
         title: material.title,
         description: material.description,
         mimeType: material.mimeType,
         content: material.extractedText ?? "",
+        subjectKey: topic.subjectKey,
+        gradeBand: topic.classroom.gradeBand,
         language: topic.contentLocale,
+        sourceUpdatedAt: material.updatedAt,
       }),
     ),
   );
@@ -849,44 +1080,59 @@ export async function hydrateStudentLearningEvidence(params: {
       indexLearningReportEvidence({
         organizationId: params.organizationId,
         topicId: report.topicId,
+        classroomId: membership.classroomId,
         classroomStudentId: params.classroomStudentId,
         studentUserId: membership.userId ?? null,
         reportId: report.id,
         topicTitle: report.topic?.title ?? "Topic",
+        subjectKey: report.topic?.subjectKey ?? null,
+        gradeBand: membership.classroom.gradeBand,
+        curriculumFrameworkKey: "kmk_de_sek1",
         masteryPercent: report.masteryPercent,
         report: report.report,
         language: report.sourceLocale,
+        sourceUpdatedAt: report.updatedAt,
       }),
     ),
     ...interactions.map((interaction) =>
       indexLearningInteractionEvidence({
         organizationId: params.organizationId,
         topicId: interaction.topicId ?? null,
+        classroomId: membership.classroomId,
         classroomStudentId: params.classroomStudentId,
         studentUserId: membership.userId ?? null,
         interactionId: interaction.id,
         topicTitle: interaction.topic?.title ?? null,
+        subjectKey: interaction.topic?.subjectKey ?? null,
+        gradeBand: membership.classroom.gradeBand,
+        curriculumFrameworkKey: "kmk_de_sek1",
         language:
           interaction.topic?.contentLocale ??
           membership.classroom.defaultContentLocale,
         role: interaction.role,
         interactionType: interaction.interactionType,
         content: interaction.content,
+        phaseType: interaction.phaseType ?? null,
+        conceptKey: interaction.conceptKey ?? null,
+        sourceUpdatedAt: interaction.updatedAt,
         metadata: interaction.metadata as Record<string, unknown> | null,
       }),
     ),
     ...profiles.map((profile) =>
       indexLearningPatternEvidence({
         organizationId: params.organizationId,
+        classroomId: membership.classroomId,
         studentUserId: profile.studentUserId,
         profileId: profile.id,
         subjectKey: profile.subjectKey ?? null,
         subjectLabel: profile.subjectLabel ?? null,
         scopeType: profile.scopeType as "global" | "subject",
+        gradeBand: membership.classroom.gradeBand,
         summaryLocale: profile.summaryLocale,
         teacherSummary: profile.teacherSummary,
         studentSummary: profile.studentSummary,
         profile: profile.profile,
+        sourceUpdatedAt: profile.updatedAt,
       }),
     ),
   ]);
@@ -946,14 +1192,21 @@ export async function syncLearningInteractionEvidence(interactionId: string) {
   return await indexLearningInteractionEvidence({
     organizationId: membership.classroom.organizationId,
     topicId: interaction.topicId,
+    classroomId: membership.classroomId,
     classroomStudentId: interaction.classroomStudentId,
     studentUserId: membership.userId,
     interactionId: interaction.id,
     topicTitle: topic?.title ?? null,
+    subjectKey: topic?.subjectKey ?? null,
+    gradeBand: membership.classroom.gradeBand,
+    curriculumFrameworkKey: "kmk_de_sek1",
     language: topic?.contentLocale ?? membership.classroom.defaultContentLocale,
     role: interaction.role,
     interactionType: interaction.interactionType,
     content: interaction.content,
+    phaseType: interaction.phaseType ?? null,
+    conceptKey: interaction.conceptKey ?? null,
+    sourceUpdatedAt: interaction.updatedAt,
     metadata: interaction.metadata as Record<string, unknown> | null,
   });
 }

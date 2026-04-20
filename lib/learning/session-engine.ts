@@ -4,6 +4,7 @@ import { z } from "zod";
 import { analysisModel, defaultModel } from "@/lib/ai";
 import { generateObservedText } from "@/lib/ai/observed-text";
 import { recordAiStep } from "@/lib/ai/observability";
+import { getDynamicFewShotExamples } from "@/lib/ai/few-shot-library";
 import { normalizeAppLocale } from "@/lib/i18n/config";
 import type { LearningTeachingPlaybook } from "@/lib/learning/pattern-types";
 import {
@@ -17,7 +18,9 @@ import {
   renderTeachingPlaybookSummary,
   type TutoringPromptRuntimeContext,
 } from "@/lib/learning/prompting";
+import { getCoursePackage } from "@/lib/learning/course-packages";
 import { findLearningEvidenceContext } from "@/lib/learning/evidence";
+import { DEEP_FRAMEWORK_KEY } from "@/lib/learning/framework-packages";
 import { generateSessionOpening } from "@/lib/learning/tutor";
 import {
   assessmentQuestionTypeSchema,
@@ -34,9 +37,11 @@ import {
   learningReflectionStateSchema,
   learningSessionPhaseSchema,
   learningSessionStateSchema,
+  originalProductionSchema,
   reasoningPatternSignalSchema,
   questionIntentSchema,
   quizDifficultySchema,
+  transferCheckSchema,
   type LearningAssessmentItem,
   type GradeBand,
   type LearningOutcomeDefinition,
@@ -52,6 +57,9 @@ export type TutoringRuntimeContext = TutoringPromptRuntimeContext;
 
 function renderTutoringRuntimeContext(context?: TutoringRuntimeContext) {
   if (!context) return "";
+  if (context.contextBundle?.rendered) {
+    return `<runtime_context_bundle key="${context.contextBundle.key}" version="${context.contextBundle.versionId}">\n${context.contextBundle.rendered}\n</runtime_context_bundle>\n\n`;
+  }
 
   const studyLanguage =
     typeof context.metadata?.studyLanguage === "string"
@@ -179,6 +187,11 @@ const sessionCloseSchema = z.object({
   summary: z.string(),
 });
 
+const originalProductionPromptSchema = z.object({
+  challenge: z.string(),
+  whyThisCounts: z.string(),
+});
+
 type TopicAccess = {
   topic: {
     id: string;
@@ -267,6 +280,117 @@ function uniqueStrings(values: Array<string | null | undefined>) {
 function average(values: number[]) {
   if (values.length === 0) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function renderCoursePedagogyDirectives(subjectKey?: string | null) {
+  const coursePackage = getCoursePackage(subjectKey);
+  return [
+    `Framework: ${coursePackage.frameworkKey}`,
+    `Competency model: ${coursePackage.competencyModel.join(", ")}`,
+    `Allowed Socratic moves: ${coursePackage.allowedSocraticMoves.join(", ")}`,
+    `Transfer rules: ${coursePackage.transferRules.join(" ")}`,
+    `Originality rules: ${coursePackage.originalityRules.join(" ")}`,
+    coursePackage.metadata?.pedagogy
+      ? `Pedagogy emphasis: ${String(coursePackage.metadata.pedagogy)}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function syncDeepFrameworkState(state: LearningSessionState) {
+  const currentPhase = getCurrentPhase(state);
+  const nextStage =
+    currentPhase?.type === "assessment" || currentPhase?.type === "quiz"
+      ? "probe"
+      : currentPhase?.type === "original_production"
+        ? "produce"
+        : currentPhase?.type === "concept_teaching"
+          ? state.productiveGap.description
+            ? "extend"
+            : "expose"
+          : "diagnose";
+
+  state.stageState.currentStage = nextStage;
+  if (nextStage === "diagnose" && !state.stageState.diagnosedAt) {
+    state.stageState.diagnosedAt = isoNow();
+  }
+  if (nextStage === "expose" && !state.stageState.exposedAt) {
+    state.stageState.exposedAt = isoNow();
+  }
+  if (nextStage === "extend" && !state.stageState.extendedAt) {
+    state.stageState.extendedAt = isoNow();
+  }
+  if (nextStage === "probe" && !state.stageState.probedAt) {
+    state.stageState.probedAt = isoNow();
+  }
+  if (nextStage === "produce" && !state.stageState.producedAt) {
+    state.stageState.producedAt = isoNow();
+  }
+}
+
+function refreshModelFingerprint(state: LearningSessionState) {
+  const strengths = uniqueStrings([
+    ...(state.reasoningQualityScore != null && state.reasoningQualityScore >= 75
+      ? ["can sustain usable reasoning under challenge"]
+      : []),
+    ...(state.transferPerformanceScore != null && state.transferPerformanceScore >= 70
+      ? ["shows transfer beyond surface pattern matching"]
+      : []),
+    ...(state.originalityScore != null && state.originalityScore >= 65
+      ? ["can produce constrained original thinking"]
+      : []),
+  ]);
+  const misconceptions = uniqueStrings(state.gapsIdentified).slice(0, 6);
+  const knowledgeState =
+    misconceptions.length >= 3 ||
+    (state.transferPerformanceScore != null && state.transferPerformanceScore < 45)
+      ? "inert"
+      : state.transferPerformanceScore != null &&
+          state.transferPerformanceScore >= 70 &&
+          state.originalityScore != null &&
+          state.originalityScore >= 65
+        ? "living"
+        : "mixed";
+
+  state.modelFingerprint = {
+    knowledgeState,
+    summary:
+      knowledgeState === "living"
+        ? "The student is beginning to show flexible, defensible understanding."
+        : knowledgeState === "inert"
+          ? "The student can produce some procedures, but the mental model is still brittle."
+          : "The student has partial understanding with visible cracks under stress.",
+    strengths,
+    misconceptions,
+    productiveAssets: uniqueStrings([
+      ...state.metacognitiveHabits,
+      ...state.thinkingPatternSignals
+        .filter((signal) => signal.evidenceCount >= 2)
+        .map((signal) => signal.label),
+    ]).slice(0, 5),
+  };
+}
+
+function setProductiveGap(
+  state: LearningSessionState,
+  input: {
+    conceptKey?: string | null;
+    description: string;
+    whyItMatters?: string;
+    dissonanceQuestion?: string;
+  },
+) {
+  if (!input.description.trim()) return;
+  state.productiveGap = {
+    conceptKey: input.conceptKey ?? null,
+    description: input.description.trim(),
+    whyItMatters:
+      input.whyItMatters?.trim() ||
+      "Closing this gap should unlock downstream understanding across later questions.",
+    dissonanceQuestion:
+      input.dissonanceQuestion?.trim() || state.productiveGap.dissonanceQuestion,
+  };
 }
 
 function computeQuestionMix(items: LearningAssessmentItem[]) {
@@ -399,6 +523,7 @@ function recomputeReasoningScores(state: LearningSessionState) {
     ...state.metacognitiveHabits,
     ...habits,
   ]);
+  refreshModelFingerprint(state);
 
   return state;
 }
@@ -534,6 +659,11 @@ export function buildLearningSessionState(params: {
     }),
     learningSessionPhaseSchema.parse({
       id: phaseId++,
+      type: "original_production",
+      status: "pending",
+    }),
+    learningSessionPhaseSchema.parse({
+      id: phaseId++,
       type: "metacognitive_reflection",
       status: "pending",
     }),
@@ -574,6 +704,7 @@ export function buildLearningSessionState(params: {
   return learningSessionStateSchema.parse({
     topicTitle: params.topic.title,
     subjectPackageKey: subjectPackage.key,
+    frameworkKey: DEEP_FRAMEWORK_KEY,
     curriculumFrameworkKey:
       params.topic.learningOutcomes[0]?.curriculumFrameworkKey ?? "kmk_de_sek1",
     conceptsToCover,
@@ -608,6 +739,31 @@ export function buildLearningSessionState(params: {
     momentOfUnderstanding: null,
     learnerGoal: "",
     usedExampleLog: [],
+    stageState: {
+      currentStage: "diagnose",
+      diagnosedAt: isoNow(),
+      exposedAt: null,
+      extendedAt: null,
+      probedAt: null,
+      producedAt: null,
+      socraticTurnCount: 0,
+    },
+    modelFingerprint: {
+      knowledgeState: "mixed",
+      summary:
+        "Initial session state created. The student's mental model still needs to be surfaced.",
+      strengths: [],
+      misconceptions: params.previousSession?.identifiedGaps ?? [],
+      productiveAssets: [],
+    },
+    productiveGap: {
+      conceptKey: null,
+      description: params.previousSession?.identifiedGaps?.[0] ?? "",
+      whyItMatters: "",
+      dissonanceQuestion: "",
+    },
+    transferChecks: [],
+    originalProduction: originalProductionSchema.parse({}),
     teachingPlaybook: null,
     reportReady: false,
   });
@@ -633,9 +789,19 @@ async function classifyQuestionIntent(params: {
     };
   }
 
+  const dynamicExamples = await getDynamicFewShotExamples({
+    feature: "tutoring_chat",
+    tags: ["intent_classification"],
+    limit: 3,
+  });
+
+  const exampleText = dynamicExamples.length > 0 
+    ? `\n\nFew-shot examples:\n${dynamicExamples.map(e => `Student: ${e.user}\nClassification: ${e.assistant}`).join('\n\n')}` 
+    : "";
+
   const { output } = await generateObservedText({
     model: analysisModel,
-    system: TUTORING_ANALYSIS_SYSTEM_PROMPT,
+    system: TUTORING_ANALYSIS_SYSTEM_PROMPT + exampleText,
     promptCache: buildTutoringPromptCache("intent-classification", "analysis"),
     output: Output.object({
       schema: questionIntentEnvelopeSchema,
@@ -862,6 +1028,10 @@ ${renderTeachingPlaybookSummary(params.teachingPlaybook)}
 Grade band: ${params.gradeBand}
 Retrieved teacher-approved context:
 ${renderRetrievedContext(params.retrievedContext)}
+Course pedagogy:
+${renderCoursePedagogyDirectives(
+  params.runtimeContext?.metadata?.subjectKey as string | null | undefined,
+)}
 
 ${renderTutoringRuntimeContext(params.runtimeContext)}Rules:
 - plain language first
@@ -869,6 +1039,8 @@ ${renderTutoringRuntimeContext(params.runtimeContext)}Rules:
 - technical vocabulary only after the idea is clear
 - include one real-world anchor sentence
 - end with one comprehension check question
+- if the subject is mathematics, prioritize why-it-works, conditions, and structure over recipe repetition
+- if the subject is physics, force physical meaning and prediction before symbol manipulation
 - prefer the explanation approaches and interest domains in the playbook when confidence is meaningful
 - avoid repeating usedExampleReferences from the playbook
 - all factual claims must come from the retrieved context
@@ -1135,11 +1307,15 @@ Grade band: ${params.gradeBand}
 Difficulty: ${params.difficulty}
 Retrieved teacher-approved context:
 ${renderRetrievedContext(params.retrievedContext)}
+Course pedagogy:
+${renderCoursePedagogyDirectives(params.subjectKey)}
 
 ${renderTutoringRuntimeContext(params.runtimeContext)}Rules:
 - personalize the framing to the student's interests where possible
 - prefer high-resonance domains from the playbook and avoid reusing old example references
 - require reasoning, not simple recall
+- mathematics: favor why-it-works, broken-condition, proof-from-scratch, generalization, or relational-connection moves
+- physics: require predict-reason-calculate, physical meaning, sense-checking, or assumption-testing moves where possible
 - multiple valid approaches are allowed when the subject permits them
 - acceptedStrategies should name valid approaches, not just the expected answer
 - hintLadder should move from nudge to stronger scaffold without giving away the full solution
@@ -1263,6 +1439,8 @@ ${params.evidenceRequirements.map((item) => `- ${item}`).join("\n") || "- none p
 Diagnostic tags:
 ${params.diagnosticTags.map((item) => `- ${item}`).join("\n") || "- none provided"}
 Student answer: ${params.studentAnswer}
+Course pedagogy:
+${renderCoursePedagogyDirectives(params.subjectKey)}
 
 Return:
 - correct
@@ -1369,6 +1547,57 @@ ${renderTutoringRuntimeContext(params.runtimeContext)}Rules:
   return output;
 }
 
+async function generateOriginalProductionPrompt(params: {
+  topicTitle: string;
+  conceptTitle: string;
+  subjectKey?: string | null;
+  state: LearningSessionState;
+  studentProfile: StudentInterestProfile;
+  teachingPlaybook?: LearningTeachingPlaybook | null;
+  gradeBand: GradeBand;
+  retrievedContext: string[];
+  runtimeContext?: TutoringRuntimeContext;
+}) {
+  const coursePackage = getCoursePackage(params.subjectKey);
+  const { output } = await generateObservedText({
+    model: defaultModel,
+    system: TUTORING_DEFAULT_SYSTEM_PROMPT,
+    promptCache: buildTutoringPromptCache("original-production", "default"),
+    output: Output.object({
+      schema: originalProductionPromptSchema,
+    }),
+    prompt: `Create the DEEP "produce something original" challenge for this tutoring session.
+
+Topic: ${params.topicTitle}
+Concept: ${params.conceptTitle}
+Course package: ${coursePackage.label}
+Course pedagogy:
+${renderCoursePedagogyDirectives(params.subjectKey)}
+Session snapshot:
+${renderLearningStateSnapshot(params.state)}
+Student profile:
+${renderStudentProfileContext(params.studentProfile)}
+Teaching playbook:
+${renderTeachingPlaybookSummary(params.teachingPlaybook)}
+Retrieved teacher-approved context:
+${renderRetrievedContext(params.retrievedContext)}
+Grade band: ${params.gradeBand}
+
+${renderTutoringRuntimeContext(params.runtimeContext)}Rules:
+- Ask for construction, not recall.
+- Mathematics: prefer generalisation, proof-from-scratch, or a novel but valid construction.
+- Physics: prefer thought experiment, novel prediction, or experiment design.
+- Keep it doable in one student turn.
+- whyThisCounts should explain that this checks living knowledge rather than memorised pattern matching.`,
+  }, buildTutoringObservedOptions(params.runtimeContext, "original_production_generation", {
+    topicTitle: params.topicTitle,
+    conceptTitle: params.conceptTitle,
+    subjectKey: params.subjectKey,
+  }));
+
+  return output;
+}
+
 function parseConfidenceScore(message: string) {
   const match = message.match(/\b(10|[1-9])\b/);
   if (!match) return null;
@@ -1382,6 +1611,7 @@ async function autoAdvanceUntilPause(params: {
   runtimeContext?: TutoringRuntimeContext;
 }) {
   const state = learningSessionStateSchema.parse(params.state);
+  syncDeepFrameworkState(state);
   const replies: string[] = [];
   let waitingForStudent = false;
 
@@ -1649,6 +1879,38 @@ async function autoAdvanceUntilPause(params: {
       continue;
     }
 
+    if (phase.type === "original_production") {
+      markPhaseStatus(state, phase.id, "in_progress");
+      const conceptTitle =
+        state.conceptsToCover[
+          Math.max(0, Math.min(state.quizCurrentIndex - 1, state.conceptsToCover.length - 1))
+        ]?.title ??
+        state.conceptsToCover[0]?.title ??
+        params.access.topic.title;
+      const retrievedContext = await retrieveContext({
+        organizationId: params.access.topic.classroom.organizationId,
+        topicId: params.access.topic.id,
+        query: `${params.access.topic.title} ${conceptTitle} original challenge`,
+        language: params.access.topic.contentLocale,
+        aiRunId: params.runtimeContext?.aiRunId,
+      });
+      const production = await generateOriginalProductionPrompt({
+        topicTitle: params.access.topic.title,
+        conceptTitle,
+        subjectKey: state.subjectPackageKey,
+        state,
+        studentProfile: params.access.classroomStudent.interestProfile!.profile,
+        teachingPlaybook: state.teachingPlaybook,
+        gradeBand: params.access.topic.classroom.gradeBand as GradeBand,
+        retrievedContext,
+        runtimeContext: params.runtimeContext,
+      });
+      state.originalProduction.prompt = production.challenge;
+      replies.push(`${production.whyThisCounts}\n\n${production.challenge}`);
+      waitingForStudent = true;
+      continue;
+    }
+
     if (phase.type === "metacognitive_reflection" || phase.type === "self_reflection") {
       markPhaseStatus(state, phase.id, "in_progress");
       if (phase.type === "metacognitive_reflection") {
@@ -1727,6 +1989,9 @@ async function autoAdvanceUntilPause(params: {
     }
   }
 
+  syncDeepFrameworkState(state);
+  refreshModelFingerprint(state);
+
   return {
     state: learningSessionStateSchema.parse(state),
     response: replies.join("\n\n"),
@@ -1740,6 +2005,7 @@ export async function runTutoringSessionTurn(params: {
   runtimeContext?: TutoringRuntimeContext;
 }) {
   const state = learningSessionStateSchema.parse(params.state);
+  syncDeepFrameworkState(state);
   const currentPhase = getCurrentPhase(state);
 
   if (!params.userMessage?.trim()) {
@@ -1756,6 +2022,8 @@ export async function runTutoringSessionTurn(params: {
       completed: auto.state.reportReady,
     };
   }
+
+  state.stageState.socraticTurnCount += 1;
 
   if (!currentPhase) {
     return {
@@ -1820,6 +2088,9 @@ export async function runTutoringSessionTurn(params: {
     state.homeworkStatus = evaluation.homeworkStatus;
     if (evaluation.gap) {
       state.gapsIdentified = uniqueStrings([...state.gapsIdentified, evaluation.gap]);
+      setProductiveGap(state, {
+        description: evaluation.gap,
+      });
     }
     replies.push(evaluation.feedback);
     markPhaseStatus(state, currentPhase.id, "completed");
@@ -1834,6 +2105,11 @@ export async function runTutoringSessionTurn(params: {
     state.openingProbeAssessment = evaluation.strength;
     if (evaluation.gap) {
       state.gapsIdentified = uniqueStrings([...state.gapsIdentified, evaluation.gap]);
+      setProductiveGap(state, {
+        description: evaluation.gap,
+        whyItMatters:
+          "This early mismatch is the cleanest current opening for productive dissonance.",
+      });
     }
     replies.push(evaluation.feedback);
     markPhaseStatus(state, currentPhase.id, "completed");
@@ -1859,6 +2135,14 @@ export async function runTutoringSessionTurn(params: {
           ...state.gapsIdentified,
           `${conceptState.conceptTitle}: initial attempt was too brief to reveal reasoning`,
         ]);
+        setProductiveGap(state, {
+          conceptKey,
+          description: `${conceptState.conceptTitle}: initial model is still too shallow to defend.`,
+          dissonanceQuestion:
+            state.subjectPackageKey === "physics"
+              ? `Before you calculate anything for ${conceptState.conceptTitle}, what do you predict should happen and why?`
+              : `Why does your first method for ${conceptState.conceptTitle} actually work?`,
+        });
       }
       replies.push(
         "Good. I wanted to see your first instinct before I explained anything. Let's build from what you just showed me.",
@@ -1901,6 +2185,14 @@ export async function runTutoringSessionTurn(params: {
         if (evaluation.gap) {
           conceptState.gaps = uniqueStrings([...conceptState.gaps, evaluation.gap]);
           state.gapsIdentified = uniqueStrings([...state.gapsIdentified, evaluation.gap]);
+          setProductiveGap(state, {
+            conceptKey,
+            description: evaluation.gap,
+            dissonanceQuestion:
+              state.subjectPackageKey === "physics"
+                ? `What physical prediction does your current model make for ${conceptTitle}, and where does it fail?`
+                : `What breaks if we change one condition in your current method for ${conceptTitle}?`,
+          });
         }
 
         if (evaluation.passed) {
@@ -2014,9 +2306,29 @@ export async function runTutoringSessionTurn(params: {
         ...state.gapsIdentified,
         evaluation.misconception,
       ]);
+      setProductiveGap(state, {
+        conceptKey: currentQuestion.conceptKey,
+        description: evaluation.misconception,
+      });
     }
     updateReasoningPatternSignals(state, evaluation.thinkingPatternSignals);
     recomputeReasoningScores(state);
+    if (currentQuestion.questionType === "transfer_challenge") {
+      state.transferChecks.push(
+        transferCheckSchema.parse({
+          prompt: currentQuestion.prompt,
+          questionType: currentQuestion.questionType,
+          result:
+            evaluation.transferScore >= 75
+              ? "strong"
+              : evaluation.transferScore >= 50
+                ? "partial"
+                : "weak",
+          score: evaluation.transferScore,
+          evidence: [evaluation.explanation],
+        }),
+      );
+    }
     state.quizCurrentIndex += 1;
     replies.push(evaluation.explanation);
 
@@ -2024,6 +2336,21 @@ export async function runTutoringSessionTurn(params: {
       markPhaseStatus(state, currentPhase.id, "completed");
       advanceToNextPendingPhase(state);
     }
+  } else if (currentPhase.type === "original_production") {
+    state.originalProduction = originalProductionSchema.parse({
+      ...state.originalProduction,
+      artifact: params.userMessage.trim(),
+      completed: true,
+      teacherNote:
+        state.subjectPackageKey === "physics"
+          ? "Original production captured as a thought experiment, prediction, or experiment design."
+          : "Original production captured as a generalisation, proof idea, or novel mathematical construction.",
+    });
+    markPhaseStatus(state, currentPhase.id, "completed");
+    advanceToNextPendingPhase(state);
+    replies.push(
+      "Nice. That kind of original construction is what tells me the idea is starting to belong to you, not just the notes.",
+    );
   } else if (currentPhase.type === "metacognitive_reflection") {
     if (state.metacognitiveMirror.currentStep === "awaiting_pattern_reflection") {
       state.metacognitiveMirror.patternReflection = params.userMessage.trim();
@@ -2083,6 +2410,8 @@ export async function runTutoringSessionTurn(params: {
     access: params.access,
     runtimeContext: params.runtimeContext,
   });
+  syncDeepFrameworkState(auto.state);
+  refreshModelFingerprint(auto.state);
 
   return {
     state: auto.state,

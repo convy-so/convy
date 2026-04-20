@@ -136,6 +136,7 @@ export const sessionPhaseTypeSchema = z.enum([
   "concept_teaching",
   "assessment",
   "quiz",
+  "original_production",
   "metacognitive_reflection",
   "self_reflection",
   "session_close",
@@ -345,9 +346,73 @@ export type LearningReflectionState = z.infer<
   typeof learningReflectionStateSchema
 >;
 
+export const deepFrameworkStageKeySchema = z.enum([
+  "diagnose",
+  "expose",
+  "extend",
+  "probe",
+  "produce",
+]);
+
+export type DeepFrameworkStageKey = z.infer<
+  typeof deepFrameworkStageKeySchema
+>;
+
+export const deepStageStateSchema = z.object({
+  currentStage: deepFrameworkStageKeySchema.default("diagnose"),
+  diagnosedAt: z.string().nullable().default(null),
+  exposedAt: z.string().nullable().default(null),
+  extendedAt: z.string().nullable().default(null),
+  probedAt: z.string().nullable().default(null),
+  producedAt: z.string().nullable().default(null),
+  socraticTurnCount: z.number().int().min(0).default(0),
+});
+
+export type DeepStageState = z.infer<typeof deepStageStateSchema>;
+
+export const modelFingerprintSchema = z.object({
+  knowledgeState: z.enum(["inert", "mixed", "living"]).default("mixed"),
+  summary: z.string().default(""),
+  strengths: z.array(z.string()).default([]),
+  misconceptions: z.array(z.string()).default([]),
+  productiveAssets: z.array(z.string()).default([]),
+});
+
+export type ModelFingerprint = z.infer<typeof modelFingerprintSchema>;
+
+export const productiveGapSchema = z.object({
+  conceptKey: z.string().nullable().default(null),
+  description: z.string().default(""),
+  whyItMatters: z.string().default(""),
+  dissonanceQuestion: z.string().default(""),
+});
+
+export type ProductiveGap = z.infer<typeof productiveGapSchema>;
+
+export const transferCheckSchema = z.object({
+  prompt: z.string(),
+  questionType: assessmentQuestionTypeSchema.default("transfer_challenge"),
+  result: z.enum(["unknown", "weak", "partial", "strong"]).default("unknown"),
+  score: z.number().min(0).max(100).nullable().default(null),
+  evidence: z.array(z.string()).default([]),
+});
+
+export type TransferCheck = z.infer<typeof transferCheckSchema>;
+
+export const originalProductionSchema = z.object({
+  prompt: z.string().default(""),
+  artifact: z.string().nullable().default(null),
+  originalityMode: originalityModeSchema.default("constrained_originality"),
+  completed: z.boolean().default(false),
+  teacherNote: z.string().default(""),
+});
+
+export type OriginalProduction = z.infer<typeof originalProductionSchema>;
+
 export const learningSessionStateSchema = z.object({
   topicTitle: z.string().default(""),
   subjectPackageKey: z.string().default("general_science"),
+  frameworkKey: z.string().default("deep"),
   curriculumFrameworkKey: curriculumFrameworkKeySchema.default("kmk_de_sek1"),
   conceptsToCover: z.array(sessionConceptSchema).default([]),
   phases: z.array(learningSessionPhaseSchema).default([]),
@@ -381,6 +446,36 @@ export const learningSessionStateSchema = z.object({
   momentOfUnderstanding: z.string().nullable().default(null),
   learnerGoal: z.string().default(""),
   usedExampleLog: z.array(z.string()).default([]),
+  stageState: deepStageStateSchema.default({
+    currentStage: "diagnose",
+    diagnosedAt: null,
+    exposedAt: null,
+    extendedAt: null,
+    probedAt: null,
+    producedAt: null,
+    socraticTurnCount: 0,
+  }),
+  modelFingerprint: modelFingerprintSchema.default({
+    knowledgeState: "mixed",
+    summary: "",
+    strengths: [],
+    misconceptions: [],
+    productiveAssets: [],
+  }),
+  productiveGap: productiveGapSchema.default({
+    conceptKey: null,
+    description: "",
+    whyItMatters: "",
+    dissonanceQuestion: "",
+  }),
+  transferChecks: z.array(transferCheckSchema).default([]),
+  originalProduction: originalProductionSchema.default({
+    prompt: "",
+    artifact: null,
+    originalityMode: "constrained_originality",
+    completed: false,
+    teacherNote: "",
+  }),
   teachingPlaybook: learningTeachingPlaybookSchema.nullable().default(null),
   reportReady: z.boolean().default(false),
 });

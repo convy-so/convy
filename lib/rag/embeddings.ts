@@ -11,6 +11,10 @@ import { logUsage } from "../billing/logger";
  *  - Excellent multilingual support for EN, FR, DE, IT, ES
  */
 const embeddingModel = openai.embedding("text-embedding-3-small");
+export const EMBEDDING_MODEL_NAME = "text-embedding-3-small";
+export const EMBEDDING_DIMENSIONS = 1536;
+export const EMBEDDING_VERSION = "openai:text-embedding-3-small@default";
+export const DEFAULT_CHUNKING_VERSION = "token-512-overlap-50:v2";
 
 const enc = getEncoding("cl100k_base");
 
@@ -25,7 +29,7 @@ export async function generateEmbedding(
   // OpenAI Embedding API fails (400) on empty strings.
   // We return a zero-vector [1536] if input is empty to avoid crashing callers.
   if (!text.trim()) {
-    return new Array(1536).fill(0);
+    return new Array(EMBEDDING_DIMENSIONS).fill(0);
   }
 
   const { embedding, usage } = await embed({
@@ -37,7 +41,7 @@ export async function generateEmbedding(
     ...metadata,
     type: "llm_embedding",
     provider: "openai",
-    modelName: "text-embedding-3-small",
+    modelName: EMBEDDING_MODEL_NAME,
     totalTokens: usage.tokens,
   });
 
@@ -54,7 +58,7 @@ export async function generateEmbeddings(
 ): Promise<number[][]> {
   // If all texts are empty, return an array of zero-vectors
   if (texts.every((t) => !t.trim())) {
-    return texts.map(() => new Array(1536).fill(0));
+    return texts.map(() => new Array(EMBEDDING_DIMENSIONS).fill(0));
   }
 
   const { embeddings, usage } = await embedMany({
@@ -66,7 +70,7 @@ export async function generateEmbeddings(
     ...metadata,
     type: "llm_embedding",
     provider: "openai",
-    modelName: "text-embedding-3-small",
+    modelName: EMBEDDING_MODEL_NAME,
     totalTokens: usage.tokens,
   });
 
@@ -76,6 +80,11 @@ export async function generateEmbeddings(
 export interface ChunkOptions {
   maxTokens?: number; // Max tokens per chunk (default: 512, well within 8191 limit)
   overlap?: number; // Overlap in tokens (default: 50)
+}
+
+export function countTokens(text: string) {
+  if (!text.trim()) return 0;
+  return enc.encode(text).length;
 }
 
 /**

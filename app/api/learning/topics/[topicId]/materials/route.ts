@@ -105,24 +105,6 @@ export async function POST(
       file.name,
     );
 
-    const extractedText = await extractLearningMaterialText({
-      buffer,
-      filename: file.name,
-      mimeType,
-    });
-
-    const analysis = await analyzeLearningMaterial({
-      topicTitle: topic.title,
-      topicDescription: topic.description,
-      learningOutcomes: topic.learningOutcomes,
-      materialText: extractedText,
-    });
-
-    const groundingSummary = await generateMaterialGroundingSummary({
-      topicTitle: topic.title,
-      materialText: extractedText,
-    });
-
     const [material] = await getDb()
       .insert(topicMaterials)
       .values({
@@ -137,48 +119,161 @@ export async function POST(
         publicUrl: buildLearningMaterialAccessPath(materialId),
         mimeType,
         sizeBytes: file.size,
-        extractionStatus: "completed",
-        indexingStatus: "completed",
-        extractedText,
-        analysis: {
-          ...analysis,
-          groundingSummary,
-        },
+        extractionStatus: "processing",
+        indexingStatus: "pending",
+        extractedText: null,
+        analysis: {},
         createdAt: new Date(),
         updatedAt: new Date(),
       })
       .returning();
 
-    await replaceLearningMaterialEmbeddings({
-      topicId,
-      materialId,
-      content: extractedText,
-      metadata: {
-        title: material.title,
-        mimeType,
-      },
-    });
+    let extractedText = "";
+    let analysis: Record<string, unknown> = {};
+    let groundingSummary = "";
 
-    if (topic.classroom.organizationId) {
-      await indexLearningMaterialEvidence({
-        organizationId: topic.classroom.organizationId,
-        topicId,
-        materialId,
-        title: material.title,
-        description: material.description,
+    try {
+      extractedText = await extractLearningMaterialText({
+        buffer,
+        filename: file.name,
         mimeType,
-        content: extractedText,
-        language: topic.contentLocale,
       });
+
+      analysis = await analyzeLearningMaterial({
+        topicTitle: topic.title,
+        topicDescription: topic.description,
+        learningOutcomes: topic.learningOutcomes,
+        materialText: extractedText,
+      });
+
+      groundingSummary = await generateMaterialGroundingSummary({
+        topicTitle: topic.title,
+        materialText: extractedText,
+      });
+
+      await getDb()
+        .update(topicMaterials)
+        .set({
+          extractionStatus: "completed",
+          extractionError: null,
+          extractedText,
+          analysis: {
+            ...analysis,
+            groundingSummary,
+          },
+          indexingStatus: "processing",
+          indexingError: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(topicMaterials.id, materialId));
+    } catch (error) {
+      await getDb()
+        .update(topicMaterials)
+        .set({
+          extractionStatus: "failed",
+          extractionError:
+            error instanceof Error ? error.message : "Material extraction failed",
+          indexingStatus: "failed",
+          indexingError: "Indexing skipped because extraction failed.",
+          updatedAt: new Date(),
+        })
+        .where(eq(topicMaterials.id, materialId));
+
+      throw error;
     }
 
-    await getDb()
-      .update(learningTopics)
-      .set({
-        lastMaterialSyncAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(learningTopics.id, topicId));
+    try {
+      await replaceLearningMaterialEmbeddings({
+        organizationId: topic.classroom.organizationId,
+        classroomId: topic.classroomId,
+        topicId,
+        materialId,
+        content: extractedText,
+        topicTitle: topic.title,
+        materialTitle: material.title,
+        materialKind: material.materialKind,
+        subjectKey: topic.subjectKey,
+        gradeBand: topic.classroom.gradeBand,
+        contentLocale: topic.contentLocale,
+        sourceUpdatedAt: material.updatedAt,
+        metadata: {
+          title: material.title,
+          mimeType,
+          topicTitle: topic.title,
+          subjectKey: topic.subjectKey,
+          gradeBand: topic.classroom.gradeBand,
+          locale: topic.contentLocale,
+        },
+      });
+
+      if (topic.classroom.organizationId) {
+        await indexLearningMaterialEvidence({
+          organizationId: topic.classroom.organizationId,
+          classroomId: topic.classroomId,
+          topicId,
+          materialId,
+          topicTitle: topic.title,
+          title: material.title,
+          description: material.description,
+          mimeType,
+          content: extractedText,
+          subjectKey: topic.subjectKey,
+          gradeBand: topic.classroom.gradeBand,
+          language: topic.contentLocale,
+          sourceUpdatedAt: material.updatedAt,
+        });
+      }
+
+      await Promise.all([
+        getDb()
+          .update(topicMaterials)
+          .set({
+            indexingStatus: "completed",
+            indexingError: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(topicMaterials.id, materialId)),
+        getDb()
+          .update(learningTopics)
+          .set({
+            lastMaterialSyncAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(learningTopics.id, topicId)),
+      ]);
+    } catch (error) {
+      await getDb()
+        .update(topicMaterials)
+        .set({
+          indexingStatus: "failed",
+          indexingError:
+            error instanceof Error ? error.message : "Material indexing failed",
+          updatedAt: new Date(),
+        })
+        .where(eq(topicMaterials.id, materialId));
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          material: {
+            ...material,
+            extractionStatus: "completed",
+            indexingStatus: "failed",
+            extractedText,
+            analysis: {
+              ...analysis,
+              groundingSummary,
+            },
+          },
+          analysis,
+          groundingSummary,
+          warning:
+            error instanceof Error
+              ? error.message
+              : "Material uploaded, but indexing did not complete.",
+        },
+      });
+    }
 
     return NextResponse.json({
       success: true,

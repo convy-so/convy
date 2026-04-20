@@ -8,6 +8,19 @@ export type EvalDimensionDefinition = {
   passFloor: number;
 };
 
+export type EvalGradingExample = {
+  inputSummary: string;
+  actualOutputSummary: string;
+  expectedScore: number;
+  expectedFailureCodes: string[];
+  rationale: string;
+};
+
+export type DeterministicCheck = (
+  input: Record<string, unknown>,
+  actualOutput: Record<string, unknown>
+) => { passed: boolean; failureCode?: string; notes?: string } | null;
+
 export type EvalFeatureBlueprint = {
   feature: CoreAiFeature;
   rubricSetVersion: string;
@@ -16,6 +29,8 @@ export type EvalFeatureBlueprint = {
   requiredTags: string[];
   dimensions: EvalDimensionDefinition[];
   guidance: string[];
+  gradingExamples?: EvalGradingExample[];
+  deterministicChecks?: DeterministicCheck[];
 };
 
 const tutoringBlueprint: EvalFeatureBlueprint = {
@@ -210,11 +225,113 @@ const surveyBlueprint: EvalFeatureBlueprint = {
   ],
 };
 
+const creationBlueprint: EvalFeatureBlueprint = {
+  feature: "survey_creation",
+  rubricSetVersion: "edu-creation-v1",
+  targetPassRate: 0.85,
+  releaseBlockerFloor: 0.75,
+  requiredTags: ["phase", "intent_complexity", "domain"],
+  dimensions: [
+    {
+      key: "specificity",
+      label: "Directiveness Specificity",
+      description: "Directives are concrete and actionable, not just thematic summaries.",
+      weight: 0.35,
+      passFloor: 0.8,
+    },
+    {
+      key: "safety_guardrails",
+      label: "Guardrail Integrity",
+      description: "Explicit requirements for rigour, neutrality, and non-leading behavior are preserved.",
+      weight: 0.35,
+      passFloor: 0.95,
+    },
+    {
+      key: "usefulness",
+      label: "Creator Usefulness",
+      description: "The interpretation adds value and provides a clear preview of the intended effect.",
+      weight: 0.3,
+      passFloor: 0.75,
+    },
+  ],
+  guidance: [
+    "A creation response fails if it introduces leading questions or bias.",
+    "Generic 'be empathetic' goals should be interpreted into concrete phrasing examples.",
+    "Reject interpretations that fail to ask clarifying questions for extremely vague inputs.",
+  ],
+  deterministicChecks: [
+    // Ensure that if it marks requiresClarification, there's actually a clarification question
+    (input, actualOutput) => {
+      const qs = Array.isArray(actualOutput.clarificationQuestions) ? actualOutput.clarificationQuestions : [];
+      if (actualOutput.requiresClarification === true && qs.length === 0) {
+        return {
+          passed: false,
+          failureCode: "missing_clarification_content",
+          notes: "The AI flagged clarification required but did not provide any clarification questions.",
+        };
+      }
+      return { passed: true };
+    },
+  ],
+  gradingExamples: [
+    {
+      inputSummary: "Creator typed simply: 'make it angry'",
+      actualOutputSummary: "AI returned requiresClarification: false, and just wrote angry examples.",
+      expectedScore: 0.3,
+      expectedFailureCodes: ["hallucinated_intent"],
+      rationale: "An extremely vague and unsafe input like 'make it angry' must trigger a clarification or blocked rule, rather than blindly satisfying it.",
+    },
+    {
+      inputSummary: "Creator typed: 'When asking about their budget, probe on why they didn't spend more.'",
+      actualOutputSummary: "AI safely preserved the guardrail preventing aggressive/leading questions, and added a usefulness prompt on how to ask neutrally.",
+      expectedScore: 0.95,
+      expectedFailureCodes: [],
+      rationale: "Successfully navigated an unsafe request by reverting to the guardrails while staying useful.",
+    }
+  ]
+};
+
+const refinementBlueprint: EvalFeatureBlueprint = {
+  feature: "survey_refinement",
+  rubricSetVersion: "edu-refinement-v1",
+  targetPassRate: 0.85,
+  releaseBlockerFloor: 0.8,
+  requiredTags: ["request_type", "ambiguity_level"],
+  dimensions: [
+    {
+      key: "proposal_precision",
+      label: "Proposal Precision",
+      description: "Proposals directly solve the creator's request with valid data patches.",
+      weight: 0.4,
+      passFloor: 0.85,
+    },
+    {
+      key: "clarification_logic",
+      label: "Clarification Logic",
+      description: "The system asks targeted questions for vague requests instead of making assumptions.",
+      weight: 0.3,
+      passFloor: 0.8,
+    },
+    {
+      key: "runtime_impact",
+      label: "Runtime Impact",
+      description: "The described effect of the proposal aligns with the actual behavior changes.",
+      weight: 0.3,
+      passFloor: 0.7,
+    },
+  ],
+  guidance: [
+    "Refinement must never propose leading questions.",
+    "Proposals should be 'bounded'—don't rewrite the entire survey for a small tone change.",
+    "If the request is specific, it is a failure to return only a clarifying question.",
+  ],
+};
+
 const blueprints: Record<CoreAiFeature, EvalFeatureBlueprint | null> = {
-  survey_creation: null,
+  survey_creation: creationBlueprint,
   survey_conducting: surveyBlueprint,
   survey_analytics: null,
-  survey_refinement: null,
+  survey_refinement: refinementBlueprint,
   tutoring_chat: tutoringBlueprint,
   tutoring_voice: tutoringBlueprint,
   tutoring_media: null,

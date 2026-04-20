@@ -104,6 +104,26 @@ export const sessionStateSchema = z.object({
     confidence: z.string().optional(),
     preferences: z.array(z.string()).default([]),
   }).default({ preferences: [] }),
+  conversationSummary: z.string().default(""),
+  summaryVersion: z.number().int().nonnegative().default(0),
+  activeWorkflowDecision: z.object({
+    activeNodeId: z.string().nullable().default(null),
+    rationale: z.string().default(""),
+    shouldStop: z.boolean().default(false),
+  }).default({
+    activeNodeId: null,
+    rationale: "",
+    shouldStop: false,
+  }),
+  contextBudgetSnapshot: z.object({
+    summaryTokens: z.number().int().nonnegative().default(0),
+    evidenceCount: z.number().int().nonnegative().default(0),
+    pendingNodeCount: z.number().int().nonnegative().default(0),
+  }).default({
+    summaryTokens: 0,
+    evidenceCount: 0,
+    pendingNodeCount: 0,
+  }),
   stopReason: z.string().optional(),
   needsHumanReview: z.boolean().default(false),
 });

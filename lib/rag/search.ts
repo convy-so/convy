@@ -26,6 +26,7 @@ export interface SearchFilters {
 export interface SearchResult {
   id: string;
   content: string;
+  retrievalContent?: string;
   score: number;
   metadata: Record<string, unknown>;
   sourceType: string;
@@ -51,7 +52,8 @@ export async function vectorSearch(
   const docResults = await getDb()
     .select({
       id: documentEmbeddings.id,
-      content: documentEmbeddings.content,
+      content: documentEmbeddings.rawContent,
+      retrievalContent: documentEmbeddings.retrievalContent,
       metadata: documentEmbeddings.metadata,
       sourceType: documentEmbeddings.sourceType,
       sourceId: documentEmbeddings.sourceId,
@@ -73,13 +75,13 @@ export async function vectorSearch(
         // Only valid embeddings
         sql`${documentEmbeddings.embedding} IS NOT NULL`,
         filters.language
-          ? sql`${documentEmbeddings.metadata}->>'language' = ${filters.language}`
+          ? eq(documentEmbeddings.language, filters.language)
           : undefined,
         filters.organizationId
-          ? sql`${documentEmbeddings.metadata}->>'organizationId' = ${filters.organizationId}`
+          ? eq(documentEmbeddings.organizationId, filters.organizationId)
           : undefined,
         filters.sessionType
-          ? sql`${documentEmbeddings.metadata}->>'sessionType' = ${filters.sessionType}`
+          ? eq(documentEmbeddings.sessionType, filters.sessionType)
           : undefined,
       ),
     )
@@ -89,6 +91,7 @@ export async function vectorSearch(
   return docResults.map((r) => ({
     id: r.id,
     content: r.content,
+    retrievalContent: r.retrievalContent,
     score: r.similarity,
     metadata: normalizeMetadata(r.metadata),
     sourceType: r.sourceType,
@@ -116,12 +119,13 @@ export async function fullTextSearch(
   const tsConfig = langConfigMap[effectiveLanguage] || "english";
   const tsQuery = sql`websearch_to_tsquery(${tsConfig}, ${query})`;
 
-  const docRank = sql<number>`ts_rank(to_tsvector(${tsConfig}, ${documentEmbeddings.content}), ${tsQuery})`;
+  const docRank = sql<number>`ts_rank(to_tsvector(${tsConfig}, ${documentEmbeddings.retrievalContent}), ${tsQuery})`;
 
   const docResults = await getDb()
     .select({
       id: documentEmbeddings.id,
-      content: documentEmbeddings.content,
+      content: documentEmbeddings.rawContent,
+      retrievalContent: documentEmbeddings.retrievalContent,
       metadata: documentEmbeddings.metadata,
       sourceType: documentEmbeddings.sourceType,
       sourceId: documentEmbeddings.sourceId,
@@ -140,15 +144,15 @@ export async function fullTextSearch(
         filters.minDate
           ? gt(documentEmbeddings.createdAt, filters.minDate)
           : undefined,
-        sql`to_tsvector(${tsConfig}, ${documentEmbeddings.content}) @@ ${tsQuery}`,
+        sql`to_tsvector(${tsConfig}, ${documentEmbeddings.retrievalContent}) @@ ${tsQuery}`,
         effectiveLanguage
-          ? sql`${documentEmbeddings.metadata}->>'language' = ${effectiveLanguage}`
+          ? eq(documentEmbeddings.language, effectiveLanguage)
           : undefined,
         filters.organizationId
-          ? sql`${documentEmbeddings.metadata}->>'organizationId' = ${filters.organizationId}`
+          ? eq(documentEmbeddings.organizationId, filters.organizationId)
           : undefined,
         filters.sessionType
-          ? sql`${documentEmbeddings.metadata}->>'sessionType' = ${filters.sessionType}`
+          ? eq(documentEmbeddings.sessionType, filters.sessionType)
           : undefined,
       ),
     )
@@ -158,6 +162,7 @@ export async function fullTextSearch(
   return docResults.map((r) => ({
     id: r.id,
     content: r.content,
+    retrievalContent: r.retrievalContent,
     score: r.rank,
     metadata: normalizeMetadata(r.metadata),
     sourceType: r.sourceType,
@@ -221,7 +226,8 @@ export async function executeRAGQuery(
   filters: SearchFilters,
   language: SupportedLanguage = "en",
 ): Promise<SearchResult[]> {
-  if (!filters.organizationId) {
+  if (!filters.organizationId && !filters.surveyId) {
+    throw new Error("executeRAGQuery requires organizationId or surveyId.");
   }
   
   const queriesToRun = [rawQuery];
@@ -276,7 +282,11 @@ export async function executeRAGQuery(
     .slice(0, 150)
     .map(([id, score]) => {
       const result = resultsMap.get(id)!;
-      return { ...result, score };
+      return {
+        ...result,
+        content: result.retrievalContent ?? result.content,
+        score,
+      };
     });
 
   const finalContextLimit = fetchLimit;

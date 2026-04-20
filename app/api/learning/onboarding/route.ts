@@ -158,6 +158,7 @@ export async function POST(request: Request) {
       await completeLearningSession({
         sessionId: activeSession.id,
         summary: "Interest profile completed.",
+        expectedStateVersion: activeSession.stateVersion ?? 1,
       });
 
       if (membership.classroom.organizationId) {
