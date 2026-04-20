@@ -1,5 +1,7 @@
 import { google } from "@ai-sdk/google";
 import { openai } from "@ai-sdk/openai";
+import "@/lib/ai/prompt-specs";
+import "@/lib/ai/retrieval-adapters";
 import {
   generateText,
   streamText,
@@ -15,6 +17,9 @@ import {
   type UsageLogInput,
 } from "./billing/logger";
 import type { AiContextLayer } from "./ai/context-assembler";
+import type { ContextBundle, PromptSpec } from "./ai-core";
+import type { PromptExample } from "@/lib/ai-core/types";
+import { resolvePromptExecution } from "./ai-core";
 import {
   createAiRunTrace,
   finishAiRunTrace,
@@ -148,6 +153,10 @@ async function initializeObservedRun(input: {
     modelProvider:
       input.observability.modelProvider ?? getProviderName(input.model),
     modelName: input.observability.modelName ?? getModelId(input.model),
+    promptVersionId:
+      input.observability.promptVersionId ??
+      input.observability.metadata?.promptVersionId?.toString() ??
+      null,
     temperature: input.observability.temperature ?? input.temperature ?? null,
     maxTokens: input.observability.maxTokens ?? input.maxTokens ?? null,
     metadata: mergeRunMetadata(
@@ -175,14 +184,24 @@ export async function generateAIResponse(
     organizationId?: string;
     surveyId?: string;
     promptCache?: PromptCacheOptions;
+    promptSpec?: PromptSpec;
+    contextBundle?: ContextBundle | null;
     observability?: AiRunTraceInput & { contextLayers?: AiContextLayer[] };
+    dynamicExamples?: PromptExample[];
   },
 ) {
   const model = options?.model ?? defaultModel;
   const startedAt = Date.now();
+  const resolvedPrompt = resolvePromptExecution({
+    prompt,
+    systemPrompt,
+    promptSpec: options?.promptSpec,
+    contextBundle: options?.contextBundle,
+    dynamicExamples: options?.dynamicExamples,
+  });
   const preparedCache = await preparePromptCache({
     model,
-    systemPrompt,
+    systemPrompt: resolvedPrompt.systemPrompt,
     promptCache: options?.promptCache,
   });
   const runId = await initializeObservedRun({
@@ -190,8 +209,30 @@ export async function generateAIResponse(
     userId: options?.userId,
     organizationId: options?.organizationId,
     surveyId: options?.surveyId,
-    observability: options?.observability,
-    systemPrompt,
+    observability: options?.observability
+      ? {
+          ...options.observability,
+          promptVersionId:
+            options.observability.promptVersionId ??
+            resolvedPrompt.promptVersionId,
+          expertGuidanceVersionId:
+            options.observability.expertGuidanceVersionId ??
+            resolvedPrompt.expertGuidanceVersionId,
+          userOverlayVersionId:
+            options.observability.userOverlayVersionId ??
+            resolvedPrompt.userOverlayVersionId,
+          contextLayers:
+            options.observability.contextLayers?.length
+              ? options.observability.contextLayers
+              : resolvedPrompt.contextLayers,
+          metadata: {
+            ...(options.observability.metadata ?? {}),
+            promptVersionId: resolvedPrompt.promptVersionId,
+            contextBundleVersionId: resolvedPrompt.contextBundleVersionId,
+          },
+        }
+      : undefined,
+    systemPrompt: resolvedPrompt.systemPrompt,
     staticSystemPrompt: options?.promptCache?.staticSystemPrompt,
     temperature: options?.temperature,
     maxTokens: options?.maxTokens,
@@ -200,7 +241,7 @@ export async function generateAIResponse(
   try {
     const result = await generateText({
       model,
-      prompt,
+      prompt: resolvedPrompt.prompt,
       system: preparedCache.systemPrompt,
       temperature: options?.temperature ?? 0.7,
       maxOutputTokens: options?.maxTokens ?? 2000,
@@ -270,17 +311,26 @@ export function streamAIResponse(
     organizationId?: string;
     surveyId?: string;
     promptCache?: PromptCacheOptions;
+    promptSpec?: PromptSpec;
+    contextBundle?: ContextBundle | null;
     tools?: ToolSet;
     stopWhen?: StopCondition<ToolSet> | Array<StopCondition<ToolSet>>;
     observability?: AiRunTraceInput & { contextLayers?: AiContextLayer[] };
+    dynamicExamples?: PromptExample[];
   },
 ) {
   const model = options?.model ?? defaultModel;
   const startedAt = Date.now();
+  const resolvedPrompt = resolvePromptExecution({
+    systemPrompt,
+    promptSpec: options?.promptSpec,
+    contextBundle: options?.contextBundle,
+    dynamicExamples: options?.dynamicExamples,
+  });
 
   const preparedCachePromise = preparePromptCache({
     model,
-    systemPrompt,
+    systemPrompt: resolvedPrompt.systemPrompt,
     promptCache: options?.promptCache,
   });
   const runIdPromise = initializeObservedRun({
@@ -288,8 +338,30 @@ export function streamAIResponse(
     userId: options?.userId,
     organizationId: options?.organizationId,
     surveyId: options?.surveyId,
-    observability: options?.observability,
-    systemPrompt,
+    observability: options?.observability
+      ? {
+          ...options.observability,
+          promptVersionId:
+            options.observability.promptVersionId ??
+            resolvedPrompt.promptVersionId,
+          expertGuidanceVersionId:
+            options.observability.expertGuidanceVersionId ??
+            resolvedPrompt.expertGuidanceVersionId,
+          userOverlayVersionId:
+            options.observability.userOverlayVersionId ??
+            resolvedPrompt.userOverlayVersionId,
+          contextLayers:
+            options.observability.contextLayers?.length
+              ? options.observability.contextLayers
+              : resolvedPrompt.contextLayers,
+          metadata: {
+            ...(options.observability.metadata ?? {}),
+            promptVersionId: resolvedPrompt.promptVersionId,
+            contextBundleVersionId: resolvedPrompt.contextBundleVersionId,
+          },
+        }
+      : undefined,
+    systemPrompt: resolvedPrompt.systemPrompt,
     staticSystemPrompt: options?.promptCache?.staticSystemPrompt,
     temperature: options?.temperature,
     maxTokens: options?.maxTokens,

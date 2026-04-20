@@ -208,8 +208,10 @@ export async function addLearningPatternObservations(params: {
   organizationId: string;
   sourceType: "onboarding" | "session";
   sourceId: string;
+  classroomId?: string | null;
   classroomStudentId?: string | null;
   topicId?: string | null;
+  sourceCreatedAt?: string | null;
   observations: LearningPatternObservation[];
 }) {
   const client = getMem0Client();
@@ -225,10 +227,12 @@ export async function addLearningPatternObservations(params: {
 
     const sharedMetadata = {
       organizationId: params.organizationId,
+      classroomId: params.classroomId ?? null,
       classroomStudentId: params.classroomStudentId ?? null,
       topicId: params.topicId ?? null,
       sourceType: params.sourceType,
       sourceId: params.sourceId,
+      sourceCreatedAt: params.sourceCreatedAt ?? null,
       scopeType: observation.scopeType,
       subjectKey: observation.subjectKey ?? null,
       subjectLabel: observation.subjectLabel ?? null,
@@ -258,8 +262,10 @@ export async function addLearningPatternObservations(params: {
     references.push({
       scopeType: observation.scopeType,
       subjectKey: observation.subjectKey ?? null,
+      subjectLabel: observation.subjectLabel ?? null,
       memoryClass: observation.memoryClass,
       dimension: observation.dimension,
+      patternConfidence: observation.patternConfidence,
       memoryIds: referencesResult.map((item) => item.id).filter(Boolean),
     });
   }

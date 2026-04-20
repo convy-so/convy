@@ -1,21 +1,14 @@
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
-  stepCountIs,
-  tool,
 } from "ai";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
-import { z } from "zod";
 import { surveyCreationConversations, surveys } from "@/db/schema";
-import {
-  normalizeMessages as toModelMessages,
-  streamAIResponse,
-} from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { toPersistedUIChatMessages, toUIMessages } from "@/lib/chat-ui-messages";
+import { toPersistedUIChatMessages } from "@/lib/chat-ui-messages";
 import { type ChatMessage, type ExtractedData } from "@/lib/chat-types";
 import {
   acquireSurveyLease,
@@ -29,12 +22,7 @@ import {
 } from "@/lib/workspace-access";
 import { getClientIP, apiRateLimiter } from "@/lib/ratelimit";
 import {
-  buildCreationSystemPrompt,
-  type CreationAgentState,
-} from "@/lib/education/creation-agent";
-import {
   deriveCreationMediaDecision,
-  getCreationFinishSurveyToolDefinition,
 } from "@/lib/education/agent-tools";
 import {
   buildCreationCollectedInfo,
@@ -44,6 +32,7 @@ import {
   persistCreationConversation,
   runCreationWorkflow,
 } from "@/lib/education/creation-workflow";
+import { chooseOrchestrationMode } from "@/lib/ai-core";
 import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
 import { recordAiFeedbackEvent } from "@/lib/ai/observability";
 
@@ -346,122 +335,77 @@ export async function POST(
         updatedAt: new Date(),
       })
       .where(eq(surveyCreationConversations.surveyId, surveyId));
-
-    const creationState: CreationAgentState = {
-      surveyId,
-      messages: messages
-        .filter(
-          (
-            message,
-          ): message is ChatMessage & { role: "user" | "assistant" } =>
-            message.role === "user" || message.role === "assistant",
-        )
-        .map((message) => ({
-          role: message.role,
-          content: message.content,
-          timestamp: message.timestamp,
-        })),
-      brief: result.brief,
-      missingFields: result.validation.missingFields,
-      readyForSampling: result.validation.isReady,
-      mediaDecision,
+    const assistantMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: result.responseText,
+      parts: [{ type: "text", text: result.responseText }],
+      timestamp: new Date().toISOString(),
     };
+    const persistedMessages = [...messages, assistantMessage];
+    const finalMediaDecision = deriveCreationMediaDecision({
+      extractedData,
+      messages: persistedMessages,
+    });
+    await persistCreationConversation(surveyId, persistedMessages);
+    await getDb()
+      .update(surveyCreationConversations)
+      .set({
+        extractedData: buildCreationExtractedData({
+          brief: result.brief,
+          validation: result.validation,
+          mediaDecision: finalMediaDecision,
+        }),
+        collectedInfo: buildCreationCollectedInfo({
+          brief: result.brief,
+          validation: result.validation,
+          mediaDecision: finalMediaDecision,
+        }),
+        updatedAt: new Date(),
+      })
+      .where(eq(surveyCreationConversations.surveyId, surveyId));
 
-    const systemPrompt = await buildCreationSystemPrompt(
-      creationState,
-      survey.organizationId,
-    );
-    const localizedSystemPrompt = `${systemPrompt}
+    await getDb().transaction(async (tx) => {
+      await recordRealtimeEvent(tx, {
+        scope: "survey",
+        surveyId,
+        workspaceId: permission.workspaceId,
+        eventType: "survey.creation_turn_added",
+        actorId: session.user.id,
+        payload: {
+          surveyId,
+          lease: leaseResult.lease,
+          workflowDecision: {
+            orchestrationMode: chooseOrchestrationMode({
+              needsDeterministicStateMachine: true,
+              needsOpenEndedDialogue: false,
+            }),
+            missingFields: result.validation.missingFields,
+            readyForSampling: result.validation.isReady,
+            programId: result.brief.programId,
+          },
+          messages: persistedMessages.slice(-2).map((message) => ({
+            id: message.id,
+            role: message.role,
+            content: message.content,
+            parts: message.parts,
+            timestamp: message.timestamp,
+          })),
+          status: "creating",
+        },
+      });
+    });
 
-Respond to the creator in the language they are speaking. Match the language of each creator message naturally.`;
-    const modelMessages = await toModelMessages(incomingMessages);
-
-    const tools = {
-      finishSurvey: tool({
-        description: getCreationFinishSurveyToolDefinition().description,
-        inputSchema: z.object({}),
-        execute: async () => {
-          if (!result.validation.isReady) {
-            return {
-              error: "The brief is not complete enough to finish yet",
-              missingFields: result.validation.missingFields,
-            };
-          }
-
-          return { success: true };
+    const response = createUIMessageStreamResponse({
+      stream: createUIMessageStream({
+        execute: async ({ writer }) => {
+          writer.write({
+            id: assistantMessage.id!,
+            type: "text-delta",
+            delta: result.responseText,
+          });
         },
       }),
-    };
-
-    const stream = streamAIResponse(
-      modelMessages,
-      localizedSystemPrompt,
-      {
-        surveyId,
-        userId: session.user.id,
-        organizationId: survey.organizationId ?? undefined,
-        maxTokens: 400,
-        temperature: 0.4,
-        tools,
-        stopWhen: stepCountIs(5),
-        observability: {
-          feature: "survey_creation",
-          scenarioType: "creator_turn",
-          resourceType: "survey",
-          resourceId: surveyId,
-          actorRole: session.user.role,
-        },
-      },
-    );
-
-    const response = stream.toUIMessageStreamResponse({
-      originalMessages: toUIMessages(messages),
-      onFinish: async ({ messages: finishedMessages }) => {
-        const persistedMessages = normalizeCreationMessages(finishedMessages);
-        const finalMediaDecision = deriveCreationMediaDecision({
-          extractedData,
-          messages: persistedMessages,
-        });
-        await persistCreationConversation(surveyId, persistedMessages);
-        await getDb()
-          .update(surveyCreationConversations)
-          .set({
-            extractedData: buildCreationExtractedData({
-              brief: result.brief,
-              validation: result.validation,
-              mediaDecision: finalMediaDecision,
-            }),
-            collectedInfo: buildCreationCollectedInfo({
-              brief: result.brief,
-              validation: result.validation,
-              mediaDecision: finalMediaDecision,
-            }),
-            updatedAt: new Date(),
-          })
-          .where(eq(surveyCreationConversations.surveyId, surveyId));
-
-        await getDb().transaction(async (tx) => {
-          await recordRealtimeEvent(tx, {
-            scope: "survey",
-            surveyId,
-            workspaceId: permission.workspaceId,
-            eventType: "survey.creation_turn_added",
-            actorId: session.user.id,
-            payload: {
-              surveyId,
-              lease: leaseResult.lease,
-              messages: persistedMessages.slice(-2).map((message) => ({
-                id: message.id,
-                role: message.role,
-                content: message.content,
-                parts: message.parts,
-                timestamp: message.timestamp,
-              })),
-              status: "creating",
-            },
-          });
-        });
-      },
     });
 
     response.headers.set("X-Survey-Revision", String(currentRevision + 1));

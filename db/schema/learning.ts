@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -7,13 +8,15 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   vector,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 import { timestamps } from "./common";
 import { departments, organizations } from "./organization";
 import { users } from "./auth";
+import { aiRuns } from "./ai";
 import type {
   LearningOutcomeDefinition,
   LearningSessionState,
@@ -214,13 +217,23 @@ export const topicMaterials = pgTable(
     mimeType: text("mime_type").notNull(),
     sizeBytes: integer("size_bytes"),
     extractionStatus: text("extraction_status").default("pending").notNull(),
+    extractionError: text("extraction_error"),
     indexingStatus: text("indexing_status").default("pending").notNull(),
+    indexingError: text("indexing_error"),
     extractedText: text("extracted_text"),
     analysis: jsonb("analysis").$type<Record<string, unknown>>().default({}),
   },
   (table) => [
     index("topic_materials_topic_id_idx").on(table.topicId),
     index("topic_materials_uploaded_by_user_id_idx").on(table.uploadedByUserId),
+    check(
+      "topic_materials_extraction_status_check",
+      sql`${table.extractionStatus} in ('pending', 'processing', 'completed', 'failed')`,
+    ),
+    check(
+      "topic_materials_indexing_status_check",
+      sql`${table.indexingStatus} in ('pending', 'processing', 'completed', 'failed')`,
+    ),
   ],
 );
 
@@ -259,6 +272,7 @@ export const learningSessions = pgTable(
     sessionType: text("session_type").notNull(),
     sessionLocale: text("session_locale").default("en").notNull(),
     sessionStatus: text("session_status").default("active").notNull(),
+    stateVersion: integer("state_version").default(1).notNull(),
     state: jsonb("state")
       .$type<LearningSessionState>()
       .default(defaultLearningSessionState),
@@ -273,6 +287,25 @@ export const learningSessions = pgTable(
     index("learning_sessions_topic_id_idx").on(table.topicId),
     index("learning_sessions_student_id_idx").on(table.classroomStudentId),
     index("learning_sessions_type_idx").on(table.sessionType),
+    check(
+      "learning_sessions_status_check",
+      sql`${table.sessionStatus} in ('active', 'completed', 'abandoned')`,
+    ),
+    uniqueIndex("learning_sessions_active_topic_unique")
+      .on(
+        table.classroomStudentId,
+        table.topicId,
+        table.sessionType,
+        table.sessionLocale,
+      )
+      .where(
+        sql`${table.topicId} is not null and ${table.sessionStatus} = 'active'`,
+      ),
+    uniqueIndex("learning_sessions_active_non_topic_unique")
+      .on(table.classroomStudentId, table.sessionType, table.sessionLocale)
+      .where(
+        sql`${table.topicId} is null and ${table.sessionStatus} = 'active'`,
+      ),
   ],
 );
 
@@ -302,6 +335,7 @@ export const studentAccessTokens = pgTable(
     index("student_access_tokens_student_id_idx").on(table.classroomStudentId),
     index("student_access_tokens_user_id_idx").on(table.userId),
     index("student_access_tokens_token_hash_idx").on(table.tokenHash),
+    uniqueIndex("student_access_tokens_token_hash_unique").on(table.tokenHash),
   ],
 );
 
@@ -313,20 +347,70 @@ export const learningMaterialEmbeddings = pgTable(
     topicId: text("topic_id")
       .notNull()
       .references(() => learningTopics.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    classroomId: text("classroom_id").references(() => classrooms.id, {
+      onDelete: "cascade",
+    }),
     materialId: text("material_id")
       .notNull()
       .references(() => topicMaterials.id, { onDelete: "cascade" }),
     chunkIndex: integer("chunk_index").notNull(),
+    subjectKey: text("subject_key"),
+    gradeBand: text("grade_band"),
+    contentLocale: text("content_locale").default("en").notNull(),
+    materialKind: text("material_kind"),
+    materialTitle: text("material_title"),
+    embeddingModel: text("embedding_model"),
+    embeddingVersion: text("embedding_version"),
+    chunkingVersion: text("chunking_version"),
+    contentHash: text("content_hash"),
+    sourceUpdatedAt: timestamp("source_updated_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    tokenCount: integer("token_count"),
+    rawContent: text("raw_content").notNull().default(""),
+    retrievalContent: text("retrieval_content").notNull().default(""),
     content: text("content").notNull(),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
     embedding: vector("embedding", { dimensions: 1536 }),
   },
   (table) => [
+    index("learning_material_embeddings_org_id_idx").on(table.organizationId),
+    index("learning_material_embeddings_classroom_id_idx").on(table.classroomId),
     index("learning_material_embeddings_topic_id_idx").on(table.topicId),
     index("learning_material_embeddings_material_id_idx").on(table.materialId),
+    index("learning_material_embeddings_subject_key_idx").on(table.subjectKey),
+    index("learning_material_embeddings_locale_idx").on(table.contentLocale),
     index("learning_material_embeddings_embedding_idx").using(
       "hnsw",
       table.embedding.op("vector_cosine_ops"),
+    ),
+    uniqueIndex("learning_material_embeddings_material_chunk_unique").on(
+      table.materialId,
+      table.chunkIndex,
+    ),
+    index("learning_material_embeddings_retrieval_en_idx").using(
+      "gin",
+      sql`to_tsvector('english', ${table.retrievalContent})`,
+    ),
+    index("learning_material_embeddings_retrieval_de_idx").using(
+      "gin",
+      sql`to_tsvector('german', ${table.retrievalContent})`,
+    ),
+    index("learning_material_embeddings_retrieval_fr_idx").using(
+      "gin",
+      sql`to_tsvector('french', ${table.retrievalContent})`,
+    ),
+    index("learning_material_embeddings_retrieval_es_idx").using(
+      "gin",
+      sql`to_tsvector('spanish', ${table.retrievalContent})`,
+    ),
+    index("learning_material_embeddings_retrieval_it_idx").using(
+      "gin",
+      sql`to_tsvector('italian', ${table.retrievalContent})`,
     ),
   ],
 );
@@ -339,6 +423,9 @@ export const learningEvidenceEmbeddings = pgTable(
     organizationId: text("organization_id")
       .references(() => organizations.id, { onDelete: "cascade" }),
     topicId: text("topic_id").references(() => learningTopics.id, {
+      onDelete: "cascade",
+    }),
+    classroomId: text("classroom_id").references(() => classrooms.id, {
       onDelete: "cascade",
     }),
     classroomStudentId: text("classroom_student_id").references(
@@ -354,6 +441,25 @@ export const learningEvidenceEmbeddings = pgTable(
     sourceId: text("source_id").notNull(),
     chunkIndex: integer("chunk_index").notNull(),
     language: text("language").default("en").notNull(),
+    subjectKey: text("subject_key"),
+    gradeBand: text("grade_band"),
+    curriculumFrameworkKey: text("curriculum_framework_key"),
+    interactionType: text("interaction_type"),
+    phaseType: text("phase_type"),
+    conceptKey: text("concept_key"),
+    scopeType: text("scope_type"),
+    sourceTitle: text("source_title"),
+    embeddingModel: text("embedding_model"),
+    embeddingVersion: text("embedding_version"),
+    chunkingVersion: text("chunking_version"),
+    contentHash: text("content_hash"),
+    sourceUpdatedAt: timestamp("source_updated_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    tokenCount: integer("token_count"),
+    rawContent: text("raw_content").notNull().default(""),
+    retrievalContent: text("retrieval_content").notNull().default(""),
     content: text("content").notNull(),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
     embedding: vector("embedding", { dimensions: 1536 }),
@@ -361,6 +467,7 @@ export const learningEvidenceEmbeddings = pgTable(
   (table) => [
     index("learning_evidence_embeddings_org_idx").on(table.organizationId),
     index("learning_evidence_embeddings_topic_idx").on(table.topicId),
+    index("learning_evidence_embeddings_classroom_idx").on(table.classroomId),
     index("learning_evidence_embeddings_student_idx").on(table.classroomStudentId),
     index("learning_evidence_embeddings_user_idx").on(table.studentUserId),
     index("learning_evidence_embeddings_source_idx").on(
@@ -368,9 +475,37 @@ export const learningEvidenceEmbeddings = pgTable(
       table.sourceId,
     ),
     index("learning_evidence_embeddings_language_idx").on(table.language),
+    index("learning_evidence_embeddings_subject_idx").on(table.subjectKey),
     index("learning_evidence_embeddings_embedding_idx").using(
       "hnsw",
       table.embedding.op("vector_cosine_ops"),
+    ),
+    uniqueIndex("learning_evidence_embeddings_source_chunk_unique").on(
+      table.organizationId,
+      table.sourceType,
+      table.sourceId,
+      table.chunkIndex,
+      table.language,
+    ),
+    index("learning_evidence_embeddings_retrieval_en_idx").using(
+      "gin",
+      sql`to_tsvector('english', ${table.retrievalContent})`,
+    ),
+    index("learning_evidence_embeddings_retrieval_de_idx").using(
+      "gin",
+      sql`to_tsvector('german', ${table.retrievalContent})`,
+    ),
+    index("learning_evidence_embeddings_retrieval_fr_idx").using(
+      "gin",
+      sql`to_tsvector('french', ${table.retrievalContent})`,
+    ),
+    index("learning_evidence_embeddings_retrieval_es_idx").using(
+      "gin",
+      sql`to_tsvector('spanish', ${table.retrievalContent})`,
+    ),
+    index("learning_evidence_embeddings_retrieval_it_idx").using(
+      "gin",
+      sql`to_tsvector('italian', ${table.retrievalContent})`,
     ),
   ],
 );
@@ -472,6 +607,10 @@ export const studentProgressReports = pgTable(
   (table) => [
     index("student_progress_reports_topic_id_idx").on(table.topicId),
     index("student_progress_reports_student_id_idx").on(table.classroomStudentId),
+    check(
+      "student_progress_reports_visibility_check",
+      sql`${table.visibility} in ('teacher_only', 'teacher_and_guardian', 'teacher_student_shared')`,
+    ),
   ],
 );
 
@@ -515,6 +654,10 @@ export const learningExpertAnnotations = pgTable(
     index("learning_expert_annotations_student_idx").on(table.classroomStudentId),
     index("learning_expert_annotations_session_idx").on(table.sessionId),
     index("learning_expert_annotations_status_idx").on(table.status),
+    check(
+      "learning_expert_annotations_status_check",
+      sql`${table.status} in ('pending', 'reviewed', 'published', 'dismissed')`,
+    ),
   ],
 );
 
@@ -774,7 +917,9 @@ export const teachingMediaUsageEvents = pgTable(
       () => classroomStudents.id,
       { onDelete: "set null" },
     ),
-    aiRunId: text("ai_run_id"),
+    aiRunId: text("ai_run_id").references(() => aiRuns.id, {
+      onDelete: "set null",
+    }),
     selectionSource: text("selection_source").default("teacher_curated").notNull(),
     reason: text("reason").notNull(),
     expectedBenefit: text("expected_benefit"),

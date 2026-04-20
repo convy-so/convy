@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 
 import { analysisModel, generateAIResponse } from "@/lib/ai";
+import { buildContextBundle, chooseOrchestrationMode } from "@/lib/ai-core";
 import {
   renderStrictScopePolicyInstructions,
   renderUntrustedContextBlock,
@@ -156,6 +157,18 @@ export function createInitialSessionState(input: {
     contradictions: [],
     notes: [],
     respondentProfile: { preferences: [] },
+    conversationSummary: "",
+    summaryVersion: 0,
+    activeWorkflowDecision: {
+      activeNodeId: firstNode,
+      rationale: "Start with the highest-priority required node.",
+      shouldStop: false,
+    },
+    contextBudgetSnapshot: {
+      summaryTokens: 0,
+      evidenceCount: 0,
+      pendingNodeCount: input.coveragePlan.nodes.length,
+    },
     needsHumanReview: false,
   };
 }
@@ -165,6 +178,14 @@ function chooseNextNode(state: SessionState, plan: CoveragePlan): string | null 
     .filter((node) => !state.completedNodeIds.includes(node.id))
     .sort((a, b) => b.priority - a.priority);
   return remaining[0]?.id ?? null;
+}
+
+function summarizeConversation(messages: ChatMessage[]) {
+  return messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .slice(-6)
+    .map((message) => `${message.role === "user" ? "Respondent" : "Interviewer"}: ${message.content}`)
+    .join("\n");
 }
 
 export function buildConductingSystemPrompt(input: {
@@ -214,39 +235,13 @@ export function buildConductingSystemPromptParts(input: {
   ]
     .filter(Boolean)
     .join("\n");
-
-  const staticSystemPrompt = `${program.conductingPrompt}
-
-<research-brief>
-- Title: ${input.brief.title}
-- Goal: ${input.brief.researchGoal}
-- Decision: ${input.brief.decisionToInform}
-- Audience: ${input.brief.audienceDefinition}
-- Learning context: ${input.brief.learningContext}
-- Delivery context: ${input.brief.deliveryContext}
-- Time window: ${input.brief.timeWindow}
-- Required topics: ${input.brief.requiredTopics.join(", ") || "None listed"}
-- Success criteria: ${input.brief.successCriteria.join(", ") || "None listed"}
-</research-brief>
-
-<coverage-plan>
-${input.coveragePlan.nodes.map((node) => `- ${node.id}: ${node.label} (${node.description})`).join("\n")}
-</coverage-plan>
-
-${input.playbookContext ? renderUntrustedContextBlock("approved_playbooks", input.playbookContext) : ""}
-
-${input.expertGuidanceContext ? renderUntrustedContextBlock("expert_guidance", input.expertGuidanceContext) : ""}
-
-${input.personalityContext ? renderUntrustedContextBlock("personality_context", input.personalityContext) : ""}
-
-${input.conductingProfile ? `<approved-adjustments>
-${input.conductingProfile.toneDirectives.map((item) => `- Tone: ${item}`).join("\n")}
-${input.conductingProfile.questionDirectives.map((item) => `- Question style: ${item}`).join("\n")}
-${input.conductingProfile.probeDirectives.map((item) => `- Probing: ${item}`).join("\n")}
-${input.conductingProfile.openingDirectives.map((item) => `- Opening: ${item}`).join("\n")}
-${input.conductingProfile.closingDirectives.map((item) => `- Closing: ${item}`).join("\n")}
-${input.conductingProfile.coverageDirectives.map((item) => `- Coverage: ${item}`).join("\n")}
-</approved-adjustments>` : ""}
+  const staticContextBundle = buildContextBundle({
+    key: "survey_conducting",
+    layers: [
+      {
+        kind: "product_policy",
+        label: "Survey conducting policy",
+        content: `${program.conductingPrompt}
 
 <response-rules>
 - Ask exactly one question at a time.
@@ -265,7 +260,75 @@ ${renderStrictScopePolicyInstructions({
     "answering in another supported language",
   ],
 })}
-</response-rules>`;
+</response-rules>`,
+        sourceType: "product_policy",
+        sourceId: "survey_conducting",
+        versionId: "v3.deep",
+      },
+      {
+        kind: "workflow_state",
+        label: "Research brief and coverage plan",
+        content: `<research-brief>
+- Title: ${input.brief.title}
+- Goal: ${input.brief.researchGoal}
+- Decision: ${input.brief.decisionToInform}
+- Audience: ${input.brief.audienceDefinition}
+- Learning context: ${input.brief.learningContext}
+- Delivery context: ${input.brief.deliveryContext}
+- Time window: ${input.brief.timeWindow}
+- Required topics: ${input.brief.requiredTopics.join(", ") || "None listed"}
+- Success criteria: ${input.brief.successCriteria.join(", ") || "None listed"}
+</research-brief>
+
+<coverage-plan>
+${input.coveragePlan.nodes.map((node) => `- ${node.id}: ${node.label} (${node.description})`).join("\n")}
+</coverage-plan>`,
+        sourceType: "workflow",
+        sourceId: input.coveragePlan.surveyId,
+        versionId: `${input.coveragePlan.version}`,
+      },
+      {
+        kind: "expert_guidance",
+        label: "Approved conducting guidance",
+        content: [
+          input.playbookContext
+            ? renderUntrustedContextBlock("approved_playbooks", input.playbookContext)
+            : "",
+          input.expertGuidanceContext
+            ? renderUntrustedContextBlock("expert_guidance", input.expertGuidanceContext)
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+        sourceType: "expert_guidance",
+        sourceId: input.coveragePlan.surveyId,
+      },
+      {
+        kind: "user_overlay",
+        label: "Respondent-facing adjustments",
+        content: [
+          input.personalityContext
+            ? renderUntrustedContextBlock("personality_context", input.personalityContext)
+            : "",
+          input.conductingProfile
+            ? `<approved-adjustments>
+${input.conductingProfile.toneDirectives.map((item) => `- Tone: ${item}`).join("\n")}
+${input.conductingProfile.questionDirectives.map((item) => `- Question style: ${item}`).join("\n")}
+${input.conductingProfile.probeDirectives.map((item) => `- Probing: ${item}`).join("\n")}
+${input.conductingProfile.openingDirectives.map((item) => `- Opening: ${item}`).join("\n")}
+${input.conductingProfile.closingDirectives.map((item) => `- Closing: ${item}`).join("\n")}
+${input.conductingProfile.coverageDirectives.map((item) => `- Coverage: ${item}`).join("\n")}
+</approved-adjustments>`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+        sourceType: "overlay",
+        sourceId: input.coveragePlan.surveyId,
+      },
+    ],
+  });
+  const staticSystemPrompt = staticContextBundle.rendered;
 
   const dynamicSystemPrompt = `<current-session>
 - Session type: ${input.sessionType}
@@ -274,6 +337,9 @@ ${renderStrictScopePolicyInstructions({
 - Overall coverage: ${(input.sessionState.overallCoverage * 100).toFixed(0)}%
 - Reliability: ${(input.sessionState.reliabilityScore * 100).toFixed(0)}%
 - Fatigue: ${(input.sessionState.fatigueScore * 100).toFixed(0)}%
+- Workflow rationale: ${input.sessionState.activeWorkflowDecision.rationale || "Stay with the highest-priority open node."}
+- Conversation summary:
+${input.sessionState.conversationSummary || "No rolling summary yet."}
 </current-session>`;
 
   return {
@@ -371,12 +437,26 @@ export async function finalizeConductingTurn(input: {
     ? input.coveragePlan.nodes.reduce((sum, node) => sum + Math.min(1, nextState.coverageByNode[node.id] ?? 0), 0) / input.coveragePlan.nodes.length
     : 0;
   nextState.currentNodeId = chooseNextNode(nextState, input.coveragePlan);
+  nextState.conversationSummary = summarizeConversation(input.messages);
+  nextState.summaryVersion = input.sessionState.summaryVersion + 1;
 
   const shouldStop = Boolean(analysis?.shouldStop) || (!nextState.currentNodeId && nextState.overallCoverage >= input.coveragePlan.completionRule.minimumRequiredNodeCoverage);
   if (shouldStop) {
     nextState.status = "completed";
     nextState.stopReason = analysis?.shouldStop ? "analysis_stop_signal" : "coverage_complete";
   }
+  nextState.activeWorkflowDecision = {
+    activeNodeId: shouldStop ? null : nextState.currentNodeId,
+    rationale: shouldStop
+      ? "Workflow stop condition reached from coverage or fatigue signal."
+      : `Continue with ${nextState.currentNodeId ?? "the next open node"} because it is still required and not yet complete.`,
+    shouldStop,
+  };
+  nextState.contextBudgetSnapshot = {
+    summaryTokens: Math.ceil(nextState.conversationSummary.length / 4),
+    evidenceCount: (analysis?.evidence ?? []).length,
+    pendingNodeCount: nextState.pendingNodeIds.length,
+  };
 
   await updateSessionState(input.sessionId, nextState);
   await replaceSessionTurns({
@@ -410,6 +490,10 @@ export async function finalizeConductingTurn(input: {
     sessionId: input.sessionId,
     traceType: "conducting_turn",
     payload: {
+      orchestrationMode: chooseOrchestrationMode({
+        needsDeterministicStateMachine: true,
+        needsOpenEndedDialogue: true,
+      }),
       currentNodeId: input.sessionState.currentNodeId,
       nextNodeId: nextState.currentNodeId,
       overallCoverage: nextState.overallCoverage,

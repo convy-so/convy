@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -8,6 +9,7 @@ import {
   text,
   unique,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import { timestamps } from "./common";
 import { users } from "./auth";
@@ -58,6 +60,10 @@ export const aiRuns = pgTable(
     index("ai_runs_org_id_idx").on(table.organizationId),
     index("ai_runs_resource_idx").on(table.resourceType, table.resourceId),
     index("ai_runs_created_at_idx").on(table.createdAt),
+    check(
+      "ai_runs_status_check",
+      sql`${table.status} in ('queued', 'running', 'completed', 'failed', 'cancelled')`,
+    ),
   ],
 );
 
@@ -224,6 +230,10 @@ export const evalRuns = pgTable(
     index("eval_runs_dataset_id_idx").on(table.datasetId),
     index("eval_runs_feature_idx").on(table.feature),
     index("eval_runs_status_idx").on(table.status),
+    check(
+      "eval_runs_status_check",
+      sql`${table.status} in ('queued', 'running', 'completed', 'failed', 'cancelled')`,
+    ),
   ],
 );
 
@@ -331,6 +341,10 @@ export const expertGuidancePacks = pgTable(
     index("expert_guidance_packs_feature_idx").on(table.feature),
     index("expert_guidance_packs_type_idx").on(table.artifactType),
     index("expert_guidance_packs_status_idx").on(table.status),
+    check(
+      "expert_guidance_packs_status_check",
+      sql`${table.status} in ('draft', 'approved', 'archived')`,
+    ),
   ],
 );
 
@@ -356,5 +370,32 @@ export const expertGuidanceVersions = pgTable(
       table.packId,
       table.version,
     ),
+    check(
+      "expert_guidance_versions_status_check",
+      sql`${table.status} in ('draft', 'approved', 'archived')`,
+    ),
   ],
 );
+
+export const fewShotExamples = pgTable(
+  "few_shot_examples",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    feature: text("feature").notNull(),
+    tags: text("tags").array().default([]),
+    userMessage: text("user_message").notNull(),
+    assistantMessage: text("assistant_message").notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    ownedByRole: text("owned_by_role").default("expert").notNull(),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  },
+  (table) => [
+    index("few_shot_examples_feature_idx").on(table.feature),
+    index("few_shot_examples_active_idx").on(table.isActive),
+  ],
+);
+

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { learningSessions } from "@/db/schema";
 import { assembleAiContext } from "@/lib/ai/context-assembler";
+import { buildContextBundle } from "@/lib/ai-core";
 import { listActiveExpertGuidance, renderExpertGuidanceContext } from "@/lib/ai/guidance";
 import {
   createAiRunTrace,
@@ -152,6 +153,7 @@ async function buildTutoringRuntimeContext(params: {
       content: memoryContext,
       sourceType: "mem0",
       sourceId: params.access.classroomStudent.userId ?? params.access.classroomStudent.id,
+      versionId: memoryRecords.map((item) => item.id).filter(Boolean).join(","),
     },
     {
       kind: "user_overlay",
@@ -161,8 +163,17 @@ async function buildTutoringRuntimeContext(params: {
       sourceId: params.access.classroomStudent.id,
     },
   ]);
+  const contextBundle = buildContextBundle({
+    key: "tutoring_runtime",
+    layers: contextLayers,
+    metadata: {
+      topicId: params.access.topic.id,
+      classroomStudentId: params.access.classroomStudent.id,
+    },
+  });
 
   const runtimeContext: TutoringRuntimeContext = {
+    contextBundle,
     expertGuidance,
     socialGuidance,
     memoryContext,
@@ -172,7 +183,9 @@ async function buildTutoringRuntimeContext(params: {
       topicId: params.access.topic.id,
       classroomStudentId: params.access.classroomStudent.id,
       subjectKey: params.access.topic.subjectKey,
+      frameworkKey: "deep",
       guidanceVersionIds: guidance.map((item) => item.versionId),
+      mem0MemoryIds: memoryRecords.map((item) => item.id).filter(Boolean),
     },
   };
 
@@ -331,6 +344,8 @@ async function ensureTutoringSession(params: {
     });
   }
 
+  let sessionStateVersion = tutorSession.stateVersion ?? 1;
+
   const parsedStateResult = learningSessionStateSchema.safeParse(tutorSession.state ?? {});
   let parsedState = parsedStateResult.success
     ? parsedStateResult.data
@@ -353,8 +368,11 @@ async function ensureTutoringSession(params: {
     await updateLearningSessionState({
       sessionId: tutorSession.id,
       state: parsedState,
+      expectedStateVersion: sessionStateVersion,
     });
+    sessionStateVersion += 1;
     tutorSession = (await getLearningSessionById(tutorSession.id)) ?? tutorSession;
+    sessionStateVersion = tutorSession.stateVersion ?? sessionStateVersion;
   }
 
   const hydratedState = await hydrateSessionTeachingPlaybook({
@@ -369,8 +387,11 @@ async function ensureTutoringSession(params: {
     await updateLearningSessionState({
       sessionId: tutorSession.id,
       state: parsedState,
+      expectedStateVersion: sessionStateVersion,
     });
+    sessionStateVersion += 1;
     tutorSession = (await getLearningSessionById(tutorSession.id)) ?? tutorSession;
+    sessionStateVersion = tutorSession.stateVersion ?? sessionStateVersion;
   }
 
   const messages = await listLearningMessages(tutorSession.id);
@@ -396,7 +417,9 @@ async function ensureTutoringSession(params: {
     await updateLearningSessionState({
       sessionId: tutorSession.id,
       state: result.state,
+      expectedStateVersion: sessionStateVersion,
     });
+    sessionStateVersion += 1;
 
     if (result.response.trim()) {
       const phase = result.state.phases.find(
@@ -602,6 +625,7 @@ export async function POST(
       sessionId: body.sessionId,
       studyLanguage,
     });
+    const sessionStateVersion = tutorSession.stateVersion ?? 1;
 
     const startingState = learningSessionStateSchema.parse(tutorSession.state ?? {});
     const { runtimeContext, contextLayers } = await buildTutoringRuntimeContext({
@@ -621,6 +645,7 @@ export async function POST(
         topicId,
         classroomStudentId: access.classroomStudent.id,
         guidanceVersionIds: runtimeContext.metadata?.guidanceVersionIds,
+        mem0MemoryIds: runtimeContext.metadata?.mem0MemoryIds,
         studyLanguage,
         sourceContentLanguage: access.topic.contentLocale,
       },
@@ -790,6 +815,7 @@ export async function POST(
       await completeLearningSession({
         sessionId: tutorSession.id,
         state: result.state,
+        expectedStateVersion: sessionStateVersion,
       });
 
       if (access.topic.classroom.organizationId) {
@@ -816,6 +842,7 @@ export async function POST(
       await updateLearningSessionState({
         sessionId: tutorSession.id,
         state: result.state,
+        expectedStateVersion: sessionStateVersion,
       });
     }
 

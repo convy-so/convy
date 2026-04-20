@@ -76,6 +76,16 @@ export async function finishEvalRun(params: {
     .where(eq(evalRuns.id, params.evalRunId));
 }
 
+function safelyStringifyContext(obj: unknown, maxStringLength = 1500): string {
+  if (obj === undefined) return "";
+  return JSON.stringify(obj, (key, value) => {
+    if (typeof value === "string" && value.length > maxStringLength) {
+      return value.substring(0, maxStringLength) + `... [TRUNCATED ${value.length - maxStringLength} chars]`;
+    }
+    return value;
+  }, 2);
+}
+
 export async function judgeEvalCase(params: {
   feature: CoreAiFeature;
   input: Record<string, unknown>;
@@ -84,25 +94,47 @@ export async function judgeEvalCase(params: {
   rubric?: Record<string, unknown>;
 }) {
   const blueprint = getEvalBlueprint(params.feature);
+
+  // 1. Run Deterministic Checks First
+  const deterministicFailureCodes: string[] = [];
+  const deterministicNotes: string[] = [];
+  if (blueprint?.deterministicChecks) {
+    for (const check of blueprint.deterministicChecks) {
+      try {
+        const result = check(params.input, params.actualOutput);
+        if (result && !result.passed) {
+          if (result.failureCode) deterministicFailureCodes.push(result.failureCode);
+          if (result.notes) deterministicNotes.push(result.notes);
+        }
+      } catch (e) {
+        deterministicFailureCodes.push("deterministic_eval_crash");
+        deterministicNotes.push(`Eval crashed during deterministic check: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  }
+
+  // If deterministic checks fully fail the output and we don't want LLM opinion, we could return early.
+  // However, LLMs can still provide useful nuance/rubric scores, so we will inject deterministic failures into the prompt.
+
   const { output } = await generateText({
     model: analysisModel,
     output: Output.object({
       schema: evalJudgeSchema,
     }),
     prompt: `You are evaluating the quality of an AI feature in a vertical AI product.
-
+    
 Feature: ${params.feature}
 Input:
-${JSON.stringify(params.input, null, 2)}
+${safelyStringifyContext(params.input)}
 
 Actual output:
-${JSON.stringify(params.actualOutput, null, 2)}
+${safelyStringifyContext(params.actualOutput)}
 
 Expected output:
-${JSON.stringify(params.expectedOutput ?? {}, null, 2)}
+${safelyStringifyContext(params.expectedOutput ?? {})}
 
 Rubric:
-${JSON.stringify(params.rubric ?? {}, null, 2)}
+${safelyStringifyContext(params.rubric ?? {})}
 
 Educational priorities:
 ${blueprint?.guidance.map((item) => `- ${item}`).join("\n") ?? "- Use the supplied rubric faithfully."}
@@ -115,6 +147,22 @@ ${blueprint?.dimensions
   )
   .join("\n") ?? "- Use the dimensions in the rubric."}
 
+${blueprint?.gradingExamples && blueprint.gradingExamples.length > 0 ? `
+Few-Shot Grading Examples to calibrate your scores:
+${blueprint.gradingExamples.map(ex => `
+- Example Input: ${ex.inputSummary}
+- Example Output: ${ex.actualOutputSummary}
+- Expected Score: ${ex.expectedScore}
+- Expected Failure Codes: ${ex.expectedFailureCodes.join(", ") || "None"}
+- Rationale: ${ex.rationale}`).join("\n")}
+` : ""}
+
+${deterministicFailureCodes.length > 0 ? `
+CRITICAL DETERMINISTIC FAILURES:
+Our programmatic checks have already determined that this output contains the following failure codes: ${deterministicFailureCodes.join(", ")}.
+Notes: ${deterministicNotes.map(n => "- " + n).join("\n")}
+You MUST include these failure codes in your final output, and adjust your score downwards accordingly.` : ""}
+
 Instructions:
 - Score from 0 to 1 based on how well the actual output satisfies the rubric and expected output.
 - pass should be true only when the output is strong enough to ship for this feature.
@@ -124,6 +172,20 @@ Instructions:
 - failureModeCodes should list concise snake_case failure labels only when real issues are present.
 - notes should explain the judgment briefly and concretely.`,
   });
+
+  // Ensure deterministic codes are never lost if the LLM ignores instructions
+  if (deterministicFailureCodes.length > 0) {
+    output.pass = false; // Deterministic failures are strict overrides
+    
+    for (const code of deterministicFailureCodes) {
+      if (!output.failureModeCodes.includes(code)) {
+         output.failureModeCodes.push(code);
+      }
+    }
+    if (deterministicNotes.length > 0) {
+      output.notes = `[DETERMINISTIC FAILURE] ${deterministicNotes.join("; ")} | [JUDGE] ${output.notes}`;
+    }
+  }
 
   return output;
 }

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
@@ -57,10 +57,11 @@ export async function createLearningSession(params: {
       id: sessionId,
       topicId: params.topicId ?? null,
       classroomStudentId: params.classroomStudentId,
-      sessionType: params.sessionType,
-      sessionLocale: params.sessionLocale ?? "en",
-      sessionStatus: "active",
-      state: params.state ?? createDefaultLearningSessionState(),
+    sessionType: params.sessionType,
+    sessionLocale: params.sessionLocale ?? "en",
+    sessionStatus: "active",
+    stateVersion: 1,
+    state: params.state ?? createDefaultLearningSessionState(),
       createdAt: new Date(),
       updatedAt: new Date(),
     })
@@ -80,15 +81,21 @@ export async function updateLearningSessionState(params: {
   state: LearningSessionState;
   sessionStatus?: string;
   summary?: string | null;
+  expectedStateVersion?: number;
 }) {
   const updatePayload: {
     state: LearningSessionState;
     updatedAt: Date;
     sessionStatus?: string;
     summary?: string | null;
+    stateVersion: number | ReturnType<typeof sql>;
   } = {
     state: params.state,
     updatedAt: new Date(),
+    stateVersion:
+      params.expectedStateVersion !== undefined
+        ? params.expectedStateVersion + 1
+        : sql`${learningSessions.stateVersion} + 1`,
   };
 
   if (params.sessionStatus !== undefined) {
@@ -102,8 +109,19 @@ export async function updateLearningSessionState(params: {
   const [session] = await getDb()
     .update(learningSessions)
     .set(updatePayload)
-    .where(eq(learningSessions.id, params.sessionId))
+    .where(
+      and(
+        eq(learningSessions.id, params.sessionId),
+        params.expectedStateVersion !== undefined
+          ? eq(learningSessions.stateVersion, params.expectedStateVersion)
+          : undefined,
+      ),
+    )
     .returning();
+
+  if (!session) {
+    throw new Error("Learning session state update conflict.");
+  }
 
   return session;
 }
@@ -249,14 +267,21 @@ export async function logLearningInteraction(params: {
     void indexLearningInteractionEvidence({
       organizationId: membership.classroom.organizationId,
       topicId: params.topicId ?? null,
+      classroomId: membership.classroomId,
       classroomStudentId: params.classroomStudentId,
       studentUserId: membership.userId ?? null,
       interactionId: interaction.id,
       topicTitle: topic?.title ?? null,
+      subjectKey: topic?.subjectKey ?? null,
+      gradeBand: membership.classroom.gradeBand,
+      curriculumFrameworkKey: "kmk_de_sek1",
       language: topic?.contentLocale ?? membership.classroom.defaultContentLocale,
       role: params.role,
       interactionType: params.interactionType,
       content: params.content,
+      phaseType: params.phaseType ?? null,
+      conceptKey: params.conceptKey ?? null,
+      sourceUpdatedAt: interaction.updatedAt,
       metadata: interaction.metadata as Record<string, unknown> | null,
     }).catch(() => undefined);
   }
@@ -297,6 +322,7 @@ export async function completeLearningSession(params: {
   summary?: string | null;
   state?: LearningSessionState;
   sessionStatus?: string;
+  expectedStateVersion?: number;
 }) {
   const updatePayload: {
     sessionStatus: string;
@@ -304,11 +330,16 @@ export async function completeLearningSession(params: {
     state?: LearningSessionState;
     completedAt: Date;
     updatedAt: Date;
+    stateVersion: number | ReturnType<typeof sql>;
   } = {
     sessionStatus: params.sessionStatus ?? "completed",
     summary: params.summary ?? null,
     completedAt: new Date(),
     updatedAt: new Date(),
+    stateVersion:
+      params.expectedStateVersion !== undefined
+        ? params.expectedStateVersion + 1
+        : sql`${learningSessions.stateVersion} + 1`,
   };
 
   if (params.state !== undefined) {
@@ -318,7 +349,14 @@ export async function completeLearningSession(params: {
   await getDb()
     .update(learningSessions)
     .set(updatePayload)
-    .where(eq(learningSessions.id, params.sessionId));
+    .where(
+      and(
+        eq(learningSessions.id, params.sessionId),
+        params.expectedStateVersion !== undefined
+          ? eq(learningSessions.stateVersion, params.expectedStateVersion)
+          : undefined,
+      ),
+    );
 }
 
 export async function upsertInterestProfile(params: {
@@ -409,13 +447,18 @@ export async function createStudentProgressReport(params: {
     void indexLearningReportEvidence({
       organizationId: membership.classroom.organizationId,
       topicId: params.topicId,
+      classroomId: membership.classroomId,
       classroomStudentId: params.classroomStudentId,
       studentUserId: membership.userId ?? null,
       reportId: created.id,
       topicTitle: topic.title,
+      subjectKey: topic.subjectKey,
+      gradeBand: membership.classroom.gradeBand,
+      curriculumFrameworkKey: "kmk_de_sek1",
       masteryPercent: params.masteryPercent,
       report: params.report,
       language: params.sourceLocale,
+      sourceUpdatedAt: created.updatedAt,
     }).catch(() => undefined);
   }
 
@@ -510,18 +553,21 @@ export async function upsertStudentLearningPatternProfile(params: {
       .where(eq(studentLearningPatternProfiles.id, existing.id))
       .returning();
 
-    void indexLearningPatternEvidence({
-      organizationId: params.organizationId,
-      studentUserId: params.studentUserId,
-      profileId: updated.id,
-      subjectKey: params.subjectKey ?? null,
-      subjectLabel: params.subjectLabel ?? null,
-      scopeType: params.scopeType,
-      summaryLocale: params.summaryLocale ?? "en",
-      teacherSummary: params.teacherSummary,
-      studentSummary: params.studentSummary,
-      profile: params.profile,
-    }).catch(() => undefined);
+  void indexLearningPatternEvidence({
+    organizationId: params.organizationId,
+    classroomId: null,
+    studentUserId: params.studentUserId,
+    profileId: updated.id,
+    subjectKey: params.subjectKey ?? null,
+    subjectLabel: params.subjectLabel ?? null,
+    scopeType: params.scopeType,
+    gradeBand: null,
+    summaryLocale: params.summaryLocale ?? "en",
+    teacherSummary: params.teacherSummary,
+    studentSummary: params.studentSummary,
+    profile: params.profile,
+    sourceUpdatedAt: updated.updatedAt,
+  }).catch(() => undefined);
 
     return updated;
   }
@@ -553,15 +599,18 @@ export async function upsertStudentLearningPatternProfile(params: {
 
   void indexLearningPatternEvidence({
     organizationId: params.organizationId,
+    classroomId: null,
     studentUserId: params.studentUserId,
     profileId: created.id,
     subjectKey: params.subjectKey ?? null,
     subjectLabel: params.subjectLabel ?? null,
     scopeType: params.scopeType,
+    gradeBand: null,
     summaryLocale: params.summaryLocale ?? "en",
     teacherSummary: params.teacherSummary,
     studentSummary: params.studentSummary,
     profile: params.profile,
+    sourceUpdatedAt: created.updatedAt,
   }).catch(() => undefined);
 
   return created;
