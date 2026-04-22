@@ -12,9 +12,6 @@ declare global {
   var surveyAnalyticsQueue: Queue<SurveyAnalyticsJobData> | undefined;
   var emailQueue: Queue<EmailJobData> | undefined;
   var imageUploadQueue: Queue<ImageUploadJobData> | undefined;
-  var learningPatternAnalysisQueue:
-    | Queue<LearningPatternAnalysisJobData>
-    | undefined;
   var tutoringReportQueue:
     | Queue<TutoringReportJobData>
     | undefined;
@@ -76,16 +73,6 @@ export interface ImageUploadJobData {
   buffer: Buffer;
   contentType: string;
   userId: string;
-}
-
-export interface LearningPatternAnalysisJobData {
-  sourceType: "onboarding" | "session";
-  sourceId: string;
-  organizationId: string;
-  studentUserId: string;
-  classroomStudentId?: string | null;
-  topicId?: string | null;
-  subjectKey?: string | null;
 }
 
 export interface TutoringReportJobData {
@@ -184,22 +171,6 @@ export const getImageUploadQueue = () => {
   }
 
   return global.imageUploadQueue;
-};
-
-export const getLearningPatternAnalysisQueue = () => {
-  if (!global.learningPatternAnalysisQueue) {
-    global.learningPatternAnalysisQueue =
-      createQueue<LearningPatternAnalysisJobData>("learning-pattern-analysis", {
-        defaultJobOptions: {
-          attempts: 5,
-          backoff: { type: "exponential", delay: 5000 },
-          removeOnComplete: { age: 24 * 3600, count: 1000 },
-          removeOnFail: { age: 7 * 24 * 3600 },
-        },
-      });
-  }
-
-  return global.learningPatternAnalysisQueue;
 };
 
 export const getTutoringReportQueue = () => {
@@ -310,19 +281,6 @@ export async function enqueueImageUpload(data: ImageUploadJobData) {
   });
 }
 
-export async function enqueueLearningPatternAnalysis(
-  data: LearningPatternAnalysisJobData,
-) {
-  return await getLearningPatternAnalysisQueue().add(
-    `analyze-${data.sourceType}`,
-    data,
-    {
-      jobId: `learning-pattern-${data.sourceType}-${data.sourceId}`,
-      priority: 2,
-    },
-  );
-}
-
 export async function enqueueTutoringReportGeneration(
   data: TutoringReportJobData,
 ) {
@@ -377,7 +335,6 @@ export async function closeQueues() {
     global.surveyAnalyticsQueue,
     global.emailQueue,
     global.imageUploadQueue,
-    global.learningPatternAnalysisQueue,
     global.tutoringReportQueue,
     global.evalRunQueue,
     global.contentTranslationQueue,
@@ -391,7 +348,6 @@ export async function closeQueues() {
     global.surveyAnalyticsQueue = undefined;
     global.emailQueue = undefined;
     global.imageUploadQueue = undefined;
-    global.learningPatternAnalysisQueue = undefined;
     global.tutoringReportQueue = undefined;
     global.evalRunQueue = undefined;
     global.contentTranslationQueue = undefined;

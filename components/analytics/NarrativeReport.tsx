@@ -180,7 +180,7 @@ export function NarrativeReport({ data, surveyId }: NarrativeReportProps) {
         <section className="space-y-6 border-t border-gray-100 pt-8">
           <SectionHeader
             title="Derived Metrics"
-            description="Approved analytics-playbook metrics computed from the stored facts layer."
+            description="Supplementary metrics computed from the stored facts layer."
           />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {data.derivedMetrics.map((metric) => (
@@ -188,7 +188,7 @@ export function NarrativeReport({ data, surveyId }: NarrativeReportProps) {
                 key={metric.id}
                 label={metric.label}
                 value={String(metric.value)}
-                helper={metric.description || "Computed from approved analytics playbooks"}
+                helper={metric.description || "Computed from stored analytics facts"}
               />
             ))}
           </div>

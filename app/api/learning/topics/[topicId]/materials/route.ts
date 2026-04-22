@@ -184,7 +184,6 @@ export async function POST(
 
     try {
       await replaceLearningMaterialEmbeddings({
-        organizationId: topic.classroom.organizationId,
         classroomId: topic.classroomId,
         topicId,
         materialId,
@@ -206,23 +205,20 @@ export async function POST(
         },
       });
 
-      if (topic.classroom.organizationId) {
-        await indexLearningMaterialEvidence({
-          organizationId: topic.classroom.organizationId,
-          classroomId: topic.classroomId,
-          topicId,
-          materialId,
-          topicTitle: topic.title,
-          title: material.title,
-          description: material.description,
-          mimeType,
-          content: extractedText,
-          subjectKey: topic.subjectKey,
-          gradeBand: topic.classroom.gradeBand,
-          language: topic.contentLocale,
-          sourceUpdatedAt: material.updatedAt,
-        });
-      }
+      await indexLearningMaterialEvidence({
+        classroomId: topic.classroomId,
+        topicId,
+        materialId,
+        topicTitle: topic.title,
+        title: material.title,
+        description: material.description,
+        mimeType,
+        content: extractedText,
+        subjectKey: topic.subjectKey,
+        gradeBand: topic.classroom.gradeBand,
+        language: topic.contentLocale,
+        sourceUpdatedAt: material.updatedAt,
+      });
 
       await Promise.all([
         getDb()

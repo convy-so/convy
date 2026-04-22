@@ -2,55 +2,30 @@
 
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { and, eq, ne, or, sql, isNull } from "drizzle-orm";
+import { eq, ne, or, sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
-import { surveys, users, organizations, surveyEditors } from "@/db/schema";
+import { surveys, users } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
-  getSurveyPermissionContext,
   getSurveyPermissionForSession,
   hasSurveyPermission,
-  isWorkspaceMember,
-  isWorkspaceOwner,
 } from "@/lib/workspace-access";
 import { invalidateDashboardCaches } from "@/lib/cache";
 import { env } from "@/lib/env";
 import {
-  recordRealtimeEvent,
-} from "@/lib/collaboration-service";
-
-type ActionResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string };
-
-type SurveyPermission = NonNullable<
-  Awaited<ReturnType<typeof getSurveyPermissionContext>>
->;
-
-/**
- * Schema for updating survey settings
- * Note: Auto-generated fields (goal, type, information, requiredQuestions) cannot be manually edited
- * These are generated from the conversational creation flow
- */
-const updateSurveySchema = z.object({
-  id: z.string().min(1),
-  title: z.string().min(1).optional(),
-  participantLimit: z
-    .number()
-    .int()
-    .positive()
-    .max(50, "Maximum participant limit is 50")
-    .optional(),
-  language: z.enum(["en", "fr", "de", "es", "it"]).optional(),
-  // Note: goal, type, information, requiredQuestions, metrics are auto-generated
-  // and should not be manually edited after creation
-});
-
-const transferSurveyOwnershipSchema = z.object({
-  surveyId: z.string().min(1),
-  newOwnerUserId: z.string().min(1),
-});
+  withErrorHandling,
+  assertExists,
+  assertPermission,
+  assertState,
+  validateInput,
+  type ActionResult,
+} from "@/lib/action-wrapper";
+import {
+  updateSurveySchema,
+  surveyCustomSlugSchema,
+  surveyIdSchema,
+} from "@/lib/validation/survey-schemas";
 
 /**
  * Update survey settings (only if it's in draft or sample_review status)
@@ -59,37 +34,31 @@ const transferSurveyOwnershipSchema = z.object({
  * and cannot be manually edited. Use the conversational creation flow to make content changes.
  */
 export async function updateSurveyAction(
-  input: z.infer<typeof updateSurveySchema>,
+  input: unknown,
 ): Promise<ActionResult<{ id: string }>> {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
-    const body = updateSurveySchema.parse(input);
+    const body = validateInput(input, updateSurveySchema);
 
-    // Check if survey exists and belongs to user
+    // Check if survey exists
     const [existingSurvey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, body.id));
 
-    if (!existingSurvey) {
-      return { success: false, error: "Survey not found" };
-    }
+    assertExists(existingSurvey, "Survey");
 
     const permission = await getSurveyPermissionForSession(session, existingSurvey.id);
-    if (!hasSurveyPermission(permission, "canEdit")) {
-      return { success: false, error: "Unauthorized: Editor access required" };
-    }
+    assertPermission(
+      hasSurveyPermission(permission, "canEdit"),
+      "Editor access required"
+    );
 
     // Only allow updates if survey is in draft or sample_review status
-    if (
-      existingSurvey.status !== "draft" &&
-      existingSurvey.status !== "sample_review"
-    ) {
-      return {
-        success: false,
-        error: "Cannot update survey in current status",
-      };
-    }
+    assertState(
+      existingSurvey.status === "draft" || existingSurvey.status === "sample_review",
+      "Cannot update survey in current status"
+    );
 
     // Only allow updating basic settings, not auto-generated content
     const updateData: Partial<typeof surveys.$inferInsert> = {};
@@ -100,49 +69,15 @@ export async function updateSurveyAction(
 
     await getDb().transaction(async (tx) => {
       await tx.update(surveys).set(updateData).where(eq(surveys.id, body.id));
-
-      if (permission?.workspaceId) {
-        await recordRealtimeEvent(tx, {
-          scope: "workspace",
-          workspaceId: permission.workspaceId,
-          eventType: "workspace.survey_updated",
-          actorId: session.user.id,
-          payload: {
-            workspaceId: permission.workspaceId,
-            survey: {
-              id: body.id,
-              ...updateData,
-            },
-          },
-        });
-      }
     });
 
     await invalidateDashboardCaches(
       session.user.id,
-      existingSurvey.organizationId,
+      null,
     );
 
     return { success: true, data: { id: body.id } };
-  } catch (error) {
-    console.error("[updateSurveyAction] Failed:", error);
-    if (error instanceof z.ZodError) {
-      return {
-        success: false,
-        error: error.errors[0]?.message ?? "Validation error",
-      };
-    }
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return { success: false, error: error.message };
-      }
-      return { success: false, error: error.message };
-    }
-    return { success: false, error: "Failed to update survey" };
-  }
+  }, "updateSurveyAction");
 }
 
 /**
@@ -173,102 +108,37 @@ export async function getSurveysAction(): Promise<
 > {
   try {
     const session = await getVerifiedSession();
-    const activeOrgId = session.session.activeOrganizationId;
+    const personalSurveys = await getDb()
+      .select({
+        id: surveys.id,
+        title: surveys.title,
+        status: surveys.status,
+        createdAt: surveys.createdAt,
+        currentParticipants: surveys.currentParticipants,
+        participantLimit: surveys.participantLimit,
+        shareableLink: surveys.shareableLink,
+        deliveryMode: surveys.deliveryMode,
+        classroomId: surveys.classroomId,
+        folderId: surveys.folderId,
+        creatorName: users.name,
+        isOwner: sql<boolean>`${surveys.userId} = ${session.user.id}`,
+        isVoice: surveys.isVoice,
+        classroomTitle: sql<string | null>`null`,
+      })
+      .from(surveys)
+      .leftJoin(users, eq(surveys.userId, users.id))
+      .where(eq(surveys.userId, session.user.id))
+      .orderBy(surveys.createdAt);
 
-    if (activeOrgId) {
-      const workspaceSurveys = await getDb()
-        .select({
-          id: surveys.id,
-          title: surveys.title,
-          status: surveys.status,
-          createdAt: surveys.createdAt,
-          currentParticipants: surveys.currentParticipants,
-          participantLimit: surveys.participantLimit,
-          shareableLink: surveys.shareableLink,
-          deliveryMode: surveys.deliveryMode,
-          classroomId: surveys.classroomId,
-          folderId: surveys.folderId,
-          creatorName: users.name,
-          isOwner: sql<boolean>`${surveys.userId} = ${session.user.id}`,
-          isVoice: surveys.isVoice,
-          classroomTitle: sql<string | null>`null`,
-        })
-        .from(surveys)
-        .leftJoin(users, eq(surveys.userId, users.id))
-        .where(eq(surveys.organizationId, activeOrgId))
-        .orderBy(surveys.createdAt);
-
-      const permissionEntries = await Promise.all(
-        workspaceSurveys.map(async (survey) => ({
-          surveyId: survey.id,
-          permission: await getSurveyPermissionContext(session.user.id, survey.id, {
-            activeWorkspaceId: activeOrgId,
-          }),
-        })),
-      );
-      const permissionBySurveyId = new Map<string, SurveyPermission>();
-      for (const entry of permissionEntries) {
-        if (entry.permission) {
-          permissionBySurveyId.set(entry.surveyId, entry.permission);
-        }
-      }
-
-      return {
-        success: true,
-        data: workspaceSurveys.flatMap((survey) => {
-            const permission = permissionBySurveyId.get(survey.id);
-
-            if (!hasSurveyPermission(permission, "canView")) {
-              return [];
-            }
-
-            return [{
-              ...survey,
-              accessLevel: permission.accessLevel,
-              canOpen: permission.canView,
-              canEdit: permission.canEdit,
-            }];
-          }),
-      };
-    } else {
-      // Personal context: Get only user's personal surveys (no organizationId)
-      const personalSurveys = await getDb()
-        .select({
-          id: surveys.id,
-          title: surveys.title,
-          status: surveys.status,
-          createdAt: surveys.createdAt,
-          currentParticipants: surveys.currentParticipants,
-          participantLimit: surveys.participantLimit,
-          shareableLink: surveys.shareableLink,
-          deliveryMode: surveys.deliveryMode,
-          classroomId: surveys.classroomId,
-          folderId: surveys.folderId,
-          creatorName: users.name,
-          isOwner: sql<boolean>`${surveys.userId} = ${session.user.id}`,
-          isVoice: surveys.isVoice,
-          classroomTitle: sql<string | null>`null`,
-        })
-        .from(surveys)
-        .leftJoin(users, eq(surveys.userId, users.id))
-        .where(
-          and(
-            eq(surveys.userId, session.user.id),
-            isNull(surveys.organizationId),
-          ),
-        )
-        .orderBy(surveys.createdAt);
-
-      return {
-        success: true,
-        data: personalSurveys.map((survey) => ({
-          ...survey,
-          accessLevel: "owner",
-          canOpen: true,
-          canEdit: true,
-        })),
-      };
-    }
+    return {
+      success: true,
+      data: personalSurveys.map((survey) => ({
+        ...survey,
+        accessLevel: "owner",
+        canOpen: true,
+        canEdit: true,
+      })),
+    };
   } catch (error) {
     console.error("[getSurveysAction] Failed:", error);
     if (error instanceof Error) {
@@ -384,47 +254,15 @@ export async function confirmSurveyAction(
       shareableLink = `survey-${nanoid(12)}`;
     }
 
-    await getDb().transaction(async (tx) => {
-      await tx
-        .update(surveys)
-        .set({
-          status: "active",
-          shareableLink,
-        })
-        .where(eq(surveys.id, surveyId));
+    await getDb()
+      .update(surveys)
+      .set({
+        status: "active",
+        shareableLink,
+      })
+      .where(eq(surveys.id, surveyId));
 
-      await recordRealtimeEvent(tx, {
-        scope: "survey",
-        surveyId,
-        workspaceId: permission.workspaceId,
-        eventType: "survey.published",
-        actorId: session.user.id,
-        payload: {
-          surveyId,
-          status: "active",
-          shareableLink,
-        },
-      });
-
-      if (permission.workspaceId) {
-        await recordRealtimeEvent(tx, {
-          scope: "workspace",
-          workspaceId: permission.workspaceId,
-          eventType: "workspace.survey_updated",
-          actorId: session.user.id,
-          payload: {
-            workspaceId: permission.workspaceId,
-            survey: {
-              id: surveyId,
-              status: "active",
-              shareableLink,
-            },
-          },
-        });
-      }
-    });
-
-    await invalidateDashboardCaches(session.user.id, survey.organizationId, [
+    await invalidateDashboardCaches(session.user.id, null, [
       "recentSurveys",
     ]);
 
@@ -747,7 +585,7 @@ export async function deactivateSurveyAction(
       .set({ status: "completed" })
       .where(eq(surveys.id, surveyId));
 
-    await invalidateDashboardCaches(session.user.id, survey.organizationId, [
+    await invalidateDashboardCaches(session.user.id, null, [
       "stats",
       "recentSurveys",
     ]);
@@ -808,7 +646,7 @@ export async function reactivateSurveyAction(
       .set({ status: "active" })
       .where(eq(surveys.id, surveyId));
 
-    await invalidateDashboardCaches(session.user.id, survey.organizationId, [
+    await invalidateDashboardCaches(session.user.id, null, [
       "stats",
       "recentSurveys",
     ]);
@@ -831,7 +669,7 @@ export async function reactivateSurveyAction(
 
 /**
  * Delete a survey (Creator ONLY)
- * Removes survey and all related data (cascade). Notifies workspace members.
+ * Removes survey and all related data (cascade).
  */
 export async function deleteSurveyAction(
   surveyId: string,
@@ -844,7 +682,6 @@ export async function deleteSurveyAction(
         id: surveys.id,
         title: surveys.title,
         userId: surveys.userId,
-        organizationId: surveys.organizationId,
       })
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -857,94 +694,13 @@ export async function deleteSurveyAction(
     if (!hasSurveyPermission(permission, "canDelete")) {
       return {
         success: false,
-        error:
-          "Unauthorized: Only the survey creator or workspace owner can delete this survey",
+        error: "Unauthorized: Only the survey creator can delete this survey",
       };
     }
 
-    const surveyTitle = survey.title;
-    const organizationId = survey.organizationId;
+    await getDb().delete(surveys).where(eq(surveys.id, surveyId));
 
-    await getDb().transaction(async (tx) => {
-      if (permission.workspaceId) {
-        await recordRealtimeEvent(tx, {
-          scope: "survey",
-          surveyId,
-          workspaceId: permission.workspaceId,
-          eventType: "survey.deleting",
-          actorId: session.user.id,
-          payload: {
-            surveyId,
-            title: surveyTitle,
-          },
-        });
-        await recordRealtimeEvent(tx, {
-          scope: "workspace",
-          workspaceId: permission.workspaceId,
-          eventType: "workspace.survey_deleted",
-          actorId: session.user.id,
-          payload: {
-            workspaceId: permission.workspaceId,
-            surveyId,
-            title: surveyTitle,
-          },
-        });
-      }
-
-      await tx.delete(surveys).where(eq(surveys.id, surveyId));
-    });
-
-    await invalidateDashboardCaches(session.user.id, survey.organizationId);
-
-    if (organizationId) {
-      try {
-        const { getWorkspaceMembers } = await import("@/app/actions/workspace");
-        const { sendSurveyDeletedEmail } = await import("@/lib/email");
-
-        const membersResult = await getWorkspaceMembers({ organizationId });
-        if (!membersResult.success) {
-          console.error(
-            "[Survey Action] Failed to load workspace members for survey deletion notifications:",
-            membersResult.error,
-          );
-        } else {
-          const [org] = await getDb()
-            .select({ name: organizations.name })
-            .from(organizations)
-            .where(eq(organizations.id, organizationId));
-
-          const workspaceName = org?.name || "Workspace";
-          const notificationResults = await Promise.allSettled(
-            membersResult.data.flatMap((member) =>
-              member.user.email
-                ? [
-                    sendSurveyDeletedEmail({
-                      email: member.user.email,
-                      surveyTitle,
-                      deletedBy: session.user.name || session.user.email,
-                      workspaceName,
-                    }),
-                  ]
-                : [],
-            ),
-          );
-
-          const failedNotifications = notificationResults.filter(
-            (result) => result.status === "rejected",
-          );
-          if (failedNotifications.length > 0) {
-            console.error(
-              `[Survey Action] Failed to enqueue ${failedNotifications.length} survey deletion notifications for survey ${surveyId}.`,
-            );
-          }
-        }
-      } catch (error) {
-        console.error(
-          "[Survey Action] Failed to enqueue survey deletion notifications:",
-          error,
-        );
-      }
-    }
+    await invalidateDashboardCaches(session.user.id, null);
 
     return { success: true, data: { id: surveyId } };
   } catch (error) {
@@ -1027,25 +783,6 @@ export async function duplicateSurveyAction(
         })
         .returning();
 
-      if (existingSurvey.organizationId && newSurvey) {
-        await recordRealtimeEvent(tx, {
-          scope: "workspace",
-          workspaceId: existingSurvey.organizationId,
-          eventType: "workspace.survey_created",
-          actorId: session.user.id,
-          payload: {
-            workspaceId: existingSurvey.organizationId,
-            survey: {
-              id: newSurvey.id,
-              title: newSurvey.title,
-              status: newSurvey.status,
-              userId: newSurvey.userId,
-              isVoice: newSurvey.isVoice,
-              createdAt: newSurvey.createdAt?.toISOString() ?? now.toISOString(),
-            },
-          },
-        });
-      }
     });
 
     if (!newSurvey) {
@@ -1070,7 +807,7 @@ export async function duplicateSurveyAction(
 
     await invalidateDashboardCaches(
       session.user.id,
-      existingSurvey.organizationId,
+      null,
       ["stats", "recentSurveys"],
     );
 
@@ -1085,125 +822,3 @@ export async function duplicateSurveyAction(
     return { success: false, error: "Failed to duplicate survey" };
   }
 }
-
-export async function transferSurveyOwnershipAction(input: {
-  surveyId: string;
-  newOwnerUserId: string;
-}): Promise<ActionResult<void>> {
-  try {
-    const session = await getVerifiedSession();
-    const body = transferSurveyOwnershipSchema.parse(input);
-
-    const [survey] = await getDb()
-      .select()
-      .from(surveys)
-      .where(eq(surveys.id, body.surveyId));
-
-    if (!survey) {
-      return { success: false, error: "Survey not found" };
-    }
-
-    if (!survey.organizationId) {
-      return {
-        success: false,
-        error: "Survey ownership transfer is only supported in workspaces",
-      };
-    }
-
-    const permission = await getSurveyPermissionForSession(session, survey.id);
-    if (!hasSurveyPermission(permission, "canDelete")) {
-      return { success: false, error: "Unauthorized" };
-    }
-
-    const targetIsMember = await isWorkspaceMember(
-      body.newOwnerUserId,
-      survey.organizationId,
-    );
-    if (!targetIsMember) {
-      return {
-        success: false,
-        error: "New owner must be a member of the workspace",
-      };
-    }
-
-    if (survey.userId === body.newOwnerUserId) {
-      return { success: false, error: "This user already owns the survey" };
-    }
-
-    const canTransfer =
-      permission.isSurveyCreator ||
-      (survey.organizationId &&
-        (await isWorkspaceOwner(session.user.id, survey.organizationId)));
-    if (!canTransfer) {
-      return { success: false, error: "Unauthorized" };
-    }
-
-    await getDb().transaction(async (tx) => {
-      await tx
-        .update(surveys)
-        .set({ userId: body.newOwnerUserId, updatedAt: new Date() })
-        .where(eq(surveys.id, body.surveyId));
-
-      await tx
-        .delete(surveyEditors)
-        .where(
-          and(
-            eq(surveyEditors.surveyId, body.surveyId),
-            eq(surveyEditors.userId, body.newOwnerUserId),
-          ),
-        );
-
-      await recordRealtimeEvent(tx, {
-        scope: "survey",
-        surveyId: body.surveyId,
-        workspaceId: survey.organizationId,
-        eventType: "survey.editor_revoked",
-        actorId: session.user.id,
-        payload: {
-          surveyId: body.surveyId,
-          userId: body.newOwnerUserId,
-          reason: "ownership_transferred",
-        },
-      });
-      await recordRealtimeEvent(tx, {
-        scope: "workspace",
-        workspaceId: survey.organizationId,
-        eventType: "workspace.survey_updated",
-        actorId: session.user.id,
-        payload: {
-          workspaceId: survey.organizationId,
-          survey: {
-            id: body.surveyId,
-            userId: body.newOwnerUserId,
-          },
-        },
-      });
-    });
-
-    await invalidateDashboardCaches(session.user.id, survey.organizationId, [
-      "stats",
-      "recentSurveys",
-    ]);
-
-    return { success: true, data: undefined };
-  } catch (error) {
-    console.error("[transferSurveyOwnershipAction] Failed:", error);
-    if (error instanceof z.ZodError) {
-      return {
-        success: false,
-        error: error.errors[0]?.message ?? "Validation error",
-      };
-    }
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return { success: false, error: error.message };
-      }
-    }
-    return { success: false, error: "Failed to transfer survey ownership" };
-  }
-}
-
-

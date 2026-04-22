@@ -4,16 +4,11 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { classroomStudents } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { listStudentLearningPatternProfiles } from "@/lib/learning/storage";
+import { listStudentModelSummaries } from "@/lib/learning/storage";
 
 export async function GET() {
   try {
     const session = await getVerifiedSession();
-    const organizationId = session.session.activeOrganizationId;
-
-    if (!organizationId) {
-      return NextResponse.json({ error: "No active workspace selected" }, { status: 400 });
-    }
 
     const memberships = await getDb().query.classroomStudents.findMany({
       where: and(
@@ -25,41 +20,44 @@ export async function GET() {
       },
     });
 
-    const inWorkspace = memberships.some(
-      (membership) => membership.classroom.organizationId === organizationId,
-    );
-
-    if (!inWorkspace) {
-      return NextResponse.json({ error: "Student context not found" }, { status: 404 });
+    if (memberships.length === 0) {
+      return NextResponse.json({ success: true, data: [] });
     }
 
-    const profiles = await listStudentLearningPatternProfiles({
-      organizationId,
+    const models = await listStudentModelSummaries({
       studentUserId: session.user.id,
     });
 
     return NextResponse.json({
       success: true,
-      data: profiles.map((profile) => ({
-        scopeType: profile.scopeType,
-        subjectKey: profile.subjectKey,
-        subjectLabel: profile.subjectLabel,
-        patternConfidence: profile.profile.patternConfidence,
-        explanationApproaches: profile.profile.explanationApproaches,
-        interestResonance: profile.profile.interestResonance,
-        cognitivePattern: profile.profile.cognitivePattern,
-        motivationalPattern: profile.profile.motivationalPattern,
-        confidenceMindsetPattern: profile.profile.confidenceMindsetPattern,
-        persistentMisconceptions: profile.profile.persistentMisconceptions,
-        summaryLocale: profile.summaryLocale,
-        studentSummary: profile.studentSummary,
-        confidenceLabel: profile.profile.confidenceLabel,
-        updatedAt: profile.updatedAt,
+      data: models.map((model) => ({
+        scopeType: "student",
+        subjectKey: null,
+        subjectLabel: model.classroomStudent.classroom.title,
+        patternConfidence:
+          model.latestSnapshot?.snapshot.cognitiveStyleCalibration.confidence ?? 0,
+        confidenceLabel:
+          model.latestSnapshot?.snapshot.cognitiveStyleCalibration.confidence &&
+          model.latestSnapshot.snapshot.cognitiveStyleCalibration.confidence > 0.65
+            ? "Established"
+            : "Emerging",
+        studentSummary:
+          model.latestSnapshot?.snapshot.summary || "Personalization model is still forming.",
+        persistentMisconceptions: [],
+        updatedAt: model.latestSnapshot?.updatedAt ?? model.updatedAt,
+        motivationalContext:
+          model.latestSnapshot?.snapshot.motivationalContext ?? null,
+        cognitiveStyleCalibration:
+          model.latestSnapshot?.snapshot.cognitiveStyleCalibration ?? null,
+        productiveStruggleCalibration:
+          model.latestSnapshot?.snapshot.productiveStruggleCalibration ?? null,
+        longitudinalDevelopment:
+          model.latestSnapshot?.snapshot.longitudinalDevelopment ?? null,
       })),
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load patterns" },
+      { error: error instanceof Error ? error.message : "Failed to load student model summaries" },
       { status: 400 },
     );
   }

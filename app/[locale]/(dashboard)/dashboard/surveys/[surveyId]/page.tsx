@@ -340,7 +340,7 @@ export default function SurveyDetailPage() {
             Access required
           </h1>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-500">
-            This survey exists in the current workspace, but only the creator and invited collaborators can open its analytics, creation history, and sample reviews.
+            Only the survey creator can open its analytics, creation history, and sample reviews.
           </p>
           <div className="mt-8 flex items-center justify-center gap-3">
             <Link

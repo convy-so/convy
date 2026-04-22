@@ -1,7 +1,7 @@
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
 import { surveys, surveyAnalyticsSnapshots, surveySessions } from "@/db/schema";
-import { eq, desc, count, and, isNull } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import { Link } from "@/i18n/routing";
 import {
   Search,
@@ -14,8 +14,6 @@ import { formatDistanceToNow } from "date-fns";
 import { Suspense } from "react";
 import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
-
-import { TeacherReportsPage } from "@/components/learning/teacher-reports-page";
 
 type StatusConfig = {
   color: string;
@@ -61,12 +59,6 @@ function getStatusConfig(status: string | null | undefined): StatusConfig {
 
 async function AnalyticsContent({ authHeaders }: { authHeaders: Headers | string | null }) {
   const session = await getVerifiedSession(authHeaders);
-  const activeOrgId = session.session.activeOrganizationId;
-
-  if (activeOrgId) {
-    return <TeacherReportsPage />;
-  }
-
   const t = await getTranslations("AnalyticsPage");
 
   const userSurveys = await getDb()
@@ -100,7 +92,6 @@ async function AnalyticsContent({ authHeaders }: { authHeaders: Headers | string
       and(
         eq(surveys.userId, session.user.id),
         eq(surveys.status, 'active'),
-        isNull(surveys.organizationId)
       )
     )
     .groupBy(

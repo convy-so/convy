@@ -3,14 +3,15 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Bot, Loader2, Send } from "lucide-react";
 import { z } from "zod";
+
 import type {
   RefinementMessage,
   RefinementProposal,
-} from "@/lib/education/playbooks";
+} from "@/lib/education/refinement";
 import {
   refinementMessageSchema,
   refinementProposalSchema,
-} from "@/lib/education/playbooks";
+} from "@/lib/education/refinement";
 
 type StoredMessage = Pick<RefinementMessage, "id" | "role" | "content">;
 type Proposal = RefinementProposal;
@@ -110,13 +111,20 @@ export function RefinementAssistantPanel({ surveyId }: { surveyId: string }) {
     }
   }
 
-  async function handleProposal(proposalId: string, action: "approve" | "reject", applyToLive = false) {
+  async function handleProposal(
+    proposalId: string,
+    action: "approve" | "reject",
+    applyToLive = false,
+  ) {
     setError(null);
-    const response = await fetch(`/api/surveys/${surveyId}/refinement/proposals/${proposalId}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, applyToLive }),
-    });
+    const response = await fetch(
+      `/api/surveys/${surveyId}/refinement/proposals/${proposalId}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, applyToLive }),
+      },
+    );
 
     if (!response.ok) {
       const message = `Failed to ${action} refinement proposal.`;
@@ -174,7 +182,9 @@ export function RefinementAssistantPanel({ surveyId }: { surveyId: string }) {
                       : "ml-auto max-w-[85%] bg-gray-900 text-white"
                   }`}
                 >
-                  {message.role === "assistant" && <Bot className="mb-1 h-3.5 w-3.5 text-gray-500" />}
+                  {message.role === "assistant" && (
+                    <Bot className="mb-1 h-3.5 w-3.5 text-gray-500" />
+                  )}
                   {message.content}
                 </div>
               ))
@@ -193,7 +203,11 @@ export function RefinementAssistantPanel({ surveyId }: { surveyId: string }) {
               disabled={isSending || !input.trim()}
               className="flex h-24 w-12 items-center justify-center rounded-xl bg-gray-900 text-white"
             >
-              {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {isSending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
             </button>
           </form>
 
@@ -203,7 +217,9 @@ export function RefinementAssistantPanel({ surveyId }: { surveyId: string }) {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold text-gray-900">{proposal.title}</div>
-                    <div className="mt-1 text-xs text-gray-500">{proposal.type} · {proposal.status}</div>
+                    <div className="mt-1 text-xs text-gray-500">
+                      {proposal.type} - {proposal.status}
+                    </div>
                   </div>
                 </div>
                 <p className="mt-2 text-sm text-gray-700">{proposal.interpretation}</p>
@@ -223,7 +239,7 @@ export function RefinementAssistantPanel({ surveyId }: { surveyId: string }) {
                     >
                       Approve
                     </button>
-                    {(proposal.type === "conducting_profile" || proposal.type === "personality_overlay") && (
+                    {proposal.type === "conducting_profile" && (
                       <button
                         type="button"
                         onClick={() => handleProposal(proposal.id, "approve", true)}
@@ -249,6 +265,3 @@ export function RefinementAssistantPanel({ surveyId }: { surveyId: string }) {
     </div>
   );
 }
-
-
-

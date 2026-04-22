@@ -3,23 +3,11 @@
 import Image from "next/image";
 import { Link } from "@/i18n/routing";
 import { useAuth } from "@/components/providers/auth-provider";
-import { getActiveWorkspace } from "@/app/actions/workspace";
-import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
 export function ProfileContent() {
     const { user } = useAuth();
     const t = useTranslations("Profile");
-    const [workspace, setWorkspace] = useState<{ role?: string; [key: string]: unknown } | null>(null);
-
-    useEffect(() => {
-        async function loadData() {
-            const wsRes = await getActiveWorkspace();
-
-            if (wsRes.success && wsRes.data) setWorkspace(wsRes.data);
-        }
-        loadData();
-    }, []);
 
     if (!user) return null;
 
@@ -54,7 +42,7 @@ export function ProfileContent() {
                 <div className="flex-1 text-center md:text-left space-y-1">
                     <h2 className="text-2xl font-semibold text-gray-900">{user.name}</h2>
                     <p className="text-sm font-medium text-gray-500">
-                        {workspace?.role ? workspace.role : t("Member")}
+                        {t("Member")}
                     </p>
                 </div>
 
@@ -94,7 +82,7 @@ export function ProfileContent() {
                     <div>
                         <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest block mb-1">{t("UserRole")}</label>
                         <p className="text-gray-900 font-medium capitalize">
-                            {workspace?.role ? workspace.role : t("DefaultRole")}
+                            {t("DefaultRole")}
                         </p>
                     </div>
 

@@ -15,7 +15,7 @@ import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema/surveys";
-import { eq, desc, count, and, sql, isNull } from "drizzle-orm";
+import { and, count, desc, eq, sql } from "drizzle-orm";
 import { Suspense } from "react";
 import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
@@ -50,7 +50,6 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
   const t = await getTranslations("Dashboard");
 
   const userId = session.user.id;
-  const activeOrgId = session.session.activeOrganizationId;
   const language = await resolvePreferredUiLocale(session);
 
   const quickActions = [
@@ -76,7 +75,7 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
       color: "from-amber-500 to-orange-500",
     },
     {
-      title: "Learning workspace",
+      title: "Learning hub",
       description: "Run classes, topics, student tutoring, and progress tracking.",
       icon: GraduationCap,
       href: "/dashboard/learning",
@@ -88,17 +87,13 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
   const [stats, recentSurveys, activities] = await Promise.all([
     // 1 & 2. Stats
     cache.wrap(
-      cacheKeys.dashboardStats(userId, activeOrgId),
+      cacheKeys.dashboardStats(userId, null),
       async () => {
         const [surveysCountRes, durationStats] = await Promise.all([
           getDb()
             .select({ count: count() })
             .from(surveys)
-            .where(
-              activeOrgId
-                ? eq(surveys.organizationId, activeOrgId)
-                : and(eq(surveys.userId, userId), isNull(surveys.organizationId))
-            ),
+            .where(eq(surveys.userId, userId)),
           getDb()
             .select({
               avgDuration: sql<number>`avg(extract(epoch from ${surveyConversations.updatedAt} - ${surveyConversations.createdAt}))`
@@ -108,9 +103,7 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
             .where(
                 and(
                   eq(surveyConversations.completed, true),
-                  activeOrgId
-                    ? eq(surveys.organizationId, activeOrgId)
-                    : and(eq(surveys.userId, userId), isNull(surveys.organizationId))
+                  eq(surveys.userId, userId)
                 )
             )
         ]);
@@ -130,12 +123,10 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
 
     // 3. Recent Surveys
     cache.wrap(
-      cacheKeys.dashboardRecentSurveys(userId, activeOrgId),
+      cacheKeys.dashboardRecentSurveys(userId, null),
       async () => {
         const surveysData = await getDb().query.surveys.findMany({
-          where: activeOrgId
-            ? eq(surveys.organizationId, activeOrgId)
-            : and(eq(surveys.userId, userId), isNull(surveys.organizationId)),
+          where: eq(surveys.userId, userId),
           orderBy: [desc(surveys.updatedAt)],
           limit: 3,
         });
@@ -157,7 +148,7 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
 
     // 4. Recent Activity
     cache.wrap(
-      cacheKeys.dashboardActivity(userId, activeOrgId),
+      cacheKeys.dashboardActivity(userId, null),
       async () => {
         const recentActivitiesRaw = await getDb()
           .select({
@@ -168,9 +159,7 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
           .from(surveyConversations)
           .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
           .where(
-            activeOrgId
-              ? eq(surveys.organizationId, activeOrgId)
-              : and(eq(surveys.userId, userId), isNull(surveys.organizationId))
+            eq(surveys.userId, userId)
           )
           .orderBy(desc(surveyConversations.createdAt))
           .limit(5);

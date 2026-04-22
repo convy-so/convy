@@ -1,106 +1,76 @@
-import { generateText, Output } from "ai";
 import { z } from "zod";
 
-import { analysisModel, defaultModel } from "@/lib/ai";
-import {
-  TUTORING_DEFAULT_SYSTEM_PROMPT,
-  renderRetrievedContext,
-  renderStudentProfileContext,
-  renderTutoringScopeInstructions,
-} from "@/lib/learning/prompting";
-import { appLocaleLabels, normalizeAppLocale } from "@/lib/i18n/config";
-import type {
-  GradeBand,
-  LearningOutcomeDefinition,
-  StudentInterestProfile,
-} from "@/lib/learning/types";
+import { generateStructuredOutput } from "@/lib/ai/runtime";
 
-const relevanceSchema = z.object({
-  classification: z.enum(["on_topic", "near_topic", "off_topic"]),
+const questionClassificationSchema = z.object({
+  classification: z.enum(["in_scope", "borderline", "off_scope"]),
   rationale: z.string(),
+});
+
+const outOfSessionReplySchema = z.object({
+  response: z.string(),
 });
 
 export async function classifyOutOfSessionQuestion(params: {
   topicTitle: string;
   topicDescription?: string | null;
-  learningOutcomes: LearningOutcomeDefinition[];
+  learningOutcomes: Array<{ title: string; description: string }>;
   question: string;
 }) {
-  const { output } = await generateText({
-    model: analysisModel,
-    output: Output.object({
-      schema: relevanceSchema,
-    }),
-    prompt: `Classify whether this student question is relevant to the current topic.
+  return await generateStructuredOutput({
+    schema: questionClassificationSchema,
+    prompt: `Classify whether this student question is in scope for the course topic.
 
 Topic: ${params.topicTitle}
 Description: ${params.topicDescription ?? ""}
 Learning outcomes:
-${params.learningOutcomes.map((outcome) => `- ${outcome.title}: ${outcome.description}`).join("\n")}
+${params.learningOutcomes.map((item) => `- ${item.title}: ${item.description}`).join("\n")}
 
 Question:
 ${params.question}
 
-Rules:
-- on_topic = clearly within the topic and outcomes
-- near_topic = adjacent and still useful to answer briefly
-- off_topic = unrelated and should be redirected`,
+Return:
+- in_scope when the question is clearly about the active topic
+- borderline when it is adjacent but still teachable with a brief bridge
+- off_scope when it is meaningfully outside the topic`,
   });
-
-  return output;
 }
 
 export async function generateOutOfSessionReply(params: {
-  classification: "on_topic" | "near_topic" | "off_topic";
+  classification: "in_scope" | "borderline" | "off_scope";
   topicTitle: string;
-  learningOutcomes: LearningOutcomeDefinition[];
-  gradeBand: GradeBand;
-  studentProfile: StudentInterestProfile;
+  learningOutcomes: Array<{ title: string; description: string }>;
+  gradeBand: string;
+  studentProfile: Record<string, unknown>;
   question: string;
   retrievedContext: string[];
-  language?: string | null;
+  language: string;
 }) {
-  if (params.classification === "off_topic") {
-    return `That's outside the topic your teacher set right now, so I'm going to keep us inside ${params.topicTitle}. Ask me anything connected to this topic and I'll help.`;
-  }
+  const result = await generateStructuredOutput({
+    schema: outOfSessionReplySchema,
+    prompt: `Answer the student's out-of-session question.
 
-  if (params.retrievedContext.length === 0) {
-    return `I want to keep this grounded in your teacher's material, and I don't have enough teacher-approved context to answer that safely yet. Ask me another question about ${params.topicTitle}, or I can help you unpack one of the ideas already covered.`;
-  }
-
-  const responseLanguage = normalizeAppLocale(params.language ?? "en");
-  const { text } = await generateText({
-    model: defaultModel,
-    system: TUTORING_DEFAULT_SYSTEM_PROMPT,
-    prompt: `You are answering a student's out-of-session academic question.
-
+Reply in ${params.language}.
+Classification: ${params.classification}
 Topic: ${params.topicTitle}
-Learning outcomes:
-${params.learningOutcomes.map((outcome) => `- ${outcome.title}: ${outcome.description}`).join("\n")}
 Grade band: ${params.gradeBand}
-Answer language: ${appLocaleLabels[responseLanguage]}
+Question: ${params.question}
+
+Learning outcomes:
+${JSON.stringify(params.learningOutcomes)}
+
 Student profile:
-${renderStudentProfileContext(params.studentProfile)}
-Question:
-${params.question}
+${JSON.stringify(params.studentProfile)}
 
-Retrieved teacher-approved context:
-${renderRetrievedContext(params.retrievedContext)}
-
-${renderTutoringScopeInstructions({
-  objective: `Help the student stay within ${params.topicTitle}`,
-  activeTopic: params.topicTitle,
-  currentPhase: "out-of-session support",
-})}
+Retrieved course context:
+${params.retrievedContext.map((item) => `- ${item}`).join("\n")}
 
 Rules:
-- answer using the retrieved context for factual claims
-- if the question is near_topic, answer it briefly and bring it back to the topic
-- personalize framing using the student profile
-- keep the tone supportive and direct
-- answer in ${appLocaleLabels[responseLanguage]}
-- do not invent facts beyond the material`,
+- stay inside the retrieved course context for facts
+- if classification is off_scope, gently redirect back toward the current topic
+- if classification is borderline, answer briefly and reconnect to the topic
+- keep the explanation concise and teachable`,
   });
 
-  return text.trim();
+  return result.response;
 }

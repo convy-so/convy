@@ -205,7 +205,6 @@ export async function searchLearningPatternMemories(params: {
 
 export async function addLearningPatternObservations(params: {
   studentUserId: string;
-  organizationId: string;
   sourceType: "onboarding" | "session";
   sourceId: string;
   classroomId?: string | null;
@@ -225,10 +224,9 @@ export async function addLearningPatternObservations(params: {
       },
     ];
 
-    const sharedMetadata = {
-      organizationId: params.organizationId,
-      classroomId: params.classroomId ?? null,
-      classroomStudentId: params.classroomStudentId ?? null,
+      const sharedMetadata = {
+        classroomId: params.classroomId ?? null,
+        classroomStudentId: params.classroomStudentId ?? null,
       topicId: params.topicId ?? null,
       sourceType: params.sourceType,
       sourceId: params.sourceId,

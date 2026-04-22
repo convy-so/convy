@@ -6,9 +6,6 @@ import { surveyCreationConversations, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getResearchBrief, getActiveCoveragePlan } from "@/lib/education/storage";
 import {
-  recordRealtimeEvent,
-} from "@/lib/collaboration-service";
-import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/workspace-access";
@@ -45,65 +42,32 @@ export async function POST(
       }, { status: 400 });
     }
 
-    let updatedSurvey: typeof surveys.$inferSelect | undefined;
-    await getDb().transaction(async (tx) => {
-      [updatedSurvey] = await tx
-        .update(surveys)
-        .set({
-          status: "sample_review",
-          title: briefRow.brief.title,
-          description: briefRow.brief.learningContext,
-          coreObjective: briefRow.brief.researchGoal,
+    const [updatedSurvey] = await getDb()
+      .update(surveys)
+      .set({
+        status: "sample_review",
+        title: briefRow.brief.title,
+        description: briefRow.brief.learningContext,
+        coreObjective: briefRow.brief.researchGoal,
+        programId: briefRow.programId,
+        updatedAt: new Date(),
+      })
+      .where(eq(surveys.id, surveyId))
+      .returning();
+
+    await getDb()
+      .update(surveyCreationConversations)
+      .set({
+        status: "completed",
+        extractedData: {
           programId: briefRow.programId,
-          updatedAt: new Date(),
-        })
-        .where(eq(surveys.id, surveyId))
-        .returning();
-
-      await tx
-        .update(surveyCreationConversations)
-        .set({
-          status: "completed",
-          extractedData: {
-            programId: briefRow.programId,
-            brief: briefRow.brief,
-            coveragePlan: planRow.plan,
-            readyForSampling: true,
-          },
-          updatedAt: new Date(),
-        })
-        .where(eq(surveyCreationConversations.surveyId, surveyId));
-
-      await recordRealtimeEvent(tx, {
-        scope: "survey",
-        surveyId,
-        workspaceId: permission.workspaceId,
-        eventType: "survey.creation_turn_added",
-        actorId: session.user.id,
-        payload: {
-          surveyId,
-          status: "sample_review",
+          brief: briefRow.brief,
+          coveragePlan: planRow.plan,
           readyForSampling: true,
         },
-      });
-
-      if (permission.workspaceId) {
-        await recordRealtimeEvent(tx, {
-          scope: "workspace",
-          workspaceId: permission.workspaceId,
-          eventType: "workspace.survey_updated",
-          actorId: session.user.id,
-          payload: {
-            workspaceId: permission.workspaceId,
-            survey: {
-              id: surveyId,
-              status: "sample_review",
-              title: briefRow.brief.title,
-            },
-          },
-        });
-      }
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(surveyCreationConversations.surveyId, surveyId));
 
     return NextResponse.json({
       success: true,

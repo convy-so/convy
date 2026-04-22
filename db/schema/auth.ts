@@ -99,8 +99,6 @@ const sessions = pgTable(
     token: text("token").notNull(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
-    activeOrganizationId: text("active_organization_id"),
-    activeTeamId: text("active_team_id"),
     impersonatedBy: text("impersonated_by"),
   },
   (table) => [

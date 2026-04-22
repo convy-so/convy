@@ -4,15 +4,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { buildRefinementAssistantResponse } from "@/lib/education/playbook-workflow";
-import { getPersonalityPreset } from "@/lib/education/playbooks";
+import { buildRefinementAssistantResponse } from "@/lib/education/refinement";
 import {
   appendRefinementMessage,
   createRefinementProposal,
-  getActivePersonalityAssignment,
   getOrCreateRefinementThread,
   getResearchBrief,
-  listPlaybooksForSurvey,
   listRefinementMessages,
   listRefinementProposals,
 } from "@/lib/education/storage";
@@ -41,19 +38,17 @@ export async function GET(
       createdBy: session.user.id,
     });
 
-    const [messages, proposals, playbooks, personality] = await Promise.all([
+    const [messages, proposals] = await Promise.all([
       listRefinementMessages(thread.id),
       listRefinementProposals(thread.id),
-      listPlaybooksForSurvey({ surveyId, organizationId: survey.organizationId }),
-      getActivePersonalityAssignment(surveyId, "sample"),
     ]);
 
     return NextResponse.json({
       thread,
       messages,
       proposals,
-      activePlaybooks: playbooks,
-      activePersonality: personality?.assignment ?? null,
+      activePlaybooks: [],
+      activePersonality: null,
     });
   } catch (error) {
     console.error("[Refinement GET] Error:", error);
@@ -79,7 +74,7 @@ export async function POST(
     const content = String(body.content || "").trim();
     if (!content) return NextResponse.json({ error: "content is required" }, { status: 400 });
 
-    const [briefRow, latestSample, personality, playbooks] = await Promise.all([
+    const [briefRow, latestSample] = await Promise.all([
       getResearchBrief(surveyId),
       getDb()
         .select()
@@ -87,8 +82,6 @@ export async function POST(
         .where(eq(sampleConversations.surveyId, surveyId))
         .orderBy(desc(sampleConversations.conversationNumber))
         .then((rows) => rows[0]),
-      getActivePersonalityAssignment(surveyId, "sample"),
-      listPlaybooksForSurvey({ surveyId, organizationId: survey.organizationId }),
     ]);
     if (!briefRow) {
       return NextResponse.json({ error: "Survey brief is not ready." }, { status: 400 });
@@ -111,14 +104,9 @@ export async function POST(
           .map((message: ChatMessage) => `${message.role}: ${message.content}`)
           .join("\n\n")
       : "";
-    const activePreset = getPersonalityPreset(personality?.assignment.presetId);
     const assistantResult = await buildRefinementAssistantResponse({
       creatorMessage: content,
       surveyTitle: survey.title || briefRow.brief.title,
-      currentPersonalityLabel: activePreset.label,
-      playbookSummaries: playbooks
-        .filter((record) => record.activeVersion)
-        .map((record) => `${record.playbook.name}: ${record.activeVersion!.interpretation.summary}`),
       latestSampleTranscript: transcript,
       brief: briefRow.brief,
     });

@@ -2,18 +2,15 @@ import { betterAuth, InferSession, InferUser } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
-import { organization } from "better-auth/plugins/organization";
 
 import { getDb } from "@/db";
 import { authSchema } from "@/db/schema";
 import { env } from "@/lib/env";
 import type { AppLocale } from "@/lib/i18n/config";
 import { defaultAppLocale, isAppLocale } from "@/lib/i18n/config";
-import { getWorkspaceLocaleSettings } from "@/lib/i18n/workspace-settings";
 import {
   sendPasswordResetEmail,
   sendVerificationEmail,
-  sendWorkspaceInvitationEmail,
 } from "@/lib/email";
 
 function readLocaleField(
@@ -28,6 +25,13 @@ function readLocaleField(
 export const auth = betterAuth({
   appName: "Convyy",
   baseURL: env.BETTER_AUTH_URL,
+  trustedOrigins: (() => {
+    try {
+      return [new URL(env.BETTER_AUTH_URL).origin];
+    } catch {
+      return [env.BETTER_AUTH_URL];
+    }
+  })(),
   secret: env.BETTER_AUTH_SECRET,
   database: drizzleAdapter(getDb(), {
     schema: authSchema,
@@ -38,24 +42,6 @@ export const auth = betterAuth({
     updateAge: 60 * 60 * 24, // 24 hours (sliding session)
   },
   plugins: [
-    organization({
-      membershipLimit: Infinity,
-      invitationLimit: Infinity,
-      invitationExpiresIn: 60 * 60 * 24 * 7,
-      creatorRole: "owner",
-      async sendInvitationEmail(data) {
-        const workspaceSettings = await getWorkspaceLocaleSettings(data.organization.id);
-        const locale = workspaceSettings?.emailLocale ?? defaultAppLocale;
-        const inviteLink = `${env.BETTER_AUTH_URL}/${locale}/workspace/accept-invitation/${data.id}`;
-        await sendWorkspaceInvitationEmail({
-          email: data.email,
-          invitedBy: data.inviter.user.name || data.inviter.user.email,
-          workspaceName: data.organization.name,
-          inviteLink,
-          locale,
-        });
-      },
-    }),
     admin({
       adminRoles: ["admin"],
       defaultRole: "user",
@@ -185,9 +171,7 @@ export type AuthUser = BaseAuthUser & {
   preferredLanguage?: AppLocale;
 };
 
-export type AuthSession = InferSession<typeof auth> & {
-  activeOrganizationId?: string | null;
-};
+export type AuthSession = InferSession<typeof auth>;
 
 export type AuthSessionWithUser = Omit<RawAuthSessionWithUser, "user" | "session"> & {
   user: AuthUser;

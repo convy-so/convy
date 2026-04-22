@@ -8,9 +8,6 @@ import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/workspace-access";
-import {
-  recordRealtimeEvent,
-} from "@/lib/collaboration-service";
 
 export async function POST(
   _request: Request,
@@ -45,49 +42,16 @@ export async function POST(
       shareableLink = `${env.APP_BASE_URL}/s/${linkId}`;
     }
 
-    // Update survey status to active
-    const [updatedSurvey] = await getDb().transaction(async (tx) => {
-      const [updated] = await tx
-        .update(surveys)
-        .set({
-          status: "active",
-          shareableLink,
-          confirmed: true,
-          updatedAt: new Date(),
-        })
-        .where(eq(surveys.id, surveyId))
-        .returning();
-
-      await recordRealtimeEvent(tx, {
-        scope: "survey",
-        surveyId,
-        actorId: session.user.id,
-        eventType: "survey.published",
-        payload: {
-          surveyId,
-          workspaceId: survey.organizationId ?? null,
-          status: "active",
-          shareableLink,
-        },
-      });
-
-      if (survey.organizationId) {
-        await recordRealtimeEvent(tx, {
-          scope: "workspace",
-          workspaceId: survey.organizationId,
-          actorId: session.user.id,
-          eventType: "workspace.survey_updated",
-          payload: {
-            surveyId,
-            workspaceId: survey.organizationId,
-            status: "active",
-            shareableLink,
-          },
-        });
-      }
-
-      return [updated];
-    });
+    const [updatedSurvey] = await getDb()
+      .update(surveys)
+      .set({
+        status: "active",
+        shareableLink,
+        confirmed: true,
+        updatedAt: new Date(),
+      })
+      .where(eq(surveys.id, surveyId))
+      .returning();
 
     return new Response(
       JSON.stringify({

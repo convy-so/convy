@@ -83,11 +83,6 @@ async function nextWorkspaceRevision(tx: DbTransaction, workspaceId: string) {
 }
 
 async function nextSurveyRevision(tx: DbTransaction, surveyId: string) {
-  const [survey] = await tx
-    .select({ organizationId: surveys.organizationId })
-    .from(surveys)
-    .where(eq(surveys.id, surveyId));
-
   const [row] = await tx
     .insert(surveyRevisions)
     .values({
@@ -107,7 +102,7 @@ async function nextSurveyRevision(tx: DbTransaction, surveyId: string) {
 
   return {
     revision: row.revision,
-    workspaceId: survey?.organizationId ?? null,
+    workspaceId: null,
   };
 }
 

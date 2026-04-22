@@ -20,7 +20,6 @@ export async function replaceEmbeddedSource(params: {
   sourceType: SourceType;
   sourceId: string;
   content: string;
-  organizationId?: string | null;
   language?: string | null;
   sessionType?: "sample" | "live" | null;
   documentTitle?: string | null;
@@ -65,7 +64,6 @@ export async function replaceEmbeddedSource(params: {
           sourceType: params.sourceType,
           sourceId: params.sourceId,
           chunkIndex: index,
-          organizationId: params.organizationId ?? null,
           language: params.language ?? null,
           sessionType: params.sessionType ?? null,
           documentTitle: params.documentTitle ?? null,

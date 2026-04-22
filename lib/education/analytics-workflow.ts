@@ -17,7 +17,6 @@ import {
   listAnalyticsFactsForSurveyByType,
   listEvidenceForSession,
   listEvidenceForSurveyByType,
-  listEffectivePlaybooks,
   listSurveySessionInsightsByType,
   listSessionTurns,
   replaceAnalyticsFacts,
@@ -37,8 +36,6 @@ import {
   type ResearchBrief,
 } from "./types";
 import { executeRAGQuery } from "@/lib/rag/search";
-import { renderPlaybookContext } from "./playbooks";
-import { getPhasePlaybookContext } from "./runtime-context";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -282,38 +279,9 @@ function buildSessionFacts(input: {
   }));
 }
 
-async function computeDerivedMetrics(input: {
-  surveyId: string;
-  organizationId?: string | null;
-  facts: AnalyticsFact[];
-}) {
-  const playbooks = await listEffectivePlaybooks({
-    surveyId: input.surveyId,
-    organizationId: input.organizationId ?? null,
-    phase: "analytics",
-  });
-
-  const metrics = playbooks.flatMap((record) =>
-    record.activeVersion?.interpretation.derivedMetrics.map((metric) => ({
-      id: metric.id,
-      label: metric.label,
-      description: metric.description,
-      value: input.facts.filter((fact) => {
-        if (metric.theme && !fact.themes.includes(metric.theme.toLowerCase())) return false;
-        if (metric.nodeId && fact.nodeId !== metric.nodeId) return false;
-        if (metric.sentiment && fact.sentiment !== metric.sentiment) return false;
-        return true;
-      }).length,
-    })) ?? [],
-  );
-
-  return metrics;
-}
-
 async function synthesizeAnalytics(input: {
   surveyId: string;
   brief: ResearchBrief;
-  playbookContext: string;
   coverageNodeIds: string[];
   insights: ConversationInsight[];
   evidence: EvidenceRecord[];
@@ -321,7 +289,7 @@ async function synthesizeAnalytics(input: {
   const program = getEducationProgram(input.brief.programId);
   const systemPrompt = `${program.analyticsPrompt}
 
-${input.playbookContext ? `<active-playbooks>\n${input.playbookContext}\n</active-playbooks>\n\n` : ""}<rules>
+<rules>
 - Use only the supplied evidence and insight summaries.
 - Keep findings scoped to the brief and program dimensions.
 - If support is thin or mixed, lower confidence and use the dataGaps field.
@@ -363,11 +331,16 @@ ${buildEvidenceDigest(input.evidence)}
   return parseSynthesisResult(safeJsonParse(raw));
 }
 
-export async function buildAnalyticsSnapshot(
-  surveyId: string,
-  generation?: Partial<AnalyticsGenerationMetadata>,
-): Promise<AnalyticsSnapshot | null> {
-  const [briefRow, planRow, survey, evidence, insightRows, latestSnapshot, factRows] = await Promise.all([
+async function fetchAndNormalizeSnapshotData(surveyId: string) {
+  const [
+    briefRow,
+    planRow,
+    survey,
+    evidence,
+    insightRows,
+    latestSnapshot,
+    factRows,
+  ] = await Promise.all([
     getResearchBrief(surveyId),
     getActiveCoveragePlan(surveyId),
     getSurveyById(surveyId),
@@ -381,7 +354,7 @@ export async function buildAnalyticsSnapshot(
 
   const brief = normalizeResearchBrief(briefRow.brief);
   if (!brief) return null;
-  const plan = planRow.plan;
+
   const insights = normalizeConversationInsights(
     insightRows.map((row) => row.insight),
   );
@@ -391,44 +364,139 @@ export async function buildAnalyticsSnapshot(
   const analyticsFacts = normalizeAnalyticsFacts(
     factRows.map((row) => row.fact),
   );
-  const coverage = aggregateCoverage(insights, plan.nodes.map((node) => node.id));
-  const completedSessions = insights.filter((insight) => insight.quality.completeness >= 0.8).length;
-  const flaggedSessions = insights.filter((insight) => insight.quality.reliability < 0.55).length;
+
+  return {
+    briefRow,
+    brief,
+    plan: planRow.plan,
+    survey,
+    insights,
+    evidenceRecords,
+    analyticsFacts,
+    latestSnapshot,
+  };
+}
+
+function calculateParticipationStats(insights: ConversationInsight[]) {
+  const completedSessions = insights.filter(
+    (insight) => insight.quality.completeness >= 0.8,
+  ).length;
+
+  return {
+    totalSessions: insights.length,
+    completedSessions,
+    completionRate: insights.length
+      ? Math.round((completedSessions / insights.length) * 100)
+      : 0,
+  };
+}
+
+function calculateQualityMetrics(insights: ConversationInsight[]) {
+  const flaggedSessions = insights.filter(
+    (insight) => insight.quality.reliability < 0.55,
+  ).length;
+
   const averageReliability = insights.length
-    ? insights.reduce((sum, insight) => sum + insight.quality.reliability, 0) / insights.length
-    : 0;
-  const averageFatigue = insights.length
-    ? insights.reduce((sum, insight) => sum + insight.quality.fatigue, 0) / insights.length
+    ? insights.reduce((sum, insight) => sum + insight.quality.reliability, 0) /
+      insights.length
     : 0;
 
-  const analyticsPlaybookContext = renderPlaybookContext(
-    (
-      await listEffectivePlaybooks({
-        surveyId,
-        organizationId: survey?.organizationId ?? null,
-        phase: "analytics",
-      })
-    ).map((record) => ({
-      name: record.playbook.name,
-      phase: record.playbook.phase,
-      scope: record.playbook.scope,
-      interpretation: record.activeVersion!.interpretation,
-    })),
+  const averageFatigue = insights.length
+    ? insights.reduce((sum, insight) => sum + insight.quality.fatigue, 0) /
+      insights.length
+    : 0;
+
+  return { flaggedSessions, averageReliability, averageFatigue };
+}
+
+async function triggerSnapshotSideEffects(params: {
+  surveyId: string;
+  survey: any;
+  brief: ResearchBrief;
+  snapshot: AnalyticsSnapshot;
+}) {
+  await replaceAnalyticsSnapshot(params.surveyId, params.snapshot);
+
+  await replaceEmbeddedSource({
+    surveyId: params.surveyId,
+    sourceType: "analytics",
+    sourceId: `snapshot:${params.snapshot.version}`,
+    language: params.survey?.language ?? "en",
+    sessionType: "live",
+    documentTitle: `Analytics snapshot v${params.snapshot.version}`,
+    sourceUpdatedAt: new Date(params.snapshot.generatedAt),
+    content: [
+      `Program: ${params.brief.programId}`,
+      ...params.snapshot.findings.map(
+        (finding) => `${finding.title}: ${finding.summary}`,
+      ),
+      ...params.snapshot.recommendations.map((item) => `Recommendation: ${item}`),
+      ...params.snapshot.dataGaps.map((item) => `Gap: ${item}`),
+    ].join("\n"),
+    metadata: {
+      version: params.snapshot.version,
+      generatedAt: params.snapshot.generatedAt,
+      sessionType: "live",
+    },
+  }).catch((error) => {
+    console.error(
+      "[analytics-workflow] failed to replace embedded insight source",
+      {
+        surveyId: params.surveyId,
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+    );
+  });
+
+  await recordEducationTrace({
+    surveyId: params.surveyId,
+    traceType: "analytics_snapshot",
+    payload: {
+      orchestrationMode: chooseOrchestrationMode({
+        needsDeterministicStateMachine: true,
+        needsOpenEndedDialogue: false,
+      }),
+      version: params.snapshot.version,
+      totalSessions: params.snapshot.participation.totalSessions,
+      findings: params.snapshot.findings.length,
+      dataGaps: params.snapshot.dataGaps.length,
+    },
+  });
+}
+
+export async function buildAnalyticsSnapshot(
+  surveyId: string,
+  generation?: Partial<AnalyticsGenerationMetadata>,
+): Promise<AnalyticsSnapshot | null> {
+  const data = await fetchAndNormalizeSnapshotData(surveyId);
+  if (!data) return null;
+
+  const {
+    briefRow,
+    brief,
+    plan,
+    survey,
+    insights,
+    evidenceRecords,
+    analyticsFacts,
+    latestSnapshot,
+  } = data;
+
+  const coverage = aggregateCoverage(
+    insights,
+    plan.nodes.map((node) => node.id),
   );
+  const participation = calculateParticipationStats(insights);
+  const quality = calculateQualityMetrics(insights);
 
   const synthesis = await synthesizeAnalytics({
     surveyId,
     brief,
-    playbookContext: analyticsPlaybookContext,
     coverageNodeIds: plan.nodes.map((node) => node.id),
     insights,
     evidence: evidenceRecords,
   });
-  const derivedMetrics = await computeDerivedMetrics({
-    surveyId,
-    organizationId: survey?.organizationId ?? null,
-    facts: analyticsFacts,
-  });
+  const derivedMetrics: AnalyticsSnapshot["derivedMetrics"] = [];
 
   const version = (latestSnapshot?.version ?? 0) + 1;
   const snapshot: AnalyticsSnapshot = {
@@ -438,16 +506,8 @@ export async function buildAnalyticsSnapshot(
     programId: brief.programId,
     briefVersion: briefRow.version,
     coverage,
-    participation: {
-      totalSessions: insights.length,
-      completedSessions,
-      completionRate: insights.length ? Math.round((completedSessions / insights.length) * 100) : 0,
-    },
-    quality: {
-      averageReliability,
-      averageFatigue,
-      flaggedSessions,
-    },
+    participation,
+    quality,
     findings: (synthesis?.findings ?? []).map((finding) => ({
       id: nanoid(),
       title: finding.title,
@@ -466,58 +526,28 @@ export async function buildAnalyticsSnapshot(
       materialityScore: generation?.materialityScore ?? 0,
       completedSessionDelta:
         generation?.completedSessionDelta ??
-        Math.max(0, completedSessions - (latestSnapshot?.snapshot.participation.completedSessions ?? 0)),
+        Math.max(
+          0,
+          participation.completedSessions -
+            (latestSnapshot?.snapshot.participation.completedSessions ?? 0),
+        ),
       overallCoverageDelta:
         generation?.overallCoverageDelta ??
-        Math.abs(coverage.overall - (latestSnapshot?.snapshot.coverage.overall ?? 0)),
+        Math.abs(
+          coverage.overall - (latestSnapshot?.snapshot.coverage.overall ?? 0),
+        ),
       reliabilityDelta:
         generation?.reliabilityDelta ??
-        Math.abs(averageReliability - (latestSnapshot?.snapshot.quality.averageReliability ?? 0)),
+        Math.abs(
+          quality.averageReliability -
+            (latestSnapshot?.snapshot.quality.averageReliability ?? 0),
+        ),
       nodeMilestones: generation?.nodeMilestones ?? [],
     },
   };
 
-  await replaceAnalyticsSnapshot(surveyId, snapshot);
-  await replaceEmbeddedSource({
-    surveyId,
-    sourceType: "analytics",
-    sourceId: `snapshot:${snapshot.version}`,
-    organizationId: survey?.organizationId ?? null,
-    language: survey?.language ?? "en",
-    sessionType: "live",
-    documentTitle: `Analytics snapshot v${snapshot.version}`,
-    sourceUpdatedAt: new Date(snapshot.generatedAt),
-    content: [
-      `Program: ${brief.programId}`,
-      ...snapshot.findings.map((finding) => `${finding.title}: ${finding.summary}`),
-      ...snapshot.recommendations.map((item) => `Recommendation: ${item}`),
-      ...snapshot.dataGaps.map((item) => `Gap: ${item}`),
-    ].join("\n"),
-    metadata: {
-      version: snapshot.version,
-      generatedAt: snapshot.generatedAt,
-      sessionType: "live",
-    },
-  }).catch((error) => {
-    console.error("[analytics-workflow] failed to replace embedded insight source", {
-      surveyId,
-      message: error instanceof Error ? error.message : "Unknown error",
-    });
-  });
-  await recordEducationTrace({
-    surveyId,
-    traceType: "analytics_snapshot",
-    payload: {
-      orchestrationMode: chooseOrchestrationMode({
-        needsDeterministicStateMachine: true,
-        needsOpenEndedDialogue: false,
-      }),
-      version,
-      totalSessions: snapshot.participation.totalSessions,
-      findings: snapshot.findings.length,
-      dataGaps: snapshot.dataGaps.length,
-    },
-  });
+  await triggerSnapshotSideEffects({ surveyId, survey, brief, snapshot });
+
   return snapshot;
 }
 
@@ -543,20 +573,12 @@ export async function buildSessionInsight(sessionId: string): Promise<Conversati
     .join("\n\n");
   const evidence = normalizeEvidenceRecords(evidenceRows.map((row) => row.metadata));
 
-  const playbookContext = await getPhasePlaybookContext({
-    surveyId,
-    organizationId: survey?.organizationId ?? null,
-    phase: "analytics",
-  });
-
   const systemPrompt = `${getEducationProgram(brief.programId).analyticsPrompt}
 
 <task>
 Summarize one interview session.
 Return JSON only.
 </task>
-
-${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>\n\n` : ""}
 
 <rules>
 - Keep the summary grounded in what this one session actually revealed.
@@ -608,7 +630,6 @@ ${buildEvidenceDigest(evidence)}
     surveyId,
     sourceType: "insight",
     sourceId: sessionId,
-    organizationId: survey?.organizationId ?? null,
     language: survey?.language ?? "en",
     sessionType:
       sessionRow.sessionType === "sample" ? "sample" : "live",
@@ -633,7 +654,6 @@ ${buildEvidenceDigest(evidence)}
         surveyId,
         sourceType: "response",
         sourceId: item.id,
-        organizationId: survey?.organizationId ?? null,
         language: survey?.language ?? "en",
         sessionType:
           sessionRow.sessionType === "sample" ? "sample" : "live",
@@ -660,23 +680,103 @@ ${buildEvidenceDigest(evidence)}
   return insight;
 }
 
+async function classifyQuestionIntent(surveyId: string, question: string) {
+  const classifierSystemPrompt = `Classify this analytics question into one of: metric, comparison, evidence, snapshot, mixed.
+Return JSON only: {"intent":"metric|comparison|evidence|snapshot|mixed","needsChart":boolean,"needsTable":boolean,"theme":"string"}.`;
+
+  const classifierRaw = await generateAIResponse(
+    `Question: ${question}`,
+    classifierSystemPrompt,
+    {
+      model: defaultModel,
+      temperature: 0,
+      maxTokens: 200,
+      surveyId,
+      promptCache: {
+        namespace: "analytics-question-classifier",
+        staticSystemPrompt: classifierSystemPrompt,
+      },
+    },
+  ).catch(() => "");
+
+  return (
+    parseClassifierResult(safeJsonParse(classifierRaw)) ?? {
+      intent: "mixed" as const,
+      needsChart: false,
+      needsTable: false,
+    }
+  );
+}
+
+async function retrieveQuestionContext(params: {
+  surveyId: string;
+  question: string;
+  classifier: any;
+  normalizedQuestion: string;
+}) {
+  const versionMatch = params.normalizedQuestion.match(/version\s+(\d+)/);
+  const requestedVersion = versionMatch ? Number(versionMatch[1]) : null;
+  const compareMatch = params.normalizedQuestion.match(
+    /compare(?:\s+version)?\s+(\d+)\s+(?:and|with|to)\s+(\d+)/,
+  );
+  const leftVersion = compareMatch ? Number(compareMatch[1]) : null;
+  const rightVersion = compareMatch ? Number(compareMatch[2]) : null;
+
+  const [
+    leftSnapshotRow,
+    rightSnapshotRow,
+    requestedSnapshotRow,
+    retrieved,
+  ] = await Promise.all([
+    leftVersion
+      ? getAnalyticsSnapshotByVersion(params.surveyId, leftVersion)
+      : null,
+    rightVersion
+      ? getAnalyticsSnapshotByVersion(params.surveyId, rightVersion)
+      : null,
+    requestedVersion && !compareMatch
+      ? getAnalyticsSnapshotByVersion(params.surveyId, requestedVersion)
+      : null,
+    params.classifier.intent === "evidence" ||
+    params.classifier.intent === "mixed"
+      ? executeRAGQuery(params.question, {
+          surveyId: params.surveyId,
+          sourceType: ["response", "insight", "analytics"],
+          sessionType: "live",
+          limit: 8,
+        }).catch(() => [])
+      : Promise.resolve([]),
+  ]);
+
+  return {
+    leftSnapshotRow,
+    rightSnapshotRow,
+    requestedSnapshotRow,
+    retrieved,
+    compareMatch: !!compareMatch,
+    requestedVersion: !!requestedVersion,
+  };
+}
+
 export async function answerAnalyticsQuestion(input: {
   surveyId: string;
   question: string;
   language?: string;
 }) {
-  const [briefRow, snapshotRow, , factsRows, stateRow, survey] = await Promise.all([
-    getResearchBrief(input.surveyId),
-    getLatestAnalyticsSnapshot(input.surveyId),
-    listEvidenceForSurveyByType(input.surveyId, "live"),
-    listAnalyticsFactsForSurveyByType(input.surveyId, "live"),
-    getAnalyticsState(input.surveyId),
-    getSurveyById(input.surveyId),
-  ]);
+  const [briefRow, snapshotRow, , factsRows, stateRow, survey] =
+    await Promise.all([
+      getResearchBrief(input.surveyId),
+      getLatestAnalyticsSnapshot(input.surveyId),
+      listEvidenceForSurveyByType(input.surveyId, "live"),
+      listAnalyticsFactsForSurveyByType(input.surveyId, "live"),
+      getAnalyticsState(input.surveyId),
+      getSurveyById(input.surveyId),
+    ]);
 
   if (!briefRow || !snapshotRow) {
     return {
-      response: "Analytics are not ready yet. Run analytics after collecting some completed sessions.",
+      response:
+        "Analytics are not ready yet. Run analytics after collecting some completed sessions.",
       sources: [],
       toolResult: null,
     };
@@ -685,39 +785,22 @@ export async function answerAnalyticsQuestion(input: {
   const brief = normalizeResearchBrief(briefRow.brief);
   if (!brief) {
     return {
-      response: "Analytics are not ready yet. Run analytics after collecting some completed sessions.",
+      response:
+        "Analytics are not ready yet. Run analytics after collecting some completed sessions.",
       sources: [],
       toolResult: null,
     };
   }
+
   const program = getEducationProgram(brief.programId);
   const snapshot = snapshotRow.snapshot;
   const facts = normalizeAnalyticsFacts(factsRows.map((row) => row.fact));
-  const playbookContext = await getPhasePlaybookContext({
-    surveyId: input.surveyId,
-    organizationId: survey?.organizationId ?? null,
-    phase: "analytics",
-  });
-
-  const classifierSystemPrompt = `Classify this analytics question into one of: metric, comparison, evidence, snapshot, mixed.
-Return JSON only: {"intent":"metric|comparison|evidence|snapshot|mixed","needsChart":boolean,"needsTable":boolean,"theme":"string"}.`;
-  const classifierRaw = await generateAIResponse(`Question: ${input.question}`, classifierSystemPrompt, {
-    model: defaultModel,
-    temperature: 0,
-    maxTokens: 200,
-    surveyId: input.surveyId,
-    promptCache: {
-      namespace: "analytics-question-classifier",
-      staticSystemPrompt: classifierSystemPrompt,
-    },
-  }).catch(() => "");
-  const classifier = parseClassifierResult(safeJsonParse(classifierRaw)) ?? {
-    intent: "mixed",
-    needsChart: false,
-    needsTable: false,
-  };
-
+  const classifier = await classifyQuestionIntent(
+    input.surveyId,
+    input.question,
+  );
   const normalizedQuestion = input.question.toLowerCase();
+
   const matchingFacts = facts.filter((fact) => {
     if (!classifier.theme) return true;
     return (
@@ -726,33 +809,26 @@ Return JSON only: {"intent":"metric|comparison|evidence|snapshot|mixed","needsCh
       fact.outcomeSignal.toLowerCase().includes(classifier.theme.toLowerCase())
     );
   });
+
   const sentimentBuckets = ["positive", "negative", "neutral", "mixed"] as const;
   const factSummary = sentimentBuckets.map((sentiment) => ({
     label: sentiment,
     value: matchingFacts.filter((fact) => fact.sentiment === sentiment).length,
   }));
 
-  const versionMatch = normalizedQuestion.match(/version\s+(\d+)/);
-  const requestedVersion = versionMatch ? Number(versionMatch[1]) : null;
-  const compareMatch = normalizedQuestion.match(/compare(?:\s+version)?\s+(\d+)\s+(?:and|with|to)\s+(\d+)/);
-  const leftVersion = compareMatch ? Number(compareMatch[1]) : null;
-  const rightVersion = compareMatch ? Number(compareMatch[2]) : null;
-
-  const [leftSnapshotRow, rightSnapshotRow, requestedSnapshotRow, retrieved] = await Promise.all([
-    leftVersion ? getAnalyticsSnapshotByVersion(input.surveyId, leftVersion) : null,
-    rightVersion ? getAnalyticsSnapshotByVersion(input.surveyId, rightVersion) : null,
-    requestedVersion && !compareMatch
-      ? getAnalyticsSnapshotByVersion(input.surveyId, requestedVersion)
-      : null,
-    classifier.intent === "evidence" || classifier.intent === "mixed"
-      ? executeRAGQuery(input.question, {
-          surveyId: input.surveyId,
-          sourceType: ["response", "insight", "analytics"],
-          sessionType: "live",
-          limit: 8,
-        }).catch(() => [])
-      : Promise.resolve([]),
-  ]);
+  const {
+    leftSnapshotRow,
+    rightSnapshotRow,
+    requestedSnapshotRow,
+    retrieved,
+    compareMatch,
+    requestedVersion,
+  } = await retrieveQuestionContext({
+    surveyId: input.surveyId,
+    question: input.question,
+    classifier,
+    normalizedQuestion,
+  });
 
   const evidenceContext = retrieved
     .slice(0, 6)
@@ -765,8 +841,6 @@ Return JSON only: {"intent":"metric|comparison|evidence|snapshot|mixed","needsCh
 Answer the creator's analytics question using the supplied analytics facts, snapshot state, and retrieved evidence.
 Return JSON only.
 </task>
-
-${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>\n\n` : ""}
 
 <rules>
 - For exact counts or percentages, rely on the fact summary or snapshot fields first.
@@ -787,6 +861,7 @@ ${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>
   }
 }
 </schema>`;
+
   const prompt = `<question>${input.question}</question>
 
 <intent>${classifier.intent}</intent>
@@ -800,22 +875,16 @@ ${JSON.stringify(snapshot, null, 2)}
 </latest-snapshot>
 
 ${requestedVersion && !compareMatch ? `<requested-version>${JSON.stringify(requestedSnapshotRow?.snapshot ?? null, null, 2)}</requested-version>` : ""}
-${compareMatch ? `<comparison>\n${JSON.stringify({
-    left: leftSnapshotRow?.snapshot ?? null,
-    right: rightSnapshotRow?.snapshot ?? null,
-  }, null, 2)}\n</comparison>` : ""}
+${compareMatch ? `<comparison>\n${JSON.stringify({ left: leftSnapshotRow?.snapshot ?? null, right: rightSnapshotRow?.snapshot ?? null }, null, 2)}\n</comparison>` : ""}
 
 <fact-summary>
-${JSON.stringify({
-    totalFacts: matchingFacts.length,
-    sentimentBuckets: factSummary,
-    themes: Array.from(new Set(matchingFacts.flatMap((fact) => fact.themes))).slice(0, 10),
-  }, null, 2)}
+${JSON.stringify({ totalFacts: matchingFacts.length, sentimentBuckets: factSummary, themes: Array.from(new Set(matchingFacts.flatMap((fact) => fact.themes))).slice(0, 10) }, null, 2)}
 </fact-summary>
 
 <retrieved-evidence>
 ${evidenceContext || "None"}
 </retrieved-evidence>`;
+
   const raw = await generateAIResponse(prompt, systemPrompt, {
     model: defaultModel,
     temperature: 0.2,
@@ -826,31 +895,32 @@ ${evidenceContext || "None"}
       staticSystemPrompt: systemPrompt,
     },
   });
+
   const parsed = parseQuestionAnswerResult(safeJsonParse(raw));
   if (parsed?.response) return parsed;
+
   return {
-    response: "I could not ground a reliable answer from the current analytics snapshot.",
+    response:
+      "I could not ground a reliable answer from the current analytics snapshot.",
     sources: [],
-    toolResult:
-      classifier.needsTable
+    toolResult: classifier.needsTable
+      ? {
+          toolName: "renderTable",
+          output: {
+            title: "Sentiment summary",
+            columns: ["Sentiment", "Count"],
+            rows: factSummary.map((row) => [row.label, String(row.value)]),
+          },
+        }
+      : classifier.needsChart
         ? {
-            toolName: "renderTable",
+            toolName: "renderChart",
             output: {
+              type: "bar",
               title: "Sentiment summary",
-              columns: ["Sentiment", "Count"],
-              rows: factSummary.map((row) => [row.label, String(row.value)]),
+              data: factSummary,
             },
           }
-        : classifier.needsChart
-          ? {
-              toolName: "renderChart",
-              output: {
-                type: "bar",
-                title: "Sentiment summary",
-                data: factSummary,
-              },
-            }
-          : null,
+        : null,
   };
 }
-

@@ -160,7 +160,6 @@ export async function POST(
       .insert(learningTeacherChatSessions)
       .values({
         id: `learn_chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        organizationId: membership.classroom.organizationId,
         classroomStudentId: studentId,
         userId: session.user.id,
         language,

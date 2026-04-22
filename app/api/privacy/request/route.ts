@@ -2,18 +2,15 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getVerifiedSession } from "@/lib/auth/session";
-import { isWorkspaceOwner } from "@/lib/workspace-access";
 import { createPrivacyRequest } from "@/lib/privacy/service";
 
 const bodySchema = z.object({
-  scope: z.enum(["user", "workspace"]).default("user"),
+  scope: z.enum(["user"]).default("user"),
   requestType: z.enum([
     "rectification",
     "restriction",
     "objection",
-    "delete_workspace_content",
   ]),
-  organizationId: z.string().min(1).optional(),
   details: z.string().trim().max(4000).optional(),
 });
 
@@ -21,29 +18,10 @@ export async function POST(request: Request) {
   try {
     const session = await getVerifiedSession();
     const body = bodySchema.parse(await request.json());
-    const organizationId =
-      body.scope === "workspace"
-        ? body.organizationId ?? session.session.activeOrganizationId ?? undefined
-        : undefined;
-
-    if (body.scope === "workspace") {
-      if (!organizationId) {
-        return NextResponse.json(
-          { error: "Organization ID is required for workspace privacy requests." },
-          { status: 400 },
-        );
-      }
-
-      const isOwner = await isWorkspaceOwner(session.user.id, organizationId);
-      if (!isOwner) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-      }
-    }
 
     const privacyRequest = await createPrivacyRequest({
-      organizationId: organizationId ?? null,
       userId: session.user.id,
-      subjectType: body.scope,
+      subjectType: "user",
       requestType: body.requestType,
       requestPayload: {
         details: body.details ?? null,

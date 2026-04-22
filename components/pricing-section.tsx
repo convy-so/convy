@@ -6,7 +6,7 @@ const plans = [
     description:
       "For individual educators exploring adaptive tutoring and student support.",
     items: [
-      "1 classroom workspace",
+      "1 classroom",
       "1 active learning topic",
       "Text-based AI tutoring",
       "Basic student insights",
@@ -24,13 +24,13 @@ const plans = [
     originalPrice: null,
     period: "/month",
     description:
-      "For schools or learning teams piloting personalized classroom support.",
+      "For schools or educators piloting personalized classroom support.",
     items: [
       "Everything in Free",
       "5 active topics or classrooms",
       "Voice and text learning experiences",
       "Custom branding and themes",
-      "Shared teacher workspace",
+      "Teacher session management",
       "Learning analytics dashboard",
       "Email support",
     ],
@@ -45,14 +45,14 @@ const plans = [
     originalPrice: "$79",
     period: "/month",
     description:
-      "For growing education teams running personalized learning at scale.",
+      "For growing education programs running personalized learning at scale.",
     items: [
       "Everything in Starter",
       "Unlimited active classrooms and topics",
       "Classroom and tutoring workflows",
       "AI-generated summaries and reports",
       "Advanced learning analytics and export",
-      "Teacher workspaces and collaboration",
+      "Expert review and reporting flows",
       "Priority support",
     ],
     cta: "Get Pro",
@@ -96,7 +96,7 @@ export default function PricingSection() {
               Pricing
             </p>
             <h2 className="mb-4 text-[28px] font-[500] leading-[36px] tracking-[-0.48px] text-[#080808] md:text-[40px] md:leading-[50px] md:tracking-[-0.64px]">
-              Pricing for modern learning teams
+              Pricing for modern learning programs
             </h2>
             <p className="mx-auto max-w-3xl text-[18px] font-normal leading-[26px] tracking-normal text-[#696969] md:text-[22px] md:leading-[32px]">
               Start with one classroom or topic, then scale toward a more

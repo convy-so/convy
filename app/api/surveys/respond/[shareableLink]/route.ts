@@ -641,7 +641,6 @@ export async function POST(
         getActiveConductingProfile(survey.id, "sample"),
         getConductingRuntimeLayers({
           surveyId: survey.id,
-          organizationId: survey.organizationId,
           classroomId: survey.classroomId,
           programId: survey.programId,
           language:
@@ -659,8 +658,6 @@ export async function POST(
       sessionType: "live",
       conductingProfile:
         activeLiveProfile?.profile ?? sampleFallbackProfile?.profile ?? null,
-      playbookContext: runtimeLayers.playbookContext,
-      personalityContext: runtimeLayers.personalityContext,
       expertGuidanceContext: runtimeLayers.expertGuidanceContext,
       toolContext: {
         canFinishSurvey: true,

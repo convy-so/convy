@@ -7,7 +7,6 @@ import { auth } from "@/lib/auth";
 import { sendStudentActivationEmail } from "@/lib/email";
 import { env } from "@/lib/env";
 import { defaultAppLocale, normalizeAppLocale } from "@/lib/i18n/config";
-import { getWorkspaceLocaleSettings } from "@/lib/i18n/workspace-settings";
 import { generateOpaqueToken, hashOpaqueToken } from "@/lib/learning/tokens";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -131,12 +130,8 @@ export async function provisionManagedStudentAccount(params: {
     })
     .where(eq(classroomStudents.id, classroomStudent.id));
 
-  const workspaceSettings = await getWorkspaceLocaleSettings(
-    classroomStudent.classroom.organizationId,
-  );
   const locale = normalizeAppLocale(
-    workspaceSettings?.emailLocale ??
-      classroomStudent.classroom.defaultContentLocale,
+    classroomStudent.classroom.defaultContentLocale,
     defaultAppLocale,
   );
   const activationLink = `${env.APP_BASE_URL}/${locale}/student-access/activate?token=${activationToken}`;

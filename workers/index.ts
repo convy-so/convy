@@ -32,7 +32,6 @@ import { testRedisConnection } from "@/lib/redis";
 import conversationInsightsWorker from "./conversation-insights.worker";
 import surveyAnalyticsWorker from "./survey-analytics.worker";
 import emailWorker from "./email.worker";
-import learningPatternsWorker from "./learning-patterns.worker";
 import tutoringReportWorker from "./tutoring-report.worker";
 import evalRunWorker from "./eval-run.worker";
 import contentTranslationWorker from "./content-translation.worker";
@@ -43,7 +42,6 @@ const workers = [
   { name: "Conversation Insights", worker: conversationInsightsWorker },
   { name: "Survey Analytics", worker: surveyAnalyticsWorker },
   { name: "Email", worker: emailWorker },
-  { name: "Learning Patterns", worker: learningPatternsWorker },
   { name: "Tutoring Report", worker: tutoringReportWorker },
   { name: "Eval Run", worker: evalRunWorker },
   { name: "Content Translation", worker: contentTranslationWorker },

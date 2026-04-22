@@ -12,7 +12,6 @@ import {
   removeSurveyFromFolderAction,
 } from "@/app/actions/folder";
 import { getSurveysAction } from "@/app/actions/survey";
-import { useAuth } from "@/components/providers/auth-provider";
 
 type FolderResponse = Awaited<ReturnType<typeof getFoldersAction>>;
 type FolderList = Extract<FolderResponse, { success: true }>["data"];
@@ -20,24 +19,20 @@ type FolderListItem = FolderList extends Array<infer T> ? T : never;
 
 // Keys
 export const folderKeys = {
-  all: (orgId?: string | null) => ["folders", orgId] as const,
-  lists: (orgId?: string | null) =>
-    [...folderKeys.all(orgId), "list"] as const,
+  all: () => ["folders"] as const,
+  lists: () => [...folderKeys.all(), "list"] as const,
   detail: (id: string) => ["folders", "detail", id] as const,
 };
 
 export const surveyKeys = {
-  all: (orgId?: string | null) => ["surveys", orgId] as const,
-  lists: (orgId?: string | null) => [...surveyKeys.all(orgId), "list"] as const,
+  all: () => ["surveys"] as const,
+  lists: () => [...surveyKeys.all(), "list"] as const,
 };
 
 // Queries
 export function useFolders() {
-  const { session } = useAuth();
-  const activeOrgId = session?.activeOrganizationId || null;
-
   return useQuery({
-    queryKey: folderKeys.lists(activeOrgId),
+    queryKey: folderKeys.lists(),
     queryFn: async () => {
       const result = await getFoldersAction();
       if (!result.success) throw new Error(result.error);
@@ -60,11 +55,8 @@ export function useFolder(id: string) {
 
 // Helper query to get surveys available for assignment (no folder)
 export function useAvailableSurveys() {
-  const { session } = useAuth();
-  const activeOrgId = session?.activeOrganizationId || null;
-
   return useQuery({
-    queryKey: surveyKeys.lists(activeOrgId),
+    queryKey: surveyKeys.lists(),
     queryFn: async () => {
       const result = await getSurveysAction();
       if (!result.success) throw new Error(result.error);
@@ -77,8 +69,6 @@ export function useAvailableSurveys() {
 // Mutations
 export function useCreateFolder() {
   const queryClient = useQueryClient();
-  const { session } = useAuth();
-  const activeOrgId = session?.activeOrganizationId || null;
 
   return useMutation({
     mutationFn: async (data: {
@@ -93,16 +83,16 @@ export function useCreateFolder() {
     onMutate: async (newFolder) => {
       // Cancel any outgoing refetches
       await queryClient.cancelQueries({
-        queryKey: folderKeys.lists(activeOrgId),
+        queryKey: folderKeys.lists(),
       });
 
       // Snapshot the previous value
       const previousFolders = queryClient.getQueryData(
-        folderKeys.lists(activeOrgId),
+        folderKeys.lists(),
       );
 
       // Optimistically update to the new value
-      queryClient.setQueryData(folderKeys.lists(activeOrgId), (old: Record<string, unknown>[] | undefined) => [
+      queryClient.setQueryData(folderKeys.lists(), (old: Record<string, unknown>[] | undefined) => [
         ...(old || []),
         { ...newFolder, id: "temp-id", createdAt: new Date() },
       ]);
@@ -116,15 +106,15 @@ export function useCreateFolder() {
     onError: (err, _newFolder, context: { previousFolders?: unknown } | undefined) => {
       toast.error(err.message);
       // Rollback to the previous value
-      queryClient.setQueryData(
-        folderKeys.lists(activeOrgId),
+        queryClient.setQueryData(
+        folderKeys.lists(),
         context?.previousFolders,
       );
     },
     onSettled: () => {
       // Always refetch after error or success to ensure sync
       queryClient.invalidateQueries({
-        queryKey: folderKeys.lists(activeOrgId),
+        queryKey: folderKeys.lists(),
       });
     },
   });
@@ -132,8 +122,6 @@ export function useCreateFolder() {
 
 export function useUpdateFolder() {
   const queryClient = useQueryClient();
-  const { session } = useAuth();
-  const activeOrgId = session?.activeOrganizationId || null;
 
   return useMutation({
     mutationFn: async (data: {
@@ -147,20 +135,20 @@ export function useUpdateFolder() {
     },
     onMutate: async (updatedFolder) => {
       await queryClient.cancelQueries({
-        queryKey: folderKeys.lists(activeOrgId),
+        queryKey: folderKeys.lists(),
       });
       await queryClient.cancelQueries({
         queryKey: folderKeys.detail(updatedFolder.id),
       });
 
       const previousFolders = queryClient.getQueryData(
-        folderKeys.lists(activeOrgId),
+        folderKeys.lists(),
       );
       const previousFolder = queryClient.getQueryData(
         folderKeys.detail(updatedFolder.id),
       );
 
-      queryClient.setQueryData(folderKeys.lists(activeOrgId), (old: FolderList | undefined) =>
+      queryClient.setQueryData(folderKeys.lists(), (old: FolderList | undefined) =>
         old?.map((p: FolderListItem) =>
           p.id === updatedFolder.id ? { ...p, ...updatedFolder } : p,
         ),
@@ -177,8 +165,8 @@ export function useUpdateFolder() {
     },
     onError: (err, updatedFolder, context: { previousFolders?: unknown, previousFolder?: unknown } | undefined) => {
       toast.error(err.message);
-      queryClient.setQueryData(
-        folderKeys.lists(activeOrgId),
+        queryClient.setQueryData(
+        folderKeys.lists(),
         context?.previousFolders,
       );
       queryClient.setQueryData(
@@ -188,7 +176,7 @@ export function useUpdateFolder() {
     },
     onSettled: (_, __, variables) => {
       queryClient.invalidateQueries({
-        queryKey: folderKeys.lists(activeOrgId),
+        queryKey: folderKeys.lists(),
       });
       queryClient.invalidateQueries({
         queryKey: folderKeys.detail(variables.id),
@@ -199,8 +187,6 @@ export function useUpdateFolder() {
 
 export function useDeleteFolder() {
   const queryClient = useQueryClient();
-  const { session } = useAuth();
-  const activeOrgId = session?.activeOrganizationId || null;
 
   return useMutation({
     mutationFn: async (id: string) => {
@@ -210,14 +196,14 @@ export function useDeleteFolder() {
     },
     onMutate: async (id) => {
       await queryClient.cancelQueries({
-        queryKey: folderKeys.lists(activeOrgId),
+        queryKey: folderKeys.lists(),
       });
 
       const previousFolders = queryClient.getQueryData(
-        folderKeys.lists(activeOrgId),
+        folderKeys.lists(),
       );
 
-      queryClient.setQueryData(folderKeys.lists(activeOrgId), (old: FolderList | undefined) =>
+      queryClient.setQueryData(folderKeys.lists(), (old: FolderList | undefined) =>
         old?.filter((p: FolderListItem) => p.id !== id),
       );
 
@@ -228,17 +214,17 @@ export function useDeleteFolder() {
     },
     onError: (err, _, context: { previousFolders?: unknown } | undefined) => {
       toast.error(err.message);
-      queryClient.setQueryData(
-        folderKeys.lists(activeOrgId),
+        queryClient.setQueryData(
+        folderKeys.lists(),
         context?.previousFolders,
       );
     },
     onSettled: () => {
       queryClient.invalidateQueries({
-        queryKey: folderKeys.lists(activeOrgId),
+        queryKey: folderKeys.lists(),
       });
       queryClient.invalidateQueries({
-        queryKey: surveyKeys.lists(activeOrgId),
+        queryKey: surveyKeys.lists(),
       });
     },
   });
@@ -246,8 +232,6 @@ export function useDeleteFolder() {
 
 export function useAddSurveyToFolder() {
   const queryClient = useQueryClient();
-  const { session } = useAuth();
-  const activeOrgId = session?.activeOrganizationId || null;
 
   return useMutation({
     mutationFn: async ({
@@ -267,10 +251,10 @@ export function useAddSurveyToFolder() {
         queryKey: folderKeys.detail(variables.folderId),
       });
       queryClient.invalidateQueries({
-        queryKey: folderKeys.lists(activeOrgId),
+        queryKey: folderKeys.lists(),
       }); // Update counts
       queryClient.invalidateQueries({
-        queryKey: surveyKeys.lists(activeOrgId),
+        queryKey: surveyKeys.lists(),
       }); // Update available surveys
     },
     onError: (error) => {
@@ -281,8 +265,6 @@ export function useAddSurveyToFolder() {
 
 export function useRemoveSurveyFromFolder() {
   const queryClient = useQueryClient();
-  const { session } = useAuth();
-  const activeOrgId = session?.activeOrganizationId || null;
 
   return useMutation({
     mutationFn: async ({
@@ -302,10 +284,10 @@ export function useRemoveSurveyFromFolder() {
         queryKey: folderKeys.detail(variables.folderId),
       });
       queryClient.invalidateQueries({
-        queryKey: folderKeys.lists(activeOrgId),
+        queryKey: folderKeys.lists(),
       }); // Update counts
       queryClient.invalidateQueries({
-        queryKey: surveyKeys.lists(activeOrgId),
+        queryKey: surveyKeys.lists(),
       }); // Update available surveys
     },
     onError: (error) => {

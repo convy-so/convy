@@ -1,4 +1,5 @@
 import { getRedisClient } from "./redis";
+import { CACHE_CONFIG } from "@/lib/config";
 
 /**
  * Robust Redis Caching Utility
@@ -7,7 +8,7 @@ import { getRedisClient } from "./redis";
  * with automatic serialization, namespacing, and TTL management.
  */
 
-const DEFAULT_TTL = 3600; // 1 hour
+const DEFAULT_TTL = CACHE_CONFIG.DEFAULT_TTL_SECONDS;
 const inFlightCacheLoads = new Map<string, Promise<unknown>>();
 
 export type DashboardCacheSection =

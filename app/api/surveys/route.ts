@@ -1,6 +1,7 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 import { getDb } from "@/db";
 import {
@@ -12,29 +13,14 @@ import {
 } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { buildCreationGreeting } from "@/lib/education/creation-agent";
-import {
-  isAppLocale,
-} from "@/lib/i18n/config";
 import { resolveUiLocaleForContentCreation } from "@/lib/i18n/resolve-locale";
-import { getWorkspaceLocaleSettings } from "@/lib/i18n/workspace-settings";
 import { getTeacherClassroomAccess } from "@/lib/learning/access";
 import {
   getSurveyPermissionContext,
   hasSurveyPermission,
 } from "@/lib/workspace-access";
-import {
-  recordRealtimeEvent,
-} from "@/lib/collaboration-service";
-
-type SurveyDeliveryMode = "link" | "classroom_assigned";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function getSurveyDeliveryMode(value: unknown): SurveyDeliveryMode {
-  return value === "classroom_assigned" ? "classroom_assigned" : "link";
-}
+import { createSurveySchema } from "@/lib/validation/survey-schemas";
+import { SURVEY_LIMITS } from "@/lib/config";
 
 type SurveyPermission = NonNullable<
   Awaited<ReturnType<typeof getSurveyPermissionContext>>
@@ -43,7 +29,6 @@ type SurveyPermission = NonNullable<
 export async function GET() {
   try {
     const session = await getVerifiedSession();
-    const activeOrgId = session.session.activeOrganizationId;
 
     const rows = await getDb()
       .select({
@@ -66,11 +51,7 @@ export async function GET() {
       .from(surveys)
       .leftJoin(users, eq(surveys.userId, users.id))
       .leftJoin(classrooms, eq(surveys.classroomId, classrooms.id))
-      .where(
-        activeOrgId
-          ? eq(surveys.organizationId, activeOrgId)
-          : and(eq(surveys.userId, session.user.id), isNull(surveys.organizationId)),
-      )
+      .where(eq(surveys.userId, session.user.id))
       .orderBy(desc(surveys.createdAt));
 
     const briefs = await getDb()
@@ -82,11 +63,7 @@ export async function GET() {
       .from(surveyBriefs);
     const briefBySurveyId = new Map(briefs.map((row) => [row.surveyId, row]));
     const permissions = await Promise.all(
-      rows.map((survey) =>
-        getSurveyPermissionContext(session.user.id, survey.id, {
-          activeWorkspaceId: activeOrgId ?? null,
-        }),
-      ),
+      rows.map((survey) => getSurveyPermissionContext(session.user.id, survey.id)),
     );
     const permissionBySurveyId = new Map<string, SurveyPermission>();
     for (const permission of permissions) {
@@ -101,10 +78,6 @@ export async function GET() {
         const canOpen = hasSurveyPermission(permission, "canView");
         const accessLevel = permission?.accessLevel ?? "none";
         const isOwner = permission?.isSurveyCreator ?? false;
-
-        if (activeOrgId && !canOpen) {
-          return [];
-        }
 
         return [{
           id: survey.id,
@@ -131,7 +104,7 @@ export async function GET() {
             permission,
             "canManageCollaborators",
           ),
-          isLocked: activeOrgId ? !canOpen : false,
+          isLocked: false,
           sharedBy: !isOwner ? (survey.creatorName ?? null) : null,
           role: accessLevel,
           coreObjective:
@@ -154,41 +127,41 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await getVerifiedSession();
-    const rawBody = await request.json().catch(() => ({}));
-    const body = isRecord(rawBody) ? rawBody : {};
+    
+    // Parse and validate request body
+    const rawBody = await request.json().catch(() => null);
+    if (!rawBody) {
+      return NextResponse.json(
+        { error: "Invalid request body" },
+        { status: 400 }
+      );
+    }
+
+    const validationResult = createSurveySchema.safeParse(rawBody);
+    if (!validationResult.success) {
+      return NextResponse.json(
+        { 
+          error: "Validation failed", 
+          details: validationResult.error.errors[0]?.message 
+        },
+        { status: 400 }
+      );
+    }
+
+    const body = validationResult.data;
     const surveyId = nanoid();
     const now = new Date();
-    const activeOrgId = session.session.activeOrganizationId;
-    const deliveryMode = getSurveyDeliveryMode(body.deliveryMode);
-    const classroomId =
-      typeof body.classroomId === "string" && body.classroomId.trim().length > 0
-        ? body.classroomId.trim()
-        : null;
-    const requestedLanguage = isAppLocale(body.language) ? body.language : null;
-    const workspaceSettings = activeOrgId
-      ? await getWorkspaceLocaleSettings(activeOrgId)
-      : null;
+    const deliveryMode = body.deliveryMode;
+    const classroomId = body.classroomId;
+    const requestedLanguage = body.language;
     const language = await resolveUiLocaleForContentCreation({
       explicitLocale: requestedLanguage,
       session,
-      workspaceId: activeOrgId,
     });
 
     if (deliveryMode === "classroom_assigned" && !classroomId) {
       return NextResponse.json(
         { error: "Class-linked surveys must target a classroom." },
-        { status: 400 },
-      );
-    }
-
-    if (
-      activeOrgId &&
-      requestedLanguage &&
-      workspaceSettings &&
-      !workspaceSettings.allowedLocales.includes(requestedLanguage)
-    ) {
-      return NextResponse.json(
-        { error: "That language is not enabled for the active workspace." },
         { status: 400 },
       );
     }
@@ -204,43 +177,21 @@ export async function POST(request: Request) {
       );
     }
 
-    if (
-      classroomAccess &&
-      activeOrgId &&
-      classroomAccess.organizationId !== activeOrgId
-    ) {
-      return NextResponse.json(
-        { error: "The selected classroom does not belong to the active workspace." },
-        { status: 400 },
-      );
-    }
-
-    if (classroomAccess && !activeOrgId && classroomAccess.organizationId) {
-      return NextResponse.json(
-        { error: "Open the matching workspace before using a workspace classroom." },
-        { status: 400 },
-      );
-    }
-
     const existingSurveys = await getDb()
       .select({ id: surveys.id, isVoice: surveys.isVoice })
       .from(surveys)
-      .where(
-        activeOrgId
-          ? eq(surveys.organizationId, activeOrgId)
-          : and(eq(surveys.userId, session.user.id), isNull(surveys.organizationId)),
-      );
+      .where(eq(surveys.userId, session.user.id));
 
-    const isVoice = typeof body.isVoice === "boolean" ? body.isVoice : false;
-    if (existingSurveys.length >= 5) {
+    const isVoice = body.isVoice;
+    if (existingSurveys.length >= SURVEY_LIMITS.MAX_SURVEYS_PER_SCOPE) {
       return NextResponse.json(
-        { error: `Limit reached: You can only have 5 surveys per ${activeOrgId ? "workspace" : "personal space"}` },
+        { error: `Limit reached: You can only have ${SURVEY_LIMITS.MAX_SURVEYS_PER_SCOPE} surveys in your account` },
         { status: 403 },
       );
     }
-    if (isVoice && existingSurveys.filter((item) => item.isVoice).length >= 2) {
+    if (isVoice && existingSurveys.filter((item) => item.isVoice).length >= SURVEY_LIMITS.MAX_VOICE_SURVEYS_PER_SCOPE) {
       return NextResponse.json(
-        { error: `Limit reached: You can only have 2 voice surveys per ${activeOrgId ? "workspace" : "personal space"}` },
+        { error: `Limit reached: You can only have ${SURVEY_LIMITS.MAX_VOICE_SURVEYS_PER_SCOPE} voice surveys in your account` },
         { status: 403 },
       );
     }
@@ -254,8 +205,6 @@ export async function POST(request: Request) {
         .values({
           id: surveyId,
           userId: session.user.id,
-          organizationId: activeOrgId,
-          departmentId: classroomAccess?.departmentId ?? null,
           classroomId: classroomAccess?.id ?? null,
           deliveryMode,
           title:
@@ -265,7 +214,7 @@ export async function POST(request: Request) {
           status: "creating",
           language,
           isVoice,
-          participantLimit: 50,
+          participantLimit: SURVEY_LIMITS.DEFAULT_PARTICIPANT_LIMIT,
           createdAt: now,
           updatedAt: now,
         })
@@ -290,28 +239,6 @@ export async function POST(request: Request) {
         createdAt: now,
         updatedAt: now,
       });
-
-      if (activeOrgId && inserted) {
-        await recordRealtimeEvent(tx, {
-          scope: "workspace",
-          workspaceId: activeOrgId,
-          eventType: "workspace.survey_created",
-          actorId: session.user.id,
-          payload: {
-            workspaceId: activeOrgId,
-            survey: {
-              id: inserted.id,
-              title: inserted.title,
-              status: inserted.status,
-              deliveryMode: inserted.deliveryMode,
-              classroomId: inserted.classroomId,
-              userId: inserted.userId,
-              isVoice: inserted.isVoice,
-              createdAt: inserted.createdAt?.toISOString() ?? now.toISOString(),
-            },
-          },
-        });
-      }
     });
 
     return NextResponse.json({
@@ -327,6 +254,15 @@ export async function POST(request: Request) {
       ],
     });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { 
+          error: "Validation failed", 
+          details: error.errors[0]?.message 
+        },
+        { status: 400 }
+      );
+    }
     if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }

@@ -11,7 +11,6 @@ import {
 import { relations, sql } from "drizzle-orm";
 import { timestamps } from "./common";
 import { surveys } from "./surveys";
-import { organizations } from "./organization";
 
 export const documentEmbeddings = pgTable(
   "document_embeddings",
@@ -26,9 +25,6 @@ export const documentEmbeddings = pgTable(
     }).notNull(),
     sourceId: text("source_id").notNull(),
     chunkIndex: integer("chunk_index").notNull(),
-    organizationId: text("organization_id").references(() => organizations.id, {
-      onDelete: "cascade",
-    }),
     language: text("language").default("en"),
     sessionType: text("session_type"),
     documentTitle: text("document_title"),
@@ -49,7 +45,6 @@ export const documentEmbeddings = pgTable(
   },
   (table) => [
     index("document_embeddings_survey_id_idx").on(table.surveyId),
-    index("document_embeddings_org_id_idx").on(table.organizationId),
     index("document_embeddings_language_idx").on(table.language),
     index("document_embeddings_session_type_idx").on(table.sessionType),
     index("document_embeddings_source_idx").on(

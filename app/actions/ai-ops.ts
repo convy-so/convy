@@ -260,8 +260,8 @@ function getPackScopeValidation(pack: {
       return { valid: true, reason: null as string | null };
     case "organization":
       return {
-        valid: Boolean(readMetadataString(metadata, "organizationId")),
-        reason: "organization-scoped packs must include metadata.organizationId",
+        valid: false,
+        reason: "organization-scoped packs are not supported in V1",
       };
     case "classroom":
       return {

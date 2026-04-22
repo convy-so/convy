@@ -6,14 +6,13 @@ import { analysisModel, defaultModel, generateAIResponse } from "@/lib/ai";
 import { nanoid } from "nanoid";
 import { getEducationProgram, classifyEducationProgramHeuristically, listEducationPrograms } from "./catalog";
 import { recordEducationTrace } from "./tracing";
-import { listEffectivePlaybooks, replaceCoveragePlan, upsertResearchBrief } from "./storage";
+import { replaceCoveragePlan, upsertResearchBrief } from "./storage";
 import {
   type BriefValidationResult,
   type CoveragePlan,
   type EducationProgramId,
   type ResearchBrief,
 } from "./types";
-import { renderPlaybookContext } from "./playbooks";
 
 import { type ChatMessage } from "@/lib/chat-types";
 
@@ -142,7 +141,6 @@ ${conversationToText(messages)}`;
 function buildExtractionPromptParts(
   programId: EducationProgramId,
   messages: ChatMessage[],
-  playbookContext: string,
 ) {
   const program = getEducationProgram(programId);
   const required = program.manifest.requiredBriefFields.join(", ");
@@ -158,7 +156,6 @@ Return JSON only.
 Required fields for this program: ${required}
 </program-requirements>
 
-  ${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>\n\n` : ""}
   <rules>
 - Infer nothing that is contradicted by the conversation.
 - Prefer concrete phrasing over generic phrasing.
@@ -231,12 +228,10 @@ export function buildCoveragePlan(surveyId: string, brief: ResearchBrief): Cover
 async function extractBrief(
   programId: EducationProgramId,
   messages: ChatMessage[],
-  playbookContext: string,
 ) {
   const promptParts = buildExtractionPromptParts(
     programId,
     messages,
-    playbookContext,
   );
   const raw = await generateAIResponse(promptParts.prompt, promptParts.systemPrompt, {
     model: analysisModel,
@@ -285,7 +280,6 @@ async function planNextQuestion(
   brief: ResearchBrief,
   validation: BriefValidationResult,
   messages: ChatMessage[],
-  playbookContext: string,
 ) {
   const program = getEducationProgram(brief.programId);
   const latestUserMessage = [...messages].reverse().find((message) => message.role === "user")?.content || "";
@@ -297,8 +291,6 @@ The brief is not complete yet.
 Ask exactly one concise next question that helps fill the highest-priority missing field.
 Return JSON only.
 </task>
-
-${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>\n\n` : ""}
 
 <rules>
 - Ask only one question.
@@ -331,7 +323,7 @@ Audience: ${brief.audienceDefinition || "missing"}
     : "What is the most important thing this education study should uncover?";
 }
 
-async function planCompletionResponse(brief: ResearchBrief, playbookContext: string) {
+async function planCompletionResponse(brief: ResearchBrief) {
   const program = getEducationProgram(brief.programId);
   const systemPrompt = `${program.creationPrompt}
 
@@ -340,8 +332,6 @@ The research brief is complete.
 Write a short, confident update that confirms readiness for sample review and mentions the chosen program in natural language.
 Return JSON only.
 </task>
-
-${playbookContext ? `<active-playbooks>\n${playbookContext}\n</active-playbooks>\n\n` : ""}
 
 <rules>
 - Keep it under 2 sentences.
@@ -369,25 +359,11 @@ Decision: ${brief.decisionToInform}
 
 export async function runCreationWorkflow(input: {
   surveyId: string;
-  organizationId?: string | null;
   messages: ChatMessage[];
   userId?: string;
 }) {
   const routing = await classifyProgram(input.messages);
-  const activePlaybooks = await listEffectivePlaybooks({
-    surveyId: input.surveyId,
-    organizationId: input.organizationId ?? null,
-    phase: "creation",
-  });
-  const playbookContext = renderPlaybookContext(
-    activePlaybooks.map((record) => ({
-      name: record.playbook.name,
-      phase: record.playbook.phase,
-      scope: record.playbook.scope,
-      interpretation: record.activeVersion!.interpretation,
-    })),
-  );
-  const brief = await extractBrief(routing.programId, input.messages, playbookContext);
+  const brief = await extractBrief(routing.programId, input.messages);
   brief.routingConfidence = routing.confidence;
   brief.routingRationale = routing.rationale;
 
@@ -423,8 +399,8 @@ export async function runCreationWorkflow(input: {
     .where(eq(surveys.id, input.surveyId));
 
   const responseText = validation.isReady
-    ? await planCompletionResponse(brief, playbookContext)
-    : await planNextQuestion(brief, validation, input.messages, playbookContext);
+    ? await planCompletionResponse(brief)
+    : await planNextQuestion(brief, validation, input.messages);
 
   await recordEducationTrace({
     surveyId: input.surveyId,

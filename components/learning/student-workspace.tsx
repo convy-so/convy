@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import {
   ArrowRight,
   BookOpen,
@@ -23,8 +25,6 @@ import {
   fetchMyPatterns,
   fetchOnboardingState,
   fetchTutoringSession,
-  sendOnboardingTurn,
-  sendTutoringMessage,
 } from "@/lib/api/learning";
 import { queryKeys } from "@/lib/query-keys";
 import { useAudioTranscription } from "@/hooks/use-audio-transcription";
@@ -37,7 +37,6 @@ import {
 import { GlassPanel } from "@/components/learning/glass-panel";
 import { MetricTile } from "@/components/learning/metric-tile";
 import { SectionHeading } from "@/components/learning/section-heading";
-
 import type { LearningMeData } from "@/lib/api/learning";
 type StudentLearningMeData = Extract<LearningMeData, { role: "student" }>;
 
@@ -48,6 +47,39 @@ type LiveMessage = {
   metadata: Record<string, unknown>;
   createdAt?: string | Date;
 };
+
+function getUIMessageText(message: UIMessage) {
+  return (
+    message.parts
+      ?.filter((part): part is { type: "text"; text: string } => part.type === "text")
+      .map((part) => part.text)
+      .join("") ?? ""
+  );
+}
+
+function toTextUIMessages(
+  messages:
+    | Array<{
+        id: string;
+        role: string;
+        content: string;
+      }>
+    | undefined,
+): UIMessage[] {
+  return (messages ?? []).flatMap((message) => {
+    if (message.role !== "assistant" && message.role !== "user") {
+      return [];
+    }
+
+    return [
+      {
+        id: message.id,
+        role: message.role,
+        parts: [{ type: "text", text: message.content }],
+      } as UIMessage,
+    ];
+  });
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -185,94 +217,119 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
       ),
     enabled: Boolean(effectiveSelectedTopicId && !selectedMembership?.needsOnboarding),
   });
-  const liveMessages = useMemo<LiveMessage[]>(
+  const initialOnboardingMessages = useMemo(
     () =>
-      tutoringSessionQuery.data?.data.messages.map((message) => ({
-        id: message.id,
-        role: message.role,
-        content: message.content,
-        metadata: message.metadata ?? {},
-        createdAt: message.createdAt,
-      })) ?? [],
+      onboardingQuery.data && !onboardingQuery.data.completed
+        ? toTextUIMessages(onboardingQuery.data.messages)
+        : [],
+    [onboardingQuery.data],
+  );
+  const initialTutoringMessages = useMemo(
+    () =>
+      toTextUIMessages(
+        tutoringSessionQuery.data?.data.messages.map((message) => ({
+          id: message.id,
+          role: message.role,
+          content: message.content,
+        })),
+      ),
     [tutoringSessionQuery.data?.data.messages],
   );
+  const onboardingTransport = useMemo(
+    () => new DefaultChatTransport({ api: "/api/learning/onboarding" }),
+    [],
+  );
+  const tutoringTransport = useMemo(
+    () =>
+      effectiveSelectedTopicId
+        ? new DefaultChatTransport({
+            api: `/api/learning/topics/${effectiveSelectedTopicId}/chat`,
+            body: {
+              sessionId: tutoringSessionQuery.data?.data.sessionId,
+              language: selectedStudyLanguage,
+            },
+          })
+        : null,
+    [effectiveSelectedTopicId, selectedStudyLanguage, tutoringSessionQuery.data?.data.sessionId],
+  );
+  const {
+    messages: onboardingChatMessages,
+    sendMessage: sendOnboardingMessage,
+    setMessages: setOnboardingChatMessages,
+    status: onboardingChatStatus,
+  } = useChat({
+    id: `learning-onboarding-${selectedMembership?.classroomStudentId ?? "none"}`,
+    messages: initialOnboardingMessages,
+    transport: onboardingTransport,
+  });
+  const {
+    messages: tutoringChatMessages,
+    sendMessage: sendTutoringChatMessage,
+    setMessages: setTutoringChatMessages,
+    status: tutoringChatStatus,
+  } = useChat({
+    id: `learning-tutoring-${effectiveSelectedTopicId ?? "none"}-${selectedStudyLanguage}`,
+    messages: initialTutoringMessages,
+    transport: tutoringTransport ?? new DefaultChatTransport({ api: "/api/learning/onboarding" }),
+  });
+  const tutoringSyncRef = useRef(0);
+  const onboardingSyncRef = useRef(0);
 
-  const onboardingMutation = useMutation({
-    mutationFn: sendOnboardingTurn,
-    onSuccess: async (data) => {
-      setOnboardingInput("");
+  useEffect(() => {
+    if (onboardingChatMessages.length === 0 && initialOnboardingMessages.length > 0) {
+      setOnboardingChatMessages(initialOnboardingMessages);
+    }
+  }, [initialOnboardingMessages, onboardingChatMessages.length, setOnboardingChatMessages]);
 
-      if (!data.completed) {
-        await queryClient.invalidateQueries({ queryKey: queryKeys.learning.onboarding });
-        return;
-      }
+  useEffect(() => {
+    if (tutoringChatMessages.length === 0 && initialTutoringMessages.length > 0) {
+      setTutoringChatMessages(initialTutoringMessages);
+    }
+  }, [initialTutoringMessages, setTutoringChatMessages, tutoringChatMessages.length]);
 
-      toast.success("Onboarding complete");
-      await Promise.all([
+  useEffect(() => {
+    if (onboardingChatStatus === "ready" && onboardingChatMessages.length > onboardingSyncRef.current) {
+      onboardingSyncRef.current = onboardingChatMessages.length;
+      void Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.learning.onboarding }),
         queryClient.invalidateQueries({ queryKey: queryKeys.learning.me }),
         queryClient.invalidateQueries({ queryKey: queryKeys.learning.myPatterns }),
       ]);
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to continue onboarding");
-    },
-  });
+    }
+  }, [onboardingChatMessages.length, onboardingChatStatus, queryClient]);
 
-  const tutoringMutation = useMutation({
-    mutationFn: sendTutoringMessage,
-    onSuccess: async (data, variables) => {
-      setSessionInput("");
-      queryClient.setQueryData<TutoringSessionResponse | undefined>(
-        queryKeys.learning.tutoring(
-          variables.topicId,
-          variables.language ?? selectedStudyLanguage,
-        ),
-        (current) => {
-          if (!current) {
-            return current;
-          }
-
-          const now = new Date().toISOString();
-          return {
-            ...current,
-            data: {
-              ...current.data,
-              sessionId: data.data.sessionId,
-              sessionState: data.data.sessionState,
-              messages: [
-                ...current.data.messages,
-                {
-                  id: `student-${Date.now()}`,
-                  role: "user",
-                  content: variables.message,
-                  metadata: {},
-                  createdAt: now,
-                },
-                {
-                  id: `assistant-${Date.now() + 1}`,
-                  role: "assistant",
-                  content: data.data.assistantMessage.content,
-                  metadata: data.data.assistantMessage.metadata ?? {},
-                  createdAt: data.data.assistantMessage.createdAt ?? now,
-                },
-              ],
-            },
-          };
-        },
-      );
-
-      await queryClient.invalidateQueries({
+  useEffect(() => {
+    if (
+      tutoringChatStatus === "ready" &&
+      effectiveSelectedTopicId &&
+      tutoringChatMessages.length > tutoringSyncRef.current
+    ) {
+      tutoringSyncRef.current = tutoringChatMessages.length;
+      void queryClient.invalidateQueries({
         queryKey: queryKeys.learning.tutoring(
-          variables.topicId,
-          variables.language ?? selectedStudyLanguage,
+          effectiveSelectedTopicId,
+          selectedStudyLanguage,
         ),
       });
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to send message");
-    },
-  });
+    }
+  }, [
+    effectiveSelectedTopicId,
+    queryClient,
+    selectedStudyLanguage,
+    tutoringChatMessages.length,
+    tutoringChatStatus,
+  ]);
+
+  const liveMessages = useMemo<LiveMessage[]>(
+    () =>
+      tutoringChatMessages.map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: getUIMessageText(message),
+        metadata: {},
+      })),
+    [tutoringChatMessages],
+  );
 
   const outOfSessionMutation = useMutation({
     mutationFn: askOutOfSessionQuestion,
@@ -289,23 +346,25 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
   const selectedTopic =
     selectedMembership?.topics.find((topic) => topic.id === effectiveSelectedTopicId) ?? null;
   const sessionState = tutoringSessionQuery.data?.data.sessionState ?? null;
-  const sessionPhases = sessionState?.phases ?? [];
-  const sessionConcepts = sessionState?.conceptsToCover ?? [];
-  const currentPhase =
-    sessionPhases.find((phase) => phase.id === sessionState?.currentPhaseId) ?? null;
-  const completedPhaseCount = sessionPhases.filter((phase) => phase.status === "completed").length;
-  const conceptCount = sessionConcepts.length;
+  const currentStageId = sessionState?.frameworkState?.currentStageId ?? null;
+  const completedPhaseCount =
+    sessionState?.frameworkState?.completedStageIds?.length ?? 0;
+  const conceptCount = sessionState?.knowledgeFocus?.length ?? 0;
   const patterns = patternsQuery.data?.data ?? [];
   const strongestPattern = patterns[0] ?? null;
   const membershipCount = memberships.length;
 
   const onboardingMessages = useMemo(() => {
-    if (!onboardingQuery.data || onboardingQuery.data.completed) {
+    if (!selectedMembership?.needsOnboarding) {
       return [];
     }
 
-    return onboardingQuery.data.messages;
-  }, [onboardingQuery.data]);
+    return onboardingChatMessages.map((message) => ({
+      id: message.id,
+      role: message.role,
+      content: getUIMessageText(message),
+    }));
+  }, [onboardingChatMessages, selectedMembership?.needsOnboarding]);
 
   if (!memberships.length) {
     return (
@@ -392,7 +451,7 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
               />
               <MetricTile
                 label="Phase"
-                value={currentPhase ? formatPhaseLabel(currentPhase.type) : "Ready"}
+                value={currentStageId ? formatPhaseLabel(currentStageId) : "Ready"}
                 helper="Your current place in the active session flow."
               />
             </div>
@@ -675,13 +734,10 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
                     event.preventDefault();
                     if (!onboardingInput.trim()) return;
 
-                    onboardingMutation.mutate({
-                      sessionId:
-                        onboardingQuery.data && !onboardingQuery.data.completed
-                          ? onboardingQuery.data.sessionId
-                          : undefined,
-                      message: onboardingInput.trim(),
+                    sendOnboardingMessage({
+                      text: onboardingInput.trim(),
                     });
+                    setOnboardingInput("");
                   }}
                 >
                   <div className="flex-1 space-y-2">
@@ -728,10 +784,10 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
                   </div>
                   <button
                     type="submit"
-                    disabled={onboardingMutation.isPending || !onboardingInput.trim()}
+                    disabled={onboardingChatStatus !== "ready" || !onboardingInput.trim()}
                     className="inline-flex min-w-[180px] items-center justify-center gap-2 rounded-[20px] bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
                   >
-                    {onboardingMutation.isPending ? (
+                    {onboardingChatStatus !== "ready" ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <ArrowRight className="h-4 w-4" />
@@ -753,9 +809,9 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
                       : "Pick a topic from the left to continue learning."
                   }
                   action={
-                    currentPhase ? (
+                    currentStageId ? (
                       <div className="rounded-full border border-white/70 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-600">
-                        {formatPhaseLabel(currentPhase.type)}
+                        {formatPhaseLabel(currentStageId)}
                       </div>
                     ) : null
                   }
@@ -766,8 +822,8 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
                     <div className="grid gap-4 md:grid-cols-3">
                       <MetricTile
                         label="Phases"
-                        value={`${completedPhaseCount}/${sessionPhases.length}`}
-                        helper="Completed steps in the current session skeleton."
+                        value={`${completedPhaseCount}`}
+                        helper="Completed framework stages in this session so far."
                       />
                       <MetricTile
                         label="Concepts"
@@ -857,12 +913,10 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
                         event.preventDefault();
                         if (!effectiveSelectedTopicId || !sessionInput.trim()) return;
 
-                        tutoringMutation.mutate({
-                          topicId: effectiveSelectedTopicId,
-                          sessionId: tutoringSessionQuery.data?.data.sessionId,
-                          message: sessionInput.trim(),
-                          language: selectedStudyLanguage,
+                        sendTutoringChatMessage({
+                          text: sessionInput.trim(),
                         });
+                        setSessionInput("");
                       }}
                     >
                       <div className="flex-1 space-y-2">
@@ -909,10 +963,10 @@ export function StudentWorkspace({ learningMe }: { learningMe: StudentLearningMe
                       </div>
                       <button
                         type="submit"
-                        disabled={tutoringMutation.isPending || !sessionInput.trim()}
+                        disabled={tutoringChatStatus !== "ready" || !sessionInput.trim()}
                         className="inline-flex min-w-[180px] items-center justify-center gap-2 rounded-[20px] bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
                       >
-                        {tutoringMutation.isPending ? (
+                        {tutoringChatStatus !== "ready" ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                           <Send className="h-4 w-4" />

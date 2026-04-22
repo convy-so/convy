@@ -13,9 +13,6 @@ import toast from "react-hot-toast";
 
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/providers/auth-provider";
-import { ActiveUsers } from "./active-users";
-import { fetchActiveWorkspace } from "@/lib/api/workspace";
-import { WorkspaceNotifications } from "./workspace-notifications";
 
 type NotificationListItem = {
   id: string;
@@ -32,12 +29,6 @@ export function DashboardHeader() {
   const t = useTranslations("Header");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-
-  // Fetch active workspace using React Query
-  const { data: activeWorkspace = null } = useQuery({
-    queryKey: queryKeys.workspaces.active,
-    queryFn: fetchActiveWorkspace,
-  });
 
   // Fetch notifications using React Query
   const { data: notifications = [], isLoading } = useQuery<NotificationListItem[]>({
@@ -82,7 +73,6 @@ export function DashboardHeader() {
 
   return (
     <header className="h-16 border-b border-[#EAEAEA] bg-white pl-16 pr-6 lg:px-6 flex items-center justify-between sticky top-0 z-10 transition-all duration-300">
-      {activeWorkspace && <WorkspaceNotifications workspaceId={activeWorkspace.id} />}
       <div className="flex items-center gap-4 lg:hidden">
         <span className="font-semibold text-[#292929]">Convyy</span>
       </div>
@@ -99,14 +89,6 @@ export function DashboardHeader() {
       </div>
 
       <div className="flex items-center gap-2">
-        {/* Active Collaboration */}
-        {activeWorkspace && (
-          <ActiveUsers 
-            workspaceId={activeWorkspace.id} 
-            className="mr-2"
-          />
-        )}
-
         {/* Notifications */}
         <div className="relative">
           <button

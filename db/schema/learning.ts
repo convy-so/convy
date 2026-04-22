@@ -14,20 +14,23 @@ import {
 import { relations, sql } from "drizzle-orm";
 
 import { timestamps } from "./common";
-import { departments, organizations } from "./organization";
 import { users } from "./auth";
 import { aiRuns } from "./ai";
 import type {
+  ExpertFramework,
+  ExpertHeuristic,
+  ExpertTutorRuntimeModel,
   LearningOutcomeDefinition,
+  FrameworkState,
   LearningSessionState,
   LearningInteractionType,
   SessionOpeningPlan,
+  StudentModelSnapshot,
   StudentInterestProfile,
   TeacherProgressReport,
   TopicSourceBoundary,
 } from "@/lib/learning/types";
 import { defaultLearningSessionState } from "@/lib/learning/types";
-import type { StudentLearningPatternProfile } from "@/lib/learning/pattern-types";
 
 export type LearningTeacherChatSessionMessage = {
   id?: string;
@@ -42,11 +45,6 @@ export const classrooms = pgTable(
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    organizationId: text("organization_id")
-      .references(() => organizations.id, { onDelete: "cascade" }),
-    departmentId: text("department_id").references(() => departments.id, {
-      onDelete: "set null",
-    }),
     teacherUserId: text("teacher_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -59,8 +57,6 @@ export const classrooms = pgTable(
     status: text("status").default("active").notNull(),
   },
   (table) => [
-    index("classrooms_organization_id_idx").on(table.organizationId),
-    index("classrooms_department_id_idx").on(table.departmentId),
     index("classrooms_teacher_user_id_idx").on(table.teacherUserId),
     index("classrooms_grade_band_idx").on(table.gradeBand),
   ],
@@ -95,65 +91,6 @@ export const classroomStudents = pgTable(
     unique("classroom_students_classroom_email_unique").on(
       table.classroomId,
       table.email,
-    ),
-  ],
-);
-
-export const classroomTeacherAccess = pgTable(
-  "classroom_teacher_access",
-  {
-    id: text("id").primaryKey(),
-    ...timestamps,
-    classroomId: text("classroom_id")
-      .notNull()
-      .references(() => classrooms.id, { onDelete: "cascade" }),
-    teacherUserId: text("teacher_user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    grantedByUserId: text("granted_by_user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    accessLevel: text("access_level").default("collaborator").notNull(),
-  },
-  (table) => [
-    index("classroom_teacher_access_classroom_idx").on(table.classroomId),
-    index("classroom_teacher_access_teacher_idx").on(table.teacherUserId),
-    unique("classroom_teacher_access_unique").on(
-      table.classroomId,
-      table.teacherUserId,
-    ),
-  ],
-);
-
-export const classroomAccessRequests = pgTable(
-  "classroom_access_requests",
-  {
-    id: text("id").primaryKey(),
-    ...timestamps,
-    classroomId: text("classroom_id")
-      .notNull()
-      .references(() => classrooms.id, { onDelete: "cascade" }),
-    requesterUserId: text("requester_user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    status: text("status").default("pending").notNull(),
-    message: text("message"),
-    resolvedByUserId: text("resolved_by_user_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
-    resolvedAt: timestamp("resolved_at", {
-      withTimezone: true,
-      mode: "date",
-    }),
-  },
-  (table) => [
-    index("classroom_access_requests_classroom_idx").on(table.classroomId),
-    index("classroom_access_requests_requester_idx").on(table.requesterUserId),
-    index("classroom_access_requests_status_idx").on(table.status),
-    unique("classroom_access_requests_unique").on(
-      table.classroomId,
-      table.requesterUserId,
-      table.status,
     ),
   ],
 );
@@ -347,9 +284,6 @@ export const learningMaterialEmbeddings = pgTable(
     topicId: text("topic_id")
       .notNull()
       .references(() => learningTopics.id, { onDelete: "cascade" }),
-    organizationId: text("organization_id").references(() => organizations.id, {
-      onDelete: "cascade",
-    }),
     classroomId: text("classroom_id").references(() => classrooms.id, {
       onDelete: "cascade",
     }),
@@ -378,7 +312,6 @@ export const learningMaterialEmbeddings = pgTable(
     embedding: vector("embedding", { dimensions: 1536 }),
   },
   (table) => [
-    index("learning_material_embeddings_org_id_idx").on(table.organizationId),
     index("learning_material_embeddings_classroom_id_idx").on(table.classroomId),
     index("learning_material_embeddings_topic_id_idx").on(table.topicId),
     index("learning_material_embeddings_material_id_idx").on(table.materialId),
@@ -420,8 +353,6 @@ export const learningEvidenceEmbeddings = pgTable(
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    organizationId: text("organization_id")
-      .references(() => organizations.id, { onDelete: "cascade" }),
     topicId: text("topic_id").references(() => learningTopics.id, {
       onDelete: "cascade",
     }),
@@ -465,7 +396,6 @@ export const learningEvidenceEmbeddings = pgTable(
     embedding: vector("embedding", { dimensions: 1536 }),
   },
   (table) => [
-    index("learning_evidence_embeddings_org_idx").on(table.organizationId),
     index("learning_evidence_embeddings_topic_idx").on(table.topicId),
     index("learning_evidence_embeddings_classroom_idx").on(table.classroomId),
     index("learning_evidence_embeddings_student_idx").on(table.classroomStudentId),
@@ -481,7 +411,6 @@ export const learningEvidenceEmbeddings = pgTable(
       table.embedding.op("vector_cosine_ops"),
     ),
     uniqueIndex("learning_evidence_embeddings_source_chunk_unique").on(
-      table.organizationId,
       table.sourceType,
       table.sourceId,
       table.chunkIndex,
@@ -515,8 +444,6 @@ export const learningTeacherChatSessions = pgTable(
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    organizationId: text("organization_id")
-      .references(() => organizations.id, { onDelete: "cascade" }),
     classroomStudentId: text("classroom_student_id")
       .notNull()
       .references(() => classroomStudents.id, { onDelete: "cascade" }),
@@ -531,7 +458,6 @@ export const learningTeacherChatSessions = pgTable(
       .default([]),
   },
   (table) => [
-    index("learning_teacher_chat_sessions_org_idx").on(table.organizationId),
     index("learning_teacher_chat_sessions_student_idx").on(table.classroomStudentId),
     index("learning_teacher_chat_sessions_user_idx").on(table.userId),
   ],
@@ -614,14 +540,70 @@ export const studentProgressReports = pgTable(
   ],
 );
 
-export const learningExpertAnnotations = pgTable(
-  "learning_expert_annotations",
+export const expertFrameworks = pgTable(
+  "expert_frameworks",
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    organizationId: text("organization_id").references(() => organizations.id, {
+    classroomId: text("classroom_id").references(() => classrooms.id, {
       onDelete: "cascade",
     }),
+    topicId: text("topic_id").references(() => learningTopics.id, {
+      onDelete: "cascade",
+    }),
+    name: text("name").notNull(),
+    description: text("description"),
+    activeVersionId: text("active_version_id"),
+    archivedAt: timestamp("archived_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+  },
+  (table) => [
+    index("expert_frameworks_classroom_idx").on(table.classroomId),
+    index("expert_frameworks_topic_idx").on(table.topicId),
+  ],
+);
+
+export const expertFrameworkVersions = pgTable(
+  "expert_framework_versions",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    frameworkId: text("framework_id")
+      .notNull()
+      .references(() => expertFrameworks.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    status: text("status").default("draft").notNull(),
+    seedSource: text("seed_source").default("deep_default").notNull(),
+    framework: jsonb("framework").$type<ExpertFramework>().notNull(),
+    notes: text("notes"),
+    publishedAt: timestamp("published_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    publishedByUserId: text("published_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+  },
+  (table) => [
+    index("expert_framework_versions_framework_idx").on(table.frameworkId),
+    unique("expert_framework_versions_framework_version_unique").on(
+      table.frameworkId,
+      table.version,
+    ),
+    check(
+      "expert_framework_versions_status_check",
+      sql`${table.status} in ('draft', 'published', 'archived')`,
+    ),
+  ],
+);
+
+export const expertReviewCases = pgTable(
+  "expert_review_cases",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
     topicId: text("topic_id").references(() => learningTopics.id, {
       onDelete: "set null",
     }),
@@ -635,28 +617,24 @@ export const learningExpertAnnotations = pgTable(
     interactionId: text("interaction_id").references(() => learningInteractions.id, {
       onDelete: "set null",
     }),
-    subjectKey: text("subject_key"),
-    curriculumFrameworkKey: text("curriculum_framework_key")
-      .default("kmk_de_sek1")
-      .notNull(),
-    annotationType: text("annotation_type").notNull(),
-    status: text("status").default("pending").notNull(),
-    summary: text("summary").notNull(),
-    evidence: text("evidence"),
+    status: text("status").default("open").notNull(),
+    priority: text("priority").default("medium").notNull(),
+    reviewType: text("review_type").notNull(),
+    tutorFailureSummary: text("tutor_failure_summary").notNull(),
+    expertCorrection: text("expert_correction").notNull(),
+    reusableSignal: boolean("reusable_signal").default(true).notNull(),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
     createdByUserId: text("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
   },
   (table) => [
-    index("learning_expert_annotations_org_idx").on(table.organizationId),
-    index("learning_expert_annotations_topic_idx").on(table.topicId),
-    index("learning_expert_annotations_student_idx").on(table.classroomStudentId),
-    index("learning_expert_annotations_session_idx").on(table.sessionId),
-    index("learning_expert_annotations_status_idx").on(table.status),
+    index("expert_review_cases_topic_idx").on(table.topicId),
+    index("expert_review_cases_student_idx").on(table.classroomStudentId),
+    index("expert_review_cases_session_idx").on(table.sessionId),
     check(
-      "learning_expert_annotations_status_check",
-      sql`${table.status} in ('pending', 'reviewed', 'published', 'dismissed')`,
+      "expert_review_cases_status_check",
+      sql`${table.status} in ('open', 'crystallized', 'dismissed')`,
     ),
   ],
 );
@@ -666,8 +644,6 @@ export const learningInterventions = pgTable(
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    organizationId: text("organization_id")
-      .references(() => organizations.id, { onDelete: "cascade" }),
     classroomId: text("classroom_id")
       .notNull()
       .references(() => classrooms.id, { onDelete: "cascade" }),
@@ -695,7 +671,6 @@ export const learningInterventions = pgTable(
     }),
   },
   (table) => [
-    index("learning_interventions_org_idx").on(table.organizationId),
     index("learning_interventions_classroom_idx").on(table.classroomId),
     index("learning_interventions_topic_idx").on(table.topicId),
     index("learning_interventions_student_idx").on(table.classroomStudentId),
@@ -703,93 +678,194 @@ export const learningInterventions = pgTable(
   ],
 );
 
-export const studentLearningPatternProfiles = pgTable(
-  "student_learning_pattern_profiles",
+export const expertCrystallizations = pgTable(
+  "expert_crystallizations",
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    organizationId: text("organization_id")
-      .references(() => organizations.id, { onDelete: "cascade" }),
-    studentUserId: text("student_user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    scopeType: text("scope_type").notNull(),
-    scopeRef: text("scope_ref").notNull(),
-    subjectKey: text("subject_key"),
-    subjectLabel: text("subject_label"),
-    patternConfidencePercent: integer("pattern_confidence_percent")
-      .default(0)
-      .notNull(),
-    confidenceByDimension: jsonb("confidence_by_dimension")
-      .$type<Record<string, number>>()
-      .default({}),
-    profile: jsonb("profile").$type<StudentLearningPatternProfile>().notNull(),
-    summaryLocale: text("summary_locale").default("en").notNull(),
-    teacherSummary: text("teacher_summary").default("").notNull(),
-    studentSummary: text("student_summary").default("").notNull(),
-    engagementTrend: text("engagement_trend").default("stable").notNull(),
-    lastAnalyzedSourceType: text("last_analyzed_source_type"),
-    lastAnalyzedSourceId: text("last_analyzed_source_id"),
-    lastMem0SyncAt: timestamp("last_mem0_sync_at", {
+    topicId: text("topic_id").references(() => learningTopics.id, {
+      onDelete: "set null",
+    }),
+    frameworkVersionId: text("framework_version_id").references(
+      () => expertFrameworkVersions.id,
+      { onDelete: "set null" },
+    ),
+    status: text("status").default("draft").notNull(),
+    title: text("title").notNull(),
+    heuristic: jsonb("heuristic").$type<ExpertHeuristic>().notNull(),
+    sourceReviewCaseIds: jsonb("source_review_case_ids")
+      .$type<string[]>()
+      .default([]),
+    notes: text("notes"),
+    approvedByUserId: text("approved_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    approvedAt: timestamp("approved_at", {
       withTimezone: true,
       mode: "date",
     }),
   },
   (table) => [
-    index("student_learning_pattern_profiles_org_idx").on(table.organizationId),
-    index("student_learning_pattern_profiles_user_idx").on(table.studentUserId),
-    index("student_learning_pattern_profiles_subject_idx").on(table.subjectKey),
-    unique("student_learning_pattern_profiles_scope_unique").on(
-      table.organizationId,
-      table.studentUserId,
-      table.scopeType,
-      table.scopeRef,
+    index("expert_crystallizations_topic_idx").on(table.topicId),
+    index("expert_crystallizations_framework_version_idx").on(
+      table.frameworkVersionId,
+    ),
+    check(
+      "expert_crystallizations_status_check",
+      sql`${table.status} in ('draft', 'approved', 'archived')`,
     ),
   ],
 );
 
-export const studentLearningPatternAnalyses = pgTable(
-  "student_learning_pattern_analyses",
+export const expertConflicts = pgTable(
+  "expert_conflicts",
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    organizationId: text("organization_id")
-      .references(() => organizations.id, { onDelete: "cascade" }),
-    studentUserId: text("student_user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    classroomStudentId: text("classroom_student_id").references(
-      () => classroomStudents.id,
-      { onDelete: "set null" },
-    ),
     topicId: text("topic_id").references(() => learningTopics.id, {
       onDelete: "set null",
     }),
-    sourceType: text("source_type").notNull(),
-    sourceId: text("source_id").notNull(),
-    status: text("status").default("queued").notNull(),
-    retryCount: integer("retry_count").default(0).notNull(),
-    mem0References: jsonb("mem0_references")
-      .$type<Array<Record<string, unknown>>>()
-      .default([]),
-    profileScopeRefs: jsonb("profile_scope_refs")
-      .$type<Array<Record<string, string | null>>>()
-      .default([]),
-    errorMessage: text("error_message"),
-    startedAt: timestamp("started_at", {
-      withTimezone: true,
-      mode: "date",
+    frameworkVersionId: text("framework_version_id").references(
+      () => expertFrameworkVersions.id,
+      { onDelete: "set null" },
+    ),
+    crystallizationId: text("crystallization_id").references(
+      () => expertCrystallizations.id,
+      { onDelete: "set null" },
+    ),
+    status: text("status").default("open").notNull(),
+    summary: text("summary").notNull(),
+    details: text("details"),
+    resolutionNotes: text("resolution_notes"),
+    resolvedByUserId: text("resolved_by_user_id").references(() => users.id, {
+      onDelete: "set null",
     }),
-    completedAt: timestamp("completed_at", {
+    resolvedAt: timestamp("resolved_at", {
       withTimezone: true,
       mode: "date",
     }),
   },
   (table) => [
-    index("student_learning_pattern_analyses_org_idx").on(table.organizationId),
-    index("student_learning_pattern_analyses_user_idx").on(table.studentUserId),
-    index("student_learning_pattern_analyses_topic_idx").on(table.topicId),
-    unique("student_learning_pattern_analyses_source_unique").on(
+    index("expert_conflicts_topic_idx").on(table.topicId),
+    index("expert_conflicts_framework_version_idx").on(table.frameworkVersionId),
+    check(
+      "expert_conflicts_status_check",
+      sql`${table.status} in ('open', 'resolved', 'ignored')`,
+    ),
+  ],
+);
+
+export const expertRuntimeModels = pgTable(
+  "expert_runtime_models",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    topicId: text("topic_id")
+      .notNull()
+      .references(() => learningTopics.id, { onDelete: "cascade" }),
+    frameworkId: text("framework_id")
+      .notNull()
+      .references(() => expertFrameworks.id, { onDelete: "cascade" }),
+    frameworkVersionId: text("framework_version_id")
+      .notNull()
+      .references(() => expertFrameworkVersions.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    status: text("status").default("draft").notNull(),
+    runtimeModel: jsonb("runtime_model").$type<ExpertTutorRuntimeModel>().notNull(),
+    conflictIds: jsonb("conflict_ids").$type<string[]>().default([]),
+    publishedAt: timestamp("published_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    publishedByUserId: text("published_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+  },
+  (table) => [
+    index("expert_runtime_models_topic_idx").on(table.topicId),
+    unique("expert_runtime_models_topic_version_unique").on(
+      table.topicId,
+      table.version,
+    ),
+    check(
+      "expert_runtime_models_status_check",
+      sql`${table.status} in ('draft', 'published', 'archived')`,
+    ),
+  ],
+);
+
+export const studentModels = pgTable(
+  "student_models",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    studentUserId: text("student_user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    classroomStudentId: text("classroom_student_id")
+      .notNull()
+      .references(() => classroomStudents.id, { onDelete: "cascade" }),
+    latestSnapshotId: text("latest_snapshot_id"),
+    summary: text("summary").default("").notNull(),
+    anomalyStatus: text("anomaly_status").default("clear").notNull(),
+    lastReviewedAt: timestamp("last_reviewed_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+  },
+  (table) => [
+    index("student_models_user_idx").on(table.studentUserId),
+    unique("student_models_classroom_student_unique").on(table.classroomStudentId),
+  ],
+);
+
+export const studentModelSnapshots = pgTable(
+  "student_model_snapshots",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    studentModelId: text("student_model_id")
+      .notNull()
+      .references(() => studentModels.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    snapshot: jsonb("snapshot").$type<StudentModelSnapshot>().notNull(),
+    sourceType: text("source_type").default("session").notNull(),
+    sourceId: text("source_id"),
+  },
+  (table) => [
+    index("student_model_snapshots_model_idx").on(table.studentModelId),
+    unique("student_model_snapshots_model_version_unique").on(
+      table.studentModelId,
+      table.version,
+    ),
+  ],
+);
+
+export const studentModelAnalyses = pgTable(
+  "student_model_analyses",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    studentModelId: text("student_model_id")
+      .notNull()
+      .references(() => studentModels.id, { onDelete: "cascade" }),
+    topicId: text("topic_id").references(() => learningTopics.id, {
+      onDelete: "set null",
+    }),
+    sessionId: text("session_id").references(() => learningSessions.id, {
+      onDelete: "set null",
+    }),
+    sourceType: text("source_type").notNull(),
+    sourceId: text("source_id").notNull(),
+    status: text("status").default("completed").notNull(),
+    frameworkState: jsonb("framework_state").$type<FrameworkState>(),
+    notes: jsonb("notes").$type<Record<string, unknown>>().default({}),
+    errorMessage: text("error_message"),
+  },
+  (table) => [
+    index("student_model_analyses_model_idx").on(table.studentModelId),
+    index("student_model_analyses_topic_idx").on(table.topicId),
+    unique("student_model_analyses_source_unique").on(
       table.sourceType,
       table.sourceId,
     ),
@@ -801,8 +877,6 @@ export const teachingMediaAssets = pgTable(
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    organizationId: text("organization_id")
-      .references(() => organizations.id, { onDelete: "cascade" }),
     classroomId: text("classroom_id").references(() => classrooms.id, {
       onDelete: "cascade",
     }),
@@ -826,7 +900,6 @@ export const teachingMediaAssets = pgTable(
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
   },
   (table) => [
-    index("teaching_media_assets_org_idx").on(table.organizationId),
     index("teaching_media_assets_classroom_idx").on(table.classroomId),
     index("teaching_media_assets_topic_idx").on(table.topicId),
     index("teaching_media_assets_status_idx").on(table.status),
@@ -937,21 +1010,11 @@ export const teachingMediaUsageEvents = pgTable(
 );
 
 export const classroomsRelations = relations(classrooms, ({ one, many }) => ({
-  organization: one(organizations, {
-    fields: [classrooms.organizationId],
-    references: [organizations.id],
-  }),
-  department: one(departments, {
-    fields: [classrooms.departmentId],
-    references: [departments.id],
-  }),
   teacher: one(users, {
     fields: [classrooms.teacherUserId],
     references: [users.id],
     relationName: "teacher_classrooms",
   }),
-  teacherAccess: many(classroomTeacherAccess),
-  accessRequests: many(classroomAccessRequests),
   students: many(classroomStudents),
   topics: many(learningTopics),
   teachingMediaAssets: many(teachingMediaAssets),
@@ -984,47 +1047,11 @@ export const classroomStudentsRelations = relations(
     interactions: many(learningInteractions),
     reports: many(studentProgressReports),
     interventions: many(learningInterventions),
-    patternAnalyses: many(studentLearningPatternAnalyses),
-  }),
-);
-
-export const classroomTeacherAccessRelations = relations(
-  classroomTeacherAccess,
-  ({ one }) => ({
-    classroom: one(classrooms, {
-      fields: [classroomTeacherAccess.classroomId],
-      references: [classrooms.id],
+    studentModel: one(studentModels, {
+      fields: [classroomStudents.id],
+      references: [studentModels.classroomStudentId],
     }),
-    teacher: one(users, {
-      fields: [classroomTeacherAccess.teacherUserId],
-      references: [users.id],
-      relationName: "classroom_teacher_access_user",
-    }),
-    grantedBy: one(users, {
-      fields: [classroomTeacherAccess.grantedByUserId],
-      references: [users.id],
-      relationName: "classroom_teacher_access_granted_by",
-    }),
-  }),
-);
-
-export const classroomAccessRequestsRelations = relations(
-  classroomAccessRequests,
-  ({ one }) => ({
-    classroom: one(classrooms, {
-      fields: [classroomAccessRequests.classroomId],
-      references: [classrooms.id],
-    }),
-    requester: one(users, {
-      fields: [classroomAccessRequests.requesterUserId],
-      references: [users.id],
-      relationName: "classroom_access_request_requester",
-    }),
-    resolvedBy: one(users, {
-      fields: [classroomAccessRequests.resolvedByUserId],
-      references: [users.id],
-      relationName: "classroom_access_request_resolved_by",
-    }),
+    reviewCases: many(expertReviewCases),
   }),
 );
 
@@ -1045,7 +1072,12 @@ export const learningTopicsRelations = relations(
     sessions: many(learningSessions),
     interactions: many(learningInteractions),
     reports: many(studentProgressReports),
-    patternAnalyses: many(studentLearningPatternAnalyses),
+    expertFrameworks: many(expertFrameworks),
+    expertReviewCases: many(expertReviewCases),
+    expertCrystallizations: many(expertCrystallizations),
+    expertConflicts: many(expertConflicts),
+    expertRuntimeModels: many(expertRuntimeModels),
+    studentModelAnalyses: many(studentModelAnalyses),
     teachingMediaAssets: many(teachingMediaAssets),
     teachingMediaBindings: many(teachingMediaBindings),
     teachingMediaUsageEvents: many(teachingMediaUsageEvents),
@@ -1124,10 +1156,6 @@ export const learningMaterialEmbeddingsRelations = relations(
 export const learningEvidenceEmbeddingsRelations = relations(
   learningEvidenceEmbeddings,
   ({ one }) => ({
-    organization: one(organizations, {
-      fields: [learningEvidenceEmbeddings.organizationId],
-      references: [organizations.id],
-    }),
     topic: one(learningTopics, {
       fields: [learningEvidenceEmbeddings.topicId],
       references: [learningTopics.id],
@@ -1146,10 +1174,6 @@ export const learningEvidenceEmbeddingsRelations = relations(
 export const learningTeacherChatSessionsRelations = relations(
   learningTeacherChatSessions,
   ({ one }) => ({
-    organization: one(organizations, {
-      fields: [learningTeacherChatSessions.organizationId],
-      references: [organizations.id],
-    }),
     classroomStudent: one(classroomStudents, {
       fields: [learningTeacherChatSessions.classroomStudentId],
       references: [classroomStudents.id],
@@ -1189,42 +1213,6 @@ export const learningInteractionsRelations = relations(
   }),
 );
 
-export const studentLearningPatternProfilesRelations = relations(
-  studentLearningPatternProfiles,
-  ({ one }) => ({
-    organization: one(organizations, {
-      fields: [studentLearningPatternProfiles.organizationId],
-      references: [organizations.id],
-    }),
-    studentUser: one(users, {
-      fields: [studentLearningPatternProfiles.studentUserId],
-      references: [users.id],
-    }),
-  }),
-);
-
-export const studentLearningPatternAnalysesRelations = relations(
-  studentLearningPatternAnalyses,
-  ({ one }) => ({
-    organization: one(organizations, {
-      fields: [studentLearningPatternAnalyses.organizationId],
-      references: [organizations.id],
-    }),
-    studentUser: one(users, {
-      fields: [studentLearningPatternAnalyses.studentUserId],
-      references: [users.id],
-    }),
-    classroomStudent: one(classroomStudents, {
-      fields: [studentLearningPatternAnalyses.classroomStudentId],
-      references: [classroomStudents.id],
-    }),
-    topic: one(learningTopics, {
-      fields: [studentLearningPatternAnalyses.topicId],
-      references: [learningTopics.id],
-    }),
-  }),
-);
-
 export const studentProgressReportsRelations = relations(
   studentProgressReports,
   ({ one }) => ({
@@ -1243,32 +1231,167 @@ export const studentProgressReportsRelations = relations(
   }),
 );
 
-export const learningExpertAnnotationsRelations = relations(
-  learningExpertAnnotations,
-  ({ one }) => ({
-    organization: one(organizations, {
-      fields: [learningExpertAnnotations.organizationId],
-      references: [organizations.id],
+export const expertFrameworksRelations = relations(
+  expertFrameworks,
+  ({ one, many }) => ({
+    classroom: one(classrooms, {
+      fields: [expertFrameworks.classroomId],
+      references: [classrooms.id],
     }),
     topic: one(learningTopics, {
-      fields: [learningExpertAnnotations.topicId],
+      fields: [expertFrameworks.topicId],
+      references: [learningTopics.id],
+    }),
+    versions: many(expertFrameworkVersions),
+    runtimeModels: many(expertRuntimeModels),
+  }),
+);
+
+export const expertFrameworkVersionsRelations = relations(
+  expertFrameworkVersions,
+  ({ one, many }) => ({
+    framework: one(expertFrameworks, {
+      fields: [expertFrameworkVersions.frameworkId],
+      references: [expertFrameworks.id],
+    }),
+    publishedBy: one(users, {
+      fields: [expertFrameworkVersions.publishedByUserId],
+      references: [users.id],
+    }),
+    crystallizations: many(expertCrystallizations),
+    conflicts: many(expertConflicts),
+    runtimeModels: many(expertRuntimeModels),
+  }),
+);
+
+export const expertReviewCasesRelations = relations(
+  expertReviewCases,
+  ({ one }) => ({
+    topic: one(learningTopics, {
+      fields: [expertReviewCases.topicId],
       references: [learningTopics.id],
     }),
     classroomStudent: one(classroomStudents, {
-      fields: [learningExpertAnnotations.classroomStudentId],
+      fields: [expertReviewCases.classroomStudentId],
       references: [classroomStudents.id],
     }),
     session: one(learningSessions, {
-      fields: [learningExpertAnnotations.sessionId],
+      fields: [expertReviewCases.sessionId],
       references: [learningSessions.id],
     }),
     interaction: one(learningInteractions, {
-      fields: [learningExpertAnnotations.interactionId],
+      fields: [expertReviewCases.interactionId],
       references: [learningInteractions.id],
     }),
     createdBy: one(users, {
-      fields: [learningExpertAnnotations.createdByUserId],
+      fields: [expertReviewCases.createdByUserId],
       references: [users.id],
+    }),
+  }),
+);
+
+export const expertCrystallizationsRelations = relations(
+  expertCrystallizations,
+  ({ one }) => ({
+    topic: one(learningTopics, {
+      fields: [expertCrystallizations.topicId],
+      references: [learningTopics.id],
+    }),
+    frameworkVersion: one(expertFrameworkVersions, {
+      fields: [expertCrystallizations.frameworkVersionId],
+      references: [expertFrameworkVersions.id],
+    }),
+    approvedBy: one(users, {
+      fields: [expertCrystallizations.approvedByUserId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const expertConflictsRelations = relations(
+  expertConflicts,
+  ({ one }) => ({
+    topic: one(learningTopics, {
+      fields: [expertConflicts.topicId],
+      references: [learningTopics.id],
+    }),
+    frameworkVersion: one(expertFrameworkVersions, {
+      fields: [expertConflicts.frameworkVersionId],
+      references: [expertFrameworkVersions.id],
+    }),
+    crystallization: one(expertCrystallizations, {
+      fields: [expertConflicts.crystallizationId],
+      references: [expertCrystallizations.id],
+    }),
+    resolvedBy: one(users, {
+      fields: [expertConflicts.resolvedByUserId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const expertRuntimeModelsRelations = relations(
+  expertRuntimeModels,
+  ({ one }) => ({
+    topic: one(learningTopics, {
+      fields: [expertRuntimeModels.topicId],
+      references: [learningTopics.id],
+    }),
+    framework: one(expertFrameworks, {
+      fields: [expertRuntimeModels.frameworkId],
+      references: [expertFrameworks.id],
+    }),
+    frameworkVersion: one(expertFrameworkVersions, {
+      fields: [expertRuntimeModels.frameworkVersionId],
+      references: [expertFrameworkVersions.id],
+    }),
+    publishedBy: one(users, {
+      fields: [expertRuntimeModels.publishedByUserId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const studentModelsRelations = relations(
+  studentModels,
+  ({ one, many }) => ({
+    studentUser: one(users, {
+      fields: [studentModels.studentUserId],
+      references: [users.id],
+    }),
+    classroomStudent: one(classroomStudents, {
+      fields: [studentModels.classroomStudentId],
+      references: [classroomStudents.id],
+    }),
+    snapshots: many(studentModelSnapshots),
+    analyses: many(studentModelAnalyses),
+  }),
+);
+
+export const studentModelSnapshotsRelations = relations(
+  studentModelSnapshots,
+  ({ one }) => ({
+    studentModel: one(studentModels, {
+      fields: [studentModelSnapshots.studentModelId],
+      references: [studentModels.id],
+    }),
+  }),
+);
+
+export const studentModelAnalysesRelations = relations(
+  studentModelAnalyses,
+  ({ one }) => ({
+    studentModel: one(studentModels, {
+      fields: [studentModelAnalyses.studentModelId],
+      references: [studentModels.id],
+    }),
+    topic: one(learningTopics, {
+      fields: [studentModelAnalyses.topicId],
+      references: [learningTopics.id],
+    }),
+    session: one(learningSessions, {
+      fields: [studentModelAnalyses.sessionId],
+      references: [learningSessions.id],
     }),
   }),
 );
@@ -1292,20 +1415,12 @@ export const learningInterventionsRelations = relations(
       fields: [learningInterventions.createdByUserId],
       references: [users.id],
     }),
-    organization: one(organizations, {
-      fields: [learningInterventions.organizationId],
-      references: [organizations.id],
-    }),
   }),
 );
 
 export const teachingMediaAssetsRelations = relations(
   teachingMediaAssets,
   ({ one, many }) => ({
-    organization: one(organizations, {
-      fields: [teachingMediaAssets.organizationId],
-      references: [organizations.id],
-    }),
     classroom: one(classrooms, {
       fields: [teachingMediaAssets.classroomId],
       references: [classrooms.id],

@@ -35,14 +35,10 @@ import {
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useAuth } from "@/components/providers/auth-provider";
-import { fetchWorkspaceLocalizationSettings } from "@/lib/api/workspace";
 import { PublishSurveyModal } from "@/components/surveys/publish-survey-modal";
 import { useAudioTranscription } from "@/hooks/use-audio-transcription";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { uploadSurveyMediaAction } from "@/app/actions/survey-media";
-import { CollaborationSidebar } from "@/components/surveys/collaboration-sidebar";
-import { ActiveUsers } from "@/components/dashboard/active-users";
-import { useRealtime } from "@/hooks/use-realtime";
 import {
   isCreationMediaDecisionResolved,
   normalizeCreationMediaDecision,
@@ -289,20 +285,6 @@ function normalizeExtractedData(value: unknown): SurveyExtractedData | null {
   };
 }
 
-function normalizeCreationRealtimeEvent(value: unknown): {
-  actorId?: string;
-  eventType?: string;
-} {
-  if (!isRecord(value)) {
-    return {};
-  }
-
-  return {
-    actorId: typeof value.actorId === "string" ? value.actorId : undefined,
-    eventType: typeof value.eventType === "string" ? value.eventType : undefined,
-  };
-}
-
 function parseMediaUploadArgs(input: unknown): {
   allowedTypes: string[];
   recommendation: CreationMediaRecommendation;
@@ -363,43 +345,6 @@ function CreateSurveyContent() {
   const [language, setLanguage] = useState<SupportedLocale>(getSupportedLocale(locale));
   const [availableLanguages, setAvailableLanguages] = useState<SupportedLocale[]>([...appLocales]);
   const [isVoiceSurvey, setIsVoiceSurvey] = useState(false);
-
-  const [canManageCollaborators, setCanManageCollaborators] = useState(false);
-  const [editors, setEditors] = useState<string[]>([]);
-  const [orgId, setOrgId] = useState<string | null>(null);
-  const [isCollaborationOpen, setIsCollaborationOpen] = useState(false);
-
-  useRealtime({
-    channels: surveyId && orgId ? [`survey:${surveyId}`] : [],
-    onEvent: async (event: unknown) => {
-      const e = normalizeCreationRealtimeEvent(event);
-      if (!surveyId || e.actorId === user?.id) return;
-      
-      const type = e.eventType;
-      if (
-        type === "survey.creation_turn_added" ||
-        type === "survey.editor_granted" ||
-        type === "survey.editor_revoked" ||
-        type === "survey.deleting"
-      ) {
-        try {
-          const response = await fetch(`/api/surveys/${surveyId}/create`, {
-            cache: "no-store",
-          });
-          if (!response.ok) return;
-          const data = await response.json();
-          setMessages(normalizeCreateMessages(data.messages));
-          const collectedInfo = normalizeCollectedInfo(data.collectedInfo);
-          const extractedData = normalizeExtractedData(data.extractedData);
-          if (collectedInfo) setCollectedInfo(collectedInfo);
-          if (extractedData) setExtractedData(extractedData);
-          if (data.status) setSurveyStatus(data.status);
-        } catch (error) {
-          console.error("[Create Page] Failed to sync realtime survey event:", error);
-        }
-      }
-    },
-  });
 
   const handleStart = async () => {
     // 1. Optimistic UI
@@ -730,16 +675,7 @@ function CreateSurveyContent() {
           }
         }
 
-        if (session?.activeOrganizationId) {
-          const workspaceLocalization = await fetchWorkspaceLocalizationSettings(
-            session.activeOrganizationId,
-          ).catch(() => null);
-
-          if (workspaceLocalization) {
-            setAvailableLanguages(workspaceLocalization.allowedLocales);
-            nextLanguage = workspaceLocalization.defaultContentLocale;
-          }
-        } else if (!cancelled) {
+        if (!cancelled) {
           setAvailableLanguages([...appLocales]);
         }
 
@@ -765,7 +701,6 @@ function CreateSurveyContent() {
     user,
     authLoading,
     locale,
-    session?.activeOrganizationId,
     surveyId,
   ]);
 
@@ -807,20 +742,6 @@ function CreateSurveyContent() {
             const surveyData = await surveyRes.json();
             const status = surveyData.survey?.status || null;
             setSurveyStatus(status);
-            const organizationId = surveyData.survey?.organizationId || null;
-            setOrgId(organizationId);
-
-
-              let currentEditors: string[] = [];
-              let hasEditAccess = false;
-
-              setCanManageCollaborators(Boolean(surveyData.survey?.permission?.canManageCollaborators));
-              if (surveyData.survey?.editors) {
-                currentEditors = surveyData.survey.editors;
-                setEditors(currentEditors);
-            }
-            hasEditAccess = Boolean(surveyData.survey?.permission?.canEdit);
-
             // Set language if available
             if (isSupportedLocale(surveyData.survey?.language)) {
               setLanguage(surveyData.survey.language);
@@ -1192,21 +1113,7 @@ function CreateSurveyContent() {
               </>
             )}
 
-            <div className="flex items-center gap-4 w-full sm:w-auto mt-4 sm:mt-0">
-              {surveyId && orgId && (
-                <div
-                  className="flex items-center gap-3 bg-gray-50 hover:bg-gray-100 border border-gray-100 rounded-2xl px-3 py-1.5 transition-all cursor-pointer group"
-                  onClick={() => setIsCollaborationOpen(true)}
-                >
-                  <ActiveUsers workspaceId={orgId} surveyId={surveyId} className="scale-90" />
-                  <div className="h-4 w-px bg-gray-200" />
-                  <button className="flex items-center gap-2 text-sm font-semibold text-gray-600 group-hover:text-indigo-600 transition-colors">
-                    <Users className="w-4 h-4" />
-                    Collaborate
-                  </button>
-                </div>
-              )}
-            </div>
+            <div className="flex items-center gap-4 w-full sm:w-auto mt-4 sm:mt-0" />
           </div>
 
 
@@ -1384,11 +1291,6 @@ function CreateSurveyContent() {
                                 </option>
                               ))}
                             </select>
-                            {session?.activeOrganizationId ? (
-                              <p className="mt-2 text-xs text-gray-500">
-                                Only the languages enabled for this workspace are available here.
-                              </p>
-                            ) : null}
                           </div>
                         </div>
 
@@ -1741,18 +1643,6 @@ function CreateSurveyContent() {
           initialIsVoice={isVoiceSurvey}
           onPublished={() => {}}
         />
-
-        {/* Real-time Collaboration Sidebar - Only for org surveys or if there are approved editors */}
-        {(surveyId && orgId) && (
-          <CollaborationSidebar
-            surveyId={surveyId}
-            workspaceId={orgId}
-            canManageCollaborators={canManageCollaborators}
-            editors={editors}
-            isOpen={isCollaborationOpen}
-            onClose={() => setIsCollaborationOpen(false)}
-          />
-        )}
       </div>
     </>
   );

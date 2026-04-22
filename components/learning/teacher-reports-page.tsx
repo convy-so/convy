@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
-  Building2,
   FileText,
   GraduationCap,
   Loader2,
@@ -22,11 +21,6 @@ import { GlassPanel } from "@/components/learning/glass-panel";
 import { MetricTile } from "@/components/learning/metric-tile";
 import { SectionHeading } from "@/components/learning/section-heading";
 
-type DepartmentOption = {
-  id: string;
-  name: string;
-};
-
 function formatDate(value: string | Date | null | undefined) {
   if (!value) return "Not yet";
   return new Intl.DateTimeFormat(undefined, {
@@ -37,7 +31,6 @@ function formatDate(value: string | Date | null | undefined) {
 }
 
 export function TeacherReportsPage() {
-  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
   const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(null);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
 
@@ -47,47 +40,14 @@ export function TeacherReportsPage() {
   });
 
   const classrooms = useMemo(() => classroomsQuery.data?.data ?? [], [classroomsQuery.data]);
-  const accessibleClassrooms = useMemo(
-    () => classrooms.filter((classroom) => classroom.accessLevel !== "none"),
-    [classrooms],
-  );
-  const departmentOptions = useMemo(() => {
-    const seenDepartmentIds = new Set<string>();
-
-    return accessibleClassrooms.reduce<DepartmentOption[]>((options, classroom) => {
-      if (!classroom.departmentId || seenDepartmentIds.has(classroom.departmentId)) {
-        return options;
-      }
-
-      seenDepartmentIds.add(classroom.departmentId);
-      options.push({
-        id: classroom.departmentId,
-        name: classroom.departmentName ?? "Unnamed department",
-      });
-      return options;
-    }, []);
-  }, [accessibleClassrooms]);
-  const effectiveSelectedDepartmentId = departmentOptions.some(
-    (department) => department.id === selectedDepartmentId,
-  )
-    ? selectedDepartmentId
-    : null;
-  const filteredClassrooms = useMemo(
-    () =>
-      effectiveSelectedDepartmentId
-        ? accessibleClassrooms.filter(
-            (classroom) => classroom.departmentId === effectiveSelectedDepartmentId,
-          )
-        : accessibleClassrooms,
-    [accessibleClassrooms, effectiveSelectedDepartmentId],
-  );
-  const effectiveSelectedClassroomId = filteredClassrooms.some(
+  const accessibleClassrooms = classrooms;
+  const effectiveSelectedClassroomId = accessibleClassrooms.some(
     (classroom) => classroom.id === selectedClassroomId,
   )
     ? selectedClassroomId
-    : (filteredClassrooms[0]?.id ?? null);
+    : (accessibleClassrooms[0]?.id ?? null);
   const selectedClassroom =
-    filteredClassrooms.find((classroom) => classroom.id === effectiveSelectedClassroomId) ?? null;
+    accessibleClassrooms.find((classroom) => classroom.id === effectiveSelectedClassroomId) ?? null;
 
   const topicsQuery = useQuery({
     queryKey: effectiveSelectedClassroomId
@@ -148,11 +108,11 @@ export function TeacherReportsPage() {
             </div>
             <div className="space-y-3">
               <h1 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 md:text-5xl">
-                Review analytics by department, class, and topic.
+                Review analytics by classroom and topic.
               </h1>
               <p className="max-w-2xl text-sm leading-7 text-slate-600 md:text-base">
-                The report center stays grounded in teacher-approved classes. Pick a department,
-                choose a class, and inspect the topic evidence before acting.
+                The report center stays grounded in your classrooms. Choose a class,
+                inspect the topic evidence, and act on the patterns that matter.
               </p>
             </div>
           </div>
@@ -163,18 +123,9 @@ export function TeacherReportsPage() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <MetricTile
-                label="Departments"
-                value={String(departmentOptions.length)}
-                helper="Departments with at least one classroom you can open."
-              />
-              <MetricTile
                 label="Classes"
-                value={String(filteredClassrooms.length)}
-                helper={
-                  effectiveSelectedDepartmentId
-                    ? "Accessible classrooms in the selected department."
-                    : "Accessible classrooms across the workspace."
-                }
+                value={String(accessibleClassrooms.length)}
+                helper="Classrooms currently available for reporting."
               />
               <MetricTile
                 label="Students"
@@ -194,58 +145,6 @@ export function TeacherReportsPage() {
       <section className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
         <div className="space-y-6">
           <GlassPanel className="p-5">
-            <div className="flex items-center gap-2 text-slate-950">
-              <Building2 className="h-4 w-4 text-sky-700" />
-              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
-                Department
-              </div>
-            </div>
-            <div className="mt-4 space-y-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedDepartmentId(null);
-                  setSelectedClassroomId(null);
-                  setSelectedTopicId(null);
-                }}
-                className={`w-full rounded-[18px] border px-4 py-4 text-left transition ${
-                  effectiveSelectedDepartmentId === null
-                    ? "border-sky-300 bg-sky-50/80"
-                    : "border-white/70 bg-white/75 hover:border-slate-200"
-                }`}
-              >
-                <div className="text-sm font-semibold text-slate-950">All departments</div>
-                <div className="mt-1 text-xs text-slate-500">
-                  View every accessible classroom in this workspace.
-                </div>
-              </button>
-              {departmentOptions.map((department) => (
-                <button
-                  key={department.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedDepartmentId(department.id);
-                    setSelectedClassroomId(null);
-                    setSelectedTopicId(null);
-                  }}
-                  className={`w-full rounded-[18px] border px-4 py-4 text-left transition ${
-                    effectiveSelectedDepartmentId === department.id
-                      ? "border-sky-300 bg-sky-50/80"
-                      : "border-white/70 bg-white/75 hover:border-slate-200"
-                  }`}
-                >
-                  <div className="text-sm font-semibold text-slate-950">{department.name}</div>
-                </button>
-              ))}
-              {!departmentOptions.length ? (
-                <div className="rounded-[18px] border border-dashed border-slate-200 bg-white/60 px-4 py-5 text-sm text-slate-500">
-                  No departments with accessible classrooms yet.
-                </div>
-              ) : null}
-            </div>
-          </GlassPanel>
-
-          <GlassPanel className="p-5">
             <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
               Classroom
             </div>
@@ -255,8 +154,8 @@ export function TeacherReportsPage() {
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading classrooms...
                 </div>
-              ) : filteredClassrooms.length ? (
-                filteredClassrooms.map((classroom) => (
+              ) : accessibleClassrooms.length ? (
+                accessibleClassrooms.map((classroom) => (
                   <button
                     key={classroom.id}
                     type="button"
@@ -278,7 +177,7 @@ export function TeacherReportsPage() {
                 ))
               ) : (
                 <div className="rounded-[18px] border border-dashed border-slate-200 bg-white/60 px-4 py-5 text-sm text-slate-500">
-                  No accessible classrooms match this department yet.
+                  No classrooms available yet.
                 </div>
               )}
             </div>
@@ -330,12 +229,8 @@ export function TeacherReportsPage() {
               title={selectedTopic?.title ?? "Choose a topic"}
               description={
                 selectedClassroom
-                  ? `${selectedClassroom.title}${
-                      selectedClassroom.departmentName
-                        ? ` in ${selectedClassroom.departmentName}`
-                        : ""
-                    }. Report cards here are teacher-facing summaries of what the tutoring workflow observed during or around each session.`
-                  : "Choose a department and class to inspect topic-level analytics."
+                  ? `${selectedClassroom.title}. Report cards here are teacher-facing summaries of what the tutoring workflow observed during or around each session.`
+                  : "Choose a classroom to inspect topic-level analytics."
               }
             />
 

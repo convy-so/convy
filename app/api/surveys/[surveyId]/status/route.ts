@@ -8,9 +8,6 @@ import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/workspace-access";
-import {
-  recordRealtimeEvent,
-} from "@/lib/collaboration-service";
 
 function isSurveyStatus(value: unknown): value is "active" | "paused" {
     return value === "active" || value === "paused";
@@ -45,30 +42,13 @@ export async function PATCH(
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 
-        // Update survey status
-        await getDb().transaction(async (tx) => {
-            await tx
-                .update(surveys)
-                .set({
-                    status,
-                    updatedAt: new Date(),
-                })
-                .where(eq(surveys.id, surveyId));
-
-            if (survey.organizationId) {
-                await recordRealtimeEvent(tx, {
-                    scope: "workspace",
-                    workspaceId: survey.organizationId,
-                    actorId: session.user.id,
-                    eventType: "workspace.survey_updated",
-                    payload: {
-                        surveyId,
-                        workspaceId: survey.organizationId,
-                        status,
-                    },
-                });
-            }
-        });
+        await getDb()
+            .update(surveys)
+            .set({
+                status,
+                updatedAt: new Date(),
+            })
+            .where(eq(surveys.id, surveyId));
 
         return NextResponse.json({ success: true, status });
     } catch (error) {

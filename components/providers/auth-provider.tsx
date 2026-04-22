@@ -6,7 +6,7 @@ import { createContext, useContext } from "react";
 
 type BaseSessionData = typeof authClient.$Infer.Session;
 type SessionData = {
-    session: BaseSessionData["session"] & { activeOrganizationId?: string | null };
+    session: BaseSessionData["session"];
     user: BaseSessionData["user"] & { preferredLanguage?: string; uiLocale?: string };
 };
 

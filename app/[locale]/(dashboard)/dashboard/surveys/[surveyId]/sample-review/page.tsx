@@ -27,15 +27,12 @@ import { MediaDisplay } from "@/components/surveys/media-display";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { useQuery } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
-import { useRealtime } from "@/hooks/use-realtime";
 import { UIMessage } from "ai";
 import { ChatMessagePart, SurveyMedia } from "@/lib/chat-types";
 import { toUIMessages } from "@/lib/chat-ui-messages";
 import { DefaultChatTransport } from "ai";
 import { SurveyStartOverlay } from "@/components/surveys/survey-start-overlay";
-import { addSampleConversationCommentAction } from "@/app/actions/sample-conversation";
 import { RefinementAssistantPanel } from "@/components/surveys/refinement-assistant-panel";
-import { getRehearsalCommentsAction } from "@/app/actions/collaboration";
 
 const MAX_SAMPLE_CONVERSATIONS = 3;
 
@@ -50,17 +47,6 @@ type StoredSampleMessage = {
     content?: string;
     parts?: ChatMessagePart[];
     timestamp?: string;
-};
-
-type RehearsalComment = {
-    id: string;
-    body: string;
-    createdAt: Date;
-    author: {
-        id: string;
-        name: string | null;
-        email: string;
-    };
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -217,8 +203,6 @@ export default function SampleReviewPage() {
     const [textInput, setTextInput] = useState("");
     const [hasAutoGreeted, setHasAutoGreeted] = useState(false);
     const [hasStarted, setHasStarted] = useState(false);
-    const [commentText, setCommentText] = useState("");
-    const [isCommenting, setIsCommenting] = useState(false);
     const [showTranscript, setShowTranscript] = useState(false);
     const [selectedSampleNumber, setSelectedSampleNumber] = useState<number | null>(null);
     const isHandlingGreetingRef = useRef(false);
@@ -256,7 +240,7 @@ export default function SampleReviewPage() {
     }, [t]);
 
 
-    const { data: surveyData, isLoading, refetch: refetchSurvey } = useQuery({
+    const { data: surveyData, isLoading } = useQuery({
         queryKey: ['survey', surveyId],
         queryFn: async () => {
             const response = await fetch(`/api/surveys/${surveyId}/details`);
@@ -276,12 +260,6 @@ export default function SampleReviewPage() {
 
     const isOwnerOrEditor = Boolean(survey?.permission?.canEdit);
 
-    // A workspace context exists if the current session is in a workspace
-    // OR the survey itself belongs to an organization.
-    const isWorkspaceContext =
-        Boolean(survey?.organizationId) &&
-        (session?.activeOrganizationId || null) === (survey?.organizationId || null);
-
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const scrollToBottom = () => {
@@ -296,49 +274,6 @@ export default function SampleReviewPage() {
             return response.json();
         },
         enabled: !!surveyId,
-    });
-
-    const { data: rehearsalComments = [], refetch: refetchComments } = useQuery<RehearsalComment[]>({
-        queryKey: ['sample-comments', surveyId, activeSampleNumber],
-        queryFn: async () => {
-            const result = await getRehearsalCommentsAction(surveyId, activeSampleNumber);
-            if (!result.success) return [];
-            return result.data;
-        },
-        enabled: !!surveyId && isWorkspaceContext,
-    });
-
-    useRealtime({
-        channels: surveyId && isWorkspaceContext ? [`survey:${surveyId}`] : [],
-        onEvent: async (baseEvent) => {
-            const event = baseEvent;
-            if (event.eventType === "survey.comment_added") {
-                refetchComments();
-            }
-            if (event.eventType === "survey.rehearsal_turn_added") {
-                const payload = event.payload as Record<string, unknown> | undefined;
-                if (payload?.conversationNumber === activeSampleNumber) {
-                    const response = await fetch(`/api/surveys/${surveyId}/sample?conversationNumber=${activeSampleNumber}`, {
-                        cache: "no-store",
-                    });
-                    if (response.ok) {
-                        const data = await response.json();
-                        setMessages(
-                            (Array.isArray(data.messages) ? data.messages : []).flatMap(
-                                (message: StoredSampleMessage, index: number) => {
-                                    const normalizedMessage = normalizeSampleMessage(message, index);
-                                    return normalizedMessage ? [normalizedMessage] : [];
-                                },
-                            ),
-                        );
-                    }
-                }
-                queryClient.invalidateQueries({ queryKey: ['sample-history', surveyId, activeSampleNumber] });
-            }
-            if (event.eventType === "survey.published") {
-                refetchSurvey();
-            }
-        },
     });
 
     const { messages, setMessages, sendMessage, status } = useChat({
@@ -620,33 +555,6 @@ export default function SampleReviewPage() {
             toast.error(t("Toasts.ConfirmFailed"));
         } finally {
             setIsConfirming(false);
-        }
-    };
-
-    const handleAddComment = async () => {
-        if (!commentText.trim()) return;
-
-        setIsCommenting(true);
-        try {
-            const result = await addSampleConversationCommentAction(
-                surveyId,
-                activeSampleNumber,
-                commentText
-            );
-
-            if (result.success) {
-                toast.success("Comment added");
-                setCommentText("");
-                refetchSurvey();
-                refetchComments();
-            } else {
-                toast.error(result.error);
-            }
-        } catch (error) {
-            console.error("[handleAddComment] Failed:", error);
-            toast.error("Failed to add comment");
-        } finally {
-            setIsCommenting(false);
         }
     };
 
@@ -938,65 +846,6 @@ export default function SampleReviewPage() {
                         <>
                             <RefinementAssistantPanel surveyId={surveyId} />
                         </>
-                    )}
-
-                    {/* Team Comments Section — only visible when in a workspace context */}
-                    {isWorkspaceContext && (
-                        <div className="pt-2 flex flex-col flex-1">
-                            <div className="mb-4">
-                                <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-1 flex items-center gap-2">
-                                    <MessageSquare className="w-3 h-3 text-gray-500" />
-                                    Team Comments
-                                </h3>
-                                <p className="text-xs text-gray-500 leading-relaxed">
-                                    Discuss this sample with your team.
-                                </p>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto mb-4 space-y-4">
-                                {rehearsalComments.length === 0 ? (
-                                    <div className="text-sm text-gray-500 italic p-4 bg-white rounded-xl border border-gray-100 shadow-sm text-center">
-                                        Comments are saved for your team to review.
-                                    </div>
-                                ) : (
-                                    rehearsalComments.map((comment) => (
-                                        <div key={comment.id} className="rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
-                                            <div className="mb-1 flex items-center justify-between gap-3">
-                                                <span className="text-xs font-semibold text-gray-900">
-                                                    {comment.author?.name || comment.author?.email || "Workspace member"}
-                                                </span>
-                                                <span className="text-[11px] text-gray-400">
-                                                    {new Date(comment.createdAt).toLocaleString()}
-                                                </span>
-                                            </div>
-                                            <p className="text-sm text-gray-700 whitespace-pre-wrap">{comment.body}</p>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-
-                            <div className="mt-auto space-y-3">
-                                <textarea
-                                    value={commentText}
-                                    onChange={(e) => setCommentText(e.target.value)}
-                                    placeholder="Add a comment..."
-                                    className="w-full h-24 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-900/5 focus:border-gray-300 outline-none resize-none bg-white text-sm placeholder:text-gray-400"
-                                />
-                                <button
-                                    onClick={handleAddComment}
-                                    disabled={!commentText.trim() || isCommenting}
-                                    className={cn(
-                                        "w-full py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 shadow-sm",
-                                        commentText.trim()
-                                            ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                                            : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                                    )}
-                                >
-                                    {isCommenting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                                    Post Comment
-                                </button>
-                            </div>
-                        </div>
                     )}
 
                 </div>

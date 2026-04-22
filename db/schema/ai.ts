@@ -13,7 +13,6 @@ import { sql } from "drizzle-orm";
 
 import { timestamps } from "./common";
 import { users } from "./auth";
-import { organizations } from "./organization";
 
 export const aiRuns = pgTable(
   "ai_runs",
@@ -25,9 +24,6 @@ export const aiRuns = pgTable(
     scenarioType: text("scenario_type"),
     status: text("status").default("queued").notNull(),
     userId: text("user_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
-    organizationId: text("organization_id").references(() => organizations.id, {
       onDelete: "set null",
     }),
     actorRole: text("actor_role"),
@@ -57,7 +53,6 @@ export const aiRuns = pgTable(
     index("ai_runs_feature_idx").on(table.feature),
     index("ai_runs_status_idx").on(table.status),
     index("ai_runs_user_id_idx").on(table.userId),
-    index("ai_runs_org_id_idx").on(table.organizationId),
     index("ai_runs_resource_idx").on(table.resourceType, table.resourceId),
     index("ai_runs_created_at_idx").on(table.createdAt),
     check(
@@ -398,4 +393,3 @@ export const fewShotExamples = pgTable(
     index("few_shot_examples_active_idx").on(table.isActive),
   ],
 );
-

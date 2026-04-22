@@ -9,15 +9,14 @@ import {
   createStudentProgressReport,
   listLearningInteractions,
   updateLearningSessionState,
+  getStudentModelByClassroomStudentId,
+  getLatestStudentModelSnapshot,
 } from "@/lib/learning/storage";
 import {
   learningSessionStateSchema,
   teacherProgressReportSchema,
 } from "@/lib/learning/types";
-import {
-  enqueueLearningPatternAnalysis,
-  type TutoringReportJobData,
-} from "@/lib/queue";
+import { type TutoringReportJobData } from "@/lib/queue";
 import { getRedisClient } from "@/lib/redis";
 
 const tutoringReportJobSchema = z.object({
@@ -36,14 +35,8 @@ const tutoringReportJobSchema = z.object({
 function computeMasteryPercent(
   state: ReturnType<typeof learningSessionStateSchema.parse>,
 ) {
-  if (state.conceptsToCover.length === 0) return 0;
-
-  const scores = state.conceptsToCover.map((concept) => {
-    const conceptState = state.conceptStates[concept.key];
-    return conceptState?.masteryScore ?? 0;
-  });
-
-  return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+  const progressSignals = state.recentEvidence.length + state.knowledgeFocus.length;
+  return Math.max(0, Math.min(100, progressSignals * 10));
 }
 
 const tutoringReportWorker = new Worker<TutoringReportJobData>(
@@ -80,20 +73,22 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
       classroomStudentId: data.classroomStudentId,
       sessionId: data.sessionId,
     });
+    const studentModel = await getStudentModelByClassroomStudentId(data.classroomStudentId);
+    const latestSnapshot = studentModel
+      ? await getLatestStudentModelSnapshot(studentModel.id)
+      : null;
 
     const report = await generateTeacherProgressReport({
       studentName: data.studentName,
       topicTitle: data.topicTitle,
       state,
-      interactions: interactions.map((interaction) => ({
+      transcript: interactions.map((interaction) => ({
         role: interaction.role,
-        interactionType: interaction.interactionType,
         content: interaction.content,
         metadata: interaction.metadata as Record<string, unknown> | null,
       })),
-      sessionStartedAt: tutoringSession.createdAt,
-      sessionCompletedAt: tutoringSession.completedAt ?? new Date(),
       previousReport: data.previousReport ?? null,
+      studentModel: latestSnapshot?.snapshot ?? null,
     });
 
     await createStudentProgressReport({
@@ -107,20 +102,13 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
 
     await updateLearningSessionState({
       sessionId: data.sessionId,
-      state,
+      state: {
+        ...state,
+        reportReady: true,
+      },
       summary: report.studentSummary,
       expectedStateVersion: tutoringSession.stateVersion ?? 1,
     });
-
-    await enqueueLearningPatternAnalysis({
-      sourceType: "session",
-      sourceId: data.sessionId,
-      organizationId: data.organizationId,
-      studentUserId: data.studentUserId,
-      classroomStudentId: data.classroomStudentId,
-      topicId: data.topicId,
-      subjectKey: data.subjectKey ?? null,
-    }).catch(() => undefined);
 
     await job.updateProgress(100);
     return {

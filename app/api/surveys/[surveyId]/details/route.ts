@@ -6,7 +6,6 @@ import { surveyBriefs, surveys, surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { env } from "@/lib/env";
 import {
-  getSurveyEditors,
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/workspace-access";
@@ -44,10 +43,6 @@ export async function GET(
     if (!hasSurveyPermission(permission, "canView")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
-
-    const editors = permission.collaborationAllowed
-      ? await getSurveyEditors(surveyId)
-      : [];
 
     // Get response statistics (only count if they have at least one user message)
     const [stats] = await getDb()
@@ -156,11 +151,10 @@ export async function GET(
         media: survey.media,
         sampleConversationCount: survey.sampleConversationCount,
         userId: survey.userId,
-        organizationId: survey.organizationId,
         deliveryMode: survey.deliveryMode,
         classroomId: survey.classroomId,
         classroomTitle: survey.classroom?.title ?? null,
-        editors,
+        editors: [],
         permission,
       },
       stats: {

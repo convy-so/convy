@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import { learningSessionStateSchema, teacherProgressReportSchema } from "@/lib/learning/types";
-import { explanationApproachTypeSchema } from "@/lib/learning/pattern-types";
 import {
   assessmentQuestionTypeSchema,
   curriculumFrameworkKeySchema,
@@ -17,14 +16,12 @@ const classroomSchema = z.object({
   description: z.string().nullable().optional(),
   subject: z.string().nullable().optional(),
   defaultContentLocale: z.enum(appLocales),
-  departmentId: z.string().nullable(),
-  departmentName: z.string().nullable(),
   gradeBand: z.string(),
   gradeLabel: z.string(),
   status: z.string(),
   teacherUserId: z.string(),
   teacherName: z.string(),
-  accessLevel: z.enum(["owner", "collaborator", "none"]),
+  accessLevel: z.literal("owner"),
   accessRequestStatus: z.string().nullable(),
   studentCount: z.number(),
   topicCount: z.number(),
@@ -126,41 +123,6 @@ const onboardingMessageSchema = z.object({
   createdAt: z.union([z.string(), z.date()]).optional(),
 });
 
-const tutorMediaSchema = z.object({
-  assetId: z.string().nullable().optional(),
-  externalMediaId: z.string().nullable().optional(),
-  assetType: z.enum(["image", "video"]),
-  title: z.string(),
-  description: z.string().nullable().optional(),
-  mediaUrl: z.string(),
-  thumbnailUrl: z.string().nullable().optional(),
-  durationSeconds: z.number().nullable().optional(),
-  selectionSource: z.string(),
-  reason: z.string(),
-  expectedBenefit: z.string(),
-  followUpPrompt: z.string(),
-});
-
-const assistantTutoringMessageSchema = onboardingMessageSchema.extend({
-  metadata: z
-    .record(z.string(), z.unknown())
-    .default({})
-    .superRefine((value, context) => {
-      const maybeTutorMedia = value.tutorMedia;
-      if (maybeTutorMedia === undefined) {
-        return;
-      }
-
-      const parsed = tutorMediaSchema.safeParse(maybeTutorMedia);
-      if (!parsed.success) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Invalid tutor media payload",
-        });
-      }
-    }),
-});
-
 const onboardingStateSchema = z.discriminatedUnion("completed", [
   z.object({
     completed: z.literal(true),
@@ -189,53 +151,36 @@ const tutoringSessionSchema = z.object({
 });
 
 const patternSchema = z.object({
-  scopeType: z.enum(["global", "subject"]),
+  scopeType: z.string(),
   subjectKey: z.string().nullable().optional(),
   subjectLabel: z.string().nullable().optional(),
-  patternConfidence: z.number(),
-  explanationApproaches: z.array(
-    z.object({
-      type: explanationApproachTypeSchema,
-      successRate: z.number(),
-      observationCount: z.number(),
-      confidence: z.number(),
-      notes: z.array(z.string()),
-    }),
-  ),
-  interestResonance: z.object({
-    domains: z.array(
-      z.object({
-        domain: z.string(),
-        engagementScore: z.number(),
-        comprehensionScore: z.number(),
-        observationCount: z.number(),
-        notes: z.array(z.string()),
-      }),
-    ),
-    usedExamples: z.array(z.string()),
-    emergingThreads: z.array(z.string()),
-  }),
-  cognitivePattern: z.record(z.string(), z.unknown()),
-  motivationalPattern: z.record(z.string(), z.unknown()),
-  confidenceMindsetPattern: z.record(z.string(), z.unknown()),
+  patternConfidence: z.number().default(0),
+  explanationApproaches: z.array(z.record(z.string(), z.unknown())).optional(),
+  interestResonance: z.record(z.string(), z.unknown()).optional(),
+  cognitivePattern: z.record(z.string(), z.unknown()).optional(),
+  motivationalPattern: z.record(z.string(), z.unknown()).optional(),
+  confidenceMindsetPattern: z.record(z.string(), z.unknown()).optional(),
   summaryLocale: z.string().optional(),
-  persistentMisconceptions: z.array(
-    z.object({
-      key: z.string(),
-      label: z.string(),
-      description: z.string(),
-      recurrenceCount: z.number(),
-      status: z.string(),
-      correctionApproachesTried: z.array(z.string()),
-      sessionIds: z.array(z.string()),
-      lastSeenAt: z.string(),
-    }),
-  ),
+  persistentMisconceptions: z
+    .array(
+      z.object({
+        key: z.string(),
+        label: z.string(),
+        description: z.string(),
+        lastSeenAt: z.string().default(""),
+      }),
+    )
+    .default([]),
   studentSummary: z.string(),
   teacherSummary: z.string().optional(),
   confidenceLabel: z.string(),
   updatedAt: z.union([z.string(), z.date()]),
   engagementTrend: z.record(z.string(), z.unknown()).optional(),
+  motivationalContext: z.record(z.string(), z.unknown()).optional(),
+  knowledgeStateModel: z.array(z.record(z.string(), z.unknown())).optional(),
+  cognitiveStyleCalibration: z.record(z.string(), z.unknown()).optional(),
+  productiveStruggleCalibration: z.record(z.string(), z.unknown()).optional(),
+  longitudinalDevelopment: z.record(z.string(), z.unknown()).optional(),
 });
 
 const teacherPatternResponseSchema = z.object({
@@ -355,27 +300,6 @@ const activationValidationSchema = z.object({
     })
     .optional(),
   expiresAt: z.string().optional(),
-});
-
-const classroomAccessRequestSchema = z.object({
-  id: z.string(),
-  status: z.string(),
-  message: z.string().nullable(),
-  createdAt: z.union([z.string(), z.date()]),
-  requester: z.object({
-    id: z.string(),
-    name: z.string(),
-    email: z.string().email(),
-  }),
-});
-
-const classroomCollaboratorSchema = z.object({
-  id: z.string(),
-  teacherUserId: z.string(),
-  accessLevel: z.enum(["owner", "collaborator"]),
-  name: z.string(),
-  email: z.string().email(),
-  grantedAt: z.union([z.string(), z.date()]),
 });
 
 const bulkInviteStudentsResponseSchema = z.object({
@@ -499,7 +423,6 @@ export async function createClassroom(input: {
   description?: string;
   subject?: string;
   gradeLabel: string;
-  departmentId?: string;
   defaultContentLocale?: (typeof appLocales)[number];
 }) {
   return await parseResponse(
@@ -518,8 +441,6 @@ export async function createClassroom(input: {
         gradeLabel: z.string(),
         accessLevel: z.literal("owner"),
         defaultContentLocale: z.enum(appLocales),
-        departmentId: z.string().nullable(),
-        departmentName: z.string().nullable(),
       }),
     }),
   );
@@ -624,116 +545,6 @@ export async function createTopic(input: {
         title: z.string(),
         learningOutcomeCount: z.number(),
         contentLocale: z.enum(appLocales),
-      }),
-    }),
-  );
-}
-
-export async function requestClassroomAccess(input: {
-  classroomId: string;
-  message?: string;
-}) {
-  return await parseResponse(
-    await fetch(`/api/learning/classrooms/${input.classroomId}/access`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: input.message }),
-    }),
-    z.object({
-      success: z.literal(true),
-      data: z.object({
-        requestId: z.string(),
-        status: z.literal("pending"),
-      }),
-    }),
-  );
-}
-
-export async function fetchClassroomAccessRequests(classroomId: string) {
-  return await parseResponse(
-    await fetch(`/api/learning/classrooms/${classroomId}/requests`, {
-      credentials: "include",
-    }),
-    z.object({
-      success: z.literal(true),
-      data: z.array(classroomAccessRequestSchema),
-    }),
-  );
-}
-
-export async function fetchClassroomCollaborators(classroomId: string) {
-  return await parseResponse(
-    await fetch(`/api/learning/classrooms/${classroomId}/collaborators`, {
-      credentials: "include",
-    }),
-    z.object({
-      success: z.literal(true),
-      data: z.array(classroomCollaboratorSchema),
-    }),
-  );
-}
-
-export async function grantClassroomCollaborator(input: {
-  classroomId: string;
-  email: string;
-}) {
-  return await parseResponse(
-    await fetch(`/api/learning/classrooms/${input.classroomId}/collaborators`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: input.email }),
-    }),
-    z.object({
-      success: z.literal(true),
-      data: classroomCollaboratorSchema.extend({
-        accessLevel: z.literal("collaborator"),
-      }),
-    }),
-  );
-}
-
-export async function revokeClassroomCollaborator(input: {
-  classroomId: string;
-  teacherUserId: string;
-}) {
-  return await parseResponse(
-    await fetch(`/api/learning/classrooms/${input.classroomId}/collaborators`, {
-      method: "DELETE",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ teacherUserId: input.teacherUserId }),
-    }),
-    z.object({
-      success: z.literal(true),
-      data: z.object({
-        teacherUserId: z.string(),
-      }),
-    }),
-  );
-}
-
-export async function respondToClassroomAccessRequest(input: {
-  classroomId: string;
-  requestId: string;
-  decision: "approved" | "rejected";
-}) {
-  return await parseResponse(
-    await fetch(`/api/learning/classrooms/${input.classroomId}/requests`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        requestId: input.requestId,
-        decision: input.decision,
-      }),
-    }),
-    z.object({
-      success: z.literal(true),
-      data: z.object({
-        requestId: z.string(),
-        status: z.enum(["approved", "rejected"]),
       }),
     }),
   );
@@ -1003,23 +814,6 @@ export async function fetchOnboardingState() {
   );
 }
 
-export async function sendOnboardingTurn(input: { sessionId?: string; message: string }) {
-  return await parseResponse(
-    await fetch("/api/learning/onboarding", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    }),
-    z.object({
-      sessionId: z.string(),
-      response: z.string(),
-      completed: z.boolean(),
-      profile: z.record(z.string(), z.unknown()).nullable().optional(),
-    }),
-  );
-}
-
 export async function fetchTutoringSession(
   topicId: string,
   language?: (typeof appLocales)[number],
@@ -1037,38 +831,6 @@ export async function fetchTutoringSession(
       },
     ),
     z.object({ success: z.literal(true), data: tutoringSessionSchema }),
-  );
-}
-
-export async function sendTutoringMessage(input: {
-  topicId: string;
-  sessionId?: string;
-  message: string;
-  language?: (typeof appLocales)[number];
-}) {
-  return await parseResponse(
-    await fetch(`/api/learning/topics/${input.topicId}/chat`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: input.sessionId,
-        message: input.message,
-        language: input.language,
-      }),
-    }),
-    z.object({
-      success: z.literal(true),
-      data: z.object({
-        sessionId: z.string(),
-        sessionLocale: z.enum(appLocales).optional(),
-        sourceLocale: z.enum(appLocales).optional(),
-        response: z.string(),
-        completed: z.boolean(),
-        sessionState: learningSessionStateSchema,
-        assistantMessage: assistantTutoringMessageSchema,
-      }),
-    }),
   );
 }
 

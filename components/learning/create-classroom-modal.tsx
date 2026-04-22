@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X, Loader2, Plus, GraduationCap, Sparkles, BookOpen, Layers, Hash, ChevronDown, Check } from "lucide-react";
+import { X, Loader2, Plus, GraduationCap, Sparkles, BookOpen, Layers, Hash } from "lucide-react";
 import { createClassroom } from "@/lib/api/learning";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
@@ -10,32 +10,22 @@ import toast from "react-hot-toast";
 import { InputField } from "@/components/auth/input-field";
 import { cn } from "@/lib/utils";
 
-type Department = {
-    id: string;
-    name: string;
-};
-
 type CreateClassroomModalProps = {
     isOpen: boolean;
     onClose: () => void;
     onSuccess?: (id: string) => void;
-    departments: Department[];
 };
 
 export function CreateClassroomModal({ 
     isOpen, 
     onClose,
-    onSuccess,
-    departments 
+    onSuccess
 }: CreateClassroomModalProps) {
     const queryClient = useQueryClient();
     const [title, setTitle] = useState("");
     const [gradeLabel, setGradeLabel] = useState("");
     const [subject, setSubject] = useState("");
-    const [departmentId, setDepartmentId] = useState("");
     const [description, setDescription] = useState("");
-    
-    const [isDeptDropdownOpen, setIsDeptDropdownOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [mounted, setMounted] = useState(false);
@@ -48,7 +38,6 @@ export function CreateClassroomModal({
         setTitle("");
         setGradeLabel("");
         setSubject("");
-        setDepartmentId("");
         setDescription("");
         setError(null);
     };
@@ -64,7 +53,6 @@ export function CreateClassroomModal({
                 title: title.trim(),
                 gradeLabel: gradeLabel.trim(),
                 subject: subject.trim() || undefined,
-                departmentId: departmentId || undefined,
                 description: description.trim() || undefined,
             });
 
@@ -81,8 +69,6 @@ export function CreateClassroomModal({
             setIsSubmitting(false);
         }
     };
-
-    const selectedDept = departments.find(d => d.id === departmentId);
 
     if (!isOpen || !mounted) return null;
 
@@ -148,55 +134,6 @@ export function CreateClassroomModal({
                             value={subject}
                             onChange={(e) => setSubject(e.target.value)}
                         />
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="block text-sm font-medium text-[#292929]">
-                            Academy Unit / Department
-                        </label>
-                        <div className="relative">
-                            <button
-                                type="button"
-                                onClick={() => setIsDeptDropdownOpen(!isDeptDropdownOpen)}
-                                className="w-full pl-4 pr-4 py-3 border border-gray-200 rounded-xl hover:border-gray-300 focus:ring-2 focus:ring-gray-900 focus:border-transparent outline-none transition-all text-left bg-white text-sm flex items-center justify-between"
-                            >
-                                <span className={cn(departmentId ? "text-gray-900" : "text-gray-400")}>
-                                    {selectedDept ? selectedDept.name : "Select a unit (Optional)"}
-                                </span>
-                                <ChevronDown className={cn("w-4 h-4 text-gray-400 transition-transform", isDeptDropdownOpen && "rotate-180")} />
-                            </button>
-
-                            {isDeptDropdownOpen && (
-                                <>
-                                    <div className="fixed inset-0 z-[110]" onClick={() => setIsDeptDropdownOpen(false)} />
-                                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-100 rounded-xl shadow-xl z-[120] py-2 max-h-[200px] overflow-y-auto animate-in fade-in zoom-in-95">
-                                        <button
-                                            type="button"
-                                            onClick={() => { setDepartmentId(""); setIsDeptDropdownOpen(false); }}
-                                            className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                        >
-                                            <span className="text-gray-500">No Academy Unit</span>
-                                            {!departmentId && <Check className="w-4 h-4 text-gray-900" />}
-                                        </button>
-                                        <div className="h-px bg-gray-50 my-1" />
-                                        {departments.map((dept) => (
-                                            <button
-                                                key={dept.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    setDepartmentId(dept.id);
-                                                    setIsDeptDropdownOpen(false);
-                                                }}
-                                                className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                            >
-                                                <span className="font-medium text-gray-900">{dept.name}</span>
-                                                {departmentId === dept.id && <Check className="w-4 h-4 text-gray-900" />}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </>
-                            )}
-                        </div>
                     </div>
 
                     <div className="space-y-2">

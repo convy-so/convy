@@ -11,12 +11,10 @@ export * from "./relations";
 export * from "./billing";
 export * from "./ai";
 export * from "./learning";
-export * from "./i18n";
 export * from "./privacy";
 
 // Re-export specific authSchema if needed by better-auth or others
 import { users, accounts, sessions, verificationTokens } from "./auth";
-import { organizations, members, invitations } from "./organization";
 import { notifications } from "./notifications";
 
 export const authSchema = {
@@ -24,8 +22,5 @@ export const authSchema = {
   account: accounts,
   session: sessions,
   verification: verificationTokens,
-  organization: organizations,
-  member: members,
-  invitation: invitations,
   notification: notifications,
 };

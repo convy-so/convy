@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getTeacherClassroomAccess } from "@/lib/learning/access";
-import { listStudentLearningPatternProfiles } from "@/lib/learning/storage";
 
 export async function GET(
   _request: Request,
@@ -17,33 +16,28 @@ export async function GET(
       where: (table, { eq }) => eq(table.id, studentId),
       with: {
         classroom: true,
+        studentModel: {
+          with: {
+            snapshots: {
+              orderBy: (table, { desc }) => [desc(table.version)],
+              limit: 1,
+            },
+          },
+        },
       },
     });
 
-    if (!membership || !membership.userId) {
+    if (!membership) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
-    const access = await getTeacherClassroomAccess(
-      session.user.id,
-      membership.classroomId,
-    );
+    const access = await getTeacherClassroomAccess(session.user.id, membership.classroomId);
 
     if (!access) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    if (!membership.classroom.organizationId) {
-      return NextResponse.json(
-        { error: "Learning pattern analytics are available only inside a workspace classroom." },
-        { status: 400 },
-      );
-    }
-
-    const profiles = await listStudentLearningPatternProfiles({
-      organizationId: membership.classroom.organizationId,
-      studentUserId: membership.userId,
-    });
+    const latestSnapshot = membership.studentModel?.snapshots[0]?.snapshot ?? null;
 
     return NextResponse.json({
       success: true,
@@ -53,29 +47,35 @@ export async function GET(
           fullName: membership.fullName,
           email: membership.email,
         },
-        profiles: profiles.map((profile) => ({
-          scopeType: profile.scopeType,
-          subjectKey: profile.subjectKey,
-          subjectLabel: profile.subjectLabel,
-          patternConfidence: profile.profile.patternConfidence,
-          explanationApproaches: profile.profile.explanationApproaches,
-          interestResonance: profile.profile.interestResonance,
-          cognitivePattern: profile.profile.cognitivePattern,
-          motivationalPattern: profile.profile.motivationalPattern,
-          confidenceMindsetPattern: profile.profile.confidenceMindsetPattern,
-          persistentMisconceptions: profile.profile.persistentMisconceptions,
-          summaryLocale: profile.summaryLocale,
-          studentSummary: profile.studentSummary,
-          teacherSummary: profile.teacherSummary,
-          confidenceLabel: profile.profile.confidenceLabel,
-          engagementTrend: profile.profile.engagementTrend,
-          updatedAt: profile.updatedAt,
-        })),
+        profiles: latestSnapshot
+          ? [
+              {
+                scopeType: "student",
+                subjectKey: null,
+                subjectLabel: membership.classroom.title,
+                patternConfidence:
+                  latestSnapshot.cognitiveStyleCalibration.confidence ?? 0,
+                confidenceLabel:
+                  latestSnapshot.cognitiveStyleCalibration.confidence > 0.65
+                    ? "Established"
+                    : "Emerging",
+                studentSummary: latestSnapshot.summary,
+                persistentMisconceptions: [],
+                updatedAt: membership.studentModel?.snapshots[0]?.updatedAt,
+                motivationalContext: latestSnapshot.motivationalContext,
+                knowledgeStateModel: latestSnapshot.knowledgeStateModel,
+                cognitiveStyleCalibration: latestSnapshot.cognitiveStyleCalibration,
+                productiveStruggleCalibration:
+                  latestSnapshot.productiveStruggleCalibration,
+                longitudinalDevelopment: latestSnapshot.longitudinalDevelopment,
+              },
+            ]
+          : [],
       },
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load student patterns" },
+      { error: error instanceof Error ? error.message : "Failed to load student model" },
       { status: 400 },
     );
   }
