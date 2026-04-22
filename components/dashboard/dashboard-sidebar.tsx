@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Link, usePathname, useRouter } from "@/i18n/routing";
 import Image from "next/image";
 import {
@@ -9,7 +8,6 @@ import {
   MessageSquare,
   BarChart3,
   Settings,
-  Users,
   FolderOpen,
   GraduationCap,
   Menu,
@@ -17,35 +15,21 @@ import {
   LogOut,
   User as UserIcon,
   Bell,
-  Activity,
-  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { WorkspaceSwitcher } from "./workspace-switcher";
 
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/providers/auth-provider";
 
 import { authClient } from "@/lib/auth-client";
-import { fetchActiveWorkspace } from "@/lib/api/workspace";
-import { queryKeys } from "@/lib/query-keys";
 import toast from "react-hot-toast";
 
 export function DashboardSidebar() {
-  const { user, session } = useAuth();
+  const { user } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const t = useTranslations("Sidebar");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  const activeOrgId = session?.activeOrganizationId || null;
-  const activeWorkspaceQuery = useQuery({
-    queryKey: queryKeys.workspaces.active,
-    queryFn: fetchActiveWorkspace,
-    enabled: Boolean(activeOrgId),
-  });
-  const activeWorkspace = activeWorkspaceQuery.data;
-  const isWorkspaceOwner = activeWorkspace?.role === "owner";
 
   const navigation = [
     { name: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard },
@@ -53,15 +37,6 @@ export function DashboardSidebar() {
     { name: "Learning", href: "/dashboard/learning", icon: GraduationCap },
     { name: "Folders", href: "/dashboard/folders", icon: FolderOpen },
     { name: t("Analytics"), href: "/dashboard/analytics", icon: BarChart3 },
-    ...(activeOrgId ? [
-      { name: "Workspace", href: "/dashboard/team", icon: Users },
-      ...(isWorkspaceOwner
-        ? [
-            { name: "Voice Quality", href: "/dashboard/voice-analytics", icon: Activity },
-            { name: "Privacy Hub", href: "/dashboard/privacy", icon: ShieldAlert },
-          ]
-        : []),
-    ] : []),
   ];
 
   const bottomNavigation = [
@@ -127,9 +102,6 @@ export function DashboardSidebar() {
             <h1 className="text-xl font-bold text-gray-900 tracking-tight">Convyy</h1>
           </Link>
         </div>
-
-        {/* Workspace Switcher */}
-        <WorkspaceSwitcher />
 
         {/* Navigation */}
         <nav className="flex-1 px-3 space-y-1 overflow-y-auto py-4">

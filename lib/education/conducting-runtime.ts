@@ -194,8 +194,6 @@ export function buildConductingSystemPrompt(input: {
   sessionState: SessionState;
   sessionType: SessionType;
   conductingProfile?: SampleConductingProfile | null;
-  playbookContext?: string;
-  personalityContext?: string;
   expertGuidanceContext?: string;
   toolContext?: {
     canFinishSurvey?: boolean;
@@ -214,8 +212,6 @@ export function buildConductingSystemPromptParts(input: {
   sessionState: SessionState;
   sessionType: SessionType;
   conductingProfile?: SampleConductingProfile | null;
-  playbookContext?: string;
-  personalityContext?: string;
   expertGuidanceContext?: string;
   toolContext?: {
     canFinishSurvey?: boolean;
@@ -290,28 +286,17 @@ ${input.coveragePlan.nodes.map((node) => `- ${node.id}: ${node.label} (${node.de
       {
         kind: "expert_guidance",
         label: "Approved conducting guidance",
-        content: [
-          input.playbookContext
-            ? renderUntrustedContextBlock("approved_playbooks", input.playbookContext)
-            : "",
-          input.expertGuidanceContext
-            ? renderUntrustedContextBlock("expert_guidance", input.expertGuidanceContext)
-            : "",
-        ]
-          .filter(Boolean)
-          .join("\n\n"),
+        content: input.expertGuidanceContext
+          ? renderUntrustedContextBlock("expert_guidance", input.expertGuidanceContext)
+          : "",
         sourceType: "expert_guidance",
         sourceId: input.coveragePlan.surveyId,
       },
       {
         kind: "user_overlay",
         label: "Respondent-facing adjustments",
-        content: [
-          input.personalityContext
-            ? renderUntrustedContextBlock("personality_context", input.personalityContext)
-            : "",
-          input.conductingProfile
-            ? `<approved-adjustments>
+        content: input.conductingProfile
+          ? `<approved-adjustments>
 ${input.conductingProfile.toneDirectives.map((item) => `- Tone: ${item}`).join("\n")}
 ${input.conductingProfile.questionDirectives.map((item) => `- Question style: ${item}`).join("\n")}
 ${input.conductingProfile.probeDirectives.map((item) => `- Probing: ${item}`).join("\n")}
@@ -319,10 +304,7 @@ ${input.conductingProfile.openingDirectives.map((item) => `- Opening: ${item}`).
 ${input.conductingProfile.closingDirectives.map((item) => `- Closing: ${item}`).join("\n")}
 ${input.conductingProfile.coverageDirectives.map((item) => `- Coverage: ${item}`).join("\n")}
 </approved-adjustments>`
-            : "",
-        ]
-          .filter(Boolean)
-          .join("\n\n"),
+          : "",
         sourceType: "overlay",
         sourceId: input.coveragePlan.surveyId,
       },

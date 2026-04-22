@@ -4,7 +4,6 @@ import { nanoid } from "nanoid";
 
 export type UsageLogInput = {
   userId?: string;
-  organizationId?: string;
   folderId?: string;
   surveyId?: string;
   type:

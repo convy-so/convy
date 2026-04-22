@@ -9,7 +9,6 @@ import {
   unique,
 } from "drizzle-orm/pg-core";
 
-import { organizations } from "./organization";
 import { surveys, surveyConversations } from "./surveys";
 import { classroomStudents } from "./learning";
 import { users } from "./auth";
@@ -55,7 +54,6 @@ export const workspacePrivacyProfiles = pgTable(
     ...timestamps,
     organizationId: text("organization_id")
       .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" })
       .unique(),
     regionCode: text("region_code").default("eu").notNull(),
     isEuWorkspace: boolean("is_eu_workspace").default(true).notNull(),
@@ -79,9 +77,7 @@ export const consentEvents = pgTable(
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    organizationId: text("organization_id").references(() => organizations.id, {
-      onDelete: "cascade",
-    }),
+    organizationId: text("organization_id"),
     surveyId: text("survey_id").references(() => surveys.id, {
       onDelete: "cascade",
     }),
@@ -107,9 +103,7 @@ export const privacyRequests = pgTable(
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    organizationId: text("organization_id").references(() => organizations.id, {
-      onDelete: "set null",
-    }),
+    organizationId: text("organization_id"),
     surveyId: text("survey_id").references(() => surveys.id, {
       onDelete: "set null",
     }),
@@ -180,7 +174,6 @@ export const retentionPolicies = pgTable(
     ...timestamps,
     organizationId: text("organization_id")
       .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" })
       .unique(),
     settings: jsonb("settings").$type<RetentionPolicySettings>().notNull(),
   },

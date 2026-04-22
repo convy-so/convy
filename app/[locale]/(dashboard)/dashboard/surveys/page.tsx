@@ -55,7 +55,7 @@ function SurveysContent() {
 
 
   const { session } = useAuth();
-  const activeOrgId = session?.activeOrganizationId || null;
+  const activeOrgId = null;
 
   // Fetch surveys using React Query
   const { data: surveys = [], isLoading } = useQuery<SurveyListItem[]>({

@@ -1,12 +1,9 @@
-import { eq, and, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import {
-  recordRealtimeEvent,
-} from "@/lib/collaboration-service";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
@@ -35,7 +32,6 @@ export async function DELETE(
       .select({
         id: surveys.id,
         title: surveys.title,
-        organizationId: surveys.organizationId,
       })
       .from(surveys)
       .where(eq(surveys.id, surveyId));
@@ -44,34 +40,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Survey not found" }, { status: 404 });
     }
 
-    await getDb().transaction(async (tx) => {
-      if (permission.workspaceId) {
-        await recordRealtimeEvent(tx, {
-          scope: "survey",
-          surveyId,
-          workspaceId: permission.workspaceId,
-          eventType: "survey.deleting",
-          actorId: session.user.id,
-          payload: {
-            surveyId,
-            title: survey.title,
-          },
-        });
-        await recordRealtimeEvent(tx, {
-          scope: "workspace",
-          workspaceId: permission.workspaceId,
-          eventType: "workspace.survey_deleted",
-          actorId: session.user.id,
-          payload: {
-            workspaceId: permission.workspaceId,
-            surveyId,
-            title: survey.title,
-          },
-        });
-      }
-
-      await tx.delete(surveys).where(eq(surveys.id, surveyId));
-    });
+    await getDb().delete(surveys).where(eq(surveys.id, surveyId));
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -144,9 +113,6 @@ export async function PATCH(
             and(
               eq(surveys.userId, session.user.id),
               eq(surveys.isVoice, true),
-              survey.organizationId
-                ? eq(surveys.organizationId, survey.organizationId)
-                : isNull(surveys.organizationId),
             ),
           );
 
@@ -154,8 +120,7 @@ export async function PATCH(
           return NextResponse.json(
             {
               error:
-                "Limit reached: You can only have 2 voice surveys per " +
-                (survey.organizationId ? "workspace" : "personal space"),
+                "Limit reached: You can only have 2 voice surveys in your account",
             },
             { status: 403 },
           );
@@ -172,31 +137,13 @@ export async function PATCH(
     }
 
     // Update survey
-    await getDb().transaction(async (tx) => {
-      await tx
-        .update(surveys)
-        .set({
-          ...updates,
-          updatedAt: new Date(),
-        })
-        .where(eq(surveys.id, surveyId));
-
-      if (permission.workspaceId) {
-        await recordRealtimeEvent(tx, {
-          scope: "workspace",
-          workspaceId: permission.workspaceId,
-          eventType: "workspace.survey_updated",
-          actorId: session.user.id,
-          payload: {
-            workspaceId: permission.workspaceId,
-            survey: {
-              id: surveyId,
-              ...updates,
-            },
-          },
-        });
-      }
-    });
+    await getDb()
+      .update(surveys)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(surveys.id, surveyId));
 
     return NextResponse.json({ success: true, updates });
   } catch (error) {

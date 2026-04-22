@@ -14,7 +14,6 @@ import {
   acquireSurveyLease,
   getActiveSurveyLease,
   getCurrentSurveyRevision,
-  recordRealtimeEvent,
 } from "@/lib/collaboration-service";
 import {
   getSurveyPermissionForSession,
@@ -32,7 +31,6 @@ import {
   persistCreationConversation,
   runCreationWorkflow,
 } from "@/lib/education/creation-workflow";
-import { chooseOrchestrationMode } from "@/lib/ai-core";
 import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
 import { recordAiFeedbackEvent } from "@/lib/ai/observability";
 
@@ -308,7 +306,6 @@ export async function POST(
 
     const result = await runCreationWorkflow({
       surveyId,
-      organizationId: survey.organizationId,
       messages,
       userId: session.user.id,
     });
@@ -364,37 +361,6 @@ export async function POST(
         updatedAt: new Date(),
       })
       .where(eq(surveyCreationConversations.surveyId, surveyId));
-
-    await getDb().transaction(async (tx) => {
-      await recordRealtimeEvent(tx, {
-        scope: "survey",
-        surveyId,
-        workspaceId: permission.workspaceId,
-        eventType: "survey.creation_turn_added",
-        actorId: session.user.id,
-        payload: {
-          surveyId,
-          lease: leaseResult.lease,
-          workflowDecision: {
-            orchestrationMode: chooseOrchestrationMode({
-              needsDeterministicStateMachine: true,
-              needsOpenEndedDialogue: false,
-            }),
-            missingFields: result.validation.missingFields,
-            readyForSampling: result.validation.isReady,
-            programId: result.brief.programId,
-          },
-          messages: persistedMessages.slice(-2).map((message) => ({
-            id: message.id,
-            role: message.role,
-            content: message.content,
-            parts: message.parts,
-            timestamp: message.timestamp,
-          })),
-          status: "creating",
-        },
-      });
-    });
 
     const response = createUIMessageStreamResponse({
       stream: createUIMessageStream({
@@ -481,22 +447,6 @@ export async function PUT(
 
     const normalizedMessages = normalizeCreationMessages(incomingMessages);
     await persistCreationConversation(surveyId, normalizedMessages);
-
-    await getDb().transaction(async (tx) => {
-      await recordRealtimeEvent(tx, {
-        scope: "survey",
-        surveyId,
-        workspaceId: permission.workspaceId,
-        eventType: "survey.creation_turn_added",
-        actorId: session.user.id,
-        payload: {
-          surveyId,
-          lease: leaseResult.lease,
-          messages: normalizedMessages.slice(-1),
-          status: survey.status,
-        },
-      });
-    });
 
     const revision = await getCurrentSurveyRevision(surveyId);
     const response = new Response("OK", { status: 200 });

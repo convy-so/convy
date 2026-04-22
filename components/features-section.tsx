@@ -18,9 +18,9 @@ const featureCards = [
   {
     icon: FaBrain,
     iconBg: "bg-[#6366F1]",
-    title: "Teacher and team workspaces",
+    title: "Expert-guided teaching systems",
     description:
-      "Give educators and school teams a shared place to manage classrooms, students, topics, and learning progress.",
+      "Combine classroom teaching, expert review, and adaptive tutoring so the system keeps improving with use.",
   },
   {
     icon: FaFileAlt,

@@ -46,7 +46,6 @@ function buildMaterialRetrievalContent(params: {
 }
 
 export async function replaceLearningMaterialEmbeddings(params: {
-  organizationId?: string | null;
   classroomId?: string | null;
   topicId: string;
   materialId: string;
@@ -93,7 +92,6 @@ export async function replaceLearningMaterialEmbeddings(params: {
       .values(
         chunks.map((content, index) => ({
           id: nanoid(),
-          organizationId: params.organizationId ?? null,
           classroomId: params.classroomId ?? null,
           topicId: params.topicId,
           materialId: params.materialId,

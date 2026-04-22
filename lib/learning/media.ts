@@ -49,7 +49,6 @@ function inferPreferredAssetType(params: {
 }
 
 export async function selectTutorMedia(params: {
-  organizationId: string;
   topicId: string;
   classroomId: string;
   gradeBand: string;
@@ -93,7 +92,6 @@ export async function selectTutorMedia(params: {
     .innerJoin(teachingMediaAssets, eq(teachingMediaBindings.assetId, teachingMediaAssets.id))
     .where(
       and(
-        eq(teachingMediaAssets.organizationId, params.organizationId),
         eq(teachingMediaAssets.status, "approved"),
         eq(teachingMediaAssets.assetType, preferredType),
         or(

@@ -1,12 +1,15 @@
 "use server";
 
-import { getVerifiedSession } from "@/lib/auth/session";
+import { desc, eq, inArray } from "drizzle-orm";
+
 import { getDb } from "@/db";
-import { voiceSessions, voiceQualityMetrics } from "@/db/schema/voice";
 import { surveys } from "@/db/schema/surveys";
-import { eq, desc, inArray } from "drizzle-orm";
-import { isWorkspaceOwner } from "@/lib/workspace-access";
-import { ActionResult } from "./workspace";
+import { voiceQualityMetrics, voiceSessions } from "@/db/schema/voice";
+import { getVerifiedSession } from "@/lib/auth/session";
+
+type ActionResult<T> =
+  | { success: true; data: T }
+  | { success: false; error: string };
 
 export type VoiceAnalyticsSessionRow = {
   id: string;
@@ -23,49 +26,38 @@ export type VoiceAnalyticsMetricsOverview = {
   sessionCount: number;
 };
 
-export async function getVoiceAnalyticsData(): Promise<ActionResult<{
-  sessions: VoiceAnalyticsSessionRow[];
-  metricsOverview: VoiceAnalyticsMetricsOverview;
-}>> {
+export async function getVoiceAnalyticsData(): Promise<
+  ActionResult<{
+    sessions: VoiceAnalyticsSessionRow[];
+    metricsOverview: VoiceAnalyticsMetricsOverview;
+  }>
+> {
   try {
     const session = await getVerifiedSession();
-    const organizationId = session.session.activeOrganizationId;
-
-    if (!organizationId) {
-      return { success: false, error: "No active workspace selected" };
-    }
-
-    const isOwner = await isWorkspaceOwner(session.user.id, organizationId);
-    if (!isOwner) {
-      return { success: false, error: "Unauthorized: Owner access required" };
-    }
-
     const db = getDb();
-    
-    // First figure out the surveys
-    const workspaceSurveys = await db
-        .select({ id: surveys.id })
-        .from(surveys)
-        .where(eq(surveys.organizationId, organizationId));
-        
-    const surveyIds = workspaceSurveys.map(s => s.id);
+
+    const ownedVoiceSurveys = await db
+      .select({ id: surveys.id })
+      .from(surveys)
+      .where(eq(surveys.userId, session.user.id));
+
+    const surveyIds = ownedVoiceSurveys.map((survey) => survey.id);
 
     if (surveyIds.length === 0) {
-        return {
-            success: true,
-            data: {
-              sessions: [],
-              metricsOverview: {
-                avgLatency: 0,
-                totalDuration: 0,
-                fallbackCount: 0,
-                sessionCount: 0,
-              },
-            }
-        };
+      return {
+        success: true,
+        data: {
+          sessions: [],
+          metricsOverview: {
+            avgLatency: 0,
+            totalDuration: 0,
+            fallbackCount: 0,
+            sessionCount: 0,
+          },
+        },
+      };
     }
 
-    // Fetch the recent sessions across all these surveys
     const sessions = await db
       .select({
         id: voiceSessions.id,
@@ -79,8 +71,7 @@ export async function getVoiceAnalyticsData(): Promise<ActionResult<{
       .orderBy(desc(voiceSessions.startedAt))
       .limit(50);
 
-    const sessionIds = sessions.map(s => s.id);
-
+    const sessionIds = sessions.map((voiceSession) => voiceSession.id);
     const metrics =
       sessionIds.length > 0
         ? await db
@@ -93,35 +84,37 @@ export async function getVoiceAnalyticsData(): Promise<ActionResult<{
             .where(inArray(voiceQualityMetrics.sessionId, sessionIds))
         : [];
 
-    // Calculate overviews (simple aggregation for the dashboard)
     let totalLatency = 0;
     let latencyCount = 0;
     let fallbackCount = 0;
 
-    metrics.forEach(m => {
-        if (m.metricType === 'latency_ms') {
-            totalLatency += parseInt(m.metricValue, 10) || 0;
-            latencyCount++;
-        }
-        if (m.metricType === 'fallback_triggered') fallbackCount++;
-    });
-
-    const metricsOverview = {
-        avgLatency: latencyCount > 0 ? Math.round(totalLatency / latencyCount) : 0,
-        totalDuration: sessions.reduce((acc, curr) => acc + (curr.durationMs || 0), 0),
-        fallbackCount,
-        sessionCount: sessions.length
-    };
+    for (const metric of metrics) {
+      if (metric.metricType === "latency_ms") {
+        totalLatency += Number.parseInt(metric.metricValue, 10) || 0;
+        latencyCount += 1;
+      }
+      if (metric.metricType === "fallback_triggered") {
+        fallbackCount += 1;
+      }
+    }
 
     return {
       success: true,
       data: {
         sessions,
-        metricsOverview
-      }
+        metricsOverview: {
+          avgLatency: latencyCount > 0 ? Math.round(totalLatency / latencyCount) : 0,
+          totalDuration: sessions.reduce(
+            (sum, voiceSession) => sum + (voiceSession.durationMs || 0),
+            0,
+          ),
+          fallbackCount,
+          sessionCount: sessions.length,
+        },
+      },
     };
   } catch (error) {
-    console.error("Error fetching voice analytics data:", error);
+    console.error("[voice-analytics] failed to fetch voice analytics", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to fetch analytics",

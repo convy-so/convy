@@ -22,7 +22,6 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { InviteMemberModal } from "@/components/dashboard/invite-member-modal";
 import { FolderAIChat } from "@/components/dashboard/folder-ai-chat";
 import {
   useFolder,
@@ -33,7 +32,6 @@ import {
   useAvailableSurveys
 } from "@/components/dashboard/folders/hooks";
 import { formatDistanceToNow } from "date-fns";
-import toast from "react-hot-toast";
 import { Suspense } from "react";
 import { authClient } from "@/lib/auth-client";
 
@@ -54,7 +52,6 @@ function FolderDetailContent() {
   const [showAddSurveyModal, setShowAddSurveyModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showMenuFor, setShowMenuFor] = useState<string | null>(null);
-  const [showInviteModal, setShowInviteModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeletingFolder, setIsDeletingFolder] = useState(false);
 
@@ -184,12 +181,6 @@ function FolderDetailContent() {
         {folder.description && (
           <p className="text-gray-500 mt-3 ml-16 text-sm max-w-2xl">{folder.description}</p>
         )}
-        {folder.isSharedWorkspaceFolder && !folder.canEditMetadata ? (
-          <p className="text-gray-500 mt-3 ml-16 text-sm max-w-2xl">
-            This is a shared workspace folder. You can organize surveys here, but only the
-            folder owner or workspace owner can rename or delete it.
-          </p>
-        ) : null}
       </div>
 
       {/* Stats */}
@@ -507,14 +498,6 @@ function FolderDetailContent() {
           </div>
         </div>
       )}
-      <InviteMemberModal
-        isOpen={showInviteModal}
-        onClose={() => setShowInviteModal(false)}
-        onSuccess={() => {
-          toast.success("Invited successfully");
-        }}
-      />
-
       {/* 
           FolderAI Chat would need to be updated to accept real folder data type 
           or generic type. Assuming it works or will need checking.

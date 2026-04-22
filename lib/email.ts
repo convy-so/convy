@@ -1,6 +1,5 @@
 
 import { enqueueEmail } from "@/lib/queue";
-import { env } from "@/lib/env";
 import type { AppLocale } from "@/lib/i18n/config";
 
 type EmailPayload = {
@@ -39,51 +38,6 @@ export async function sendPasswordResetEmail(payload: EmailPayload) {
 }
 
 /**
- * Queue workspace invitation email for background sending
- */
-export async function sendWorkspaceInvitationEmail(payload: {
-  email: string;
-  invitedBy: string;
-  workspaceName: string;
-  inviteLink: string;
-  locale: AppLocale;
-}) {
-  await enqueueEmail({
-    type: "workspace-invitation",
-    email: payload.email,
-    url: payload.inviteLink,
-    name: payload.workspaceName,
-    metadata: {
-      locale: payload.locale,
-      invitedBy: payload.invitedBy,
-      workspaceName: payload.workspaceName,
-    },
-  });
-}
-
-/**
- * Queue workspace welcome email (direct add)
- */
-export async function sendWorkspaceWelcomeEmail(payload: {
-  email: string;
-  workspaceName: string;
-  url: string;
-  name?: string | null;
-  locale?: AppLocale;
-}) {
-  await enqueueEmail({
-    type: "workspace-welcome",
-    email: payload.email,
-    url: payload.url,
-    name: payload.name,
-    metadata: {
-      locale: payload.locale,
-      workspaceName: payload.workspaceName,
-    },
-  });
-}
-
-/**
  * Queue secondary email verification
  */
 export async function sendSecondaryEmailVerification(payload: {
@@ -98,29 +52,6 @@ export async function sendSecondaryEmailVerification(payload: {
     url: payload.url,
     name: payload.name,
     metadata: payload.locale ? { locale: payload.locale } : undefined,
-  });
-}
-
-/**
- * Queue survey deleted email (notify workspace members)
- */
-export async function sendSurveyDeletedEmail(payload: {
-  email: string;
-  surveyTitle: string;
-  deletedBy: string;
-  workspaceName: string;
-  locale?: AppLocale;
-}) {
-  await enqueueEmail({
-    type: "survey-deleted",
-    email: payload.email,
-    url: env.APP_BASE_URL, // Redirect to dashboard
-    name: payload.surveyTitle,
-    metadata: {
-      locale: payload.locale,
-      deletedBy: payload.deletedBy,
-      workspaceName: payload.workspaceName,
-    },
   });
 }
 

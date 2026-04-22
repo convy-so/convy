@@ -1,35 +1,40 @@
-import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
 import {
   classroomStudents,
-  learningExpertAnnotations,
+  expertConflicts,
+  expertCrystallizations,
+  expertFrameworks,
+  expertFrameworkVersions,
+  expertReviewCases,
+  expertRuntimeModels,
   learningInteractions,
   learningMessages,
   learningSessions,
-  studentLearningPatternAnalyses,
-  studentLearningPatternProfiles,
   learningTopics,
   studentInterestProfiles,
+  studentModelAnalyses,
+  studentModels,
+  studentModelSnapshots,
   studentProgressReports,
   topicMaterials,
 } from "@/db/schema";
-import {
-  indexLearningInteractionEvidence,
-  indexLearningPatternEvidence,
-  indexLearningReportEvidence,
-} from "@/lib/learning/evidence";
-import type { StudentLearningPatternProfile } from "@/lib/learning/pattern-types";
+import { createDefaultDeepFramework } from "@/lib/learning/framework-packages";
 import type {
+  ExpertTutorRuntimeModel,
   LearningInteractionType,
   LearningSessionState,
-  QuestionIntent,
   StudentInterestProfile,
+  StudentModelSnapshot,
   TeacherProgressReport,
 } from "@/lib/learning/types";
-import { createDefaultLearningSessionState } from "@/lib/learning/types";
-import type { ExpertAnnotation } from "@/lib/learning/expert-types";
+import {
+  createDefaultLearningSessionState,
+  expertTutorRuntimeModelSchema,
+  studentModelSnapshotSchema,
+} from "@/lib/learning/types";
 
 export async function getTopicWithMaterials(topicId: string) {
   return await getDb().query.learningTopics.findFirst({
@@ -50,18 +55,17 @@ export async function createLearningSession(params: {
   sessionLocale?: string | null;
   state?: LearningSessionState;
 }) {
-  const sessionId = nanoid();
   const [session] = await getDb()
     .insert(learningSessions)
     .values({
-      id: sessionId,
+      id: nanoid(),
       topicId: params.topicId ?? null,
       classroomStudentId: params.classroomStudentId,
-    sessionType: params.sessionType,
-    sessionLocale: params.sessionLocale ?? "en",
-    sessionStatus: "active",
-    stateVersion: 1,
-    state: params.state ?? createDefaultLearningSessionState(),
+      sessionType: params.sessionType,
+      sessionLocale: params.sessionLocale ?? "en",
+      sessionStatus: "active",
+      stateVersion: 1,
+      state: params.state ?? createDefaultLearningSessionState(),
       createdAt: new Date(),
       updatedAt: new Date(),
     })
@@ -83,32 +87,18 @@ export async function updateLearningSessionState(params: {
   summary?: string | null;
   expectedStateVersion?: number;
 }) {
-  const updatePayload: {
-    state: LearningSessionState;
-    updatedAt: Date;
-    sessionStatus?: string;
-    summary?: string | null;
-    stateVersion: number | ReturnType<typeof sql>;
-  } = {
-    state: params.state,
-    updatedAt: new Date(),
-    stateVersion:
-      params.expectedStateVersion !== undefined
-        ? params.expectedStateVersion + 1
-        : sql`${learningSessions.stateVersion} + 1`,
-  };
-
-  if (params.sessionStatus !== undefined) {
-    updatePayload.sessionStatus = params.sessionStatus;
-  }
-
-  if (params.summary !== undefined) {
-    updatePayload.summary = params.summary;
-  }
-
   const [session] = await getDb()
     .update(learningSessions)
-    .set(updatePayload)
+    .set({
+      state: params.state,
+      sessionStatus: params.sessionStatus,
+      summary: params.summary,
+      stateVersion:
+        params.expectedStateVersion !== undefined
+          ? params.expectedStateVersion + 1
+          : sql`${learningSessions.stateVersion} + 1`,
+      updatedAt: new Date(),
+    })
     .where(
       and(
         eq(learningSessions.id, params.sessionId),
@@ -124,6 +114,31 @@ export async function updateLearningSessionState(params: {
   }
 
   return session;
+}
+
+export async function completeLearningSession(params: {
+  sessionId: string;
+  summary?: string | null;
+  expectedStateVersion?: number;
+}) {
+  const session = await getLearningSessionById(params.sessionId);
+  if (!session) {
+    throw new Error("Learning session not found.");
+  }
+
+  const state = {
+    ...(session.state ?? createDefaultLearningSessionState()),
+    completed: true,
+    reportReady: true,
+  } as LearningSessionState;
+
+  return await updateLearningSessionState({
+    sessionId: params.sessionId,
+    state,
+    sessionStatus: "completed",
+    summary: params.summary ?? session.summary ?? null,
+    expectedStateVersion: params.expectedStateVersion,
+  });
 }
 
 export async function getActiveLearningSession(params: {
@@ -215,6 +230,19 @@ export async function appendLearningMessage(params: {
   return message;
 }
 
+export async function listLearningInteractions(params: {
+  classroomStudentId: string;
+  sessionId?: string | null;
+}) {
+  return await getDb().query.learningInteractions.findMany({
+    where: and(
+      eq(learningInteractions.classroomStudentId, params.classroomStudentId),
+      params.sessionId ? eq(learningInteractions.sessionId, params.sessionId) : undefined,
+    ),
+    orderBy: [asc(learningInteractions.createdAt)],
+  });
+}
+
 export async function logLearningInteraction(params: {
   classroomStudentId: string;
   topicId?: string | null;
@@ -222,10 +250,6 @@ export async function logLearningInteraction(params: {
   role: string;
   interactionType: LearningInteractionType;
   content: string;
-  phaseId?: number | null;
-  phaseType?: string | null;
-  conceptKey?: string | null;
-  questionType?: QuestionIntent | null;
   metadata?: Record<string, unknown>;
 }) {
   const [interaction] = await getDb()
@@ -237,174 +261,14 @@ export async function logLearningInteraction(params: {
       sessionId: params.sessionId ?? null,
       role: params.role,
       interactionType: params.interactionType,
-      phaseId: params.phaseId ?? null,
-      phaseType: params.phaseType ?? null,
-      conceptKey: params.conceptKey ?? null,
       content: params.content,
-      metadata: {
-        ...(params.metadata ?? {}),
-        ...(params.questionType ? { questionType: params.questionType } : {}),
-      },
+      metadata: params.metadata ?? {},
       createdAt: new Date(),
       updatedAt: new Date(),
     })
     .returning();
-
-  const membership = await getDb().query.classroomStudents.findFirst({
-    where: eq(classroomStudents.id, params.classroomStudentId),
-    with: {
-      classroom: true,
-    },
-  });
-
-  const topic = params.topicId
-    ? await getDb().query.learningTopics.findFirst({
-        where: eq(learningTopics.id, params.topicId),
-      })
-    : null;
-
-  if (membership?.classroom.organizationId) {
-    void indexLearningInteractionEvidence({
-      organizationId: membership.classroom.organizationId,
-      topicId: params.topicId ?? null,
-      classroomId: membership.classroomId,
-      classroomStudentId: params.classroomStudentId,
-      studentUserId: membership.userId ?? null,
-      interactionId: interaction.id,
-      topicTitle: topic?.title ?? null,
-      subjectKey: topic?.subjectKey ?? null,
-      gradeBand: membership.classroom.gradeBand,
-      curriculumFrameworkKey: "kmk_de_sek1",
-      language: topic?.contentLocale ?? membership.classroom.defaultContentLocale,
-      role: params.role,
-      interactionType: params.interactionType,
-      content: params.content,
-      phaseType: params.phaseType ?? null,
-      conceptKey: params.conceptKey ?? null,
-      sourceUpdatedAt: interaction.updatedAt,
-      metadata: interaction.metadata as Record<string, unknown> | null,
-    }).catch(() => undefined);
-  }
 
   return interaction;
-}
-
-export async function listLearningInteractions(params: {
-  classroomStudentId: string;
-  topicId?: string | null;
-  sessionId?: string | null;
-}) {
-  if (params.sessionId) {
-    return await getDb().query.learningInteractions.findMany({
-      where: eq(learningInteractions.sessionId, params.sessionId),
-      orderBy: [asc(learningInteractions.createdAt)],
-    });
-  }
-
-  if (params.topicId) {
-    return await getDb().query.learningInteractions.findMany({
-      where: and(
-        eq(learningInteractions.classroomStudentId, params.classroomStudentId),
-        eq(learningInteractions.topicId, params.topicId),
-      ),
-      orderBy: [asc(learningInteractions.createdAt)],
-    });
-  }
-
-  return await getDb().query.learningInteractions.findMany({
-    where: eq(learningInteractions.classroomStudentId, params.classroomStudentId),
-    orderBy: [asc(learningInteractions.createdAt)],
-  });
-}
-
-export async function completeLearningSession(params: {
-  sessionId: string;
-  summary?: string | null;
-  state?: LearningSessionState;
-  sessionStatus?: string;
-  expectedStateVersion?: number;
-}) {
-  const updatePayload: {
-    sessionStatus: string;
-    summary: string | null;
-    state?: LearningSessionState;
-    completedAt: Date;
-    updatedAt: Date;
-    stateVersion: number | ReturnType<typeof sql>;
-  } = {
-    sessionStatus: params.sessionStatus ?? "completed",
-    summary: params.summary ?? null,
-    completedAt: new Date(),
-    updatedAt: new Date(),
-    stateVersion:
-      params.expectedStateVersion !== undefined
-        ? params.expectedStateVersion + 1
-        : sql`${learningSessions.stateVersion} + 1`,
-  };
-
-  if (params.state !== undefined) {
-    updatePayload.state = params.state;
-  }
-
-  await getDb()
-    .update(learningSessions)
-    .set(updatePayload)
-    .where(
-      and(
-        eq(learningSessions.id, params.sessionId),
-        params.expectedStateVersion !== undefined
-          ? eq(learningSessions.stateVersion, params.expectedStateVersion)
-          : undefined,
-      ),
-    );
-}
-
-export async function upsertInterestProfile(params: {
-  classroomStudentId: string;
-  profile: StudentInterestProfile;
-}) {
-  const existing = await getDb().query.studentInterestProfiles.findFirst({
-    where: eq(studentInterestProfiles.classroomStudentId, params.classroomStudentId),
-  });
-
-  if (existing) {
-    const [updated] = await getDb()
-      .update(studentInterestProfiles)
-      .set({
-        profile: params.profile,
-        lastRefreshedAt: new Date(params.profile.lastUpdated),
-        updatedAt: new Date(),
-      })
-      .where(eq(studentInterestProfiles.id, existing.id))
-      .returning();
-    return updated;
-  }
-
-  const [created] = await getDb()
-    .insert(studentInterestProfiles)
-    .values({
-      id: nanoid(),
-      classroomStudentId: params.classroomStudentId,
-      profile: params.profile,
-      visibility: "private_to_student_and_agent",
-      lastRefreshedAt: new Date(params.profile.lastUpdated),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .returning();
-
-  return created;
-}
-
-export async function markStudentOnboardingComplete(classroomStudentId: string) {
-  await getDb()
-    .update(classroomStudents)
-    .set({
-      onboardingStatus: "complete",
-      lastActiveAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(classroomStudents.id, classroomStudentId));
 }
 
 export async function createStudentProgressReport(params: {
@@ -415,7 +279,7 @@ export async function createStudentProgressReport(params: {
   sourceLocale?: string | null;
   report: TeacherProgressReport;
 }) {
-  const [created] = await getDb()
+  const [report] = await getDb()
     .insert(studentProgressReports)
     .values({
       id: nanoid(),
@@ -431,38 +295,7 @@ export async function createStudentProgressReport(params: {
     })
     .returning();
 
-  const [membership, topic] = await Promise.all([
-    getDb().query.classroomStudents.findFirst({
-      where: eq(classroomStudents.id, params.classroomStudentId),
-      with: {
-        classroom: true,
-      },
-    }),
-    getDb().query.learningTopics.findFirst({
-      where: eq(learningTopics.id, params.topicId),
-    }),
-  ]);
-
-  if (membership?.classroom.organizationId && topic) {
-    void indexLearningReportEvidence({
-      organizationId: membership.classroom.organizationId,
-      topicId: params.topicId,
-      classroomId: membership.classroomId,
-      classroomStudentId: params.classroomStudentId,
-      studentUserId: membership.userId ?? null,
-      reportId: created.id,
-      topicTitle: topic.title,
-      subjectKey: topic.subjectKey,
-      gradeBand: membership.classroom.gradeBand,
-      curriculumFrameworkKey: "kmk_de_sek1",
-      masteryPercent: params.masteryPercent,
-      report: params.report,
-      language: params.sourceLocale,
-      sourceUpdatedAt: created.updatedAt,
-    }).catch(() => undefined);
-  }
-
-  return created;
+  return report;
 }
 
 export async function getLatestStudentProgressReport(params: {
@@ -478,167 +311,63 @@ export async function getLatestStudentProgressReport(params: {
   });
 }
 
-export async function listStudentLearningPatternProfiles(params: {
-  organizationId: string;
-  studentUserId: string;
+export async function upsertInterestProfile(params: {
+  classroomStudentId: string;
+  profile: StudentInterestProfile;
 }) {
-  return await getDb().query.studentLearningPatternProfiles.findMany({
-    where: and(
-      eq(studentLearningPatternProfiles.organizationId, params.organizationId),
-      eq(studentLearningPatternProfiles.studentUserId, params.studentUserId),
-    ),
-    orderBy: [asc(studentLearningPatternProfiles.scopeType), asc(studentLearningPatternProfiles.scopeRef)],
-  });
-}
-
-export async function getStudentLearningPatternProfile(params: {
-  organizationId: string;
-  studentUserId: string;
-  scopeType: "global" | "subject";
-  scopeRef: string;
-}) {
-  return await getDb().query.studentLearningPatternProfiles.findFirst({
-    where: and(
-      eq(studentLearningPatternProfiles.organizationId, params.organizationId),
-      eq(studentLearningPatternProfiles.studentUserId, params.studentUserId),
-      eq(studentLearningPatternProfiles.scopeType, params.scopeType),
-      eq(studentLearningPatternProfiles.scopeRef, params.scopeRef),
-    ),
-  });
-}
-
-export async function upsertStudentLearningPatternProfile(params: {
-  organizationId: string;
-  studentUserId: string;
-  scopeType: "global" | "subject";
-  scopeRef: string;
-  subjectKey?: string | null;
-  subjectLabel?: string | null;
-  patternConfidencePercent: number;
-  confidenceByDimension: Record<string, number>;
-  profile: StudentLearningPatternProfile;
-  summaryLocale?: string | null;
-  teacherSummary: string;
-  studentSummary: string;
-  engagementTrend: string;
-  lastAnalyzedSourceType?: string | null;
-  lastAnalyzedSourceId?: string | null;
-  lastMem0SyncAt?: Date | null;
-}) {
-  const existing = await getStudentLearningPatternProfile({
-    organizationId: params.organizationId,
-    studentUserId: params.studentUserId,
-    scopeType: params.scopeType,
-    scopeRef: params.scopeRef,
+  const existing = await getDb().query.studentInterestProfiles.findFirst({
+    where: eq(studentInterestProfiles.classroomStudentId, params.classroomStudentId),
   });
 
   if (existing) {
     const [updated] = await getDb()
-      .update(studentLearningPatternProfiles)
+      .update(studentInterestProfiles)
       .set({
-        subjectKey: params.subjectKey ?? null,
-        subjectLabel: params.subjectLabel ?? null,
-        patternConfidencePercent: params.patternConfidencePercent,
-        confidenceByDimension: params.confidenceByDimension,
         profile: params.profile,
-        summaryLocale: params.summaryLocale ?? "en",
-        teacherSummary: params.teacherSummary,
-        studentSummary: params.studentSummary,
-        engagementTrend: params.engagementTrend,
-        lastAnalyzedSourceType: params.lastAnalyzedSourceType ?? null,
-        lastAnalyzedSourceId: params.lastAnalyzedSourceId ?? null,
-        lastMem0SyncAt: params.lastMem0SyncAt ?? null,
+        lastRefreshedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(studentLearningPatternProfiles.id, existing.id))
+      .where(eq(studentInterestProfiles.id, existing.id))
       .returning();
-
-  void indexLearningPatternEvidence({
-    organizationId: params.organizationId,
-    classroomId: null,
-    studentUserId: params.studentUserId,
-    profileId: updated.id,
-    subjectKey: params.subjectKey ?? null,
-    subjectLabel: params.subjectLabel ?? null,
-    scopeType: params.scopeType,
-    gradeBand: null,
-    summaryLocale: params.summaryLocale ?? "en",
-    teacherSummary: params.teacherSummary,
-    studentSummary: params.studentSummary,
-    profile: params.profile,
-    sourceUpdatedAt: updated.updatedAt,
-  }).catch(() => undefined);
 
     return updated;
   }
 
   const [created] = await getDb()
-    .insert(studentLearningPatternProfiles)
+    .insert(studentInterestProfiles)
     .values({
       id: nanoid(),
-      organizationId: params.organizationId,
-      studentUserId: params.studentUserId,
-      scopeType: params.scopeType,
-      scopeRef: params.scopeRef,
-      subjectKey: params.subjectKey ?? null,
-      subjectLabel: params.subjectLabel ?? null,
-      patternConfidencePercent: params.patternConfidencePercent,
-      confidenceByDimension: params.confidenceByDimension,
+      classroomStudentId: params.classroomStudentId,
       profile: params.profile,
-      summaryLocale: params.summaryLocale ?? "en",
-      teacherSummary: params.teacherSummary,
-      studentSummary: params.studentSummary,
-      engagementTrend: params.engagementTrend,
-      lastAnalyzedSourceType: params.lastAnalyzedSourceType ?? null,
-      lastAnalyzedSourceId: params.lastAnalyzedSourceId ?? null,
-      lastMem0SyncAt: params.lastMem0SyncAt ?? null,
+      visibility: "private_to_student_and_agent",
+      lastRefreshedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
     })
     .returning();
 
-  void indexLearningPatternEvidence({
-    organizationId: params.organizationId,
-    classroomId: null,
-    studentUserId: params.studentUserId,
-    profileId: created.id,
-    subjectKey: params.subjectKey ?? null,
-    subjectLabel: params.subjectLabel ?? null,
-    scopeType: params.scopeType,
-    gradeBand: null,
-    summaryLocale: params.summaryLocale ?? "en",
-    teacherSummary: params.teacherSummary,
-    studentSummary: params.studentSummary,
-    profile: params.profile,
-    sourceUpdatedAt: created.updatedAt,
-  }).catch(() => undefined);
-
   return created;
 }
 
-export async function getLearningPatternAnalysisBySource(params: {
-  sourceType: "onboarding" | "session";
-  sourceId: string;
-}) {
-  return await getDb().query.studentLearningPatternAnalyses.findFirst({
-    where: and(
-      eq(studentLearningPatternAnalyses.sourceType, params.sourceType),
-      eq(studentLearningPatternAnalyses.sourceId, params.sourceId),
-    ),
-  });
+export async function markStudentOnboardingComplete(classroomStudentId: string) {
+  const [updated] = await getDb()
+    .update(classroomStudents)
+    .set({
+      onboardingStatus: "complete",
+      updatedAt: new Date(),
+    })
+    .where(eq(classroomStudents.id, classroomStudentId))
+    .returning();
+
+  return updated;
 }
 
-export async function createLearningPatternAnalysis(params: {
-  organizationId: string;
-  studentUserId: string;
-  classroomStudentId?: string | null;
-  topicId?: string | null;
-  sourceType: "onboarding" | "session";
-  sourceId: string;
+export async function ensureStudentModel(params: {
+  classroomStudentId: string;
+  studentUserId?: string | null;
 }) {
-  const existing = await getLearningPatternAnalysisBySource({
-    sourceType: params.sourceType,
-    sourceId: params.sourceId,
+  const existing = await getDb().query.studentModels.findFirst({
+    where: eq(studentModels.classroomStudentId, params.classroomStudentId),
   });
 
   if (existing) {
@@ -646,19 +375,13 @@ export async function createLearningPatternAnalysis(params: {
   }
 
   const [created] = await getDb()
-    .insert(studentLearningPatternAnalyses)
+    .insert(studentModels)
     .values({
       id: nanoid(),
-      organizationId: params.organizationId,
-      studentUserId: params.studentUserId,
-      classroomStudentId: params.classroomStudentId ?? null,
-      topicId: params.topicId ?? null,
-      sourceType: params.sourceType,
-      sourceId: params.sourceId,
-      status: "queued",
-      retryCount: 0,
-      mem0References: [],
-      profileScopeRefs: [],
+      classroomStudentId: params.classroomStudentId,
+      studentUserId: params.studentUserId ?? null,
+      summary: "",
+      anomalyStatus: "clear",
       createdAt: new Date(),
       updatedAt: new Date(),
     })
@@ -667,238 +390,348 @@ export async function createLearningPatternAnalysis(params: {
   return created;
 }
 
-export async function markLearningPatternAnalysisRunning(analysisId: string) {
-  const [updated] = await getDb()
-    .update(studentLearningPatternAnalyses)
-    .set({
-      status: "running",
-      startedAt: new Date(),
-      updatedAt: new Date(),
-      errorMessage: null,
-    })
-    .where(eq(studentLearningPatternAnalyses.id, analysisId))
-    .returning();
-
-  return updated;
+export async function getStudentModelByClassroomStudentId(classroomStudentId: string) {
+  return await getDb().query.studentModels.findFirst({
+    where: eq(studentModels.classroomStudentId, classroomStudentId),
+  });
 }
 
-export async function completeLearningPatternAnalysis(params: {
-  analysisId: string;
-  mem0References: Array<Record<string, unknown>>;
-  profileScopeRefs: Array<Record<string, string | null>>;
-}) {
-  const [updated] = await getDb()
-    .update(studentLearningPatternAnalyses)
-    .set({
-      status: "completed",
-      completedAt: new Date(),
-      updatedAt: new Date(),
-      mem0References: params.mem0References,
-      profileScopeRefs: params.profileScopeRefs,
-      errorMessage: null,
-    })
-    .where(eq(studentLearningPatternAnalyses.id, params.analysisId))
-    .returning();
-
-  return updated;
+export async function getLatestStudentModelSnapshot(studentModelId: string) {
+  return await getDb().query.studentModelSnapshots.findFirst({
+    where: eq(studentModelSnapshots.studentModelId, studentModelId),
+    orderBy: [desc(studentModelSnapshots.version)],
+  });
 }
 
-export async function failLearningPatternAnalysis(params: {
-  analysisId: string;
-  errorMessage: string;
+export async function createStudentModelSnapshot(params: {
+  studentModelId: string;
+  snapshot: StudentModelSnapshot;
+  sourceType: string;
+  sourceId?: string | null;
 }) {
-  const existing = await getDb().query.studentLearningPatternAnalyses.findFirst({
-    where: eq(studentLearningPatternAnalyses.id, params.analysisId),
+  const latest = await getLatestStudentModelSnapshot(params.studentModelId);
+  const version = (latest?.version ?? 0) + 1;
+  const normalizedSnapshot = studentModelSnapshotSchema.parse({
+    ...params.snapshot,
+    version,
   });
 
-  const [updated] = await getDb()
-    .update(studentLearningPatternAnalyses)
-    .set({
-      status: "failed",
-      retryCount: (existing?.retryCount ?? 0) + 1,
-      errorMessage: params.errorMessage,
+  const [snapshot] = await getDb()
+    .insert(studentModelSnapshots)
+    .values({
+      id: nanoid(),
+      studentModelId: params.studentModelId,
+      version,
+      snapshot: normalizedSnapshot,
+      sourceType: params.sourceType,
+      sourceId: params.sourceId ?? null,
+      createdAt: new Date(),
       updatedAt: new Date(),
     })
-    .where(eq(studentLearningPatternAnalyses.id, params.analysisId))
     .returning();
 
-  return updated;
+  await getDb()
+    .update(studentModels)
+    .set({
+      latestSnapshotId: snapshot.id,
+      summary: normalizedSnapshot.summary,
+      updatedAt: new Date(),
+    })
+    .where(eq(studentModels.id, params.studentModelId));
+
+  return snapshot;
 }
 
-export async function listRecentOutOfSessionInteractions(params: {
-  classroomStudentId: string;
-  topicId: string;
-  since?: Date | null;
+export async function createStudentModelAnalysis(params: {
+  studentModelId: string;
+  topicId?: string | null;
+  sessionId?: string | null;
+  sourceType: string;
+  sourceId: string;
+  status?: string;
+  notes?: Record<string, unknown>;
 }) {
-  const conditions = [
-    eq(learningInteractions.classroomStudentId, params.classroomStudentId),
-    eq(learningInteractions.topicId, params.topicId),
-    isNull(learningInteractions.sessionId),
-    or(
-      eq(learningInteractions.interactionType, "out_of_session_question"),
-      eq(learningInteractions.interactionType, "agent_answer"),
-    ),
-  ];
+  const [analysis] = await getDb()
+    .insert(studentModelAnalyses)
+    .values({
+      id: nanoid(),
+      studentModelId: params.studentModelId,
+      topicId: params.topicId ?? null,
+      sessionId: params.sessionId ?? null,
+      sourceType: params.sourceType,
+      sourceId: params.sourceId,
+      status: params.status ?? "completed",
+      notes: params.notes ?? {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .returning();
 
-  if (params.since) {
-    conditions.push(gt(learningInteractions.createdAt, params.since));
+  return analysis;
+}
+
+export async function listStudentModelSummaries(params: {
+  studentUserId: string;
+}) {
+  const models = await getDb().query.studentModels.findMany({
+    where: eq(studentModels.studentUserId, params.studentUserId),
+    with: {
+      classroomStudent: {
+        with: {
+          classroom: true,
+        },
+      },
+      snapshots: {
+        orderBy: [desc(studentModelSnapshots.version)],
+        limit: 1,
+      },
+    },
+  });
+
+  return models.map((model) => ({
+    ...model,
+    latestSnapshot: model.snapshots[0] ?? null,
+  }));
+}
+
+export async function ensureTopicFramework(params: {
+  topicId: string;
+  classroomId?: string | null;
+}) {
+  const existing = await getDb().query.expertFrameworks.findFirst({
+    where: eq(expertFrameworks.topicId, params.topicId),
+  });
+
+  if (existing) {
+    return existing;
   }
 
-  return await getDb().query.learningInteractions.findMany({
-    where: and(...conditions),
-    orderBy: [asc(learningInteractions.createdAt)],
+  const [framework] = await getDb()
+    .insert(expertFrameworks)
+    .values({
+      id: nanoid(),
+      topicId: params.topicId,
+      classroomId: params.classroomId ?? null,
+      name: "DEEP",
+      description:
+        "Default seeded framework. Experts can edit, replace, or delete it.",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .returning();
+
+  const defaultFramework = createDefaultDeepFramework();
+  const [version] = await getDb()
+    .insert(expertFrameworkVersions)
+    .values({
+      id: nanoid(),
+      frameworkId: framework.id,
+      version: 1,
+      status: "published",
+      seedSource: "deep_default",
+      framework: defaultFramework,
+      publishedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .returning();
+
+  await getDb()
+    .update(expertFrameworks)
+    .set({
+      activeVersionId: version.id,
+      updatedAt: new Date(),
+    })
+    .where(eq(expertFrameworks.id, framework.id));
+
+  return {
+    ...framework,
+    activeVersionId: version.id,
+  };
+}
+
+export async function getActiveFrameworkVersion(topicId: string) {
+  const framework = await ensureTopicFramework({ topicId });
+  return await getDb().query.expertFrameworkVersions.findFirst({
+    where: and(
+      eq(expertFrameworkVersions.frameworkId, framework.id),
+      eq(expertFrameworkVersions.id, framework.activeVersionId ?? ""),
+    ),
   });
 }
 
-export async function listExpertReviewQueue(params: {
-  organizationId: string;
-  limit?: number;
+export async function listApprovedCrystallizations(params: { topicId: string }) {
+  return await getDb().query.expertCrystallizations.findMany({
+    where: and(
+      eq(expertCrystallizations.topicId, params.topicId),
+      eq(expertCrystallizations.status, "approved"),
+    ),
+    orderBy: [asc(expertCrystallizations.createdAt)],
+  });
+}
+
+export async function listOpenConflicts(params: { topicId: string }) {
+  return await getDb().query.expertConflicts.findMany({
+    where: and(
+      eq(expertConflicts.topicId, params.topicId),
+      eq(expertConflicts.status, "open"),
+    ),
+    orderBy: [desc(expertConflicts.createdAt)],
+  });
+}
+
+export async function createRuntimeModel(params: {
+  topicId: string;
+  frameworkId: string;
+  frameworkVersionId: string;
+  runtimeModel: ExpertTutorRuntimeModel;
+  conflictIds?: string[];
+  status?: "draft" | "published" | "archived";
 }) {
-  const reports = await getDb().query.studentProgressReports.findMany({
-    where: eq(studentProgressReports.visibility, "teacher_only"),
+  const latest = await getDb().query.expertRuntimeModels.findFirst({
+    where: eq(expertRuntimeModels.topicId, params.topicId),
+    orderBy: [desc(expertRuntimeModels.version)],
+  });
+
+  const nextVersion = (latest?.version ?? 0) + 1;
+  const [created] = await getDb()
+    .insert(expertRuntimeModels)
+    .values({
+      id: nanoid(),
+      topicId: params.topicId,
+      frameworkId: params.frameworkId,
+      frameworkVersionId: params.frameworkVersionId,
+      version: nextVersion,
+      status: params.status ?? "published",
+      runtimeModel: expertTutorRuntimeModelSchema.parse({
+        ...params.runtimeModel,
+        version: nextVersion,
+      }),
+      conflictIds: params.conflictIds ?? [],
+      publishedAt: params.status === "draft" ? null : new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .returning();
+
+  return created;
+}
+
+export async function getPublishedRuntimeModel(topicId: string) {
+  return await getDb().query.expertRuntimeModels.findFirst({
+    where: and(
+      eq(expertRuntimeModels.topicId, topicId),
+      eq(expertRuntimeModels.status, "published"),
+    ),
+    orderBy: [desc(expertRuntimeModels.version)],
+  });
+}
+
+export async function listExpertReviewCases(params: {
+  teacherUserId: string;
+  topicId?: string | null;
+  sessionId?: string | null;
+}) {
+  const reviewCases = await getDb().query.expertReviewCases.findMany({
+    where: and(
+      params.topicId ? eq(expertReviewCases.topicId, params.topicId) : undefined,
+      params.sessionId ? eq(expertReviewCases.sessionId, params.sessionId) : undefined,
+    ),
     with: {
-      classroomStudent: true,
       topic: {
         with: {
           classroom: true,
         },
       },
+      classroomStudent: {
+        with: {
+          classroom: true,
+        },
+      },
+      session: {
+        with: {
+          topic: {
+            with: {
+              classroom: true,
+            },
+          },
+        },
+      },
     },
-    orderBy: [desc(studentProgressReports.updatedAt)],
-    limit: params.limit ?? 24,
+    orderBy: [desc(expertReviewCases.updatedAt)],
   });
 
-  const reportIds = reports.map((report) => report.id);
-  const sessionIds = reports
-    .map((report) => report.generatedFromSessionId)
-    .filter((value): value is string => Boolean(value));
-  const topicIds = reports
-    .map((report) => report.topicId)
-    .filter((value): value is string => Boolean(value));
-  const reviewedAnnotations =
-    reportIds.length === 0
-      ? []
-      : await getDb().query.learningExpertAnnotations.findMany({
-          where: and(
-            eq(learningExpertAnnotations.organizationId, params.organizationId),
-            inArray(learningExpertAnnotations.status, ["reviewed", "published"]),
-            sessionIds.length > 0 && topicIds.length > 0
-              ? or(
-                  inArray(learningExpertAnnotations.sessionId, sessionIds),
-                  inArray(learningExpertAnnotations.topicId, topicIds),
-                )
-              : sessionIds.length > 0
-                ? inArray(learningExpertAnnotations.sessionId, sessionIds)
-                : topicIds.length > 0
-                  ? inArray(learningExpertAnnotations.topicId, topicIds)
-                  : undefined,
-          ),
-        });
-  const reviewedQueueKeys = new Set(
-    reviewedAnnotations.flatMap((annotation) => {
-      const reviewQueueKey =
-        typeof annotation.metadata?.reviewQueueKey === "string"
-          ? annotation.metadata.reviewQueueKey
-          : null;
-      if (reviewQueueKey && reportIds.includes(reviewQueueKey)) {
-        return [reviewQueueKey];
-      }
-
-      const matchedReport = reports.find(
-        (report) =>
-          (annotation.sessionId && report.generatedFromSessionId === annotation.sessionId) ||
-          (annotation.topicId && report.topicId === annotation.topicId &&
-            annotation.classroomStudentId === report.classroomStudentId),
-      );
-      return matchedReport ? [matchedReport.id] : [];
-    }),
-  );
-
-  return reports
-    .filter(
-      (report) =>
-        report.topic?.classroom?.organizationId === params.organizationId &&
-        !reviewedQueueKeys.has(report.id),
-    )
-    .map((report) => {
-      const reasons = [
-        ...(report.report.persistentMisconceptions ?? []),
-        ...(report.report.riskFlags ?? []),
-        ...(report.report.transferReadiness === "not_yet"
-          ? ["Transfer readiness is still low."]
-          : []),
-        ...(report.report.originalityWithinConstraint === "low"
-          ? ["Originality within constraint is still weak."]
-          : []),
-      ];
-      return {
-        key: report.id,
-        sessionId: report.generatedFromSessionId ?? null,
-        topicId: report.topicId,
-        classroomStudentId: report.classroomStudentId,
-        studentName: report.classroomStudent?.fullName ?? null,
-        topicTitle: report.topic?.title ?? null,
-        subjectKey: report.topic?.subjectKey ?? null,
-        subjectLabel: report.topic?.subjectLabel ?? null,
-        priority:
-          (report.report.riskFlags?.length ?? 0) > 0 ||
-          report.report.transferReadiness === "not_yet"
-            ? "high"
-            : (report.report.persistentMisconceptions?.length ?? 0) > 0
-              ? "medium"
-              : "low",
-        reasons: reasons.slice(0, 4),
-        createdAt: report.updatedAt.toISOString(),
-      };
-    });
-}
-
-export async function listLearningExpertAnnotations(params: {
-  organizationId: string;
-  topicId?: string | null;
-  sessionId?: string | null;
-}) {
-  return await getDb().query.learningExpertAnnotations.findMany({
-    where:
-      params.sessionId != null
-        ? and(
-            eq(learningExpertAnnotations.organizationId, params.organizationId),
-            eq(learningExpertAnnotations.sessionId, params.sessionId),
-          )
-        : params.topicId != null
-          ? and(
-              eq(learningExpertAnnotations.organizationId, params.organizationId),
-              eq(learningExpertAnnotations.topicId, params.topicId),
-            )
-          : eq(learningExpertAnnotations.organizationId, params.organizationId),
-    orderBy: [desc(learningExpertAnnotations.updatedAt)],
+  return reviewCases.filter((reviewCase) => {
+    const ownerId =
+      reviewCase.topic?.classroom.teacherUserId ??
+      reviewCase.classroomStudent?.classroom.teacherUserId ??
+      reviewCase.session?.topic.classroom.teacherUserId ??
+      null;
+    return ownerId === params.teacherUserId;
   });
 }
 
-export async function createLearningExpertAnnotation(params: {
-  annotation: ExpertAnnotation;
+export async function createExpertReviewCase(params: {
+  reviewCase: typeof expertReviewCases.$inferInsert;
 }) {
   const [created] = await getDb()
-    .insert(learningExpertAnnotations)
-    .values({
-      id: params.annotation.id,
-      organizationId: params.annotation.organizationId,
-      topicId: params.annotation.topicId,
-      classroomStudentId: params.annotation.classroomStudentId,
-      sessionId: params.annotation.sessionId,
-      interactionId: params.annotation.interactionId,
-      subjectKey: params.annotation.subjectKey,
-      curriculumFrameworkKey: params.annotation.curriculumFrameworkKey,
-      annotationType: params.annotation.annotationType,
-      status: params.annotation.status,
-      summary: params.annotation.summary,
-      evidence: params.annotation.evidence,
-      metadata: params.annotation.metadata,
-      createdByUserId: params.annotation.createdByUserId,
-      createdAt: new Date(params.annotation.createdAt),
-      updatedAt: new Date(params.annotation.updatedAt),
-    })
+    .insert(expertReviewCases)
+    .values(params.reviewCase)
     .returning();
 
   return created;
+}
+
+export async function listExpertReviewQueue(params: { teacherUserId: string }) {
+  const reviewCases = await getDb().query.expertReviewCases.findMany({
+    where: and(
+      eq(expertReviewCases.status, "open"),
+    ),
+    with: {
+      classroomStudent: {
+        with: {
+          classroom: true,
+        },
+      },
+      topic: {
+        with: {
+          classroom: true,
+        },
+      },
+      session: {
+        with: {
+          topic: {
+            with: {
+              classroom: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: [desc(expertReviewCases.createdAt)],
+  });
+
+  return reviewCases
+    .filter((reviewCase) => {
+      const ownerId =
+        reviewCase.topic?.classroom.teacherUserId ??
+        reviewCase.classroomStudent?.classroom.teacherUserId ??
+        reviewCase.session?.topic.classroom.teacherUserId ??
+        null;
+      return ownerId === params.teacherUserId;
+    })
+    .map((reviewCase) => ({
+    key: reviewCase.id,
+    sessionId: reviewCase.sessionId,
+    topicId: reviewCase.topicId,
+    classroomStudentId: reviewCase.classroomStudentId,
+    studentName: reviewCase.classroomStudent?.fullName ?? null,
+    topicTitle: reviewCase.topic?.title ?? null,
+    priority: reviewCase.priority as "low" | "medium" | "high",
+    reasons: [
+      reviewCase.reviewType,
+      reviewCase.tutorFailureSummary,
+    ].filter(Boolean),
+    createdAt: reviewCase.createdAt.toISOString(),
+    }));
 }

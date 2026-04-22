@@ -7,30 +7,22 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import {
   applyResearchBriefPatch,
   buildConductingProfileFromProposal,
-  compilePlaybookAuthorInput,
-  normalizePersonalityOverlay,
   normalizeResearchBriefPatch,
-} from "@/lib/education/playbook-workflow";
-import { personalityPresetIdSchema, playbookAuthorInputSchema } from "@/lib/education/playbooks";
+} from "@/lib/education/refinement";
 import { validateBrief } from "@/lib/education/creation-workflow";
 import { sampleRequestedChangeSchema } from "@/lib/education/sample-feedback";
 import {
-  approvePlaybookVersion,
-  createPlaybook,
   createResearchBriefPatchRecord,
   getActiveConductingProfile,
   getActiveCoveragePlan,
-  getActivePersonalityAssignment,
   getRefinementProposal,
   getResearchBrief,
   replaceConductingProfile,
   replaceCoveragePlan,
-  replacePersonalityAssignment,
   updateRefinementProposalStatus,
   upsertResearchBrief,
 } from "@/lib/education/storage";
 import {
-  isWorkspaceOwner,
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/workspace-access";
@@ -39,11 +31,6 @@ import { z } from "zod";
 const conductingProfilePayloadSchema = z.object({
   changes: z.array(sampleRequestedChangeSchema).optional(),
   summary: z.string().optional(),
-});
-
-const personalityOverlayPayloadSchema = z.object({
-  presetId: z.string().optional(),
-  overlay: z.record(z.string(), z.unknown()).optional(),
 });
 
 export async function POST(
@@ -146,74 +133,6 @@ export async function POST(
           proposalId,
           patch,
           createdBy: session.user.id,
-        });
-        break;
-      }
-      case "personality_overlay": {
-        const payload = personalityOverlayPayloadSchema.parse(proposal.payload);
-        const presetId = personalityPresetIdSchema.parse(payload.presetId || "balanced_researcher");
-        const overlay = normalizePersonalityOverlay(payload.overlay ?? {});
-        const currentSample = await getActivePersonalityAssignment(surveyId, "sample");
-        await replacePersonalityAssignment({
-          surveyId,
-          mode: "sample",
-          assignment: {
-            version: (currentSample?.assignment.version ?? 0) + 1,
-            mode: "sample",
-            presetId,
-            overlay,
-            createdAt: new Date().toISOString(),
-          },
-        });
-
-        if (body.applyToLive) {
-          const currentLive = await getActivePersonalityAssignment(surveyId, "live");
-          await replacePersonalityAssignment({
-            surveyId,
-            mode: "live",
-            assignment: {
-              version: (currentLive?.assignment.version ?? 0) + 1,
-              mode: "live",
-              presetId,
-              overlay,
-              createdAt: new Date().toISOString(),
-            },
-          });
-        }
-        break;
-      }
-      case "playbook_draft": {
-        const parsed = playbookAuthorInputSchema.safeParse(proposal.payload);
-        if (!parsed.success) {
-          return NextResponse.json({ error: "Invalid playbook draft payload." }, { status: 400 });
-        }
-        if (parsed.data.scope === "workspace") {
-          if (!survey.organizationId) {
-            return NextResponse.json({ error: "Workspace playbooks require a workspace survey." }, { status: 400 });
-          }
-          const workspaceOwner = await isWorkspaceOwner(session.user.id, survey.organizationId);
-          if (!workspaceOwner) {
-            return NextResponse.json({ error: "Only workspace owners can approve workspace playbooks." }, { status: 403 });
-          }
-        }
-        const compiled = await compilePlaybookAuthorInput(parsed.data);
-        const created = await createPlaybook({
-          surveyId,
-          organizationId: survey.organizationId,
-          createdBy: session.user.id,
-          scope: parsed.data.scope,
-          phase: parsed.data.phase,
-          name: parsed.data.name,
-          input: parsed.data,
-          interpretation: compiled.interpretation,
-          preview: compiled.preview,
-          status: "approved",
-          attachToSurveyId: parsed.data.scope === "workspace" ? surveyId : null,
-        });
-        await approvePlaybookVersion({
-          playbookId: created.playbook.id,
-          versionId: created.version.id,
-          approvedBy: session.user.id,
         });
         break;
       }

@@ -25,7 +25,6 @@ import {
   acquireSurveyLease,
   getActiveSurveyLease,
   getCurrentSurveyRevision,
-  recordRealtimeEvent,
 } from "@/lib/collaboration-service";
 import {
   buildConductingSystemPromptParts,
@@ -295,7 +294,6 @@ export async function POST(
       getActiveConductingProfile(surveyId, "sample"),
       getConductingRuntimeLayers({
         surveyId,
-        organizationId: survey.organizationId,
         classroomId: survey.classroomId,
         programId: survey.programId,
         language: getSurveyLanguage(survey.language),
@@ -364,8 +362,6 @@ export async function POST(
       sessionState: sessionRow.sessionState,
       sessionType: "sample",
       conductingProfile: activeSampleProfile?.profile ?? null,
-      playbookContext: runtimeLayers.playbookContext,
-      personalityContext: runtimeLayers.personalityContext,
       expertGuidanceContext: runtimeLayers.expertGuidanceContext,
       toolContext: {
         canFinishSurvey: true,
@@ -534,30 +530,13 @@ Respond to the user in the language they are speaking to you in. Match the langu
           toPersistedUIChatMessages(messages, ["user", "assistant"]),
         );
 
-        await getDb().transaction(async (tx) => {
-          await tx
-            .update(sampleConversations)
-            .set({
-              messages: persistedMessages,
-              updatedAt: new Date(),
-            })
-            .where(eq(sampleConversations.id, sampleConversation.id));
-
-          await recordRealtimeEvent(tx, {
-            scope: "survey",
-            surveyId,
-            workspaceId: permission.workspaceId,
-            eventType: "survey.rehearsal_turn_added",
-            actorId: session.user.id,
-            payload: {
-              surveyId,
-              conversationNumber,
-              sampleConversationId: sampleConversation.id,
-              lease: leaseResult.lease,
-              messages: persistedMessages.slice(-2),
-            },
-          });
-        });
+        await getDb()
+          .update(sampleConversations)
+          .set({
+            messages: persistedMessages,
+            updatedAt: new Date(),
+          })
+          .where(eq(sampleConversations.id, sampleConversation.id));
 
         if (persistedMessages.some((message) => message.role === "user")) {
           if (!completedByTool) {

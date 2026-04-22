@@ -11,7 +11,6 @@ import { relations } from "drizzle-orm";
 import { timestamps } from "./common";
 import { users } from "./auth";
 import { surveys } from "./surveys";
-import { organizations } from "./organization";
 
 export const surveyCreationComments = pgTable(
   "survey_creation_comments",
@@ -180,9 +179,7 @@ export const surveyRevisions = pgTable("survey_revisions", {
 });
 
 export const workspaceRevisions = pgTable("workspace_revisions", {
-  workspaceId: text("workspace_id")
-    .primaryKey()
-    .references(() => organizations.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").primaryKey(),
   revision: integer("revision").default(0).notNull(),
   updatedAt: timestamp("updated_at", {
     withTimezone: true,
@@ -197,9 +194,7 @@ export const collaborationEvents = pgTable(
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    workspaceId: text("workspace_id").references(() => organizations.id, {
-      onDelete: "cascade",
-    }),
+    workspaceId: text("workspace_id"),
     surveyId: text("survey_id").references(() => surveys.id, {
       onDelete: "cascade",
     }),
@@ -226,9 +221,7 @@ export const workspaceOutbox = pgTable(
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    workspaceId: text("workspace_id").references(() => organizations.id, {
-      onDelete: "cascade",
-    }),
+    workspaceId: text("workspace_id"),
     surveyId: text("survey_id").references(() => surveys.id, {
       onDelete: "cascade",
     }),
@@ -341,21 +334,12 @@ export const surveyRevisionsRelations = relations(
 
 export const workspaceRevisionsRelations = relations(
   workspaceRevisions,
-  ({ one }) => ({
-    workspace: one(organizations, {
-      fields: [workspaceRevisions.workspaceId],
-      references: [organizations.id],
-    }),
-  }),
+  () => ({}),
 );
 
 export const collaborationEventsRelations = relations(
   collaborationEvents,
   ({ one }) => ({
-    workspace: one(organizations, {
-      fields: [collaborationEvents.workspaceId],
-      references: [organizations.id],
-    }),
     survey: one(surveys, {
       fields: [collaborationEvents.surveyId],
       references: [surveys.id],
@@ -368,10 +352,6 @@ export const collaborationEventsRelations = relations(
 );
 
 export const workspaceOutboxRelations = relations(workspaceOutbox, ({ one }) => ({
-  workspace: one(organizations, {
-    fields: [workspaceOutbox.workspaceId],
-    references: [organizations.id],
-  }),
   survey: one(surveys, {
     fields: [workspaceOutbox.surveyId],
     references: [surveys.id],

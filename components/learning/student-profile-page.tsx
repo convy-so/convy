@@ -264,7 +264,7 @@ export function StudentProfilePage() {
                         </div>
                       </div>
                       <div className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
-                        {Math.round(pattern.patternConfidence * 100)}%
+                        {Math.round((pattern.patternConfidence ?? 0) * 100)}%
                       </div>
                     </div>
                     <p className="mt-3 text-sm leading-6 text-slate-600">

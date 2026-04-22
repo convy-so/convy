@@ -1,14 +1,4 @@
 import { z } from "zod";
-import { learningTeachingPlaybookSchema } from "@/lib/learning/pattern-types";
-import {
-  assessmentQuestionTypeSchema,
-  assessmentReasoningSkillSchema,
-  curriculumFrameworkKeySchema,
-  originalityModeSchema,
-  reasoningGoalSchema,
-  subjectCompetencySchema,
-  transferExpectationSchema,
-} from "@/lib/learning/subject-packages";
 
 export const gradeBandSchema = z.enum([
   "nursery",
@@ -65,13 +55,8 @@ export const learningOutcomeDefinitionSchema = z.object({
   title: z.string().min(1),
   description: z.string().min(1),
   evidenceSignals: z.array(z.string()).default([]),
-  masteryThreshold: z.number().min(0).max(100).default(70),
-  competencyTargets: z.array(subjectCompetencySchema).default([]),
-  reasoningGoals: z.array(reasoningGoalSchema).default([]),
   misconceptionTags: z.array(z.string()).default([]),
-  questionModes: z.array(assessmentQuestionTypeSchema).default([]),
-  transferExpectation: transferExpectationSchema.default("near"),
-  curriculumFrameworkKey: curriculumFrameworkKeySchema.default("kmk_de_sek1"),
+  masteryThreshold: z.number().min(0).max(100).default(70),
 });
 
 export type LearningOutcomeDefinition = z.infer<
@@ -81,34 +66,23 @@ export type LearningOutcomeDefinition = z.infer<
 export const topicSourceBoundarySchema = z.object({
   teacherSummary: z.string().default(""),
   allowedMaterialIds: z.array(z.string()).default([]),
-  groundingMode: z
-    .enum(["teacher_material_only", "teacher_material_plus_web_opening"])
-    .default("teacher_material_only"),
-  webOpeningEnabled: z.boolean().default(false),
+  rigorNotes: z.array(z.string()).default([]),
+  notationNotes: z.array(z.string()).default([]),
+  scopeNotes: z.array(z.string()).default([]),
   hallucinationPolicy: z
     .string()
     .default(
-      "Use source material for factual claims. Use model intelligence only to explain, quiz, and adapt language.",
+      "Stay inside the uploaded course material for concepts, notation, rigor, and problem scope. Use model intelligence only for pedagogy and framing.",
     ),
 });
 
 export type TopicSourceBoundary = z.infer<typeof topicSourceBoundarySchema>;
 
-export const gradeLanguagePolicySchema = z.object({
-  gradeBand: gradeBandSchema,
-  preferredSentenceLength: z.enum(["short", "medium", "mixed"]),
-  explanationStyle: z.array(z.string()).default([]),
-  avoidPatterns: z.array(z.string()).default([]),
-  quizStyle: z.array(z.string()).default([]),
-  encouragementStyle: z.array(z.string()).default([]),
-});
-
-export type GradeLanguagePolicy = z.infer<typeof gradeLanguagePolicySchema>;
-
 export const sessionOpeningStrategySchema = z.enum([
-  "web_event",
-  "web_application",
-  "crafted_story",
+  "world_connection",
+  "story",
+  "provocation",
+  "question",
 ]);
 
 export type SessionOpeningStrategy = z.infer<
@@ -116,42 +90,31 @@ export type SessionOpeningStrategy = z.infer<
 >;
 
 export const sessionOpeningPlanSchema = z.object({
-  strategy: sessionOpeningStrategySchema,
-  maxSentences: z.number().int().positive().max(4).default(4),
-  personalizationFrame: z.string(),
-  bridgeConcept: z.string(),
-  invitationGoal: z.string(),
-  suggestedSearchQueries: z.array(z.string()).default([]),
-  rationale: z.string(),
+  strategy: sessionOpeningStrategySchema.default("world_connection"),
+  personalizationFrame: z.string().default(""),
+  bridgeConcept: z.string().default(""),
+  invitationGoal: z.string().default(""),
+  rationale: z.string().default(""),
 });
 
 export type SessionOpeningPlan = z.infer<typeof sessionOpeningPlanSchema>;
 
-export const sessionPhaseTypeSchema = z.enum([
-  "continuity_check",
-  "opening_hook",
-  "opening_probe",
-  "connecting_question",
-  "attempt_first",
-  "concept_teaching",
-  "assessment",
-  "quiz",
-  "original_production",
-  "metacognitive_reflection",
-  "self_reflection",
-  "session_close",
+export const learningInteractionTypeSchema = z.enum([
+  "onboarding_turn",
+  "student_message",
+  "tutor_message",
+  "framework_transition",
+  "student_model_signal",
+  "out_of_session_question",
+  "agent_answer",
+  "session_event",
+  "expert_review",
+  "report_event",
 ]);
 
-export type SessionPhaseType = z.infer<typeof sessionPhaseTypeSchema>;
-
-export const sessionPhaseStatusSchema = z.enum([
-  "pending",
-  "in_progress",
-  "completed",
-  "skipped",
-]);
-
-export type SessionPhaseStatus = z.infer<typeof sessionPhaseStatusSchema>;
+export type LearningInteractionType = z.infer<
+  typeof learningInteractionTypeSchema
+>;
 
 export const questionIntentSchema = z.enum([
   "phase_response",
@@ -161,24 +124,6 @@ export const questionIntentSchema = z.enum([
 ]);
 
 export type QuestionIntent = z.infer<typeof questionIntentSchema>;
-
-export const conceptConfidenceSchema = z.enum(["low", "medium", "high"]);
-
-export type ConceptConfidence = z.infer<typeof conceptConfidenceSchema>;
-
-export const quizDifficultySchema = z.enum(["easy", "medium", "hard"]);
-
-export type QuizDifficulty = z.infer<typeof quizDifficultySchema>;
-
-export const homeworkStatusSchema = z.enum([
-  "not_applicable",
-  "completed_understood",
-  "completed_confused",
-  "attempted_partial",
-  "not_done",
-]);
-
-export type HomeworkStatus = z.infer<typeof homeworkStatusSchema>;
 
 export const sessionComparisonTrendSchema = z.enum([
   "improved",
@@ -191,293 +136,184 @@ export type SessionComparisonTrend = z.infer<
   typeof sessionComparisonTrendSchema
 >;
 
-export const learningInteractionTypeSchema = z.enum([
-  "phase_prompt",
-  "student_response",
-  "student_question",
-  "agent_answer",
-  "assessment_question",
-  "assessment_answer",
-  "quiz_question",
-  "quiz_answer",
-  "reflection",
-  "homework_check",
-  "session_event",
-  "out_of_session_question",
+export const studentMasteryLevelSchema = z.enum([
+  "surface",
+  "applied",
+  "generative",
 ]);
 
-export type LearningInteractionType = z.infer<
-  typeof learningInteractionTypeSchema
->;
+export type StudentMasteryLevel = z.infer<typeof studentMasteryLevelSchema>;
 
-export const sessionConceptSchema = z.object({
-  key: z.string(),
-  title: z.string(),
-  outcomeIds: z.array(z.string()).default([]),
+export const expertFrameworkStageSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  objective: z.string().min(1),
+  exitCriteria: z.array(z.string()).default([]),
+  guidance: z.array(z.string()).default([]),
+  allowedNextStageIds: z.array(z.string()).default([]),
 });
 
-export type SessionConcept = z.infer<typeof sessionConceptSchema>;
+export type ExpertFrameworkStage = z.infer<typeof expertFrameworkStageSchema>;
 
-export const conceptTeachingStateSchema = z.object({
-  conceptKey: z.string(),
-  conceptTitle: z.string(),
-  attemptPrompt: z.string().default(""),
-  attemptEvaluated: z.boolean().default(false),
-  explanationAttempts: z.number().int().min(0).default(0),
-  comprehensionPassed: z.boolean().default(false),
-  deepeningDone: z.boolean().default(false),
-  studentExplanationGiven: z.boolean().default(false),
-  currentStep: z
-    .enum([
-      "attempt",
-      "intro",
-      "awaiting_comprehension",
-      "awaiting_deepening",
-      "bridge",
-    ])
-    .default("intro"),
-  masteryScore: z.number().min(0).max(100).nullable().default(null),
-  confidence: conceptConfidenceSchema.nullable().default(null),
-  gaps: z.array(z.string()).default([]),
-  notes: z.array(z.string()).default([]),
-  lastAnalogy: z.string().default(""),
-  realWorldAnchor: z.string().default(""),
-  reasoningScore: z.number().min(0).max(100).nullable().default(null),
-  transferScore: z.number().min(0).max(100).nullable().default(null),
-  originalityScore: z.number().min(0).max(100).nullable().default(null),
-});
-
-export type ConceptTeachingState = z.infer<typeof conceptTeachingStateSchema>;
-
-export const learningSessionPhaseSchema = z.object({
-  id: z.number().int().positive(),
-  type: sessionPhaseTypeSchema,
-  status: sessionPhaseStatusSchema.default("pending"),
-  conceptKey: z.string().nullable().default(null),
-  attempts: z.number().int().min(0).default(0),
-  startedAt: z.string().nullable().default(null),
-  completedAt: z.string().nullable().default(null),
-  notes: z.array(z.string()).default([]),
-});
-
-export type LearningSessionPhase = z.infer<typeof learningSessionPhaseSchema>;
-
-export const assessmentRubricScoreSchema = z.object({
-  dimension: z.string(),
-  score: z.number().min(0).max(100),
-  note: z.string().default(""),
-});
-
-export type AssessmentRubricScore = z.infer<
-  typeof assessmentRubricScoreSchema
->;
-
-export const learningAssessmentItemSchema = z.object({
-  id: z.string(),
-  conceptKey: z.string(),
-  prompt: z.string(),
-  questionType: assessmentQuestionTypeSchema.default("self_explanation"),
-  primaryCompetency: subjectCompetencySchema.default("conceptual_understanding"),
-  reasoningSkill: assessmentReasoningSkillSchema.default("mental_model"),
-  transferLevel: transferExpectationSchema.default("near"),
-  originalityMode: originalityModeSchema.default("constrained_originality"),
-  acceptedStrategies: z.array(z.string()).default([]),
-  rubric: z.array(assessmentRubricScoreSchema).default([]),
-  hintLadder: z.array(z.string()).default([]),
-  diagnosticTags: z.array(z.string()).default([]),
-  evidenceRequirements: z.array(z.string()).default([]),
-  expectedAnswer: z.string().default(""),
-  explanation: z.string().default(""),
-  difficulty: quizDifficultySchema,
-  studentAnswer: z.string().nullable().default(null),
-  correct: z.boolean().nullable().default(null),
-  score: z.number().min(0).max(100).nullable().default(null),
-  reasoningScore: z.number().min(0).max(100).nullable().default(null),
-  transferScore: z.number().min(0).max(100).nullable().default(null),
-  originalityScore: z.number().min(0).max(100).nullable().default(null),
-  helpUsed: z.number().int().min(0).default(0),
-});
-
-export type LearningAssessmentItem = z.infer<typeof learningAssessmentItemSchema>;
-
-export const learningQuizItemSchema = learningAssessmentItemSchema;
-
-export type LearningQuizItem = LearningAssessmentItem;
-
-export const reasoningPatternSignalSchema = z.object({
-  key: z.string(),
-  label: z.string(),
-  evidenceCount: z.number().int().min(1).default(1),
-  lastSeenAt: z.string(),
-  studentFacingSummary: z.string().default(""),
-  teacherSummary: z.string().default(""),
-});
-
-export type ReasoningPatternSignal = z.infer<typeof reasoningPatternSignalSchema>;
-
-export const metacognitiveMirrorStateSchema = z.object({
-  currentStep: z
-    .enum([
-      "awaiting_pattern_reflection",
-      "awaiting_strategy_commitment",
-      "awaiting_confidence",
-      "awaiting_click_moment",
-      "complete",
-    ])
-    .default("awaiting_pattern_reflection"),
-  highlightedPatternKey: z.string().nullable().default(null),
-  patternReflection: z.string().nullable().default(null),
-  nextStrategyCommitment: z.string().nullable().default(null),
-});
-
-export type MetacognitiveMirrorState = z.infer<
-  typeof metacognitiveMirrorStateSchema
->;
-
-export const learningReflectionStateSchema = z.object({
-  confidenceScore: z.number().int().min(1).max(10).nullable().default(null),
-  momentOfUnderstanding: z.string().nullable().default(null),
-  currentStep: z
-    .enum(["awaiting_confidence", "awaiting_click_moment", "complete"])
-    .default("awaiting_confidence"),
-});
-
-export type LearningReflectionState = z.infer<
-  typeof learningReflectionStateSchema
->;
-
-export const deepFrameworkStageKeySchema = z.enum([
-  "diagnose",
-  "expose",
-  "extend",
-  "probe",
-  "produce",
-]);
-
-export type DeepFrameworkStageKey = z.infer<
-  typeof deepFrameworkStageKeySchema
->;
-
-export const deepStageStateSchema = z.object({
-  currentStage: deepFrameworkStageKeySchema.default("diagnose"),
-  diagnosedAt: z.string().nullable().default(null),
-  exposedAt: z.string().nullable().default(null),
-  extendedAt: z.string().nullable().default(null),
-  probedAt: z.string().nullable().default(null),
-  producedAt: z.string().nullable().default(null),
-  socraticTurnCount: z.number().int().min(0).default(0),
-});
-
-export type DeepStageState = z.infer<typeof deepStageStateSchema>;
-
-export const modelFingerprintSchema = z.object({
-  knowledgeState: z.enum(["inert", "mixed", "living"]).default("mixed"),
-  summary: z.string().default(""),
-  strengths: z.array(z.string()).default([]),
-  misconceptions: z.array(z.string()).default([]),
-  productiveAssets: z.array(z.string()).default([]),
-});
-
-export type ModelFingerprint = z.infer<typeof modelFingerprintSchema>;
-
-export const productiveGapSchema = z.object({
-  conceptKey: z.string().nullable().default(null),
+export const expertFrameworkSchema = z.object({
+  name: z.string().min(1),
   description: z.string().default(""),
-  whyItMatters: z.string().default(""),
-  dissonanceQuestion: z.string().default(""),
+  startStageId: z.string().min(1),
+  stages: z.array(expertFrameworkStageSchema).min(1),
 });
 
-export type ProductiveGap = z.infer<typeof productiveGapSchema>;
+export type ExpertFramework = z.infer<typeof expertFrameworkSchema>;
 
-export const transferCheckSchema = z.object({
-  prompt: z.string(),
-  questionType: assessmentQuestionTypeSchema.default("transfer_challenge"),
-  result: z.enum(["unknown", "weak", "partial", "strong"]).default("unknown"),
-  score: z.number().min(0).max(100).nullable().default(null),
+export const expertHeuristicSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  trigger: z.string().min(1),
+  action: z.string().min(1),
+  rationale: z.string().default(""),
+  examples: z.array(z.string()).default([]),
+  priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
+  tags: z.array(z.string()).default([]),
+});
+
+export type ExpertHeuristic = z.infer<typeof expertHeuristicSchema>;
+
+export const expertTutorRuntimeModelSchema = z.object({
+  id: z.string().min(1),
+  version: z.number().int().positive(),
+  frameworkVersionId: z.string().min(1),
+  framework: expertFrameworkSchema,
+  heuristics: z.array(expertHeuristicSchema).default([]),
+  conflictIds: z.array(z.string()).default([]),
+  seedSource: z.enum(["deep_default", "expert_authored"]).default("deep_default"),
+});
+
+export type ExpertTutorRuntimeModel = z.infer<
+  typeof expertTutorRuntimeModelSchema
+>;
+
+export const motivationalContextSchema = z.object({
+  surfaceInterests: z.array(z.string()).default([]),
+  deeperMotivations: z.array(z.string()).default([]),
+  aspirations: z.array(z.string()).default([]),
+  culturalContext: z.array(z.string()).default([]),
+  relevanceHooks: z.array(z.string()).default([]),
+  careReasons: z.array(z.string()).default([]),
+  summary: z.string().default(""),
+});
+
+export type MotivationalContext = z.infer<typeof motivationalContextSchema>;
+
+export const knowledgeStateNodeSchema = z.object({
+  conceptKey: z.string().min(1),
+  title: z.string().min(1),
+  masteryLevel: studentMasteryLevelSchema.default("surface"),
+  confidence: z.number().min(0).max(1).default(0.2),
   evidence: z.array(z.string()).default([]),
+  misconceptions: z.array(z.string()).default([]),
+  relatedKnownConcepts: z.array(z.string()).default([]),
+  lastUpdatedAt: z.string(),
 });
 
-export type TransferCheck = z.infer<typeof transferCheckSchema>;
+export type KnowledgeStateNode = z.infer<typeof knowledgeStateNodeSchema>;
 
-export const originalProductionSchema = z.object({
-  prompt: z.string().default(""),
-  artifact: z.string().nullable().default(null),
-  originalityMode: originalityModeSchema.default("constrained_originality"),
-  completed: z.boolean().default(false),
-  teacherNote: z.string().default(""),
+export const cognitiveStyleCalibrationSchema = z.object({
+  preferredEntryPoints: z.array(z.string()).default([]),
+  stretchEntryPoints: z.array(z.string()).default([]),
+  frictionPoints: z.array(z.string()).default([]),
+  evidence: z.array(z.string()).default([]),
+  summary: z.string().default(""),
+  confidence: z.number().min(0).max(1).default(0.2),
 });
 
-export type OriginalProduction = z.infer<typeof originalProductionSchema>;
+export type CognitiveStyleCalibration = z.infer<
+  typeof cognitiveStyleCalibrationSchema
+>;
+
+export const productiveStruggleCalibrationSchema = z.object({
+  targetBand: z
+    .enum(["high_support", "balanced", "high_challenge"])
+    .default("balanced"),
+  signals: z.array(z.string()).default([]),
+  currentReadiness: z
+    .enum(["fragile", "steady", "ready_for_more"])
+    .default("steady"),
+  recoverySupports: z.array(z.string()).default([]),
+  summary: z.string().default(""),
+});
+
+export type ProductiveStruggleCalibration = z.infer<
+  typeof productiveStruggleCalibrationSchema
+>;
+
+export const longitudinalDevelopmentSchema = z.object({
+  betterQuestionSignals: z.array(z.string()).default([]),
+  transferSignals: z.array(z.string()).default([]),
+  precisionSignals: z.array(z.string()).default([]),
+  selfMonitoringSignals: z.array(z.string()).default([]),
+  anomalies: z.array(z.string()).default([]),
+  summary: z.string().default(""),
+});
+
+export type LongitudinalDevelopment = z.infer<
+  typeof longitudinalDevelopmentSchema
+>;
+
+export const studentModelSnapshotSchema = z.object({
+  version: z.number().int().positive().default(1),
+  motivationalContext: motivationalContextSchema.default({}),
+  knowledgeStateModel: z.array(knowledgeStateNodeSchema).default([]),
+  cognitiveStyleCalibration: cognitiveStyleCalibrationSchema.default({}),
+  productiveStruggleCalibration:
+    productiveStruggleCalibrationSchema.default({}),
+  longitudinalDevelopment: longitudinalDevelopmentSchema.default({}),
+  summary: z.string().default(""),
+  updatedAt: z.string(),
+});
+
+export type StudentModelSnapshot = z.infer<typeof studentModelSnapshotSchema>;
+
+export const frameworkStateSchema = z.object({
+  currentStageId: z.string().nullable().default(null),
+  completedStageIds: z.array(z.string()).default([]),
+  stageAttemptCounts: z.record(z.string(), z.number().int().min(0)).default({}),
+  stageStartedAt: z.record(z.string(), z.string()).default({}),
+  stageCompletedAt: z.record(z.string(), z.string()).default({}),
+  lastTransitionAt: z.string().nullable().default(null),
+  lastTransitionReason: z.string().default(""),
+});
+
+export type FrameworkState = z.infer<typeof frameworkStateSchema>;
+
+export const contentScopeSnapshotSchema = z.object({
+  topicId: z.string().nullable().default(null),
+  topicTitle: z.string().default(""),
+  contentLocale: z.string().default("en"),
+  teacherSummary: z.string().default(""),
+  materialIds: z.array(z.string()).default([]),
+  scopeNotes: z.array(z.string()).default([]),
+  notationNotes: z.array(z.string()).default([]),
+  rigorNotes: z.array(z.string()).default([]),
+  retrievedContext: z.array(z.string()).default([]),
+});
+
+export type ContentScopeSnapshot = z.infer<typeof contentScopeSnapshotSchema>;
 
 export const learningSessionStateSchema = z.object({
   topicTitle: z.string().default(""),
-  subjectPackageKey: z.string().default("general_science"),
-  frameworkKey: z.string().default("deep"),
-  curriculumFrameworkKey: curriculumFrameworkKeySchema.default("kmk_de_sek1"),
-  conceptsToCover: z.array(sessionConceptSchema).default([]),
-  phases: z.array(learningSessionPhaseSchema).default([]),
-  currentPhaseId: z.number().int().positive().default(1),
-  previousSessionId: z.string().nullable().default(null),
-  previousSessionSummary: z.string().default(""),
-  homeworkFromPreviousSession: z.array(z.string()).default([]),
-  homeworkStatus: homeworkStatusSchema.default("not_applicable"),
-  gapsIdentified: z.array(z.string()).default([]),
-  completedConceptKeys: z.array(z.string()).default([]),
-  conceptStates: z.record(z.string(), conceptTeachingStateSchema).default({}),
-  openingHook: z.string().default(""),
-  openingProbe: z.string().default(""),
-  openingProbeAssessment: z.enum(["strong", "partial", "weak"]).nullable().default(null),
-  connectingQuestion: z.string().default(""),
-  quizItems: z.array(learningAssessmentItemSchema).default([]),
-  quizTargetCount: z.number().int().min(1).max(7).default(5),
-  quizCurrentIndex: z.number().int().min(0).default(0),
-  reflection: learningReflectionStateSchema.default({}),
-  reasoningQualityScore: z.number().min(0).max(100).nullable().default(null),
-  strategyDiversityScore: z.number().min(0).max(100).nullable().default(null),
-  transferPerformanceScore: z.number().min(0).max(100).nullable().default(null),
-  helpDependenceScore: z.number().min(0).max(100).nullable().default(null),
-  confidenceCalibrationScore: z.number().min(0).max(100).nullable().default(null),
-  originalityScore: z.number().min(0).max(100).nullable().default(null),
-  metacognitiveHabits: z.array(z.string()).default([]),
-  thinkingPatternSignals: z.array(reasoningPatternSignalSchema).default([]),
-  metacognitiveMirror: metacognitiveMirrorStateSchema.default({}),
-  personalizedHomework: z.array(z.string()).default([]),
-  studentConfidenceScore: z.number().int().min(1).max(10).nullable().default(null),
-  momentOfUnderstanding: z.string().nullable().default(null),
-  learnerGoal: z.string().default(""),
-  usedExampleLog: z.array(z.string()).default([]),
-  stageState: deepStageStateSchema.default({
-    currentStage: "diagnose",
-    diagnosedAt: null,
-    exposedAt: null,
-    extendedAt: null,
-    probedAt: null,
-    producedAt: null,
-    socraticTurnCount: 0,
-  }),
-  modelFingerprint: modelFingerprintSchema.default({
-    knowledgeState: "mixed",
-    summary: "",
-    strengths: [],
-    misconceptions: [],
-    productiveAssets: [],
-  }),
-  productiveGap: productiveGapSchema.default({
-    conceptKey: null,
-    description: "",
-    whyItMatters: "",
-    dissonanceQuestion: "",
-  }),
-  transferChecks: z.array(transferCheckSchema).default([]),
-  originalProduction: originalProductionSchema.default({
-    prompt: "",
-    artifact: null,
-    originalityMode: "constrained_originality",
-    completed: false,
-    teacherNote: "",
-  }),
-  teachingPlaybook: learningTeachingPlaybookSchema.nullable().default(null),
+  runtimeModelId: z.string().nullable().default(null),
+  runtimeModelVersion: z.number().int().positive().default(1),
+  studentModelId: z.string().nullable().default(null),
+  studentModelSnapshotId: z.string().nullable().default(null),
+  frameworkState: frameworkStateSchema.default({}),
+  contentScopeSnapshot: contentScopeSnapshotSchema.nullable().default(null),
+  activeConceptKey: z.string().nullable().default(null),
+  activeConceptTitle: z.string().nullable().default(null),
+  knowledgeFocus: z.array(z.string()).default([]),
+  misconceptionsObserved: z.array(z.string()).default([]),
+  recentEvidence: z.array(z.string()).default([]),
+  tutorNotes: z.array(z.string()).default([]),
   reportReady: z.boolean().default(false),
+  completed: z.boolean().default(false),
 });
 
 export type LearningSessionState = z.infer<typeof learningSessionStateSchema>;
@@ -488,71 +324,41 @@ export function createDefaultLearningSessionState(): LearningSessionState {
   return learningSessionStateSchema.parse({});
 }
 
-export const conceptPerformanceSchema = z.object({
-  concept: z.string(),
-  score: z.number().min(0).max(100),
-  confidenceLevel: conceptConfidenceSchema,
-  explanationAttempts: z.number().int().min(0),
-  status: z.enum(["mastered", "developing", "needs_support"]),
-});
-
-export type ConceptPerformance = z.infer<typeof conceptPerformanceSchema>;
-
 export const teacherProgressReportSchema = z.object({
   studentName: z.string(),
   topicTitle: z.string(),
   studentSummary: z.string(),
-  reasoningSummary: z.string().default(""),
-  conceptsCovered: z.array(z.string()).default([]),
-  sessionDurationMinutes: z.number().min(0).default(0),
-  sessionCompleted: z.boolean().default(false),
-  performanceByConcept: z.array(conceptPerformanceSchema).default([]),
-  questionsAskedByStudent: z
+  pedagogicalSummary: z.string().default(""),
+  conceptProgress: z
     .array(
       z.object({
-        content: z.string(),
-        type: questionIntentSchema,
+        conceptKey: z.string(),
+        title: z.string(),
+        masteryLevel: studentMasteryLevelSchema,
+        confidence: z.number().min(0).max(1).default(0),
+        misconceptions: z.array(z.string()).default([]),
+        evidence: z.array(z.string()).default([]),
       }),
     )
     .default([]),
-  quizResults: z
-    .array(
-      z.object({
-        concept: z.string(),
-        prompt: z.string(),
-        studentAnswer: z.string().default(""),
-        correct: z.boolean(),
-        difficulty: quizDifficultySchema,
-        explanation: z.string().default(""),
-      }),
-    )
-    .default([]),
-  identifiedGaps: z.array(z.string()).default([]),
+  motivationalHooksUsed: z.array(z.string()).default([]),
+  productiveStruggleNotes: z.array(z.string()).default([]),
+  longitudinalSignals: z.array(z.string()).default([]),
+  recommendedTeacherActions: z.array(z.string()).default([]),
   homeworkAssigned: z.array(z.string()).default([]),
-  homeworkStatus: homeworkStatusSchema.default("not_applicable"),
   studentConfidenceScore: z.number().int().min(1).max(10).nullable().default(null),
-  momentOfUnderstanding: z.string().nullable().default(null),
+  expertReviewRecommended: z.boolean().default(false),
+  expertReviewReason: z.string().default(""),
+  identifiedGaps: z.array(z.string()).default([]),
+  riskFlags: z.array(z.string()).default([]),
   comparisonToPreviousSession: z.string().default(""),
   comparisonTrend: sessionComparisonTrendSchema.default("unknown"),
-  recommendedTeacherActions: z.array(z.string()).default([]),
-  evidence: z
-    .array(
-      z.object({
-        type: z.enum(["question", "quiz", "reflection", "homework", "continuity"]),
-        note: z.string(),
-      }),
-    )
-    .default([]),
-  riskFlags: z.array(z.string()).default([]),
-  reasoningStrengths: z.array(z.string()).default([]),
-  persistentMisconceptions: z.array(z.string()).default([]),
   transferReadiness: z
     .enum(["not_yet", "emerging", "ready"])
     .default("not_yet"),
   originalityWithinConstraint: z
     .enum(["low", "emerging", "strong"])
     .default("low"),
-  confidenceGap: z.string().default(""),
   recommendedInterventionType: z
     .enum(["reteach", "challenge", "practice", "confidence_check", "none"])
     .default("none"),
@@ -568,7 +374,3 @@ export const teacherOnboardingSummarySchema = z.object({
 export type TeacherOnboardingSummary = z.infer<
   typeof teacherOnboardingSummarySchema
 >;
-
-export const tutorRuntimeModeSchema = z.enum(["workflow", "agent", "hybrid"]);
-
-export type TutorRuntimeMode = z.infer<typeof tutorRuntimeModeSchema>;

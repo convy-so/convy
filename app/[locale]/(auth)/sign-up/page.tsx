@@ -30,8 +30,6 @@ export default function SignUpPage() {
     email: "",
     password: "",
     agreeToTerms: false,
-    accountMode: "personal" as "personal" | "workspace",
-    workspaceType: "collaborative" as "collaborative" | "institutional",
   });
 
   const [passwordStrength, setPasswordStrength] = useState({
@@ -60,10 +58,7 @@ export default function SignUpPage() {
         email: formData.email,
         password: formData.password,
         name: formData.name,
-        callbackURL:
-          formData.accountMode === "workspace"
-            ? `/${locale}/dashboard/workspaces/new?type=${formData.workspaceType}`
-            : `/${locale}/dashboard`,
+        callbackURL: `/${locale}/dashboard`,
         fetchOptions: {
           onError: (ctx) => {
             toast.error(ctx.error.message);
@@ -75,8 +70,6 @@ export default function SignUpPage() {
       if (result.data?.user && result.data?.token === null) {
         if (typeof window !== 'undefined') {
           sessionStorage.setItem('verification_email', formData.email);
-          sessionStorage.setItem('signup_account_mode', formData.accountMode);
-          sessionStorage.setItem('signup_workspace_type', formData.workspaceType);
         }
         toast.success(t('Success'));
         setIsRedirecting(true);
@@ -85,11 +78,7 @@ export default function SignUpPage() {
         // This shouldn't happen with requireEmailVerification: true, but handle it
         toast.success(t('SuccessVerified'));
         setIsRedirecting(true);
-        router.push(
-          formData.accountMode === "workspace"
-            ? `/dashboard/workspaces/new?type=${formData.workspaceType}`
-            : "/dashboard",
-        );
+        router.push("/dashboard");
       }
     } catch (error) {
       console.error("[SignUp] Failed:", error);
@@ -148,81 +137,6 @@ export default function SignUpPage() {
           placeholder={t('EmailPlaceholder')}
           required
         />
-
-        <div className="space-y-3 rounded-2xl border border-gray-200 p-4">
-          <div>
-            <p className="text-sm font-semibold text-[#292929]">Start In</p>
-            <p className="text-xs text-[#696969] mt-1">
-              Personal space is for one teacher. Workspaces are for shared teacher teams or institutions.
-            </p>
-          </div>
-
-          <div className="grid gap-3">
-            <button
-              type="button"
-              onClick={() => setFormData({ ...formData, accountMode: "personal" })}
-              className={`rounded-xl border px-4 py-3 text-left transition ${
-                formData.accountMode === "personal"
-                  ? "border-[#292929] bg-[#292929] text-white"
-                  : "border-gray-200 bg-white text-[#292929]"
-              }`}
-            >
-              <div className="font-medium">Personal Space</div>
-              <div className="text-xs mt-1 opacity-80">
-                Full solo-teacher access to classes, surveys, materials, and folders.
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                setFormData({ ...formData, accountMode: "workspace" })
-              }
-              className={`rounded-xl border px-4 py-3 text-left transition ${
-                formData.accountMode === "workspace"
-                  ? "border-[#292929] bg-[#292929] text-white"
-                  : "border-gray-200 bg-white text-[#292929]"
-              }`}
-            >
-              <div className="font-medium">Workspace</div>
-              <div className="text-xs mt-1 opacity-80">
-                Shared teacher collaboration, with optional institutional controls.
-              </div>
-            </button>
-          </div>
-
-          {formData.accountMode === "workspace" && (
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() =>
-                  setFormData({ ...formData, workspaceType: "collaborative" })
-                }
-                className={`rounded-xl border px-3 py-3 text-left text-sm transition ${
-                  formData.workspaceType === "collaborative"
-                    ? "border-[#292929] bg-gray-100 text-[#292929]"
-                    : "border-gray-200 bg-white text-[#696969]"
-                }`}
-              >
-                <div className="font-medium">Collaborative</div>
-                <div className="text-xs mt-1">Teacher team</div>
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setFormData({ ...formData, workspaceType: "institutional" })
-                }
-                className={`rounded-xl border px-3 py-3 text-left text-sm transition ${
-                  formData.workspaceType === "institutional"
-                    ? "border-[#292929] bg-gray-100 text-[#292929]"
-                    : "border-gray-200 bg-white text-[#696969]"
-                }`}
-              >
-                <div className="font-medium">Institutional</div>
-                <div className="text-xs mt-1">School governance</div>
-              </button>
-            </div>
-          )}
-        </div>
 
         <div>
           <InputField

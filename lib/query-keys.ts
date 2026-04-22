@@ -4,18 +4,6 @@
  */
 
 export const queryKeys = {
-  // Workspace-related queries
-  workspaces: {
-    all: ["workspaces"] as const,
-    active: ["activeWorkspace"] as const,
-    members: (workspaceId: string) =>
-      ["workspaceMembers", workspaceId] as const,
-    departments: (workspaceId: string) =>
-      ["workspaceDepartments", workspaceId] as const,
-    invitations: (workspaceId: string) =>
-      ["workspaceInvitations", workspaceId] as const,
-  },
-
   // Survey-related queries
   surveys: {
     all: (orgId?: string | null) => ["surveys", orgId] as const,

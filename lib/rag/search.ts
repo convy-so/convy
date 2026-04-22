@@ -9,7 +9,6 @@ import { z } from "zod";
 import { rerank } from "./reranker";
 
 export interface SearchFilters {
-  organizationId?: string;
   surveyId?: string;
   sourceType?: (
     | "response"
@@ -76,9 +75,6 @@ export async function vectorSearch(
         sql`${documentEmbeddings.embedding} IS NOT NULL`,
         filters.language
           ? eq(documentEmbeddings.language, filters.language)
-          : undefined,
-        filters.organizationId
-          ? eq(documentEmbeddings.organizationId, filters.organizationId)
           : undefined,
         filters.sessionType
           ? eq(documentEmbeddings.sessionType, filters.sessionType)
@@ -147,9 +143,6 @@ export async function fullTextSearch(
         sql`to_tsvector(${tsConfig}, ${documentEmbeddings.retrievalContent}) @@ ${tsQuery}`,
         effectiveLanguage
           ? eq(documentEmbeddings.language, effectiveLanguage)
-          : undefined,
-        filters.organizationId
-          ? eq(documentEmbeddings.organizationId, filters.organizationId)
           : undefined,
         filters.sessionType
           ? eq(documentEmbeddings.sessionType, filters.sessionType)
@@ -226,8 +219,8 @@ export async function executeRAGQuery(
   filters: SearchFilters,
   language: SupportedLanguage = "en",
 ): Promise<SearchResult[]> {
-  if (!filters.organizationId && !filters.surveyId) {
-    throw new Error("executeRAGQuery requires organizationId or surveyId.");
+  if (!filters.surveyId) {
+    throw new Error("executeRAGQuery requires surveyId.");
   }
   
   const queriesToRun = [rawQuery];

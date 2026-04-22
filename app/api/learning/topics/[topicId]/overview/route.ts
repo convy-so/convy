@@ -54,7 +54,7 @@ export async function GET(
         questionCount: questionCountResult.filter(
           (item) =>
             item.interactionType === "out_of_session_question" ||
-            item.interactionType === "student_question",
+            item.interactionType === "student_message",
         ).length,
         activeStudentCount: activeStudentCountResult.filter(
           (student) => student.inviteStatus === "accepted",

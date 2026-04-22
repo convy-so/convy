@@ -156,7 +156,7 @@ export function TeacherStudentDetailPage({ studentId }: { studentId: string }) {
                         </div>
                       </div>
                       <div className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
-                        {Math.round(pattern.patternConfidence * 100)}%
+                        {Math.round((pattern.patternConfidence ?? 0) * 100)}%
                       </div>
                     </div>
                     <p className="mt-3 text-sm leading-6 text-slate-600">
@@ -197,7 +197,18 @@ export function TeacherStudentDetailPage({ studentId }: { studentId: string }) {
 
               {persistentMisconceptions.length ? (
                 <div className="space-y-3">
-                  {persistentMisconceptions.map((misconception) => (
+                  {persistentMisconceptions
+                    .filter(
+                      (
+                        misconception,
+                      ): misconception is {
+                        key: string;
+                        label: string;
+                        description: string;
+                        lastSeenAt: string;
+                      } => Boolean(misconception),
+                    )
+                    .map((misconception) => (
                     <div
                       key={`${misconception.key}-${misconception.lastSeenAt}`}
                       className="rounded-[18px] border border-rose-100 bg-rose-50/80 px-4 py-3"

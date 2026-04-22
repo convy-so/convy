@@ -11,7 +11,7 @@ import {
 import { relations } from "drizzle-orm";
 import { timestamps } from "./common";
 import { users } from "./auth";
-import { departments, organizations, folders } from "./organization";
+import { folders } from "./organization";
 import { classrooms } from "./learning";
 import type {
   AnalyticsFact,
@@ -29,14 +29,10 @@ import type {
   SampleFeedbackPatch,
 } from "@/lib/education/sample-feedback";
 import type {
-  PlaybookAuthorInput,
-  PlaybookInterpretation,
-  PlaybookPreview,
   ResearchBriefPatch,
   RefinementMessage,
   RefinementProposal,
-  SurveyPersonalityAssignment,
-} from "@/lib/education/playbooks";
+} from "@/lib/education/refinement";
 import {
   surveyStatusEnum,
   toneEnum,
@@ -96,12 +92,6 @@ const surveys = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    organizationId: text("organization_id").references(() => organizations.id, {
-      onDelete: "cascade",
-    }),
-    departmentId: text("department_id").references(() => departments.id, {
-      onDelete: "set null",
-    }),
     classroomId: text("classroom_id").references(() => classrooms.id, {
       onDelete: "cascade",
     }),
@@ -132,18 +122,12 @@ const surveys = pgTable(
   },
   (table) => [
     index("surveys_user_id_idx").on(table.userId),
-    index("surveys_organization_id_idx").on(table.organizationId),
-    index("surveys_department_id_idx").on(table.departmentId),
     index("surveys_classroom_id_idx").on(table.classroomId),
     index("surveys_delivery_mode_idx").on(table.deliveryMode),
     index("surveys_shareable_link_idx").on(table.shareableLink),
     index("surveys_custom_slug_idx").on(table.customSlug),
     index("surveys_status_idx").on(table.status),
-    index("surveys_user_org_updated_idx").on(
-      table.userId,
-      table.organizationId,
-      table.updatedAt,
-    ),
+    index("surveys_user_updated_idx").on(table.userId, table.updatedAt),
   ],
 );
 
@@ -457,97 +441,6 @@ const surveyConductingProfiles = pgTable(
   ],
 );
 
-const surveyPersonalityAssignments = pgTable(
-  "survey_personality_assignments",
-  {
-    id: text("id").primaryKey(),
-    ...timestamps,
-    surveyId: text("survey_id")
-      .notNull()
-      .references(() => surveys.id, { onDelete: "cascade" }),
-    mode: text("mode").notNull(),
-    version: integer("version").default(1).notNull(),
-    assignment: jsonb("assignment").$type<SurveyPersonalityAssignment>().notNull(),
-    isActive: boolean("is_active").default(true).notNull(),
-  },
-  (table) => [
-    index("survey_personality_assignments_survey_id_idx").on(table.surveyId),
-    index("survey_personality_assignments_mode_idx").on(table.surveyId, table.mode, table.isActive),
-  ],
-);
-
-const playbooks = pgTable(
-  "playbooks",
-  {
-    id: text("id").primaryKey(),
-    ...timestamps,
-    surveyId: text("survey_id").references(() => surveys.id, { onDelete: "cascade" }),
-    organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
-    createdBy: text("created_by")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    scope: text("scope").notNull(),
-    phase: text("phase").notNull(),
-    name: text("name").notNull(),
-    status: text("status").notNull(),
-    latestVersion: integer("latest_version").default(1).notNull(),
-    activeVersionId: text("active_version_id"),
-  },
-  (table) => [
-    index("playbooks_survey_id_idx").on(table.surveyId),
-    index("playbooks_organization_id_idx").on(table.organizationId),
-    index("playbooks_scope_phase_idx").on(table.scope, table.phase),
-  ],
-);
-
-const playbookVersions = pgTable(
-  "playbook_versions",
-  {
-    id: text("id").primaryKey(),
-    ...timestamps,
-    playbookId: text("playbook_id")
-      .notNull()
-      .references(() => playbooks.id, { onDelete: "cascade" }),
-    version: integer("version").default(1).notNull(),
-    status: text("status").notNull(),
-    input: jsonb("input").$type<PlaybookAuthorInput>().notNull(),
-    interpretation: jsonb("interpretation").$type<PlaybookInterpretation>().notNull(),
-    preview: jsonb("preview").$type<PlaybookPreview>().notNull(),
-    createdBy: text("created_by")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    approvedBy: text("approved_by").references(() => users.id, { onDelete: "set null" }),
-    approvedAt: timestamp("approved_at"),
-  },
-  (table) => [
-    index("playbook_versions_playbook_id_idx").on(table.playbookId),
-    unique("playbook_versions_unique_version").on(table.playbookId, table.version),
-  ],
-);
-
-const surveyPlaybookAttachments = pgTable(
-  "survey_playbook_attachments",
-  {
-    id: text("id").primaryKey(),
-    ...timestamps,
-    surveyId: text("survey_id")
-      .notNull()
-      .references(() => surveys.id, { onDelete: "cascade" }),
-    playbookId: text("playbook_id")
-      .notNull()
-      .references(() => playbooks.id, { onDelete: "cascade" }),
-    attachedBy: text("attached_by")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    isActive: boolean("is_active").default(true).notNull(),
-  },
-  (table) => [
-    index("survey_playbook_attachments_survey_id_idx").on(table.surveyId),
-    index("survey_playbook_attachments_playbook_id_idx").on(table.playbookId),
-    unique("survey_playbook_attachments_unique").on(table.surveyId, table.playbookId),
-  ],
-);
-
 const refinementThreads = pgTable(
   "refinement_threads",
   {
@@ -729,14 +622,6 @@ const surveysRelations = relations(surveys, ({ one, many }) => ({
     fields: [surveys.userId],
     references: [users.id],
   }),
-  organization: one(organizations, {
-    fields: [surveys.organizationId],
-    references: [organizations.id],
-  }),
-  department: one(departments, {
-    fields: [surveys.departmentId],
-    references: [departments.id],
-  }),
   classroom: one(classrooms, {
     fields: [surveys.classroomId],
     references: [classrooms.id],
@@ -759,9 +644,6 @@ const surveysRelations = relations(surveys, ({ one, many }) => ({
   sessions: many(surveySessions),
   sampleFeedbackEntries: many(sampleFeedbackEntries),
   conductingProfiles: many(surveyConductingProfiles),
-  personalityAssignments: many(surveyPersonalityAssignments),
-  playbooks: many(playbooks),
-  playbookAttachments: many(surveyPlaybookAttachments),
   refinementThreads: many(refinementThreads),
   refinementProposals: many(refinementProposals),
   briefPatches: many(researchBriefPatches),
@@ -947,50 +829,6 @@ const surveyConductingProfilesRelations = relations(
   }),
 );
 
-const surveyPersonalityAssignmentsRelations = relations(
-  surveyPersonalityAssignments,
-  ({ one }) => ({
-    survey: one(surveys, {
-      fields: [surveyPersonalityAssignments.surveyId],
-      references: [surveys.id],
-    }),
-  }),
-);
-
-const playbooksRelations = relations(playbooks, ({ one, many }) => ({
-  survey: one(surveys, {
-    fields: [playbooks.surveyId],
-    references: [surveys.id],
-  }),
-  organization: one(organizations, {
-    fields: [playbooks.organizationId],
-    references: [organizations.id],
-  }),
-  versions: many(playbookVersions),
-  attachments: many(surveyPlaybookAttachments),
-}));
-
-const playbookVersionsRelations = relations(playbookVersions, ({ one }) => ({
-  playbook: one(playbooks, {
-    fields: [playbookVersions.playbookId],
-    references: [playbooks.id],
-  }),
-}));
-
-const surveyPlaybookAttachmentsRelations = relations(
-  surveyPlaybookAttachments,
-  ({ one }) => ({
-    survey: one(surveys, {
-      fields: [surveyPlaybookAttachments.surveyId],
-      references: [surveys.id],
-    }),
-    playbook: one(playbooks, {
-      fields: [surveyPlaybookAttachments.playbookId],
-      references: [playbooks.id],
-    }),
-  }),
-);
-
 const refinementThreadsRelations = relations(refinementThreads, ({ one, many }) => ({
   survey: one(surveys, {
     fields: [refinementThreads.surveyId],
@@ -1093,10 +931,6 @@ export {
   sampleFeedbackEntries,
   sampleFeedbackPatches,
   surveyConductingProfiles,
-  surveyPersonalityAssignments,
-  playbooks,
-  playbookVersions,
-  surveyPlaybookAttachments,
   refinementThreads,
   refinementMessages,
   refinementProposals,
@@ -1119,10 +953,6 @@ export {
   sampleFeedbackEntriesRelations,
   sampleFeedbackPatchesRelations,
   surveyConductingProfilesRelations,
-  surveyPersonalityAssignmentsRelations,
-  playbooksRelations,
-  playbookVersionsRelations,
-  surveyPlaybookAttachmentsRelations,
   refinementThreadsRelations,
   refinementMessagesRelations,
   refinementProposalsRelations,

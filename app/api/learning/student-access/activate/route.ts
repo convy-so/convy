@@ -5,7 +5,6 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import { classroomStudents, studentAccessTokens, users } from "@/db/schema";
 import { auth } from "@/lib/auth";
-import { assertWorkspacePrivacyReadiness } from "@/lib/privacy/compliance";
 import { hashOpaqueToken } from "@/lib/learning/tokens";
 
 const studentActivationBodySchema = z.object({
@@ -44,11 +43,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ valid: false }, { status: 404 });
     }
 
-    await assertWorkspacePrivacyReadiness({
-      organizationId: record.classroomStudent.classroom.organizationId,
-      requireAgeMode: true,
-    });
-
     return NextResponse.json({
       valid: true,
       student: {
@@ -62,13 +56,6 @@ export async function GET(request: Request) {
       expiresAt: record.expiresAt.toISOString(),
     });
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.name === "GDPR_WORKSPACE_PRIVACY_INCOMPLETE"
-    ) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
@@ -108,11 +95,6 @@ export async function POST(request: Request) {
       with: {
         classroom: true,
       },
-    });
-
-    await assertWorkspacePrivacyReadiness({
-      organizationId: classroomStudent?.classroom.organizationId,
-      requireAgeMode: true,
     });
 
     await auth.api.setUserPassword({
@@ -164,13 +146,6 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    if (
-      error instanceof Error &&
-      error.name === "GDPR_WORKSPACE_PRIVACY_INCOMPLETE"
-    ) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

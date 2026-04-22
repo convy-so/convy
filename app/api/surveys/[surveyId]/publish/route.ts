@@ -7,9 +7,6 @@ import { surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { env } from "@/lib/env";
 import {
-  recordRealtimeEvent,
-} from "@/lib/collaboration-service";
-import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/workspace-access";
@@ -63,64 +60,27 @@ export async function POST(
     }
 
     const shareableLink = survey.shareableLink || nanoid(10);
-    let updatedSurvey: typeof surveys.$inferSelect | undefined;
-    await getDb().transaction(async (tx) => {
-      [updatedSurvey] = await tx
-        .update(surveys)
-        .set({
-          status: "active",
-          shareableLink,
-          title:
-            typeof body.title === "string" && body.title.trim()
-              ? body.title.trim()
-              : briefRow.brief.title,
-          description:
-            typeof body.description === "string"
-              ? body.description
-              : briefRow.brief.learningContext,
-          coreObjective: briefRow.brief.researchGoal,
-          programId: briefRow.programId,
-          isVoice:
-            typeof body.isVoice === "boolean" ? body.isVoice : survey.isVoice,
-          updatedAt: new Date(),
-        })
-        .where(eq(surveys.id, surveyId))
-        .returning();
-
-      await recordRealtimeEvent(tx, {
-        scope: "survey",
-        surveyId,
-        workspaceId: permission.workspaceId,
-        eventType: "survey.published",
-        actorId: session.user.id,
-        payload: {
-          surveyId,
-          status: "active",
-          shareableLink,
-        },
-      });
-
-      if (permission.workspaceId) {
-        await recordRealtimeEvent(tx, {
-          scope: "workspace",
-          workspaceId: permission.workspaceId,
-          eventType: "workspace.survey_updated",
-          actorId: session.user.id,
-          payload: {
-            workspaceId: permission.workspaceId,
-            survey: {
-              id: surveyId,
-              status: "active",
-              shareableLink,
-              title:
-                typeof body.title === "string" && body.title.trim()
-                  ? body.title.trim()
-                  : briefRow.brief.title,
-            },
-          },
-        });
-      }
-    });
+    const [updatedSurvey] = await getDb()
+      .update(surveys)
+      .set({
+        status: "active",
+        shareableLink,
+        title:
+          typeof body.title === "string" && body.title.trim()
+            ? body.title.trim()
+            : briefRow.brief.title,
+        description:
+          typeof body.description === "string"
+            ? body.description
+            : briefRow.brief.learningContext,
+        coreObjective: briefRow.brief.researchGoal,
+        programId: briefRow.programId,
+        isVoice:
+          typeof body.isVoice === "boolean" ? body.isVoice : survey.isVoice,
+        updatedAt: new Date(),
+      })
+      .where(eq(surveys.id, surveyId))
+      .returning();
 
     return NextResponse.json({
       success: true,

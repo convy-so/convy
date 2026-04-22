@@ -190,6 +190,18 @@ export async function generateAIResponse(
     dynamicExamples?: PromptExample[];
   },
 ) {
+  // Apply rate limiting for AI operations
+  if (options?.userId) {
+    const { expensiveAiRateLimiter } = await import("@/lib/ratelimit");
+    const { success, reset } = await expensiveAiRateLimiter.limit(options.userId);
+    if (!success) {
+      const resetDate = new Date(reset);
+      throw new Error(
+        `AI_RATE_LIMIT_EXCEEDED: Rate limit exceeded. Try again at ${resetDate.toISOString()}`
+      );
+    }
+  }
+
   const model = options?.model ?? defaultModel;
   const startedAt = Date.now();
   const resolvedPrompt = resolvePromptExecution({
@@ -297,9 +309,6 @@ export async function generateAIResponse(
   }
 }
 
-/**
- * Stream text for real-time conversations
- */
 export function streamAIResponse(
   messages: ModelMessage[],
   systemPrompt: string,
@@ -319,6 +328,20 @@ export function streamAIResponse(
     dynamicExamples?: PromptExample[];
   },
 ) {
+  // Apply rate limiting for streaming AI operations
+  const rateLimitPromise = (async () => {
+    if (options?.userId) {
+      const { expensiveAiRateLimiter } = await import("@/lib/ratelimit");
+      const { success, reset } = await expensiveAiRateLimiter.limit(options.userId);
+      if (!success) {
+        const resetDate = new Date(reset);
+        throw new Error(
+          `AI_RATE_LIMIT_EXCEEDED: Rate limit exceeded. Try again at ${resetDate.toISOString()}`
+        );
+      }
+    }
+  })();
+
   const model = options?.model ?? defaultModel;
   const startedAt = Date.now();
   const resolvedPrompt = resolvePromptExecution({
@@ -377,6 +400,8 @@ export function streamAIResponse(
     ...(observedTools ? { tools: observedTools } : {}),
     ...(options?.stopWhen ? { stopWhen: options.stopWhen } : {}),
     prepareStep: async () => {
+      // Ensure rate limit check completes before streaming
+      await rateLimitPromise;
       const preparedCache = await preparedCachePromise;
       return {
         system: preparedCache.systemPrompt,

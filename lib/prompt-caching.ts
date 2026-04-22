@@ -137,55 +137,69 @@ async function getOrCreateGoogleCachedContent(input: {
   }
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/cachedContents?key=${env.GOOGLE_GENERATIVE_AI_API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: normalizedModel,
-          displayName: `convy-${input.namespace}-${contentHash.slice(0, 8)}`,
-          systemInstruction: {
-            role: "system",
-            parts: [{ text: input.systemInstruction }],
-          },
-          ttl: `${input.ttlSeconds}s`,
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Google cachedContents create failed (${response.status}): ${errorText}`,
-      );
-    }
-
-    const rawPayload = await response.json();
-    if (!isRecord(rawPayload) || typeof rawPayload.name !== "string") {
-      throw new Error("Google cachedContents response did not include a name");
-    }
-
-    const expiresAt =
-      (typeof rawPayload.expireTime === "string" ? rawPayload.expireTime : undefined) ||
-      new Date(Date.now() + input.ttlSeconds * 1000).toISOString();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
     try {
-      await redis.set(
-        redisKey,
-        JSON.stringify({
-          cachedContent: rawPayload.name,
-          expiresAt,
-        }),
-        "EX",
-        Math.max(60, input.ttlSeconds - GOOGLE_CACHE_REFRESH_WINDOW_SECONDS),
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/cachedContents?key=${env.GOOGLE_GENERATIVE_AI_API_KEY}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: normalizedModel,
+            displayName: `convy-${input.namespace}-${contentHash.slice(0, 8)}`,
+            systemInstruction: {
+              role: "system",
+              parts: [{ text: input.systemInstruction }],
+            },
+            ttl: `${input.ttlSeconds}s`,
+          }),
+          signal: controller.signal,
+        },
       );
-    } catch {
-    }
 
-    return rawPayload.name;
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Google cachedContents create failed (${response.status}): ${errorText}`,
+        );
+      }
+
+      const rawPayload = await response.json();
+      if (!isRecord(rawPayload) || typeof rawPayload.name !== "string") {
+        throw new Error("Google cachedContents response did not include a name");
+      }
+
+      const expiresAt =
+        (typeof rawPayload.expireTime === "string" ? rawPayload.expireTime : undefined) ||
+        new Date(Date.now() + input.ttlSeconds * 1000).toISOString();
+
+      try {
+        await redis.set(
+          redisKey,
+          JSON.stringify({
+            cachedContent: rawPayload.name,
+            expiresAt,
+          }),
+          "EX",
+          Math.max(60, input.ttlSeconds - GOOGLE_CACHE_REFRESH_WINDOW_SECONDS),
+        );
+      } catch {
+      }
+
+      return rawPayload.name;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error("Google cachedContents API request timed out after 10 seconds");
+      }
+      throw error;
+    }
   } catch {
     return null;
   } finally {

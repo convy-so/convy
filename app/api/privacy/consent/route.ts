@@ -24,7 +24,6 @@ export async function POST(request: Request) {
   });
 
   await recordConsentEvent({
-    organizationId: session?.session.activeOrganizationId ?? null,
     userId: session?.user.id ?? null,
     subjectType: session ? "user" : "browser",
     subjectId: session?.user.id ?? null,

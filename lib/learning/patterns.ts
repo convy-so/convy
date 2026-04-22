@@ -153,7 +153,6 @@ function withNormalizedProfile(profile: StudentLearningPatternProfile) {
 
 export async function analyzeOnboardingLearningPatterns(params: {
   studentName: string;
-  organizationId: string;
   studentUserId: string;
   classroomStudentId: string;
   interestProfile: StudentInterestProfile;

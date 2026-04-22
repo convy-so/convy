@@ -2,17 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getVerifiedSession } from "@/lib/auth/session";
-import { isWorkspaceOwner } from "@/lib/workspace-access";
 import {
   createPrivacyRequest,
   exportUserPrivacyData,
-  exportWorkspacePrivacyData,
   markPrivacyRequestResolved,
 } from "@/lib/privacy/service";
 
 const bodySchema = z.object({
-  scope: z.enum(["user", "workspace"]).default("user"),
-  organizationId: z.string().optional(),
+  scope: z.enum(["user"]).default("user"),
 });
 
 export async function POST(request: Request) {
@@ -21,13 +18,8 @@ export async function POST(request: Request) {
   try {
     const session = await getVerifiedSession();
     const body = bodySchema.parse(await request.json());
-    const organizationId =
-      body.scope === "workspace"
-        ? body.organizationId ?? session.session.activeOrganizationId ?? null
-        : body.organizationId ?? null;
 
     const privacyRequest = await createPrivacyRequest({
-      organizationId,
       userId: session.user.id,
       subjectType: body.scope,
       requestType: "export",
@@ -35,16 +27,7 @@ export async function POST(request: Request) {
     });
     privacyRequestId = privacyRequest.id;
 
-    const payload =
-      body.scope === "workspace"
-        ? await (async () => {
-            if (!organizationId || !(await isWorkspaceOwner(session.user.id, organizationId))) {
-              throw new Error("Unauthorized");
-            }
-
-            return await exportWorkspacePrivacyData(organizationId);
-          })()
-        : await exportUserPrivacyData(session.user.id);
+    const payload = await exportUserPrivacyData(session.user.id);
 
     await markPrivacyRequestResolved({
       requestId: privacyRequest.id,

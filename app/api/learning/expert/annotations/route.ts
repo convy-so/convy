@@ -4,43 +4,44 @@ import { z } from "zod";
 
 import { getVerifiedSession } from "@/lib/auth/session";
 import { assertAiOpsUser } from "@/lib/auth/expert";
+import { resolveTeacherExpertAnchor } from "@/lib/learning/expert-access";
 import {
-  createLearningExpertAnnotation,
-  listLearningExpertAnnotations,
+  createExpertReviewCase,
+  listExpertReviewCases,
 } from "@/lib/learning/storage";
-import { expertAnnotationSchema } from "@/lib/learning/expert-types";
-import { getTeachingContext } from "@/lib/teaching-context";
 
-const createAnnotationSchema = expertAnnotationSchema.omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  createdByUserId: true,
+const createReviewCaseSchema = z.object({
+  topicId: z.string().nullable().optional(),
+  sessionId: z.string().nullable().optional(),
+  classroomStudentId: z.string().nullable().optional(),
+  interactionId: z.string().nullable().optional(),
+  reviewType: z.string().min(1),
+  priority: z.enum(["low", "medium", "high"]).default("medium"),
+  tutorFailureSummary: z.string().min(1),
+  expertCorrection: z.string().min(1),
+  reusableSignal: z.boolean().default(true),
+  metadata: z.record(z.string(), z.unknown()).default({}),
 });
 
 export async function GET(request: Request) {
   try {
     const session = await getVerifiedSession();
     await assertAiOpsUser(session.user);
-    const context = await getTeachingContext();
-    if (!context.organizationId) {
-      return NextResponse.json({ error: "Workspace required" }, { status: 400 });
-    }
 
     const { searchParams } = new URL(request.url);
     const topicId = searchParams.get("topicId");
     const sessionId = searchParams.get("sessionId");
 
-    const annotations = await listLearningExpertAnnotations({
-      organizationId: context.organizationId,
+    const reviewCases = await listExpertReviewCases({
+      teacherUserId: session.user.id,
       topicId,
       sessionId,
     });
 
-    return NextResponse.json({ success: true, data: annotations });
+    return NextResponse.json({ success: true, data: reviewCases });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load annotations" },
+      { error: error instanceof Error ? error.message : "Failed to load review cases" },
       { status: 400 },
     );
   }
@@ -50,49 +51,43 @@ export async function POST(request: Request) {
   try {
     const session = await getVerifiedSession();
     await assertAiOpsUser(session.user);
-    const context = await getTeachingContext();
-    if (!context.organizationId) {
-      return NextResponse.json({ error: "Workspace required" }, { status: 400 });
-    }
-
-    const body = createAnnotationSchema.parse(await request.json());
-    const reviewQueueKey =
-      typeof body.metadata?.reviewQueueKey === "string"
-        ? body.metadata.reviewQueueKey
-        : null;
-    if (reviewQueueKey) {
-      const existing = await listLearningExpertAnnotations({
-        organizationId: context.organizationId,
-      });
-      const existingReviewed = existing.find(
-        (annotation) =>
-          annotation.status === "reviewed" &&
-          typeof annotation.metadata?.reviewQueueKey === "string" &&
-          annotation.metadata.reviewQueueKey === reviewQueueKey,
+    const body = createReviewCaseSchema.parse(await request.json());
+    const anchor = await resolveTeacherExpertAnchor(session.user.id, body);
+    if (!anchor) {
+      return NextResponse.json(
+        { error: "A teacher-owned topic, student, session, or interaction is required." },
+        { status: 404 },
       );
-      if (existingReviewed) {
-        return NextResponse.json({ success: true, data: existingReviewed });
-      }
     }
 
-    const now = new Date().toISOString();
-    const annotation = expertAnnotationSchema.parse({
-      ...body,
-      id: nanoid(),
-      organizationId: context.organizationId,
-      createdByUserId: session.user.id,
-      createdAt: now,
-      updatedAt: now,
+    const created = await createExpertReviewCase({
+      reviewCase: {
+        id: nanoid(),
+        topicId: anchor.topicId,
+        sessionId: anchor.sessionId,
+        classroomStudentId: anchor.classroomStudentId,
+        interactionId: anchor.interactionId,
+        reviewType: body.reviewType,
+        priority: body.priority,
+        tutorFailureSummary: body.tutorFailureSummary,
+        expertCorrection: body.expertCorrection,
+        reusableSignal: body.reusableSignal,
+        status: "open",
+        metadata: body.metadata,
+        createdByUserId: session.user.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
     });
 
-    const created = await createLearningExpertAnnotation({ annotation });
     return NextResponse.json({ success: true, data: created });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors[0]?.message ?? "Validation error" }, { status: 400 });
     }
+
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to save annotation" },
+      { error: error instanceof Error ? error.message : "Failed to save review case" },
       { status: 400 },
     );
   }

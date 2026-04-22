@@ -4,13 +4,11 @@ import { nanoid } from "nanoid";
 import { getDb } from "@/db";
 import {
   analyticsChatSessions,
-  classrooms,
   classroomStudents,
   deletionJobs,
   participantFeedback,
   privacyRequests,
   respondentAccessTokens,
-  retentionPolicies,
   surveyAnalyticsFacts,
   surveyConversations,
   surveyEvidence,
@@ -23,13 +21,11 @@ import {
   voiceChunks,
   voiceQualityMetrics,
   voiceSessions,
-  workspacePrivacyProfiles,
 } from "@/db/schema";
 import { deleteLearningPatternMemoriesForUser, isMem0Configured } from "@/lib/learning/mem0";
 import { deleteLearningMaterial, clearSurveyMedia } from "@/lib/storage";
 
 export async function createPrivacyRequest(input: {
-  organizationId?: string | null;
   surveyId?: string | null;
   userId?: string | null;
   classroomStudentId?: string | null;
@@ -41,7 +37,6 @@ export async function createPrivacyRequest(input: {
     .insert(privacyRequests)
     .values({
       id: nanoid(),
-      organizationId: input.organizationId ?? null,
       surveyId: input.surveyId ?? null,
       userId: input.userId ?? null,
       classroomStudentId: input.classroomStudentId ?? null,
@@ -150,70 +145,9 @@ export async function exportUserPrivacyData(userId: string) {
 }
 
 export async function exportWorkspacePrivacyData(organizationId: string) {
-  const [
-    workspaceSurveys,
-    workspaceClassrooms,
-    workspaceTopics,
-    workspaceMaterials,
-    privacyProfile,
-    retentionPolicy,
-    workspacePrivacyQueue,
-  ] =
-    await Promise.all([
-      getDb().query.surveys.findMany({
-        where: eq(surveys.organizationId, organizationId),
-      }),
-      getDb().query.classrooms.findMany({
-        where: eq(classrooms.organizationId, organizationId),
-      }),
-      getDb().query.learningTopics.findMany({
-        with: {
-          classroom: {
-            columns: {
-              organizationId: true,
-            },
-          },
-        },
-      }).then((rows) =>
-        rows.filter((topic) => topic.classroom.organizationId === organizationId),
-      ),
-      getDb().query.topicMaterials.findMany({
-        with: {
-          topic: {
-            with: {
-              classroom: {
-                columns: {
-                  organizationId: true,
-                },
-              },
-            },
-          },
-        },
-      }).then((rows) =>
-        rows.filter(
-          (material) => material.topic.classroom.organizationId === organizationId,
-        ),
-      ),
-      getDb().query.workspacePrivacyProfiles.findFirst({
-        where: eq(workspacePrivacyProfiles.organizationId, organizationId),
-      }),
-      getDb().query.retentionPolicies.findFirst({
-        where: eq(retentionPolicies.organizationId, organizationId),
-      }),
-      getDb().query.privacyRequests.findMany({
-        where: eq(privacyRequests.organizationId, organizationId),
-      }),
-    ]);
-
-  return {
-    surveys: workspaceSurveys,
-    classrooms: workspaceClassrooms,
-    learningTopics: workspaceTopics,
-    topicMaterials: workspaceMaterials,
-    workspacePrivacyProfile: privacyProfile,
-    retentionPolicy,
-    privacyRequests: workspacePrivacyQueue,
-  };
+  throw new Error(
+    `Workspace privacy export is not available in V1 (${organizationId}).`,
+  );
 }
 
 export async function exportRespondentPrivacyData(conversationId: string) {

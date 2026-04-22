@@ -1,7 +1,7 @@
 const faqs = [
   {
     q: "What's included in the free plan?",
-    a: "The free plan is designed for getting started with classroom support. You can launch one classroom workspace, create a learning topic, run core AI tutoring flows, and review basic student insights without a credit card.",
+    a: "The free plan is designed for getting started with classroom support. You can create one classroom, publish a lesson, run core AI tutoring flows, and review basic student insights without a credit card.",
   },
   {
     q: "How is Convyy different from a regular LMS tool?",
@@ -9,7 +9,7 @@ const faqs = [
   },
   {
     q: "Do I lose access to the free version if I don't upgrade?",
-    a: "Not at all. The free plan stays available with no time limit. You only upgrade when you need more classrooms, collaboration, voice features, or deeper analytics.",
+    a: "Not at all. The free plan stays available with no time limit. You only upgrade when you need more classrooms, more sessions, or deeper analytics.",
   },
   {
     q: "Can I use Convyy across different educational use cases?",
@@ -24,12 +24,12 @@ const faqs = [
     a: "Yes, you can change your plan at any time. Upgrades take effect immediately, and downgrades apply at the end of your current billing cycle.",
   },
   {
-    q: "How does team collaboration work?",
-    a: "On Pro and Enterprise plans, you can create shared teacher workspaces, invite teammates, organize classrooms and topics, and collaborate on delivery, analysis, and reporting.",
+    q: "Can teachers organize their work?",
+    a: "Yes. Teachers can organize classrooms, sessions, surveys, analytics, and reports so related work stays grouped together and easier to review.",
   },
   {
     q: "What kind of support does Pro include?",
-    a: "Pro includes priority email support, richer learning analytics, AI-generated reporting, and broader workflow coverage for teams running multiple classes or programs.",
+    a: "Pro includes priority email support, richer learning analytics, AI-generated reporting, and broader workflow coverage for teachers running multiple classes or programs.",
   },
 ];
 
