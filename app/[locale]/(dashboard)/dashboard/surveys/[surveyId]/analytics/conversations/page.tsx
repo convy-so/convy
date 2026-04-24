@@ -2,18 +2,14 @@ import { Suspense } from "react";
 import { ArrowLeft, Loader2, Search } from "lucide-react";
 
 import { ConversationCard } from "@/components/analytics/ConversationCard";
-import { buildConversationListItem } from "@/lib/analytics";
 import { Link, redirect } from "@/i18n/routing";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getDb } from "@/db";
-import { surveySessionInsights, surveySessions } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
-import { conversationInsightSchema } from "@/lib/education/types";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 import { getTranslations } from "next-intl/server";
+import { getConversationInsightsSummary } from "@/lib/analytics/conversation-queries";
 
 interface PageProps {
   params: Promise<{ surveyId: string; locale: string }>;
@@ -42,58 +38,23 @@ async function ConversationsContent({
   surveyId: string;
   locale: string;
 }) {
-  const t = await getTranslations({ locale, namespace: "SurveyAnalytics.Conversations" });
-  const tt = (key: string, fallback: string) => (t.has(key) ? t(key) : fallback);
+  const t = await getTranslations({
+    locale,
+    namespace: "SurveyAnalytics.Conversations",
+  });
+  const tt = (key: string, fallback: string) =>
+    t.has(key) ? t(key) : fallback;
+
   const session = await getVerifiedSession();
   const permission = await getSurveyPermissionForSession(session, surveyId);
   if (!hasSurveyPermission(permission, "canView")) {
     redirect({ href: "/dashboard/analytics", locale });
   }
 
-  const rows = await getDb()
-    .select({
-      sessionId: surveySessionInsights.sessionId,
-      insight: surveySessionInsights.insight,
-      createdAt: surveySessions.createdAt,
-      sessionType: surveySessions.sessionType,
-      sourceConversationId: surveySessions.sourceConversationId,
-    })
-    .from(surveySessionInsights)
-    .innerJoin(surveySessions, eq(surveySessions.id, surveySessionInsights.sessionId))
-    .where(
-      and(
-        eq(surveySessionInsights.surveyId, surveyId),
-        eq(surveySessions.sessionType, "live"),
-      ),
-    );
-
-  const conversations = rows.flatMap((row) => {
-    const parsedInsight = conversationInsightSchema.safeParse(row.insight);
-
-    if (!parsedInsight.success) {
-      return [];
-    }
-
-    return [
-      buildConversationListItem({
-        insight: parsedInsight.data,
-        sessionType: row.sessionType,
-        createdAt: row.createdAt,
-        sourceConversationId: row.sourceConversationId,
-      }),
-    ];
-  });
-  const total = conversations.length;
-  const highQuality = conversations.filter(
-    (item) => item.completenessPercent >= 80 && item.reliabilityPercent >= 65,
-  ).length;
-  const averageReliability =
-    total > 0
-      ? Math.round(
-          conversations.reduce((sum, item) => sum + item.reliabilityPercent, 0) /
-            total,
-        )
-      : 0;
+  const { conversations, stats } = await getConversationInsightsSummary(
+    surveyId,
+    50,
+  );
 
   return (
     <div className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -110,7 +71,10 @@ async function ConversationsContent({
               {tt("Title", "Session Insights")}
             </h1>
             <p className="text-sm text-gray-500">
-              {tt("Description", "Review the session-level summaries that feed the analytics snapshot.")}
+              {tt(
+                "Description",
+                "Review the session-level summaries that feed the analytics snapshot.",
+              )}
             </p>
           </div>
         </div>
@@ -118,15 +82,15 @@ async function ConversationsContent({
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <StatCard
             label={tt("Stats.Sessions", "Sessions")}
-            value={String(total)}
+            value={String(stats.total)}
           />
           <StatCard
             label={tt("Stats.HighQuality", "High quality")}
-            value={String(highQuality)}
+            value={String(stats.highQuality)}
           />
           <StatCard
             label={tt("Stats.AverageReliability", "Average reliability")}
-            value={`${averageReliability}%`}
+            value={`${stats.averageReliability}%`}
           />
         </div>
 
@@ -134,7 +98,10 @@ async function ConversationsContent({
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder={tt("SearchPlaceholder", "Search session summaries...")}
+            placeholder={tt(
+              "SearchPlaceholder",
+              "Search session summaries...",
+            )}
             className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-700 outline-none transition-all focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
             disabled
           />
@@ -150,7 +117,10 @@ async function ConversationsContent({
             {tt("EmptyTitle", "No session insights yet")}
           </h3>
           <p className="text-sm text-gray-500">
-            {tt("EmptyDescription", "Complete a few live sessions to populate grounded analytics.")}
+            {tt(
+              "EmptyDescription",
+              "Complete a few live sessions to populate grounded analytics.",
+            )}
           </p>
         </div>
       ) : (

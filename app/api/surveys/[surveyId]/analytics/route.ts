@@ -14,7 +14,7 @@ import { getEducationProgram } from "@/lib/education/catalog";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 import {
   getActiveCoveragePlan,
   getAnalyticsState,

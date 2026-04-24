@@ -12,7 +12,6 @@ export async function rerank(
   topK: number = 5,
   metadata?: {
     userId?: string;
-    organizationId?: string;
     surveyId?: string;
   },
 ): Promise<SearchResult[]> {
@@ -49,7 +48,6 @@ export async function rerank(
       if (data.usage?.total_tokens) {
         logUsage({
           userId: metadata?.userId,
-          organizationId: metadata?.organizationId,
           surveyId: metadata?.surveyId,
           type: "llm_text",
           provider: "voyage",
@@ -115,7 +113,6 @@ Rank the top ${topK} results.`,
     if (usage) {
       logUsage({
         userId: metadata?.userId,
-        organizationId: metadata?.organizationId,
         surveyId: metadata?.surveyId,
         type: "llm_text",
         provider: "google",

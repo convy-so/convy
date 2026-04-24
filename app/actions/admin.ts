@@ -4,15 +4,13 @@ import { getDb } from "@/db";
 import { users, sessions } from "@/db/schema/auth";
 import { usageLogs } from "@/db/schema/billing";
 import { surveys } from "@/db/schema/surveys";
+import { platformFeedback } from "@/db/schema/feedback";
+import { classroomStudents } from "@/db/schema/learning";
 import { sql, eq, gte, desc, count, sum } from "drizzle-orm";
 import { headers } from "next/headers";
 
 import { resolveAdminSessionEmail } from "@/lib/admin/session";
 
-/**
- * Helper to check admin access in server actions.
- * Throws an error if the user is not an admin.
- */
 async function checkAdmin(authHeaders?: Headers | string | null) {
   let finalHeaders: Headers;
 
@@ -34,9 +32,6 @@ async function checkAdmin(authHeaders?: Headers | string | null) {
   return { email };
 }
 
-/**
- * Fetch high-level statistics for the admin dashboard overview.
- */
 export async function getAdminStats(authHeaders?: Headers | string | null) {
   await checkAdmin(authHeaders);
 
@@ -44,105 +39,110 @@ export async function getAdminStats(authHeaders?: Headers | string | null) {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(now.getDate() - 30);
 
-  const [
-    totalUsers,
-    totalSurveys,
-    totalUsageCost,
-    activeSessions,
-    newUsersLast30Days,
-  ] = await Promise.all([
-    getDb().select({ count: count() }).from(users),
-    getDb().select({ count: count() }).from(surveys),
-    getDb().select({ total: sum(usageLogs.cost) }).from(usageLogs),
-    getDb()
-      .select({ count: count() })
-      .from(sessions)
-      .where(gte(sessions.expiresAt, now)),
-    getDb()
-      .select({ count: count() })
-      .from(users)
-      .where(gte(users.createdAt, thirtyDaysAgo)),
-  ]);
+  try {
+    const [
+      totalUsers,
+      totalSurveys,
+      totalUsageCost,
+      activeSessions,
+      newUsersLast30Days,
+    ] = await Promise.all([
+      getDb().select({ count: count() }).from(users),
+      getDb().select({ count: count() }).from(surveys),
+      getDb().select({ total: sum(usageLogs.cost) }).from(usageLogs),
+      getDb()
+        .select({ count: count() })
+        .from(sessions)
+        .where(gte(sessions.expiresAt, now)),
+      getDb()
+        .select({ count: count() })
+        .from(users)
+        .where(gte(users.createdAt, thirtyDaysAgo)),
+    ]);
 
-  return {
-    totalUsers: totalUsers[0].count,
-    totalSurveys: totalSurveys[0].count,
-    totalUsageCost: totalUsageCost[0].total || "0",
-    activeSessions: activeSessions[0].count,
-    newUsersLast30Days: newUsersLast30Days[0].count,
-  };
+    return {
+      totalUsers: totalUsers[0].count,
+      totalSurveys: totalSurveys[0].count,
+      totalUsageCost: totalUsageCost[0].total || "0",
+      activeSessions: activeSessions[0].count,
+      newUsersLast30Days: newUsersLast30Days[0].count,
+    };
+  } catch (error) {
+    console.error("[Admin] getAdminStats failed:", error);
+    throw new Error("Failed to fetch admin statistics");
+  }
 }
 
-/**
- * Fetch user growth metrics (new users per day) for the last 30 days.
- */
 export async function getUserGrowthData(authHeaders?: Headers | string | null) {
   await checkAdmin(authHeaders);
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  // Group by date using SQL to handle different DB dialects (Postgres here)
-  const results = await getDb().execute(
-    sql<{ date: string; count: number }>`
-    SELECT 
-      DATE(created_at) as date,
-      COUNT(*)::int as count
-    FROM users
-    WHERE created_at >= ${thirtyDaysAgo}
-    GROUP BY DATE(created_at)
-    ORDER BY date ASC
-  `,
-  );
-
-  return results.rows;
+  try {
+    const results = await getDb().execute(
+      sql<{ date: string; count: number }>`
+      SELECT
+        DATE(created_at) as date,
+        COUNT(*)::int as count
+      FROM users
+      WHERE created_at >= ${thirtyDaysAgo}
+      GROUP BY DATE(created_at)
+      ORDER BY date ASC
+    `,
+    );
+    return results.rows;
+  } catch (error) {
+    console.error("[Admin] getUserGrowthData failed:", error);
+    throw new Error("Failed to fetch user growth data");
+  }
 }
 
-/**
- * Fetch usage cost data per day for the last 30 days.
- */
 export async function getUsageCostData(authHeaders?: Headers | string | null) {
   await checkAdmin(authHeaders);
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const results = await getDb().execute(
-    sql<{ date: string; cost: number }>`
-    SELECT 
-      DATE(created_at) as date,
-      SUM(cost)::double precision as cost
-    FROM usage_logs
-    WHERE created_at >= ${thirtyDaysAgo}
-    GROUP BY DATE(created_at)
-    ORDER BY date ASC
-  `,
-  );
-
-  return results.rows;
+  try {
+    const results = await getDb().execute(
+      sql<{ date: string; cost: number }>`
+      SELECT
+        DATE(created_at) as date,
+        SUM(cost)::double precision as cost
+      FROM usage_logs
+      WHERE created_at >= ${thirtyDaysAgo}
+      GROUP BY DATE(created_at)
+      ORDER BY date ASC
+    `,
+    );
+    return results.rows;
+  } catch (error) {
+    console.error("[Admin] getUsageCostData failed:", error);
+    throw new Error("Failed to fetch usage cost data");
+  }
 }
 
-/**
- * Fetch usage breakdown by type.
- */
-export async function getUsageTypeBreakdown(authHeaders?: Headers | string | null) {
+export async function getUsageTypeBreakdown(
+  authHeaders?: Headers | string | null,
+) {
   await checkAdmin(authHeaders);
 
-  const results = await getDb()
-    .select({
-      type: usageLogs.type,
-      totalCost: sum(usageLogs.cost),
-      count: count(),
-    })
-    .from(usageLogs)
-    .groupBy(usageLogs.type);
-
-  return results;
+  try {
+    return await getDb()
+      .select({
+        type: usageLogs.type,
+        totalCost: sum(usageLogs.cost),
+        count: count(),
+      })
+      .from(usageLogs)
+      .groupBy(usageLogs.type);
+  } catch (error) {
+    console.error("[Admin] getUsageTypeBreakdown failed:", error);
+    throw new Error("Failed to fetch usage breakdown");
+  }
 }
 
-/**
- * List surveys for expert feedback, ordered by creation date.
- */
 export async function getSurveysForFeedback(
   authHeaders?: Headers | string | null,
   page = 1,
@@ -150,36 +150,139 @@ export async function getSurveysForFeedback(
 ) {
   await checkAdmin(authHeaders);
 
-  const offset = (page - 1) * limit;
+  const safePage = Math.max(1, page);
+  const safeLimit = Math.min(100, Math.max(1, limit));
+  const offset = (safePage - 1) * safeLimit;
 
-  return getDb().query.surveys.findMany({
-    orderBy: [desc(surveys.createdAt)],
-    limit,
-    offset,
-    with: {
-      user: true,
-    },
-  });
+  try {
+    return await getDb().query.surveys.findMany({
+      orderBy: [desc(surveys.createdAt)],
+      limit: safeLimit,
+      offset,
+      with: {
+        user: true,
+      },
+    });
+  } catch (error) {
+    console.error("[Admin] getSurveysForFeedback failed:", error);
+    throw new Error("Failed to fetch surveys for review");
+  }
 }
 
-/**
- * Get a single survey with its full creation context for review.
- */
 export async function getSurveyReviewDetails(
   surveyId: string,
   authHeaders?: Headers | string | null,
 ) {
   await checkAdmin(authHeaders);
 
-  const survey = await getDb().query.surveys.findFirst({
-    where: eq(surveys.id, surveyId),
-    with: {
-      user: true,
-      creationConversation: true,
-      brief: true,
-    },
-  });
+  if (!surveyId?.trim()) {
+    throw new Error("Survey ID is required");
+  }
 
-  return survey;
+  try {
+    return await getDb().query.surveys.findFirst({
+      where: eq(surveys.id, surveyId),
+      with: {
+        user: true,
+        creationConversation: true,
+        brief: true,
+      },
+    });
+  } catch (error) {
+    console.error("[Admin] getSurveyReviewDetails failed:", error);
+    throw new Error("Failed to fetch survey details");
+  }
 }
 
+export async function getPlatformFeedbackItems(
+  authHeaders?: Headers | string | null,
+  status?: string,
+) {
+  await checkAdmin(authHeaders);
+
+  try {
+    const query = getDb()
+      .select({
+        id: platformFeedback.id,
+        createdAt: platformFeedback.createdAt,
+        updatedAt: platformFeedback.updatedAt,
+        submitterRole: platformFeedback.submitterRole,
+        kind: platformFeedback.kind,
+        sourceArea: platformFeedback.sourceArea,
+        status: platformFeedback.status,
+        subject: platformFeedback.subject,
+        message: platformFeedback.message,
+        contactEmail: platformFeedback.contactEmail,
+        metadata: platformFeedback.metadata,
+        userId: platformFeedback.userId,
+        userName: users.name,
+        userEmail: users.email,
+        classroomStudentId: platformFeedback.classroomStudentId,
+        classroomStudentName: classroomStudents.fullName,
+        classroomStudentEmail: classroomStudents.email,
+      })
+      .from(platformFeedback)
+      .leftJoin(users, eq(users.id, platformFeedback.userId))
+      .leftJoin(
+        classroomStudents,
+        eq(classroomStudents.id, platformFeedback.classroomStudentId),
+      )
+      .orderBy(desc(platformFeedback.createdAt))
+      .limit(200);
+
+    if (status) {
+      return await query.where(eq(platformFeedback.status, status));
+    }
+
+    return await query;
+  } catch (error) {
+    console.error("[Admin] getPlatformFeedbackItems failed:", error);
+    throw new Error("Failed to fetch feedback items");
+  }
+}
+
+const VALID_FEEDBACK_STATUSES = [
+  "open",
+  "reviewing",
+  "resolved",
+  "dismissed",
+] as const;
+type FeedbackStatus = (typeof VALID_FEEDBACK_STATUSES)[number];
+
+function isValidFeedbackStatus(value: string): value is FeedbackStatus {
+  return VALID_FEEDBACK_STATUSES.includes(value as FeedbackStatus);
+}
+
+export async function updatePlatformFeedbackStatus(
+  feedbackId: string,
+  status: FeedbackStatus,
+  authHeaders?: Headers | string | null,
+) {
+  await checkAdmin(authHeaders);
+
+  if (!feedbackId?.trim()) {
+    throw new Error("Feedback ID is required");
+  }
+  if (!isValidFeedbackStatus(status)) {
+    throw new Error(`Invalid status: ${status}`);
+  }
+
+  try {
+    const [updated] = await getDb()
+      .update(platformFeedback)
+      .set({
+        status,
+        updatedAt: new Date(),
+      })
+      .where(eq(platformFeedback.id, feedbackId))
+      .returning({
+        id: platformFeedback.id,
+        status: platformFeedback.status,
+      });
+
+    return updated ?? null;
+  } catch (error) {
+    console.error("[Admin] updatePlatformFeedbackStatus failed:", error);
+    throw new Error("Failed to update feedback status");
+  }
+}

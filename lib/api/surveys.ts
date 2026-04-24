@@ -82,13 +82,12 @@ const surveyListItemSchema = z.object({
   isOwner: z.boolean(),
   isVoice: z.boolean(),
   sharedBy: z.string().nullish(),
-  role: z.enum(["owner", "editor", "none"]).optional(),
+  role: z.enum(["owner", "none"]).optional(),
   creatorName: z.string().nullish(),
-  accessLevel: z.enum(["owner", "editor", "none"]),
+  accessLevel: z.enum(["owner", "none"]),
   canOpen: z.boolean(),
   canEdit: z.boolean(),
   canDelete: z.boolean(),
-  canManageCollaborators: z.boolean().optional(),
   isLocked: z.boolean(),
   folderId: z.string().nullish(),
   programId: z.string().nullish(),
@@ -101,14 +100,8 @@ const surveyListResponseSchema = z.object({
 
 const surveyPermissionSchema = z.object({
   surveyId: z.string(),
-  resourceScope: z.enum(["personal"]),
-  activeContextMatchesResource: z.boolean(),
-  collaborationAllowed: z.boolean(),
-  creatorId: z.string(),
-  accessLevel: z.enum(["owner", "editor", "none"]),
-  isWorkspaceMember: z.boolean(),
-  workspaceRole: z.null(),
-  isWorkspaceOwner: z.boolean(),
+  ownerId: z.string(),
+  accessLevel: z.enum(["owner", "none"]),
   isSurveyCreator: z.boolean(),
   isSurveyEditor: z.boolean(),
   canDiscover: z.boolean(),
@@ -117,7 +110,6 @@ const surveyPermissionSchema = z.object({
   canEdit: z.boolean(),
   canPublish: z.boolean(),
   canDelete: z.boolean(),
-  canManageCollaborators: z.boolean(),
 });
 
 const surveyDetailsResponseSchema = z.object({
@@ -199,6 +191,17 @@ const surveyDraftCreateResponseSchema = z.object({
   title: z.string(),
   deliveryMode: z.enum(["link", "classroom_assigned"]),
   classroomId: z.string().nullable().optional(),
+  messages: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        role: z.string(),
+        content: z.string().optional(),
+        parts: z.array(z.unknown()).optional(),
+        timestamp: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 
 export async function fetchSurveys(): Promise<SurveyListItem[]> {

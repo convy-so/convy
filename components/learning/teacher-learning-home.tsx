@@ -1,11 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import {
-  ClipboardList,
   ArrowUpRight,
-  ArrowRight,
   BookOpen,
   CheckCircle2,
   FileText,
@@ -14,7 +11,6 @@ import {
   Lock,
   Layout,
   Sparkles,
-  Unplug,
   UploadCloud,
   Users,
   Plus,
@@ -22,29 +18,10 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { GlassPanel } from "@/components/learning/glass-panel";
-import { MetricTile } from "@/components/learning/metric-tile";
-import { SectionHeading } from "@/components/learning/section-heading";
-import { Link, useRouter } from "@/i18n/routing";
-import {
-  fetchClassroomAssignedSurveys,
-  fetchClassroomStudents,
-  fetchClassroomTopics,
-  fetchLearningInterventions,
-  fetchStudentPatterns,
-  fetchTeacherClassrooms,
-  fetchTopicMaterials,
-  fetchTopicQuestions,
-  fetchTopicReadiness,
-  fetchTopicReports,
-  updateTopicStatus,
-  updateLearningIntervention,
-  uploadTopicMaterial,
-} from "@/lib/api/learning";
-import { createSurveyDraft } from "@/lib/api/surveys";
-import { queryKeys } from "@/lib/query-keys";
+import { Link } from "@/i18n/routing";
 import { CreateClassroomModal } from "@/components/learning/create-classroom-modal";
 import { CreateTopicModal } from "@/components/learning/create-topic-modal";
+import { useTeacherLearningWorkspace } from "@/components/learning/hooks/use-teacher-learning-workspace";
 import { InviteStudentModal } from "@/components/learning/invite-student-modal";
 import { LogInterventionModal } from "@/components/learning/log-intervention-modal";
 import { StatsCard } from "@/components/dashboard/stats-card";
@@ -57,27 +34,6 @@ function countReadyTopics(statuses: string[]) {
 
 function accessMeta() {
   return { label: "Owner", tone: "border-emerald-200 bg-emerald-50 text-emerald-700" };
-}
-
-type InterventionType =
-  | "reteach"
-  | "check_in"
-  | "practice"
-  | "family_follow_up";
-
-type InterventionPriority = "low" | "medium" | "high";
-
-function isInterventionType(value: string): value is InterventionType {
-  return (
-    value === "reteach" ||
-    value === "check_in" ||
-    value === "practice" ||
-    value === "family_follow_up"
-  );
-}
-
-function isInterventionPriority(value: string): value is InterventionPriority {
-  return value === "low" || value === "medium" || value === "high";
 }
 
 function formatInterventionTypeLabel(value: string) {
@@ -94,224 +50,45 @@ function formatInterventionStatusLabel(value: string) {
     .join(" ");
 }
 
-export function TeacherWorkspace() {
-  const router = useRouter();
-  const queryClient = useQueryClient();
+export function TeacherLearningHome() {
   const [isCreateClassModalOpen, setIsCreateClassModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
   const [isInterventionModalOpen, setIsInterventionModalOpen] = useState(false);
-  const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(null);
-  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
-  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [materialTitle, setMaterialTitle] = useState("");
   const [materialDescription, setMaterialDescription] = useState("");
   const [materialFile, setMaterialFile] = useState<File | null>(null);
-
-  const classroomsQuery = useQuery({
-    queryKey: queryKeys.learning.classrooms,
-    queryFn: fetchTeacherClassrooms,
-  });
-
-  const classrooms = useMemo(() => classroomsQuery.data?.data ?? [], [classroomsQuery.data]);
-  const selectedDirectoryClassroom =
-    classrooms.find((classroom) => classroom.id === selectedClassroomId) ??
-    classrooms[0] ??
-    null;
-  const selectedAccessibleClassroomId = selectedDirectoryClassroom?.id ?? null;
-  const canManageStudents = Boolean(selectedDirectoryClassroom);
-
-  const studentsQuery = useQuery({
-    queryKey: selectedAccessibleClassroomId
-      ? queryKeys.learning.students(selectedAccessibleClassroomId)
-      : ["learningStudents", "idle"],
-    queryFn: async () => {
-      if (!selectedAccessibleClassroomId) {
-        throw new Error("Missing classroom id");
-      }
-      return fetchClassroomStudents(selectedAccessibleClassroomId);
-    },
-    enabled: Boolean(selectedAccessibleClassroomId),
-  });
-  const topicsQuery = useQuery({
-    queryKey: selectedAccessibleClassroomId
-      ? queryKeys.learning.topics(selectedAccessibleClassroomId)
-      : ["learningTopics", "idle"],
-    queryFn: async () => {
-      if (!selectedAccessibleClassroomId) {
-        throw new Error("Missing classroom id");
-      }
-      return fetchClassroomTopics(selectedAccessibleClassroomId);
-    },
-    enabled: Boolean(selectedAccessibleClassroomId),
-  });
-  const students = useMemo(() => studentsQuery.data?.data ?? [], [studentsQuery.data]);
-  const topics = useMemo(() => topicsQuery.data?.data ?? [], [topicsQuery.data]);
-  const selectedStudent =
-    students.find((student) => student.id === selectedStudentId) ?? students[0] ?? null;
-  const selectedTopic =
-    topics.find((topic) => topic.id === selectedTopicId) ?? topics[0] ?? null;
-
-  const materialsQuery = useQuery({
-    queryKey: selectedTopic ? queryKeys.learning.materials(selectedTopic.id) : ["learningMaterials", "idle"],
-    queryFn: async () => {
-      if (!selectedTopic) {
-        throw new Error("Missing topic");
-      }
-      return fetchTopicMaterials(selectedTopic.id);
-    },
-    enabled: Boolean(selectedTopic),
-  });
-  const readinessQuery = useQuery({
-    queryKey: selectedTopic ? queryKeys.learning.readiness(selectedTopic.id) : ["learningReadiness", "idle"],
-    queryFn: async () => {
-      if (!selectedTopic) {
-        throw new Error("Missing topic");
-      }
-      return fetchTopicReadiness(selectedTopic.id);
-    },
-    enabled: Boolean(selectedTopic),
-  });
-  const reportsQuery = useQuery({
-    queryKey: selectedTopic ? queryKeys.learning.reports(selectedTopic.id) : ["learningReports", "idle"],
-    queryFn: async () => {
-      if (!selectedTopic) {
-        throw new Error("Missing topic");
-      }
-      return fetchTopicReports(selectedTopic.id);
-    },
-    enabled: Boolean(selectedTopic),
-  });
-  const questionsQuery = useQuery({
-    queryKey: selectedTopic ? queryKeys.learning.questions(selectedTopic.id) : ["learningQuestions", "idle"],
-    queryFn: async () => {
-      if (!selectedTopic) {
-        throw new Error("Missing topic");
-      }
-      return fetchTopicQuestions(selectedTopic.id);
-    },
-    enabled: Boolean(selectedTopic),
-  });
-  const studentPatternsQuery = useQuery({
-    queryKey: selectedStudent ? queryKeys.learning.studentPatterns(selectedStudent.id) : ["learningStudentPatterns", "idle"],
-    queryFn: async () => {
-      if (!selectedStudent) {
-        throw new Error("Missing student");
-      }
-      return fetchStudentPatterns(selectedStudent.id);
-    },
-    enabled: Boolean(selectedStudent),
-  });
-  const assignedSurveysQuery = useQuery({
-    queryKey: selectedAccessibleClassroomId
-      ? queryKeys.learning.assignedSurveys(selectedAccessibleClassroomId)
-      : ["learningAssignedSurveys", "idle"],
-    queryFn: async () => {
-      if (!selectedAccessibleClassroomId) {
-        throw new Error("Missing classroom");
-      }
-      return fetchClassroomAssignedSurveys(selectedAccessibleClassroomId);
-    },
-    enabled: Boolean(selectedAccessibleClassroomId),
-  });
-  const interventionsQuery = useQuery({
-    queryKey:
-      selectedAccessibleClassroomId && selectedStudent
-        ? queryKeys.learning.interventions(
-            selectedAccessibleClassroomId,
-            selectedStudent.id,
-            selectedTopic?.id ?? null,
-          )
-        : ["learningInterventions", "idle"],
-    queryFn: async () => {
-      if (!selectedAccessibleClassroomId || !selectedStudent) {
-        throw new Error("Missing intervention context");
-      }
-      return fetchLearningInterventions({
-        classroomId: selectedAccessibleClassroomId,
-        classroomStudentId: selectedStudent.id,
-        topicId: selectedTopic?.id,
-      });
-    },
-    enabled: Boolean(selectedAccessibleClassroomId && selectedStudent),
-  });
-  const uploadMaterialMutation = useMutation({
-    mutationFn: uploadTopicMaterial,
-    onSuccess: async () => {
-      setMaterialTitle("");
-      setMaterialDescription("");
-      setMaterialFile(null);
-      toast.success("Material uploaded");
-      if (selectedTopic) {
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: queryKeys.learning.materials(selectedTopic.id) }),
-          queryClient.invalidateQueries({ queryKey: queryKeys.learning.readiness(selectedTopic.id) }),
-        ]);
-      }
-    },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to upload material"),
-  });
-  const updateTopicStatusMutation = useMutation({
-    mutationFn: ({ topicId, status }: { topicId: string; status: "draft" | "active" | "paused" | "archived" }) =>
-      updateTopicStatus(topicId, status),
-    onSuccess: async () => {
-      toast.success("Topic status updated");
-      if (selectedAccessibleClassroomId) {
-        await queryClient.invalidateQueries({ queryKey: queryKeys.learning.topics(selectedAccessibleClassroomId) });
-      }
-    },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to update topic"),
-  });
-  const createClassSurveyMutation = useMutation({
-    mutationFn: async (classroomId: string) =>
-      createSurveyDraft({
-        deliveryMode: "classroom_assigned",
-        classroomId,
-      }),
-    onSuccess: async (data) => {
-      toast.success("Class-linked survey draft created");
-      await queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all(null) });
-      router.push(`/dashboard/create?surveyId=${encodeURIComponent(data.id)}`);
-    },
-    onError: (error) =>
-      toast.error(
-        error instanceof Error ? error.message : "Failed to create class-linked survey",
-      ),
-  });
-  const updateInterventionMutation = useMutation({
-    mutationFn: updateLearningIntervention,
-    onSuccess: async () => {
-      toast.success("Intervention updated");
-      if (selectedAccessibleClassroomId && selectedStudent) {
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.learning.interventions(
-            selectedAccessibleClassroomId,
-            selectedStudent.id,
-            selectedTopic?.id ?? null,
-          ),
-        });
-      }
-    },
-    onError: (error) =>
-      toast.error(
-        error instanceof Error ? error.message : "Failed to update intervention",
-      ),
-  });
-
-  const reportsPayload = reportsQuery.data?.data ?? null;
-  const reports = reportsPayload?.reports ?? [];
-  const questions = questionsQuery.data?.data ?? [];
-  const assignedSurveys = assignedSurveysQuery.data?.data ?? [];
-  const interventions = interventionsQuery.data?.data ?? [];
-  const selectedStudentReport =
-    reports.find((report) => report.student.id === selectedStudent?.id) ?? null;
-  const selectedStudentAssignedSurveyStates = assignedSurveys.map((survey) => ({
-    ...survey,
-    selectedStudentState:
-      survey.students.find((student) => student.classroomStudentId === selectedStudent?.id) ??
-      null,
-  }));
-  const patternSummary = studentPatternsQuery.data?.data.profiles[0]?.studentSummary ?? null;
+  const {
+    classroomsQuery,
+    classrooms,
+    selectedDirectoryClassroom,
+    selectedAccessibleClassroomId,
+    canManageStudents,
+    studentsQuery,
+    topicsQuery,
+    students,
+    topics,
+    selectedStudent,
+    selectedTopic,
+    materialsQuery,
+    readinessQuery,
+    reportsQuery,
+    assignedSurveysQuery,
+    interventionsQuery,
+    uploadMaterialMutation,
+    updateTopicStatusMutation,
+    createClassSurveyMutation,
+    updateInterventionMutation,
+    reports,
+    questions,
+    interventions,
+    selectedStudentReport,
+    selectedStudentAssignedSurveyStates,
+    patternSummary,
+    setSelectedClassroomId,
+    setSelectedTopicId,
+    setSelectedStudentId,
+  } = useTeacherLearningWorkspace();
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-12">
@@ -619,7 +396,21 @@ export function TeacherWorkspace() {
                         <form className="space-y-3" onSubmit={(e) => {
                           e.preventDefault();
                           if (!materialFile) { toast.error("Choose a file first."); return; }
-                          uploadMaterialMutation.mutate({ topicId: selectedTopic.id, file: materialFile, title: materialTitle || undefined, description: materialDescription || undefined });
+                          uploadMaterialMutation.mutate(
+                            {
+                              topicId: selectedTopic.id,
+                              file: materialFile,
+                              title: materialTitle || undefined,
+                              description: materialDescription || undefined,
+                            },
+                            {
+                              onSuccess: () => {
+                                setMaterialTitle("");
+                                setMaterialDescription("");
+                                setMaterialFile(null);
+                              },
+                            },
+                          );
                         }}>
                           <input value={materialTitle} onChange={(e) => setMaterialTitle(e.target.value)} placeholder="Material name (e.g. Chapter 1)" className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-gray-400 transition-colors" />
                           <textarea value={materialDescription} onChange={(e) => setMaterialDescription(e.target.value)} rows={2} placeholder="Brief description…" className="w-full resize-none rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-gray-400 transition-colors" />

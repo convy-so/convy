@@ -33,12 +33,12 @@ import {
   type VoiceAgentSettings,
   VOICE_AGENT_THINK_MODEL,
 } from "@/lib/voice/deepgram-voice-agent";
+import { getSurveyPermissionContext } from "@/lib/survey-access";
 import type { AuthenticatedConnection } from "../middleware/auth";
 import { BaseVoiceAgentHandler } from "./base-voice-agent-handler";
-import { getSurveyPermissionContext } from "@/lib/workspace-access";
 import {
   acquireSurveyLease,
-  recordRealtimeEvent,
+  incrementSurveyRevision,
   releaseSurveyLease,
   renewSurveyLease,
 } from "@/lib/collaboration-service";
@@ -156,7 +156,6 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
         return;
       }
       this.leaseToken = lease.lease.leaseToken;
-      await this.broadcastLeaseEvent("survey.lease_acquired", lease.lease.expiresAt);
 
       if (!briefRow || !planRow) {
         this.sendError("This survey is not ready for education interview rehearsal yet.");
@@ -177,7 +176,6 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       this.state.brief = briefRow.brief;
       this.state.coveragePlan = planRow.plan;
       this.surveyId = survey.id;
-      this.organizationId = survey.organizationId;
 
       await getDb().insert(voiceSessions).values({
         id: this.state.voiceSessionId,
@@ -298,7 +296,6 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       getActiveConductingProfile(this.state.surveyId, "sample"),
       getConductingRuntimeLayers({
         surveyId: this.state.surveyId,
-        organizationId: this.state.survey?.organizationId,
         classroomId: this.state.survey?.classroomId,
         programId: this.state.survey?.programId,
         language: this.state.language,
@@ -312,8 +309,6 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
       sessionState: this.state.sessionState,
       sessionType: "sample",
       conductingProfile: activeSampleProfile?.profile ?? null,
-      playbookContext: runtimeLayers.playbookContext,
-      personalityContext: runtimeLayers.personalityContext,
       expertGuidanceContext: runtimeLayers.expertGuidanceContext,
       toolContext: {
         canFinishSurvey: true,
@@ -383,20 +378,11 @@ Additional sample-session rules:
           updatedAt: new Date(),
         })
         .where(eq(sampleConversations.id, this.state.conversationId));
-
-      await getDb().transaction(async (tx) => {
-        await recordRealtimeEvent(tx, {
-          scope: "survey",
+      await incrementSurveyRevision(this.state.surveyId).catch((error) => {
+        console.error("[sample-survey-voice] failed to increment survey revision", {
           surveyId: this.state.surveyId,
-          actorId: this.userId!,
-          eventType: "survey.rehearsal_turn_added",
-          payload: {
-            surveyId: this.state.surveyId,
-            conversationId: this.state.conversationId,
-            conversationNumber: this.state.conversationNumber,
-            messageCount: this.state.messages.length,
-            source: "voice",
-          },
+          conversationId: this.state.conversationId,
+          message: error instanceof Error ? error.message : "Unknown error",
         });
       });
     }
@@ -445,7 +431,6 @@ Additional sample-session rules:
       getActiveConductingProfile(this.state.surveyId, "sample"),
       getConductingRuntimeLayers({
         surveyId: this.state.surveyId,
-        organizationId: this.state.survey?.organizationId,
         classroomId: this.state.survey?.classroomId,
         programId: this.state.survey?.programId,
         language: this.state.language,
@@ -458,8 +443,6 @@ Additional sample-session rules:
       sessionState: nextState,
       sessionType: "sample",
       conductingProfile: refreshedSampleProfile?.profile ?? null,
-      playbookContext: refreshedRuntimeLayers.playbookContext,
-      personalityContext: refreshedRuntimeLayers.personalityContext,
       expertGuidanceContext: refreshedRuntimeLayers.expertGuidanceContext,
       toolContext: {
         canFinishSurvey: true,
@@ -569,7 +552,6 @@ Additional sample-session rules:
         return null;
       });
       if (releaseResult?.ok) {
-        await this.broadcastLeaseEvent("survey.lease_released").catch(() => undefined);
       }
       this.leaseToken = null;
     }
@@ -622,34 +604,7 @@ Additional sample-session rules:
     }
 
     this.leaseToken = acquired.lease.leaseToken;
-    await this.broadcastLeaseEvent("survey.lease_acquired", acquired.lease.expiresAt);
     return true;
-  }
-
-  private async broadcastLeaseEvent(
-    eventType: "survey.lease_acquired" | "survey.lease_released",
-    expiresAt?: Date | null,
-  ) {
-    await getDb().transaction(async (tx) => {
-      await recordRealtimeEvent(tx, {
-        scope: "survey",
-        surveyId: this.state.surveyId,
-        actorId: this.userId!,
-        eventType,
-        payload: {
-          surveyId: this.state.surveyId,
-          stage: "rehearsal",
-          holderUserId:
-            eventType === "survey.lease_released" ? null : this.userId!,
-          holderSessionId:
-            eventType === "survey.lease_released"
-              ? null
-              : this.state.voiceSessionId,
-          expiresAt: expiresAt?.toISOString() ?? null,
-          source: "voice",
-        },
-      });
-    });
   }
 }
 

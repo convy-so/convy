@@ -17,7 +17,6 @@ import {
 } from "@/lib/ai";
 import {
   toPersistedUIChatMessages,
-  toUIMessages,
   toVisibleConversationMessages,
 } from "@/lib/chat-ui-messages";
 import { getVerifiedSession } from "@/lib/auth/session";
@@ -25,6 +24,7 @@ import {
   acquireSurveyLease,
   getActiveSurveyLease,
   getCurrentSurveyRevision,
+  incrementSurveyRevision,
 } from "@/lib/collaboration-service";
 import {
   buildConductingSystemPromptParts,
@@ -44,13 +44,15 @@ import {
   purgeSessionAnalyticsArtifacts,
   updateSessionState,
 } from "@/lib/education/storage";
-import { getClientIP, apiRateLimiter } from "@/lib/ratelimit";
+import { getRateLimitKey, apiRateLimiter } from "@/lib/ratelimit";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
+import { sanitizeUserInput } from "@/lib/ai/sanitization";
 import { recordAiFeedbackEvent } from "@/lib/ai/observability";
+import { buildCanonicalConversationTurn } from "@/lib/respondent-conversation";
 
 export const maxDuration = 300;
 const MAX_SAMPLE_CONVERSATIONS = 3;
@@ -188,8 +190,13 @@ export async function POST(
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
-    const clientIP = getClientIP(request);
-    const rateLimitResult = await apiRateLimiter.limit(clientIP);
+    const session = await getVerifiedSession();
+    const rateLimitResult = await apiRateLimiter.limit(
+      getRateLimitKey(request, {
+        userId: session.user.id,
+        scope: "survey-sample:post",
+      }),
+    );
     if (!rateLimitResult.success) {
       return new Response(
         JSON.stringify({
@@ -203,17 +210,10 @@ export async function POST(
       );
     }
 
-    const session = await getVerifiedSession();
     const { surveyId } = await params;
     const body = parseSampleRouteBody(await request.json());
     const conversationNumber = Number(body.conversationNumber || 1);
     const rawMessages = body.messages ?? [];
-    const persistedIncomingMessages = toPersistedUIChatMessages(rawMessages, ["user", "assistant"]);
-    const latestUserMessage =
-      [...persistedIncomingMessages]
-        .reverse()
-        .find((message) => message.role === "user")
-        ?.content?.trim() ?? "";
 
     if (
       conversationNumber < 1 ||
@@ -338,6 +338,12 @@ export async function POST(
         .where(eq(surveys.id, surveyId));
     }
 
+    const canonicalTurn = buildCanonicalConversationTurn({
+      storedMessages: sampleConversation.messages ?? [],
+      incomingMessages: rawMessages,
+    });
+    const latestUserMessage = canonicalTurn.latestUserMessage;
+
     const sourceId = sampleConversation.id;
     let sessionRow = await getSessionBySourceId(sourceId);
     if (!sessionRow) {
@@ -448,7 +454,7 @@ Respond to the user in the language they are speaking to you in. Match the langu
           timestamp: new Date().toISOString(),
         };
         const redirectedMessages = toVisibleConversationMessages([
-          ...persistedIncomingMessages,
+          ...canonicalTurn.canonicalMessages,
           redirectMessage,
         ]);
         await getDb()
@@ -458,6 +464,7 @@ Respond to the user in the language they are speaking to you in. Match the langu
             updatedAt: new Date(),
           })
           .where(eq(sampleConversations.id, sampleConversation.id));
+        const revision = await incrementSurveyRevision(surveyId);
         await recordAiFeedbackEvent({
           userId: session.user.id,
           source: "scope_policy",
@@ -474,7 +481,7 @@ Respond to the user in the language they are speaking to you in. Match the langu
           },
         }).catch(() => undefined);
 
-        return createUIMessageStreamResponse({
+        const response = createUIMessageStreamResponse({
           stream: createUIMessageStream({
             execute: async ({ writer }) => {
               writer.write({
@@ -485,12 +492,29 @@ Respond to the user in the language they are speaking to you in. Match the langu
             },
           }),
         });
+        response.headers.set("X-Survey-Revision", String(revision));
+        response.headers.set("X-Lease-Token", leaseResult.lease.leaseToken);
+        return response;
       }
     }
 
+    // Sanitize conversation history before sending to the model
+    const sanitizedMessages = (canonicalTurn.originalMessages as any[]).map((m) => {
+      if (m.role === "user") {
+        return {
+          ...m,
+          content: sanitizeUserInput(m.content, {
+            maxLength: 2000,
+            allowNewlines: true,
+          }),
+        };
+      }
+      return m;
+    });
+
     const modelMessages =
-      rawMessages.length > 0
-        ? await toModelMessages(rawMessages)
+      canonicalTurn.canonicalMessages.length > 0
+        ? await toModelMessages(sanitizedMessages)
         : [
             {
               role: "user" as const,
@@ -524,7 +548,7 @@ Respond to the user in the language they are speaking to you in. Match the langu
 
     const remainingSamples = MAX_SAMPLE_CONVERSATIONS - conversationNumber;
     const response = result.toUIMessageStreamResponse({
-      originalMessages: toUIMessages(persistedIncomingMessages),
+      originalMessages: canonicalTurn.originalMessages,
       onFinish: async ({ messages }) => {
         const persistedMessages = toVisibleConversationMessages(
           toPersistedUIChatMessages(messages, ["user", "assistant"]),
@@ -537,6 +561,9 @@ Respond to the user in the language they are speaking to you in. Match the langu
             updatedAt: new Date(),
           })
           .where(eq(sampleConversations.id, sampleConversation.id));
+        await incrementSurveyRevision(surveyId).catch((error) => {
+          console.error("[Sample Route] Failed to increment survey revision:", error);
+        });
 
         if (persistedMessages.some((message) => message.role === "user")) {
           if (!completedByTool) {

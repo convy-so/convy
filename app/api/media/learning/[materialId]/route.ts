@@ -42,13 +42,6 @@ export async function GET(
     ) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
-    if (
-      error instanceof Error &&
-      error.name === "GDPR_WORKSPACE_PRIVACY_INCOMPLETE"
-    ) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-
     return NextResponse.json({ error: "Failed to access material" }, { status: 500 });
   }
 }

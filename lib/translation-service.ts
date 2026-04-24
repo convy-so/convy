@@ -284,8 +284,6 @@ export async function getUserPreferredLanguage(
     switch (locale) {
       case "fr":
       case "de":
-      case "es":
-      case "it":
       case "en":
         return locale;
       default:

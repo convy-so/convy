@@ -8,15 +8,9 @@ import type { AnalyticsPendingData, SurveyAnalyticsData } from "@/lib/analytics"
 import { Link } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 import { NarrativeReport } from "./NarrativeReport";
-import { useRealtime } from "@/hooks/use-realtime";
 
 interface AnalyticsDashboardProps {
   surveyId: string;
-  enableRealtime?: boolean;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -54,7 +48,6 @@ async function fetchAnalytics(
 
 export function AnalyticsDashboard({
   surveyId,
-  enableRealtime = false,
 }: AnalyticsDashboardProps) {
   const [isRegenerating, setIsRegenerating] = useState(false);
 
@@ -69,30 +62,17 @@ export function AnalyticsDashboard({
           : 300000,
   });
 
-  useRealtime({
-    channels: enableRealtime ? [`survey:${surveyId}`] : [],
-    onEvent: (message) => {
-      if (!isRecord(message)) {
-        return;
-      }
-
-      if (
-        message.eventType === "survey.analytics_ready" &&
-        message.surveyId === surveyId
-      ) {
-        void refetch();
-      }
-    },
-  });
-
   const handleRegenerate = async () => {
     setIsRegenerating(true);
     try {
-      await fetch(`/api/surveys/${surveyId}/analytics`, {
+      const res = await fetch(`/api/surveys/${surveyId}/analytics`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ force: true }),
       });
-      await refetch();
+      if (res.ok) {
+        await refetch();
+      }
     } finally {
       setIsRegenerating(false);
     }

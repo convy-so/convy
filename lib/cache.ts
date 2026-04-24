@@ -144,35 +144,30 @@ export const cache = {
  * Standardized key generators to avoid collisions and make invalidation easier
  */
 export const cacheKeys = {
-  dashboardStats: (userId: string, orgId?: string | null) =>
-    orgId ? `dash:stats:org:${orgId}` : `dash:stats:user:${userId}`,
-  dashboardRecentSurveys: (userId: string, orgId?: string | null) =>
-    orgId ? `dash:surveys:org:${orgId}` : `dash:surveys:user:${userId}`,
-  dashboardActivity: (userId: string, orgId?: string | null) =>
-    orgId ? `dash:activity:org:${orgId}` : `dash:activity:user:${userId}`,
+  dashboardStats: (userId: string) => `dash:stats:user:${userId}`,
+  dashboardRecentSurveys: (userId: string) => `dash:surveys:user:${userId}`,
+  dashboardActivity: (userId: string) => `dash:activity:user:${userId}`,
 
   // Patterns for broad invalidation
   userScope: (userId: string) => `*:${userId}:*`,
-  orgScope: (orgId: string) => `*:*:*:${orgId}`,
 };
 
 export async function invalidateDashboardCaches(
   userId: string,
-  orgId?: string | null,
+  _scopeId?: string | null,
   sections: DashboardCacheSection[] = ["stats", "recentSurveys", "activity"],
 ): Promise<void> {
   const uniqueSections = new Set(sections);
   const keys = Array.from(uniqueSections, (section) => {
     switch (section) {
       case "stats":
-        return cacheKeys.dashboardStats(userId, orgId);
+        return cacheKeys.dashboardStats(userId);
       case "recentSurveys":
-        return cacheKeys.dashboardRecentSurveys(userId, orgId);
+        return cacheKeys.dashboardRecentSurveys(userId);
       case "activity":
-        return cacheKeys.dashboardActivity(userId, orgId);
+        return cacheKeys.dashboardActivity(userId);
     }
   });
 
   await Promise.all(keys.map((key) => cache.delete(key)));
 }
-

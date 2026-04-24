@@ -7,7 +7,7 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 import { sampleFeedbackEntryInputSchema } from "@/lib/education/sample-feedback";
 import {
   applyFeedbackBriefPatch,

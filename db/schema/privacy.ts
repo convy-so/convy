@@ -1,5 +1,4 @@
 import {
-  boolean,
   index,
   integer,
   jsonb,
@@ -14,70 +13,16 @@ import { classroomStudents } from "./learning";
 import { users } from "./auth";
 import { timestamps } from "./common";
 
-export type WorkspaceLawfulBasisDeclaration = {
-  purpose: string;
-  lawfulBasis: string;
-  notes?: string | null;
-};
-
-export type WorkspacePrivacyProfileSettings = {
-  controllerIdentity?: string | null;
-  controllerContactName?: string | null;
-  controllerContactEmail?: string | null;
-  dpoContactEmail?: string | null;
-  privacyNoticeUrl?: string | null;
-  privacyNoticeText?: string | null;
-  processorRoleAcknowledged: boolean;
-  enabledProcessors: string[];
-  lawfulBasisDeclarations: WorkspaceLawfulBasisDeclaration[];
-  dataResidencyMode: "eea_only" | "approved_transfers";
-  audienceAgeMode: "unset" | "adult_only" | "includes_minors";
-};
-
-export type RetentionPolicySettings = {
-  rawTranscriptDays: number;
-  voiceTelemetryDays: number;
-  derivedAnalyticsDays: number;
-  studentInteractionDays: number;
-  privacyRequestDays: number;
-};
-
 export type ConsentEvidence = {
   source: "banner" | "preferences" | "api";
   categories: Array<"necessary" | "analytics" | "marketing">;
 };
-
-export const workspacePrivacyProfiles = pgTable(
-  "workspace_privacy_profiles",
-  {
-    id: text("id").primaryKey(),
-    ...timestamps,
-    organizationId: text("organization_id")
-      .notNull()
-      .unique(),
-    regionCode: text("region_code").default("eu").notNull(),
-    isEuWorkspace: boolean("is_eu_workspace").default(true).notNull(),
-    settings: jsonb("settings")
-      .$type<WorkspacePrivacyProfileSettings>()
-      .notNull(),
-    status: text("status").default("draft").notNull(),
-    publishedAt: timestamp("published_at", {
-      withTimezone: true,
-      mode: "date",
-    }),
-  },
-  (table) => [
-    index("workspace_privacy_profiles_org_idx").on(table.organizationId),
-    index("workspace_privacy_profiles_status_idx").on(table.status),
-  ],
-);
 
 export const consentEvents = pgTable(
   "consent_events",
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    organizationId: text("organization_id"),
     surveyId: text("survey_id").references(() => surveys.id, {
       onDelete: "cascade",
     }),
@@ -92,7 +37,6 @@ export const consentEvents = pgTable(
     evidence: jsonb("evidence").$type<ConsentEvidence>().notNull(),
   },
   (table) => [
-    index("consent_events_org_idx").on(table.organizationId),
     index("consent_events_user_idx").on(table.userId),
     index("consent_events_subject_idx").on(table.subjectType, table.subjectId),
   ],
@@ -103,7 +47,6 @@ export const privacyRequests = pgTable(
   {
     id: text("id").primaryKey(),
     ...timestamps,
-    organizationId: text("organization_id"),
     surveyId: text("survey_id").references(() => surveys.id, {
       onDelete: "set null",
     }),
@@ -127,7 +70,6 @@ export const privacyRequests = pgTable(
     }),
   },
   (table) => [
-    index("privacy_requests_org_idx").on(table.organizationId),
     index("privacy_requests_user_idx").on(table.userId),
     index("privacy_requests_status_idx").on(table.status),
     index("privacy_requests_type_idx").on(table.requestType),
@@ -165,19 +107,6 @@ export const deletionJobs = pgTable(
     index("deletion_jobs_status_idx").on(table.status),
     index("deletion_jobs_target_idx").on(table.targetType, table.targetId),
   ],
-);
-
-export const retentionPolicies = pgTable(
-  "retention_policies",
-  {
-    id: text("id").primaryKey(),
-    ...timestamps,
-    organizationId: text("organization_id")
-      .notNull()
-      .unique(),
-    settings: jsonb("settings").$type<RetentionPolicySettings>().notNull(),
-  },
-  (table) => [index("retention_policies_org_idx").on(table.organizationId)],
 );
 
 export const respondentAccessTokens = pgTable(

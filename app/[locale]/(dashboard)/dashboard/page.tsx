@@ -87,7 +87,7 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
   const [stats, recentSurveys, activities] = await Promise.all([
     // 1 & 2. Stats
     cache.wrap(
-      cacheKeys.dashboardStats(userId, null),
+      cacheKeys.dashboardStats(userId),
       async () => {
         const [surveysCountRes, durationStats] = await Promise.all([
           getDb()
@@ -123,12 +123,17 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
 
     // 3. Recent Surveys
     cache.wrap(
-      cacheKeys.dashboardRecentSurveys(userId, null),
+      cacheKeys.dashboardRecentSurveys(userId),
       async () => {
         const surveysData = await getDb().query.surveys.findMany({
           where: eq(surveys.userId, userId),
           orderBy: [desc(surveys.updatedAt)],
           limit: 3,
+          with: {
+            folder: {
+              columns: { id: true, name: true },
+            },
+          },
         });
 
         return surveysData.map(survey => ({
@@ -141,6 +146,7 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
           createdAt: survey.createdAt,
           isVoice: survey.isVoice,
           folderId: survey.folderId,
+          folderName: survey.folder?.name ?? null,
         }));
       },
       60 * 2 // Cache for 2 minutes
@@ -148,7 +154,7 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
 
     // 4. Recent Activity
     cache.wrap(
-      cacheKeys.dashboardActivity(userId, null),
+      cacheKeys.dashboardActivity(userId),
       async () => {
         const recentActivitiesRaw = await getDb()
           .select({
@@ -185,7 +191,7 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
     status: normalizeDashboardSurveyStatus(survey.status),
     lastActivity: new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(survey.updatedAt)),
     createdAtFormatted: new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(survey.createdAt)),
-    folderName: survey.folderId ? "Folder" : "Unsorted",
+    folderName: survey.folderName ?? (survey.folderId ? "Folder" : "Unsorted"),
   }));
 
   const formattedActivities = activities.map(activity => ({

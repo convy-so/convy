@@ -24,7 +24,8 @@ export async function POST(
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
-  } catch {
+  } catch (error) {
+    console.error("[removeMedia] Unexpected error:", error);
     return new Response(
       JSON.stringify({
         success: false,

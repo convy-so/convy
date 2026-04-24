@@ -1,268 +1,39 @@
-import {
-  createUIMessageStream,
-  createUIMessageStreamResponse,
-  stepCountIs,
-  tool,
-} from "ai";
 import { and, desc, eq } from "drizzle-orm";
-import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
-
-import { z } from "zod";
 import { getDb } from "@/db";
-import { classroomStudents, surveyConversations, surveys } from "@/db/schema";
-import {
-  normalizeMessages as toModelMessages,
-  streamAIResponse,
-} from "@/lib/ai";
-import {
-  toPersistedUIChatMessages,
-  toUIMessages,
-  toVisibleConversationMessages,
-} from "@/lib/chat-ui-messages";
-import {
-  buildConductingSystemPromptParts,
-  createInitialSessionState,
-  finalizeConductingTurn,
-} from "@/lib/education/conducting-runtime";
-import {
-  getRespondentFinishSurveyToolDefinition,
-} from "@/lib/education/agent-tools";
-import { getConductingRuntimeLayers } from "@/lib/education/runtime-context";
+import { surveyConversations, surveys } from "@/db/schema";
 import {
   ensureSession,
-  getActiveConductingProfile,
   getActiveCoveragePlan,
   getResearchBrief,
   getSessionBySourceId,
-  updateSessionState,
 } from "@/lib/education/storage";
-import { enqueueConversationInsights } from "@/lib/queue";
+import { createInitialSessionState } from "@/lib/education/conducting-runtime";
 import {
   admitParticipantOnFirstUserTurn,
-  buildRespondentVoiceGreeting,
-  getUsableRespondentMessages,
-  hasUserTurn,
+  buildCanonicalConversationTurn,
   type RespondentLanguage,
 } from "@/lib/respondent-conversation";
-import type { ChatMessage } from "@/lib/chat-types";
 import {
   RESPONDENT_RESUME_QUERY_PARAM,
-  getRespondentSessionCookieName,
-  getRespondentSessionCookieOptions,
-  issueRespondentSessionToken,
   resolveRespondentAccess,
+  getRespondentSessionCookieName,
 } from "@/lib/privacy/respondent";
-import { getVerifiedSession } from "@/lib/auth/session";
-import { evaluateScopePolicy, renderStrictScopePolicyInstructions } from "@/lib/ai/scope-policy";
-import { recordAiFeedbackEvent } from "@/lib/ai/observability";
 import { getClientIP } from "@/lib/ratelimit";
+import { 
+  resolveClassroomAssignedAccess, 
+  respondWithExistingConversation, 
+  createNewConversation,
+  jsonNoStore 
+} from "@/lib/surveys/respondent-session-service";
+import { processRespondentTurn } from "@/lib/surveys/respondent-runtime-service";
+import { nanoid } from "nanoid";
 
-type RespondRouteBody = {
-  messages?: unknown[];
-  context?: {
-    conversationId?: string;
-  };
-  conversationId?: string;
-  language?: unknown;
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isRespondentLanguage(value: unknown): value is RespondentLanguage {
-  return (
-    value === "en" ||
-    value === "fr" ||
-    value === "de" ||
-    value === "es" ||
-    value === "it"
-  );
-}
-
-function getRequestedLanguage(value: unknown): RespondentLanguage | undefined {
-  return isRespondentLanguage(value) ? value : undefined;
-}
-
-function parseRespondRouteBody(value: unknown): RespondRouteBody {
-  if (!isRecord(value)) {
-    return {};
+function getRequestedLanguage(language: string | null): RespondentLanguage {
+  if (language === "fr" || language === "de" || language === "es" || language === "it") {
+    return language;
   }
-
-  const context = isRecord(value.context) ? value.context : undefined;
-
-  return {
-    messages: Array.isArray(value.messages) ? value.messages : undefined,
-    context:
-      context && typeof context.conversationId === "string"
-        ? { conversationId: context.conversationId }
-        : undefined,
-    conversationId:
-      typeof value.conversationId === "string" ? value.conversationId : undefined,
-    language: value.language,
-  };
-}
-
-function getConversationIdFromBody(body: RespondRouteBody): string | undefined {
-  if (typeof body.context?.conversationId === "string") {
-    return body.context.conversationId;
-  }
-
-  return typeof body.conversationId === "string"
-    ? body.conversationId
-    : undefined;
-}
-
-function getRawMessages(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function jsonNoStore(body: unknown, init?: ResponseInit) {
-  const response = NextResponse.json(body, init);
-  response.headers.set("Cache-Control", "no-store");
-  return response;
-}
-
-type ClassroomAssignedAccess =
-  | {
-      mode: "classroom_assigned";
-      classroomStudent: {
-        id: string;
-        userId: string | null;
-      };
-    }
-  | { mode: "link" };
-
-async function resolveClassroomAssignedAccess(
-  survey: typeof surveys.$inferSelect,
-): Promise<
-  | { success: true; data: ClassroomAssignedAccess }
-  | { success: false; response: NextResponse }
-> {
-  if (survey.deliveryMode !== "classroom_assigned") {
-    return {
-      success: true,
-      data: { mode: "link" },
-    };
-  }
-
-  if (!survey.classroomId) {
-    return {
-      success: false,
-      response: jsonNoStore(
-        { error: "Classroom-assigned survey is misconfigured" },
-        { status: 400 },
-      ),
-    };
-  }
-
-  const session = await getVerifiedSession().catch(() => null);
-  if (!session) {
-    return {
-      success: false,
-      response: jsonNoStore(
-        { error: "Sign in with your classroom account to access this survey" },
-        { status: 403 },
-      ),
-    };
-  }
-
-  const classroomStudent = await getDb().query.classroomStudents.findFirst({
-    where: and(
-      eq(classroomStudents.classroomId, survey.classroomId),
-      eq(classroomStudents.userId, session.user.id),
-    ),
-    columns: {
-      id: true,
-      userId: true,
-    },
-  });
-
-  if (!classroomStudent) {
-    return {
-      success: false,
-      response: jsonNoStore(
-        { error: "You do not have access to this classroom survey" },
-        { status: 403 },
-      ),
-    };
-  }
-
-  return {
-    success: true,
-    data: {
-      mode: "classroom_assigned",
-      classroomStudent,
-    },
-  };
-}
-
-function buildSurveyResponsePayload(survey: typeof surveys.$inferSelect) {
-  return {
-    id: survey.id,
-    title: survey.title,
-    objective: survey.coreObjective,
-    tone: survey.tone,
-    requiredQuestions: survey.requiredQuestions || [],
-    isVoice: survey.isVoice,
-    programId: survey.programId,
-  };
-}
-
-async function respondWithExistingConversation(input: {
-  request: Request;
-  survey: typeof surveys.$inferSelect;
-  conversation: typeof surveyConversations.$inferSelect;
-}) {
-  const respondentSessionToken = await issueRespondentSessionToken({
-    surveyId: input.survey.id,
-    conversationId: input.conversation.id,
-    participantId: input.conversation.participantId,
-    ipAddress: getClientIP(input.request),
-    userAgent: input.request.headers.get("user-agent"),
-  });
-  const usableMessages = getUsableRespondentMessages(
-    toVisibleConversationMessages(
-      toPersistedUIChatMessages(
-        getRawMessages(input.conversation.rawConversation),
-        ["user", "assistant"],
-      ),
-    ),
-    input.survey.isVoice,
-  );
-
-  if (input.conversation.completed) {
-    const completedResponse = jsonNoStore({
-      completed: true,
-      survey: {
-        id: input.survey.id,
-        title: input.survey.title,
-        isVoice: input.survey.isVoice,
-      },
-      conversationId: input.conversation.id,
-      participantId: input.conversation.participantId,
-    });
-    completedResponse.cookies.set(
-      getRespondentSessionCookieName(input.survey.id),
-      respondentSessionToken,
-      getRespondentSessionCookieOptions(),
-    );
-    return completedResponse;
-  }
-
-  const response = jsonNoStore({
-    survey: buildSurveyResponsePayload(input.survey),
-    conversationId: input.conversation.id,
-    participantId: input.conversation.participantId,
-    messages: usableMessages,
-  });
-  response.cookies.set(
-    getRespondentSessionCookieName(input.survey.id),
-    respondentSessionToken,
-    getRespondentSessionCookieOptions(),
-  );
-  return response;
+  return "en";
 }
 
 export async function GET(
@@ -275,20 +46,15 @@ export async function GET(
     const language = getRequestedLanguage(searchParams.get("language"));
     const resumeToken = searchParams.get(RESPONDENT_RESUME_QUERY_PARAM);
 
-    const survey = await getDb()
-      .select()
-      .from(surveys)
-      .where(eq(surveys.shareableLink, shareableLink))
-      .then((rows) => rows[0]);
+    const survey = await getDb().query.surveys.findFirst({
+      where: eq(surveys.shareableLink, shareableLink),
+    });
 
     if (!survey) {
       return jsonNoStore({ error: "Survey not found" }, { status: 404 });
     }
     if (survey.status !== "active") {
-      return jsonNoStore(
-        { error: "Survey is not active" },
-        { status: 403 },
-      );
+      return jsonNoStore({ error: "Survey is not active" }, { status: 403 });
     }
 
     const access = await resolveClassroomAssignedAccess(survey);
@@ -305,13 +71,13 @@ export async function GET(
       clientIp: getClientIP(request),
       userAgent: request.headers.get("user-agent"),
     });
+    
     const existingConversationId = authorizedAccess?.conversationId ?? null;
 
     if (existingConversationId) {
-      const [existingConversation] = await getDb()
-        .select()
-        .from(surveyConversations)
-        .where(eq(surveyConversations.id, existingConversationId));
+      const existingConversation = await getDb().query.surveyConversations.findFirst({
+        where: eq(surveyConversations.id, existingConversationId),
+      });
 
       if (existingConversation && existingConversation.surveyId === survey.id) {
         if (
@@ -340,20 +106,13 @@ export async function GET(
     }
 
     if (access.data.mode === "classroom_assigned") {
-      const existingClassroomConversation = await getDb()
-        .select()
-        .from(surveyConversations)
-        .where(
-          and(
-            eq(surveyConversations.surveyId, survey.id),
-            eq(
-              surveyConversations.participantId,
-              access.data.classroomStudent.id,
-            ),
-          ),
-        )
-        .orderBy(desc(surveyConversations.updatedAt))
-        .then((rows) => rows[0] ?? null);
+      const existingClassroomConversation = await getDb().query.surveyConversations.findFirst({
+        where: and(
+          eq(surveyConversations.surveyId, survey.id),
+          eq(surveyConversations.participantId, access.data.classroomStudent.id),
+        ),
+        orderBy: desc(surveyConversations.updatedAt),
+      });
 
       if (existingClassroomConversation) {
         return respondWithExistingConversation({
@@ -364,69 +123,15 @@ export async function GET(
       }
     }
 
-    const conversationId = nanoid();
-    const participantId =
-      access.data.mode === "classroom_assigned"
-        ? access.data.classroomStudent.id
-        : nanoid(8);
-    const respondentSessionToken = await issueRespondentSessionToken({
-      surveyId: survey.id,
-      conversationId,
-      participantId,
-      ipAddress: getClientIP(request),
-      userAgent: request.headers.get("user-agent"),
+    return await createNewConversation({
+      request,
+      survey,
+      access: access.data,
+      language,
     });
-    const greetingText = buildRespondentVoiceGreeting({
-      language: getRequestedLanguage(language || survey.language) || "en",
-      surveyTitle: survey.title,
-      brief: null,
-    });
-    const greetingMessage: ChatMessage | null = survey.isVoice
-      ? null
-      : {
-          id: nanoid(),
-          role: "assistant",
-          content: greetingText,
-          parts: [{ type: "text", text: greetingText }],
-          timestamp: new Date().toISOString(),
-        };
-
-    await getDb().insert(surveyConversations).values({
-      id: conversationId,
-      surveyId: survey.id,
-      participantId,
-      rawConversation: greetingMessage ? [greetingMessage] : [],
-      completed: false,
-      originalLanguage: language || survey.language || "en",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    const response = jsonNoStore({
-      survey: {
-        id: survey.id,
-        title: survey.title,
-        objective: survey.coreObjective,
-        tone: survey.tone,
-        requiredQuestions: survey.requiredQuestions || [],
-        isVoice: survey.isVoice,
-        programId: survey.programId,
-      },
-      conversationId,
-      participantId,
-      messages: greetingMessage ? [greetingMessage] : [],
-    });
-    response.cookies.set(
-      getRespondentSessionCookieName(survey.id),
-      respondentSessionToken,
-      getRespondentSessionCookieOptions(),
-    );
-    return response;
-  } catch {
-    return jsonNoStore(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+  } catch (error) {
+    console.error("[Respondent GET] Error:", error);
+    return jsonNoStore({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -435,60 +140,48 @@ export async function POST(
   { params }: { params: Promise<{ shareableLink: string }> },
 ) {
   try {
-    const body = parseRespondRouteBody(await req.json());
-    const rawMessages = getRawMessages(body.messages);
-    const language = getRequestedLanguage(body.language);
+    const body = await req.json();
     const { shareableLink } = await params;
 
-    const [survey] = await getDb()
-      .select()
-      .from(surveys)
-      .where(eq(surveys.shareableLink, shareableLink))
-      .limit(1);
+    const survey = await getDb().query.surveys.findFirst({
+      where: eq(surveys.shareableLink, shareableLink),
+    });
     if (!survey) {
       return jsonNoStore({ error: "Survey not found" }, { status: 404 });
     }
     if (survey.status !== "active") {
-      return jsonNoStore(
-        { error: "Survey is not active" },
-        { status: 403 },
-      );
+      return jsonNoStore({ error: "Survey is not active" }, { status: 403 });
     }
 
-    const conversationId = getConversationIdFromBody(body);
+    const conversationId = body.conversationId || body.context?.conversationId;
     if (!conversationId) {
-      return jsonNoStore(
-        { error: "Conversation ID is required" },
-        { status: 400 },
-      );
+      return jsonNoStore({ error: "Conversation ID is required" }, { status: 400 });
     }
 
     const [conversation, briefRow, planRow] = await Promise.all([
-      getDb()
-        .select()
-        .from(surveyConversations)
-        .where(eq(surveyConversations.id, conversationId))
-        .then((rows) => rows[0]),
+      getDb().query.surveyConversations.findFirst({
+        where: eq(surveyConversations.id, conversationId),
+      }),
       getResearchBrief(survey.id),
       getActiveCoveragePlan(survey.id),
     ]);
+    
     const access = await resolveClassroomAssignedAccess(survey);
     if (!access.success) {
       return access.response;
     }
 
     if (!conversation || conversation.surveyId !== survey.id) {
-      return jsonNoStore(
-        { error: "Conversation not found" },
-        { status: 404 },
-      );
+      return jsonNoStore({ error: "Conversation not found" }, { status: 404 });
     }
+    
     if (
       access.data.mode === "classroom_assigned" &&
       conversation.participantId !== access.data.classroomStudent.id
     ) {
       return jsonNoStore({ error: "Unauthorized" }, { status: 403 });
     }
+    
     const respondentAccess = await resolveRespondentAccess({
       cookieHeader: req.headers.get("cookie"),
       surveyId: survey.id,
@@ -497,9 +190,11 @@ export async function POST(
       clientIp: getClientIP(req),
       userAgent: req.headers.get("user-agent"),
     });
+    
     if (!respondentAccess) {
       return jsonNoStore({ error: "Unauthorized" }, { status: 403 });
     }
+    
     if (!briefRow || !planRow) {
       return jsonNoStore(
         { error: "This survey does not have an approved education brief yet." },
@@ -507,102 +202,20 @@ export async function POST(
       );
     }
 
-    const persistedIncomingMessages = toPersistedUIChatMessages(rawMessages, [
-      "user",
-      "assistant",
-    ]);
-    const visibleMessages = toVisibleConversationMessages(
-      persistedIncomingMessages,
-    );
-    const latestUserMessage =
-      [...visibleMessages]
-        .reverse()
-        .find((message) => message.role === "user")
-        ?.content?.trim() ?? "";
+    const canonicalTurn = buildCanonicalConversationTurn({
+      storedMessages: Array.isArray(conversation.rawConversation) ? conversation.rawConversation : [],
+      incomingMessages: Array.isArray(body.messages) ? body.messages : [],
+    });
 
-    if (latestUserMessage) {
-      const priorDriftCount = toPersistedUIChatMessages(
-        getRawMessages(conversation.rawConversation),
-        ["user", "assistant"],
-      ).filter(
-        (message) =>
-          message.role === "assistant" &&
-          /let's stay focused on|we need to stay on the current objective/i.test(
-            message.content,
-          ),
-      ).length;
-      const scopeDecision = await evaluateScopePolicy({
-        feature: "survey_conducting",
-        objective: survey.coreObjective || survey.title,
-        currentPhase: "live respondent interview",
-        activeTopic: planRow.plan.nodes[0]?.label ?? survey.title,
-        latestUserMessage,
-        strictMode: true,
-        driftCount: priorDriftCount,
-        allowedDetours: [
-          "brief clarification of the current question",
-          "asking what a current term means",
-          "answering in another supported language",
-        ],
-      });
-
-      if (scopeDecision.shouldRedirect) {
-        const redirectText = scopeDecision.redirectMessage;
-        const redirectMessage: ChatMessage = {
-          id: nanoid(),
-          role: "assistant",
-          content: redirectText,
-          parts: [{ type: "text", text: redirectText }],
-          timestamp: new Date().toISOString(),
-        };
-        const redirectedMessages = [...visibleMessages, redirectMessage];
-
-        await recordAiFeedbackEvent({
-          source: "scope_policy",
-          feedbackType:
-            scopeDecision.promptInjectionSignal === "none"
-              ? "redirected"
-              : "prompt_injection_detected",
-          payload: {
-            surveyId: survey.id,
-            conversationId: conversation.id,
-            classification: scopeDecision.classification,
-            promptInjectionSignal: scopeDecision.promptInjectionSignal,
-            reason: scopeDecision.reason,
-          },
-        }).catch(() => undefined);
-
-        await getDb()
-          .update(surveyConversations)
-          .set({
-            rawConversation: redirectedMessages,
-            updatedAt: new Date(),
-          })
-          .where(eq(surveyConversations.id, conversation.id));
-
-        return createUIMessageStreamResponse({
-          stream: createUIMessageStream({
-            execute: async ({ writer }) => {
-              writer.write({
-                id: redirectMessage.id,
-                type: "text-delta",
-                delta: redirectText,
-              });
-            },
-          }),
-        });
-      }
+    if (!canonicalTurn.hasNewUserTurn) {
+       // Handled by client replay usually, but let's be safe
+       return jsonNoStore({ error: "No new user turn detected" }, { status: 400 });
     }
 
-    if (
-      !hasUserTurn(
-        toPersistedUIChatMessages(
-          getRawMessages(conversation.rawConversation),
-          ["user", "assistant"],
-        ),
-      ) &&
-      visibleMessages.some((message) => message.role === "user")
-    ) {
+    const firstUserTurn = !conversation.rawConversation || 
+      !(conversation.rawConversation as any[]).some(m => m.role === "user");
+
+    if (firstUserTurn) {
       const admission = await admitParticipantOnFirstUserTurn({
         surveyId: survey.id,
         conversationId: conversation.id,
@@ -610,202 +223,41 @@ export async function POST(
       });
 
       if (!admission.allowed) {
-        return jsonNoStore(
-          { error: "Survey has reached participant limit" },
-          { status: 403 },
-        );
+        return jsonNoStore({ error: "Survey has reached participant limit" }, { status: 403 });
       }
     }
 
+    const language = getRequestedLanguage(body.language);
     let sessionRow = await getSessionBySourceId(conversation.id);
     if (!sessionRow) {
       sessionRow = await ensureSession({
         surveyId: survey.id,
         sessionType: "live",
         sourceConversationId: conversation.id,
-        language: getRequestedLanguage(language || survey.language) || "en",
+        language: getRequestedLanguage(body.language || survey.language) || "en",
         respondentId: conversation.participantId,
         initialState: createInitialSessionState({
           surveyId: survey.id,
           sessionId: nanoid(),
           sessionType: "live",
-          language: getRequestedLanguage(language || survey.language) || "en",
+          language: getRequestedLanguage(body.language || survey.language) || "en",
           coveragePlan: planRow.plan,
         }),
       });
     }
 
-    const [activeLiveProfile, sampleFallbackProfile, runtimeLayers] =
-      await Promise.all([
-        getActiveConductingProfile(survey.id, "live"),
-        getActiveConductingProfile(survey.id, "sample"),
-        getConductingRuntimeLayers({
-          surveyId: survey.id,
-          classroomId: survey.classroomId,
-          programId: survey.programId,
-          language:
-            getRequestedLanguage(language || survey.language) ||
-            survey.language ||
-            "en",
-          mode: "live",
-        }),
-      ]);
-
-    const promptParts = buildConductingSystemPromptParts({
-      brief: briefRow.brief,
-      coveragePlan: planRow.plan,
-      sessionState: sessionRow.sessionState,
-      sessionType: "live",
-      conductingProfile:
-        activeLiveProfile?.profile ?? sampleFallbackProfile?.profile ?? null,
-      expertGuidanceContext: runtimeLayers.expertGuidanceContext,
-      toolContext: {
-        canFinishSurvey: true,
-        canShowMedia: false,
-      },
+    return await processRespondentTurn({
+      survey,
+      conversation,
+      brief: briefRow,
+      coveragePlan: planRow,
+      sessionRow,
+      canonicalTurn,
+      language: language as any,
     });
-    const systemPrompt = `${promptParts.dynamicSystemPrompt}
-
-${renderStrictScopePolicyInstructions({
-  objective: survey.coreObjective || survey.title,
-  currentPhase: "live respondent interview",
-  activeTopic: planRow.plan.nodes[0]?.label ?? survey.title,
-  allowedDetours: [
-    "brief clarification of the current question",
-    "asking what a current term means",
-    "answering in another supported language",
-  ],
-})}
-
-Respond to the user in the language they are speaking to you in. Match the language of each user message naturally.`;
-
-    let currentSessionState = sessionRow.sessionState;
-    let completedByTool = false;
-
-    const tools = {
-      finishSurvey: tool({
-        description: getRespondentFinishSurveyToolDefinition().description,
-        inputSchema: z.object({}),
-        execute: async () => {
-          const threshold =
-            planRow.plan.completionRule.minimumRequiredNodeCoverage;
-          if (
-            currentSessionState.status !== "completed" &&
-            currentSessionState.overallCoverage < threshold
-          ) {
-            return {
-              error: "Interview coverage is not high enough to finish yet",
-              currentCoverage: currentSessionState.overallCoverage,
-              requiredCoverage: threshold,
-            };
-          }
-
-          if (currentSessionState.status !== "completed") {
-            currentSessionState = {
-              ...currentSessionState,
-              status: "completed",
-              stopReason: "agent_finish_signal",
-            };
-            await updateSessionState(sessionRow.id, currentSessionState);
-          }
-
-          completedByTool = true;
-          return { success: true, message: "Survey marked as complete" };
-        },
-      }),
-    };
-
-    const starterMessages: Awaited<ReturnType<typeof toModelMessages>> = [
-      {
-        role: "user",
-        content:
-          "Start the interview by greeting the participant and asking the first best question.",
-      },
-    ];
-    const modelMessages =
-      rawMessages.length > 0
-        ? await toModelMessages(rawMessages)
-        : starterMessages;
-
-    const result = streamAIResponse(
-      modelMessages,
-      systemPrompt,
-      {
-        surveyId: survey.id,
-        maxTokens: 550,
-        temperature: 0.4,
-        promptCache: {
-          namespace: "conducting-respond",
-          staticSystemPrompt: promptParts.staticSystemPrompt,
-        },
-        tools,
-        stopWhen: stepCountIs(5),
-        observability: {
-          feature: "survey_conducting",
-          scenarioType: "respondent_turn",
-          resourceType: "survey_session",
-          resourceId: sessionRow.id,
-          metadata: {
-            surveyId: survey.id,
-            guidanceVersionIds: runtimeLayers.expertGuidanceVersionIds,
-          },
-        },
-      },
-    );
-
-    return result.toUIMessageStreamResponse({
-      originalMessages: toUIMessages(persistedIncomingMessages),
-      onFinish: async ({ messages }) => {
-        const persistedMessages = toVisibleConversationMessages(
-          toPersistedUIChatMessages(messages, ["user", "assistant"]),
-        );
-
-        await getDb()
-          .update(surveyConversations)
-          .set({
-            rawConversation: persistedMessages,
-            completed:
-              completedByTool || currentSessionState.status === "completed",
-            updatedAt: new Date(),
-          })
-          .where(eq(surveyConversations.id, conversation.id));
-
-        if (persistedMessages.some((message) => message.role === "user")) {
-          if (!completedByTool) {
-            const { nextState } = await finalizeConductingTurn({
-              surveyId: survey.id,
-              sessionId: sessionRow.id,
-              brief: briefRow.brief,
-              coveragePlan: planRow.plan,
-              sessionState: currentSessionState,
-              messages: persistedMessages,
-            });
-            currentSessionState = nextState;
-          }
-
-          await enqueueConversationInsights({
-            conversationId: conversation.id,
-            surveyId: survey.id,
-            userId: survey.userId,
-          }).catch(() => {
-          });
-
-          await getDb()
-            .update(surveyConversations)
-            .set({
-              completed:
-                completedByTool || currentSessionState.status === "completed",
-              updatedAt: new Date(),
-            })
-            .where(eq(surveyConversations.id, conversation.id));
-        }
-      },
-    });
-  } catch {
-    return jsonNoStore(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+  } catch (error) {
+    console.error("[Respondent POST] Error:", error);
+    return jsonNoStore({ error: "Internal server error" }, { status: 500 });
   }
 }
 

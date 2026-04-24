@@ -32,7 +32,7 @@ type FolderPermissions = {
   canEditMetadata: true;
   canOrganizeSurveys: true;
   canDelete: true;
-  isSharedWorkspaceFolder: false;
+  isSharedFolder: false;
 };
 
 type FolderListRow = typeof folders.$inferSelect & {
@@ -55,7 +55,7 @@ const personalFolderPermissions: FolderPermissions = {
   canEditMetadata: true,
   canOrganizeSurveys: true,
   canDelete: true,
-  isSharedWorkspaceFolder: false,
+  isSharedFolder: false,
 };
 
 async function requireOwnedFolder(userId: string, folderId: string) {

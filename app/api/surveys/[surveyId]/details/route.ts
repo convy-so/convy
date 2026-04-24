@@ -8,7 +8,7 @@ import { env } from "@/lib/env";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 
 /**
  * GET - Get detailed survey info for the owner

@@ -43,7 +43,7 @@ const appBaseUrl = optional("APP_BASE_URL") || "http://localhost:3000";
 const betterAuthUrl = optional("BETTER_AUTH_URL") || appBaseUrl;
 const allowInsecureTls = optional("ALLOW_INSECURE_TLS") === "true";
 const outboxNotifyChannel =
-  optional("OUTBOX_NOTIFY_CHANNEL") || "workspace_outbox_wakeup";
+  optional("OUTBOX_NOTIFY_CHANNEL") || "survey_outbox_wakeup";
 
 if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(outboxNotifyChannel)) {
   throw new Error("Invalid OUTBOX_NOTIFY_CHANNEL; expected a PostgreSQL identifier");

@@ -23,13 +23,13 @@ import {
   updateSessionState,
 } from "@/lib/education/storage";
 import { getConductingRuntimeLayers } from "@/lib/education/runtime-context";
+import { scheduleAnalyticsRefresh } from "@/lib/analytics-scheduler";
 import type {
   CoveragePlan,
   ResearchBrief,
   SessionState,
 } from "@/lib/education/types";
 import { buildRespondentVoiceFunctions } from "@/lib/education/agent-tools";
-import { enqueueConversationInsights } from "@/lib/queue";
 import {
   buildVoiceAgentSettings,
   type ConversationTextEvent,
@@ -131,7 +131,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       this.state.brief = briefRow.brief;
       this.state.coveragePlan = planRow.plan;
       this.surveyId = survey.id;
-      this.organizationId = survey.organizationId;
       this.ownerId = survey.userId;
 
       if (!this.hasExplicitLanguage) {
@@ -249,7 +248,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       getActiveConductingProfile(this.state.survey!.id, "sample"),
       getConductingRuntimeLayers({
         surveyId: this.state.survey!.id,
-        organizationId: this.state.survey!.organizationId,
         classroomId: this.state.survey!.classroomId,
         programId: this.state.survey!.programId,
         language: this.state.language,
@@ -262,8 +260,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       sessionState: this.state.sessionState,
       sessionType: "live",
       conductingProfile: activeLiveProfile?.profile ?? sampleFallbackProfile?.profile ?? null,
-      playbookContext: runtimeLayers.playbookContext,
-      personalityContext: runtimeLayers.personalityContext,
       expertGuidanceContext: runtimeLayers.expertGuidanceContext,
       toolContext: {
         canFinishSurvey: true,
@@ -379,12 +375,11 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
     });
 
     this.state.sessionState = nextState;
-    await enqueueConversationInsights({
-      conversationId: this.state.conversationId!,
+    await scheduleAnalyticsRefresh({
       surveyId: this.state.survey!.id,
       userId: this.ownerId || this.state.survey!.userId,
     }).catch((error) => {
-      console.error("[survey-response-voice] failed to enqueue conversation insights", {
+      console.error("[survey-response-voice] failed to schedule analytics refresh", {
         surveyId: this.state.survey?.id,
         conversationId: this.state.conversationId,
         message: error instanceof Error ? error.message : "Unknown error",
@@ -403,7 +398,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       getActiveConductingProfile(this.state.survey!.id, "sample"),
       getConductingRuntimeLayers({
         surveyId: this.state.survey!.id,
-        organizationId: this.state.survey!.organizationId,
         classroomId: this.state.survey!.classroomId,
         programId: this.state.survey!.programId,
         language: this.state.language,
@@ -416,8 +410,6 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       sessionState: nextState,
       sessionType: "live",
       conductingProfile: refreshedLiveProfile?.profile ?? refreshedSampleProfile?.profile ?? null,
-      playbookContext: refreshedRuntimeLayers.playbookContext,
-      personalityContext: refreshedRuntimeLayers.personalityContext,
       expertGuidanceContext: refreshedRuntimeLayers.expertGuidanceContext,
       toolContext: {
         canFinishSurvey: true,
@@ -521,18 +513,19 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
           .set({ completed: true, updatedAt: new Date() })
           .where(eq(surveyConversations.id, this.state.conversationId));
 
-        try {
-          await enqueueConversationInsights({
-            conversationId: this.state.conversationId,
-            surveyId: this.state.survey?.id || "",
-            userId: this.ownerId || "",
-          });
-        } catch (error) {
-          console.error("[survey-response-voice] failed to enqueue completion insights", {
-            surveyId: this.state.survey?.id,
-            conversationId: this.state.conversationId,
-            message: error instanceof Error ? error.message : "Unknown error",
-          });
+        if (this.state.survey?.id) {
+          try {
+            await scheduleAnalyticsRefresh({
+              surveyId: this.state.survey.id,
+              userId: this.ownerId || this.state.survey.userId,
+            });
+          } catch (error) {
+            console.error("[survey-response-voice] failed to schedule completion analytics refresh", {
+              surveyId: this.state.survey?.id,
+              conversationId: this.state.conversationId,
+              message: error instanceof Error ? error.message : "Unknown error",
+            });
+          }
         }
       }
 

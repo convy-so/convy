@@ -29,24 +29,20 @@ process.env.IS_WORKER = "true";
 
 import { testRedisConnection } from "@/lib/redis";
 
-import conversationInsightsWorker from "./conversation-insights.worker";
 import surveyAnalyticsWorker from "./survey-analytics.worker";
 import emailWorker from "./email.worker";
 import tutoringReportWorker from "./tutoring-report.worker";
 import evalRunWorker from "./eval-run.worker";
 import contentTranslationWorker from "./content-translation.worker";
-import { startOutboxRelay, type OutboxRelayHandle } from "./outbox-relay";
 
 // Collect all workers for coordinated shutdown
 const workers = [
-  { name: "Conversation Insights", worker: conversationInsightsWorker },
   { name: "Survey Analytics", worker: surveyAnalyticsWorker },
   { name: "Email", worker: emailWorker },
   { name: "Tutoring Report", worker: tutoringReportWorker },
   { name: "Eval Run", worker: evalRunWorker },
   { name: "Content Translation", worker: contentTranslationWorker },
 ];
-let outboxRelay: OutboxRelayHandle | null = null;
 // Test Redis connection before confirming workers are ready
 (async () => {
   const isConnected = await testRedisConnection();
@@ -54,10 +50,6 @@ let outboxRelay: OutboxRelayHandle | null = null;
   if (!isConnected) {
     process.exit(1);
   }
-
-
-  // Schedule recurring jobs (none currently)
-  outboxRelay = await startOutboxRelay();
 
   if (process.env.SENTRY_TEST_TRIGGER === "true") {
     throw new Error("Sentry Test Worker Error: This is a test error from the Worker process.");
@@ -94,10 +86,7 @@ async function gracefulShutdown() {
 
     // Wait for all workers to close with a timeout
     await Promise.race([
-      Promise.all([
-        ...closePromises,
-        outboxRelay?.stop(),
-      ]),
+      Promise.all(closePromises),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Shutdown timeout")), 30000),
       ),

@@ -1,7 +1,7 @@
 export * from "./common";
 export * from "./enums";
 export * from "./auth";
-export * from "./organization";
+export * from "./folders";
 export * from "./vectors";
 export * from "./voice";
 export * from "./collaboration";
@@ -11,6 +11,7 @@ export * from "./relations";
 export * from "./billing";
 export * from "./ai";
 export * from "./learning";
+export * from "./feedback";
 export * from "./privacy";
 
 // Re-export specific authSchema if needed by better-auth or others

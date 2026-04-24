@@ -1,4 +1,4 @@
-export const appLocales = ["en", "fr", "de", "es", "it"] as const;
+export const appLocales = ["en", "fr", "de"] as const;
 
 export type AppLocale = (typeof appLocales)[number];
 
@@ -21,23 +21,4 @@ export const appLocaleLabels: Record<AppLocale, string> = {
   en: "English",
   fr: "Français",
   de: "Deutsch",
-  es: "Español",
-  it: "Italiano",
 };
-
-export type WorkspaceLocaleSettings = {
-  defaultUiLocale: AppLocale;
-  defaultContentLocale: AppLocale;
-  emailLocale: AppLocale;
-  allowedLocales: AppLocale[];
-  autoTranslateGeneratedContent: boolean;
-};
-
-export const defaultWorkspaceLocaleSettings: WorkspaceLocaleSettings = {
-  defaultUiLocale: defaultAppLocale,
-  defaultContentLocale: defaultAppLocale,
-  emailLocale: defaultAppLocale,
-  allowedLocales: [...appLocales],
-  autoTranslateGeneratedContent: true,
-};
-

@@ -42,7 +42,17 @@ async function SurveysListWrapper() {
 }
 
 async function SurveysList({ cookieHeader }: { cookieHeader: string | null }) {
-    const surveys = await getSurveysForFeedback(cookieHeader);
+    let surveys: Awaited<ReturnType<typeof getSurveysForFeedback>> = [];
+    try {
+        surveys = await getSurveysForFeedback(cookieHeader);
+    } catch (error) {
+        console.error("[AdminSurveys] Failed to load surveys:", error);
+        return (
+            <div className="rounded-2xl border border-red-100 bg-red-50 p-6 text-sm text-red-600">
+                Failed to load surveys. Please refresh to try again.
+            </div>
+        );
+    }
 
     if (surveys.length === 0) {
         return (

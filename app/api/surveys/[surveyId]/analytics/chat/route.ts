@@ -6,13 +6,13 @@ import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
 import type { ChatSessionMessage } from "@/db/schema/surveys";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { answerAnalyticsQuestion } from "@/lib/education/analytics-workflow";
+import { askAnalyticsQuestion } from "@/lib/education/analytics-workflow";
 import { normalizeSpeechToTextLanguage } from "@/lib/voice/voice-locales";
 import { getUserPreferredLanguage } from "@/lib/translation-service";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 import { z } from "zod";
 import { normalizeAppLocale } from "@/lib/i18n/config";
 
@@ -125,13 +125,20 @@ export async function POST(
       body.language ??
         (await getUserPreferredLanguage(session.user.id).catch(() => "en")),
     );
-    const answer = await answerAnalyticsQuestion({
+    const answer = await askAnalyticsQuestion({
       surveyId,
       question,
-      language: responseLanguage,
     });
+    
+    if (!answer) {
+      return NextResponse.json(
+        { error: "Failed to generate answer" },
+        { status: 500 },
+      );
+    }
+    
     const responseText = answer.sources?.length
-      ? `${answer.response}\n\nSources:\n${answer.sources.map((source) => `- ${source.label} (${source.id})`).join("\n")}`
+      ? `${answer.response}\n\nSources:\n${answer.sources.map((source: { label: string; id: string }) => `- ${source.label} (${source.id})`).join("\n")}`
       : answer.response;
 
     return createUIMessageStreamResponse({

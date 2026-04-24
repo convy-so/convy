@@ -162,16 +162,6 @@ const VOICE_MODEL_MAP: Record<
     formal: "aura-2-fabian-de",
     empathetic: "aura-2-viktoria-de",
   },
-  es: {
-    casual: "aura-2-celeste-es",
-    formal: "aura-2-nestor-es",
-    empathetic: "aura-2-celeste-es",
-  },
-  it: {
-    casual: "aura-2-livia-it",
-    formal: "aura-2-dionisio-it",
-    empathetic: "aura-2-livia-it",
-  },
 };
 
 /**
@@ -638,4 +628,3 @@ export function buildVoiceAgentSettings(options: {
     },
   };
 }
-

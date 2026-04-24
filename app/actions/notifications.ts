@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { eq, desc, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { ActionResult } from "./workspace";
+import type { ActionResult } from "@/lib/action-wrapper";
 
 type NotificationRecord = typeof notifications.$inferSelect;
 
@@ -56,14 +56,26 @@ export async function markNotificationAsRead(id: string): Promise<ActionResult<v
     }
 }
 
-export async function createNotification(userId: string, title: string, message: string, type: "info" | "success" | "warning" | "error" = "info", link?: string) {
-    await getDb().insert(notifications).values({
-        id: nanoid(),
-        userId,
-        title,
-        message,
-        type,
-        link,
-        createdAt: new Date(),
-    });
+export async function createNotification(
+    userId: string,
+    title: string,
+    message: string,
+    type: "info" | "success" | "warning" | "error" = "info",
+    link?: string,
+): Promise<ActionResult<void>> {
+    try {
+        await getDb().insert(notifications).values({
+            id: nanoid(),
+            userId,
+            title,
+            message,
+            type,
+            link,
+            createdAt: new Date(),
+        });
+        return { success: true, data: undefined };
+    } catch (error) {
+        console.error("[createNotification] Failed:", error);
+        return { success: false, error: "Failed to create notification" };
+    }
 }

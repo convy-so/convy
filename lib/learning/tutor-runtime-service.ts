@@ -80,6 +80,7 @@ export class TutorRuntimeService {
     classroomId?: string | null;
     classroomStudentId: string;
     studentUserId?: string | null;
+    sessionId?: string | null;
     studyLanguage: string;
     state: LearningSessionState;
     latestStudentMessage: string;
@@ -107,6 +108,8 @@ export class TutorRuntimeService {
       studentModel: latestSnapshot,
       latestStudentMessage: params.latestStudentMessage,
       latestTutorMessage: params.latestTutorMessage,
+      sessionId: params.sessionId,
+      userId: params.studentUserId,
     });
     const systemPrompt = tutoringPromptService.buildStudentTurnPrompt({
       contentScope,

@@ -28,7 +28,6 @@ export type AiRunTraceInput = {
   scenarioType?: string | null;
   status?: string;
   userId?: string | null;
-  organizationId?: string | null;
   actorRole?: string | null;
   resourceType?: string | null;
   resourceId?: string | null;
@@ -79,7 +78,6 @@ export async function createAiRunTrace(input: AiRunTraceInput) {
     scenarioType: input.scenarioType ?? null,
     status: input.status ?? "running",
     userId: input.userId ?? null,
-    organizationId: input.organizationId ?? null,
     actorRole: input.actorRole ?? null,
     resourceType: input.resourceType ?? null,
     resourceId: input.resourceId ?? null,

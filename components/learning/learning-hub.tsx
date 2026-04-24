@@ -6,10 +6,10 @@ import { Loader2 } from "lucide-react";
 import { fetchLearningMe } from "@/lib/api/learning";
 import { queryKeys } from "@/lib/query-keys";
 import { GlassPanel } from "@/components/learning/glass-panel";
-import { TeacherWorkspace } from "@/components/learning/teacher-workspace";
-import { StudentWorkspace } from "@/components/learning/student-workspace";
+import { TeacherLearningHome } from "@/components/learning/teacher-learning-home";
+import { StudentLearningHome } from "@/components/learning/student-learning-home";
 
-export function LearningWorkspace() {
+export function LearningHub() {
   const learningMeQuery = useQuery({
     queryKey: queryKeys.learning.me,
     queryFn: fetchLearningMe,
@@ -59,8 +59,8 @@ export function LearningWorkspace() {
   }
 
   if (learningMe.role === "student") {
-    return <StudentWorkspace learningMe={learningMe} />;
+    return <StudentLearningHome learningMe={learningMe} />;
   }
 
-  return <TeacherWorkspace />;
+  return <TeacherLearningHome />;
 }

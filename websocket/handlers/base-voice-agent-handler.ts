@@ -60,7 +60,6 @@ export abstract class BaseVoiceAgentHandler {
 
   // Attribution for billing
   public surveyId: string | null | undefined;
-  protected organizationId: string | null | undefined;
 
   // Voice Agent connection
   protected voiceAgent: VoiceAgentConnection | null = null;
@@ -424,7 +423,6 @@ export abstract class BaseVoiceAgentHandler {
       if (this.activeDurationMs > 0) {
         logUsage({
           userId: this.userId,
-          organizationId: this.organizationId || undefined,
           surveyId: this.surveyId || undefined,
           type: "voice_session",
           provider: "deepgram",

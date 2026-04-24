@@ -6,59 +6,6 @@ import type { AuthSessionWithUser } from "@/lib/auth";
 
 export type SurveyAccessLevel = "owner" | "none";
 
-export type WorkspaceRole = null;
-
-export type WorkspaceCapability =
-  | "manageWorkspace"
-  | "manageMembers"
-  | "manageDepartments"
-  | "createTeachingContent"
-  | "viewWorkspaceDirectory"
-  | "viewClassDirectory"
-  | "managePrivacy";
-
-export type WorkspaceProfileSnapshot = null;
-
-export async function getWorkspaceMembership() {
-  return null;
-}
-
-export async function isWorkspaceMember(): Promise<boolean> {
-  return false;
-}
-
-export async function getWorkspaceRole(): Promise<WorkspaceRole> {
-  return null;
-}
-
-export async function isWorkspaceOwner(): Promise<boolean> {
-  return false;
-}
-
-export async function getWorkspaceOwnerId(): Promise<string | null> {
-  return null;
-}
-
-export async function getWorkspaceProfile(): Promise<WorkspaceProfileSnapshot> {
-  return null;
-}
-
-export function getWorkspaceCapabilities(): Record<WorkspaceCapability, boolean> {
-  return {
-    manageWorkspace: false,
-    manageMembers: false,
-    manageDepartments: false,
-    createTeachingContent: false,
-    viewWorkspaceDirectory: false,
-    viewClassDirectory: false,
-    managePrivacy: false,
-  };
-}
-
-export async function hasWorkspaceCapability(): Promise<boolean> {
-  return false;
-}
-
 export async function getSurveyAccessLevel(
   userId: string,
   surveyId: string,
@@ -76,15 +23,8 @@ export async function getSurveyAccessLevel(
 
 export type SurveyPermissionContext = {
   surveyId: string;
-  workspaceId: null;
-  resourceScope: "personal";
-  activeContextMatchesResource: true;
-  collaborationAllowed: false;
-  creatorId: string;
+  ownerId: string;
   accessLevel: SurveyAccessLevel;
-  isWorkspaceMember: false;
-  workspaceRole: null;
-  isWorkspaceOwner: false;
   isSurveyCreator: boolean;
   isSurveyEditor: boolean;
   canDiscover: boolean;
@@ -93,7 +33,6 @@ export type SurveyPermissionContext = {
   canEdit: boolean;
   canPublish: boolean;
   canDelete: boolean;
-  canManageCollaborators: false;
 };
 
 export type SurveyPermissionCapability =
@@ -102,8 +41,7 @@ export type SurveyPermissionCapability =
   | "canComment"
   | "canEdit"
   | "canPublish"
-  | "canDelete"
-  | "canManageCollaborators";
+  | "canDelete";
 
 export async function getSurveyPermissionContext(
   userId: string,
@@ -124,15 +62,8 @@ export async function getSurveyPermissionContext(
 
   return {
     surveyId: survey.id,
-    workspaceId: null,
-    resourceScope: "personal",
-    activeContextMatchesResource: true,
-    collaborationAllowed: false,
-    creatorId: survey.userId,
+    ownerId: survey.userId,
     accessLevel,
-    isWorkspaceMember: false,
-    workspaceRole: null,
-    isWorkspaceOwner: false,
     isSurveyCreator,
     isSurveyEditor: isSurveyCreator,
     canDiscover: isSurveyCreator,
@@ -141,7 +72,6 @@ export async function getSurveyPermissionContext(
     canEdit: isSurveyCreator,
     canPublish: isSurveyCreator,
     canDelete: isSurveyCreator,
-    canManageCollaborators: false,
   };
 }
 
@@ -169,8 +99,4 @@ export async function isSurveyEditor(
 ): Promise<boolean> {
   const permission = await getSurveyPermissionContext(userId, surveyId);
   return Boolean(permission?.canEdit);
-}
-
-export async function getActiveWorkspaceId(): Promise<string | null> {
-  return null;
 }

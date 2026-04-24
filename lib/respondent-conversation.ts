@@ -1,8 +1,15 @@
 import { and, eq, sql } from "drizzle-orm";
+import type { UIMessage } from "ai";
 
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
+import {
+  toPersistedUIChatMessages,
+  toUIMessages,
+  toVisibleConversationMessages,
+} from "@/lib/chat-ui-messages";
 import { getTimeBasedGreeting } from "@/lib/greetings";
+import type { ChatMessage } from "@/lib/chat-types";
 import type { ResearchBrief } from "@/lib/education/types";
 
 type ConversationMessage = {
@@ -41,6 +48,47 @@ export function getUsableRespondentMessages<T extends ConversationMessage>(
   return isLegacyVoiceBootstrapConversation(messages, isVoiceSurvey)
     ? []
     : messages;
+}
+
+function isSameVisibleMessage(a: ChatMessage, b: ChatMessage) {
+  return a.id === b.id || (a.role === b.role && a.content === b.content);
+}
+
+export function buildCanonicalConversationTurn(params: {
+  storedMessages: readonly unknown[];
+  incomingMessages: readonly unknown[];
+}): {
+  storedMessages: Array<ChatMessage & { role: "user" | "assistant" }>;
+  canonicalMessages: Array<ChatMessage & { role: "user" | "assistant" }>;
+  originalMessages: UIMessage[];
+  latestUserMessage: string;
+  hasNewUserTurn: boolean;
+} {
+  const storedMessages = toVisibleConversationMessages(
+    toPersistedUIChatMessages(params.storedMessages, ["user", "assistant"]),
+  );
+  const incomingMessages = toVisibleConversationMessages(
+    toPersistedUIChatMessages(params.incomingMessages, ["user", "assistant"]),
+  );
+  const latestIncomingUser =
+    [...incomingMessages].reverse().find((message) => message.role === "user") ??
+    null;
+  const lastStoredMessage = storedMessages.at(-1) ?? null;
+  const hasNewUserTurn = Boolean(
+    latestIncomingUser &&
+      (!lastStoredMessage || !isSameVisibleMessage(lastStoredMessage, latestIncomingUser)),
+  );
+  const canonicalMessages = hasNewUserTurn && latestIncomingUser
+    ? [...storedMessages, latestIncomingUser]
+    : storedMessages;
+
+  return {
+    storedMessages,
+    canonicalMessages,
+    originalMessages: toUIMessages(canonicalMessages),
+    latestUserMessage: hasNewUserTurn ? latestIncomingUser?.content.trim() ?? "" : "",
+    hasNewUserTurn,
+  };
 }
 
 export function buildRespondentVoiceGreeting(input: {

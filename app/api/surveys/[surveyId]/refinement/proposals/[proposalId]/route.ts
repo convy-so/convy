@@ -25,7 +25,7 @@ import {
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 import { z } from "zod";
 
 const conductingProfilePayloadSchema = z.object({

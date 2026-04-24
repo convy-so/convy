@@ -10,7 +10,7 @@ import { normalizeSpeechToTextLanguage } from "@/lib/voice/voice-locales";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 
 export async function POST(
   request: NextRequest,

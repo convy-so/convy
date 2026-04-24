@@ -258,11 +258,6 @@ function getPackScopeValidation(pack: {
   switch (pack.targetScope) {
     case "global":
       return { valid: true, reason: null as string | null };
-    case "organization":
-      return {
-        valid: false,
-        reason: "organization-scoped packs are not supported in V1",
-      };
     case "classroom":
       return {
         valid: Boolean(readMetadataString(metadata, "classroomId")),

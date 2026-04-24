@@ -834,6 +834,33 @@ export async function fetchTutoringSession(
   );
 }
 
+export async function completeTutoringSession(input: {
+  topicId: string;
+  sessionId: string;
+  language?: (typeof appLocales)[number];
+}) {
+  return await parseResponse(
+    await fetch(`/api/learning/topics/${input.topicId}/chat/complete`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: input.sessionId,
+        language: input.language,
+      }),
+    }),
+    z.object({
+      success: z.literal(true),
+      data: z.object({
+        sessionId: z.string(),
+        status: z.string(),
+        reportQueued: z.boolean().optional(),
+        alreadyCompleted: z.boolean().optional(),
+      }),
+    }),
+  );
+}
+
 export async function askOutOfSessionQuestion(input: {
   topicId: string;
   message: string;

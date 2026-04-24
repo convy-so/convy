@@ -35,12 +35,8 @@ import {
 } from "./middleware/rate-limit";
 import { SurveyResponseVoiceHandler } from "./handlers/survey-response-voice";
 import { SampleSurveyVoiceHandler } from "./handlers/sample-survey-voice";
-import { PresenceHandler } from "./handlers/presence";
 import { getRedisSubscriber } from "@/lib/redis";
-import {
-  getSurveyPermissionContext,
-  isWorkspaceMember,
-} from "@/lib/workspace-access";
+import { getSurveyPermissionContext } from "@/lib/survey-access";
 
 /**
  * WebSocket Server for Voice-Enabled Surveys
@@ -53,18 +49,11 @@ const PORT = parseInt(env.WEBSOCKET_PORT);
 const activeConnections = new Map<
   string,
   {
-    handler:
-    | SurveyResponseVoiceHandler
-    | SampleSurveyVoiceHandler
-    | PresenceHandler;
+    handler: SurveyResponseVoiceHandler | SampleSurveyVoiceHandler;
     userId?: string;
     createdAt: number; // Track when connection was created for cleanup
   }
 >();
-
-// Track each presence socket independently so multiple tabs from the same user
-// do not overwrite each other.
-const presenceConnections = new Map<string, PresenceHandler>();
 const realtimeConnections = new Map<
   string,
   {
@@ -75,7 +64,7 @@ const realtimeConnections = new Map<
 >();
 const realtimeChannelSubscriptions = new Map<string, Set<string>>();
 
-// Redis pub/sub subscriber for presence and realtime events
+// Redis pub/sub subscriber for realtime events
 let redisSubscriber: ReturnType<typeof getRedisSubscriber> | null = null;
 let redisSubscriberReconnectAttempts = 0;
 const MAX_REDIS_RECONNECT_ATTEMPTS = 10;
@@ -116,9 +105,6 @@ function cleanupStaleConnections(): void {
       const isTooOld = now - connection.createdAt > MAX_CONNECTION_AGE_MS;
 
       if (isClosed || isTooOld) {
-        if (presenceConnections.has(connectionId)) {
-          presenceConnections.delete(connectionId);
-        }
         if (hasCleanupMethod(connection.handler)) {
           void connection.handler.cleanup().catch((error) => {
             console.error("[websocket] handler cleanup failed", {
@@ -137,9 +123,6 @@ function cleanupStaleConnections(): void {
         message: error instanceof Error ? error.message : "Unknown error",
       });
       // If we can't check the connection, remove it to be safe
-      if (presenceConnections.has(connectionId)) {
-        presenceConnections.delete(connectionId);
-      }
       activeConnections.delete(connectionId);
       cleanedCount++;
     }
@@ -230,8 +213,6 @@ wss.on("connection", async (ws: WebSocket, req) => {
       await handleSampleConversation(ws, req);
     } else if (pathname === "/realtime") {
       await handleRealtime(ws, req);
-    } else if (pathname.startsWith("/presence")) {
-      await handlePresence(ws, req);
     } else {
       ws.send(
         JSON.stringify({
@@ -405,81 +386,6 @@ async function handleSampleConversation(
   }
 }
 
-/**
- * Handle presence connections (authenticated)
- * URL format: /presence?workspaceId={id}&surveyId={id}
- */
-async function handlePresence(
-  ws: WebSocket,
-  req: IncomingMessage,
-): Promise<void> {
-  const authResult = await authenticateWebSocket(ws, req);
-
-  if ("code" in authResult) {
-    sendAuthError(ws, authResult);
-    return;
-  }
-
-  const connection = authResult;
-  const url = parse(req.url || "", true);
-  const workspaceId = getSingleQueryParam(url.query.workspaceId);
-  const surveyId = getSingleQueryParam(url.query.surveyId);
-
-  if (!workspaceId) {
-    ws.send(JSON.stringify({ type: "error", error: "Workspace ID required" }));
-    ws.close();
-    return;
-  }
-
-  const member = await isWorkspaceMember(connection.userId, workspaceId);
-  if (!member) {
-    ws.send(JSON.stringify({ type: "error", error: "Unauthorized" }));
-    ws.close();
-    return;
-  }
-
-  // Get client identifier (user-based)
-  const identifier = getClientIdentifier(req, connection.userId);
-  const rateLimitCheck = await checkConnectionAllowed(identifier);
-
-  if (!rateLimitCheck.allowed) {
-    ws.send(JSON.stringify({ type: "error", error: rateLimitCheck.reason }));
-    ws.close();
-    return;
-  }
-
-  try {
-    const connectionId = `presence-${connection.userId}-${workspaceId}-${Date.now()}`;
-    const handler = new PresenceHandler(
-      connection,
-      connectionId,
-      workspaceId,
-      surveyId,
-    );
-    await handler.initialize();
-
-    activeConnections.set(connectionId, {
-      handler,
-      userId: connection.userId,
-      createdAt: Date.now(),
-    });
-    presenceConnections.set(connectionId, handler);
-
-    ws.on("close", async () => {
-      activeConnections.delete(connectionId);
-      presenceConnections.delete(connectionId);
-      await releaseConnection(identifier);
-    });
-
-  } catch (error) {
-    console.error("[websocket] presence handler initialization failed", {
-      message: error instanceof Error ? error.message : "Unknown error",
-    });
-    await releaseConnection(identifier);
-    ws.close();
-  }
-}
-
 async function handleRealtime(
   ws: WebSocket,
   req: IncomingMessage,
@@ -585,15 +491,10 @@ async function authorizeRealtimeSubscription(
   userId: string,
   channel: string,
 ): Promise<boolean> {
-  if (channel.startsWith("workspace:")) {
-    const workspaceId = channel.slice("workspace:".length);
-    return await isWorkspaceMember(userId, workspaceId);
-  }
-
   if (channel.startsWith("survey:")) {
     const surveyId = channel.slice("survey:".length);
     const permission = await getSurveyPermissionContext(userId, surveyId);
-    return Boolean(permission?.canView && permission.collaborationAllowed);
+    return Boolean(permission?.canView);
   }
 
   return false;
@@ -611,25 +512,11 @@ function initializeRedisSubscriber(): void {
 
     redisSubscriber = getRedisSubscriber();
 
-    // Subscribe to patterns
-    redisSubscriber.psubscribe("pubsub:presence:*");
     redisSubscriber.psubscribe("pubsub:realtime:*");
 
     redisSubscriber.on("pmessage", async (_pattern, channel, message) => {
       try {
-        if (channel.startsWith("pubsub:presence:")) {
-          const channelParts = channel.split(":");
-          const workspaceId = channelParts[2];
-          const surveyId =
-            channelParts.length > 3 ? channelParts.slice(3).join(":") : undefined;
-          const data = JSON.parse(message);
-
-          for (const handler of presenceConnections.values()) {
-            if (handler.matchesScope(workspaceId, surveyId)) {
-              handler.send(data);
-            }
-          }
-        } else if (channel.startsWith("pubsub:realtime:")) {
+        if (channel.startsWith("pubsub:realtime:")) {
           const parts = channel.split(":");
           const scope = parts[2];
           const entityId = parts[3];
@@ -720,7 +607,6 @@ process.on("SIGTERM", async () => {
   // Unsubscribe from Redis channels
   if (redisSubscriber) {
     try {
-      await redisSubscriber.punsubscribe("pubsub:presence:*");
       await redisSubscriber.punsubscribe("pubsub:realtime:*");
       await redisSubscriber.quit();
     } catch (error) {

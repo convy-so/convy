@@ -7,7 +7,7 @@ import { getCurrentSession } from "@/lib/auth/session";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 import { createSignedSurveyMediaUrl } from "@/lib/storage";
 import { resolveRespondentAccess } from "@/lib/privacy/respondent";
 import { getClientIP } from "@/lib/ratelimit";

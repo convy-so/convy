@@ -28,7 +28,6 @@ type GenerateObservedTextInput = GenerateTextInput & {
 export type ObservedTextOptions = AiRunTraceInput & {
   contextLayers?: AiContextLayer[];
   userId?: string | null;
-  organizationId?: string | null;
   surveyId?: string | null;
 };
 
@@ -106,11 +105,10 @@ export async function generateObservedText(
     promptCache,
   });
   const runId = observability
-    ? await createAiRunTrace({
+      ? await createAiRunTrace({
         ...observability,
         status: "running",
         userId: observability.userId ?? null,
-        organizationId: observability.organizationId ?? null,
         resourceType: observability.resourceType ?? (observability.surveyId ? "survey" : null),
         resourceId: observability.resourceId ?? observability.surveyId ?? null,
         modelProvider: observability.modelProvider ?? getProviderName(rawParams.model),
@@ -134,7 +132,6 @@ export async function generateObservedText(
 
     const usageInput: UsageLogInput = {
       userId: observability?.userId ?? undefined,
-      organizationId: observability?.organizationId ?? undefined,
       surveyId: observability?.surveyId ?? undefined,
       type: "llm_text",
       provider: getProviderName(rawParams.model),

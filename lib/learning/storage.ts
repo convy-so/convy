@@ -87,12 +87,20 @@ export async function updateLearningSessionState(params: {
   summary?: string | null;
   expectedStateVersion?: number;
 }) {
+  const completedAt =
+    params.sessionStatus === "completed"
+      ? new Date()
+      : params.sessionStatus && params.sessionStatus !== "completed"
+        ? null
+        : undefined;
+
   const [session] = await getDb()
     .update(learningSessions)
     .set({
       state: params.state,
       sessionStatus: params.sessionStatus,
       summary: params.summary,
+      completedAt,
       stateVersion:
         params.expectedStateVersion !== undefined
           ? params.expectedStateVersion + 1
@@ -129,7 +137,8 @@ export async function completeLearningSession(params: {
   const state = {
     ...(session.state ?? createDefaultLearningSessionState()),
     completed: true,
-    reportReady: true,
+    reportReady:
+      (session.state ?? createDefaultLearningSessionState()).reportReady ?? false,
   } as LearningSessionState;
 
   return await updateLearningSessionState({
@@ -665,7 +674,7 @@ export async function listExpertReviewCases(params: {
     const ownerId =
       reviewCase.topic?.classroom.teacherUserId ??
       reviewCase.classroomStudent?.classroom.teacherUserId ??
-      reviewCase.session?.topic.classroom.teacherUserId ??
+      reviewCase.session?.topic?.classroom.teacherUserId ??
       null;
     return ownerId === params.teacherUserId;
   });
@@ -716,7 +725,7 @@ export async function listExpertReviewQueue(params: { teacherUserId: string }) {
       const ownerId =
         reviewCase.topic?.classroom.teacherUserId ??
         reviewCase.classroomStudent?.classroom.teacherUserId ??
-        reviewCase.session?.topic.classroom.teacherUserId ??
+        reviewCase.session?.topic?.classroom.teacherUserId ??
         null;
       return ownerId === params.teacherUserId;
     })

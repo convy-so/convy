@@ -22,6 +22,8 @@ export async function generateTeacherProgressReport(params: {
   studentName: string;
   topicTitle: string;
   state: LearningSessionState;
+  sessionId?: string | null;
+  userId?: string | null;
   transcript: Array<{
     role: string;
     content: string;
@@ -40,36 +42,130 @@ export async function generateTeacherProgressReport(params: {
       transcript: params.transcript,
       previousReport: params.previousReport ?? null,
     }),
+    observability: params.sessionId
+      ? {
+          feature: "tutoring_chat",
+          runKind: "analysis",
+          scenarioType: "teacher_report_generation",
+          userId: params.userId ?? null,
+          resourceType: "learning_session",
+          resourceId: params.sessionId,
+          metadata: {
+            topicTitle: params.topicTitle,
+          },
+        }
+      : undefined,
   });
 }
 
 export function buildClassroomTopicReportSummary(
   reports: Array<{
+    student: {
+      id: string;
+    };
     masteryPercent: number;
+    updatedAt?: string | Date | null;
     report: TeacherProgressReport;
   }>,
 ) {
+  const latestByStudent = Array.from(
+    new Map(reports.map((report) => [report.student.id, report])).values(),
+  );
+
   if (reports.length === 0) {
     return {
       reportCount: 0,
-      averageMasteryPercent: 0,
-      riskFlagCount: 0,
-      identifiedGapCount: 0,
+      studentCount: 0,
+      averageMasteryPercent: null,
+      averageConfidenceScore: null,
+      averageSessionDurationMinutes: null,
+      studentsNeedingAttention: 0,
+      studentsStrongMastery: 0,
+      studentsDeveloping: 0,
+      studentsWithLowConfidence: 0,
+      latestReportAt: null,
+      commonGaps: [] as string[],
+      commonRiskFlags: [] as string[],
+      recommendedTeacherFocus: [] as string[],
     };
   }
 
+  const confidenceScores = latestByStudent
+    .map((report) => report.report.studentConfidenceScore)
+    .filter((value): value is number => typeof value === "number");
+
+  const collectTopItems = (
+    items: string[],
+    limit = 5,
+  ) =>
+    Array.from(
+      items.reduce((counts, item) => {
+        counts.set(item, (counts.get(item) ?? 0) + 1);
+        return counts;
+      }, new Map<string, number>()),
+    )
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .slice(0, limit)
+      .map(([item]) => item);
+
+  const studentsWithLowConfidence = latestByStudent.filter(
+    (report) =>
+      typeof report.report.studentConfidenceScore === "number" &&
+      report.report.studentConfidenceScore <= 4,
+  ).length;
+  const studentsNeedingAttention = latestByStudent.filter((report) => {
+    const confidence = report.report.studentConfidenceScore;
+    return (
+      report.masteryPercent < 60 ||
+      (report.report.riskFlags?.length ?? 0) > 0 ||
+      (report.report.identifiedGaps?.length ?? 0) >= 2 ||
+      (typeof confidence === "number" && confidence <= 4)
+    );
+  }).length;
+  const studentsStrongMastery = latestByStudent.filter(
+    (report) =>
+      report.masteryPercent >= 80 &&
+      (report.report.riskFlags?.length ?? 0) === 0,
+  ).length;
+
   return {
     reportCount: reports.length,
+    studentCount: latestByStudent.length,
     averageMasteryPercent: Math.round(
-      reports.reduce((sum, report) => sum + report.masteryPercent, 0) / reports.length,
+      latestByStudent.reduce((sum, report) => sum + report.masteryPercent, 0) /
+        latestByStudent.length,
     ),
-    riskFlagCount: reports.reduce(
-      (sum, report) => sum + (report.report.riskFlags?.length ?? 0),
-      0,
+    averageConfidenceScore:
+      confidenceScores.length > 0
+        ? Number(
+            (
+              confidenceScores.reduce((sum, score) => sum + score, 0) /
+              confidenceScores.length
+            ).toFixed(1),
+          )
+        : null,
+    averageSessionDurationMinutes: null,
+    studentsNeedingAttention,
+    studentsStrongMastery,
+    studentsDeveloping:
+      latestByStudent.length - studentsStrongMastery - studentsNeedingAttention,
+    studentsWithLowConfidence,
+    latestReportAt:
+      reports[0]?.updatedAt instanceof Date
+        ? reports[0].updatedAt.toISOString()
+        : typeof reports[0]?.updatedAt === "string"
+          ? reports[0].updatedAt
+          : null,
+    commonGaps: collectTopItems(
+      latestByStudent.flatMap((report) => report.report.identifiedGaps ?? []),
     ),
-    identifiedGapCount: reports.reduce(
-      (sum, report) => sum + (report.report.identifiedGaps?.length ?? 0),
-      0,
+    commonRiskFlags: collectTopItems(
+      latestByStudent.flatMap((report) => report.report.riskFlags ?? []),
+    ),
+    recommendedTeacherFocus: collectTopItems(
+      latestByStudent.flatMap(
+        (report) => report.report.recommendedTeacherActions ?? [],
+      ),
     ),
   };
 }
