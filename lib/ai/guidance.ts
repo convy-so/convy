@@ -20,7 +20,6 @@ export type ExpertGuidanceArtifact = {
 };
 
 type GuidanceSelectors = {
-  organizationId?: string | null;
   classroomId?: string | null;
   topicId?: string | null;
   subjectKey?: string | null;
@@ -48,11 +47,6 @@ function scorePackScope(params: {
   const metadata = params.metadata;
 
   if (scope === "global") return 1;
-
-  if (scope === "organization") {
-    const organizationId = getMetadataString(metadata, "organizationId");
-    return organizationId && organizationId === selectors.organizationId ? 5 : -1;
-  }
 
   if (scope === "classroom") {
     const classroomId = getMetadataString(metadata, "classroomId");

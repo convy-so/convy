@@ -128,7 +128,6 @@ function mergeRunMetadata(
 async function initializeObservedRun(input: {
   model: LanguageModel;
   userId?: string;
-  organizationId?: string;
   surveyId?: string;
   observability?: (AiRunTraceInput & { contextLayers?: AiContextLayer[] }) | undefined;
   systemPrompt?: string;
@@ -144,8 +143,6 @@ async function initializeObservedRun(input: {
     ...input.observability,
     status: "running",
     userId: input.observability.userId ?? input.userId ?? null,
-    organizationId:
-      input.observability.organizationId ?? input.organizationId ?? null,
     resourceType:
       input.observability.resourceType ??
       (input.surveyId ? "survey" : null),
@@ -181,7 +178,6 @@ export async function generateAIResponse(
     temperature?: number;
     maxTokens?: number;
     userId?: string;
-    organizationId?: string;
     surveyId?: string;
     promptCache?: PromptCacheOptions;
     promptSpec?: PromptSpec;
@@ -219,7 +215,6 @@ export async function generateAIResponse(
   const runId = await initializeObservedRun({
     model,
     userId: options?.userId,
-    organizationId: options?.organizationId,
     surveyId: options?.surveyId,
     observability: options?.observability
       ? {
@@ -262,7 +257,6 @@ export async function generateAIResponse(
 
     const usageInput: UsageLogInput = {
       userId: options?.userId,
-      organizationId: options?.organizationId,
       surveyId: options?.surveyId,
       type: "llm_text",
       provider: getProviderName(model),
@@ -317,7 +311,6 @@ export function streamAIResponse(
     temperature?: number;
     maxTokens?: number;
     userId?: string;
-    organizationId?: string;
     surveyId?: string;
     promptCache?: PromptCacheOptions;
     promptSpec?: PromptSpec;
@@ -359,7 +352,6 @@ export function streamAIResponse(
   const runIdPromise = initializeObservedRun({
     model,
     userId: options?.userId,
-    organizationId: options?.organizationId,
     surveyId: options?.surveyId,
     observability: options?.observability
       ? {
@@ -411,7 +403,6 @@ export function streamAIResponse(
     onFinish: (result) => {
       const usageInput: UsageLogInput = {
         userId: options?.userId,
-        organizationId: options?.organizationId,
         surveyId: options?.surveyId,
         type: "llm_text",
         provider: getProviderName(model),

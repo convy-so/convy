@@ -18,7 +18,7 @@ import { getTeacherClassroomAccess } from "@/lib/learning/access";
 import {
   getSurveyPermissionContext,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 import { createSurveySchema } from "@/lib/validation/survey-schemas";
 import { SURVEY_LIMITS } from "@/lib/config";
 
@@ -100,10 +100,6 @@ export async function GET() {
           canOpen,
           canEdit: hasSurveyPermission(permission, "canEdit"),
           canDelete: hasSurveyPermission(permission, "canDelete"),
-          canManageCollaborators: hasSurveyPermission(
-            permission,
-            "canManageCollaborators",
-          ),
           isLocked: false,
           sharedBy: !isOwner ? (survey.creatorName ?? null) : null,
           role: accessLevel,

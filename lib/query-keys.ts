@@ -6,7 +6,7 @@
 export const queryKeys = {
   // Survey-related queries
   surveys: {
-    all: (orgId?: string | null) => ["surveys", orgId] as const,
+    all: (scopeId?: string | null) => ["surveys", scopeId] as const,
     detail: (surveyId: string) => ["survey", surveyId] as const,
     responses: (surveyId: string, page: number, status: string) =>
       ["surveyResponses", surveyId, page, status] as const,
@@ -16,13 +16,13 @@ export const queryKeys = {
 
   // Folder-related queries
   folders: {
-    all: (orgId?: string | null) => ["folders", orgId] as const,
+    all: (scopeId?: string | null) => ["folders", scopeId] as const,
     detail: (folderId: string) => ["folders", "detail", folderId] as const,
   },
 
   // Notifications
   notifications: {
-    all: (orgId?: string | null) => ["notifications", orgId] as const,
+    all: (scopeId?: string | null) => ["notifications", scopeId] as const,
   },
 
   // Learning

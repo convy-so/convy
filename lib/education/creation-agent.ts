@@ -55,10 +55,6 @@ export function buildCreationGreeting(
       return "Bonjour. Je vais vous aider a construire cette etude. Quel programme d'apprentissage ou quelle experience voulez-vous etudier ?";
     case "de":
       return "Hallo. Ich helfe Ihnen dabei, diese Studie zu gestalten. Welches Lernprogramm oder welche Lernerfahrung moechten Sie untersuchen?";
-    case "es":
-      return "Hola. Voy a ayudarte a dar forma a este estudio. Que programa o experiencia de aprendizaje quieres analizar?";
-    case "it":
-      return "Ciao. Ti aiutero a dare forma a questo studio. Quale programma o esperienza di apprendimento vuoi analizzare?";
     case "en":
     default:
       return "Hi. I'll help you shape this education study. What learning program or experience do you want feedback on?";

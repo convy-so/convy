@@ -1,4 +1,4 @@
-import { Worker, type Job } from "bullmq";
+import { MetricsTime, Worker, type Job } from "bullmq";
 import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -263,7 +263,18 @@ const evalRunWorker = new Worker<EvalRunJobData>(
   {
     connection: getRedisClient(),
     concurrency: 2,
+    metrics: {
+      maxDataPoints: MetricsTime.ONE_WEEK * 2,
+    },
   },
 );
+
+evalRunWorker.on("failed", (job, err) => {
+  console.error("[eval-run-worker] job failed", {
+    jobId: job?.id,
+    evalRunId: job?.data?.evalRunId,
+    message: err instanceof Error ? err.message : String(err),
+  });
+});
 
 export default evalRunWorker;

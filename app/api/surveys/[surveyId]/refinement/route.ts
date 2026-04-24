@@ -16,7 +16,7 @@ import {
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 import type { ChatMessage } from "@/lib/chat-types";
 
 export async function GET(
@@ -47,8 +47,8 @@ export async function GET(
       thread,
       messages,
       proposals,
-      activePlaybooks: [],
-      activePersonality: null,
+      activeConductingProfile: null,
+      activeResearchBriefPatch: null,
     });
   } catch (error) {
     console.error("[Refinement GET] Error:", error);

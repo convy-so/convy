@@ -7,7 +7,7 @@ import { getDb } from "@/db";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 
 export async function POST(
   _request: Request,

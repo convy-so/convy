@@ -6,6 +6,10 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { getStudentTopicAccess } from "@/lib/learning/access";
 import { extractMessageText, toPersistedUIChatMessages } from "@/lib/chat-ui-messages";
 import {
+  normalizeMessages as toModelMessages,
+  streamAIResponse,
+} from "@/lib/ai";
+import {
   appendLearningMessage,
   createLearningSession,
   getActiveLearningSession,
@@ -16,11 +20,16 @@ import {
 } from "@/lib/learning/storage";
 import { tutorRuntimeService } from "@/lib/learning/tutor-runtime-service";
 import { generateSessionOpening } from "@/lib/learning/tutor";
+import {
+  finalizeTutoringSession,
+  shouldAutoCompleteTutoringSession,
+  shouldRefreshStudentModel,
+} from "@/lib/learning/tutoring-session-lifecycle";
 import { learningSessionStateSchema } from "@/lib/learning/types";
 import { normalizeAppLocale } from "@/lib/i18n/config";
 import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
+import { sanitizeUserInput } from "@/lib/ai/sanitization";
 import { studentModelService } from "@/lib/learning/student-model-service";
-import { streamUiText } from "@/lib/ai/runtime";
 import { logBraintrustTrace } from "@/lib/ai/braintrust";
 
 const requestSchema = z.object({
@@ -41,9 +50,17 @@ async function ensureTutoringSession(params: {
   sessionId?: string;
   studyLanguage: string;
 }) {
+  const requestedSession = params.sessionId
+    ? await getLearningSessionById(params.sessionId)
+    : null;
   const existing =
-    (params.sessionId
-      ? await getLearningSessionById(params.sessionId)
+    (requestedSession &&
+    requestedSession.sessionStatus === "active" &&
+    requestedSession.sessionType === "tutoring" &&
+    requestedSession.topicId === params.topicId &&
+    requestedSession.classroomStudentId === params.access.classroomStudent.id &&
+    requestedSession.sessionLocale === params.studyLanguage
+      ? requestedSession
       : null) ??
     (await getActiveLearningSession({
       classroomStudentId: params.access.classroomStudent.id,
@@ -311,15 +328,47 @@ export async function POST(
       classroomId: access.topic.classroomId,
       classroomStudentId: access.classroomStudent.id,
       studentUserId: access.classroomStudent.userId,
+      sessionId: tutorSession.id,
       studyLanguage,
       state,
       latestStudentMessage: latestUserText,
       latestTutorMessage: previousAssistant?.content ?? null,
     });
 
-    const result = await streamUiText({
-      messages: body.messages,
-      system: prepared.systemPrompt,
+    // Sanitize conversation history before sending to the model
+    const sanitizedMessages = (body.messages as any[]).map((m) => {
+      if (m.role === "user") {
+        return {
+          ...m,
+          content: sanitizeUserInput(m.content, {
+            maxLength: 2000,
+            allowNewlines: true,
+          }),
+        };
+      }
+      return m;
+    });
+
+    const modelMessages = await toModelMessages(sanitizedMessages);
+    const result = streamAIResponse(modelMessages, prepared.systemPrompt, {
+      userId: session.user.id,
+      maxTokens: 900,
+      temperature: 0.3,
+      observability: {
+        feature: "tutoring_chat",
+        scenarioType: "student_turn",
+        resourceType: "learning_session",
+        resourceId: tutorSession.id,
+        metadata: {
+          topicId,
+          runtimeModelId: prepared.runtimeModel.id,
+          runtimeModelVersion: prepared.runtimeModel.version,
+          frameworkVersionId: prepared.runtimeModel.frameworkVersionId,
+          stageId: prepared.frameworkState.currentStageId,
+          studentModelId: prepared.studentModel.id,
+          contentScopeMaterialIds: prepared.contentScope.materialIds,
+        },
+      },
     });
 
     return result.toUIMessageStreamResponse({
@@ -355,36 +404,77 @@ export async function POST(
           },
         });
 
-        const snapshot = await studentModelService.updateFromConversation({
-          studentModelId: prepared.studentModel.id,
-          topicId,
-          sessionId: tutorSession.id,
-          sourceType: "session_turn",
-          sourceId: tutorSession.id,
-          existingSnapshot: prepared.latestStudentSnapshot,
-          contentScope: prepared.contentScope,
-          conversationExcerpt: [
-            ...(previousAssistant?.content
-              ? [{ role: "assistant", content: previousAssistant.content }]
-              : []),
-            { role: "user", content: latestUserText },
-            { role: "assistant", content: assistantText },
-          ],
+        const autoComplete = shouldAutoCompleteTutoringSession({
+          runtimeModel: prepared.runtimeModel,
+          previousState: state,
+          nextState: prepared.nextState,
         });
+        const shouldUpdateStudentModel = shouldRefreshStudentModel({
+          previousState: state,
+          nextState: prepared.nextState,
+          forcedCompletion: autoComplete,
+        });
+        const snapshot = shouldUpdateStudentModel
+          ? await studentModelService.updateFromConversation({
+              studentModelId: prepared.studentModel.id,
+              topicId,
+              sessionId: tutorSession.id,
+              sourceType: "session_turn",
+              sourceId: tutorSession.id,
+              userId: session.user.id,
+              existingSnapshot: prepared.latestStudentSnapshot,
+              contentScope: prepared.contentScope,
+              conversationExcerpt: [
+                ...(previousAssistant?.content
+                  ? [{ role: "assistant", content: previousAssistant.content }]
+                  : []),
+                { role: "user", content: latestUserText },
+                { role: "assistant", content: assistantText },
+              ],
+            })
+          : null;
+        const refreshedAt = new Date().toISOString();
+        const nextState = {
+          ...prepared.nextState,
+          studentModelSnapshotId: shouldUpdateStudentModel
+            ? snapshot?.id ?? null
+            : prepared.latestStudentSnapshotRecord?.id ?? null,
+          recentEvidence: [
+            ...prepared.nextState.recentEvidence,
+            latestUserText,
+            assistantText,
+          ].slice(-8),
+          turnCount: state.turnCount + 1,
+          turnsSinceStudentModelRefresh: shouldUpdateStudentModel
+            ? 0
+            : state.turnsSinceStudentModelRefresh + 1,
+          lastStudentModelRefreshAt: shouldUpdateStudentModel
+            ? refreshedAt
+            : state.lastStudentModelRefreshAt,
+        };
 
-        await updateLearningSessionState({
+        const persistedSession = await updateLearningSessionState({
           sessionId: tutorSession.id,
-          state: {
-            ...prepared.nextState,
-            studentModelSnapshotId: snapshot.id,
-            recentEvidence: [
-              ...prepared.nextState.recentEvidence,
-              latestUserText,
-              assistantText,
-            ].slice(-8),
-          },
+          state: nextState,
           expectedStateVersion: tutorSession.stateVersion ?? 1,
         });
+
+        if (autoComplete) {
+          await finalizeTutoringSession({
+            sessionId: tutorSession.id,
+            topicId,
+            classroomId: access.topic.classroomId ?? "",
+            classroomStudentId: access.classroomStudent.id,
+            studentUserId: session.user.id,
+            studentName: access.classroomStudent.fullName,
+            topicTitle: access.topic.title,
+            sourceLocale: access.topic.contentLocale,
+            summary: assistantText,
+            expectedStateVersion: persistedSession.stateVersion ?? 1,
+            state: nextState,
+            reason: "framework_complete",
+          });
+        }
 
         await logBraintrustTrace({
           event: "tutoring_turn",
@@ -396,15 +486,19 @@ export async function POST(
           output: {
             tutorMessage: assistantText,
           },
-          metadata: {
-            topicId,
-            runtimeModelVersion: prepared.runtimeModel.version,
-            frameworkVersion: prepared.runtimeModel.frameworkVersionId,
-            studentModelSnapshotId: snapshot.id,
-            materialIds: prepared.contentScope.materialIds,
-            stageId: prepared.frameworkState.currentStageId,
-            conflictState:
-              prepared.runtimeModel.conflictIds.length > 0 ? "open" : "clear",
+            metadata: {
+              topicId,
+              runtimeModelVersion: prepared.runtimeModel.version,
+              frameworkVersion: prepared.runtimeModel.frameworkVersionId,
+              studentModelSnapshotId: shouldUpdateStudentModel
+                ? snapshot?.id
+                : prepared.latestStudentSnapshotRecord?.id,
+              materialIds: prepared.contentScope.materialIds,
+              stageId: prepared.frameworkState.currentStageId,
+              conflictState:
+                prepared.runtimeModel.conflictIds.length > 0 ? "open" : "clear",
+            autoCompleted: autoComplete,
+            studentModelRefreshed: shouldUpdateStudentModel,
           },
         }).catch(() => undefined);
       },

@@ -15,6 +15,7 @@ import {
   LogOut,
   User as UserIcon,
   Bell,
+  Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +42,7 @@ export function DashboardSidebar() {
 
   const bottomNavigation = [
     { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
+    { name: "Feedback", href: "/dashboard/feedback", icon: Inbox },
     { name: t("Profile"), href: "/dashboard/profile", icon: UserIcon },
     { name: t("Settings"), href: "/dashboard/settings", icon: Settings },
   ];

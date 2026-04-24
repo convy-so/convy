@@ -14,12 +14,13 @@ import {
   acquireSurveyLease,
   getActiveSurveyLease,
   getCurrentSurveyRevision,
+  incrementSurveyRevision,
 } from "@/lib/collaboration-service";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
-import { getClientIP, apiRateLimiter } from "@/lib/ratelimit";
+} from "@/lib/survey-access";
+import { getRateLimitKey, apiRateLimiter } from "@/lib/ratelimit";
 import {
   deriveCreationMediaDecision,
 } from "@/lib/education/agent-tools";
@@ -150,8 +151,13 @@ export async function POST(
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
-    const clientIP = getClientIP(request);
-    const rateLimitResult = await apiRateLimiter.limit(clientIP);
+    const session = await getVerifiedSession();
+    const rateLimitResult = await apiRateLimiter.limit(
+      getRateLimitKey(request, {
+        userId: session.user.id,
+        scope: "survey-create:post",
+      }),
+    );
     if (!rateLimitResult.success) {
       return new Response(
         JSON.stringify({
@@ -165,7 +171,6 @@ export async function POST(
       );
     }
 
-    const session = await getVerifiedSession();
     const { surveyId } = await params;
     const body = await request.json();
     const incomingMessages = Array.isArray(body.messages)
@@ -273,6 +278,7 @@ export async function POST(
         };
         const redirectedMessages = [...messages, redirectMessage];
         await persistCreationConversation(surveyId, redirectedMessages);
+        const revision = await incrementSurveyRevision(surveyId);
         await recordAiFeedbackEvent({
           userId: session.user.id,
           source: "scope_policy",
@@ -288,7 +294,7 @@ export async function POST(
           },
         }).catch(() => undefined);
 
-        return createUIMessageStreamResponse({
+        const response = createUIMessageStreamResponse({
           stream: createUIMessageStream({
             execute: async ({ writer }) => {
               writer.write({
@@ -299,6 +305,9 @@ export async function POST(
             },
           }),
         });
+        response.headers.set("X-Survey-Revision", String(revision));
+        response.headers.set("X-Lease-Token", leaseResult.lease.leaseToken);
+        return response;
       }
     }
 
@@ -361,6 +370,7 @@ export async function POST(
         updatedAt: new Date(),
       })
       .where(eq(surveyCreationConversations.surveyId, surveyId));
+    const nextRevision = await incrementSurveyRevision(surveyId);
 
     const response = createUIMessageStreamResponse({
       stream: createUIMessageStream({
@@ -374,7 +384,7 @@ export async function POST(
       }),
     });
 
-    response.headers.set("X-Survey-Revision", String(currentRevision + 1));
+    response.headers.set("X-Survey-Revision", String(nextRevision));
     response.headers.set("X-Lease-Token", leaseResult.lease.leaseToken);
     return response;
   } catch (error) {
@@ -448,7 +458,7 @@ export async function PUT(
     const normalizedMessages = normalizeCreationMessages(incomingMessages);
     await persistCreationConversation(surveyId, normalizedMessages);
 
-    const revision = await getCurrentSurveyRevision(surveyId);
+    const revision = await incrementSurveyRevision(surveyId);
     const response = new Response("OK", { status: 200 });
     response.headers.set("X-Survey-Revision", String(revision));
     response.headers.set("X-Lease-Token", leaseResult.lease.leaseToken);

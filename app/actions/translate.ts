@@ -31,7 +31,6 @@ export async function updateUserLanguage(language: AppLocale) {
 
     revalidatePath("/", "layout");
 
-    // Sync the NEXT_LOCALE cookie so the proxy can perform optimistic redirects
     (await cookies()).set("NEXT_LOCALE", language, {
       path: "/",
       maxAge: 60 * 60 * 24 * 365, // 1 year

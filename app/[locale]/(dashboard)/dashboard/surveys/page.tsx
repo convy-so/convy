@@ -52,14 +52,11 @@ function SurveysContent() {
   const [pageSize, setPageSize] = useState(10);
   const [isPageSizeOpen, setIsPageSizeOpen] = useState(false);
   const t = useTranslations("SurveysPage");
-
-
-  const { session } = useAuth();
-  const activeOrgId = null;
+  useAuth();
 
   // Fetch surveys using React Query
   const { data: surveys = [], isLoading } = useQuery<SurveyListItem[]>({
-    queryKey: queryKeys.surveys.all(activeOrgId),
+    queryKey: queryKeys.surveys.all(null),
     queryFn: fetchSurveys,
   });
 
@@ -79,7 +76,7 @@ function SurveysContent() {
       const result = await deleteSurveyAction(surveyToDelete.id);
 
       if (result.success) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all(activeOrgId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all(null) });
         toast.success(t("Card.Toasts.Deleted") || "Survey deleted successfully.");
         setSurveyToDelete(null);
       } else {
@@ -96,7 +93,7 @@ function SurveysContent() {
   // Continue creating survey
   const handleContinue = (surveyId: string) => {
     setShowMenuFor(null);
-    router.push(`/dashboard/create?surveyId=${surveyId}`);
+    router.push(`/dashboard/create?id=${surveyId}`);
   };
 
   // Duplicate survey
@@ -107,9 +104,9 @@ function SurveysContent() {
 
       if (result.success) {
         toast.success(t("Card.Toasts.Duplicated") || "Survey duplicated successfully.");
-        queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all(activeOrgId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all(null) });
       } else {
-        toast.error(t("Card.Toasts.DuplicateFailed") || "Failed to delete survey.");
+        toast.error(t("Card.Toasts.DuplicateFailed") || "Failed to duplicate survey.");
       }
     } catch (error) {
       console.error("[handleDuplicate] Failed:", error);

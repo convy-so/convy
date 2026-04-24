@@ -66,3 +66,19 @@ export const expensiveAiRateLimiter = new Ratelimit({
 export function getClientIP(request: Request): string {
   return resolveTrustedClientIp(request.headers).ip || "unknown";
 }
+
+export function getRateLimitKey(
+  request: Request,
+  options?: {
+    userId?: string | null;
+    scope?: string;
+  },
+): string {
+  const clientIp = getClientIP(request);
+  const subject =
+    options?.userId && options.userId.trim().length > 0
+      ? `user:${options.userId}`
+      : `ip:${clientIp}`;
+
+  return options?.scope ? `${options.scope}:${subject}` : subject;
+}

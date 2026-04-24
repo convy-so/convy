@@ -47,7 +47,11 @@ export function assembleAiContext(layers: ContextLayer[]) {
     }))
     .filter((layer) => layer.content.length > 0)
     .sort((left, right) => left.priority - right.priority)
-    .map(({ priority, ...layer }) => layer);
+    .map((layer) => {
+      const withoutPriority = { ...layer };
+      Reflect.deleteProperty(withoutPriority, "priority");
+      return withoutPriority;
+    });
 }
 
 export function formatAiContextForSystemPrompt(layers: ContextLayer[]) {

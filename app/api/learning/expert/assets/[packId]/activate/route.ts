@@ -6,6 +6,7 @@ import { getDb } from "@/db";
 import {
   expertConflicts,
   expertCrystallizations,
+  expertFrameworks,
   expertFrameworkVersions,
 } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";

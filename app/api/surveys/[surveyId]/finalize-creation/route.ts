@@ -8,7 +8,7 @@ import { getResearchBrief, getActiveCoveragePlan } from "@/lib/education/storage
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 
 export async function POST(
   _request: Request,

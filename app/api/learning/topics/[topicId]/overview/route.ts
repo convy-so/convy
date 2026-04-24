@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, count, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
@@ -20,15 +20,29 @@ export async function GET(
     }
 
     const [reportCountResult, questionCountResult, activeStudentCountResult] = await Promise.all([
-      getDb().query.studentProgressReports.findMany({
-        where: eq(studentProgressReports.topicId, topicId),
-      }),
-      getDb().query.learningInteractions.findMany({
-        where: eq(learningInteractions.topicId, topicId),
-      }),
-      getDb().query.classroomStudents.findMany({
-        where: eq(classroomStudents.classroomId, topic.classroomId),
-      }),
+      getDb()
+        .select({ value: count() })
+        .from(studentProgressReports)
+        .where(eq(studentProgressReports.topicId, topicId)),
+      getDb()
+        .select({ value: count() })
+        .from(learningInteractions)
+        .where(
+          and(
+            eq(learningInteractions.topicId, topicId),
+            isNull(learningInteractions.sessionId),
+            eq(learningInteractions.interactionType, "out_of_session_question"),
+          ),
+        ),
+      getDb()
+        .select({ value: count() })
+        .from(classroomStudents)
+        .where(
+          and(
+            eq(classroomStudents.classroomId, topic.classroomId),
+            eq(classroomStudents.inviteStatus, "accepted"),
+          ),
+        ),
     ]);
 
     return NextResponse.json({
@@ -50,15 +64,9 @@ export async function GET(
             gradeLabel: topic.classroom.gradeLabel,
           },
         },
-        reportCount: reportCountResult.length,
-        questionCount: questionCountResult.filter(
-          (item) =>
-            item.interactionType === "out_of_session_question" ||
-            item.interactionType === "student_message",
-        ).length,
-        activeStudentCount: activeStudentCountResult.filter(
-          (student) => student.inviteStatus === "accepted",
-        ).length,
+        reportCount: reportCountResult[0]?.value ?? 0,
+        questionCount: questionCountResult[0]?.value ?? 0,
+        activeStudentCount: activeStudentCountResult[0]?.value ?? 0,
       },
     });
   } catch (error) {

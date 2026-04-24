@@ -193,6 +193,36 @@ export async function getSessionById(sessionId: string) {
   return session ?? null;
 }
 
+export async function listSurveySessionsByType(
+  surveyId: string,
+  sessionType: SessionType,
+) {
+  return await getDb()
+    .select({
+      id: surveySessions.id,
+      surveyId: surveySessions.surveyId,
+      sessionType: surveySessions.sessionType,
+      sessionStatus: surveySessions.sessionStatus,
+      sourceConversationId: surveySessions.sourceConversationId,
+      language: surveySessions.language,
+      respondentId: surveySessions.respondentId,
+      respondentRole: surveySessions.respondentRole,
+      sessionState: surveySessions.sessionState,
+      summary: surveySessions.summary,
+      completedAt: surveySessions.completedAt,
+      createdAt: surveySessions.createdAt,
+      updatedAt: surveySessions.updatedAt,
+    })
+    .from(surveySessions)
+    .where(
+      and(
+        eq(surveySessions.surveyId, surveyId),
+        eq(surveySessions.sessionType, sessionType),
+      ),
+    )
+    .orderBy(desc(surveySessions.updatedAt));
+}
+
 export async function updateSessionState(sessionId: string, state: SessionState) {
   const [updated] = await getDb()
     .update(surveySessions)

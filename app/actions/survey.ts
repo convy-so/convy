@@ -2,7 +2,7 @@
 
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { eq, ne, or, sql } from "drizzle-orm";
+import { and, eq, ne, or, sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { surveys, users } from "@/db/schema";
@@ -10,7 +10,7 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 import { invalidateDashboardCaches } from "@/lib/cache";
 import { env } from "@/lib/env";
 import {
@@ -23,8 +23,6 @@ import {
 } from "@/lib/action-wrapper";
 import {
   updateSurveySchema,
-  surveyCustomSlugSchema,
-  surveyIdSchema,
 } from "@/lib/validation/survey-schemas";
 
 /**
@@ -100,7 +98,7 @@ export async function getSurveysAction(): Promise<
       creatorName: string | null;
       isOwner: boolean;
       isVoice: boolean;
-      accessLevel: "owner" | "editor" | "none";
+      accessLevel: "owner" | "none";
       canOpen: boolean;
       canEdit: boolean;
     }>
@@ -177,7 +175,7 @@ export async function getSurveyAction(
       return { success: false, error: "Unauthorized" };
     }
 
-    // Access granted (creator, personal owner, or invited editor)
+    // Access granted for the survey owner
     return { success: true, data: survey };
   } catch (error) {
     console.error("[getSurveyAction] Failed:", error);

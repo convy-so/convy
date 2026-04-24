@@ -144,12 +144,6 @@ export async function exportUserPrivacyData(userId: string) {
   };
 }
 
-export async function exportWorkspacePrivacyData(organizationId: string) {
-  throw new Error(
-    `Workspace privacy export is not available in V1 (${organizationId}).`,
-  );
-}
-
 export async function exportRespondentPrivacyData(conversationId: string) {
   const [conversation, feedback, voiceSessionRows] = await Promise.all([
     getDb().query.surveyConversations.findFirst({

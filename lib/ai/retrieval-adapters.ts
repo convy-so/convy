@@ -9,17 +9,12 @@ const learningRetrievalAdapter = retrievalAdapterRegistry.register({
     "Grounded retrieval for tutoring. Use when teacher-approved topic material should bound factual claims.",
   async retrieve(input) {
     const { findLearningEvidenceContext } = await import("@/lib/learning/evidence");
-    const organizationId =
-      typeof input.metadata?.organizationId === "string"
-        ? input.metadata.organizationId
-        : null;
     const topicId =
       typeof input.metadata?.topicId === "string" ? input.metadata.topicId : null;
 
-    if (!organizationId || !topicId) return [];
+    if (!topicId) return [];
 
     return await findLearningEvidenceContext({
-      organizationId,
       topicId,
       query: input.query,
       language: (input.language as never) ?? "en",
@@ -36,18 +31,13 @@ const surveyRetrievalAdapter = retrievalAdapterRegistry.register({
     const { executeRAGQuery } = await import("@/lib/rag/search");
     const surveyId =
       typeof input.metadata?.surveyId === "string" ? input.metadata.surveyId : null;
-    const organizationId =
-      typeof input.metadata?.organizationId === "string"
-        ? input.metadata.organizationId
-        : null;
 
-    if (!surveyId && !organizationId) return [];
+    if (!surveyId) return [];
 
     return await executeRAGQuery(
       input.query,
       {
-        surveyId: surveyId ?? undefined,
-        organizationId: organizationId ?? undefined,
+        surveyId,
         limit: input.limit ?? 6,
         language: (input.language as never) ?? "en",
       },

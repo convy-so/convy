@@ -193,7 +193,7 @@ export default function SampleReviewPage() {
     const params = useParams();
     const router = useRouter();
     const queryClient = useQueryClient();
-    const { session } = useAuth();
+    useAuth();
     const surveyId =
         typeof params.surveyId === "string" ? params.surveyId : "";
     const t = useTranslations("Survey.SampleReview");
@@ -305,9 +305,6 @@ export default function SampleReviewPage() {
             }
         }
     }, [isHistoryLoading, historyData, setMessages, messages.length]);
-
-    useEffect(() => {
-    }, [status, messages.length]);
 
     useEffect(() => {
         scrollToBottom();
@@ -451,15 +448,14 @@ export default function SampleReviewPage() {
 
             if (isNew || userSpokeLast) {
                 isHandlingGreetingRef.current = true;
-                
+                setHasAutoGreeted(true);
                 sendMessage({
                     text: isNew
                         ? "Start the conversation now. Greet the participant according to the system prompt instructions."
                         : "The user has returned to this sample survey review. Respond to their last input and continue the interview naturally."
-                }).then(() => {
-                    setHasAutoGreeted(true);
                 }).catch(() => {
                     isHandlingGreetingRef.current = false;
+                    setHasAutoGreeted(false);
                 });
             }
         }

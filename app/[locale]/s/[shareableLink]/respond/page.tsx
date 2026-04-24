@@ -3,7 +3,8 @@
 import { clientEnv } from "@/lib/env.client";
 import Image from "next/image";
 
-import { useState, useRef, useEffect, useMemo, Suspense } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, Suspense } from "react";
+import toast from "react-hot-toast";
 import { useParams, useSearchParams } from "next/navigation";
 import {
   Mic,
@@ -40,7 +41,7 @@ interface Survey {
   tone?: string;
   isVoice?: boolean;
   media?: SurveyMedia[];
-  language?: "en" | "fr" | "de" | "es" | "it";
+  language?: "en" | "fr" | "de";
 }
 
 function getDefaultMimeType(mediaType: SurveyMedia["type"]): string {
@@ -82,7 +83,7 @@ interface SurveyInitResponse {
   completed?: boolean;
 }
 
-type SurveyResponseLocale = "en" | "fr" | "de" | "es" | "it";
+type SurveyResponseLocale = "en" | "fr" | "de";
 
 function isConversationRole(role: string): role is "user" | "assistant" {
   return role === "user" || role === "assistant";
@@ -368,7 +369,7 @@ function SurveyContent() {
   const setIsVoiceMode = setLocalIsVoiceMode;
 
   const selectedLanguage: SurveyResponseLocale =
-    locale === "fr" || locale === "de" || locale === "es" || locale === "it"
+    locale === "fr" || locale === "de"
       ? locale
       : "en";
 
@@ -469,7 +470,7 @@ function SurveyContent() {
     setLocalIsVoiceMode(false);
   };
 
-  const onVoiceMessage = (data: VoiceAgentMessage) => {
+  const onVoiceMessage = useCallback((data: VoiceAgentMessage) => {
 
     // Chain of Trust: Unified message handling via Voice Agent events
     if (data.type === "conversation_text") {
@@ -566,11 +567,10 @@ function SurveyContent() {
       // Disconnect voice immediately to stop recording
       setLocalIsVoiceMode(false);
     }
-  };
-  // Deps: survey (for media lookup), t (for locale strings), setMessages (stable from useChat),
-  // setCompletedOverride (stable React setter — used directly to avoid stale wrapper closure.
-  // Do NOT add isCompleted here — it would force a new callback reference on every completion
-  // state change, which can cause the WebSocket to re-subscribe unnecessarily.)
+  // Do NOT add isCompleted — it would force a new callback on every completion state change,
+  // causing the WebSocket to re-subscribe unnecessarily.
+  }, [survey, t, setMessages, setCompletedOverride]);
+
   const voiceWs = useVoiceWebSocket({
     url: wsUrl,
     onMessage: onVoiceMessage,
@@ -597,20 +597,18 @@ function SurveyContent() {
     }
   };
 
-  // Handle language switch behavior
+  // Reconnect voice socket when locale changes so the server picks up the new language.
+  // voiceWs methods are stable references from useVoiceWebSocket — safe to call inside effect
+  // without adding the whole object to deps (doing so would run on every render).
   useEffect(() => {
-    // If the user hasn't manually switched and survey has a specific language, redirect (optional)
-    // But for now, we'll let the user choose.
-    if (isVoiceMode && conversationId && voiceWs.status === "connected") {
-      // Reconnect on language change to ensure correct voice parameters
-      voiceWs.disconnect();
-      setTimeout(() => {
-        voiceWs.connect().catch((error) => {
-          handleVoiceFailure(error);
-        });
-      }, 100);
-    }
-  }, [locale, isVoiceMode, conversationId, voiceWs]);
+    if (!isVoiceMode || !conversationId) return;
+    voiceWs.disconnect();
+    const timer = setTimeout(() => {
+      voiceWs.connect().catch(handleVoiceFailure);
+    }, 100);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locale]);
 
   const handleLanguageChange = (newLocale: string) => {
     router.replace(
@@ -674,7 +672,10 @@ function SurveyContent() {
         role: "user",
         parts: [{ type: "text", text: currentInput }],
       });
-    } catch {
+    } catch (error) {
+      console.error("[Respondent] sendMessage failed:", error);
+      toast.error("Failed to send message. Please try again.");
+      setInput(currentInput);
     }
   };
 
@@ -717,7 +718,7 @@ function SurveyContent() {
       link.remove();
       URL.revokeObjectURL(url);
     } catch (error) {
-      window.alert(
+      toast.error(
         error instanceof Error
           ? error.message
           : "Failed to export your response data.",
@@ -763,7 +764,7 @@ function SurveyContent() {
 
       window.location.reload();
     } catch (error) {
-      window.alert(
+      toast.error(
         error instanceof Error
           ? error.message
           : "Failed to delete your response data.",

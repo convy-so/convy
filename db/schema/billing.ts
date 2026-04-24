@@ -8,7 +8,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { users } from "./auth";
-import { folders } from "./organization";
+import { folders } from "./folders";
 import { surveys } from "./surveys";
 
 export { usageLogs, usageLogsRelations };

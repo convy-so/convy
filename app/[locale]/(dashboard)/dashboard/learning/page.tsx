@@ -1,5 +1,5 @@
-import { LearningWorkspace } from "@/components/learning/workspace";
+import { LearningHub } from "@/components/learning/learning-hub";
 
 export default function LearningPage() {
-  return <LearningWorkspace />;
+  return <LearningHub />;
 }

@@ -1,3 +1,4 @@
+import { nanoid } from "nanoid";
 import {
   getSurveyAnalyticsQueue,
   type SurveyAnalyticsJobData,
@@ -5,16 +6,12 @@ import {
 import {
   getAnalyticsState,
   getLatestAnalyticsSnapshot,
-  listSurveySessionInsightsByType,
+  listSurveySessionsByType,
   upsertAnalyticsState,
 } from "@/lib/education/storage";
 import type {
   AnalyticsGenerationState,
 } from "@/lib/education/types";
-import {
-  recordRealtimeEvent,
-} from "@/lib/collaboration-service";
-import { getDb } from "@/db";
 
 const ACTIVE_DEBOUNCE_MS = 90 * 1000;
 const BOOTSTRAP_DEBOUNCE_MS = 60 * 1000;
@@ -54,16 +51,22 @@ function getNodeCoverage(value: unknown): Record<string, number> {
   );
 }
 
-function getDebouncedJobId(surveyId: string) {
-  return `analytics-refresh-${surveyId}`;
+function createAnalyticsJobId(surveyId: string) {
+  return `analytics-refresh-${surveyId}-${nanoid(8)}`;
 }
 
-async function cancelPendingAnalyticsJob(surveyId: string) {
+async function cancelPendingAnalyticsJob(jobId: string | null) {
+  if (!jobId) {
+    return;
+  }
+
   const queue = getSurveyAnalyticsQueue();
-  const jobId = getDebouncedJobId(surveyId);
   const existing = await queue.getJob(jobId);
   if (existing) {
-    await existing.remove();
+    const state = await existing.getState().catch(() => null);
+    if (state && state !== "active") {
+      await existing.remove();
+    }
   }
 }
 
@@ -167,12 +170,19 @@ function decideMateriality(input: {
   };
 }
 
-export async function markAnalyticsRunning(surveyId: string) {
-  const current = (await getAnalyticsState(surveyId))?.state ?? createDefaultState(surveyId);
-  return await upsertAnalyticsState(surveyId, {
+export async function markAnalyticsRunning(params: {
+  surveyId: string;
+  jobId?: string | null;
+}) {
+  const current = (await getAnalyticsState(params.surveyId))?.state ??
+    createDefaultState(params.surveyId);
+  return await upsertAnalyticsState(params.surveyId, {
     ...current,
     status: "running",
-    pendingJobId: current.pendingJobId,
+    pendingJobId:
+      params.jobId && current.pendingJobId === params.jobId
+        ? null
+        : current.pendingJobId,
     lastRequestedAt: current.lastRequestedAt ?? new Date().toISOString(),
     lastError: null,
   });
@@ -183,44 +193,67 @@ export async function markAnalyticsCompleted(params: {
   version: number;
   reason: string;
   score: number;
+  jobId?: string | null;
 }) {
   const current = (await getAnalyticsState(params.surveyId))?.state ?? createDefaultState(params.surveyId);
   const state = await upsertAnalyticsState(params.surveyId, {
     ...current,
-    status: "idle",
-    latestSnapshotVersion: params.version,
-    pendingJobId: null,
+    status: current.pendingJobId ? "queued" : "idle",
+    latestSnapshotVersion: params.version ?? current.latestSnapshotVersion,
+    pendingJobId:
+      params.jobId && current.pendingJobId === params.jobId
+        ? null
+        : current.pendingJobId,
     lastCompletedAt: new Date().toISOString(),
     lastMaterialityReason: params.reason,
     lastMaterialityScore: params.score,
     lastError: null,
   });
 
-  await getDb().transaction(async (tx) => {
-    await recordRealtimeEvent(tx, {
-      scope: "survey",
-      surveyId: params.surveyId,
-      actorId: "system",
-      eventType: "survey.analytics_ready",
-      payload: {
-        surveyId: params.surveyId,
-        version: params.version,
-        reason: params.reason,
-        score: params.score,
-      },
-    });
-  });
-
   return state;
 }
 
-export async function markAnalyticsFailed(surveyId: string, error: unknown) {
-  const current = (await getAnalyticsState(surveyId))?.state ?? createDefaultState(surveyId);
-  return await upsertAnalyticsState(surveyId, {
+export async function markAnalyticsDeferred(params: {
+  surveyId: string;
+  reason: string;
+  score: number;
+  jobId?: string | null;
+}) {
+  const current = (await getAnalyticsState(params.surveyId))?.state ??
+    createDefaultState(params.surveyId);
+  return await upsertAnalyticsState(params.surveyId, {
     ...current,
-    status: "failed",
-    pendingJobId: null,
-    lastError: error instanceof Error ? error.message : "Unknown analytics worker error",
+    status: current.pendingJobId ? "queued" : "idle",
+    pendingJobId:
+      params.jobId && current.pendingJobId === params.jobId
+        ? null
+        : current.pendingJobId,
+    lastCompletedAt: new Date().toISOString(),
+    lastMaterialityReason: params.reason,
+    lastMaterialityScore: params.score,
+    lastError: null,
+  });
+}
+
+export async function markAnalyticsFailed(params: {
+  surveyId: string;
+  error: unknown;
+  jobId?: string | null;
+}) {
+  const current = (await getAnalyticsState(params.surveyId))?.state ??
+    createDefaultState(params.surveyId);
+  const nextPendingJobId =
+    params.jobId && current.pendingJobId === params.jobId
+      ? null
+      : current.pendingJobId;
+  return await upsertAnalyticsState(params.surveyId, {
+    ...current,
+    status: nextPendingJobId ? "queued" : "failed",
+    pendingJobId: nextPendingJobId,
+    lastError:
+      params.error instanceof Error
+        ? params.error.message
+        : "Unknown analytics worker error",
   });
 }
 
@@ -229,41 +262,46 @@ export async function scheduleAnalyticsRefresh(params: {
   userId: string;
   force?: boolean;
 }) {
-  const [stateRow, snapshotRow, insightRows] = await Promise.all([
+  const [stateRow, snapshotRow, sessionRows] = await Promise.all([
     getAnalyticsState(params.surveyId),
     getLatestAnalyticsSnapshot(params.surveyId),
-    listSurveySessionInsightsByType(params.surveyId, "live"),
+    listSurveySessionsByType(params.surveyId, "live"),
   ]);
 
   const state = stateRow?.state ?? createDefaultState(params.surveyId);
   const latestSnapshot = snapshotRow?.snapshot ?? null;
-  const completedSessions = insightRows.filter(
-    (row) => row.insight.quality?.completeness >= 0.8,
+  const completedSessions = sessionRows.filter(
+    (row) =>
+      row.sessionStatus === "completed" ||
+      row.sessionState.status === "completed" ||
+      row.sessionState.overallCoverage >= 0.8,
   ).length;
   const coverageOverall =
-    insightRows.length > 0
-      ? insightRows.reduce(
-          (sum, row) => sum + (row.insight.quality?.completeness ?? 0),
+    sessionRows.length > 0
+      ? sessionRows.reduce(
+          (sum, row) => sum + (row.sessionState.overallCoverage ?? 0),
           0,
-        ) / insightRows.length
+        ) / sessionRows.length
       : 0;
   const averageReliability =
-    insightRows.length > 0
-      ? insightRows.reduce(
-          (sum, row) => sum + (row.insight.quality?.reliability ?? 0),
+    sessionRows.length > 0
+      ? sessionRows.reduce(
+          (sum, row) => sum + (row.sessionState.reliabilityScore ?? 0),
           0,
-        ) / insightRows.length
+        ) / sessionRows.length
       : 0;
 
   const previousCoverageByNode = latestSnapshot?.coverage.byNode ?? {};
   const latestCoverageByNode: Record<string, number> = {};
-  for (const row of insightRows) {
-    const nodeCoverage = getNodeCoverage(row.insight);
+  for (const row of sessionRows) {
+    const nodeCoverage = getNodeCoverage({
+      nodeCoverage: row.sessionState.coverageByNode,
+    });
     for (const [nodeId, value] of Object.entries(nodeCoverage)) {
       latestCoverageByNode[nodeId] = (latestCoverageByNode[nodeId] ?? 0) + Number(value ?? 0);
     }
   }
-  const divisor = Math.max(1, insightRows.length);
+  const divisor = Math.max(1, sessionRows.length);
   const nodeMilestonesCrossed = Object.entries(latestCoverageByNode)
     .filter(([nodeId, total]) => {
       const previous = previousCoverageByNode[nodeId] ?? 0;
@@ -295,9 +333,9 @@ export async function scheduleAnalyticsRefresh(params: {
     return { queued: false, reason: decision.reason, score: decision.score };
   }
 
-  await cancelPendingAnalyticsJob(params.surveyId);
+  await cancelPendingAnalyticsJob(state.pendingJobId);
   const queue = getSurveyAnalyticsQueue();
-  const jobId = getDebouncedJobId(params.surveyId);
+  const jobId = createAnalyticsJobId(params.surveyId);
   await queue.add(
     "generate-analytics",
     {

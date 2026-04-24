@@ -1,8 +1,8 @@
 import { IncomingMessage } from "http";
 import { WebSocket } from "ws";
 import { getDb } from "@/db";
-import { sessions, users, members, surveys } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { sessions, users, surveys } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { getRedisClient } from "@/lib/redis";
 import {
   RESPONDENT_RESUME_QUERY_PARAM,
@@ -21,7 +21,7 @@ export interface AuthenticatedConnection {
   sessionId: string;
   userEmail: string;
   emailVerified: boolean;
-  role: "user" | "admin" | "org_admin" | "org_member";
+  role: "user" | "admin";
 }
 
 export interface AuthError {
@@ -99,7 +99,7 @@ async function verifySessionToken(token: string): Promise<{
   sessionId: string;
   userEmail: string;
   emailVerified: boolean;
-  role: "user" | "admin" | "org_admin" | "org_member";
+  role: "user" | "admin";
 } | null> {
   try {
     const resolvedToken = await resolveSessionToken(token);
@@ -115,7 +115,6 @@ async function verifySessionToken(token: string): Promise<{
         userId: sessions.userId,
         expiresAt: sessions.expiresAt,
         token: sessions.token,
-        activeOrganizationId: sessions.activeOrganizationId,
       })
       .from(sessions)
       .where(eq(sessions.token, resolvedToken))
@@ -127,7 +126,7 @@ async function verifySessionToken(token: string): Promise<{
 
     return processSession(session);
 
-    async function processSession(session: { userId: string; id: string; expiresAt: Date | null; activeOrganizationId?: string | null }) {
+    async function processSession(session: { userId: string; id: string; expiresAt: Date | null }) {
       // Check if session is expired
       const now = new Date();
       if (session.expiresAt && session.expiresAt < now) {
@@ -150,35 +149,11 @@ async function verifySessionToken(token: string): Promise<{
       }
 
       // Determine the derived role
-      let derivedRole: "user" | "admin" | "org_admin" | "org_member" = "user";
+      let derivedRole: "user" | "admin" = "user";
 
       // 1. Global Admin always wins
       if (user.role === "admin") {
         derivedRole = "admin";
-      } 
-      // 2. If an organization is active, check the user's role in that organization
-      else if (session.activeOrganizationId) {
-        const [membership] = await getDb()
-          .select({
-            role: members.role,
-          })
-          .from(members)
-          .where(
-            and(
-              eq(members.userId, session.userId),
-              eq(members.organizationId, session.activeOrganizationId)
-            )
-          )
-          .limit(1);
-
-        if (membership) {
-          // Map organization roles to derived roles
-          if (membership.role === "owner" || membership.role === "admin") {
-            derivedRole = "org_admin";
-          } else {
-            derivedRole = "org_member";
-          }
-        }
       }
 
       return {

@@ -11,7 +11,7 @@ import {
 import { relations } from "drizzle-orm";
 import { timestamps } from "./common";
 import { users } from "./auth";
-import { folders } from "./organization";
+import { folders } from "./folders";
 import { classrooms } from "./learning";
 import type {
   AnalyticsFact,

@@ -8,8 +8,8 @@ const faqs = [
     a: "Convyy is designed around adaptive conversation. Instead of fixed modules, it responds to each student in real time, making support feel more personal while still giving teachers structure and visibility.",
   },
   {
-    q: "Do I lose access to the free version if I don't upgrade?",
-    a: "Not at all. The free plan stays available with no time limit. You only upgrade when you need more classrooms, more sessions, or deeper analytics.",
+    q: "Can I start small and expand later?",
+    a: "Yes. You can begin with a focused setup and expand classrooms, sessions, surveys, and analytics workflows as your program grows.",
   },
   {
     q: "Can I use Convyy across different educational use cases?",
@@ -20,16 +20,16 @@ const faqs = [
     a: "Yes. Convyy supports both voice and text experiences, so you can choose the interaction style that best fits your learners and teaching context.",
   },
   {
-    q: "Can I upgrade or downgrade later?",
-    a: "Yes, you can change your plan at any time. Upgrades take effect immediately, and downgrades apply at the end of your current billing cycle.",
+    q: "How do surveys and tutoring work together?",
+    a: "They share the same teacher-centered workflow. You can run classrooms and tutoring sessions, collect survey responses, and review analytics and reports in one product.",
   },
   {
     q: "Can teachers organize their work?",
     a: "Yes. Teachers can organize classrooms, sessions, surveys, analytics, and reports so related work stays grouped together and easier to review.",
   },
   {
-    q: "What kind of support does Pro include?",
-    a: "Pro includes priority email support, richer learning analytics, AI-generated reporting, and broader workflow coverage for teachers running multiple classes or programs.",
+    q: "What kind of support is available?",
+    a: "Convyy is built to support teachers with clear workflows, generated reports, and responsive product support as you run surveys, sessions, and classroom follow-up.",
   },
 ];
 

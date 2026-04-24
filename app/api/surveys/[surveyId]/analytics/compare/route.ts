@@ -12,7 +12,7 @@ import {
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 
 export async function GET(
   request: Request,

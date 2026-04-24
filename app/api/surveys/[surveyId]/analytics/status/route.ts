@@ -8,7 +8,7 @@ import { getAnalyticsState } from "@/lib/education/storage";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 
 export async function GET(
   _request: Request,

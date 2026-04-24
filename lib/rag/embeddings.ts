@@ -22,7 +22,6 @@ export async function generateEmbedding(
   text: string,
   metadata?: {
     userId?: string;
-    organizationId?: string;
     surveyId?: string;
   },
 ): Promise<number[]> {
@@ -52,7 +51,6 @@ export async function generateEmbeddings(
   texts: string[],
   metadata?: {
     userId?: string;
-    organizationId?: string;
     surveyId?: string;
   },
 ): Promise<number[][]> {

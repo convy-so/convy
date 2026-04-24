@@ -1,4 +1,4 @@
-import { Worker, type Job } from "bullmq";
+import { MetricsTime, Worker, type Job } from "bullmq";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -22,7 +22,7 @@ import { getRedisClient } from "@/lib/redis";
 const tutoringReportJobSchema = z.object({
   sessionId: z.string().min(1),
   topicId: z.string().min(1),
-  organizationId: z.string().min(1),
+  classroomId: z.string().min(1),
   studentUserId: z.string().min(1),
   classroomStudentId: z.string().min(1),
   studentName: z.string().min(1),
@@ -82,6 +82,8 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
       studentName: data.studentName,
       topicTitle: data.topicTitle,
       state,
+      sessionId: data.sessionId,
+      userId: data.studentUserId,
       transcript: interactions.map((interaction) => ({
         role: interaction.role,
         content: interaction.content,
@@ -120,7 +122,18 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
   {
     connection: getRedisClient(),
     concurrency: 2,
+    metrics: {
+      maxDataPoints: MetricsTime.ONE_WEEK * 2,
+    },
   },
 );
+
+tutoringReportWorker.on("failed", (job, err) => {
+  console.error("[tutoring-report-worker] job failed", {
+    jobId: job?.id,
+    sessionId: job?.data?.sessionId,
+    message: err instanceof Error ? err.message : String(err),
+  });
+});
 
 export default tutoringReportWorker;

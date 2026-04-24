@@ -9,7 +9,7 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import {
     getSurveyPermissionForSession,
     hasSurveyPermission,
-} from "@/lib/workspace-access";
+} from "@/lib/survey-access";
 import { getTranslations } from "next-intl/server";
 
 interface PageProps {

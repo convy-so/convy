@@ -55,7 +55,7 @@ export async function GET(request: Request) {
       },
       expiresAt: record.expiresAt.toISOString(),
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
@@ -89,13 +89,6 @@ export async function POST(request: Request) {
     if (!record) {
       return NextResponse.json({ error: "Invalid or expired token." }, { status: 404 });
     }
-
-    const classroomStudent = await getDb().query.classroomStudents.findFirst({
-      where: eq(classroomStudents.id, record.classroomStudentId),
-      with: {
-        classroom: true,
-      },
-    });
 
     await auth.api.setUserPassword({
       body: {

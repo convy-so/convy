@@ -312,6 +312,9 @@ export const learningSessionStateSchema = z.object({
   misconceptionsObserved: z.array(z.string()).default([]),
   recentEvidence: z.array(z.string()).default([]),
   tutorNotes: z.array(z.string()).default([]),
+  turnCount: z.number().int().nonnegative().default(0),
+  turnsSinceStudentModelRefresh: z.number().int().nonnegative().default(0),
+  lastStudentModelRefreshAt: z.string().nullable().default(null),
   reportReady: z.boolean().default(false),
   completed: z.boolean().default(false),
 });

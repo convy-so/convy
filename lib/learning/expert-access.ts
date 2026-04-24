@@ -83,7 +83,7 @@ export async function getTeacherOwnedLearningSession(userId: string, sessionId: 
     },
   });
 
-  if (!session || session.topic.classroom.teacherUserId !== userId) {
+  if (!session || !session.topic || session.topic.classroom.teacherUserId !== userId) {
     return null;
   }
 
@@ -109,7 +109,12 @@ export async function getTeacherOwnedLearningInteraction(
     },
   });
 
-  if (!interaction || interaction.session.topic.classroom.teacherUserId !== userId) {
+  if (
+    !interaction ||
+    !interaction.session ||
+    !interaction.session.topic ||
+    interaction.session.topic.classroom.teacherUserId !== userId
+  ) {
     return null;
   }
 
@@ -168,7 +173,7 @@ export async function resolveTeacherExpertAnchor(
     );
     if (!interaction) return null;
     return {
-      topicId: params.topicId ?? interaction.session.topicId ?? null,
+      topicId: params.topicId ?? interaction.session?.topicId ?? null,
       classroomStudentId:
         params.classroomStudentId ?? interaction.classroomStudentId ?? null,
       sessionId: params.sessionId ?? interaction.sessionId ?? null,

@@ -1,4 +1,4 @@
-import { Worker, Job } from "bullmq";
+import { MetricsTime, Worker, Job } from "bullmq";
 import { z } from "zod";
 
 import { getRedisClient } from "@/lib/redis";
@@ -49,7 +49,19 @@ const contentTranslationWorker = new Worker<ContentTranslationJobData>(
   {
     connection: getRedisClient(),
     concurrency: 3,
+    metrics: {
+      maxDataPoints: MetricsTime.ONE_WEEK * 2,
+    },
   },
 );
+
+contentTranslationWorker.on("failed", (job, err) => {
+  console.error("[content-translation-worker] job failed", {
+    jobId: job?.id,
+    resourceType: job?.data?.resourceType,
+    resourceId: job?.data?.resourceId,
+    message: err instanceof Error ? err.message : String(err),
+  });
+});
 
 export default contentTranslationWorker;

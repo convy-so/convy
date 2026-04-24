@@ -4,7 +4,7 @@ import { BaseLayout, globalStyles } from "./base-layout";
 interface SurveyDeletedProps {
   surveyTitle: string;
   deletedBy: string;
-  workspaceName: string;
+  dashboardLabel: string;
   url: string;
   name?: string | null;
 }
@@ -12,11 +12,11 @@ interface SurveyDeletedProps {
 export const SurveyDeletedEmail = ({
   surveyTitle,
   deletedBy,
-  workspaceName,
+  dashboardLabel,
   url,
   name,
 }: SurveyDeletedProps) => {
-  const previewText = `Survey deleted in ${workspaceName}`;
+  const previewText = `Survey deleted from ${dashboardLabel}`;
 
   return (
     <BaseLayout previewText={previewText}>
@@ -28,7 +28,7 @@ export const SurveyDeletedEmail = ({
 
       <Text style={globalStyles.text}>
         The survey <strong>&quot;{surveyTitle}&quot;</strong> has been
-        permanently deleted from {workspaceName}.
+        permanently deleted from {dashboardLabel}.
       </Text>
 
       <Text style={globalStyles.text}>

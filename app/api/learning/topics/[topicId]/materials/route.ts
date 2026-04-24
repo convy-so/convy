@@ -17,7 +17,7 @@ import { buildLearningMaterialAccessPath } from "@/lib/media-access";
 import { replaceLearningMaterialEmbeddings } from "@/lib/learning/rag";
 import { uploadLearningMaterial } from "@/lib/storage";
 import { assertLearningMaterialFile } from "@/lib/security/uploads";
-import { getClientIP, uploadRateLimiter } from "@/lib/ratelimit";
+import { getRateLimitKey, uploadRateLimiter } from "@/lib/ratelimit";
 
 function inferMaterialKind(mimeType: string) {
   if (mimeType === "application/pdf") return "pdf";
@@ -30,8 +30,13 @@ export async function GET(
   { params }: { params: Promise<{ topicId: string }> },
 ) {
   try {
-    const clientIP = getClientIP(request);
-    const rateLimitResult = await uploadRateLimiter.limit(clientIP);
+    const session = await getVerifiedSession();
+    const rateLimitResult = await uploadRateLimiter.limit(
+      getRateLimitKey(request, {
+        userId: session.user.id,
+        scope: "learning-materials:get",
+      }),
+    );
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded", retryAfter: rateLimitResult.reset },
@@ -39,7 +44,6 @@ export async function GET(
       );
     }
 
-    const session = await getVerifiedSession();
     const { topicId } = await params;
     const topic = await getTeacherTopicAccess(session.user.id, topicId);
 

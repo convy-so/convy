@@ -49,9 +49,7 @@ function isSupportedLanguage(value: string): value is SupportedLanguage {
   return (
     value === "en" ||
     value === "fr" ||
-    value === "de" ||
-    value === "es" ||
-    value === "it"
+    value === "de"
   );
 }
 
@@ -63,24 +61,16 @@ function isRoutingLocale(
 
 const METADATA_CONFIG: Record<SupportedLanguage, { title: string; description: string }> = {
   en: {
-    title: "Convyy — Turn Forms into AI Conversations",
+    title: "Convyy â€” Turn Forms into AI Conversations",
     description: "Boring forms are dead. Meet modern, AI-native conversations.",
   },
   fr: {
-    title: "Convyy — Transformez vos formulaires en conversations IA",
-    description: "Les formulaires ennuyeux, c'est fini. Découvrez les conversations natives IA.",
+    title: "Convyy â€” Transformez vos formulaires en conversations IA",
+    description: "Les formulaires ennuyeux, c'est fini. DÃ©couvrez les conversations natives IA.",
   },
   de: {
-    title: "Convyy — Verwandeln Sie Formulare in KI-Gespräche",
-    description: "Langweilige Formulare sind passée. Erleben Sie moderne KI-Gespräche.",
-  },
-  es: {
-    title: "Convyy — Convierta formularios en conversaciones de IA",
-    description: "Los formularios aburridos han muerto. Conozca las conversaciones nativas de IA.",
-  },
-  it: {
-    title: "Convyy — Trasforma i moduli in conversazioni AI",
-    description: "I moduli noiosi sono finiti. Scopri le conversazioni native AI.",
+    title: "Convyy â€” Verwandeln Sie Formulare in KI-GesprÃ¤che",
+    description: "Langweilige Formulare sind passÃ©e. Erleben Sie moderne KI-GesprÃ¤che.",
   },
 };
 
@@ -103,8 +93,6 @@ export async function generateMetadata({
         en: "/en",
         fr: "/fr",
         de: "/de",
-        es: "/es",
-        it: "/it",
       },
     },
     openGraph: {
@@ -165,7 +153,7 @@ export default async function LocaleLayout({
     "applicationCategory": "BusinessApplication",
     "operatingSystem": "Web",
     "publisher": {
-      "@type": "Organization",
+      "@type": "Person",
       "name": "Convyy AI",
       "logo": {
         "@type": "ImageObject",

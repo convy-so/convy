@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpenCheck, ChevronLeft, LogOut, Radar } from "lucide-react";
+import { BookOpenCheck, ChevronLeft, Inbox, LogOut, Radar } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { authClient } from "@/lib/auth-client";
@@ -13,6 +13,7 @@ export function ExpertSidebar() {
 
   const navigation = [
     { name: "AI Ops", href: "/expert", icon: Radar },
+    { name: "Feedback", href: "/expert/feedback", icon: Inbox },
   ];
 
   const handleSignOut = async () => {

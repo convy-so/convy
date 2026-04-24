@@ -108,8 +108,6 @@ export async function fullTextSearch(
     en: "english",
     fr: "french",
     de: "german",
-    es: "spanish",
-    it: "italian",
   };
 
   const tsConfig = langConfigMap[effectiveLanguage] || "english";

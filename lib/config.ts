@@ -9,7 +9,7 @@ import { env } from "@/lib/env";
  * Survey limits and constraints
  */
 export const SURVEY_LIMITS = {
-  /** Maximum surveys per user/workspace to prevent abuse */
+  /** Maximum surveys per user to prevent abuse */
   MAX_SURVEYS_PER_SCOPE: 5,
   
   /** Maximum voice surveys per scope (more expensive to process) */
@@ -192,10 +192,20 @@ export const DB_CONFIG = {
 /**
  * Get configuration value with environment override
  */
+export function getConfig(
+  key: string,
+  defaultValue: string,
+  parser?: (value: string) => string,
+): string;
 export function getConfig<T>(
   key: string,
   defaultValue: T,
-  parser?: (value: string) => T
+  parser: (value: string) => T,
+): T;
+export function getConfig<T>(
+  key: string,
+  defaultValue: T,
+  parser?: (value: string) => T,
 ): T {
   const envValue = process.env[key];
   if (envValue === undefined) {
@@ -210,8 +220,12 @@ export function getConfig<T>(
       return defaultValue;
     }
   }
-  
-  return envValue as unknown as T;
+
+  if (typeof defaultValue === "string") {
+    return envValue as T;
+  }
+
+  return defaultValue;
 }
 
 /**
