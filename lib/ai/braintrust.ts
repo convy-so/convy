@@ -1,4 +1,5 @@
 import { initLogger } from "braintrust";
+import * as Sentry from "@sentry/nextjs";
 
 type BraintrustTraceInput = {
   event: string;
@@ -39,7 +40,7 @@ export async function logBraintrustTrace(input: BraintrustTraceInput) {
       },
       scores: input.scores ?? {},
     });
-  } catch {
-    // Never let Braintrust failures surface to callers
+  } catch (error) {
+    Sentry.captureException(error);
   }
 }

@@ -1,11 +1,9 @@
 import { AiOpsDashboard } from "@/components/admin/ai-ops-dashboard";
-import { ExpertLearningOps } from "@/components/admin/expert-learning-ops";
 
 export default function ExpertPage() {
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <AiOpsDashboard />
-      <ExpertLearningOps />
     </div>
   );
 }

@@ -77,8 +77,7 @@ export const fewShotExamples = pgTable(
     ...timestamps,
     feature: text("feature").notNull(),
     tags: text("tags").array().default([]),
-    userMessage: text("user_message").notNull(),
-    assistantMessage: text("assistant_message").notNull(),
+    content: jsonb("content").$type<Record<string, unknown>>().notNull().default({}),
     isActive: boolean("is_active").default(true).notNull(),
     ownedByRole: text("owned_by_role").default("expert").notNull(),
     createdByUserId: text("created_by_user_id").references(() => users.id, {

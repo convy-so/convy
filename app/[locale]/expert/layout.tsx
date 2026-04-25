@@ -36,7 +36,7 @@ async function ExpertLayoutContent({
   const session = await getVerifiedSession(cookieHeader).catch(() => null);
 
   if (!session || !hasAiOpsAccess(session.user)) {
-    redirect(`/${locale}`);
+    redirect(`/${locale}/expert-login`);
   }
 
   return (

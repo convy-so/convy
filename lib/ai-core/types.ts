@@ -37,10 +37,7 @@ export interface ContextBundle {
   metadata?: Record<string, unknown>;
 }
 
-export interface PromptExample {
-  user: string;
-  assistant: string;
-}
+export type PromptExample = Record<string, unknown>;
 
 export interface PromptSpec {
   id: string;
