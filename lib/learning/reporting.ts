@@ -42,19 +42,7 @@ export async function generateTeacherProgressReport(params: {
       transcript: params.transcript,
       previousReport: params.previousReport ?? null,
     }),
-    observability: params.sessionId
-      ? {
-          feature: "tutoring_chat",
-          runKind: "analysis",
-          scenarioType: "teacher_report_generation",
-          userId: params.userId ?? null,
-          resourceType: "learning_session",
-          resourceId: params.sessionId,
-          metadata: {
-            topicTitle: params.topicTitle,
-          },
-        }
-      : undefined,
+
   });
 }
 

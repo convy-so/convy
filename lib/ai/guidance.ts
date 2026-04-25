@@ -5,7 +5,7 @@ import {
   expertGuidancePacks,
   expertGuidanceVersions,
 } from "@/db/schema";
-import type { CoreAiFeature } from "@/lib/ai/observability";
+import type { CoreAiFeature } from "@/lib/ai/types";
 
 export type ExpertGuidanceArtifact = {
   packId: string;

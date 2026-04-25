@@ -5,7 +5,7 @@ import { surveyCreationConversations, surveys } from "@/db/schema";
 import { analysisModel, defaultModel, generateAIResponse } from "@/lib/ai";
 import { nanoid } from "nanoid";
 import { getEducationProgram, classifyEducationProgramHeuristically, listEducationPrograms } from "./catalog";
-import { recordEducationTrace } from "./tracing";
+
 import { replaceCoveragePlan, upsertResearchBrief } from "./storage";
 import {
   type BriefValidationResult,
@@ -401,17 +401,6 @@ export async function runCreationWorkflow(input: {
   const responseText = validation.isReady
     ? await planCompletionResponse(brief)
     : await planNextQuestion(brief, validation, input.messages);
-
-  await recordEducationTrace({
-    surveyId: input.surveyId,
-    traceType: "creation_workflow",
-    payload: {
-      programId: brief.programId,
-      routingConfidence: brief.routingConfidence,
-      missingFields: validation.missingFields,
-      readyForSampling: validation.isReady,
-    },
-  });
 
   return {
     brief,

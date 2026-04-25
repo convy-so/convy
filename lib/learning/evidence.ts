@@ -629,17 +629,7 @@ export async function answerTeacherStudentQuestion(params: {
 
   return await generateStructuredOutput({
     schema: teacherEvidenceAnswerSchema,
-    observability: {
-      feature: "memory_behavior",
-      runKind: "analysis",
-      scenarioType: "teacher_student_question",
-      userId: params.studentUserId ?? null,
-      resourceType: "student_profile",
-      resourceId: params.classroomStudentId,
-      metadata: {
-        retrievedEvidenceCount: retrievedEvidence.length,
-      },
-    },
+
     prompt: `Answer a teacher's question about a student's learning trajectory.
 
 Reply in ${params.language}.

@@ -3,7 +3,7 @@ import { analysisModel, generateAIResponse } from "@/lib/ai";
 import { chooseOrchestrationMode } from "@/lib/ai-core";
 import { getPromptSpec } from "@/lib/ai/prompt-specs";
 import { getEducationProgram } from "./catalog";
-import { recordEducationTrace } from "./tracing";
+
 import {
   getResearchBrief,
   getActiveCoveragePlan,
@@ -267,15 +267,7 @@ export async function buildAnalyticsSnapshot(
     metadata: { version: snapshot.version, sessionType: "live" },
   }).catch(() => {});
 
-  await recordEducationTrace({
-    surveyId,
-    traceType: "analytics_snapshot",
-    payload: {
-      version: snapshot.version,
-      totalSessions: participation.totalSessions,
-      findings: snapshot.findings.length,
-    },
-  });
+
 
   return snapshot;
 }

@@ -56,72 +56,6 @@ export const surveyRevisions = pgTable("survey_revisions", {
     .notNull(),
 });
 
-export const surveyRealtimeEvents = pgTable(
-  "survey_realtime_events",
-  {
-    id: text("id").primaryKey(),
-    ...timestamps,
-    surveyId: text("survey_id")
-      .notNull()
-      .references(() => surveys.id, {
-        onDelete: "cascade",
-      }),
-    revision: integer("revision").notNull(),
-    eventType: text("event_type").notNull(),
-    actorId: text("actor_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
-  },
-  (table) => [
-    index("survey_realtime_events_survey_idx").on(table.surveyId, table.revision),
-    index("survey_realtime_events_type_idx").on(table.eventType),
-  ],
-);
-
-export const surveyOutbox = pgTable(
-  "survey_outbox",
-  {
-    id: text("id").primaryKey(),
-    ...timestamps,
-    surveyId: text("survey_id")
-      .notNull()
-      .references(() => surveys.id, {
-        onDelete: "cascade",
-      }),
-    channel: text("channel").notNull(),
-    eventType: text("event_type").notNull(),
-    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
-    claimOwner: text("claim_owner"),
-    claimedAt: timestamp("claimed_at", {
-      withTimezone: true,
-      mode: "date",
-    }),
-    claimExpiresAt: timestamp("claim_expires_at", {
-      withTimezone: true,
-      mode: "date",
-    }),
-    publishAttempts: integer("publish_attempts").default(0).notNull(),
-    lastError: text("last_error"),
-    publishedAt: timestamp("published_at", {
-      withTimezone: true,
-      mode: "date",
-    }),
-  },
-  (table) => [
-    index("survey_outbox_survey_idx").on(table.surveyId, table.publishedAt),
-    index("survey_outbox_unpublished_created_idx").on(
-      table.publishedAt,
-      table.createdAt,
-    ),
-    index("survey_outbox_reclaim_idx").on(
-      table.publishedAt,
-      table.claimExpiresAt,
-      table.createdAt,
-    ),
-  ],
-);
-
 export const surveyEditLeasesRelations = relations(
   surveyEditLeases,
   ({ one }) => ({
@@ -145,24 +79,3 @@ export const surveyRevisionsRelations = relations(
     }),
   }),
 );
-
-export const surveyRealtimeEventsRelations = relations(
-  surveyRealtimeEvents,
-  ({ one }) => ({
-    survey: one(surveys, {
-      fields: [surveyRealtimeEvents.surveyId],
-      references: [surveys.id],
-    }),
-    actor: one(users, {
-      fields: [surveyRealtimeEvents.actorId],
-      references: [users.id],
-    }),
-  }),
-);
-
-export const surveyOutboxRelations = relations(surveyOutbox, ({ one }) => ({
-  survey: one(surveys, {
-    fields: [surveyOutbox.surveyId],
-    references: [surveys.id],
-  }),
-}));

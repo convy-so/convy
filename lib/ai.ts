@@ -10,6 +10,9 @@ import {
   type StopCondition,
   type ToolSet,
   convertToModelMessages,
+  ToolLoopAgent,
+  createAgentUIStreamResponse,
+  type ToolLoopAgentOnFinishCallback,
 } from "ai";
 import {
   calculateCost,
@@ -20,13 +23,6 @@ import type { AiContextLayer } from "./ai/context-assembler";
 import type { ContextBundle, PromptSpec } from "./ai-core";
 import type { PromptExample } from "@/lib/ai-core/types";
 import { resolvePromptExecution } from "./ai-core";
-import {
-  createAiRunTrace,
-  finishAiRunTrace,
-  type AiRunTraceInput,
-  recordAiContextLayers,
-  wrapToolSetWithObservability,
-} from "./ai/observability";
 import { toPersistedUIChatMessages, toUIMessages } from "./chat-ui-messages";
 import { preparePromptCache, type PromptCacheOptions } from "./prompt-caching";
 
@@ -125,50 +121,7 @@ function mergeRunMetadata(
   };
 }
 
-async function initializeObservedRun(input: {
-  model: LanguageModel;
-  userId?: string;
-  surveyId?: string;
-  observability?: (AiRunTraceInput & { contextLayers?: AiContextLayer[] }) | undefined;
-  systemPrompt?: string;
-  staticSystemPrompt?: string;
-  temperature?: number;
-  maxTokens?: number;
-}) {
-  if (!input.observability) {
-    return null;
-  }
 
-  const runId = await createAiRunTrace({
-    ...input.observability,
-    status: "running",
-    userId: input.observability.userId ?? input.userId ?? null,
-    resourceType:
-      input.observability.resourceType ??
-      (input.surveyId ? "survey" : null),
-    resourceId: input.observability.resourceId ?? input.surveyId ?? null,
-    modelProvider:
-      input.observability.modelProvider ?? getProviderName(input.model),
-    modelName: input.observability.modelName ?? getModelId(input.model),
-    promptVersionId:
-      input.observability.promptVersionId ??
-      input.observability.metadata?.promptVersionId?.toString() ??
-      null,
-    temperature: input.observability.temperature ?? input.temperature ?? null,
-    maxTokens: input.observability.maxTokens ?? input.maxTokens ?? null,
-    metadata: mergeRunMetadata(
-      input.observability.metadata,
-      input.systemPrompt,
-      input.staticSystemPrompt,
-    ),
-  });
-
-  if (input.observability.contextLayers?.length) {
-    await recordAiContextLayers(runId, input.observability.contextLayers);
-  }
-
-  return runId;
-}
 
 export async function generateAIResponse(
   prompt: string,
@@ -182,7 +135,6 @@ export async function generateAIResponse(
     promptCache?: PromptCacheOptions;
     promptSpec?: PromptSpec;
     contextBundle?: ContextBundle | null;
-    observability?: AiRunTraceInput & { contextLayers?: AiContextLayer[] };
     dynamicExamples?: PromptExample[];
   },
 ) {
@@ -212,38 +164,7 @@ export async function generateAIResponse(
     systemPrompt: resolvedPrompt.systemPrompt,
     promptCache: options?.promptCache,
   });
-  const runId = await initializeObservedRun({
-    model,
-    userId: options?.userId,
-    surveyId: options?.surveyId,
-    observability: options?.observability
-      ? {
-          ...options.observability,
-          promptVersionId:
-            options.observability.promptVersionId ??
-            resolvedPrompt.promptVersionId,
-          expertGuidanceVersionId:
-            options.observability.expertGuidanceVersionId ??
-            resolvedPrompt.expertGuidanceVersionId,
-          userOverlayVersionId:
-            options.observability.userOverlayVersionId ??
-            resolvedPrompt.userOverlayVersionId,
-          contextLayers:
-            options.observability.contextLayers?.length
-              ? options.observability.contextLayers
-              : resolvedPrompt.contextLayers,
-          metadata: {
-            ...(options.observability.metadata ?? {}),
-            promptVersionId: resolvedPrompt.promptVersionId,
-            contextBundleVersionId: resolvedPrompt.contextBundleVersionId,
-          },
-        }
-      : undefined,
-    systemPrompt: resolvedPrompt.systemPrompt,
-    staticSystemPrompt: options?.promptCache?.staticSystemPrompt,
-    temperature: options?.temperature,
-    maxTokens: options?.maxTokens,
-  });
+
 
   try {
     const result = await generateText({
@@ -253,6 +174,14 @@ export async function generateAIResponse(
       temperature: options?.temperature ?? 0.7,
       maxOutputTokens: options?.maxTokens ?? 2000,
       providerOptions: preparedCache.providerOptions,
+      experimental_telemetry: {
+        isEnabled: true,
+        functionId: "generate_ai_response",
+        metadata: {
+          ...(options?.userId ? { userId: options.userId } : {}),
+          ...(options?.surveyId ? { surveyId: options.surveyId } : {}),
+        },
+      },
     });
 
     const usageInput: UsageLogInput = {
@@ -274,31 +203,11 @@ export async function generateAIResponse(
     };
     logUsage(usageInput);
 
-    if (runId) {
-      await finishAiRunTrace(runId, {
-        status: "completed",
-        outputText: maybeReadTextResult(result),
-        latencyMs: Date.now() - startedAt,
-        promptTokens: getTokenCount(result.usage, "inputTokens", "promptTokens"),
-        completionTokens: getTokenCount(
-          result.usage,
-          "outputTokens",
-          "completionTokens",
-        ),
-        totalTokens: result.usage.totalTokens ?? null,
-        estimatedCostUsd: calculateCost(usageInput),
-      });
-    }
+
 
     return result.text;
   } catch (error) {
-    if (runId) {
-      await finishAiRunTrace(runId, {
-        status: "failed",
-        errorMessage: error instanceof Error ? error.message : "AI generation failed",
-        latencyMs: Date.now() - startedAt,
-      });
-    }
+
     throw error;
   }
 }
@@ -317,7 +226,6 @@ export function streamAIResponse(
     contextBundle?: ContextBundle | null;
     tools?: ToolSet;
     stopWhen?: StopCondition<ToolSet> | Array<StopCondition<ToolSet>>;
-    observability?: AiRunTraceInput & { contextLayers?: AiContextLayer[] };
     dynamicExamples?: PromptExample[];
   },
 ) {
@@ -349,39 +257,7 @@ export function streamAIResponse(
     systemPrompt: resolvedPrompt.systemPrompt,
     promptCache: options?.promptCache,
   });
-  const runIdPromise = initializeObservedRun({
-    model,
-    userId: options?.userId,
-    surveyId: options?.surveyId,
-    observability: options?.observability
-      ? {
-          ...options.observability,
-          promptVersionId:
-            options.observability.promptVersionId ??
-            resolvedPrompt.promptVersionId,
-          expertGuidanceVersionId:
-            options.observability.expertGuidanceVersionId ??
-            resolvedPrompt.expertGuidanceVersionId,
-          userOverlayVersionId:
-            options.observability.userOverlayVersionId ??
-            resolvedPrompt.userOverlayVersionId,
-          contextLayers:
-            options.observability.contextLayers?.length
-              ? options.observability.contextLayers
-              : resolvedPrompt.contextLayers,
-          metadata: {
-            ...(options.observability.metadata ?? {}),
-            promptVersionId: resolvedPrompt.promptVersionId,
-            contextBundleVersionId: resolvedPrompt.contextBundleVersionId,
-          },
-        }
-      : undefined,
-    systemPrompt: resolvedPrompt.systemPrompt,
-    staticSystemPrompt: options?.promptCache?.staticSystemPrompt,
-    temperature: options?.temperature,
-    maxTokens: options?.maxTokens,
-  });
-  const observedTools = wrapToolSetWithObservability(options?.tools, runIdPromise);
+
 
   return streamText({
     model,
@@ -389,8 +265,16 @@ export function streamAIResponse(
     system: undefined,
     temperature: options?.temperature ?? 0.7,
     maxOutputTokens: options?.maxTokens ?? 2000,
-    ...(observedTools ? { tools: observedTools } : {}),
+    ...(options?.tools ? { tools: options.tools } : {}),
     ...(options?.stopWhen ? { stopWhen: options.stopWhen } : {}),
+    experimental_telemetry: {
+      isEnabled: true,
+      functionId: "stream_ai_response",
+      metadata: {
+        ...(options?.userId ? { userId: options.userId } : {}),
+        ...(options?.surveyId ? { surveyId: options.surveyId } : {}),
+      },
+    },
     prepareStep: async () => {
       // Ensure rate limit check completes before streaming
       await rateLimitPromise;
@@ -423,39 +307,74 @@ export function streamAIResponse(
         cacheWriteTokens: result.usage.inputTokenDetails?.cacheWriteTokens,
       };
       logUsage(usageInput);
-      void (async () => {
-        const runId = await runIdPromise;
-        if (!runId) return;
-        await finishAiRunTrace(runId, {
-          status: "completed",
-          outputText: maybeReadTextResult(result),
-          latencyMs: Date.now() - startedAt,
-          promptTokens: getTokenCount(
-            result.usage,
-            "inputTokens",
-            "promptTokens",
-          ),
-          completionTokens: getTokenCount(
-            result.usage,
-            "outputTokens",
-            "completionTokens",
-          ),
-          totalTokens: result.usage.totalTokens ?? null,
-          estimatedCostUsd: calculateCost(usageInput),
-        });
-      })();
+
     },
     onError: ({ error }) => {
-      void (async () => {
-        const runId = await runIdPromise;
-        if (!runId) return;
-        await finishAiRunTrace(runId, {
-          status: "failed",
-          errorMessage: error instanceof Error ? error.message : "AI stream failed",
-          latencyMs: Date.now() - startedAt,
-        });
-      })();
+
     },
+  });
+}
+
+export async function streamAgentResponse<TOOLS extends ToolSet>(
+  messages: unknown[],
+  instructions: string,
+  options: {
+    model?: LanguageModel;
+    tools: TOOLS;
+    userId?: string;
+    surveyId?: string;
+    temperature?: number;
+    maxTokens?: number;
+    onFinish?: ToolLoopAgentOnFinishCallback<TOOLS>;
+  },
+) {
+  // Apply rate limiting
+  if (options.userId) {
+    const { expensiveAiRateLimiter } = await import("@/lib/ratelimit");
+    const { success, reset } = await expensiveAiRateLimiter.limit(options.userId);
+    if (!success) {
+      const resetDate = new Date(reset);
+      throw new Error(
+        `AI_RATE_LIMIT_EXCEEDED: Rate limit exceeded. Try again at ${resetDate.toISOString()}`,
+      );
+    }
+  }
+
+  const model = options.model ?? defaultModel;
+
+  const agent = new ToolLoopAgent({
+    model,
+    tools: options.tools,
+    instructions,
+    temperature: options.temperature ?? 0.3,
+    maxOutputTokens: options.maxTokens ?? 1000,
+    onFinish: (result) => {
+      // Usage logging
+      const usageInput: UsageLogInput = {
+        userId: options.userId,
+        surveyId: options.surveyId,
+        type: "agent_loop",
+        provider: getProviderName(model),
+        modelName: getModelId(model) || GEMINI_FLASH_ID,
+        promptTokens: getTokenCount(result.totalUsage, "inputTokens", "promptTokens"),
+        completionTokens: getTokenCount(
+          result.totalUsage,
+          "outputTokens",
+          "completionTokens",
+        ),
+        totalTokens: result.totalUsage.totalTokens,
+      };
+      logUsage(usageInput);
+
+      if (options.onFinish) {
+        return options.onFinish(result);
+      }
+    },
+  });
+
+  return createAgentUIStreamResponse({
+    agent,
+    uiMessages: messages,
   });
 }
 

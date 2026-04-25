@@ -15,7 +15,7 @@ declare global {
   var tutoringReportQueue:
     | Queue<TutoringReportJobData>
     | undefined;
-  var evalRunQueue: Queue<EvalRunJobData> | undefined;
+
   var contentTranslationQueue: Queue<ContentTranslationJobData> | undefined;
   var experimentEvaluationQueue: Queue<unknown> | undefined;
   var notificationQueue:
@@ -80,12 +80,7 @@ export interface TutoringReportJobData {
   subjectKey?: string | null;
 }
 
-export interface EvalRunJobData {
-  evalRunId: string;
-  datasetId: string;
-  feature: string;
-  triggeredByUserId?: string | null;
-}
+
 
 export interface ContentTranslationJobData {
   resourceType: string;
@@ -163,20 +158,7 @@ export const getTutoringReportQueue = () => {
   return global.tutoringReportQueue;
 };
 
-export const getEvalRunQueue = () => {
-  if (!global.evalRunQueue) {
-    global.evalRunQueue = createQueue<EvalRunJobData>("eval-run", {
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: { type: "exponential", delay: 4000 },
-        removeOnComplete: true,
-        removeOnFail: { age: 7 * 24 * 3600 },
-      },
-    });
-  }
 
-  return global.evalRunQueue;
-};
 
 export const getContentTranslationQueue = () => {
   if (!global.contentTranslationQueue) {
@@ -297,12 +279,7 @@ export async function enqueueTutoringReportGeneration(
   });
 }
 
-export async function enqueueEvalRun(data: EvalRunJobData) {
-  return await getEvalRunQueue().add("run-eval-dataset", data, {
-    jobId: `eval-run-${data.evalRunId}`,
-    priority: 2,
-  });
-}
+
 
 export async function enqueueContentTranslation(data: ContentTranslationJobData) {
   return await getContentTranslationQueue().add("translate-content", data, {
@@ -342,7 +319,7 @@ export async function closeQueues() {
     global.emailQueue,
     global.imageUploadQueue,
     global.tutoringReportQueue,
-    global.evalRunQueue,
+
     global.contentTranslationQueue,
     global.experimentEvaluationQueue,
     global.notificationQueue,
@@ -354,7 +331,7 @@ export async function closeQueues() {
     global.emailQueue = undefined;
     global.imageUploadQueue = undefined;
     global.tutoringReportQueue = undefined;
-    global.evalRunQueue = undefined;
+
     global.contentTranslationQueue = undefined;
     global.experimentEvaluationQueue = undefined;
     global.notificationQueue = undefined;

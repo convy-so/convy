@@ -1,5 +1,4 @@
 import {
-  boolean,
   index,
   integer,
   numeric,
@@ -12,18 +11,13 @@ import { timestamps } from "./common";
 import {
   voiceSessionStatusEnum,
   voiceSessionTypeEnum,
-  voiceChunkTypeEnum,
 } from "./enums";
 import { users } from "./auth";
 import { surveys } from "./surveys";
 
 export {
   voiceSessions,
-  voiceChunks,
-  voiceQualityMetrics,
   voiceSessionsRelations,
-  voiceChunksRelations,
-  voiceQualityMetricsRelations,
 };
 
 const voiceSessions = pgTable(
@@ -55,48 +49,9 @@ const voiceSessions = pgTable(
   ]
 );
 
-const voiceChunks = pgTable(
-  "voice_chunks",
-  {
-    id: text("id").primaryKey(),
-    sessionId: text("session_id")
-      .notNull()
-      .references(() => voiceSessions.id, { onDelete: "cascade" }),
-    chunkType: voiceChunkTypeEnum("chunk_type").notNull(),
-    durationMs: integer("duration_ms").notNull(),
-    sizeBytes: integer("size_bytes").notNull(),
-    transcription: text("transcription"),
-    synthesisText: text("synthesis_text"),
-    cost: numeric("cost").default("0"),
-    hadSpeech: boolean("had_speech").default(true),
-    vadProbability: text("vad_probability"),
-    processingTimeMs: integer("processing_time_ms"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [index("voice_chunks_session_id_idx").on(table.sessionId)]
-);
-
-const voiceQualityMetrics = pgTable(
-  "voice_quality_metrics",
-  {
-    id: text("id").primaryKey(),
-    sessionId: text("session_id")
-      .notNull()
-      .references(() => voiceSessions.id, { onDelete: "cascade" }),
-    metricType: text("metric_type").notNull(),
-    metricValue: text("metric_value").notNull(),
-    timestamp: timestamp("timestamp", { withTimezone: true, mode: "date" })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [index("voice_quality_metrics_session_id_idx").on(table.sessionId)]
-);
-
 const voiceSessionsRelations = relations(
   voiceSessions,
-  ({ one, many }) => ({
+  ({ one }) => ({
     user: one(users, {
       fields: [voiceSessions.userId],
       references: [users.id],
@@ -104,25 +59,6 @@ const voiceSessionsRelations = relations(
     survey: one(surveys, {
       fields: [voiceSessions.surveyId],
       references: [surveys.id],
-    }),
-    chunks: many(voiceChunks),
-    metrics: many(voiceQualityMetrics),
-  })
-);
-
-const voiceChunksRelations = relations(voiceChunks, ({ one }) => ({
-  session: one(voiceSessions, {
-    fields: [voiceChunks.sessionId],
-    references: [voiceSessions.id],
-  }),
-}));
-
-const voiceQualityMetricsRelations = relations(
-  voiceQualityMetrics,
-  ({ one }) => ({
-    session: one(voiceSessions, {
-      fields: [voiceQualityMetrics.sessionId],
-      references: [voiceSessions.id],
     }),
   })
 );

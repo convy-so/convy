@@ -573,27 +573,7 @@ const surveyAnalyticsFacts = pgTable(
   ],
 );
 
-const traceRuns = pgTable(
-  "trace_runs",
-  {
-    id: text("id").primaryKey(),
-    ...timestamps,
-    surveyId: text("survey_id").references(() => surveys.id, {
-      onDelete: "cascade",
-    }),
-    sessionId: text("session_id").references(() => surveySessions.id, {
-      onDelete: "cascade",
-    }),
-    traceType: text("trace_type").notNull(),
-    status: text("status").default("ok").notNull(),
-    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
-  },
-  (table) => [
-    index("trace_runs_survey_id_idx").on(table.surveyId),
-    index("trace_runs_session_id_idx").on(table.sessionId),
-    index("trace_runs_type_idx").on(table.traceType),
-  ],
-);
+
 
 export const participantFeedback = pgTable(
   "participant_feedback",
@@ -938,7 +918,7 @@ export {
   surveyAnalyticsSnapshots,
   surveyAnalyticsStates,
   surveyAnalyticsFacts,
-  traceRuns,
+
   analyticsChatSessions,
   surveysRelations,
   surveyCreationConversationsRelations,

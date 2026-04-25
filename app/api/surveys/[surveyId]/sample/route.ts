@@ -51,7 +51,7 @@ import {
 } from "@/lib/survey-access";
 import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
 import { sanitizeUserInput } from "@/lib/ai/sanitization";
-import { recordAiFeedbackEvent } from "@/lib/ai/observability";
+
 import { buildCanonicalConversationTurn } from "@/lib/respondent-conversation";
 
 export const maxDuration = 300;
@@ -465,21 +465,7 @@ Respond to the user in the language they are speaking to you in. Match the langu
           })
           .where(eq(sampleConversations.id, sampleConversation.id));
         const revision = await incrementSurveyRevision(surveyId);
-        await recordAiFeedbackEvent({
-          userId: session.user.id,
-          source: "scope_policy",
-          feedbackType:
-            scopeDecision.promptInjectionSignal === "none"
-              ? "redirected"
-              : "prompt_injection_detected",
-          payload: {
-            surveyId,
-            conversationNumber,
-            classification: scopeDecision.classification,
-            promptInjectionSignal: scopeDecision.promptInjectionSignal,
-            reason: scopeDecision.reason,
-          },
-        }).catch(() => undefined);
+
 
         const response = createUIMessageStreamResponse({
           stream: createUIMessageStream({
@@ -534,16 +520,7 @@ Respond to the user in the language they are speaking to you in. Match the langu
       },
       tools,
       stopWhen: stepCountIs(5),
-      observability: {
-        feature: "survey_conducting",
-        scenarioType: "sample_turn",
-        resourceType: "survey_session",
-        resourceId: sessionRow.id,
-        metadata: {
-          surveyId,
-          guidanceVersionIds: runtimeLayers.expertGuidanceVersionIds,
-        },
-      },
+
     });
 
     const remainingSamples = MAX_SAMPLE_CONVERSATIONS - conversationNumber;

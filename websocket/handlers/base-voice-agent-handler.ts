@@ -12,6 +12,7 @@ import {
   type VoiceAgentConnection,
 } from "@/lib/voice/voice-agent-provider";
 import { logUsage } from "@/lib/billing/logger";
+import { logBraintrustTrace } from "@/lib/ai/braintrust";
 
 // Configuration constants
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -419,7 +420,7 @@ export abstract class BaseVoiceAgentHandler {
       this.voiceAgent.close();
       this.voiceAgent = null;
 
-      // Log voice session usage
+      // Log voice session usage (billing)
       if (this.activeDurationMs > 0) {
         logUsage({
           userId: this.userId,
@@ -429,6 +430,17 @@ export abstract class BaseVoiceAgentHandler {
           modelName: "voice-agent-v1",
           durationMs: this.activeDurationMs,
         });
+
+        // Log to Braintrust for observability (fire-and-forget)
+        logBraintrustTrace({
+          event: "voice_session",
+          input: { provider: "deepgram", model: "voice-agent-v1" },
+          output: { durationMs: this.activeDurationMs },
+          metadata: {
+            ...(this.userId ? { userId: this.userId } : {}),
+            ...(this.surveyId ? { surveyId: this.surveyId } : {}),
+          },
+        }).catch(() => undefined);
       }
     }
 

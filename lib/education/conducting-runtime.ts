@@ -7,7 +7,7 @@ import {
   renderUntrustedContextBlock,
 } from "@/lib/ai/scope-policy";
 import { getEducationProgram } from "./catalog";
-import { recordEducationTrace } from "./tracing";
+
 import {
   listEvidenceForSession,
   listSessionTurns,
@@ -467,23 +467,7 @@ export async function finalizeConductingTurn(input: {
     }));
   await replaceEvidence(input.sessionId, input.surveyId, evidence);
 
-  await recordEducationTrace({
-    surveyId: input.surveyId,
-    sessionId: input.sessionId,
-    traceType: "conducting_turn",
-    payload: {
-      orchestrationMode: chooseOrchestrationMode({
-        needsDeterministicStateMachine: true,
-        needsOpenEndedDialogue: true,
-      }),
-      currentNodeId: input.sessionState.currentNodeId,
-      nextNodeId: nextState.currentNodeId,
-      overallCoverage: nextState.overallCoverage,
-      completedNodeIds: nextState.completedNodeIds,
-      evidenceCount: evidence.length,
-      stopReason: nextState.stopReason ?? null,
-    },
-  });
+
 
   return { nextState, evidence };
 }

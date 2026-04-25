@@ -3,7 +3,6 @@ import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
 import {
-  externalMediaCache,
   teachingMediaAssets,
   teachingMediaBindings,
   teachingMediaUsageEvents,
@@ -11,7 +10,6 @@ import {
 
 export type TutorMediaRecommendation = {
   assetId?: string | null;
-  externalMediaId?: string | null;
   assetType: "image" | "video";
   title: string;
   description: string | null;
@@ -119,7 +117,6 @@ export async function selectTutorMedia(params: {
   if (curated) {
     return {
       assetId: curated.assetId,
-      externalMediaId: null,
       assetType: curated.assetType as "image" | "video",
       title: curated.title,
       description: curated.description,
@@ -138,53 +135,21 @@ export async function selectTutorMedia(params: {
     } satisfies TutorMediaRecommendation;
   }
 
-  const external = await getDb().query.externalMediaCache.findFirst({
-    where: and(
-      eq(externalMediaCache.assetType, preferredType),
-      eq(externalMediaCache.approvedForDirectUse, true),
-    ),
-    orderBy: [asc(externalMediaCache.updatedAt)],
-  });
-
-  if (!external) {
-    return null;
-  }
-
-  return {
-    assetId: null,
-    externalMediaId: external.id,
-    assetType: external.assetType as "image" | "video",
-    title: external.title,
-    description: external.description,
-    mediaUrl: external.sourceUrl,
-    thumbnailUrl: external.thumbnailUrl,
-    durationSeconds: external.durationSeconds,
-    transcript: external.transcript,
-    selectionSource: "external_catalog",
-    reason: `No teacher-curated ${preferredType} matched this concept, so the tutor selected an approved external fallback.`,
-    expectedBenefit:
-      preferredType === "video"
-        ? "A short approved clip can reinforce the idea with motion and sequence."
-        : "An approved image can provide a quick visual anchor for the explanation.",
-    followUpPrompt: `What did you notice in ${external.title} that connects back to ${params.conceptTitle ?? "the topic"}?`,
-  } satisfies TutorMediaRecommendation;
+  return null;
 }
 
 export async function logTutorMediaUsage(params: {
   topicId: string;
   sessionId: string;
   classroomStudentId: string;
-  aiRunId?: string | null;
   recommendation: TutorMediaRecommendation;
 }) {
   await getDb().insert(teachingMediaUsageEvents).values({
     id: nanoid(),
     assetId: params.recommendation.assetId ?? null,
-    externalMediaId: params.recommendation.externalMediaId ?? null,
     topicId: params.topicId,
     sessionId: params.sessionId,
     classroomStudentId: params.classroomStudentId,
-    aiRunId: params.aiRunId ?? null,
     selectionSource: params.recommendation.selectionSource,
     reason: params.recommendation.reason,
     expectedBenefit: params.recommendation.expectedBenefit,

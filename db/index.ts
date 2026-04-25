@@ -27,15 +27,12 @@ const shouldUseInsecureTls = env.ALLOW_INSECURE_TLS && !isLocal;
 
 const poolConfig = {
   connectionString: env.DATABASE_URL,
-  // Reduce connection limit for dev environment to avoid hitting limits
-  max: isLocal ? 10 : 5,
+  max: 5,
   ssl: isLocal ? undefined : { rejectUnauthorized: !shouldUseInsecureTls },
 };
 
 declare global {
-   
   var db: ReturnType<typeof drizzle<typeof schema>> | undefined;
-   
   var pool: Pool | undefined;
 }
 
