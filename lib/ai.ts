@@ -15,11 +15,10 @@ import {
   type ToolLoopAgentOnFinishCallback,
 } from "ai";
 import {
-  calculateCost,
   logUsage,
   type UsageLogInput,
 } from "./billing/logger";
-import type { AiContextLayer } from "./ai/context-assembler";
+
 import type { ContextBundle, PromptSpec } from "./ai-core";
 import type { PromptExample } from "@/lib/ai-core/types";
 import { resolvePromptExecution } from "./ai-core";
@@ -325,6 +324,7 @@ export async function streamAgentResponse<TOOLS extends ToolSet>(
     surveyId?: string;
     temperature?: number;
     maxTokens?: number;
+    dynamicExamples?: PromptExample[];
     onFinish?: ToolLoopAgentOnFinishCallback<TOOLS>;
   },
 ) {
@@ -342,10 +342,18 @@ export async function streamAgentResponse<TOOLS extends ToolSet>(
 
   const model = options.model ?? defaultModel;
 
+  // Merge dynamic few-shot examples (from DB) into the instructions string
+  const resolvedInstructions = options.dynamicExamples?.length
+    ? resolvePromptExecution({
+        systemPrompt: instructions,
+        dynamicExamples: options.dynamicExamples,
+      }).systemPrompt
+    : instructions;
+
   const agent = new ToolLoopAgent({
     model,
     tools: options.tools,
-    instructions,
+    instructions: resolvedInstructions,
     temperature: options.temperature ?? 0.3,
     maxOutputTokens: options.maxTokens ?? 1000,
     onFinish: (result) => {

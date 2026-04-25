@@ -49,7 +49,7 @@ export function assembleAiContext(layers: ContextLayer[]) {
     .sort((left, right) => left.priority - right.priority)
     .map((layer) => {
       const withoutPriority = { ...layer };
-      Reflect.deleteProperty(withoutPriority, "priority");
+     Reflect.deleteProperty(withoutPriority, "priority");
       return withoutPriority;
     });
 }

@@ -1,6 +1,5 @@
 import { nanoid } from "nanoid";
 import { analysisModel, generateAIResponse } from "@/lib/ai";
-import { chooseOrchestrationMode } from "@/lib/ai-core";
 import { getPromptSpec } from "@/lib/ai/prompt-specs";
 import { getEducationProgram } from "./catalog";
 

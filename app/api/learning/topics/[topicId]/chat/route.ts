@@ -31,6 +31,7 @@ import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
 import { sanitizeUserInput } from "@/lib/ai/sanitization";
 import { studentModelService } from "@/lib/learning/student-model-service";
 import { logBraintrustTrace } from "@/lib/ai/braintrust";
+import { getDynamicFewShotExamples } from "@/lib/ai/few-shot-library";
 
 const requestSchema = z.object({
   sessionId: z.string().optional(),
@@ -321,19 +322,22 @@ export async function POST(
       .reverse()
       .find((message) => message.role === "assistant");
 
-    const prepared = await tutorRuntimeService.prepareAgentTurn({
-      topicId,
-      topicTitle: access.topic.title,
-      sourceBoundary: access.topic.sourceBoundary,
-      classroomId: access.topic.classroomId,
-      classroomStudentId: access.classroomStudent.id,
-      studentUserId: access.classroomStudent.userId,
-      sessionId: tutorSession.id,
-      studyLanguage,
-      state,
-      latestStudentMessage: latestUserText,
-      latestTutorMessage: previousAssistant?.content ?? null,
-    });
+    const [prepared, fewShotExamples] = await Promise.all([
+      tutorRuntimeService.prepareAgentTurn({
+        topicId,
+        topicTitle: access.topic.title,
+        sourceBoundary: access.topic.sourceBoundary,
+        classroomId: access.topic.classroomId,
+        classroomStudentId: access.classroomStudent.id,
+        studentUserId: access.classroomStudent.userId,
+        sessionId: tutorSession.id,
+        studyLanguage,
+        state,
+        latestStudentMessage: latestUserText,
+        latestTutorMessage: previousAssistant?.content ?? null,
+      }),
+      getDynamicFewShotExamples({ feature: "tutoring", limit: 3 }),
+    ]);
 
     const { createTutorTools } = await import("@/lib/learning/agent-tools");
     const tools = createTutorTools({
@@ -364,6 +368,7 @@ export async function POST(
       tools,
       maxTokens: 1000,
       temperature: 0.3,
+      dynamicExamples: fewShotExamples,
       onFinish: async (result) => {
         // Find the last assistant message in the steps
         const lastStep = result.steps.at(-1);

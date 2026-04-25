@@ -40,15 +40,14 @@ export async function getDynamicFewShotExamples({
 
     const results = await db
       .select({
-        user: fewShotExamples.userMessage,
-        assistant: fewShotExamples.assistantMessage,
+        content: fewShotExamples.content,
       })
       .from(fewShotExamples)
       .where(and(...conditions))
       .orderBy(sql`RANDOM()`) // Add simple shuffle for variation; could also sort by priority
       .limit(limit);
 
-    return results;
+    return results.map(r => r.content as PromptExample);
   } catch (error) {
     // Build for failure: log silently or to APM, and return [] to gracefully degrade
     console.error(`Failed to fetch dynamic examples for feature ${feature}`, error);

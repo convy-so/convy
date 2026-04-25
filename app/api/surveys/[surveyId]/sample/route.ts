@@ -51,6 +51,7 @@ import {
 } from "@/lib/survey-access";
 import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
 import { sanitizeUserInput } from "@/lib/ai/sanitization";
+import { getDynamicFewShotExamples } from "@/lib/ai/few-shot-library";
 
 import { buildCanonicalConversationTurn } from "@/lib/respondent-conversation";
 
@@ -290,7 +291,7 @@ export async function POST(
       );
     }
 
-    const [activeSampleProfile, runtimeLayers] = await Promise.all([
+    const [activeSampleProfile, runtimeLayers, fewShotExamples] = await Promise.all([
       getActiveConductingProfile(surveyId, "sample"),
       getConductingRuntimeLayers({
         surveyId,
@@ -299,6 +300,7 @@ export async function POST(
         language: getSurveyLanguage(survey.language),
         mode: "sample",
       }),
+      getDynamicFewShotExamples({ feature: "survey_conducting", limit: 3 }),
     ]);
 
     let [sampleConversation] = await getDb()
@@ -520,7 +522,7 @@ Respond to the user in the language they are speaking to you in. Match the langu
       },
       tools,
       stopWhen: stepCountIs(5),
-
+      dynamicExamples: fewShotExamples,
     });
 
     const remainingSamples = MAX_SAMPLE_CONVERSATIONS - conversationNumber;

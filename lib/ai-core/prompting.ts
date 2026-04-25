@@ -10,10 +10,15 @@ function renderPromptSpecExamples(promptSpec?: PromptSpec, dynamicExamples?: Pro
 
   return [
     "Few-shot examples:",
-    ...examples.flatMap((example) => [
-      `User: ${example.user}`,
-      `Assistant: ${example.assistant}`,
-    ]),
+    ...examples.map((example) => {
+      const lines = ["<example>"];
+      for (const [key, value] of Object.entries(example)) {
+        const valueStr = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+        lines.push(`  <${key}>\n${valueStr}\n  </${key}>`);
+      }
+      lines.push("</example>");
+      return lines.join("\n");
+    }),
   ].join("\n\n");
 }
 

@@ -31,6 +31,7 @@ import {
 import { scheduleAnalyticsRefresh } from "@/lib/analytics-scheduler";
 import { evaluateScopePolicy, renderStrictScopePolicyInstructions } from "@/lib/ai/scope-policy";
 import { sanitizeUserInput } from "@/lib/ai/sanitization";
+import { getDynamicFewShotExamples } from "@/lib/ai/few-shot-library";
 import type { ChatMessage } from "@/lib/chat-types";
 import type { RespondentLanguage } from "@/lib/respondent-conversation";
 
@@ -106,7 +107,7 @@ export async function processRespondentTurn(params: {
     }
   }
 
-  const [activeLiveProfile, sampleFallbackProfile, runtimeLayers] =
+  const [activeLiveProfile, sampleFallbackProfile, runtimeLayers, fewShotExamples] =
     await Promise.all([
       getDb().query.surveyConductingProfiles.findFirst({
         where: (p, { and, eq }) => and(eq(p.surveyId, survey.id), eq(p.mode, "live")),
@@ -121,6 +122,7 @@ export async function processRespondentTurn(params: {
         language: language || (survey.language) || "en",
         mode: "live",
       }),
+      getDynamicFewShotExamples({ feature: "survey_conducting", limit: 3 }),
     ]);
 
   const promptParts = buildConductingSystemPromptParts({
@@ -216,7 +218,7 @@ Respond to the user in the language they are speaking to you in. Match the langu
       },
       tools,
       stopWhen: stepCountIs(5),
-
+      dynamicExamples: fewShotExamples,
     },
   );
 

@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 
 import { analysisModel, generateAIResponse } from "@/lib/ai";
-import { buildContextBundle, chooseOrchestrationMode } from "@/lib/ai-core";
+import { buildContextBundle} from "@/lib/ai-core";
 import {
   renderStrictScopePolicyInstructions,
   renderUntrustedContextBlock,
