@@ -1,17 +1,9 @@
 import { generateText } from "ai";
 
-import type { AiContextLayer } from "@/lib/ai/context-assembler";
 import {
-  calculateCost,
   logUsage,
   type UsageLogInput,
 } from "@/lib/billing/logger";
-import {
-  createAiRunTrace,
-  finishAiRunTrace,
-  type AiRunTraceInput,
-  recordAiContextLayers,
-} from "@/lib/ai/observability";
 import {
   preparePromptCache,
   type PromptCacheOptions,
@@ -23,12 +15,6 @@ type GenerateTextResult = Awaited<ReturnType<typeof generateText>>;
 
 type GenerateObservedTextInput = GenerateTextInput & {
   promptCache?: PromptCacheOptions;
-};
-
-export type ObservedTextOptions = AiRunTraceInput & {
-  contextLayers?: AiContextLayer[];
-  userId?: string | null;
-  surveyId?: string | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -87,94 +73,45 @@ function readUsageField(
   return null;
 }
 
-function readOutputText(result: GenerateTextResult) {
-  return typeof result.text === "string" && result.text.trim().length > 0
-    ? result.text
-    : null;
-}
-
 export async function generateObservedText(
   params: GenerateObservedTextInput,
-  observability?: ObservedTextOptions,
 ) {
-  const startedAt = Date.now();
   const { promptCache, ...rawParams } = params;
   const preparedCache = await preparePromptCache({
     model: rawParams.model,
     systemPrompt: typeof rawParams.system === "string" ? rawParams.system : undefined,
     promptCache,
   });
-  const runId = observability
-      ? await createAiRunTrace({
-        ...observability,
-        status: "running",
-        userId: observability.userId ?? null,
-        resourceType: observability.resourceType ?? (observability.surveyId ? "survey" : null),
-        resourceId: observability.resourceId ?? observability.surveyId ?? null,
-        modelProvider: observability.modelProvider ?? getProviderName(rawParams.model),
-        modelName: observability.modelName ?? getModelId(rawParams.model),
-      })
-    : null;
 
-  if (runId && observability?.contextLayers?.length) {
-    await recordAiContextLayers(runId, observability.contextLayers);
-  }
+  const result = await generateText({
+    ...rawParams,
+    system: preparedCache.systemPrompt ?? rawParams.system,
+    providerOptions: mergeProviderOptions(
+      rawParams.providerOptions as ProviderOptions | undefined,
+      preparedCache.providerOptions,
+    ),
+    experimental_telemetry: {
+      isEnabled: true,
+      functionId: "generate_observed_text",
+    },
+  });
 
-  try {
-    const result = await generateText({
-      ...rawParams,
-      system: preparedCache.systemPrompt ?? rawParams.system,
-      providerOptions: mergeProviderOptions(
-        rawParams.providerOptions as ProviderOptions | undefined,
-        preparedCache.providerOptions,
-      ),
-    });
+  const usageInput: UsageLogInput = {
+    userId: undefined,
+    surveyId: undefined,
+    type: "llm_text",
+    provider: getProviderName(rawParams.model),
+    modelName: getModelId(rawParams.model),
+    promptTokens: readUsageField(result.usage, "inputTokens", "promptTokens") ?? 0,
+    completionTokens:
+      readUsageField(result.usage, "outputTokens", "completionTokens") ?? 0,
+    totalTokens: result.usage.totalTokens ?? undefined,
+    inputNoCacheTokens: result.usage.inputTokenDetails?.noCacheTokens,
+    cacheReadTokens: result.usage.inputTokenDetails?.cacheReadTokens,
+    cacheWriteTokens: result.usage.inputTokenDetails?.cacheWriteTokens,
+  };
 
-    const usageInput: UsageLogInput = {
-      userId: observability?.userId ?? undefined,
-      surveyId: observability?.surveyId ?? undefined,
-      type: "llm_text",
-      provider: getProviderName(rawParams.model),
-      modelName: getModelId(rawParams.model),
-      promptTokens: readUsageField(result.usage, "inputTokens", "promptTokens") ?? 0,
-      completionTokens:
-        readUsageField(result.usage, "outputTokens", "completionTokens") ?? 0,
-      totalTokens: result.usage.totalTokens ?? undefined,
-      inputNoCacheTokens: result.usage.inputTokenDetails?.noCacheTokens,
-      cacheReadTokens: result.usage.inputTokenDetails?.cacheReadTokens,
-      cacheWriteTokens: result.usage.inputTokenDetails?.cacheWriteTokens,
-    };
+  logUsage(usageInput);
 
-    logUsage(usageInput);
-
-    if (runId) {
-      await finishAiRunTrace(runId, {
-        status: "completed",
-        outputText: readOutputText(result),
-        latencyMs: Date.now() - startedAt,
-        promptTokens: readUsageField(result.usage, "inputTokens", "promptTokens"),
-        completionTokens: readUsageField(
-          result.usage,
-          "outputTokens",
-          "completionTokens",
-        ),
-        totalTokens: result.usage.totalTokens ?? null,
-        estimatedCostUsd: calculateCost(usageInput),
-      });
-    }
-
-    return {
-      ...result,
-      aiRunId: runId,
-    };
-  } catch (error) {
-    if (runId) {
-      await finishAiRunTrace(runId, {
-        status: "failed",
-        errorMessage: error instanceof Error ? error.message : "AI generation failed",
-        latencyMs: Date.now() - startedAt,
-      });
-    }
-    throw error;
-  }
+  return result;
 }

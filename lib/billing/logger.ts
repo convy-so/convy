@@ -12,7 +12,8 @@ export type UsageLogInput = {
     | "stt"
     | "tts"
     | "search"
-    | "voice_session";
+    | "voice_session"
+    | "agent_loop";
   provider: string;
   modelName?: string;
   promptTokens?: number;

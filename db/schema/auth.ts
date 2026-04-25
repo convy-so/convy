@@ -9,7 +9,7 @@ import {
 import { relations } from "drizzle-orm";
 import { timestamps } from "./common";
 import { userRoleEnum } from "./enums";
-export { users, userEmails, accounts, sessions, verificationTokens, accountsRelations, sessionsRelations };
+export { users, accounts, sessions, verificationTokens, accountsRelations, sessionsRelations };
 
 const users = pgTable(
   "users",
@@ -31,24 +31,6 @@ const users = pgTable(
     preferredLanguage: text("preferred_language").default("en"),
   },
   (table) => [unique("users_email_unique").on(table.email)]
-);
-
-const userEmails = pgTable(
-  "user_emails",
-  {
-    id: text("id").primaryKey(),
-    ...timestamps,
-    userId: text("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    email: text("email").notNull(),
-    emailVerified: boolean("email_verified").default(false).notNull(),
-    verificationToken: text("verification_token"), 
-  },
-  (table) => [
-    unique("user_emails_email_unique").on(table.email),
-    index("user_emails_user_id_idx").on(table.userId),
-  ]
 );
 
 const accounts = pgTable(

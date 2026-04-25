@@ -140,6 +140,84 @@ export class TutorRuntimeService {
       nextState,
     };
   }
+
+  async prepareAgentTurn(params: {
+    topicId: string;
+    topicTitle: string;
+    sourceBoundary: TopicSourceBoundary;
+    classroomId?: string | null;
+    classroomStudentId: string;
+    studentUserId?: string | null;
+    sessionId?: string | null;
+    studyLanguage: string;
+    state: LearningSessionState;
+    latestStudentMessage: string;
+    latestTutorMessage?: string | null;
+  }) {
+    const runtimeModel = await expertTutorModelService.getRuntimeModel({
+      topicId: params.topicId,
+      classroomId: params.classroomId,
+    });
+    const studentModel = await studentModelService.ensureModel({
+      classroomStudentId: params.classroomStudentId,
+      studentUserId: params.studentUserId,
+    });
+    const latestSnapshotRecord = await studentModelService.getLatestSnapshot(studentModel.id);
+    const latestSnapshot = latestSnapshotRecord?.snapshot ?? createEmptyStudentSnapshot();
+
+    // In agentic mode, we provide the boundary info but NOT the retrieved context upfront.
+    // The agent will use the search_course_materials tool to find evidence.
+    const baselineScope = {
+      topicId: params.topicId,
+      topicTitle: params.topicTitle,
+      contentLocale: params.studyLanguage,
+      teacherSummary: params.sourceBoundary.teacherSummary,
+      materialIds: params.sourceBoundary.allowedMaterialIds,
+      scopeNotes: params.sourceBoundary.scopeNotes,
+      notationNotes: params.sourceBoundary.notationNotes,
+      rigorNotes: params.sourceBoundary.rigorNotes,
+      retrievedContext: [], // Empty initially
+    };
+
+    const frameworkState = await frameworkEngine.decideNextState({
+      runtimeModel,
+      frameworkState: params.state.frameworkState,
+      studentModel: latestSnapshot,
+      latestStudentMessage: params.latestStudentMessage,
+      latestTutorMessage: params.latestTutorMessage,
+      sessionId: params.sessionId,
+      userId: params.studentUserId,
+    });
+
+    const systemPrompt = tutoringPromptService.buildStudentTurnPrompt({
+      contentScope: baselineScope,
+      runtimeModel,
+      studentModel: latestSnapshot,
+      frameworkState,
+      studyLanguage: params.studyLanguage,
+    });
+
+    const nextState = learningSessionStateSchema.parse({
+      ...params.state,
+      runtimeModelId: runtimeModel.id,
+      runtimeModelVersion: runtimeModel.version,
+      studentModelId: studentModel.id,
+      studentModelSnapshotId: latestSnapshotRecord?.id ?? null,
+      frameworkState,
+      contentScopeSnapshot: baselineScope,
+    });
+
+    return {
+      runtimeModel,
+      studentModel,
+      latestStudentSnapshot: latestSnapshot,
+      latestStudentSnapshotRecord: latestSnapshotRecord,
+      baselineScope,
+      frameworkState,
+      systemPrompt,
+      nextState,
+    };
+  }
 }
 
 export const tutorRuntimeService = new TutorRuntimeService();

@@ -32,19 +32,7 @@ export class FrameworkEngine {
     const decision = await generateStructuredOutput({
       schema: frameworkDecisionSchema,
       prompt: buildFrameworkDecisionPrompt(params),
-      observability: params.sessionId
-        ? {
-            feature: "tutoring_chat",
-            runKind: "analysis",
-            scenarioType: "framework_transition",
-            userId: params.userId ?? null,
-            resourceType: "learning_session",
-            resourceId: params.sessionId,
-            metadata: {
-              currentStageId: currentStage.id,
-            },
-          }
-        : undefined,
+
     });
 
     const requestedStage =

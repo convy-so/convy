@@ -1,6 +1,7 @@
 import { createClient } from "@deepgram/sdk";
 
 import { env } from "@/lib/env";
+import { logBraintrustTrace } from "@/lib/ai/braintrust";
 import { getSpeechToTextProviderName } from "@/lib/voice/provider-config";
 import {
   normalizeSpeechToTextLanguage,
@@ -52,10 +53,19 @@ class DeepgramSpeechToTextProvider implements SpeechToTextProvider {
       throw new Error("No transcript generated from audio");
     }
 
+    const detectedLanguage =
+      result.results?.channels[0]?.detected_language ?? normalizedLanguage;
+
+    logBraintrustTrace({
+      event: "stt_transcription",
+      input: { model: "nova-3", language: normalizedLanguage },
+      output: { transcriptLength: transcript.length, detectedLanguage },
+      metadata: { provider: "deepgram" },
+    }).catch(() => undefined);
+
     return {
       transcript,
-      language:
-        result.results?.channels[0]?.detected_language ?? normalizedLanguage,
+      language: detectedLanguage,
     };
   }
 }

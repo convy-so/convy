@@ -33,7 +33,7 @@ import {
   runCreationWorkflow,
 } from "@/lib/education/creation-workflow";
 import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
-import { recordAiFeedbackEvent } from "@/lib/ai/observability";
+
 
 export const maxDuration = 300;
 
@@ -279,20 +279,7 @@ export async function POST(
         const redirectedMessages = [...messages, redirectMessage];
         await persistCreationConversation(surveyId, redirectedMessages);
         const revision = await incrementSurveyRevision(surveyId);
-        await recordAiFeedbackEvent({
-          userId: session.user.id,
-          source: "scope_policy",
-          feedbackType:
-            scopeDecision.promptInjectionSignal === "none"
-              ? "redirected"
-              : "prompt_injection_detected",
-          payload: {
-            surveyId,
-            classification: scopeDecision.classification,
-            promptInjectionSignal: scopeDecision.promptInjectionSignal,
-            reason: scopeDecision.reason,
-          },
-        }).catch(() => undefined);
+
 
         const response = createUIMessageStreamResponse({
           stream: createUIMessageStream({

@@ -15,7 +15,7 @@ import { relations, sql } from "drizzle-orm";
 
 import { timestamps } from "./common";
 import { users } from "./auth";
-import { aiRuns } from "./ai";
+
 import type {
   ExpertFramework,
   ExpertHeuristic,
@@ -943,41 +943,12 @@ export const teachingMediaBindings = pgTable(
   ],
 );
 
-export const externalMediaCache = pgTable(
-  "external_media_cache",
-  {
-    id: text("id").primaryKey(),
-    ...timestamps,
-    provider: text("provider").notNull(),
-    externalId: text("external_id").notNull(),
-    sourceUrl: text("source_url").notNull(),
-    title: text("title").notNull(),
-    description: text("description"),
-    assetType: text("asset_type").notNull(),
-    thumbnailUrl: text("thumbnail_url"),
-    transcript: text("transcript"),
-    durationSeconds: integer("duration_seconds"),
-    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
-    approvedForDirectUse: boolean("approved_for_direct_use").default(false).notNull(),
-  },
-  (table) => [
-    index("external_media_cache_provider_idx").on(table.provider),
-    unique("external_media_cache_provider_external_unique").on(
-      table.provider,
-      table.externalId,
-    ),
-  ],
-);
-
 export const teachingMediaUsageEvents = pgTable(
   "teaching_media_usage_events",
   {
     id: text("id").primaryKey(),
     ...timestamps,
     assetId: text("asset_id").references(() => teachingMediaAssets.id, {
-      onDelete: "set null",
-    }),
-    externalMediaId: text("external_media_id").references(() => externalMediaCache.id, {
       onDelete: "set null",
     }),
     topicId: text("topic_id").references(() => learningTopics.id, {
@@ -990,9 +961,6 @@ export const teachingMediaUsageEvents = pgTable(
       () => classroomStudents.id,
       { onDelete: "set null" },
     ),
-    aiRunId: text("ai_run_id").references(() => aiRuns.id, {
-      onDelete: "set null",
-    }),
     selectionSource: text("selection_source").default("teacher_curated").notNull(),
     reason: text("reason").notNull(),
     expectedBenefit: text("expected_benefit"),
@@ -1005,7 +973,7 @@ export const teachingMediaUsageEvents = pgTable(
     index("teaching_media_usage_events_topic_idx").on(table.topicId),
     index("teaching_media_usage_events_session_idx").on(table.sessionId),
     index("teaching_media_usage_events_student_idx").on(table.classroomStudentId),
-    index("teaching_media_usage_events_ai_run_idx").on(table.aiRunId),
+
   ],
 );
 
@@ -1456,23 +1424,12 @@ export const teachingMediaBindingsRelations = relations(
   }),
 );
 
-export const externalMediaCacheRelations = relations(
-  externalMediaCache,
-  ({ many }) => ({
-    usageEvents: many(teachingMediaUsageEvents),
-  }),
-);
-
 export const teachingMediaUsageEventsRelations = relations(
   teachingMediaUsageEvents,
   ({ one }) => ({
     asset: one(teachingMediaAssets, {
       fields: [teachingMediaUsageEvents.assetId],
       references: [teachingMediaAssets.id],
-    }),
-    externalMedia: one(externalMediaCache, {
-      fields: [teachingMediaUsageEvents.externalMediaId],
-      references: [externalMediaCache.id],
     }),
     topic: one(learningTopics, {
       fields: [teachingMediaUsageEvents.topicId],

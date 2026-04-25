@@ -57,22 +57,7 @@ export class StudentModelService {
         contentScope: params.contentScope,
         conversationExcerpt: params.conversationExcerpt,
       }),
-      observability: params.sessionId
-        ? {
-            feature: "memory_behavior",
-            runKind: "analysis",
-            scenarioType: "student_model_refresh",
-            userId: params.userId ?? null,
-            resourceType: "learning_session",
-            resourceId: params.sessionId,
-            metadata: {
-              sourceType: params.sourceType,
-              sourceId: params.sourceId,
-              topicId: params.topicId ?? null,
-              studentModelId: params.studentModelId,
-            },
-          }
-        : undefined,
+
     });
 
     const savedSnapshot = await createStudentModelSnapshot({

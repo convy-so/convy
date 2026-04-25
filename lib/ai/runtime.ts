@@ -9,13 +9,6 @@ import {
 import { z } from "zod";
 
 import { calculateCost, logUsage, type UsageLogInput } from "@/lib/billing/logger";
-import type { AiContextLayer } from "@/lib/ai/context-assembler";
-import {
-  createAiRunTrace,
-  finishAiRunTrace,
-  recordAiContextLayers,
-  type AiRunTraceInput,
-} from "@/lib/ai/observability";
 import { tutorAnalysisModel, tutorChatModel } from "@/lib/ai/models";
 
 type StructuredGenerationParams<TSchema extends z.ZodTypeAny> = {
@@ -25,7 +18,6 @@ type StructuredGenerationParams<TSchema extends z.ZodTypeAny> = {
   model?: LanguageModel;
   temperature?: number;
   maxOutputTokens?: number;
-  observability?: AiRunTraceInput & { contextLayers?: AiContextLayer[] };
 };
 
 type StreamUiTextParams = {
@@ -41,29 +33,6 @@ export async function generateStructuredOutput<TSchema extends z.ZodTypeAny>(
 ): Promise<z.infer<TSchema>> {
   const model = params.model ?? tutorAnalysisModel;
   const startedAt = Date.now();
-  const runId = params.observability
-    ? await createAiRunTrace({
-        ...params.observability,
-        status: "running",
-        modelProvider:
-          params.observability.modelProvider ?? getProviderName(model),
-        modelName: params.observability.modelName ?? getModelId(model),
-        temperature: params.observability.temperature ?? params.temperature ?? 0.2,
-        maxTokens:
-          params.observability.maxTokens ?? params.maxOutputTokens ?? 1500,
-        metadata: {
-          ...(params.observability.metadata ?? {}),
-          promptPreview:
-            params.prompt.length > 400
-              ? `${params.prompt.slice(0, 397)}...`
-              : params.prompt,
-        },
-      })
-    : null;
-
-  if (runId && params.observability?.contextLayers?.length) {
-    await recordAiContextLayers(runId, params.observability.contextLayers);
-  }
 
   try {
     const result = await generateText({
@@ -75,6 +44,10 @@ export async function generateStructuredOutput<TSchema extends z.ZodTypeAny>(
       output: Output.object({
         schema: params.schema,
       }),
+      experimental_telemetry: {
+        isEnabled: true,
+        functionId: "generate_structured_output",
+      },
     });
 
     const usageInput: UsageLogInput = {
@@ -91,32 +64,8 @@ export async function generateStructuredOutput<TSchema extends z.ZodTypeAny>(
     };
     logUsage(usageInput);
 
-    if (runId) {
-      await finishAiRunTrace(runId, {
-        status: "completed",
-        outputText: JSON.stringify(result.output),
-        latencyMs: Date.now() - startedAt,
-        promptTokens: getTokenCount(result.usage, "inputTokens", "promptTokens"),
-        completionTokens: getTokenCount(
-          result.usage,
-          "outputTokens",
-          "completionTokens",
-        ),
-        totalTokens: result.usage.totalTokens ?? null,
-        estimatedCostUsd: calculateCost(usageInput),
-      });
-    }
-
     return result.output;
   } catch (error) {
-    if (runId) {
-      await finishAiRunTrace(runId, {
-        status: "failed",
-        errorMessage:
-          error instanceof Error ? error.message : "Structured generation failed",
-        latencyMs: Date.now() - startedAt,
-      });
-    }
     throw error;
   }
 }

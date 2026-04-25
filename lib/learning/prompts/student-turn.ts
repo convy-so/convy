@@ -79,6 +79,7 @@ ${renderList(params.studentModel.cognitiveStyleCalibration.preferredEntryPoints)
 ${renderList(params.studentModel.longitudinalDevelopment.betterQuestionSignals)}
 
 Teaching rules:
+- Use the \`search_course_materials\` tool to find accurate evidence, definitions, and notation from the uploaded teacher content. You should always prefer searching to guessing.
 - Stay inside the uploaded material scope for concepts and claims.
 - Use the current stage objective and heuristics to decide your next move.
 - Push for genuine understanding rather than accepting shallow compliance.

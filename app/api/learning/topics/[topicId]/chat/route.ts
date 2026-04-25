@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getStudentTopicAccess } from "@/lib/learning/access";
-import { extractMessageText, toPersistedUIChatMessages } from "@/lib/chat-ui-messages";
+import { extractMessageText, toPersistedUIChatMessages, toUIMessages } from "@/lib/chat-ui-messages";
 import {
   normalizeMessages as toModelMessages,
   streamAIResponse,
@@ -321,7 +321,7 @@ export async function POST(
       .reverse()
       .find((message) => message.role === "assistant");
 
-    const prepared = await tutorRuntimeService.prepareTurn({
+    const prepared = await tutorRuntimeService.prepareAgentTurn({
       topicId,
       topicTitle: access.topic.title,
       sourceBoundary: access.topic.sourceBoundary,
@@ -335,48 +335,39 @@ export async function POST(
       latestTutorMessage: previousAssistant?.content ?? null,
     });
 
+    const { createTutorTools } = await import("@/lib/learning/agent-tools");
+    const tools = createTutorTools({
+      topicId,
+      contentLocale: access.topic.contentLocale,
+    });
+
     // Sanitize conversation history before sending to the model
-    const sanitizedMessages = (body.messages as any[]).map((m) => {
-      if (m.role === "user") {
-        return {
-          ...m,
-          content: sanitizeUserInput(m.content, {
-            maxLength: 2000,
-            allowNewlines: true,
-          }),
-        };
-      }
-      return m;
-    });
+    const sanitizedMessages = toUIMessages(
+      toPersistedUIChatMessages(body.messages).map((m) => {
+        if (m.role === "user") {
+          return {
+            ...m,
+            content: sanitizeUserInput(m.content, {
+              maxLength: 2000,
+              allowNewlines: true,
+            }),
+          };
+        }
+        return m;
+      }),
+    );
 
-    const modelMessages = await toModelMessages(sanitizedMessages);
-    const result = streamAIResponse(modelMessages, prepared.systemPrompt, {
+    const { streamAgentResponse } = await import("@/lib/ai");
+
+    return await streamAgentResponse(sanitizedMessages, prepared.systemPrompt, {
       userId: session.user.id,
-      maxTokens: 900,
+      tools,
+      maxTokens: 1000,
       temperature: 0.3,
-      observability: {
-        feature: "tutoring_chat",
-        scenarioType: "student_turn",
-        resourceType: "learning_session",
-        resourceId: tutorSession.id,
-        metadata: {
-          topicId,
-          runtimeModelId: prepared.runtimeModel.id,
-          runtimeModelVersion: prepared.runtimeModel.version,
-          frameworkVersionId: prepared.runtimeModel.frameworkVersionId,
-          stageId: prepared.frameworkState.currentStageId,
-          studentModelId: prepared.studentModel.id,
-          contentScopeMaterialIds: prepared.contentScope.materialIds,
-        },
-      },
-    });
-
-    return result.toUIMessageStreamResponse({
-      originalMessages: body.messages,
-      onFinish: async ({ messages }) => {
-        const persistedMessages = toPersistedUIChatMessages(messages, ["assistant"]);
-        const assistantMessage = persistedMessages.at(-1);
-        const assistantText = assistantMessage?.content?.trim();
+      onFinish: async (result) => {
+        // Find the last assistant message in the steps
+        const lastStep = result.steps.at(-1);
+        const assistantText = lastStep?.text?.trim();
 
         if (!assistantText) {
           return;
@@ -390,6 +381,7 @@ export async function POST(
             frameworkStageId: prepared.frameworkState.currentStageId,
             runtimeModelId: prepared.runtimeModel.id,
             runtimeModelVersion: prepared.runtimeModel.version,
+            toolCalls: result.steps.flatMap((s) => s.toolCalls),
           },
         });
         await logLearningInteraction({
@@ -414,6 +406,7 @@ export async function POST(
           nextState: prepared.nextState,
           forcedCompletion: autoComplete,
         });
+
         const snapshot = shouldUpdateStudentModel
           ? await studentModelService.updateFromConversation({
               studentModelId: prepared.studentModel.id,
@@ -423,7 +416,24 @@ export async function POST(
               sourceId: tutorSession.id,
               userId: session.user.id,
               existingSnapshot: prepared.latestStudentSnapshot,
-              contentScope: prepared.contentScope,
+              contentScope: {
+                ...prepared.baselineScope,
+                // Include whatever we actually retrieved during the turn
+                retrievedContext: result.steps
+                  .flatMap((s) => s.toolResults)
+                  .flatMap((r) => {
+                    // Type-safe check for our specific tool
+                    if (r.toolName === "search_course_materials") {
+                      // We know the structure of search_course_materials output
+                      const searchOutput = r.output as {
+                        success: boolean;
+                        results?: Array<{ content: string; materialId: string }>;
+                      };
+                      return searchOutput.results?.map((res) => res.content) || [];
+                    }
+                    return [];
+                  }),
+              },
               conversationExcerpt: [
                 ...(previousAssistant?.content
                   ? [{ role: "assistant", content: previousAssistant.content }]
@@ -433,6 +443,7 @@ export async function POST(
               ],
             })
           : null;
+
         const refreshedAt = new Date().toISOString();
         const nextState = {
           ...prepared.nextState,
@@ -485,20 +496,22 @@ export async function POST(
           },
           output: {
             tutorMessage: assistantText,
+            steps: result.steps.length,
           },
-            metadata: {
-              topicId,
-              runtimeModelVersion: prepared.runtimeModel.version,
-              frameworkVersion: prepared.runtimeModel.frameworkVersionId,
-              studentModelSnapshotId: shouldUpdateStudentModel
-                ? snapshot?.id
-                : prepared.latestStudentSnapshotRecord?.id,
-              materialIds: prepared.contentScope.materialIds,
-              stageId: prepared.frameworkState.currentStageId,
-              conflictState:
-                prepared.runtimeModel.conflictIds.length > 0 ? "open" : "clear",
+          metadata: {
+            topicId,
+            runtimeModelVersion: prepared.runtimeModel.version,
+            frameworkVersion: prepared.runtimeModel.frameworkVersionId,
+            studentModelSnapshotId: shouldUpdateStudentModel
+              ? snapshot?.id
+              : prepared.latestStudentSnapshotRecord?.id,
+            materialIds: prepared.baselineScope.materialIds,
+            stageId: prepared.frameworkState.currentStageId,
+            conflictState:
+              prepared.runtimeModel.conflictIds.length > 0 ? "open" : "clear",
             autoCompleted: autoComplete,
             studentModelRefreshed: shouldUpdateStudentModel,
+            toolUse: result.steps.some((s) => s.toolCalls.length > 0),
           },
         }).catch(() => undefined);
       },

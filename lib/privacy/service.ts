@@ -18,8 +18,6 @@ import {
   surveys,
   topicMaterials,
   users,
-  voiceChunks,
-  voiceQualityMetrics,
   voiceSessions,
 } from "@/db/schema";
 import { deleteLearningPatternMemoriesForUser, isMem0Configured } from "@/lib/learning/mem0";
@@ -178,8 +176,6 @@ async function deleteSurveySessionArtifacts(sessionIds: string[]) {
     await tx.delete(surveySessionInsights).where(inArray(surveySessionInsights.sessionId, sessionIds));
     await tx.delete(surveyEvidence).where(inArray(surveyEvidence.sessionId, sessionIds));
     await tx.delete(surveyTurns).where(inArray(surveyTurns.sessionId, sessionIds));
-    await tx.delete(voiceQualityMetrics).where(inArray(voiceQualityMetrics.sessionId, sessionIds));
-    await tx.delete(voiceChunks).where(inArray(voiceChunks.sessionId, sessionIds));
     await tx.delete(surveySessions).where(inArray(surveySessions.id, sessionIds));
   });
 }

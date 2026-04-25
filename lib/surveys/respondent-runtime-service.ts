@@ -29,9 +29,6 @@ import {
   updateSessionState,
 } from "@/lib/education/storage";
 import { scheduleAnalyticsRefresh } from "@/lib/analytics-scheduler";
-import {
-  recordAiFeedbackEvent,
-} from "@/lib/ai/observability";
 import { evaluateScopePolicy, renderStrictScopePolicyInstructions } from "@/lib/ai/scope-policy";
 import { sanitizeUserInput } from "@/lib/ai/sanitization";
 import type { ChatMessage } from "@/lib/chat-types";
@@ -85,20 +82,7 @@ export async function processRespondentTurn(params: {
       };
       const redirectedMessages = [...visibleMessages, redirectMessage];
 
-      await recordAiFeedbackEvent({
-        source: "scope_policy",
-        feedbackType:
-          scopeDecision.promptInjectionSignal === "none"
-            ? "redirected"
-            : "prompt_injection_detected",
-        payload: {
-          surveyId: survey.id,
-          conversationId: conversation.id,
-          classification: scopeDecision.classification,
-          promptInjectionSignal: scopeDecision.promptInjectionSignal,
-          reason: scopeDecision.reason,
-        },
-      }).catch(() => undefined);
+
 
       await getDb()
         .update(surveyConversations)
@@ -232,16 +216,7 @@ Respond to the user in the language they are speaking to you in. Match the langu
       },
       tools,
       stopWhen: stepCountIs(5),
-      observability: {
-        feature: "survey_conducting",
-        scenarioType: "respondent_turn",
-        resourceType: "survey_session",
-        resourceId: sessionRow.id,
-        metadata: {
-          surveyId: survey.id,
-          guidanceVersionIds: runtimeLayers.expertGuidanceVersionIds,
-        },
-      },
+
     },
   );
 

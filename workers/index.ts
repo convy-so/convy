@@ -32,7 +32,7 @@ import { testRedisConnection } from "@/lib/redis";
 import surveyAnalyticsWorker from "./survey-analytics.worker";
 import emailWorker from "./email.worker";
 import tutoringReportWorker from "./tutoring-report.worker";
-import evalRunWorker from "./eval-run.worker";
+
 import contentTranslationWorker from "./content-translation.worker";
 
 // Collect all workers for coordinated shutdown
@@ -40,7 +40,7 @@ const workers = [
   { name: "Survey Analytics", worker: surveyAnalyticsWorker },
   { name: "Email", worker: emailWorker },
   { name: "Tutoring Report", worker: tutoringReportWorker },
-  { name: "Eval Run", worker: evalRunWorker },
+
   { name: "Content Translation", worker: contentTranslationWorker },
 ];
 // Test Redis connection before confirming workers are ready
