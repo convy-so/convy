@@ -337,14 +337,6 @@ export const learningMaterialEmbeddings = pgTable(
       "gin",
       sql`to_tsvector('french', ${table.retrievalContent})`,
     ),
-    index("learning_material_embeddings_retrieval_es_idx").using(
-      "gin",
-      sql`to_tsvector('spanish', ${table.retrievalContent})`,
-    ),
-    index("learning_material_embeddings_retrieval_it_idx").using(
-      "gin",
-      sql`to_tsvector('italian', ${table.retrievalContent})`,
-    ),
   ],
 );
 
@@ -427,15 +419,7 @@ export const learningEvidenceEmbeddings = pgTable(
     index("learning_evidence_embeddings_retrieval_fr_idx").using(
       "gin",
       sql`to_tsvector('french', ${table.retrievalContent})`,
-    ),
-    index("learning_evidence_embeddings_retrieval_es_idx").using(
-      "gin",
-      sql`to_tsvector('spanish', ${table.retrievalContent})`,
-    ),
-    index("learning_evidence_embeddings_retrieval_it_idx").using(
-      "gin",
-      sql`to_tsvector('italian', ${table.retrievalContent})`,
-    ),
+    )
   ],
 );
 
