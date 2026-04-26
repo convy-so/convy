@@ -280,6 +280,9 @@ ${input.creatorMessage}
     model: defaultModel,
     temperature: 0.2,
     maxTokens: 1400,
+    attribution: {
+      feature: "survey-refinement-assistant",
+    },
   }).catch(() => "");
 
   const parsed = parseRefinementAssistantResponse(safeJsonParse(raw));

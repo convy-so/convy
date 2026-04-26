@@ -79,7 +79,7 @@ export async function getDynamicFewShotExamples({
     // ─── Phase 1: Vector recall via HNSW ────────────────────────────────────
     let vectorResults: SearchResult[] = [];
     if (context.trim()) {
-      const queryVector = JSON.stringify(await generateEmbedding(context));
+      const queryVector = JSON.stringify(await generateEmbedding(context, { feature }));
       const rows = await db
         .select({
           id: fewShotExamples.id,
@@ -197,7 +197,7 @@ export async function indexFewShotExample(params: {
   content: Record<string, unknown>;
 }) {
   const retrievalContent = buildFewShotRetrievalContent(params);
-  const embedding = await generateEmbedding(retrievalContent);
+  const embedding = await generateEmbedding(retrievalContent, { feature: params.feature });
 
   await getDb()
     .update(fewShotExamples)

@@ -213,7 +213,10 @@ Respond to the user in the language they are speaking to you in. Match the langu
     modelMessages,
     systemPrompt,
     {
-      surveyId: survey.id,
+      attribution: {
+        surveyId: survey.id,
+        feature: "survey-respondent-interview",
+      },
       maxTokens: 550,
       temperature: 0.4,
       promptCache: {

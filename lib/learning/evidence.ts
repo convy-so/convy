@@ -153,7 +153,7 @@ async function replaceLearningEvidenceEmbeddings(
 
   const embeddings = await generateEmbeddings(retrievalChunks, {
     userId: params.studentUserId ?? undefined,
-    surveyId: params.topicId ?? undefined,
+    feature: `learning-evidence-indexing:${params.sourceType}`,
   });
 
   return await getDb().transaction(async (tx) => {
@@ -217,7 +217,9 @@ async function searchStudentLearningEvidenceContext(params: {
   const limit = params.limit ?? 8;
   const language = params.language ?? "en";
   const tsConfig = langConfigMap[language] ?? "english";
-  const queryVector = JSON.stringify(await generateEmbedding(params.query));
+  const queryVector = JSON.stringify(await generateEmbedding(params.query, {
+    feature: "learning-evidence-search",
+  }));
 
   const vectorResults = await getDb()
     .select({

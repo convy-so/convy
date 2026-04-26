@@ -130,8 +130,7 @@ export async function generateAIResponse(
     model?: LanguageModel;
     temperature?: number;
     maxTokens?: number;
-    userId?: string;
-    surveyId?: string;
+    attribution?: Partial<UsageLogInput>;
     promptCache?: PromptCacheOptions;
     promptSpec?: PromptSpec;
     contextBundle?: ContextBundle | null;
@@ -139,9 +138,9 @@ export async function generateAIResponse(
   },
 ) {
   // Apply rate limiting for AI operations
-  if (options?.userId) {
+  if (options?.attribution?.userId) {
     const { expensiveAiRateLimiter } = await import("@/lib/ratelimit");
-    const { success, reset } = await expensiveAiRateLimiter.limit(options.userId);
+    const { success, reset } = await expensiveAiRateLimiter.limit(options.attribution.userId);
     if (!success) {
       const resetDate = new Date(reset);
       throw new Error(
@@ -178,15 +177,13 @@ export async function generateAIResponse(
         isEnabled: true,
         functionId: "generate_ai_response",
         metadata: {
-          ...(options?.userId ? { userId: options.userId } : {}),
-          ...(options?.surveyId ? { surveyId: options.surveyId } : {}),
+          ...(options?.attribution ?? {}),
         },
       },
     });
 
     const usageInput: UsageLogInput = {
-      userId: options?.userId,
-      surveyId: options?.surveyId,
+      ...(options?.attribution ?? {}),
       type: "llm_text",
       provider: getProviderName(model),
       modelName: getModelId(model) || GEMINI_FLASH_ID,
@@ -219,8 +216,7 @@ export function streamAIResponse(
     model?: LanguageModel;
     temperature?: number;
     maxTokens?: number;
-    userId?: string;
-    surveyId?: string;
+    attribution?: Partial<UsageLogInput>;
     promptCache?: PromptCacheOptions;
     promptSpec?: PromptSpec;
     contextBundle?: ContextBundle | null;
@@ -231,9 +227,9 @@ export function streamAIResponse(
 ) {
   // Apply rate limiting for streaming AI operations
   const rateLimitPromise = (async () => {
-    if (options?.userId) {
+    if (options?.attribution?.userId) {
       const { expensiveAiRateLimiter } = await import("@/lib/ratelimit");
-      const { success, reset } = await expensiveAiRateLimiter.limit(options.userId);
+      const { success, reset } = await expensiveAiRateLimiter.limit(options.attribution.userId);
       if (!success) {
         const resetDate = new Date(reset);
         throw new Error(
@@ -271,8 +267,7 @@ export function streamAIResponse(
       isEnabled: true,
       functionId: "stream_ai_response",
       metadata: {
-        ...(options?.userId ? { userId: options.userId } : {}),
-        ...(options?.surveyId ? { surveyId: options.surveyId } : {}),
+        ...(options?.attribution ?? {}),
       },
     },
     prepareStep: async () => {
@@ -286,8 +281,7 @@ export function streamAIResponse(
     },
     onFinish: (result) => {
       const usageInput: UsageLogInput = {
-        userId: options?.userId,
-        surveyId: options?.surveyId,
+        ...(options?.attribution ?? {}),
         type: "llm_text",
         provider: getProviderName(model),
         modelName: getModelId(model) || GEMINI_FLASH_ID,
@@ -321,8 +315,7 @@ export async function streamAgentResponse<TOOLS extends ToolSet>(
   options: {
     model?: LanguageModel;
     tools: TOOLS;
-    userId?: string;
-    surveyId?: string;
+    attribution?: Partial<UsageLogInput>;
     temperature?: number;
     maxTokens?: number;
     dynamicExamples?: PromptExample[];
@@ -330,9 +323,9 @@ export async function streamAgentResponse<TOOLS extends ToolSet>(
   },
 ) {
   // Apply rate limiting
-  if (options.userId) {
+  if (options.attribution?.userId) {
     const { expensiveAiRateLimiter } = await import("@/lib/ratelimit");
-    const { success, reset } = await expensiveAiRateLimiter.limit(options.userId);
+    const { success, reset } = await expensiveAiRateLimiter.limit(options.attribution.userId);
     if (!success) {
       const resetDate = new Date(reset);
       throw new Error(
@@ -360,8 +353,7 @@ export async function streamAgentResponse<TOOLS extends ToolSet>(
     onFinish: (result) => {
       // Usage logging
       const usageInput: UsageLogInput = {
-        userId: options.userId,
-        surveyId: options.surveyId,
+        ...(options.attribution ?? {}),
         type: "agent_loop",
         provider: getProviderName(model),
         modelName: getModelId(model) || GEMINI_FLASH_ID,

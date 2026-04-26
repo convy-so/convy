@@ -156,7 +156,10 @@ ${buildEvidenceDigest(input.evidence)}
     model: analysisModel,
     temperature: 0.2,
     maxTokens: 1500,
-    surveyId: input.surveyId,
+    attribution: {
+      surveyId: input.surveyId,
+      feature: "survey-analytics-synthesis",
+    },
     promptSpec: getPromptSpec("survey.analytics") ?? undefined,
   });
 
