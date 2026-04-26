@@ -1,6 +1,6 @@
-import { ExpertAssetStudio } from "@/components/admin/expert-asset-studio";
-import { ExpertRuntimePreview } from "@/components/admin/expert-runtime-preview";
-import { ExpertEvalBaselines } from "@/components/admin/expert-eval-baselines";
+import { ExpertAssetStudio } from "@/components/expert/expert-asset-studio";
+import { ExpertRuntimePreview } from "@/components/expert/expert-runtime-preview";
+import { ExpertEvalBaselines } from "@/components/expert/expert-eval-baselines";
 
 export default function FrameworksPage() {
   return (

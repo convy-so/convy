@@ -1,4 +1,4 @@
-import { ExpertQaReview } from "@/components/admin/expert-qa-review";
+import { ExpertQaReview } from "@/components/expert/expert-qa-review";
 
 export default function QaReviewPage() {
   return (

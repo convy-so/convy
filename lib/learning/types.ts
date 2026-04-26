@@ -173,6 +173,7 @@ export const expertHeuristicSchema = z.object({
   examples: z.array(z.string()).default([]),
   priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
   tags: z.array(z.string()).default([]),
+  relevanceScope: z.enum(["general", "framework_specific"]).default("general"),
 });
 
 export type ExpertHeuristic = z.infer<typeof expertHeuristicSchema>;

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
@@ -569,11 +569,21 @@ export async function getActiveFrameworkVersion(topicId: string) {
   });
 }
 
-export async function listApprovedCrystallizations(params: { topicId: string }) {
+export async function listApprovedCrystallizations(params: {
+  topicId: string;
+  frameworkVersionId?: string;
+}) {
   return await getDb().query.expertCrystallizations.findMany({
     where: and(
       eq(expertCrystallizations.topicId, params.topicId),
       eq(expertCrystallizations.status, "approved"),
+      or(
+        eq(expertCrystallizations.relevanceScope, "general"),
+        and(
+          eq(expertCrystallizations.relevanceScope, "framework_specific"),
+          eq(expertCrystallizations.frameworkVersionId, params.frameworkVersionId ?? ""),
+        ),
+      ),
     ),
     orderBy: [asc(expertCrystallizations.createdAt)],
   });

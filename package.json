@@ -22,6 +22,7 @@
     "@ai-sdk/openai": "^3.0.19",
     "@ai-sdk/react": "^3.0.52",
     "@better-fetch/fetch": "^1.1.21",
+    "@braintrust/otel": "^0.2.0",
     "@deepgram/sdk": "^4.11.3",
     "@next/env": "16.1.5",
     "@react-email/components": "^1.0.9",
