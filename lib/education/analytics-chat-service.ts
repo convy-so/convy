@@ -56,7 +56,10 @@ Return JSON only: {"intent":"metric|comparison|evidence|snapshot|mixed","needsCh
     model: defaultModel,
     temperature: 0,
     maxTokens: 200,
-    surveyId,
+    attribution: {
+      surveyId,
+      feature: "survey-analytics-chat-classify",
+    },
   }).catch(() => "");
 
   return parseClassifierResult(safeJsonParse(raw)) ?? {
@@ -141,7 +144,10 @@ Return JSON only: {"response":"string","sources":[{"id":"string","label":"string
     model: defaultModel,
     temperature: 0.1,
     maxTokens: 1000,
-    surveyId: params.surveyId,
+    attribution: {
+      surveyId: params.surveyId,
+      feature: "survey-analytics-chat-answer",
+    },
   }).catch(() => "");
 
   return parseQuestionAnswerResult(safeJsonParse(raw));

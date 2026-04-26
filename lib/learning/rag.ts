@@ -72,7 +72,7 @@ export async function replaceLearningMaterialEmbeddings(params: {
     }),
   );
   const embeddings = await generateEmbeddings(retrievalChunks, {
-    surveyId: params.topicId,
+    feature: "learning-material-indexing",
   });
 
   return await getDb().transaction(async (tx) => {
@@ -127,7 +127,9 @@ export async function searchLearningTopicContext(params: {
   const limit = params.limit ?? 8;
   const contentLocale = params.contentLocale ?? "en";
   const tsConfig = langConfigMap[contentLocale] ?? "english";
-  const queryVector = JSON.stringify(await generateEmbedding(params.query));
+  const queryVector = JSON.stringify(await generateEmbedding(params.query, {
+    feature: "learning-topic-search",
+  }));
 
   const vectorResults = await getDb()
     .select({

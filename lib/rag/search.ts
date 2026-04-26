@@ -43,7 +43,9 @@ export async function vectorSearch(
   query: string,
   filters: SearchFilters = {},
 ): Promise<SearchResult[]> {
-  const embedding = await generateEmbedding(query);
+  const embedding = await generateEmbedding(query, {
+    surveyId: filters.surveyId,
+  });
   const limit = filters.limit || 20;
   const queryVector = JSON.stringify(embedding);
 

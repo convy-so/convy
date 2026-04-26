@@ -368,7 +368,10 @@ export async function POST(
     const { streamAgentResponse } = await import("@/lib/ai");
 
     return await streamAgentResponse(sanitizedMessages, prepared.systemPrompt, {
-      userId: session.user.id,
+      attribution: {
+        userId: session.user.id,
+        feature: "learning-tutor-chat",
+      },
       tools,
       maxTokens: 1000,
       temperature: 0.3,

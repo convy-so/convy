@@ -1,7 +1,7 @@
 import { openai } from "@ai-sdk/openai";
 import { embed, embedMany } from "ai";
 import { getEncoding } from "js-tiktoken";
-import { logUsage } from "../billing/logger";
+import { logUsage, type UsageLogInput } from "../billing/logger";
 
 /**
  * OpenAI text-embedding-3-small
@@ -20,13 +20,8 @@ const enc = getEncoding("cl100k_base");
 
 export async function generateEmbedding(
   text: string,
-  metadata?: {
-    userId?: string;
-    surveyId?: string;
-  },
+  attribution?: Partial<UsageLogInput>,
 ): Promise<number[]> {
-  // OpenAI Embedding API fails (400) on empty strings.
-  // We return a zero-vector [1536] if input is empty to avoid crashing callers.
   if (!text.trim()) {
     return new Array(EMBEDDING_DIMENSIONS).fill(0);
   }
@@ -37,7 +32,7 @@ export async function generateEmbedding(
   });
 
   logUsage({
-    ...metadata,
+    ...attribution,
     type: "llm_embedding",
     provider: "openai",
     modelName: EMBEDDING_MODEL_NAME,
@@ -49,10 +44,7 @@ export async function generateEmbedding(
 
 export async function generateEmbeddings(
   texts: string[],
-  metadata?: {
-    userId?: string;
-    surveyId?: string;
-  },
+  attribution?: Partial<UsageLogInput>,
 ): Promise<number[][]> {
   // If all texts are empty, return an array of zero-vectors
   if (texts.every((t) => !t.trim())) {
@@ -65,7 +57,7 @@ export async function generateEmbeddings(
   });
 
   logUsage({
-    ...metadata,
+    ...attribution,
     type: "llm_embedding",
     provider: "openai",
     modelName: EMBEDDING_MODEL_NAME,

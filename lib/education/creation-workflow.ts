@@ -122,6 +122,9 @@ ${conversationToText(messages)}`;
     model: analysisModel,
     temperature: 0.1,
     maxTokens: 250,
+    attribution: {
+      feature: "survey-creation-classify-program",
+    },
     promptCache: {
       namespace: "creation-classify-program",
       staticSystemPrompt: systemPrompt,
@@ -237,6 +240,9 @@ async function extractBrief(
     model: analysisModel,
     temperature: 0.1,
     maxTokens: 1500,
+    attribution: {
+      feature: "survey-creation-extract-brief",
+    },
     promptCache: {
       namespace: "creation-extract-brief",
       staticSystemPrompt: promptParts.systemPrompt,
@@ -311,6 +317,9 @@ Audience: ${brief.audienceDefinition || "missing"}
     model: defaultModel,
     temperature: 0.3,
     maxTokens: 220,
+    attribution: {
+      feature: "survey-creation-next-question",
+    },
     promptCache: {
       namespace: "creation-next-question",
       staticSystemPrompt: systemPrompt,
@@ -349,6 +358,9 @@ Decision: ${brief.decisionToInform}
     model: defaultModel,
     temperature: 0.3,
     maxTokens: 180,
+    attribution: {
+      feature: "survey-creation-completion-response",
+    },
     promptCache: {
       namespace: "creation-completion-response",
       staticSystemPrompt: systemPrompt,

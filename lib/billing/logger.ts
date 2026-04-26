@@ -6,6 +6,7 @@ export type UsageLogInput = {
   userId?: string;
   folderId?: string;
   surveyId?: string;
+  feature?: string;
   type:
     | "llm_text"
     | "llm_embedding"

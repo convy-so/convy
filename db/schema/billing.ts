@@ -30,6 +30,7 @@ const usageLogs = pgTable(
     surveyId: text("survey_id").references(() => surveys.id, {
       onDelete: "cascade",
     }),
+    feature: text("feature"),
 
     type: text("type").notNull(),
     provider: text("provider").notNull(),
@@ -68,4 +69,3 @@ const usageLogsRelations = relations(usageLogs, ({ one }) => ({
     references: [surveys.id],
   }),
 }));
-

@@ -156,7 +156,10 @@ ${buildEvidenceDigest(evidence)}
     model: analysisModel,
     temperature: 0.2,
     maxTokens: 500,
-    surveyId,
+    attribution: {
+      surveyId,
+      feature: "survey-analytics-session-insight",
+    },
     promptCache: {
       namespace: "analytics-session-insight",
       staticSystemPrompt: systemPrompt,

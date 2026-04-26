@@ -1,10 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/db";
-import {
-  expertGuidancePacks,
-  expertGuidanceVersions,
-} from "@/db/schema";
+import { expertGuidancePacks, expertGuidanceVersions } from "@/db/schema";
 import type { CoreAiFeature } from "@/lib/ai/types";
 
 export type ExpertGuidanceArtifact = {
@@ -119,24 +116,27 @@ export async function listActiveExpertGuidance(params: {
     .from(expertGuidanceVersions)
     .where(inArray(expertGuidanceVersions.id, activeVersionIds));
 
-  return packs.flatMap((pack) => {
-    const version = versions.find((candidate) => candidate.id === pack.activeVersionId);
-    if (!version) return [];
+  return packs
+    .flatMap((pack) => {
+      const version = versions.find(
+        (candidate) => candidate.id === pack.activeVersionId,
+      );
+      if (!version) return [];
 
-    return [
-      {
-        packId: pack.id,
-        packName: pack.name,
-        artifactType: pack.artifactType,
-        versionId: version.id,
-        version: version.version,
-        targetScope: pack.targetScope,
-        metadata: (pack.metadata as Record<string, unknown>) ?? {},
-        artifact: (version.artifact as Record<string, unknown>) ?? {},
-        updatedAt: version.updatedAt,
-      },
-    ];
-  })
+      return [
+        {
+          packId: pack.id,
+          packName: pack.name,
+          artifactType: pack.artifactType,
+          versionId: version.id,
+          version: version.version,
+          targetScope: pack.targetScope,
+          metadata: (pack.metadata as Record<string, unknown>) ?? {},
+          artifact: (version.artifact as Record<string, unknown>) ?? {},
+          updatedAt: version.updatedAt,
+        },
+      ];
+    })
     .map((item) => ({
       item,
       score: scorePackScope({
@@ -146,17 +146,26 @@ export async function listActiveExpertGuidance(params: {
       }),
     }))
     .filter((entry) => entry.score >= 0)
-    .sort((left, right) => right.score - left.score || right.item.updatedAt.getTime() - left.item.updatedAt.getTime())
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        right.item.updatedAt.getTime() - left.item.updatedAt.getTime(),
+    )
     .map((entry) => entry.item);
 }
 
-export function renderExpertGuidanceContext(guidance: ExpertGuidanceArtifact[]) {
+export function renderExpertGuidanceContext(
+  guidance: ExpertGuidanceArtifact[],
+) {
   if (guidance.length === 0) return "";
 
   return guidance
     .map((item) => {
       const artifactLines = Object.entries(item.artifact)
-        .map(([key, value]) => `- ${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`)
+        .map(
+          ([key, value]) =>
+            `- ${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`,
+        )
         .join("\n");
 
       return [

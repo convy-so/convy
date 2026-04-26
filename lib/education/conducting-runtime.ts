@@ -378,7 +378,10 @@ ${input.messages.map((message) => `${message.role}: ${message.content}`).join("\
     model: analysisModel,
     temperature: 0.1,
     maxTokens: 1200,
-    surveyId: input.surveyId,
+    attribution: {
+      surveyId: input.surveyId,
+      feature: "survey-conducting-turn-evaluation",
+    },
   });
 
   return normalizeTurnAnalysisResult(safeJsonParse(raw));

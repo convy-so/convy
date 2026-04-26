@@ -516,8 +516,11 @@ Respond to the user in the language they are speaking to you in. Match the langu
           ];
 
     const result = streamAIResponse(modelMessages, systemPrompt, {
-      surveyId,
-      userId: session.user.id,
+      attribution: {
+        surveyId,
+        userId: session.user.id,
+        feature: "survey-conducting-sample",
+      },
       maxTokens: 500,
       temperature: 0.4,
       promptCache: {
