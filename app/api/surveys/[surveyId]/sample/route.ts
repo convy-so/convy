@@ -300,7 +300,11 @@ export async function POST(
         language: getSurveyLanguage(survey.language),
         mode: "sample",
       }),
-      getDynamicFewShotExamples({ feature: "survey_conducting", limit: 3 }),
+      getDynamicFewShotExamples({
+        feature: "survey_conducting",
+        limit: 3,
+        context: [survey.title, planRow.plan.nodes[0]?.label].filter(Boolean).join(" | "),
+      }),
     ]);
 
     let [sampleConversation] = await getDb()

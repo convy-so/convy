@@ -34,10 +34,10 @@ export interface SearchResult {
 }
 
 function normalizeMetadata(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null
-    ? Object.fromEntries(Object.entries(value))
-    : {};
+  if (typeof value !== "object" || value === null) return {};
+  return Object.fromEntries(Object.entries(value));
 }
+
 
 export async function vectorSearch(
   query: string,
