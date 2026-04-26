@@ -30,7 +30,7 @@ export async function rerank(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          query,
+          query: `Instruction: Prioritize documents that provide strong pedagogical value, clear evidence of student understanding, or exact few-shot examples for AI tutoring and surveys. Focus on educational utility and structural relevance.\nQuery: ${query}`,
           documents,
           model: "rerank-2",
           top_k: topK,
@@ -99,7 +99,8 @@ export async function rerank(
             .describe("Indices of the candidates in order of relevance (0-based)"),
         }),
       }),
-      system: `You are a search quality rater. Your task is to rank the following search results based on their relevance to the user's query.
+      system: `You are an expert educational search quality rater for a pedagogical AI platform. Your task is to rank the following search results based on their relevance to the user's query.
+Instruction: Prioritize documents that provide strong pedagogical value, clear evidence of student understanding, or exact few-shot examples for AI tutoring and surveys. Focus on educational utility and structural relevance over superficial keyword matches.
 Return the indices of the most relevant results, ordered from most relevant to least relevant.
 Ignore results that are irrelevant to the query.`,
       prompt: `Query: "${query}"

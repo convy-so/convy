@@ -122,7 +122,11 @@ export async function processRespondentTurn(params: {
         language: language || (survey.language) || "en",
         mode: "live",
       }),
-      getDynamicFewShotExamples({ feature: "survey_conducting", limit: 3 }),
+      getDynamicFewShotExamples({
+        feature: "survey_conducting",
+        limit: 3,
+        context: [survey.title, coveragePlan.plan.nodes[0]?.label, latestUserMessage].filter(Boolean).join(" | "),
+      }),
     ]);
 
   const promptParts = buildConductingSystemPromptParts({

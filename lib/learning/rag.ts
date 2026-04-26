@@ -19,8 +19,6 @@ const langConfigMap: Record<string, string> = {
   en: "english",
   fr: "french",
   de: "german",
-  es: "spanish",
-  it: "italian",
 };
 
 function buildMaterialRetrievalContent(params: {

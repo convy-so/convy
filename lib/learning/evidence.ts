@@ -60,8 +60,6 @@ const langConfigMap: Record<string, string> = {
   en: "english",
   fr: "french",
   de: "german",
-  es: "spanish",
-  it: "italian",
 };
 
 function buildLearningEvidenceContent(params: {
@@ -627,6 +625,18 @@ export async function answerTeacherStudentQuestion(params: {
     }),
   ]);
 
+  // --- Post-Retrieval Deterministic Deduplication ---
+  // Create a fast lookup Set of all source IDs retrieved via semantic RAG
+  const ragSourceIds = new Set(retrievedEvidence.map((item) => item.sourceId));
+
+  // Filter out any recent fallbacks that already exist in the RAG evidence pool.
+  // We keep the RAG version because it contains the semantic relevance `score`
+  // which the LLM uses for weighting its conclusions.
+  const uniqueReports = reports.filter((report) => !ragSourceIds.has(report.id));
+  const uniqueInteractions = interactions.filter(
+    (interaction) => !ragSourceIds.has(interaction.id),
+  );
+
   return await generateStructuredOutput({
     schema: teacherEvidenceAnswerSchema,
 
@@ -648,18 +658,18 @@ ${JSON.stringify(
       })),
     )}
 
-Recent reports fallback:
+Recent reports fallback (excluding exact matches above):
 ${JSON.stringify(
-      reports.map((report) => ({
+      uniqueReports.map((report) => ({
         topicTitle: report.topic?.title ?? null,
         masteryPercent: report.masteryPercent,
         report: report.report,
       })),
     )}
 
-Recent interactions fallback:
+Recent interactions fallback (excluding exact matches above):
 ${JSON.stringify(
-      interactions.map((interaction) => ({
+      uniqueInteractions.map((interaction) => ({
         topicTitle: interaction.topic?.title ?? null,
         role: interaction.role,
         interactionType: interaction.interactionType,

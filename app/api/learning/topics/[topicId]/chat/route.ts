@@ -336,7 +336,11 @@ export async function POST(
         latestStudentMessage: latestUserText,
         latestTutorMessage: previousAssistant?.content ?? null,
       }),
-      getDynamicFewShotExamples({ feature: "tutoring", limit: 3 }),
+      getDynamicFewShotExamples({
+        feature: "tutoring",
+        limit: 3,
+        context: [latestUserText, access.topic.title, access.topic.subject].filter(Boolean).join(" | "),
+      }),
     ]);
 
     const { createTutorTools } = await import("@/lib/learning/agent-tools");

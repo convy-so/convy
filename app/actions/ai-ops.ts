@@ -8,10 +8,12 @@ import { getDb } from "@/db";
 import {
   expertGuidancePacks,
   expertGuidanceVersions,
+  fewShotExamples,
 } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { hasAiOpsAccess } from "@/lib/auth/expert";
 import { getPlatformRole } from "@/lib/auth/roles";
+import { indexFewShotExample } from "@/lib/ai/few-shot-library";
 import type { CoreAiFeature } from "@/lib/ai/types";
 
 async function requireAiOpsSession(authHeaders?: Headers | string | null) {
@@ -228,3 +230,48 @@ export async function activateExpertGuidanceVersion(input: {
     status: "approved" as const,
   };
 }
+
+export async function listExpertFewShotExamples(
+  authHeaders?: Headers | string | null,
+) {
+  await requireAiOpsSession(authHeaders);
+
+  return await getDb().query.fewShotExamples.findMany({
+    orderBy: [desc(fewShotExamples.updatedAt)],
+    limit: 50,
+  });
+}
+
+export async function createExpertFewShotExample(input: {
+  feature: string;
+  tags: string[];
+  content: Record<string, unknown>;
+  isActive?: boolean;
+}) {
+  const session = await requireAiOpsSession();
+  const [example] = await getDb()
+    .insert(fewShotExamples)
+    .values({
+      id: nanoid(),
+      feature: input.feature,
+      tags: input.tags,
+      content: input.content,
+      isActive: input.isActive ?? true,
+      createdByUserId: session.user.id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .returning();
+
+  // Kick off embedding + retrieval content indexing immediately so the
+  // new example is searchable via HNSW + BM25 on the very next request.
+  await indexFewShotExample({
+    id: example.id,
+    feature: input.feature,
+    tags: input.tags,
+    content: input.content,
+  });
+
+  return example;
+}
+
