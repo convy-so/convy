@@ -33,7 +33,10 @@ export class ExpertTutorModelService {
     }
 
     const [approvedCrystallizations, openConflicts] = await Promise.all([
-      listApprovedCrystallizations({ topicId: params.topicId }),
+      listApprovedCrystallizations({
+        topicId: params.topicId,
+        frameworkVersionId: frameworkVersion.id,
+      }),
       listOpenConflicts({ topicId: params.topicId }),
     ]);
 

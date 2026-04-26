@@ -1,8 +1,16 @@
 export function buildCrystallizationPrompt(params: {
   reviewCases: Array<Record<string, unknown>>;
   framework: Record<string, unknown>;
+  scope: "general" | "framework_specific";
 }) {
+  const scopeInstruction = params.scope === "general"
+    ? "Focus on universal pedagogical principles that apply regardless of the specific framework stages. Avoid mentioning specific framework stage IDs unless they are fundamental concepts."
+    : "Focus on improving the specific framework provided. You may reference specific framework stage IDs and objectives to create precise patches for the current framework structure.";
+
   return `Crystallize reusable pedagogical knowledge from these expert-reviewed tutoring cases.
+
+SCOPE: ${params.scope.toUpperCase()}
+${scopeInstruction}
 
 Framework:
 ${JSON.stringify(params.framework)}

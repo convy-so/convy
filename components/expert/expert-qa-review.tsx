@@ -61,6 +61,7 @@ export function ExpertQaReview() {
   const [annotationSummary, setAnnotationSummary] = useState("");
   const [annotationEvidence, setAnnotationEvidence] = useState("");
   const [annotationType, setAnnotationType] = useState("reasoning_gap");
+  const [relevanceScope, setRelevanceScope] = useState<"general" | "framework_specific">("general");
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
   // Queries
@@ -110,11 +111,11 @@ export function ExpertQaReview() {
           topicId: selectedQueueItem.topicId,
           sessionId: selectedQueueItem.sessionId,
           classroomStudentId: selectedQueueItem.classroomStudentId,
-          subjectKey: selectedQueueItem.subjectKey,
-          annotationType,
-          status: "reviewed",
-          summary: annotationSummary.trim(),
-          evidence: annotationEvidence.trim(),
+          reviewType: annotationType,
+          priority: selectedQueueItem.priority,
+          tutorFailureSummary: annotationSummary.trim(),
+          expertCorrection: annotationEvidence.trim(),
+          relevanceScope,
           metadata: {
             reviewQueueKey: selectedQueueItem.key,
             reasons: selectedQueueItem.reasons,
@@ -321,6 +322,39 @@ export function ExpertQaReview() {
                       <option value="rubric_improvement">Rubric Improvement</option>
                       <option value="hint_ladder">Hint Ladder</option>
                     </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                      Relevance Scope
+                    </label>
+                    <div className="space-y-2">
+                      <label className={cn(
+                        "flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all",
+                        relevanceScope === "general" ? "border-slate-900 bg-slate-50" : "border-slate-200"
+                      )}>
+                        <input 
+                          type="radio" 
+                          name="scope" 
+                          className="w-3 h-3 text-slate-900" 
+                          checked={relevanceScope === "general"} 
+                          onChange={() => setRelevanceScope("general")} 
+                        />
+                        <span className="text-xs font-medium">General Pedagogy</span>
+                      </label>
+                      <label className={cn(
+                        "flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all",
+                        relevanceScope === "framework_specific" ? "border-slate-900 bg-slate-50" : "border-slate-200"
+                      )}>
+                        <input 
+                          type="radio" 
+                          name="scope" 
+                          className="w-3 h-3 text-slate-900" 
+                          checked={relevanceScope === "framework_specific"} 
+                          onChange={() => setRelevanceScope("framework_specific")} 
+                        />
+                        <span className="text-xs font-medium">Framework Specific</span>
+                      </label>
+                    </div>
                   </div>
                   <button
                     type="button"

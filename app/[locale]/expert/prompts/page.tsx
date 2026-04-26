@@ -1,5 +1,5 @@
 import { listExpertGuidanceSummary, listExpertFewShotExamples } from "@/app/actions/ai-ops";
-import { FewShotManager } from "@/components/admin/few-shot-manager";
+import { FewShotManager } from "@/components/expert/few-shot-manager";
 
 export default async function PromptsLibraryPage() {
   const [guidancePacks, fewShotExamples] = await Promise.all([

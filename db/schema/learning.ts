@@ -606,6 +606,11 @@ export const expertReviewCases = pgTable(
     reviewType: text("review_type").notNull(),
     tutorFailureSummary: text("tutor_failure_summary").notNull(),
     expertCorrection: text("expert_correction").notNull(),
+    relevanceScope: text("relevance_scope").default("general").notNull(),
+    frameworkVersionId: text("framework_version_id").references(
+      () => expertFrameworkVersions.id,
+      { onDelete: "set null" },
+    ),
     reusableSignal: boolean("reusable_signal").default(true).notNull(),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
     createdByUserId: text("created_by_user_id").references(() => users.id, {
@@ -619,6 +624,10 @@ export const expertReviewCases = pgTable(
     check(
       "expert_review_cases_status_check",
       sql`${table.status} in ('open', 'crystallized', 'dismissed')`,
+    ),
+    check(
+      "expert_review_cases_relevance_scope_check",
+      sql`${table.relevanceScope} in ('general', 'framework_specific')`,
     ),
   ],
 );
@@ -675,6 +684,7 @@ export const expertCrystallizations = pgTable(
       { onDelete: "set null" },
     ),
     status: text("status").default("draft").notNull(),
+    relevanceScope: text("relevance_scope").default("general").notNull(),
     title: text("title").notNull(),
     heuristic: jsonb("heuristic").$type<ExpertHeuristic>().notNull(),
     sourceReviewCaseIds: jsonb("source_review_case_ids")
@@ -697,6 +707,10 @@ export const expertCrystallizations = pgTable(
     check(
       "expert_crystallizations_status_check",
       sql`${table.status} in ('draft', 'approved', 'archived')`,
+    ),
+    check(
+      "expert_crystallizations_relevance_scope_check",
+      sql`${table.relevanceScope} in ('general', 'framework_specific')`,
     ),
   ],
 );

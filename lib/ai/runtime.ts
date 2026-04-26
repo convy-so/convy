@@ -44,10 +44,6 @@ export async function generateStructuredOutput<TSchema extends z.ZodTypeAny>(
       output: Output.object({
         schema: params.schema,
       }),
-      experimental_telemetry: {
-        isEnabled: true,
-        functionId: "generate_structured_output",
-      },
     });
 
     const usageInput: UsageLogInput = {

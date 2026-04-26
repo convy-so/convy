@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { ExpertSidebar } from "@/components/admin/expert-sidebar";
+import { ExpertSidebar } from "@/components/expert/expert-sidebar";
 import { hasAiOpsAccess } from "@/lib/auth/expert";
 import { getVerifiedSession } from "@/lib/auth/session";
 

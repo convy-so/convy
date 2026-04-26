@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, Library, Workflow, ShieldCheck, ChevronLeft, LogOut } from "lucide-react";
+import { LayoutDashboard, Library, Workflow, ShieldCheck, ChevronLeft, LogOut, Brain } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { authClient } from "@/lib/auth-client";
@@ -16,6 +16,7 @@ export function ExpertSidebar() {
     { name: "Prompt Library", href: "/expert/prompts", icon: Library },
     { name: "Frameworks", href: "/expert/frameworks", icon: Workflow },
     { name: "QA Review", href: "/expert/qa", icon: ShieldCheck },
+    { name: "Knowledge Inbox", href: "/expert/knowledge", icon: Brain },
   ];
 
   const handleSignOut = async () => {

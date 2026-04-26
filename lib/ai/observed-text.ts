@@ -90,10 +90,6 @@ export async function generateObservedText(
       rawParams.providerOptions as ProviderOptions | undefined,
       preparedCache.providerOptions,
     ),
-    experimental_telemetry: {
-      isEnabled: true,
-      functionId: "generate_observed_text",
-    },
   });
 
   const usageInput: UsageLogInput = {
