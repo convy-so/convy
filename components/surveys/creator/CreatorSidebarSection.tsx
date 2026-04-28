@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Users,
   CheckCircle2,
   Sparkles,
   Loader2,
@@ -13,15 +12,20 @@ import { MediaUploadFlow } from "@/components/surveys/media-upload-flow";
 
 interface CreatorSidebarSectionProps {
   surveyId: string | null;
-  collectedInfo: any;
-  extractedData: any;
-  mediaDecision: any;
+  collectedInfo: Record<string, unknown> | null;
+  extractedData: Record<string, unknown> | null;
+  mediaDecision: {
+    recommendation?: string;
+    allowedTypes?: string[];
+    rationale?: string;
+    suggestedDescription?: string;
+    suggestedFeedbackFocus?: string;
+  };
   mediaDecisionResolved: boolean;
-  resolveLocalMediaToolResult: (id: string, output: any) => void;
+  resolveLocalMediaToolResult: (id: string, output: Record<string, unknown>) => void;
   isReadyForSample: boolean;
   isFinalizing: boolean;
   handleGoToSampleConversations: () => void;
-  t: (key: string) => string;
 }
 
 export function CreatorSidebarSection({
@@ -34,7 +38,6 @@ export function CreatorSidebarSection({
   isReadyForSample,
   isFinalizing,
   handleGoToSampleConversations,
-  t,
 }: CreatorSidebarSectionProps) {
   return (
     <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-gray-100 bg-gray-50/30 flex flex-col min-h-0">
@@ -83,7 +86,7 @@ export function CreatorSidebarSection({
             <div className="p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
               <MediaUploadFlow
                 surveyId={surveyId}
-                allowedTypes={mediaDecision.allowedTypes}
+                allowedTypes={mediaDecision.allowedTypes ?? []}
                 recommendation={mediaDecision.recommendation || "add_media"}
                 rationale={mediaDecision.rationale}
                 aiDescription={mediaDecision.suggestedDescription}
@@ -117,18 +120,24 @@ export function CreatorSidebarSection({
               Brief Summary
             </h3>
             <div className="p-4 bg-white rounded-2xl border border-gray-100 shadow-sm space-y-4">
-              {extractedData.objective?.goal && (
+              {typeof extractedData.objective === "object" &&
+              extractedData.objective !== null &&
+              "goal" in extractedData.objective &&
+              typeof extractedData.objective.goal === "string" ? (
                 <div>
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">Goal</p>
                   <p className="text-xs text-gray-600 line-clamp-2 mt-0.5">{extractedData.objective.goal}</p>
                 </div>
-              )}
-              {extractedData.targetAudience?.description && (
+              ) : null}
+              {typeof extractedData.targetAudience === "object" &&
+              extractedData.targetAudience !== null &&
+              "description" in extractedData.targetAudience &&
+              typeof extractedData.targetAudience.description === "string" ? (
                 <div>
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">Audience</p>
                   <p className="text-xs text-gray-600 line-clamp-2 mt-0.5">{extractedData.targetAudience.description}</p>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         )}

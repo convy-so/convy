@@ -10,22 +10,18 @@ import {
   getLatestAnalyticsSnapshot,
   listEvidenceForSurveyByType,
   listSurveySessionInsightsByType,
-  listAnalyticsFactsForSurveyByType,
   replaceAnalyticsSnapshot,
   listSurveySessionsByType,
 } from "./storage";
 import {
-  analyticsFactSchema,
   conversationInsightSchema,
   evidenceRecordSchema,
   researchBriefSchema,
-  type AnalyticsFact,
   type AnalyticsGenerationMetadata,
   type AnalyticsSnapshot,
   type ConversationInsight,
   type EvidenceRecord,
   type ResearchBrief,
-  type CoveragePlan,
 } from "./types";
 import { replaceEmbeddedSource } from "@/lib/rag/indexer";
 import { buildSessionInsight } from "./analytics-session-service";

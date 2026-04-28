@@ -6,10 +6,6 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { getStudentTopicAccess } from "@/lib/learning/access";
 import { extractMessageText, toPersistedUIChatMessages, toUIMessages } from "@/lib/chat-ui-messages";
 import {
-  normalizeMessages as toModelMessages,
-  streamAIResponse,
-} from "@/lib/ai";
-import {
   appendLearningMessage,
   createLearningSession,
   getActiveLearningSession,

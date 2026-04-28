@@ -16,7 +16,7 @@ export async function PATCH(
     const result = await updateLearningInterventionAction({
       ...updatePayload,
       interventionId,
-    } as any);
+    } as Parameters<typeof updateLearningInterventionAction>[0]);
     return NextResponse.json(result, { status: result.success ? 200 : 400 });
   } catch (error) {
     return NextResponse.json(

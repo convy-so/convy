@@ -28,6 +28,8 @@ const LEARNING_MATERIAL_EXTENSION_ALLOWLIST = new Set([
   "json",
 ]);
 
+const AUDIO_UPLOAD_MIME_PREFIX = "audio/";
+
 
 
 function getFileExtension(filename: string) {
@@ -53,6 +55,14 @@ export function assertLearningMaterialFile(file: FileLike, detectedMimeType?: st
 
   if (!LEARNING_MATERIAL_MIME_ALLOWLIST.has(mimeType)) {
     throw new Error("Unsupported learning material format");
+  }
+}
+
+export function assertAudioUploadFile(file: FileLike) {
+  assertFileSize(file, MAX_AUDIO_UPLOAD_BYTES, "Audio upload");
+  const mimeType = (file.type || "").toLowerCase();
+  if (!mimeType.startsWith(AUDIO_UPLOAD_MIME_PREFIX)) {
+    throw new Error("Unsupported audio format");
   }
 }
 

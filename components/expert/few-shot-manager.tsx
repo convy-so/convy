@@ -6,13 +6,12 @@ import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 
 import { createExpertFewShotExample } from "@/app/actions/ai-ops";
-import { cn } from "@/lib/utils";
 
 type FewShotExample = {
   id: string;
   feature: string;
-  tags: string[];
-  content: any;
+  tags: string[] | null;
+  content: Record<string, unknown>;
   isActive: boolean;
 };
 
@@ -55,7 +54,7 @@ export function FewShotManager({ initialExamples }: FewShotManagerProps) {
       let parsedContent;
       try {
         parsedContent = JSON.parse(contentJson);
-      } catch (e) {
+      } catch {
         toast.error("Invalid JSON content");
         return;
       }
@@ -71,7 +70,7 @@ export function FewShotManager({ initialExamples }: FewShotManagerProps) {
       setTags([]);
       setTagInput("");
       router.refresh();
-    } catch (error) {
+    } catch {
       toast.error("Failed to create example");
     } finally {
       setIsPending(false);
@@ -173,7 +172,7 @@ export function FewShotManager({ initialExamples }: FewShotManagerProps) {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-400 uppercase">{example.feature}</span>
                 <div className="flex gap-1.5">
-                  {example.tags.map(tag => (
+                  {(example.tags ?? []).map(tag => (
                     <span key={tag} className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-600 ring-1 ring-inset ring-indigo-500/20">
                       <TagIcon className="h-2.5 w-2.5" />
                       {tag}

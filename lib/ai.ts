@@ -89,40 +89,6 @@ function getProviderName(model: LanguageModel) {
     : "google";
 }
 
-function maybeReadTextResult(result: { text?: string | null }) {
-  return typeof result.text === "string" && result.text.trim().length > 0
-    ? result.text
-    : null;
-}
-
-function mergeRunMetadata(
-  base: Record<string, unknown> | undefined,
-  systemPrompt: string | undefined,
-  staticSystemPrompt: string | undefined,
-) {
-  return {
-    ...(base ?? {}),
-    ...(systemPrompt
-      ? {
-          dynamicSystemPromptPreview:
-            systemPrompt.length > 400
-              ? `${systemPrompt.slice(0, 397)}...`
-              : systemPrompt,
-        }
-      : {}),
-    ...(staticSystemPrompt
-      ? {
-          staticSystemPromptPreview:
-            staticSystemPrompt.length > 240
-              ? `${staticSystemPrompt.slice(0, 237)}...`
-              : staticSystemPrompt,
-        }
-      : {}),
-  };
-}
-
-
-
 export async function generateAIResponse(
   prompt: string,
   systemPrompt?: string,
@@ -150,7 +116,6 @@ export async function generateAIResponse(
   }
 
   const model = options?.model ?? defaultModel;
-  const startedAt = Date.now();
   const resolvedPrompt = resolvePromptExecution({
     prompt,
     systemPrompt,
@@ -203,9 +168,8 @@ export async function generateAIResponse(
 
 
     return result.text;
-  } catch (error) {
-
-    throw error;
+  } catch (err) {
+    throw err;
   }
 }
 
@@ -240,7 +204,6 @@ export function streamAIResponse(
   })();
 
   const model = options?.model ?? defaultModel;
-  const startedAt = Date.now();
   const resolvedPrompt = resolvePromptExecution({
     systemPrompt,
     promptSpec: options?.promptSpec,
@@ -303,8 +266,7 @@ export function streamAIResponse(
       logUsage(usageInput);
 
     },
-    onError: ({ error }) => {
-
+    onError: () => {
     },
   });
 }

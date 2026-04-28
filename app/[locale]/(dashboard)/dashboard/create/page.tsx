@@ -149,8 +149,6 @@ function CreateSurveyContent() {
   const isLoading = status === "streaming" || status === "submitted";
 
   const {
-    isSupported: isVoiceInputSupported,
-    phase: transcriptionPhase,
     startTranscription,
     stopRecording,
   } = useAudioTranscription({
@@ -801,7 +799,6 @@ function CreateSurveyContent() {
                   handleKeyDown={handleKeyDown}
                   setCreationVoiceMode={setCreationVoiceMode}
                   messagesEndRef={messagesEndRef}
-                  t={t}
                 />
 
                 {/* Sidebar Section */}
@@ -815,7 +812,6 @@ function CreateSurveyContent() {
                   isReadyForSample={isReadyForSample}
                   isFinalizing={isFinalizing}
                   handleGoToSampleConversations={handleGoToSampleConversations}
-                  t={t}
                 />
               </div>
             )}
