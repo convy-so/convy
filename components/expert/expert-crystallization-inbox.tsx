@@ -56,7 +56,7 @@ export function ExpertCrystallizationInbox({
       setDrafts(drafts.filter((d) => d.id !== id));
       setEditingId(null);
       toast.success("Heuristic approved and added to Runtime Model");
-    } catch (error) {
+    } catch {
       toast.error("Failed to approve heuristic");
     } finally {
       setIsProcessing(null);
@@ -71,7 +71,7 @@ export function ExpertCrystallizationInbox({
       await rejectCrystallization(id);
       setDrafts(drafts.filter((d) => d.id !== id));
       toast.success("Heuristic archived");
-    } catch (error) {
+    } catch {
       toast.error("Failed to reject heuristic");
     } finally {
       setIsProcessing(null);

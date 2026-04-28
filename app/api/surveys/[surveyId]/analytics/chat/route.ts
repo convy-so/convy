@@ -8,13 +8,11 @@ import type { ChatSessionMessage } from "@/db/schema/surveys";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { askAnalyticsQuestion } from "@/lib/education/analytics-workflow";
 import { normalizeSpeechToTextLanguage } from "@/lib/voice/voice-locales";
-import { getUserPreferredLanguage } from "@/lib/translation-service";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/survey-access";
 import { z } from "zod";
-import { normalizeAppLocale } from "@/lib/i18n/config";
 
 export const maxDuration = 300;
 
@@ -121,10 +119,6 @@ export async function POST(
       );
     }
 
-    const responseLanguage = normalizeAppLocale(
-      body.language ??
-        (await getUserPreferredLanguage(session.user.id).catch(() => "en")),
-    );
     const answer = await askAnalyticsQuestion({
       surveyId,
       question,

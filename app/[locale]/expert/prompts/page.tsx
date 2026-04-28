@@ -1,6 +1,9 @@
 import { listExpertGuidanceSummary, listExpertFewShotExamples } from "@/app/actions/ai-ops";
 import { FewShotManager } from "@/components/expert/few-shot-manager";
 
+type GuidancePackSummary = Awaited<ReturnType<typeof listExpertGuidanceSummary>>[number];
+type FewShotExampleItem = Awaited<ReturnType<typeof listExpertFewShotExamples>>[number];
+
 export default async function PromptsLibraryPage() {
   const [guidancePacks, fewShotExamples] = await Promise.all([
     listExpertGuidanceSummary(),
@@ -23,7 +26,7 @@ export default async function PromptsLibraryPage() {
       <div className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
         <div className="space-y-6">
           <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
-            <FewShotManager initialExamples={fewShotExamples as any} />
+            <FewShotManager initialExamples={fewShotExamples as FewShotExampleItem[]} />
           </div>
         </div>
 
@@ -42,7 +45,7 @@ export default async function PromptsLibraryPage() {
                   No guidance packs found.
                 </div>
               ) : (
-                guidancePacks.map((pack: any) => (
+                guidancePacks.map((pack: GuidancePackSummary) => (
                   <div key={pack.id} className="rounded-xl border border-slate-100 bg-[#FAFAFA] p-4 flex items-center justify-between transition-colors hover:bg-slate-50">
                     <div>
                       <div className="font-semibold text-slate-950">{pack.name}</div>

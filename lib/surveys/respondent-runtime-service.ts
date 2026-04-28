@@ -3,6 +3,7 @@ import {
   createUIMessageStreamResponse,
   stepCountIs,
   tool,
+  type UIMessage,
 } from "ai";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
@@ -38,13 +39,35 @@ import type { RespondentLanguage } from "@/lib/respondent-conversation";
 export async function processRespondentTurn(params: {
   survey: typeof surveys.$inferSelect;
   conversation: typeof surveyConversations.$inferSelect;
-  brief: any;
-  coveragePlan: any;
-  sessionRow: any;
-  canonicalTurn: any;
+  brief: unknown;
+  coveragePlan: unknown;
+  sessionRow: unknown;
+  canonicalTurn: unknown;
   language?: RespondentLanguage;
 }) {
-  const { survey, conversation, brief, coveragePlan, sessionRow, canonicalTurn, language } = params;
+  const { survey, conversation, language } = params;
+  const brief = params.brief as { brief: unknown };
+  const coveragePlan = params.coveragePlan as {
+    plan: {
+      nodes: Array<{ label?: string }>;
+      completionRule: { minimumRequiredNodeCoverage: number };
+    };
+  };
+  const sessionRow = params.sessionRow as {
+    id: string;
+    sessionState: {
+      status: string;
+      overallCoverage: number;
+      stopReason?: string;
+      [key: string]: unknown;
+    };
+  };
+  const canonicalTurn = params.canonicalTurn as {
+    canonicalMessages: ChatMessage[];
+    latestUserMessage: string;
+    storedMessages: ChatMessage[];
+    originalMessages: unknown[];
+  };
   const visibleMessages = canonicalTurn.canonicalMessages;
   const latestUserMessage = canonicalTurn.latestUserMessage;
 
@@ -130,9 +153,13 @@ export async function processRespondentTurn(params: {
     ]);
 
   const promptParts = buildConductingSystemPromptParts({
-    brief: brief.brief,
-    coveragePlan: coveragePlan.plan,
-    sessionState: sessionRow.sessionState,
+    brief: brief.brief as Parameters<typeof buildConductingSystemPromptParts>[0]["brief"],
+    coveragePlan: coveragePlan.plan as Parameters<
+      typeof buildConductingSystemPromptParts
+    >[0]["coveragePlan"],
+    sessionState: sessionRow.sessionState as Parameters<
+      typeof buildConductingSystemPromptParts
+    >[0]["sessionState"],
     sessionType: "live",
     conductingProfile:
       activeLiveProfile?.profile ?? sampleFallbackProfile?.profile ?? null,
@@ -184,7 +211,10 @@ Respond to the user in the language they are speaking to you in. Match the langu
             status: "completed",
             stopReason: "agent_finish_signal",
           };
-          await updateSessionState(sessionRow.id, currentSessionState);
+          await updateSessionState(
+            sessionRow.id,
+            currentSessionState as Parameters<typeof updateSessionState>[1],
+          );
         }
 
         completedByTool = true;
@@ -194,8 +224,8 @@ Respond to the user in the language they are speaking to you in. Match the langu
   };
 
   // Sanitize conversation history before sending to the model
-  const sanitizedMessages = (canonicalTurn.originalMessages as any[]).map((m) => {
-    if (m.role === "user") {
+  const sanitizedMessages = (canonicalTurn.originalMessages as unknown as Array<Record<string, unknown>>).map((m) => {
+    if (m.role === "user" && typeof m.content === "string") {
       return {
         ...m,
         content: sanitizeUserInput(m.content, {
@@ -207,7 +237,7 @@ Respond to the user in the language they are speaking to you in. Match the langu
     return m;
   });
 
-  const modelMessages = await toModelMessages(sanitizedMessages);
+  const modelMessages = await toModelMessages(sanitizedMessages as unknown[]);
 
   const result = streamAIResponse(
     modelMessages,
@@ -230,7 +260,7 @@ Respond to the user in the language they are speaking to you in. Match the langu
   );
 
   return result.toUIMessageStreamResponse({
-    originalMessages: canonicalTurn.originalMessages,
+    originalMessages: canonicalTurn.originalMessages as UIMessage[],
     onFinish: async ({ messages }) => {
       const persistedMessages = toVisibleConversationMessages(
         toPersistedUIChatMessages(messages, ["user", "assistant"]),
@@ -251,9 +281,13 @@ Respond to the user in the language they are speaking to you in. Match the langu
           const { nextState } = await finalizeConductingTurn({
             surveyId: survey.id,
             sessionId: sessionRow.id,
-            brief: brief.brief,
-            coveragePlan: coveragePlan.plan,
-            sessionState: currentSessionState,
+            brief: brief.brief as Parameters<typeof finalizeConductingTurn>[0]["brief"],
+            coveragePlan: coveragePlan.plan as Parameters<
+              typeof finalizeConductingTurn
+            >[0]["coveragePlan"],
+            sessionState: currentSessionState as Parameters<
+              typeof finalizeConductingTurn
+            >[0]["sessionState"],
             messages: persistedMessages,
           });
           currentSessionState = nextState;

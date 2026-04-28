@@ -1,5 +1,4 @@
 import { and, desc, eq } from "drizzle-orm";
-import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { surveyConversations, surveys } from "@/db/schema";
 import {
@@ -17,7 +16,6 @@ import {
 import {
   RESPONDENT_RESUME_QUERY_PARAM,
   resolveRespondentAccess,
-  getRespondentSessionCookieName,
 } from "@/lib/privacy/respondent";
 import { getClientIP } from "@/lib/ratelimit";
 import { 
@@ -213,7 +211,9 @@ export async function POST(
     }
 
     const firstUserTurn = !conversation.rawConversation || 
-      !(conversation.rawConversation as any[]).some(m => m.role === "user");
+      !(conversation.rawConversation as Array<{ role?: string }>).some(
+        (m) => m.role === "user",
+      );
 
     if (firstUserTurn) {
       const admission = await admitParticipantOnFirstUserTurn({
@@ -253,11 +253,10 @@ export async function POST(
       coveragePlan: planRow,
       sessionRow,
       canonicalTurn,
-      language: language as any,
+      language,
     });
   } catch (error) {
     console.error("[Respondent POST] Error:", error);
     return jsonNoStore({ error: "Internal server error" }, { status: 500 });
   }
 }
-

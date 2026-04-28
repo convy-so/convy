@@ -5,15 +5,14 @@ import {
   Mic,
   Loader2,
   Sparkles,
-  Play,
-  CheckCircle2,
 } from "lucide-react";
+import type { UIMessage } from "ai";
 import { cn } from "@/lib/utils";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 import { getDisplayedMessageText } from "@/lib/surveys/message-normalizer";
 
 interface CreatorChatSectionProps {
-  messages: any[];
+  messages: UIMessage[];
   isLoading: boolean;
   isResearching: boolean;
   isInitializing: boolean;
@@ -25,7 +24,6 @@ interface CreatorChatSectionProps {
   handleKeyDown: (e: React.KeyboardEvent) => void;
   setCreationVoiceMode: (enabled: boolean) => void;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
-  t: (key: string) => string;
 }
 
 export function CreatorChatSection({
@@ -41,7 +39,6 @@ export function CreatorChatSection({
   handleKeyDown,
   setCreationVoiceMode,
   messagesEndRef,
-  t,
 }: CreatorChatSectionProps) {
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-white">
@@ -50,7 +47,7 @@ export function CreatorChatSection({
           const isUser = message.role === "user";
           const text = getDisplayedMessageText(message);
           
-          if (!text && !message.parts?.some((p: any) => p.type === "tool-call")) return null;
+          if (!text && !message.parts?.some((p) => p.type === "tool-call")) return null;
 
           return (
             <div

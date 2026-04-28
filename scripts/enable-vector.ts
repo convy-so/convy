@@ -1,8 +1,8 @@
 import { Pool } from "pg";
-import * as dotenv from "dotenv";
 import * as path from "path";
+import { loadEnvConfig } from "@next/env";
 
-dotenv.config({ path: path.join(process.cwd(), ".env") });
+loadEnvConfig(path.join(process.cwd()));
 
 async function enableVector() {
   const connectionString = process.env.DATABASE_URL;

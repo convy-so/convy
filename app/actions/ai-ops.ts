@@ -143,57 +143,6 @@ export async function createExpertGuidanceVersion(input: {
   return version;
 }
 
-function readMetadataString(metadata: Record<string, unknown> | null | undefined, key: string) {
-  return typeof metadata?.[key] === "string" ? (metadata[key] as string) : null;
-}
-
-function getPackScopeValidation(pack: {
-  targetScope: string;
-  metadata: Record<string, unknown> | null;
-}) {
-  const metadata = pack.metadata ?? {};
-
-  switch (pack.targetScope) {
-    case "global":
-      return { valid: true, reason: null as string | null };
-    case "classroom":
-      return {
-        valid: Boolean(readMetadataString(metadata, "classroomId")),
-        reason: "classroom-scoped packs must include metadata.classroomId",
-      };
-    case "topic":
-      return {
-        valid: Boolean(readMetadataString(metadata, "topicId")),
-        reason: "topic-scoped packs must include metadata.topicId",
-      };
-    case "subject":
-      return {
-        valid: Boolean(readMetadataString(metadata, "subjectKey")),
-        reason: "subject-scoped packs must include metadata.subjectKey",
-      };
-    case "grade_band":
-      return {
-        valid: Boolean(readMetadataString(metadata, "gradeBand")),
-        reason: "grade-band-scoped packs must include metadata.gradeBand",
-      };
-    case "language":
-      return {
-        valid: Boolean(readMetadataString(metadata, "language")),
-        reason: "language-scoped packs must include metadata.language",
-      };
-    case "program":
-      return {
-        valid: Boolean(readMetadataString(metadata, "programId")),
-        reason: "program-scoped packs must include metadata.programId",
-      };
-    default:
-      return {
-        valid: false,
-        reason: `Unsupported target scope: ${pack.targetScope}`,
-      };
-  }
-}
-
 export async function activateExpertGuidanceVersion(input: {
   packId: string;
   versionId: string;
@@ -274,4 +223,3 @@ export async function createExpertFewShotExample(input: {
 
   return example;
 }
-

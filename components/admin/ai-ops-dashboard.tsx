@@ -3,15 +3,7 @@ import {
   listExpertGuidanceSummary,
 } from "@/app/actions/ai-ops";
 
-function formatDate(value: Date | string | null | undefined) {
-  if (!value) return "Unknown";
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
+type GuidancePackSummary = Awaited<ReturnType<typeof listExpertGuidanceSummary>>[number];
 
 export async function AiOpsDashboard() {
   const [overview, guidancePacks] = await Promise.all([
@@ -55,7 +47,7 @@ export async function AiOpsDashboard() {
                   No active guidance packs found in production.
                 </div>
               ) : (
-                guidancePacks.map((pack: any) => (
+                guidancePacks.map((pack: GuidancePackSummary) => (
                   <div key={pack.id} className="rounded-xl border border-slate-100 bg-[#FAFAFA] p-4 flex items-center justify-between transition-colors hover:bg-slate-50">
                     <div>
                       <div className="font-semibold text-slate-950">{pack.name}</div>
@@ -83,4 +75,3 @@ export async function AiOpsDashboard() {
     </div>
   );
 }
-
