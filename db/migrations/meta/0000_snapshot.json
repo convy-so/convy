@@ -1,5 +1,5 @@
 {
-  "id": "a07c80b1-fa8e-4069-a86c-6775e8a4f8ae",
+  "id": "a3ae3c83-fe2a-4a22-88d3-d03b6c9d7975",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -324,17 +324,19 @@
           "notNull": false,
           "default": "'{}'"
         },
-        "user_message": {
-          "name": "user_message",
+        "retrieval_content": {
+          "name": "retrieval_content",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "''"
         },
-        "assistant_message": {
-          "name": "assistant_message",
-          "type": "text",
+        "content": {
+          "name": "content",
+          "type": "jsonb",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "'{}'::jsonb"
         },
         "is_active": {
           "name": "is_active",
@@ -362,6 +364,12 @@
           "primaryKey": false,
           "notNull": false,
           "default": "'{}'::jsonb"
+        },
+        "embedding": {
+          "name": "embedding",
+          "type": "vector(1024)",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -393,6 +401,67 @@
           "isUnique": false,
           "concurrently": false,
           "method": "btree",
+          "with": {}
+        },
+        "few_shot_examples_embedding_hnsw_idx": {
+          "name": "few_shot_examples_embedding_hnsw_idx",
+          "columns": [
+            {
+              "expression": "embedding",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last",
+              "opclass": "vector_cosine_ops"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "hnsw",
+          "with": {}
+        },
+        "few_shot_examples_retrieval_en_idx": {
+          "name": "few_shot_examples_retrieval_en_idx",
+          "columns": [
+            {
+              "expression": "to_tsvector('english', \"retrieval_content\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "few_shot_examples_retrieval_de_idx": {
+          "name": "few_shot_examples_retrieval_de_idx",
+          "columns": [
+            {
+              "expression": "to_tsvector('german', \"retrieval_content\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "few_shot_examples_retrieval_fr_idx": {
+          "name": "few_shot_examples_retrieval_fr_idx",
+          "columns": [
+            {
+              "expression": "to_tsvector('french', \"retrieval_content\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
           "with": {}
         }
       },
@@ -656,102 +725,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.user_emails": {
-      "name": "user_emails",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "email": {
-          "name": "email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "email_verified": {
-          "name": "email_verified",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "verification_token": {
-          "name": "verification_token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "user_emails_user_id_idx": {
-          "name": "user_emails_user_id_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "user_emails_user_id_users_id_fk": {
-          "name": "user_emails_user_id_users_id_fk",
-          "tableFrom": "user_emails",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "user_emails_email_unique": {
-          "name": "user_emails_email_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.users": {
       "name": "users",
       "schema": "",
@@ -964,6 +937,12 @@
         },
         "survey_id": {
           "name": "survey_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "feature": {
+          "name": "feature",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -1269,311 +1248,6 @@
           ]
         }
       },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.survey_outbox": {
-      "name": "survey_outbox",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "survey_id": {
-          "name": "survey_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "channel": {
-          "name": "channel",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "event_type": {
-          "name": "event_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "claim_owner": {
-          "name": "claim_owner",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "claimed_at": {
-          "name": "claimed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "claim_expires_at": {
-          "name": "claim_expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "publish_attempts": {
-          "name": "publish_attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "last_error": {
-          "name": "last_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "published_at": {
-          "name": "published_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "survey_outbox_survey_idx": {
-          "name": "survey_outbox_survey_idx",
-          "columns": [
-            {
-              "expression": "survey_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "published_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "survey_outbox_unpublished_created_idx": {
-          "name": "survey_outbox_unpublished_created_idx",
-          "columns": [
-            {
-              "expression": "published_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "survey_outbox_reclaim_idx": {
-          "name": "survey_outbox_reclaim_idx",
-          "columns": [
-            {
-              "expression": "published_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "claim_expires_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "survey_outbox_survey_id_surveys_id_fk": {
-          "name": "survey_outbox_survey_id_surveys_id_fk",
-          "tableFrom": "survey_outbox",
-          "tableTo": "surveys",
-          "columnsFrom": [
-            "survey_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.survey_realtime_events": {
-      "name": "survey_realtime_events",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "survey_id": {
-          "name": "survey_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "revision": {
-          "name": "revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "event_type": {
-          "name": "event_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "actor_id": {
-          "name": "actor_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "survey_realtime_events_survey_idx": {
-          "name": "survey_realtime_events_survey_idx",
-          "columns": [
-            {
-              "expression": "survey_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "revision",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "survey_realtime_events_type_idx": {
-          "name": "survey_realtime_events_type_idx",
-          "columns": [
-            {
-              "expression": "event_type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "survey_realtime_events_survey_id_surveys_id_fk": {
-          "name": "survey_realtime_events_survey_id_surveys_id_fk",
-          "tableFrom": "survey_realtime_events",
-          "tableTo": "surveys",
-          "columnsFrom": [
-            "survey_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "survey_realtime_events_actor_id_users_id_fk": {
-          "name": "survey_realtime_events_actor_id_users_id_fk",
-          "tableFrom": "survey_realtime_events",
-          "tableTo": "users",
-          "columnsFrom": [
-            "actor_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -1938,69 +1612,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.idempotency_keys": {
-      "name": "idempotency_keys",
-      "schema": "",
-      "columns": {
-        "key": {
-          "name": "key",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "operation": {
-          "name": "operation",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "response_body": {
-          "name": "response_body",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "response_status": {
-          "name": "response_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "locked_at": {
-          "name": "locked_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.document_embeddings": {
       "name": "document_embeddings",
       "schema": "",
@@ -2133,7 +1744,7 @@
         },
         "embedding": {
           "name": "embedding",
-          "type": "vector(1536)",
+          "type": "vector(1024)",
           "primaryKey": false,
           "notNull": false
         }
@@ -2337,199 +1948,6 @@
           "tableTo": "surveys",
           "columnsFrom": [
             "survey_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.voice_chunks": {
-      "name": "voice_chunks",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "session_id": {
-          "name": "session_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "chunk_type": {
-          "name": "chunk_type",
-          "type": "voice_chunk_type",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "duration_ms": {
-          "name": "duration_ms",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "size_bytes": {
-          "name": "size_bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "transcription": {
-          "name": "transcription",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "synthesis_text": {
-          "name": "synthesis_text",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cost": {
-          "name": "cost",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'0'"
-        },
-        "had_speech": {
-          "name": "had_speech",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": true
-        },
-        "vad_probability": {
-          "name": "vad_probability",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "processing_time_ms": {
-          "name": "processing_time_ms",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "voice_chunks_session_id_idx": {
-          "name": "voice_chunks_session_id_idx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "voice_chunks_session_id_voice_sessions_id_fk": {
-          "name": "voice_chunks_session_id_voice_sessions_id_fk",
-          "tableFrom": "voice_chunks",
-          "tableTo": "voice_sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.voice_quality_metrics": {
-      "name": "voice_quality_metrics",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "session_id": {
-          "name": "session_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "metric_type": {
-          "name": "metric_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "metric_value": {
-          "name": "metric_value",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "timestamp": {
-          "name": "timestamp",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "voice_quality_metrics_session_id_idx": {
-          "name": "voice_quality_metrics_session_id_idx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "voice_quality_metrics_session_id_voice_sessions_id_fk": {
-          "name": "voice_quality_metrics_session_id_voice_sessions_id_fk",
-          "tableFrom": "voice_quality_metrics",
-          "tableTo": "voice_sessions",
-          "columnsFrom": [
-            "session_id"
           ],
           "columnsTo": [
             "id"
@@ -5968,12 +5386,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'interest_profile_pending'"
-        },
-        "last_active_at": {
-          "name": "last_active_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -6412,6 +5824,13 @@
           "notNull": true,
           "default": "'draft'"
         },
+        "relevance_scope": {
+          "name": "relevance_scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'general'"
+        },
         "title": {
           "name": "title",
           "type": "text",
@@ -6530,6 +5949,10 @@
         "expert_crystallizations_status_check": {
           "name": "expert_crystallizations_status_check",
           "value": "\"expert_crystallizations\".\"status\" in ('draft', 'approved', 'archived')"
+        },
+        "expert_crystallizations_relevance_scope_check": {
+          "name": "expert_crystallizations_relevance_scope_check",
+          "value": "\"expert_crystallizations\".\"relevance_scope\" in ('general', 'framework_specific')"
         }
       },
       "isRLSEnabled": false
@@ -6881,6 +6304,19 @@
           "primaryKey": false,
           "notNull": true
         },
+        "relevance_scope": {
+          "name": "relevance_scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'general'"
+        },
+        "framework_version_id": {
+          "name": "framework_version_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "reusable_signal": {
           "name": "reusable_signal",
           "type": "boolean",
@@ -7002,6 +6438,19 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
+        "expert_review_cases_framework_version_id_expert_framework_versions_id_fk": {
+          "name": "expert_review_cases_framework_version_id_expert_framework_versions_id_fk",
+          "tableFrom": "expert_review_cases",
+          "tableTo": "expert_framework_versions",
+          "columnsFrom": [
+            "framework_version_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
         "expert_review_cases_created_by_user_id_users_id_fk": {
           "name": "expert_review_cases_created_by_user_id_users_id_fk",
           "tableFrom": "expert_review_cases",
@@ -7023,6 +6472,10 @@
         "expert_review_cases_status_check": {
           "name": "expert_review_cases_status_check",
           "value": "\"expert_review_cases\".\"status\" in ('open', 'crystallized', 'dismissed')"
+        },
+        "expert_review_cases_relevance_scope_check": {
+          "name": "expert_review_cases_relevance_scope_check",
+          "value": "\"expert_review_cases\".\"relevance_scope\" in ('general', 'framework_specific')"
         }
       },
       "isRLSEnabled": false
@@ -7197,132 +6650,6 @@
           "value": "\"expert_runtime_models\".\"status\" in ('draft', 'published', 'archived')"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.external_media_cache": {
-      "name": "external_media_cache",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "external_id": {
-          "name": "external_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_url": {
-          "name": "source_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "asset_type": {
-          "name": "asset_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "thumbnail_url": {
-          "name": "thumbnail_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "transcript": {
-          "name": "transcript",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "duration_seconds": {
-          "name": "duration_seconds",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "metadata": {
-          "name": "metadata",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'{}'::jsonb"
-        },
-        "approved_for_direct_use": {
-          "name": "approved_for_direct_use",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        }
-      },
-      "indexes": {
-        "external_media_cache_provider_idx": {
-          "name": "external_media_cache_provider_idx",
-          "columns": [
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "external_media_cache_provider_external_unique": {
-          "name": "external_media_cache_provider_external_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "provider",
-            "external_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.learning_evidence_embeddings": {
@@ -7511,7 +6838,7 @@
         },
         "embedding": {
           "name": "embedding",
-          "type": "vector(1536)",
+          "type": "vector(1024)",
           "primaryKey": false,
           "notNull": false
         }
@@ -7712,36 +7039,6 @@
           "columns": [
             {
               "expression": "to_tsvector('french', \"retrieval_content\")",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "gin",
-          "with": {}
-        },
-        "learning_evidence_embeddings_retrieval_es_idx": {
-          "name": "learning_evidence_embeddings_retrieval_es_idx",
-          "columns": [
-            {
-              "expression": "to_tsvector('spanish', \"retrieval_content\")",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "gin",
-          "with": {}
-        },
-        "learning_evidence_embeddings_retrieval_it_idx": {
-          "name": "learning_evidence_embeddings_retrieval_it_idx",
-          "columns": [
-            {
-              "expression": "to_tsvector('italian', \"retrieval_content\")",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -8374,7 +7671,7 @@
         },
         "embedding": {
           "name": "embedding",
-          "type": "vector(1536)",
+          "type": "vector(1024)",
           "primaryKey": false,
           "notNull": false
         }
@@ -8527,36 +7824,6 @@
           "columns": [
             {
               "expression": "to_tsvector('french', \"retrieval_content\")",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "gin",
-          "with": {}
-        },
-        "learning_material_embeddings_retrieval_es_idx": {
-          "name": "learning_material_embeddings_retrieval_es_idx",
-          "columns": [
-            {
-              "expression": "to_tsvector('spanish', \"retrieval_content\")",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "gin",
-          "with": {}
-        },
-        "learning_material_embeddings_retrieval_it_idx": {
-          "name": "learning_material_embeddings_retrieval_it_idx",
-          "columns": [
-            {
-              "expression": "to_tsvector('italian', \"retrieval_content\")",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -10549,12 +9816,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "external_media_id": {
-          "name": "external_media_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "topic_id": {
           "name": "topic_id",
           "type": "text",
@@ -10672,19 +9933,6 @@
           "tableTo": "teaching_media_assets",
           "columnsFrom": [
             "asset_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "teaching_media_usage_events_external_media_id_external_media_cache_id_fk": {
-          "name": "teaching_media_usage_events_external_media_id_external_media_cache_id_fk",
-          "tableFrom": "teaching_media_usage_events",
-          "tableTo": "external_media_cache",
-          "columnsFrom": [
-            "external_media_id"
           ],
           "columnsTo": [
             "id"

@@ -42,12 +42,13 @@ CREATE TABLE "few_shot_examples" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"feature" text NOT NULL,
 	"tags" text[] DEFAULT '{}',
-	"user_message" text NOT NULL,
-	"assistant_message" text NOT NULL,
+	"retrieval_content" text DEFAULT '' NOT NULL,
+	"content" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"is_active" boolean DEFAULT true NOT NULL,
 	"owned_by_role" text DEFAULT 'expert' NOT NULL,
 	"created_by_user_id" text,
-	"metadata" jsonb DEFAULT '{}'::jsonb
+	"metadata" jsonb DEFAULT '{}'::jsonb,
+	"embedding" vector(1024)
 );
 --> statement-breakpoint
 CREATE TABLE "accounts" (
@@ -78,17 +79,6 @@ CREATE TABLE "sessions" (
 	"user_agent" text,
 	"impersonated_by" text,
 	CONSTRAINT "sessions_token_unique" UNIQUE("token")
-);
---> statement-breakpoint
-CREATE TABLE "user_emails" (
-	"id" text PRIMARY KEY NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"user_id" text NOT NULL,
-	"email" text NOT NULL,
-	"email_verified" boolean DEFAULT false NOT NULL,
-	"verification_token" text,
-	CONSTRAINT "user_emails_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
 CREATE TABLE "users" (
@@ -124,6 +114,7 @@ CREATE TABLE "usage_logs" (
 	"user_id" text,
 	"project_id" text,
 	"survey_id" text,
+	"feature" text,
 	"type" text NOT NULL,
 	"provider" text NOT NULL,
 	"model_name" text,
@@ -146,33 +137,6 @@ CREATE TABLE "survey_edit_leases" (
 	"expires_at" timestamp with time zone NOT NULL,
 	"last_heartbeat_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "survey_edit_leases_survey_id_stage_pk" PRIMARY KEY("survey_id","stage")
-);
---> statement-breakpoint
-CREATE TABLE "survey_outbox" (
-	"id" text PRIMARY KEY NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"survey_id" text NOT NULL,
-	"channel" text NOT NULL,
-	"event_type" text NOT NULL,
-	"payload" jsonb NOT NULL,
-	"claim_owner" text,
-	"claimed_at" timestamp with time zone,
-	"claim_expires_at" timestamp with time zone,
-	"publish_attempts" integer DEFAULT 0 NOT NULL,
-	"last_error" text,
-	"published_at" timestamp with time zone
-);
---> statement-breakpoint
-CREATE TABLE "survey_realtime_events" (
-	"id" text PRIMARY KEY NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"survey_id" text NOT NULL,
-	"revision" integer NOT NULL,
-	"event_type" text NOT NULL,
-	"actor_id" text NOT NULL,
-	"payload" jsonb NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "survey_revisions" (
@@ -208,17 +172,6 @@ CREATE TABLE "folders" (
 	"icon" text
 );
 --> statement-breakpoint
-CREATE TABLE "idempotency_keys" (
-	"key" text PRIMARY KEY NOT NULL,
-	"user_id" text,
-	"operation" text NOT NULL,
-	"response_body" jsonb,
-	"response_status" text,
-	"locked_at" timestamp with time zone DEFAULT now(),
-	"expires_at" timestamp with time zone NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
 CREATE TABLE "document_embeddings" (
 	"id" text PRIMARY KEY NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -240,30 +193,7 @@ CREATE TABLE "document_embeddings" (
 	"retrieval_content" text DEFAULT '' NOT NULL,
 	"content" text NOT NULL,
 	"metadata" jsonb DEFAULT '{}'::jsonb,
-	"embedding" vector(1536)
-);
---> statement-breakpoint
-CREATE TABLE "voice_chunks" (
-	"id" text PRIMARY KEY NOT NULL,
-	"session_id" text NOT NULL,
-	"chunk_type" "voice_chunk_type" NOT NULL,
-	"duration_ms" integer NOT NULL,
-	"size_bytes" integer NOT NULL,
-	"transcription" text,
-	"synthesis_text" text,
-	"cost" numeric DEFAULT '0',
-	"had_speech" boolean DEFAULT true,
-	"vad_probability" text,
-	"processing_time_ms" integer,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "voice_quality_metrics" (
-	"id" text PRIMARY KEY NOT NULL,
-	"session_id" text NOT NULL,
-	"metric_type" text NOT NULL,
-	"metric_value" text NOT NULL,
-	"timestamp" timestamp with time zone DEFAULT now() NOT NULL
+	"embedding" vector(1024)
 );
 --> statement-breakpoint
 CREATE TABLE "voice_sessions" (
@@ -593,7 +523,6 @@ CREATE TABLE "classroom_students" (
 	"email" text NOT NULL,
 	"invite_status" text DEFAULT 'pending' NOT NULL,
 	"onboarding_status" text DEFAULT 'interest_profile_pending' NOT NULL,
-	"last_active_at" timestamp with time zone,
 	CONSTRAINT "classroom_students_classroom_email_unique" UNIQUE("classroom_id","email")
 );
 --> statement-breakpoint
@@ -634,13 +563,15 @@ CREATE TABLE "expert_crystallizations" (
 	"topic_id" text,
 	"framework_version_id" text,
 	"status" text DEFAULT 'draft' NOT NULL,
+	"relevance_scope" text DEFAULT 'general' NOT NULL,
 	"title" text NOT NULL,
 	"heuristic" jsonb NOT NULL,
 	"source_review_case_ids" jsonb DEFAULT '[]'::jsonb,
 	"notes" text,
 	"approved_by_user_id" text,
 	"approved_at" timestamp with time zone,
-	CONSTRAINT "expert_crystallizations_status_check" CHECK ("expert_crystallizations"."status" in ('draft', 'approved', 'archived'))
+	CONSTRAINT "expert_crystallizations_status_check" CHECK ("expert_crystallizations"."status" in ('draft', 'approved', 'archived')),
+	CONSTRAINT "expert_crystallizations_relevance_scope_check" CHECK ("expert_crystallizations"."relevance_scope" in ('general', 'framework_specific'))
 );
 --> statement-breakpoint
 CREATE TABLE "expert_framework_versions" (
@@ -684,10 +615,13 @@ CREATE TABLE "expert_review_cases" (
 	"review_type" text NOT NULL,
 	"tutor_failure_summary" text NOT NULL,
 	"expert_correction" text NOT NULL,
+	"relevance_scope" text DEFAULT 'general' NOT NULL,
+	"framework_version_id" text,
 	"reusable_signal" boolean DEFAULT true NOT NULL,
 	"metadata" jsonb DEFAULT '{}'::jsonb,
 	"created_by_user_id" text,
-	CONSTRAINT "expert_review_cases_status_check" CHECK ("expert_review_cases"."status" in ('open', 'crystallized', 'dismissed'))
+	CONSTRAINT "expert_review_cases_status_check" CHECK ("expert_review_cases"."status" in ('open', 'crystallized', 'dismissed')),
+	CONSTRAINT "expert_review_cases_relevance_scope_check" CHECK ("expert_review_cases"."relevance_scope" in ('general', 'framework_specific'))
 );
 --> statement-breakpoint
 CREATE TABLE "expert_runtime_models" (
@@ -705,24 +639,6 @@ CREATE TABLE "expert_runtime_models" (
 	"published_by_user_id" text,
 	CONSTRAINT "expert_runtime_models_topic_version_unique" UNIQUE("topic_id","version"),
 	CONSTRAINT "expert_runtime_models_status_check" CHECK ("expert_runtime_models"."status" in ('draft', 'published', 'archived'))
-);
---> statement-breakpoint
-CREATE TABLE "external_media_cache" (
-	"id" text PRIMARY KEY NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"provider" text NOT NULL,
-	"external_id" text NOT NULL,
-	"source_url" text NOT NULL,
-	"title" text NOT NULL,
-	"description" text,
-	"asset_type" text NOT NULL,
-	"thumbnail_url" text,
-	"transcript" text,
-	"duration_seconds" integer,
-	"metadata" jsonb DEFAULT '{}'::jsonb,
-	"approved_for_direct_use" boolean DEFAULT false NOT NULL,
-	CONSTRAINT "external_media_cache_provider_external_unique" UNIQUE("provider","external_id")
 );
 --> statement-breakpoint
 CREATE TABLE "learning_evidence_embeddings" (
@@ -755,7 +671,7 @@ CREATE TABLE "learning_evidence_embeddings" (
 	"retrieval_content" text DEFAULT '' NOT NULL,
 	"content" text NOT NULL,
 	"metadata" jsonb DEFAULT '{}'::jsonb,
-	"embedding" vector(1536)
+	"embedding" vector(1024)
 );
 --> statement-breakpoint
 CREATE TABLE "learning_interactions" (
@@ -814,7 +730,7 @@ CREATE TABLE "learning_material_embeddings" (
 	"retrieval_content" text DEFAULT '' NOT NULL,
 	"content" text NOT NULL,
 	"metadata" jsonb DEFAULT '{}'::jsonb,
-	"embedding" vector(1536)
+	"embedding" vector(1024)
 );
 --> statement-breakpoint
 CREATE TABLE "learning_messages" (
@@ -995,7 +911,6 @@ CREATE TABLE "teaching_media_usage_events" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"asset_id" text,
-	"external_media_id" text,
 	"topic_id" text,
 	"session_id" text,
 	"classroom_student_id" text,
@@ -1101,22 +1016,16 @@ ALTER TABLE "expert_guidance_versions" ADD CONSTRAINT "expert_guidance_versions_
 ALTER TABLE "few_shot_examples" ADD CONSTRAINT "few_shot_examples_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "user_emails" ADD CONSTRAINT "user_emails_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "usage_logs" ADD CONSTRAINT "usage_logs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "usage_logs" ADD CONSTRAINT "usage_logs_project_id_folders_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."folders"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "usage_logs" ADD CONSTRAINT "usage_logs_survey_id_surveys_id_fk" FOREIGN KEY ("survey_id") REFERENCES "public"."surveys"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "survey_edit_leases" ADD CONSTRAINT "survey_edit_leases_survey_id_surveys_id_fk" FOREIGN KEY ("survey_id") REFERENCES "public"."surveys"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "survey_edit_leases" ADD CONSTRAINT "survey_edit_leases_holder_user_id_users_id_fk" FOREIGN KEY ("holder_user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "survey_outbox" ADD CONSTRAINT "survey_outbox_survey_id_surveys_id_fk" FOREIGN KEY ("survey_id") REFERENCES "public"."surveys"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "survey_realtime_events" ADD CONSTRAINT "survey_realtime_events_survey_id_surveys_id_fk" FOREIGN KEY ("survey_id") REFERENCES "public"."surveys"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "survey_realtime_events" ADD CONSTRAINT "survey_realtime_events_actor_id_users_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "survey_revisions" ADD CONSTRAINT "survey_revisions_survey_id_surveys_id_fk" FOREIGN KEY ("survey_id") REFERENCES "public"."surveys"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "platform_feedback" ADD CONSTRAINT "platform_feedback_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "platform_feedback" ADD CONSTRAINT "platform_feedback_classroom_student_id_classroom_students_id_fk" FOREIGN KEY ("classroom_student_id") REFERENCES "public"."classroom_students"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "folders" ADD CONSTRAINT "folders_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "document_embeddings" ADD CONSTRAINT "document_embeddings_survey_id_surveys_id_fk" FOREIGN KEY ("survey_id") REFERENCES "public"."surveys"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "voice_chunks" ADD CONSTRAINT "voice_chunks_session_id_voice_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."voice_sessions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "voice_quality_metrics" ADD CONSTRAINT "voice_quality_metrics_session_id_voice_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."voice_sessions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "voice_sessions" ADD CONSTRAINT "voice_sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "voice_sessions" ADD CONSTRAINT "voice_sessions_survey_id_surveys_id_fk" FOREIGN KEY ("survey_id") REFERENCES "public"."surveys"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -1179,6 +1088,7 @@ ALTER TABLE "expert_review_cases" ADD CONSTRAINT "expert_review_cases_topic_id_l
 ALTER TABLE "expert_review_cases" ADD CONSTRAINT "expert_review_cases_classroom_student_id_classroom_students_id_fk" FOREIGN KEY ("classroom_student_id") REFERENCES "public"."classroom_students"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "expert_review_cases" ADD CONSTRAINT "expert_review_cases_session_id_learning_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."learning_sessions"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "expert_review_cases" ADD CONSTRAINT "expert_review_cases_interaction_id_learning_interactions_id_fk" FOREIGN KEY ("interaction_id") REFERENCES "public"."learning_interactions"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "expert_review_cases" ADD CONSTRAINT "expert_review_cases_framework_version_id_expert_framework_versions_id_fk" FOREIGN KEY ("framework_version_id") REFERENCES "public"."expert_framework_versions"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "expert_review_cases" ADD CONSTRAINT "expert_review_cases_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "expert_runtime_models" ADD CONSTRAINT "expert_runtime_models_topic_id_learning_topics_id_fk" FOREIGN KEY ("topic_id") REFERENCES "public"."learning_topics"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "expert_runtime_models" ADD CONSTRAINT "expert_runtime_models_framework_id_expert_frameworks_id_fk" FOREIGN KEY ("framework_id") REFERENCES "public"."expert_frameworks"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -1224,7 +1134,6 @@ ALTER TABLE "teaching_media_bindings" ADD CONSTRAINT "teaching_media_bindings_as
 ALTER TABLE "teaching_media_bindings" ADD CONSTRAINT "teaching_media_bindings_topic_id_learning_topics_id_fk" FOREIGN KEY ("topic_id") REFERENCES "public"."learning_topics"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "teaching_media_bindings" ADD CONSTRAINT "teaching_media_bindings_classroom_id_classrooms_id_fk" FOREIGN KEY ("classroom_id") REFERENCES "public"."classrooms"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "teaching_media_usage_events" ADD CONSTRAINT "teaching_media_usage_events_asset_id_teaching_media_assets_id_fk" FOREIGN KEY ("asset_id") REFERENCES "public"."teaching_media_assets"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "teaching_media_usage_events" ADD CONSTRAINT "teaching_media_usage_events_external_media_id_external_media_cache_id_fk" FOREIGN KEY ("external_media_id") REFERENCES "public"."external_media_cache"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "teaching_media_usage_events" ADD CONSTRAINT "teaching_media_usage_events_topic_id_learning_topics_id_fk" FOREIGN KEY ("topic_id") REFERENCES "public"."learning_topics"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "teaching_media_usage_events" ADD CONSTRAINT "teaching_media_usage_events_session_id_learning_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."learning_sessions"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "teaching_media_usage_events" ADD CONSTRAINT "teaching_media_usage_events_classroom_student_id_classroom_students_id_fk" FOREIGN KEY ("classroom_student_id") REFERENCES "public"."classroom_students"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -1244,9 +1153,12 @@ CREATE INDEX "expert_guidance_packs_status_idx" ON "expert_guidance_packs" USING
 CREATE INDEX "expert_guidance_versions_pack_id_idx" ON "expert_guidance_versions" USING btree ("pack_id");--> statement-breakpoint
 CREATE INDEX "few_shot_examples_feature_idx" ON "few_shot_examples" USING btree ("feature");--> statement-breakpoint
 CREATE INDEX "few_shot_examples_active_idx" ON "few_shot_examples" USING btree ("is_active");--> statement-breakpoint
+CREATE INDEX "few_shot_examples_embedding_hnsw_idx" ON "few_shot_examples" USING hnsw ("embedding" vector_cosine_ops);--> statement-breakpoint
+CREATE INDEX "few_shot_examples_retrieval_en_idx" ON "few_shot_examples" USING gin (to_tsvector('english', "retrieval_content"));--> statement-breakpoint
+CREATE INDEX "few_shot_examples_retrieval_de_idx" ON "few_shot_examples" USING gin (to_tsvector('german', "retrieval_content"));--> statement-breakpoint
+CREATE INDEX "few_shot_examples_retrieval_fr_idx" ON "few_shot_examples" USING gin (to_tsvector('french', "retrieval_content"));--> statement-breakpoint
 CREATE INDEX "accounts_user_id_idx" ON "accounts" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "sessions_user_id_idx" ON "sessions" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "user_emails_user_id_idx" ON "user_emails" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "verification_identifier_idx" ON "verification_tokens" USING btree ("identifier");--> statement-breakpoint
 CREATE INDEX "usage_logs_user_id_idx" ON "usage_logs" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "usage_logs_survey_id_idx" ON "usage_logs" USING btree ("survey_id");--> statement-breakpoint
@@ -1254,11 +1166,6 @@ CREATE INDEX "usage_logs_created_at_idx" ON "usage_logs" USING btree ("created_a
 CREATE INDEX "usage_logs_type_idx" ON "usage_logs" USING btree ("type");--> statement-breakpoint
 CREATE INDEX "survey_edit_leases_holder_user_id_idx" ON "survey_edit_leases" USING btree ("holder_user_id");--> statement-breakpoint
 CREATE INDEX "survey_edit_leases_expires_at_idx" ON "survey_edit_leases" USING btree ("expires_at");--> statement-breakpoint
-CREATE INDEX "survey_outbox_survey_idx" ON "survey_outbox" USING btree ("survey_id","published_at");--> statement-breakpoint
-CREATE INDEX "survey_outbox_unpublished_created_idx" ON "survey_outbox" USING btree ("published_at","created_at");--> statement-breakpoint
-CREATE INDEX "survey_outbox_reclaim_idx" ON "survey_outbox" USING btree ("published_at","claim_expires_at","created_at");--> statement-breakpoint
-CREATE INDEX "survey_realtime_events_survey_idx" ON "survey_realtime_events" USING btree ("survey_id","revision");--> statement-breakpoint
-CREATE INDEX "survey_realtime_events_type_idx" ON "survey_realtime_events" USING btree ("event_type");--> statement-breakpoint
 CREATE INDEX "platform_feedback_status_idx" ON "platform_feedback" USING btree ("status","created_at");--> statement-breakpoint
 CREATE INDEX "platform_feedback_kind_idx" ON "platform_feedback" USING btree ("kind");--> statement-breakpoint
 CREATE INDEX "platform_feedback_role_idx" ON "platform_feedback" USING btree ("submitter_role");--> statement-breakpoint
@@ -1277,8 +1184,6 @@ CREATE INDEX "document_embeddings_retrieval_de_idx" ON "document_embeddings" USI
 CREATE INDEX "document_embeddings_retrieval_fr_idx" ON "document_embeddings" USING gin (to_tsvector('french', "retrieval_content"));--> statement-breakpoint
 CREATE INDEX "document_embeddings_retrieval_es_idx" ON "document_embeddings" USING gin (to_tsvector('spanish', "retrieval_content"));--> statement-breakpoint
 CREATE INDEX "document_embeddings_retrieval_it_idx" ON "document_embeddings" USING gin (to_tsvector('italian', "retrieval_content"));--> statement-breakpoint
-CREATE INDEX "voice_chunks_session_id_idx" ON "voice_chunks" USING btree ("session_id");--> statement-breakpoint
-CREATE INDEX "voice_quality_metrics_session_id_idx" ON "voice_quality_metrics" USING btree ("session_id");--> statement-breakpoint
 CREATE INDEX "voice_sessions_user_id_idx" ON "voice_sessions" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "voice_sessions_survey_id_idx" ON "voice_sessions" USING btree ("survey_id");--> statement-breakpoint
 CREATE INDEX "voice_sessions_started_at_idx" ON "voice_sessions" USING btree ("started_at");--> statement-breakpoint
@@ -1346,7 +1251,6 @@ CREATE INDEX "expert_review_cases_topic_idx" ON "expert_review_cases" USING btre
 CREATE INDEX "expert_review_cases_student_idx" ON "expert_review_cases" USING btree ("classroom_student_id");--> statement-breakpoint
 CREATE INDEX "expert_review_cases_session_idx" ON "expert_review_cases" USING btree ("session_id");--> statement-breakpoint
 CREATE INDEX "expert_runtime_models_topic_idx" ON "expert_runtime_models" USING btree ("topic_id");--> statement-breakpoint
-CREATE INDEX "external_media_cache_provider_idx" ON "external_media_cache" USING btree ("provider");--> statement-breakpoint
 CREATE INDEX "learning_evidence_embeddings_topic_idx" ON "learning_evidence_embeddings" USING btree ("topic_id");--> statement-breakpoint
 CREATE INDEX "learning_evidence_embeddings_classroom_idx" ON "learning_evidence_embeddings" USING btree ("classroom_id");--> statement-breakpoint
 CREATE INDEX "learning_evidence_embeddings_student_idx" ON "learning_evidence_embeddings" USING btree ("classroom_student_id");--> statement-breakpoint
@@ -1359,8 +1263,6 @@ CREATE UNIQUE INDEX "learning_evidence_embeddings_source_chunk_unique" ON "learn
 CREATE INDEX "learning_evidence_embeddings_retrieval_en_idx" ON "learning_evidence_embeddings" USING gin (to_tsvector('english', "retrieval_content"));--> statement-breakpoint
 CREATE INDEX "learning_evidence_embeddings_retrieval_de_idx" ON "learning_evidence_embeddings" USING gin (to_tsvector('german', "retrieval_content"));--> statement-breakpoint
 CREATE INDEX "learning_evidence_embeddings_retrieval_fr_idx" ON "learning_evidence_embeddings" USING gin (to_tsvector('french', "retrieval_content"));--> statement-breakpoint
-CREATE INDEX "learning_evidence_embeddings_retrieval_es_idx" ON "learning_evidence_embeddings" USING gin (to_tsvector('spanish', "retrieval_content"));--> statement-breakpoint
-CREATE INDEX "learning_evidence_embeddings_retrieval_it_idx" ON "learning_evidence_embeddings" USING gin (to_tsvector('italian', "retrieval_content"));--> statement-breakpoint
 CREATE INDEX "learning_interactions_student_id_idx" ON "learning_interactions" USING btree ("classroom_student_id");--> statement-breakpoint
 CREATE INDEX "learning_interactions_topic_id_idx" ON "learning_interactions" USING btree ("topic_id");--> statement-breakpoint
 CREATE INDEX "learning_interactions_session_id_idx" ON "learning_interactions" USING btree ("session_id");--> statement-breakpoint
@@ -1379,8 +1281,6 @@ CREATE UNIQUE INDEX "learning_material_embeddings_material_chunk_unique" ON "lea
 CREATE INDEX "learning_material_embeddings_retrieval_en_idx" ON "learning_material_embeddings" USING gin (to_tsvector('english', "retrieval_content"));--> statement-breakpoint
 CREATE INDEX "learning_material_embeddings_retrieval_de_idx" ON "learning_material_embeddings" USING gin (to_tsvector('german', "retrieval_content"));--> statement-breakpoint
 CREATE INDEX "learning_material_embeddings_retrieval_fr_idx" ON "learning_material_embeddings" USING gin (to_tsvector('french', "retrieval_content"));--> statement-breakpoint
-CREATE INDEX "learning_material_embeddings_retrieval_es_idx" ON "learning_material_embeddings" USING gin (to_tsvector('spanish', "retrieval_content"));--> statement-breakpoint
-CREATE INDEX "learning_material_embeddings_retrieval_it_idx" ON "learning_material_embeddings" USING gin (to_tsvector('italian', "retrieval_content"));--> statement-breakpoint
 CREATE INDEX "learning_messages_session_id_idx" ON "learning_messages" USING btree ("session_id");--> statement-breakpoint
 CREATE INDEX "learning_sessions_topic_id_idx" ON "learning_sessions" USING btree ("topic_id");--> statement-breakpoint
 CREATE INDEX "learning_sessions_student_id_idx" ON "learning_sessions" USING btree ("classroom_student_id");--> statement-breakpoint

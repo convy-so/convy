@@ -1,77 +1,77 @@
 {
     "Index":  {
                   "title":  "Convyy",
-                  "description":  "Sondages alimentÃƒÂ©s par l\u0027IA"
+                  "description":  "Sondages alimentés par l\u0027IA"
               },
     "Survey":  {
                    "Create":  {
                                   "Title":  {
-                                                "Create":  "CrÃƒÂ©er un nouveau sondage",
-                                                "View":  "Voir la conversation de crÃƒÂ©ation",
+                                                "Create":  "Créer un nouveau sondage",
+                                                "View":  "Voir la conversation de création",
                                                 "ChooseTopic":  "Choisissez le sujet de votre sondage"
                                             },
-                                  "Subtitle":  "SÃƒÂ©lectionnez un sujet pour commencer votre sondage. Notre IA experte vous guidera tout au long du processus.",
+                                  "Subtitle":  "Sélectionnez un sujet pour commencer votre sondage. Notre IA experte vous guidera tout au long du processus.",
                                   "TextMode":  "Mode Texte",
                                   "VoiceMode":  "Mode Vocal",
                                   "CreationMode":  {
                                                        "Title":  "Mode Designer IA",
                                                        "Description":  "Choisissez comment vous souhaitez construire votre sondage avec notre IA experte.",
                                                        "Text":  "Designer Texte",
-                                                       "TextDescription":  "Envoyez des messages et itÃƒÂ©rez sur votre design ÃƒÂ©tape par ÃƒÂ©tape dans une interface de chat familiÃƒÂ¨re.",
+                                                       "TextDescription":  "Envoyez des messages et itérez sur votre design étape par étape dans une interface de chat familière.",
                                                        "Voice":  "Designer Vocal",
-                                                       "VoiceDescription":  "Concevez votre sondage les mains libres en utilisant la parole naturelle en temps rÃƒÂ©el avec l\u0027IA."
+                                                       "VoiceDescription":  "Concevez votre sondage les mains libres en utilisant la parole naturelle en temps réel avec l\u0027IA."
                                                    },
                                   "RespondentFormat":  {
-                                                           "Title":  "ExpÃƒÂ©rience Participant",
-                                                           "Description":  "Comment les gens doivent-ils rÃƒÂ©pondre ÃƒÂ  ce sondage ? Choisissez l\u0027interface qu\u0027ils utiliseront.",
+                                                           "Title":  "Expérience Participant",
+                                                           "Description":  "Comment les gens doivent-ils répondre à ce sondage ? Choisissez l\u0027interface qu\u0027ils utiliseront.",
                                                            "Text":  "Sondage Texte",
-                                                           "TextDescription":  "Les rÃƒÂ©pondants rÃƒÂ©pondent aux questions via une interface de chat textuelle standard.",
+                                                           "TextDescription":  "Les répondants répondent aux questions via une interface de chat textuelle standard.",
                                                            "Voice":  "Sondage Vocal",
-                                                           "VoiceDescription":  "Les rÃƒÂ©pondants parlent ÃƒÂ  un agent IA rÃƒÂ©aliste qui les guide tout au long du sondage."
+                                                           "VoiceDescription":  "Les répondants parlent à un agent IA réaliste qui les guide tout au long du sondage."
                                                        },
-                                  "PageTitle":  "CrÃƒÂ©er un nouveau sondage",
-                                  "PageSubtitle":  "SÃƒÂ©lectionnez l\u0027expertise mÃƒÂ©tier pour votre sondage ou dÃƒÂ©crivez vos besoins",
+                                  "PageTitle":  "Créer un nouveau sondage",
+                                  "PageSubtitle":  "Sélectionnez l\u0027expertise métier pour votre sondage ou décrivez vos besoins",
                                   "AIExpertLabel":  "Expert IA",
                                   "Domains":  {
                                                   "1":  {
-                                                            "Title":  "ExpÃƒÂ©rience Client \u0026 Satisfaction",
-                                                            "Description":  "Ãƒâ€°valuer une transaction ou un service qui a DÃƒâ€°JÃƒâ‚¬ EU LIEU."
+                                                            "Title":  "Expérience Client \u0026 Satisfaction",
+                                                            "Description":  "Évaluer une transaction ou un service qui a DÉJÀ EU LIEU."
                                                         },
                                                   "2":  {
-                                                            "Title":  "Ãƒâ€°tude de MarchÃƒÂ© \u0026 Intelligence Consommateur",
-                                                            "Description":  "Comprendre les marchÃƒÂ©s, les prÃƒÂ©fÃƒÂ©rences et les comportements pour ÃƒÂ©clairer les dÃƒÂ©cisions FUTURES."
+                                                            "Title":  "Étude de Marché \u0026 Intelligence Consommateur",
+                                                            "Description":  "Comprendre les marchés, les préférences et les comportements pour éclairer les décisions FUTURES."
                                                         },
                                                   "3":  {
-                                                            "Title":  "DÃƒÂ©veloppement de l\u0027Organisation \u0026 de la Main-d\u0027Ã…â€œuvre",
-                                                            "Description":  "Ãƒâ€°valuer la santÃƒÂ© interne, l\u0027efficacitÃƒÂ© et le sentiment des employÃƒÂ©s."
+                                                            "Title":  "Développement de l\u0027Organisation \u0026 de la Main-d\u0027œœuvre",
+                                                            "Description":  "Évaluer la santé interne, l\u0027efficacité et le sentiment des employés."
                                                         },
                                                   "4":  {
                                                             "Title":  "Design de Produit \u0026 Recherche Utilisateur",
-                                                            "Description":  "Optimiser l\u0027utilisabilitÃƒÂ©, l\u0027accessibilitÃƒÂ© et l\u0027efficacitÃƒÂ© de l\u0027interface."
+                                                            "Description":  "Optimiser l\u0027utilisabilité, l\u0027accessibilité et l\u0027efficacité de l\u0027interface."
                                                         },
                                                   "5":  {
-                                                            "Title":  "Ãƒâ€°ducation \u0026 Ãƒâ€°valuation de l\u0027Apprentissage",
-                                                            "Description":  "Mesurer les connaissances, les compÃƒÂ©tences, les rÃƒÂ©sultats d\u0027apprentissage ou les expÃƒÂ©riences ÃƒÂ©ducatives."
+                                                            "Title":  "Éducation \u0026 Évaluation de l\u0027Apprentissage",
+                                                            "Description":  "Mesurer les connaissances, les compétences, les résultats d\u0027apprentissage ou les expériences éducatives."
                                                         },
                                                   "6":  {
                                                             "Title":  "Engagement Civique \u0026 Opinion Publique",
                                                             "Description":  "Capturer les points de vue des citoyens sur les questions politiques, les politiques ou la gouvernance communautaire."
                                                         },
                                                   "7":  {
-                                                            "Title":  "Recherche Scientifique \u0026 AcadÃƒÂ©mique",
-                                                            "Description":  "Mener des recherches rigoureuses pour des connaissances gÃƒÂ©nÃƒÂ©ralisables."
+                                                            "Title":  "Recherche Scientifique \u0026 Académique",
+                                                            "Description":  "Mener des recherches rigoureuses pour des connaissances généralisables."
                                                         },
                                                   "8":  {
-                                                            "Title":  "SantÃƒÂ© \u0026 ExpÃƒÂ©rience Patient",
-                                                            "Description":  "Mesurer la qualitÃƒÂ© des soins, les rÃƒÂ©sultats pour les patients et la communication clinique."
+                                                            "Title":  "Santé \u0026 Expérience Patient",
+                                                            "Description":  "Mesurer la qualité des soins, les résultats pour les patients et la communication clinique."
                                                         },
                                                   "9":  {
-                                                            "Title":  "CaractÃƒÂ©risation DÃƒÂ©mographique \u0026 Sociale",
-                                                            "Description":  "Compter, dÃƒÂ©crire et comprendre les profils de population."
+                                                            "Title":  "Caractérisation Démographique \u0026 Sociale",
+                                                            "Description":  "Compter, décrire et comprendre les profils de population."
                                                         },
                                                   "10":  {
-                                                             "Title":  "Performance des Infrastructures \u0026 des SystÃƒÂ¨mes",
-                                                             "Description":  "Ãƒâ€°valuer le fonctionnement des systÃƒÂ¨mes physiques ou des plateformes techniques."
+                                                             "Title":  "Performance des Infrastructures \u0026 des Systèmes",
+                                                             "Description":  "Évaluer le fonctionnement des systèmes physiques ou des plateformes techniques."
                                                          }
                                               },
                                   "Badges":  {
@@ -79,10 +79,10 @@
                                                  "ReadOnly":  "Lecture seule"
                                              },
                                   "Header":  {
-                                                 "Title":  "CrÃƒÂ©er un sondage",
+                                                 "Title":  "Créer un sondage",
                                                  "Publish":  "Publier",
                                                  "VoiceMode":  "Mode Vocal",
-                                                 "StopVoice":  "ArrÃƒÂªter la voix",
+                                                 "StopVoice":  "Arrêter la voix",
                                                  "Mode":  {
                                                               "Voice":  "Voix",
                                                               "VoiceActive":  "Voix active",
@@ -91,116 +91,116 @@
                                                  "Language":  "Langue"
                                              },
                                   "ReadOnlyBanner":  {
-                                                         "Message":  "Vous visualisez une conversation terminÃƒÂ©e.",
-                                                         "Link":  "Aller aux dÃƒÂ©tails du sondage Ã¢â€ â€™"
+                                                         "Message":  "Vous visualisez une conversation terminée.",
+                                                         "Link":  "Aller aux détails du sondage →"
                                                      },
                                   "Chat":  {
-                                               "Started":  "Conversation vocale dÃƒÂ©marrÃƒÂ©e",
-                                               "Instruction":  "Parlez naturellement pour crÃƒÂ©er votre sondage",
-                                               "Listening":  "Ãƒâ€°coute...",
+                                               "Started":  "Conversation vocale démarrée",
+                                               "Instruction":  "Parlez naturellement pour créer votre sondage",
+                                               "Listening":  "Écoute...",
                                                "Speaking":  "Parle...",
                                                "VoiceActive":  "Mode vocal actif",
-                                               "VoiceInstruction":  "Parlez naturellement. Je rÃƒÂ©pondrai quand vous vous arrÃƒÂªterez.",
-                                               "VoiceListening":  "Ãƒâ€°coute de la rÃƒÂ©ponse...",
-                                               "VoiceStart":  "Cliquez sur le microphone pour dÃƒÂ©marrer la conversation.",
+                                               "VoiceInstruction":  "Parlez naturellement. Je répondrai quand vous vous arrêterez.",
+                                               "VoiceListening":  "Écoute de la réponse...",
+                                               "VoiceStart":  "Cliquez sur le microphone pour démarrer la conversation.",
                                                "ExitVoice":  "Quitter le mode vocal",
-                                               "Welcome":  "Salut ! Je suis lÃƒÂ  pour vous aider ÃƒÂ  crÃƒÂ©er le sondage parfait. CommenÃƒÂ§ons par les bases - quel est l\u0027objectif principal de votre sondage ? Que souhaitez-vous apprendre de vos rÃƒÂ©pondants ?"
+                                               "Welcome":  "Salut ! Je suis là pour vous aider à créer le sondage parfait. Commençons par les bases - quel est l\u0027objectif principal de votre sondage ? Que souhaitez-vous apprendre de vos répondants ?"
                                            },
                                   "Status":  {
                                                  "AISpeaking":  "L\u0027IA parle",
-                                                 "Listening":  "Ãƒâ€°coute",
+                                                 "Listening":  "Écoute",
                                                  "Connecting":  "Connexion...",
-                                                 "Ready":  "PrÃƒÂªt",
+                                                 "Ready":  "Prêt",
                                                  "Speaking":  "Parle",
                                                  "SpeakingUser":  "Vous parlez",
                                                  "TapToPause":  "Appuyer pour mettre en pause",
                                                  "TapToSpeak":  "Appuyer pour parler",
-                                                 "SelectTopicFirst":  "SÃƒÂ©lectionnez un sujet d\u0027abord"
+                                                 "SelectTopicFirst":  "Sélectionnez un sujet d\u0027abord"
                                              },
                                   "Completion":  {
-                                                     "Title":  "Excellent ! Nous sommes prÃƒÂªts.",
-                                                     "Message":  "J\u0027ai toutes les informations dont j\u0027ai besoin. Revenons en arriÃƒÂ¨re pour voir le rÃƒÂ©sumÃƒÂ© et commencer les tests.",
-                                                     "Button":  "Voir le rÃƒÂ©sumÃƒÂ© \u0026 tester"
+                                                     "Title":  "Excellent ! Nous sommes prêts.",
+                                                     "Message":  "J\u0027ai toutes les informations dont j\u0027ai besoin. Revenons en arrière pour voir le résumé et commencer les tests.",
+                                                     "Button":  "Voir le résumé \u0026 tester"
                                                  },
                                   "ReadyCard":  {
-                                                    "Title":  "PrÃƒÂªt ÃƒÂ  tester !",
-                                                    "Description":  "J\u0027ai tout ce dont j\u0027ai besoin pour rÃƒÂ©diger votre sondage.",
+                                                    "Title":  "Prêt à tester !",
+                                                    "Description":  "J\u0027ai tout ce dont j\u0027ai besoin pour rédiger votre sondage.",
                                                     "Button":  "Commencer le test",
                                                     "Finalizing":  "Finalisation..."
                                                 },
                                   "Menu":  {
-                                               "UploadFile":  "TÃƒÂ©lÃƒÂ©charger un fichier",
-                                               "AddMedia":  "Ajouter un mÃƒÂ©dia",
-                                               "MediaTypes":  "Images, VidÃƒÂ©o, Audio",
+                                               "UploadFile":  "Télécharger un fichier",
+                                               "AddMedia":  "Ajouter un média",
+                                               "MediaTypes":  "Images, Vidéo, Audio",
                                                "VoiceMode":  "Mode Vocal",
-                                               "TalkToAI":  "Parler ÃƒÂ  l\u0027IA"
+                                               "TalkToAI":  "Parler à l\u0027IA"
                                            },
                                   "Input":  {
-                                                "Placeholder":  "DÃƒÂ©crivez vos objectifs de sondage...",
+                                                "Placeholder":  "Décrivez vos objectifs de sondage...",
                                                 "VoiceMode":  "Passer en mode vocal",
-                                                "PlaceholderLocked":  "SÃƒÂ©lectionnez un sujet ci-dessus pour commencer...",
-                                                "AddMedia":  "Ajouter contexte/mÃƒÂ©dia",
+                                                "PlaceholderLocked":  "Sélectionnez un sujet ci-dessus pour commencer...",
+                                                "AddMedia":  "Ajouter contexte/média",
                                                 "Send":  "Envoyer",
                                                 "ActionsTitle":  "Actions"
                                             },
                                   "DomainSelection":  {
                                                           "Title":  "Choisissez votre parcours de sondage",
-                                                          "Description":  "SÃƒÂ©lectionnez un domaine pour obtenir des conseils de l\u0027IA spÃƒÂ©cialisÃƒÂ©e et des modÃƒÂ¨les standards de l\u0027industrie."
+                                                          "Description":  "Sélectionnez un domaine pour obtenir des conseils de l\u0027IA spécialisée et des modèles standards de l\u0027industrie."
                                                       },
                                   "SuggestedPrompts":  {
                                                            "1":  [
-                                                                     "CrÃƒÂ©er un sondage de satisfaction client (CSAT)",
+                                                                     "Créer un sondage de satisfaction client (CSAT)",
                                                                      "Cartographier un point de contact du parcours client",
                                                                      "Mesurer le Net Promoter Score (NPS)",
-                                                                     "Ãƒâ€°valuer une interaction de support"
+                                                                     "Évaluer une interaction de support"
                                                                  ],
                                                            "2":  [
-                                                                     "Ãƒâ€°tude de marchÃƒÂ© pour un nouveau produit",
+                                                                     "Étude de marché pour un nouveau produit",
                                                                      "Analyse de la perception de la marque",
-                                                                     "EnquÃƒÂªte sur les habitudes de consommation",
+                                                                     "Enquête sur les habitudes de consommation",
                                                                      "Test de concept publicitaire"
                                                                  ],
                                                            "3":  [
-                                                                     "EnquÃƒÂªte sur l\u0027engagement des employÃƒÂ©s",
-                                                                     "Ãƒâ€°valuation de la culture d\u0027entreprise",
-                                                                     "Sondage sur le bien-ÃƒÂªtre au travail",
+                                                                     "Enquête sur l\u0027engagement des employés",
+                                                                     "Évaluation de la culture d\u0027entreprise",
+                                                                     "Sondage sur le bien-être au travail",
                                                                      "Retour sur la formation interne"
                                                                  ]
                                                        },
                                   "Authentication":  {
                                                          "Required":  "Authentification requise",
-                                                         "VerifyEmail":  "VÃƒÂ©rifier l\u0027e-mail",
+                                                         "VerifyEmail":  "Vérifier l\u0027e-mail",
                                                          "GoBack":  "Retour",
                                                          "SignIn":  "Se connecter",
                                                          "GoHome":  "Accueil"
                                                      },
                                   "Toasts":  {
-                                                 "LanguageUpdateFailed":  "Ãƒâ€°chec de l\u0027enregistrement de la prÃƒÂ©fÃƒÂ©rence de langue",
-                                                 "ModeUpdateFailed":  "Ãƒâ€°chec de l\u0027enregistrement du mode de sondage",
-                                                 "LoadFailed":  "Ãƒâ€°chec du chargement des donnÃƒÂ©es du sondage",
-                                                 "InitFailed":  "Ãƒâ€°chec de l\u0027initialisation du sondage",
-                                                 "SendFailed":  "Ãƒâ€°chec de l\u0027envoi du message. Veuillez rÃƒÂ©essayer.",
-                                                 "MicDenied":  "AccÃƒÂ¨s au microphone refusÃƒÂ©",
-                                                 "VoiceSendFailed":  "Ãƒâ€°chec de l\u0027envoi du message vocal",
-                                                 "FinalizeFailed":  "Ãƒâ€°chec de la finalisation du sondage. Veuillez rÃƒÂ©essayer.",
-                                                 "Finalized":  "Sondage finalisÃƒÂ© ! Chargement des conversations d\u0027exemple...",
-                                                 "SaveTopicFailed":  "Ãƒâ€°chec de l\u0027enregistrement de la sÃƒÂ©lection du sujet",
-                                                 "GenericError":  "Une erreur est survenue. Veuillez rÃƒÂ©essayer."
+                                                 "LanguageUpdateFailed":  "Échec de l\u0027enregistrement de la préférence de langue",
+                                                 "ModeUpdateFailed":  "Échec de l\u0027enregistrement du mode de sondage",
+                                                 "LoadFailed":  "Échec du chargement des données du sondage",
+                                                 "InitFailed":  "Échec de l\u0027initialisation du sondage",
+                                                 "SendFailed":  "Échec de l\u0027envoi du message. Veuillez réessayer.",
+                                                 "MicDenied":  "Accès au microphone refusé",
+                                                 "VoiceSendFailed":  "Échec de l\u0027envoi du message vocal",
+                                                 "FinalizeFailed":  "Échec de la finalisation du sondage. Veuillez réessayer.",
+                                                 "Finalized":  "Sondage finalisé ! Chargement des conversations d\u0027exemple...",
+                                                 "SaveTopicFailed":  "Échec de l\u0027enregistrement de la sélection du sujet",
+                                                 "GenericError":  "Une erreur est survenue. Veuillez réessayer."
                                              },
                                   "Feedback":  {
-                                                   "Preparing":  "PrÃƒÂ©paration de votre designer de sondage..."
+                                                   "Preparing":  "Préparation de votre designer de sondage..."
                                                }
                               },
                    "PublishModal":  {
                                         "Title":  "Publier le sondage",
-                                        "TitlePublished":  "Sondage publiÃƒÂ© !",
+                                        "TitlePublished":  "Sondage publié !",
                                         "Subtitle":  "Rendez votre sondage actif et partageable",
                                         "SubtitlePublished":  "Votre sondage est maintenant actif et partageable",
-                                        "SuccessMessage":  "Ã°Å¸Å½â€° Votre sondage est maintenant actif !",
+                                        "SuccessMessage":  "🎉 Votre sondage est maintenant actif !",
                                         "Buttons":  {
                                                         "CopyLink":  "Copier le lien",
                                                         "ViewSurvey":  "Voir le sondage",
-                                                        "Done":  "TerminÃƒÂ©",
+                                                        "Done":  "Terminé",
                                                         "Cancel":  "Annuler",
                                                         "Publish":  "Publier le sondage",
                                                         "Publishing":  "Publication..."
@@ -210,23 +210,23 @@
                                                        "TitlePlaceholder":  "Entrez un titre pour votre sondage",
                                                        "DescLabel":  "Description",
                                                        "DescOptional":  "(optionnel)",
-                                                       "DescPlaceholder":  "Ajoutez une brÃƒÂ¨ve description pour votre sondage",
+                                                       "DescPlaceholder":  "Ajoutez une brève description pour votre sondage",
                                                        "VoiceModeLabel":  "Mode vocal",
-                                                       "VoiceModeDesc":  "Les rÃƒÂ©pondants commenceront par la voix."
+                                                       "VoiceModeDesc":  "Les répondants commenceront par la voix."
                                                    },
                                         "Toasts":  {
-                                                       "TitleGenerated":  "Suggestion de titre gÃƒÂ©nÃƒÂ©rÃƒÂ©e !",
-                                                       "GenerateFailed":  "Ãƒâ€°chec de la gÃƒÂ©nÃƒÂ©ration de la suggestion de titre",
+                                                       "TitleGenerated":  "Suggestion de titre générée !",
+                                                       "GenerateFailed":  "Échec de la génération de la suggestion de titre",
                                                        "EnterTitle":  "Veuillez entrer un titre pour votre sondage",
-                                                       "Success":  "Sondage publiÃƒÂ© avec succÃƒÂ¨s !",
-                                                       "Failed":  "Ãƒâ€°chec de la publication du sondage",
-                                                       "Copied":  "Lien copiÃƒÂ© dans le presse-papier !",
-                                                       "CopyFailed":  "Ãƒâ€°chec de la copie du lien"
+                                                       "Success":  "Sondage publié avec succès !",
+                                                       "Failed":  "Échec de la publication du sondage",
+                                                       "Copied":  "Lien copié dans le presse-papier !",
+                                                       "CopyFailed":  "Échec de la copie du lien"
                                                    }
                                     },
                    "SampleReview":  {
                                         "Header":  {
-                                                       "Title":  "RÃƒÂ©vision de la conversation d\u0027exemple",
+                                                       "Title":  "Révision de la conversation d\u0027exemple",
                                                        "Back":  "Retour au sondage"
                                                    },
                                         "Actions":  {
@@ -235,15 +235,15 @@
                                                         "Publish":  "Publier le sondage"
                                                     },
                                         "VoiceVisualizer":  {
-                                                                "Listening":  "Ãƒâ€°coute...",
+                                                                "Listening":  "Écoute...",
                                                                 "AISpeaking":  "L\u0027IA parle...",
                                                                 "TapToSpeak":  "Appuyez pour parler",
-                                                                "SpeakInstruction":  "Parlez en continu. L\u0027IA rÃƒÂ©pondra naturellement.",
+                                                                "SpeakInstruction":  "Parlez en continu. L\u0027IA répondra naturellement.",
                                                                 "Connecting":  "Connexion au service vocal..."
                                                             },
                                         "EmptyState":  {
-                                                           "StartTitle":  "DÃƒÂ©marrer la conversation",
-                                                           "VoiceInstruction":  "Appuyez sur le microphone ci-dessous pour commencer ÃƒÂ  parler.",
+                                                           "StartTitle":  "Démarrer la conversation",
+                                                           "VoiceInstruction":  "Appuyez sur le microphone ci-dessous pour commencer à parler.",
                                                            "TextInstruction":  "Tapez un message pour commencer le test."
                                                        },
                                         "Input":  {
@@ -255,65 +255,65 @@
                                         "Feedback":  {
                                                          "Title":  "Affiner la simulation",
                                                          "Description":  "Pas satisfait du comportement de l\u0027IA ? Donnez des instructions ci-dessous pour ajuster le prochain exemple.",
-                                                         "Placeholder":  "ex: \u0027Soyez plus concis\u0027, \u0027Posez des questions sur le budget plus tÃƒÂ´t\u0027, \u0027N\u0027utilisez pas d\u0027emojis\u0027...",
-                                                         "Chars":  "{count} caractÃƒÂ¨res",
+                                                         "Placeholder":  "ex: \u0027Soyez plus concis\u0027, \u0027Posez des questions sur le budget plus tôt\u0027, \u0027N\u0027utilisez pas d\u0027emojis\u0027...",
+                                                         "Chars":  "{count} caractères",
                                                          "RetriesLeft":  "{count} essais restants",
-                                                         "Button":  "Mettre ÃƒÂ  jour \u0026 RedÃƒÂ©marrer",
+                                                         "Button":  "Mettre à jour \u0026 Redémarrer",
                                                          "Applying":  "Application...",
-                                                         "LimitReached":  "Vous avez utilisÃƒÂ© toutes les conversations d\u0027exemple disponibles. Veuillez publier ou modifier le sondage directement."
+                                                         "LimitReached":  "Vous avez utilisé toutes les conversations d\u0027exemple disponibles. Veuillez publier ou modifier le sondage directement."
                                                      },
                                         "Toasts":  {
-                                                       "Finished":  "Conversation terminÃƒÂ©e ! Vous pouvez maintenant affiner ou publier.",
-                                                       "LimitReached":  "Vous avez utilisÃƒÂ© vos 3 conversations d\u0027exemple",
-                                                       "FeedbackApplied":  "Commentaire appliquÃƒÂ© ! DÃƒÂ©marrage d\u0027une nouvelle conversation...",
-                                                       "FeedbackFailed":  "Ãƒâ€°chec de l\u0027application du commentaire",
-                                                       "Confirmed":  "Sondage confirmÃƒÂ© et publiÃƒÂ© !",
-                                                       "ConfirmFailed":  "Ãƒâ€°chec de la confirmation du sondage",
-                                                       "ResponseFailed":  "Ãƒâ€°chec de l\u0027obtention de la rÃƒÂ©ponse",
-                                                       "AIResponseFailed":  "Ãƒâ€°chec de l\u0027obtention de la rÃƒÂ©ponse de l\u0027IA",
-                                                       "NoRetries":  "Vous avez utilisÃƒÂ© vos 3 conversations d\u0027exemple",
+                                                       "Finished":  "Conversation terminée ! Vous pouvez maintenant affiner ou publier.",
+                                                       "LimitReached":  "Vous avez utilisé vos 3 conversations d\u0027exemple",
+                                                       "FeedbackApplied":  "Commentaire appliqué ! Démarrage d\u0027une nouvelle conversation...",
+                                                       "FeedbackFailed":  "Échec de l\u0027application du commentaire",
+                                                       "Confirmed":  "Sondage confirmé et publié !",
+                                                       "ConfirmFailed":  "Échec de la confirmation du sondage",
+                                                       "ResponseFailed":  "Échec de l\u0027obtention de la réponse",
+                                                       "AIResponseFailed":  "Échec de l\u0027obtention de la réponse de l\u0027IA",
+                                                       "NoRetries":  "Vous avez utilisé vos 3 conversations d\u0027exemple",
                                                        "FeedbackError":  "Erreur lors de l\u0027application du commentaire",
-                                                       "StartFailed":  "Ãƒâ€°chec du dÃƒÂ©marrage de la conversation"
+                                                       "StartFailed":  "Échec du démarrage de la conversation"
                                                    },
                                         "ConfirmDialog":  {
                                                               "Title":  "Publier le sondage ?",
-                                                              "Message":  "ÃƒÅ tes-vous sÃƒÂ»r de vouloir publier ce sondage ? Vous ne pourrez plus modifier les questions de base une fois qu\u0027il sera en ligne.",
+                                                              "Message":  "Êtes-vous sûr de vouloir publier ce sondage ? Vous ne pourrez plus modifier les questions de base une fois qu\u0027il sera en ligne.",
                                                               "Confirm":  "Publier",
-                                                              "Cancel":  "Continuer ÃƒÂ  modifier"
+                                                              "Cancel":  "Continuer à modifier"
                                                           }
                                     },
                    "Response":  {
                                     "welcome":  "Bienvenue",
                                     "start":  "Commencer le sondage",
-                                    "loading":  "PrÃƒÂ©paration de votre sondage...",
+                                    "loading":  "Préparation de votre sondage...",
                                     "notFound":  "Impossible de charger le sondage",
-                                    "closed":  "Ce sondage n\u0027accepte plus de rÃƒÂ©ponses",
-                                    "errorHelp":  "Veuillez vÃƒÂ©rifier le lien et rÃƒÂ©essayer.",
+                                    "closed":  "Ce sondage n\u0027accepte plus de réponses",
+                                    "errorHelp":  "Veuillez vérifier le lien et réessayer.",
                                     "thankYou":  "Merci !",
-                                    "thankYouMessage":  "Vos informations sont incroyablement prÃƒÂ©cieuses. Nous apprÃƒÂ©cions que vous preniez le temps de partager vos pensÃƒÂ©es avec nous.",
+                                    "thankYouMessage":  "Vos informations sont incroyablement précieuses. Nous apprécions que vous preniez le temps de partager vos pensées avec nous.",
                                     "close":  "Fermer le sondage",
                                     "hideText":  "Masquer le texte",
                                     "showText":  "Afficher le texte",
                                     "voiceMode":  "Mode vocal",
                                     "tryVoice":  "Essayer la voix",
-                                    "connectionFailed":  "Ãƒâ€°chec de la connexion",
+                                    "connectionFailed":  "Échec de la connexion",
                                     "connecting":  "Connexion en cours...",
-                                    "listening":  "Ãƒâ€°coute...",
+                                    "listening":  "Écoute...",
                                     "aiSpeaking":  "L\u0027IA parle...",
                                     "tapToSpeak":  "Appuyez pour parler",
-                                    "aiReady":  "IA prÃƒÂªte",
+                                    "aiReady":  "IA prête",
                                     "initializing":  "Initialisation...",
                                     "liveTranscription":  "Transcription en direct",
-                                    "typeAnswer":  "Tapez votre rÃƒÂ©ponse...",
-                                    "sharedMedia":  "MÃƒÂ©dia partagÃƒÂ©",
-                                    "tapToRetry":  "Appuyez sur l\u0027icÃƒÂ´ne pour rÃƒÂ©essayer",
-                                    "loadFailed":  "Ãƒâ€°chec du chargement du sondage",
-                                    "voiceSurveyIntro":  "Participez ÃƒÂ  notre entretien ÃƒÂ  commande vocale. Choisissez votre langue prÃƒÂ©fÃƒÂ©rÃƒÂ©e et commencez ÃƒÂ  parler naturellement.",
+                                    "typeAnswer":  "Tapez votre réponse...",
+                                    "sharedMedia":  "Média partagé",
+                                    "tapToRetry":  "Appuyez sur l\u0027icône pour réessayer",
+                                    "loadFailed":  "Échec du chargement du sondage",
+                                    "voiceSurveyIntro":  "Participez à notre entretien à commande vocale. Choisissez votre langue préférée et commencez à parler naturellement.",
                                     "selectLanguage":  "Choisir la langue",
                                     "startInterview":  "Commencer l\u0027entretien",
-                                    "micPermissionDenied":  "L\u0027accÃƒÂ¨s au microphone est requis pour ce sondage. Veuillez l\u0027activer dans les paramÃƒÂ¨tres de votre navigateur pour continuer.",
-                                    "micConsentTitle":  "AccÃƒÂ¨s au Microphone",
-                                    "micConsentDescription":  "Je comprends que cette enquÃƒÂªte utilise l\u0027enregistrement vocal. J\u0027autorise l\u0027utilisation de mon microphone pour la durÃƒÂ©e de l\u0027entretien."
+                                    "micPermissionDenied":  "L\u0027accès au microphone est requis pour ce sondage. Veuillez l\u0027activer dans les paramètres de votre navigateur pour continuer.",
+                                    "micConsentTitle":  "Accès au Microphone",
+                                    "micConsentDescription":  "Je comprends que cette enquête utilise l\u0027enregistrement vocal. J\u0027autorise l\u0027utilisation de mon microphone pour la durée de l\u0027entretien."
                                 },
                    "Detail":  {
                                   "NotFound":  "Sondage introuvable",
@@ -321,45 +321,45 @@
                                   "Status":  {
                                                  "Active":  "Actif",
                                                  "Draft":  "Brouillon",
-                                                 "Completed":  "TerminÃƒÂ©",
+                                                 "Completed":  "Terminé",
                                                  "Paused":  "En pause",
-                                                 "SampleReview":  "En rÃƒÂ©vision"
+                                                 "SampleReview":  "En révision"
                                              },
                                   "Header":  {
-                                                 "Copied":  "CopiÃƒÂ©",
+                                                 "Copied":  "Copié",
                                                  "CopyLink":  "Copier le lien",
                                                  "Pause":  "Pause",
                                                  "Resume":  "Reprendre",
-                                                 "Continue":  "Continuer la crÃƒÂ©ation",
-                                                 "Preview":  "AperÃƒÂ§u",
+                                                 "Continue":  "Continuer la création",
+                                                 "Preview":  "Aperçu",
                                                  "NoDescription":  "Aucune description fournie."
                                              },
                                   "SampleReview":  {
-                                                       "Badge":  "Ãƒâ€°tape requise",
-                                                       "Title":  "PrÃƒÂªt pour les conversations d\u0027exemple",
-                                                       "Description":  "La logique de votre sondage a ÃƒÂ©tÃƒÂ© gÃƒÂ©nÃƒÂ©rÃƒÂ©e ! Effectuez une conversation vocale d\u0027exemple avec l\u0027IA pour vÃƒÂ©rifier l\u0027expÃƒÂ©rience avant de mettre en ligne.",
-                                                       "Button":  "DÃƒÂ©marrer la conversation d\u0027exemple"
+                                                       "Badge":  "Étape requise",
+                                                       "Title":  "Prêt pour les conversations d\u0027exemple",
+                                                       "Description":  "La logique de votre sondage a été générée ! Effectuez une conversation vocale d\u0027exemple avec l\u0027IA pour vérifier l\u0027expérience avant de mettre en ligne.",
+                                                       "Button":  "Démarrer la conversation d\u0027exemple"
                                                    },
                                   "Tabs":  {
                                                "Overview":  "Vue d\u0027ensemble",
-                                               "Responses":  "RÃƒÂ©ponses",
-                                               "Settings":  "ParamÃƒÂ¨tres"
+                                               "Responses":  "Réponses",
+                                               "Settings":  "Paramètres"
                                            },
                                   "Overview":  {
                                                    "Responses":  {
-                                                                     "Title":  "RÃƒÂ©ponses",
+                                                                     "Title":  "Réponses",
                                                                      "Target":  "sur {limit} cibles"
                                                                  },
                                                    "Completion":  {
-                                                                      "Title":  "ComplÃƒÂ©tion",
-                                                                      "Completed":  "{count} terminÃƒÂ©s"
+                                                                      "Title":  "Complétion",
+                                                                      "Completed":  "{count} terminés"
                                                                   },
                                                    "Duration":  {
-                                                                    "Title":  "DurÃƒÂ©e moy.",
+                                                                    "Title":  "Durée moy.",
                                                                     "Unit":  "minutes"
                                                                 },
                                                    "Created":  {
-                                                                   "Title":  "CrÃƒÂ©ÃƒÂ©"
+                                                                   "Title":  "Créé"
                                                                },
                                                    "ShareLink":  "Partager le lien",
                                                    "Configuration":  {
@@ -367,49 +367,49 @@
                                                                          "Objective":  "Objectif",
                                                                          "TargetAudience":  "Public cible",
                                                                          "Tone":  "Ton de la conversation",
-                                                                         "NotSpecified":  "Non spÃƒÂ©cifiÃƒÂ©"
+                                                                         "NotSpecified":  "Non spécifié"
                                                                      },
                                                    "RecentResponses":  {
-                                                                           "Title":  "RÃƒÂ©ponses rÃƒÂ©centes",
+                                                                           "Title":  "Réponses récentes",
                                                                            "ViewAll":  "Voir tout",
-                                                                           "NoResponses":  "Pas encore de rÃƒÂ©ponses"
+                                                                           "NoResponses":  "Pas encore de réponses"
                                                                        }
                                                },
                                   "Responses":  {
-                                                    "SearchPlaceholder":  "Rechercher des rÃƒÂ©ponses...",
+                                                    "SearchPlaceholder":  "Rechercher des réponses...",
                                                     "Filter":  {
                                                                    "All":  "Tous les statuts",
-                                                                   "Completed":  "TerminÃƒÂ©",
+                                                                   "Completed":  "Terminé",
                                                                    "InProgress":  "En cours"
                                                                },
                                                     "Export":  "Exporter",
                                                     "Table":  {
-                                                                  "Empty":  "Pas encore de rÃƒÂ©ponses",
+                                                                  "Empty":  "Pas encore de réponses",
                                                                   "Participant":  "Participant {id}",
                                                                   "Anonymous":  "Anonyme",
                                                                   "Status":  {
-                                                                                 "Completed":  "TerminÃƒÂ©",
+                                                                                 "Completed":  "Terminé",
                                                                                  "InProgress":  "En cours"
                                                                              },
-                                                                  "Summary":  "Aucun rÃƒÂ©sumÃƒÂ© disponible"
+                                                                  "Summary":  "Aucun résumé disponible"
                                                               },
                                                     "Card":  {
-                                                                 "NoSummary":  "Aucun rÃƒÂ©sumÃƒÂ© gÃƒÂ©nÃƒÂ©rÃƒÂ© pour l\u0027instant."
+                                                                 "NoSummary":  "Aucun résumé généré pour l\u0027instant."
                                                              },
                                                     "Pagination":  {
                                                                        "Page":  "Page {current} sur {total}",
-                                                                       "FirstPage":  "PremiÃƒÂ¨re page",
-                                                                       "PreviousPage":  "Page prÃƒÂ©cÃƒÂ©dente",
+                                                                       "FirstPage":  "Première page",
+                                                                       "PreviousPage":  "Page précédente",
                                                                        "NextPage":  "Page suivante",
-                                                                       "LastPage":  "DerniÃƒÂ¨re page"
+                                                                       "LastPage":  "Dernière page"
                                                                    }
                                                 },
                                   "Settings":  {
-                                                   "Title":  "ParamÃƒÂ¨tres du sondage",
+                                                   "Title":  "Paramètres du sondage",
                                                    "Fields":  {
                                                                   "Title":  "Titre du sondage",
                                                                   "Description":  "Description",
-                                                                  "Limit":  "Limite de rÃƒÂ©ponses"
+                                                                  "Limit":  "Limite de réponses"
                                                               },
                                                    "VoiceMode":  {
                                                                      "Title":  "Mode de conversation vocale",
@@ -420,22 +420,22 @@
                                                },
                                   "DeleteModal":  {
                                                       "Title":  "Supprimer le sondage",
-                                                      "Description":  "ÃƒÅ tes-vous sÃƒÂ»r de vouloir supprimer \"{title}\" ? Cette action ne peut pas ÃƒÂªtre annulÃƒÂ©e et supprimera dÃƒÂ©finitivement toutes les rÃƒÂ©ponses.",
+                                                      "Description":  "Êtes-vous sûr de vouloir supprimer \"{title}\" ? Cette action ne peut pas être annulée et supprimera définitivement toutes les réponses.",
                                                       "Cancel":  "Annuler",
                                                       "Delete":  "Supprimer le sondage",
                                                       "Deleting":  "Suppression..."
                                                   },
                                   "Toasts":  {
-                                                 "ExportStarted":  "Exportation dÃƒÂ©marrÃƒÂ©e",
-                                                 "ExportFailed":  "Ãƒâ€°chec de l\u0027exportation",
-                                                 "NoData":  "Aucune donnÃƒÂ©e ÃƒÂ  exporter",
-                                                 "SettingsSaved":  "ParamÃƒÂ¨tres enregistrÃƒÂ©s avec succÃƒÂ¨s",
-                                                 "SettingsFailed":  "Ãƒâ€°chec de l\u0027enregistrement des paramÃƒÂ¨tres",
+                                                 "ExportStarted":  "Exportation démarrée",
+                                                 "ExportFailed":  "Échec de l\u0027exportation",
+                                                 "NoData":  "Aucune donnée à exporter",
+                                                 "SettingsSaved":  "Paramètres enregistrés avec succès",
+                                                 "SettingsFailed":  "Échec de l\u0027enregistrement des paramètres",
                                                  "StatusUpdated":  "Sondage {status}",
-                                                 "StatusFailed":  "Ãƒâ€°chec de la mise ÃƒÂ  jour du statut",
-                                                 "Deleted":  "Sondage supprimÃƒÂ©",
-                                                 "DeleteFailed":  "Ãƒâ€°chec de la suppression du sondage",
-                                                 "LinkCopied":  "Lien copiÃƒÂ© !",
+                                                 "StatusFailed":  "Échec de la mise à jour du statut",
+                                                 "Deleted":  "Sondage supprimé",
+                                                 "DeleteFailed":  "Échec de la suppression du sondage",
+                                                 "LinkCopied":  "Lien copié !",
                                                  "Error":  "Une erreur est survenue"
                                              }
                               }
@@ -445,13 +445,13 @@
                     "Surveys":  "Sondages",
                     "Projects":  "Projets",
                     "Analytics":  "Analytique",
-                    "Team":  "Ãƒâ€°quipe",
-                    "Integrations":  "IntÃƒÂ©grations",
+                    "Team":  "Équipe",
+                    "Integrations":  "Intégrations",
                     "Profile":  "Profil",
-                    "Settings":  "ParamÃƒÂ¨tres",
+                    "Settings":  "Paramètres",
                     "SignIn":  "Se connecter",
-                    "SignOut":  "Se dÃƒÂ©connecter",
-                    "ComingSoon":  "BientÃƒÂ´t"
+                    "SignOut":  "Se déconnecter",
+                    "ComingSoon":  "Bientôt"
                 },
     "Header":  {
                    "Search":  "Rechercher...",
@@ -460,72 +460,72 @@
                    "NoNotifications":  "Pas de notifications",
                    "ViewAll":  "Voir toutes les notifications",
                    "Profile":  "Profil",
-                   "Settings":  "ParamÃƒÂ¨tres",
-                   "LogOut":  "Se dÃƒÂ©connecter"
+                   "Settings":  "Paramètres",
+                   "LogOut":  "Se déconnecter"
                },
     "Dashboard":  {
                       "Welcome":  {
-                                      "Title":  "Bon retour ! Ã°Å¸â€˜â€¹",
+                                      "Title":  "Bon retour ! 👋",
                                       "Subtitle":  "Voici ce qui se passe avec vos sondages aujourd\u0027hui."
                                   },
-                      "CreateSurvey":  "CrÃƒÂ©er un sondage",
+                      "CreateSurvey":  "Créer un sondage",
                       "Stats":  {
                                     "TotalSurveys":  "Total des sondages",
                                     "AllTime":  "Tout le temps",
-                                    "AvgDuration":  "DurÃƒÂ©e moyenne",
-                                    "PerCompleted":  "Par sondage terminÃƒÂ©",
-                                    "NoCompletions":  "Pas de rÃƒÂ©ponses encore"
+                                    "AvgDuration":  "Durée moyenne",
+                                    "PerCompleted":  "Par sondage terminé",
+                                    "NoCompletions":  "Pas de réponses encore"
                                 },
                       "QuickActions":  {
                                            "CreateSurvey":  {
-                                                                "Title":  "CrÃƒÂ©er un sondage",
-                                                                "Description":  "CrÃƒÂ©er des formulaires IA"
+                                                                "Title":  "Créer un sondage",
+                                                                "Description":  "Créer des formulaires IA"
                                                             },
                                            "ViewAnalytics":  {
                                                                  "Title":  "Voir les analyses",
-                                                                 "Description":  "AperÃƒÂ§us et rapports"
+                                                                 "Description":  "Aperçus et rapports"
                                                              },
                                            "ManageProjects":  {
-                                                                  "Title":  "GÃƒÂ©rer les projets",
+                                                                  "Title":  "Gérer les projets",
                                                                   "Description":  "Organiser vos sondages"
                                                               },
                                            "TeamManagement":  {
-                                                                  "Title":  "Gestion de l\u0027ÃƒÂ©quipe",
-                                                                  "Description":  "ParamÃƒÂ¨tres de collaboration"
+                                                                  "Title":  "Gestion de l\u0027équipe",
+                                                                  "Description":  "Paramètres de collaboration"
                                                               }
                                        },
                       "RecentSurveys":  {
-                                            "Title":  "Sondages rÃƒÂ©cents",
+                                            "Title":  "Sondages récents",
                                             "ViewAll":  "Voir tout",
                                             "NoSurveys":  "Pas encore de sondages",
-                                            "GetStarted":  "Commencez par crÃƒÂ©er votre premier sondage IA.",
-                                            "CreateFirst":  "CrÃƒÂ©er votre premier sondage"
+                                            "GetStarted":  "Commencez par créer votre premier sondage IA.",
+                                            "CreateFirst":  "Créer votre premier sondage"
                                         },
                       "Activity":  {
-                                       "Title":  "ActivitÃƒÂ© rÃƒÂ©cente",
+                                       "Title":  "Activité récente",
                                        "ViewAll":  "Voir tout",
-                                       "NewResponse":  "Nouvelle rÃƒÂ©ponse reÃƒÂ§ue",
-                                       "SurveyCreated":  "Sondage crÃƒÂ©ÃƒÂ©",
-                                       "SurveyPublished":  "Sondage publiÃƒÂ©"
+                                       "NewResponse":  "Nouvelle réponse reçue",
+                                       "SurveyCreated":  "Sondage créé",
+                                       "SurveyPublished":  "Sondage publié"
                                    }
                   },
     "SurveysPage":  {
                         "Status":  {
                                        "Active":  "Actif",
-                                       "Published":  "PubliÃƒÂ©",
+                                       "Published":  "Publié",
                                        "Draft":  "Brouillon",
-                                       "Creating":  "CrÃƒÂ©ation",
-                                       "Completed":  "TerminÃƒÂ©",
+                                       "Creating":  "Création",
+                                       "Completed":  "Terminé",
                                        "Paused":  "En pause"
                                    },
                         "Header":  {
                                        "Title":  "Sondages",
-                                       "Description":  "GÃƒÂ©rez et surveillez vos sondages conversationnels.",
+                                       "Description":  "Gérez et surveillez vos sondages conversationnels.",
                                        "CreateButton":  "Nouveau sondage"
                                    },
                         "Tabs":  {
                                      "All":  "Tous",
-                                     "Published":  "PubliÃƒÂ©s",
+                                     "Published":  "Publiés",
                                      "Unpublished":  "Brouillons"
                                  },
                         "Search":  {
@@ -533,128 +533,128 @@
                                    },
                         "Loading":  "Chargement de vos sondages...",
                         "Card":  {
-                                     "Responses":  "RÃƒÂ©ponses",
-                                     "Created":  "CrÃƒÂ©ÃƒÂ©",
-                                     "LastActivity":  "DerniÃƒÂ¨re activitÃƒÂ© :",
+                                     "Responses":  "Réponses",
+                                     "Created":  "Créé",
+                                     "LastActivity":  "Dernière activité :",
                                      "InProject":  "dans {name}",
                                      "Menu":  {
-                                                  "Continue":  "Continuer la crÃƒÂ©ation",
-                                                  "ViewDetails":  "Voir les dÃƒÂ©tails",
+                                                  "Continue":  "Continuer la création",
+                                                  "ViewDetails":  "Voir les détails",
                                                   "Analytics":  "Analyses",
                                                   "Edit":  "Modifier",
                                                   "CopyLink":  "Copier le lien",
                                                   "Duplicate":  "Dupliquer",
                                                   "Delete":  "Supprimer",
-                                                  "Resume":  "Reprendre la crÃƒÂ©ation",
-                                                  "ViewChat":  "Voir le chat de crÃƒÂ©ation",
+                                                  "Resume":  "Reprendre la création",
+                                                  "ViewChat":  "Voir le chat de création",
                                                   "ShareLink":  "Partager le lien"
                                               },
                                      "Toasts":  {
-                                                    "Deleted":  "Sondage supprimÃƒÂ© avec succÃƒÂ¨s",
-                                                    "DeleteFailed":  "Ãƒâ€°chec de la suppression du sondage",
-                                                    "Duplicated":  "Sondage dupliquÃƒÂ© !",
-                                                    "DuplicateFailed":  "Ãƒâ€°chec de la duplication du sondage",
+                                                    "Deleted":  "Sondage supprimé avec succès",
+                                                    "DeleteFailed":  "Échec de la suppression du sondage",
+                                                    "Duplicated":  "Sondage dupliqué !",
+                                                    "DuplicateFailed":  "Échec de la duplication du sondage",
                                                     "Duplicating":  "Duplication du sondage...",
-                                                    "LinkCopied":  "Lien copiÃƒÂ© dans le presse-papier !",
-                                                    "CopyFailed":  "Ãƒâ€°chec de la copie du lien"
+                                                    "LinkCopied":  "Lien copié dans le presse-papier !",
+                                                    "CopyFailed":  "Échec de la copie du lien"
                                                 }
                                  },
                         "Empty":  {
                                       "NoMatching":  {
                                                          "Title":  "Aucun sondage correspondant",
-                                                         "Description":  "Essayez d\u0027ajuster vos critÃƒÂ¨res de recherche",
+                                                         "Description":  "Essayez d\u0027ajuster vos critères de recherche",
                                                          "Clear":  "Effacer la recherche"
                                                      },
                                       "NoPublished":  {
-                                                          "Title":  "Aucun sondage publiÃƒÂ©",
-                                                          "Description":  "CrÃƒÂ©ez un sondage et publiez-le pour commencer ÃƒÂ  collecter des rÃƒÂ©ponses",
-                                                          "Button":  "CrÃƒÂ©er un sondage"
+                                                          "Title":  "Aucun sondage publié",
+                                                          "Description":  "Créez un sondage et publiez-le pour commencer à collecter des réponses",
+                                                          "Button":  "Créer un sondage"
                                                       },
                                       "NoUnpublished":  {
                                                             "Title":  "Aucun brouillon ou sondage en cours",
-                                                            "Description":  "Tous vos sondages sont publiÃƒÂ©s !"
+                                                            "Description":  "Tous vos sondages sont publiés !"
                                                         },
                                       "NoSurveys":  {
                                                         "Title":  "Pas encore de sondages",
-                                                        "Description":  "Commencez par crÃƒÂ©er votre premier sondage conversationnel",
-                                                        "Button":  "CrÃƒÂ©er votre premier sondage"
+                                                        "Description":  "Commencez par créer votre premier sondage conversationnel",
+                                                        "Button":  "Créer votre premier sondage"
                                                     }
                                   },
                         "DeleteModal":  {
                                             "Title":  "Supprimer le sondage",
-                                            "Description":  "ÃƒÅ tes-vous sÃƒÂ»r de vouloir supprimer \"{title}\" ? Cette action ne peut pas ÃƒÂªtre annulÃƒÂ©e et supprimera dÃƒÂ©finitivement toutes les rÃƒÂ©ponses.",
+                                            "Description":  "Êtes-vous sûr de vouloir supprimer \"{title}\" ? Cette action ne peut pas être annulée et supprimera définitivement toutes les réponses.",
                                             "Cancel":  "Annuler",
                                             "Delete":  "Supprimer",
                                             "Confirm":  "Supprimer le sondage",
                                             "Deleting":  "Suppression..."
                                         },
                         "Pagination":  {
-                                           "Previous":  "PrÃƒÂ©cÃƒÂ©dent",
+                                           "Previous":  "Précédent",
                                            "Next":  "Suivant",
                                            "PerPage":  "par page",
-                                           "Showing":  "Affichage de {start} ÃƒÂ  {end} sur {total} sondages"
+                                           "Showing":  "Affichage de {start} à {end} sur {total} sondages"
                                        }
                     },
     "AnalyticsPage":  {
                           "Header":  {
                                          "Title":  "Analyse",
-                                         "Description":  "AperÃƒÂ§u de la performance et de l\u0027engagement de vos sondages"
+                                         "Description":  "Aperçu de la performance et de l\u0027engagement de vos sondages"
                                      },
                           "Search":  {
                                          "Placeholder":  "Rechercher des sondages..."
                                      },
                           "Card":  {
-                                       "Responses":  "rÃƒÂ©ponses"
+                                       "Responses":  "réponses"
                                    },
                           "Empty":  {
                                         "Title":  "Pas encore de statistiques",
-                                        "Description":  "CrÃƒÂ©ez et publiez un sondage pour commencer ÃƒÂ  voir les analyses.",
-                                        "Button":  "CrÃƒÂ©er un sondage"
+                                        "Description":  "Créez et publiez un sondage pour commencer à voir les analyses.",
+                                        "Button":  "Créer un sondage"
                                     }
                       },
     "Settings":  {
                      "Header":  {
-                                    "Title":  "ParamÃƒÂ¨tres",
-                                    "Description":  "GÃƒÂ©rer vos prÃƒÂ©fÃƒÂ©rences de compte"
+                                    "Title":  "Paramètres",
+                                    "Description":  "Gérer vos préférences de compte"
                                 },
                      "Tabs":  {
                                   "Profile":  "Profil",
                                   "Notifications":  "Notifications",
-                                  "Preferences":  "PrÃƒÂ©fÃƒÂ©rences",
-                                  "Security":  "SÃƒÂ©curitÃƒÂ©"
+                                  "Preferences":  "Préférences",
+                                  "Security":  "Sécurité"
                               },
                      "Preferences":  {
-                                         "Title":  "PrÃƒÂ©fÃƒÂ©rences",
-                                         "Description":  "GÃƒÂ©rer votre langue et vos paramÃƒÂ¨tres d\u0027affichage",
+                                         "Title":  "Préférences",
+                                         "Description":  "Gérer votre langue et vos paramètres d\u0027affichage",
                                          "Language":  "Langue",
-                                         "Toast":  "Langue changÃƒÂ©e"
+                                         "Toast":  "Langue changée"
                                      },
                      "Profile":  {
                                      "Title":  "Informations de profil",
-                                     "Description":  "Mettre ÃƒÂ  jour vos dÃƒÂ©tails personnels",
+                                     "Description":  "Mettre à jour vos détails personnels",
                                      "RemovePhoto":  "Supprimer la photo",
                                      "FullName":  "Nom complet",
                                      "Email":  "Adresse e-mail",
-                                     "EmailHint":  "L\u0027e-mail ne peut pas ÃƒÂªtre changÃƒÂ© directement.",
+                                     "EmailHint":  "L\u0027e-mail ne peut pas être changé directement.",
                                      "Save":  "Enregistrer",
                                      "Saving":  "Enregistrement..."
                                  },
                      "Notifications":  {
-                                           "Title":  "PrÃƒÂ©fÃƒÂ©rences de notification",
-                                           "Description":  "Choisissez comment vous souhaitez ÃƒÂªtre notifiÃƒÂ©",
+                                           "Title":  "Préférences de notification",
+                                           "Description":  "Choisissez comment vous souhaitez être notifié",
                                            "Email":  "Notifications par e-mail",
                                            "Push":  "Notifications push",
-                                           "Saved":  "PrÃƒÂ©fÃƒÂ©rences enregistrÃƒÂ©es",
+                                           "Saved":  "Préférences enregistrées",
                                            "Types":  {
-                                                         "NewResponse":  "Nouvelles rÃƒÂ©ponses au sondage",
-                                                         "NewResponseDesc":  "Soyez notifiÃƒÂ© quand quelqu\u0027un termine votre sondage",
-                                                         "WeeklySummary":  "RÃƒÂ©sumÃƒÂ© hebdomadaire",
-                                                         "WeeklySummaryDesc":  "Recevez un rÃƒÂ©sumÃƒÂ© hebdomadaire de vos analyses",
-                                                         "TeamUpdates":  "Mises ÃƒÂ  jour de l\u0027ÃƒÂ©quipe",
-                                                         "TeamUpdatesDesc":  "Soyez notifiÃƒÂ© des actions des membres de l\u0027ÃƒÂ©quipe",
-                                                         "RealTime":  "Nouvelles rÃƒÂ©ponses",
-                                                         "RealTimeDesc":  "Alertes en temps rÃƒÂ©el pour les nouvelles rÃƒÂ©ponses",
-                                                         "MilestonesDesc":  "Quand les sondages atteignent des objectifs de rÃƒÂ©ponse"
+                                                         "NewResponse":  "Nouvelles réponses au sondage",
+                                                         "NewResponseDesc":  "Soyez notifié quand quelqu\u0027un termine votre sondage",
+                                                         "WeeklySummary":  "Résumé hebdomadaire",
+                                                         "WeeklySummaryDesc":  "Recevez un résumé hebdomadaire de vos analyses",
+                                                         "TeamUpdates":  "Mises à jour de l\u0027équipe",
+                                                         "TeamUpdatesDesc":  "Soyez notifié des actions des membres de l\u0027équipe",
+                                                         "RealTime":  "Nouvelles réponses",
+                                                         "RealTimeDesc":  "Alertes en temps réel pour les nouvelles réponses",
+                                                         "MilestonesDesc":  "Quand les sondages atteignent des objectifs de réponse"
                                                      },
                                            "Error":  "Une erreur est survenue",
                                            "Saving":  "Enregistrement...",
@@ -662,20 +662,20 @@
                                        },
                      "Security":  {
                                       "Title":  "Changer le mot de passe",
-                                      "Description":  "Mettre ÃƒÂ  jour le mot de passe de votre compte",
+                                      "Description":  "Mettre à jour le mot de passe de votre compte",
                                       "Current":  "Mot de passe actuel",
                                       "New":  "Nouveau mot de passe",
                                       "Confirm":  "Confirmer le nouveau mot de passe",
-                                      "Update":  "Mettre ÃƒÂ  jour le mot de passe",
-                                      "Updating":  "Mise ÃƒÂ  jour...",
+                                      "Update":  "Mettre à jour le mot de passe",
+                                      "Updating":  "Mise à jour...",
                                       "TwoFactor":  {
-                                                        "Title":  "Authentification ÃƒÂ  deux facteurs",
-                                                        "Description":  "Ajouter une couche de sÃƒÂ©curitÃƒÂ© supplÃƒÂ©mentaire",
+                                                        "Title":  "Authentification à deux facteurs",
+                                                        "Description":  "Ajouter une couche de sécurité supplémentaire",
                                                         "Enable":  "Activer"
                                                     },
                                       "Delete":  {
                                                      "Title":  "Supprimer le compte",
-                                                     "Description":  "Une fois que vous supprimez votre compte, il n\u0027y a pas de retour en arriÃƒÂ¨re. Soyez certain.",
+                                                     "Description":  "Une fois que vous supprimez votre compte, il n\u0027y a pas de retour en arrière. Soyez certain.",
                                                      "Button":  "Supprimer le compte"
                                                  },
                                       "PasswordMismatch":  "Les mots de passe ne correspondent pas"
@@ -690,71 +690,71 @@
                     "Hero":  {
                                  "Badge":  "Formulaires 2.0",
                                  "Title":  "Sondes natives en IA \u003cbr /\u003e pour chaque domaine.",
-                                 "Description":  "Nous aidons le CX, les ÃƒÂ©ducateurs et les chercheurs ÃƒÂ  obtenir de meilleures informations en remplaÃƒÂ§ant les formulaires rigides par des discussions IA.",
+                                 "Description":  "Nous aidons le CX, les éducateurs et les chercheurs à obtenir de meilleures informations en remplaçant les formulaires rigides par des discussions IA.",
                                  "CTA":  "Commencez votre sondage gratuit",
-                                 "NoCreditCard":  "pas de carte de crÃƒÂ©dit requise"
+                                 "NoCreditCard":  "pas de carte de crédit requise"
                              },
                     "Insights":  {
-                                     "Badge":  "Ãƒâ€°coutez",
-                                     "Title":  "DÃƒÂ©couvrez le \u0027Pourquoi\u0027 derriÃƒÂ¨re les donnÃƒÂ©es",
-                                     "Description":  "De l\u0027engagement des employÃƒÂ©s aux retours produits, les chats IA transforment les interactions en insights de qualitÃƒÂ©.",
+                                     "Badge":  "Écoutez",
+                                     "Title":  "Découvrez le \u0027Pourquoi\u0027 derrière les données",
+                                     "Description":  "De l\u0027engagement des employés aux retours produits, les chats IA transforment les interactions en insights de qualité.",
                                      "Cards":  {
                                                    "AI":  {
                                                               "Title":  "Des conversations, pas des interrogatoires",
-                                                              "Description":  "Les questions statiques piÃƒÂ¨gent les utilisateurs. Les vraies conversations rÃƒÂ©vÃƒÂ¨lent leurs prioritÃƒÂ©s et ressentis rÃƒÂ©els."
+                                                              "Description":  "Les questions statiques piègent les utilisateurs. Les vraies conversations révèlent leurs priorités et ressentis réels."
                                                           },
                                                    "Alive":  {
-                                                                 "Title":  "Adaptable ÃƒÂ  tout domaine",
+                                                                 "Title":  "Adaptable à tout domaine",
                                                                  "Description":  "Que vous sondiez un citoyen ou un client, notre IA adapte son ton naturellement."
                                                              },
                                                    "Flow":  {
                                                                 "Title":  "Des formulaires qui coulent vraiment",
-                                                                "Description":  "Les utilisateurs rencontrent des impasses et abandonnent, mais les flux fluides les gardent engagÃƒÂ©s."
+                                                                "Description":  "Les utilisateurs rencontrent des impasses et abandonnent, mais les flux fluides les gardent engagés."
                                                             },
                                                    "Data":  {
-                                                                "Title":  "Discussions de donnÃƒÂ©es intelligentes",
-                                                                "Description":  "Convyy transforme les rÃƒÂ©ponses dÃƒÂ©sordonnÃƒÂ©es, les fautes de frappe et l\u0027argot en idÃƒÂ©es claires que vous pouvez utiliser."
+                                                                "Title":  "Discussions de données intelligentes",
+                                                                "Description":  "Convyy transforme les réponses désordonnées, les fautes de frappe et l\u0027argot en idées claires que vous pouvez utiliser."
                                                             }
                                                }
                                  },
                     "Features":  {
-                                     "Badge":  "FonctionnalitÃƒÂ©s",
+                                     "Badge":  "Fonctionnalités",
                                      "Title":  "Tout ce dont vous avez besoin pour parler aux utilisateurs",
                                      "Description":  "Convyy transforme les listes de questions statiques en conversations vivantes pour capturer des signaux plus riches dans tous les domaines.",
                                      "Cards":  {
                                                    "Builder":  {
                                                                    "Title":  "Constructeur de formulaires IA",
-                                                                   "Description":  "GÃƒÂ©nÃƒÂ©rez automatiquement des flux conversationnels spÃƒÂ©cifiques au domaine via un texte simple."
+                                                                   "Description":  "Générez automatiquement des flux conversationnels spécifiques au domaine via un texte simple."
                                                                },
                                                    "ChatData":  {
-                                                                    "Title":  "Discuter avec les donnÃƒÂ©es",
-                                                                    "Description":  "Parlez directement ÃƒÂ  vos rÃƒÂ©ponses collectÃƒÂ©es et ÃƒÂ  vos analyses."
+                                                                    "Title":  "Discuter avec les données",
+                                                                    "Description":  "Parlez directement à vos réponses collectées et à vos analyses."
                                                                 },
                                                    "Logic":  {
                                                                  "Title":  "Logique intelligente",
-                                                                 "Description":  "L\u0027IA dÃƒÂ©tecte l\u0027intention et change dynamiquement les questions en cours de discussion."
+                                                                 "Description":  "L\u0027IA détecte l\u0027intention et change dynamiquement les questions en cours de discussion."
                                                              },
                                                    "Summaries":  {
-                                                                     "Title":  "RÃƒÂ©sumÃƒÂ©s automatiques",
-                                                                     "Description":  "Obtenez des idÃƒÂ©es structurÃƒÂ©es instantanÃƒÂ©es et des rÃƒÂ©sumÃƒÂ©s de chaque conversation."
+                                                                     "Title":  "Résumés automatiques",
+                                                                     "Description":  "Obtenez des idées structurées instantanées et des résumés de chaque conversation."
                                                                  },
                                                    "Integrations":  {
-                                                                        "Title":  "IntÃƒÂ©grations",
-                                                                        "Description":  "Connectez vos outils prÃƒÂ©fÃƒÂ©rÃƒÂ©s pour synchroniser automatiquement les donnÃƒÂ©es et dÃƒÂ©clencher des flux de travail."
+                                                                        "Title":  "Intégrations",
+                                                                        "Description":  "Connectez vos outils préférés pour synchroniser automatiquement les données et déclencher des flux de travail."
                                                                     }
                                                }
                                  },
                     "CTA":  {
                                 "Badge":  "Commencer",
-                                "Title":  "PrÃƒÂªt ÃƒÂ  transformer vos feedbacks ?",
-                                "Description":  "CrÃƒÂ©ez votre premier sondage conversationnel en quelques minutes et commencez ÃƒÂ  capturer des insights plus riches dÃƒÂ¨s aujourd\u0027hui.",
+                                "Title":  "Prêt à transformer vos feedbacks ?",
+                                "Description":  "Créez votre premier sondage conversationnel en quelques minutes et commencez à capturer des insights plus riches dès aujourd\u0027hui.",
                                 "Button":  "Commencer gratuitement"
                             },
                     "Footer":  {
-                                   "Message":  "Commencez ÃƒÂ  dÃƒÂ©couvrir des idÃƒÂ©es plus profondes aujourd\u0027hui avec \u003cbr /\u003e les donnÃƒÂ©es en temps rÃƒÂ©el de Convyy.",
+                                   "Message":  "Commencez à découvrir des idées plus profondes aujourd\u0027hui avec \u003cbr /\u003e les données en temps réel de Convyy.",
                                    "Contact":  "Contactez-nous sur X",
-                                   "Rights":  "Ã‚Â© {year} convy. Tous droits rÃƒÂ©servÃƒÂ©s.",
-                                   "Privacy":  "Politique de confidentialitÃƒÂ©",
+                                   "Rights":  "© {year} convy. Tous droits réservés.",
+                                   "Privacy":  "Politique de confidentialité",
                                    "Cookies":  "Politique de cookies",
                                    "Blog":  "Blog"
                                }
@@ -762,115 +762,115 @@
     "Auth":  {
                  "SignIn":  {
                                 "Title":  "Bon retour",
-                                "Subtitle":  "Connectez-vous ÃƒÂ  votre compte pour continuer",
+                                "Subtitle":  "Connectez-vous à votre compte pour continuer",
                                 "EmailLabel":  "Adresse e-mail",
                                 "EmailPlaceholder":  "Entrez votre e-mail",
                                 "PasswordLabel":  "Mot de passe",
                                 "PasswordPlaceholder":  "Entrez votre mot de passe",
                                 "RememberMe":  "Se souvenir de moi",
-                                "ForgotPassword":  "Mot de passe oubliÃƒÂ© ?",
+                                "ForgotPassword":  "Mot de passe oublié ?",
                                 "Button":  "Se connecter",
                                 "Loading":  "Connexion en cours...",
                                 "NoAccount":  "Vous n\u0027avez pas de compte ?",
                                 "SignUpLink":  "S\u0027inscrire",
-                                "Success":  "ConnectÃƒÂ© avec succÃƒÂ¨s",
+                                "Success":  "Connecté avec succès",
                                 "LoadingOverlay":  "Chargement...",
                                 "Redirecting":  "Redirection vers le tableau de bord"
                             },
                  "SignUp":  {
-                                "Title":  "CrÃƒÂ©er votre compte",
-                                "Subtitle":  "Commencez ÃƒÂ  crÃƒÂ©er des sondages conversationnels dÃƒÂ¨s aujourd\u0027hui",
+                                "Title":  "Créer votre compte",
+                                "Subtitle":  "Commencez à créer des sondages conversationnels dès aujourd\u0027hui",
                                 "NameLabel":  "Nom complet",
                                 "NamePlaceholder":  "Entrez votre nom complet",
                                 "EmailLabel":  "Adresse e-mail",
                                 "EmailPlaceholder":  "Entrez votre e-mail",
                                 "PasswordLabel":  "Mot de passe",
-                                "PasswordPlaceholder":  "CrÃƒÂ©ez un mot de passe fort",
+                                "PasswordPlaceholder":  "Créez un mot de passe fort",
                                 "AgreeTo":  "J\u0027accepte les",
                                 "Terms":  "Conditions d\u0027utilisation",
                                 "And":  "et",
-                                "Privacy":  "Politique de confidentialitÃƒÂ©",
-                                "Button":  "CrÃƒÂ©er un compte",
-                                "Loading":  "CrÃƒÂ©ation du compte...",
-                                "HasAccount":  "Vous avez dÃƒÂ©jÃƒÂ  un compte ?",
+                                "Privacy":  "Politique de confidentialité",
+                                "Button":  "Créer un compte",
+                                "Loading":  "Création du compte...",
+                                "HasAccount":  "Vous avez déjà un compte ?",
                                 "SignInLink":  "Se connecter",
-                                "Success":  "Compte crÃƒÂ©ÃƒÂ© ! Veuillez vÃƒÂ©rifier votre e-mail pour valider votre compte.",
-                                "SuccessVerified":  "Compte crÃƒÂ©ÃƒÂ© et vÃƒÂ©rifiÃƒÂ© !",
-                                "Error":  "Une erreur est survenue. Veuillez rÃƒÂ©essayer.",
+                                "Success":  "Compte créé ! Veuillez vérifier votre e-mail pour valider votre compte.",
+                                "SuccessVerified":  "Compte créé et vérifié !",
+                                "Error":  "Une erreur est survenue. Veuillez réessayer.",
                                 "LoadingOverlay":  "Chargement ...",
                                 "Redirecting":  "Redirection sous peu"
                             },
                  "ForgotPassword":  {
-                                        "Title":  "Mot de passe oubliÃƒÂ©?",
-                                        "Subtitle":  "Pas de soucis! Entrez votre adresse e-mail et nous vous enverrons un lien de rÃƒÂ©initialisation.",
+                                        "Title":  "Mot de passe oublié?",
+                                        "Subtitle":  "Pas de soucis! Entrez votre adresse e-mail et nous vous enverrons un lien de réinitialisation.",
                                         "EmailLabel":  "Adresse e-mail",
                                         "EmailPlaceholder":  "Entrez votre adresse e-mail",
-                                        "Button":  "Envoyer le lien de rÃƒÂ©initialisation",
-                                        "Loading":  "Envoi du lien de rÃƒÂ©initialisation...",
-                                        "BackToSignIn":  "Retour ÃƒÂ  la connexion",
+                                        "Button":  "Envoyer le lien de réinitialisation",
+                                        "Loading":  "Envoi du lien de réinitialisation...",
+                                        "BackToSignIn":  "Retour à la connexion",
                                         "Success":  {
-                                                        "Title":  "VÃƒÂ©rifiez votre e-mail",
-                                                        "Description":  "Nous avons envoyÃƒÂ© un lien de rÃƒÂ©initialisation de mot de passe ÃƒÂ  {email}",
-                                                        "Button":  "RÃƒÂ©essayer"
+                                                        "Title":  "Vérifiez votre e-mail",
+                                                        "Description":  "Nous avons envoyé un lien de réinitialisation de mot de passe à {email}",
+                                                        "Button":  "Réessayer"
                                                     }
                                     },
                  "ResetPassword":  {
-                                       "Title":  "RÃƒÂ©initialisez votre mot de passe",
+                                       "Title":  "Réinitialisez votre mot de passe",
                                        "Subtitle":  "Entrez votre nouveau mot de passe ci-dessous",
                                        "PasswordLabel":  "Nouveau mot de passe",
                                        "PasswordPlaceholder":  "Entrez votre nouveau mot de passe",
                                        "ConfirmPasswordLabel":  "Confirmer le nouveau mot de passe",
                                        "ConfirmPasswordPlaceholder":  "Confirmez votre nouveau mot de passe",
-                                       "Button":  "RÃƒÂ©initialiser le mot de passe",
-                                       "Loading":  "RÃƒÂ©initialisation du mot de passe...",
+                                       "Button":  "Réinitialiser le mot de passe",
+                                       "Loading":  "Réinitialisation du mot de passe...",
                                        "Success":  {
-                                                       "Title":  "Mot de passe rÃƒÂ©initialisÃƒÂ© avec succÃƒÂ¨s",
-                                                       "Description":  "Votre mot de passe a ÃƒÂ©tÃƒÂ© rÃƒÂ©initialisÃƒÂ© avec succÃƒÂ¨s. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.",
-                                                       "Button":  "Se connecter ÃƒÂ  votre compte"
+                                                       "Title":  "Mot de passe réinitialisé avec succès",
+                                                       "Description":  "Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.",
+                                                       "Button":  "Se connecter à votre compte"
                                                    },
                                        "Errors":  {
                                                       "Mismatch":  "Les mots de passe ne correspondent pas",
-                                                      "Failed":  "Ãƒâ€°chec de la rÃƒÂ©initialisation du mot de passe"
+                                                      "Failed":  "Échec de la réinitialisation du mot de passe"
                                                   },
                                        "PasswordsMatch":  "Les mots de passe correspondent"
                                    },
                  "VerifyEmail":  {
-                                     "Title":  "VÃƒÂ©rifiez votre e-mail",
-                                     "Description":  "Nous avons envoyÃƒÂ© un lien de vÃƒÂ©rification ÃƒÂ  {email}. Veuillez vÃƒÂ©rifier votre boÃƒÂ®te de rÃƒÂ©ception et suivre les instructions pour vÃƒÂ©rifier votre compte.",
+                                     "Title":  "Vérifiez votre e-mail",
+                                     "Description":  "Nous avons envoyé un lien de vérification à {email}. Veuillez vérifier votre boîte de réception et suivre les instructions pour vérifier votre compte.",
                                      "DefaultEmail":  "votre e-mail",
-                                     "Verifying":  "VÃƒÂ©rification de votre e-mail...",
+                                     "Verifying":  "Vérification de votre e-mail...",
                                      "VerifyingSubtitle":  "Veuillez patienter un instant",
-                                     "ResendButton":  "Renvoyer l\u0027e-mail de vÃƒÂ©rification",
+                                     "ResendButton":  "Renvoyer l\u0027e-mail de vérification",
                                      "ResendingButton":  "Envoi en cours...",
-                                     "BackToSignIn":  "Retour ÃƒÂ  la connexion",
-                                     "SuccessToast":  "E-mail vÃƒÂ©rifiÃƒÂ© avec succÃƒÂ¨s!",
-                                     "ErrorToast":  "Ãƒâ€°chec de la vÃƒÂ©rification",
-                                     "GenericError":  "Une erreur s\u0027est produite lors de la vÃƒÂ©rification",
-                                     "ResendSuccess":  "E-mail de vÃƒÂ©rification envoyÃƒÂ©!",
-                                     "ResendError":  "Ãƒâ€°chec de l\u0027envoi de l\u0027e-mail de vÃƒÂ©rification"
+                                     "BackToSignIn":  "Retour à la connexion",
+                                     "SuccessToast":  "E-mail vérifié avec succès!",
+                                     "ErrorToast":  "Échec de la vérification",
+                                     "GenericError":  "Une erreur s\u0027est produite lors de la vérification",
+                                     "ResendSuccess":  "E-mail de vérification envoyé!",
+                                     "ResendError":  "Échec de l\u0027envoi de l\u0027e-mail de vérification"
                                  }
              },
     "Profile":  {
                     "Title":  "Mon Profil",
                     "EditButton":  "Modifier le Profil",
                     "PersonalInfo":  "Informations Personnelles",
-                    "FirstName":  "PrÃƒÂ©nom",
+                    "FirstName":  "Prénom",
                     "LastName":  "Nom",
                     "Email":  "Adresse E-mail",
                     "JoinDate":  "Date d\u0027Inscription",
-                    "UserRole":  "RÃƒÂ´le de l\u0027Utilisateur",
+                    "UserRole":  "Rôle de l\u0027Utilisateur",
                     "DefaultRole":  "Membre"
                 },
     "SurveyAnalytics":  {
-                            "Title":  "Analyse d\u0027enquÃƒÂªte",
-                            "Subtitle":  "Insights et mÃƒÂ©triques alimentÃƒÂ©s par l\u0027IA"
+                            "Title":  "Analyse d\u0027enquête",
+                            "Subtitle":  "Insights et métriques alimentés par l\u0027IA"
                         },
     "SurveyStatus":  {
                          "Active":  "Actif",
                          "Draft":  "Brouillon",
-                         "Completed":  "TerminÃƒÂ©",
+                         "Completed":  "Terminé",
                          "Paused":  "En pause",
-                         "Creating":  "CrÃƒÂ©ation"
+                         "Creating":  "Création"
                      },
     "Common":  {
                    "Cancel":  "Annuler",
@@ -878,22 +878,22 @@
                    "Save":  "Enregistrer",
                    "Saving":  "Enregistrement...",
                    "Error":  "Une erreur est survenue",
-                   "Success":  "SuccÃƒÂ¨s"
+                   "Success":  "Succès"
                },
     "ProjectsPage":  {
                          "Header":  {
                                         "Title":  "Projets",
-                                        "Description":  "Organisez vos sondages en projets pour garder les choses ordonnÃƒÂ©es et systÃƒÂ©matiques.",
-                                        "CreateButton":  "CrÃƒÂ©er un projet"
+                                        "Description":  "Organisez vos sondages en projets pour garder les choses ordonnées et systématiques.",
+                                        "CreateButton":  "Créer un projet"
                                     },
                          "Search":  {
                                         "Placeholder":  "Rechercher des projets..."
                                     },
                          "Card":  {
                                       "Surveys":  "Sondages",
-                                      "Responses":  "RÃƒÂ©ponses",
+                                      "Responses":  "Réponses",
                                       "Menu":  {
-                                                   "ViewDetails":  "Voir les dÃƒÂ©tails",
+                                                   "ViewDetails":  "Voir les détails",
                                                    "AddSurvey":  "Ajouter un sondage",
                                                    "Edit":  "Modifier",
                                                    "Delete":  "Supprimer"
@@ -901,19 +901,19 @@
                                   },
                          "Empty":  {
                                        "CreateNew":  {
-                                                         "Title":  "CrÃƒÂ©er un nouveau projet",
-                                                         "Description":  "Regroupez les sondages liÃƒÂ©s pour un meilleur suivi."
+                                                         "Title":  "Créer un nouveau projet",
+                                                         "Description":  "Regroupez les sondages liés pour un meilleur suivi."
                                                      },
-                                       "NoMatching":  "Aucun projet correspondant trouvÃƒÂ©."
+                                       "NoMatching":  "Aucun projet correspondant trouvé."
                                    },
                          "CreateModal":  {
-                                             "Title":  "CrÃƒÂ©er un projet",
+                                             "Title":  "Créer un projet",
                                              "NameLabel":  "Nom du projet",
                                              "NamePlaceholder":  "ex: Recherche utilisateur T4",
                                              "DescriptionLabel":  "Description",
-                                             "DescriptionPlaceholder":  "DÃƒÂ©crivez l\u0027objectif de ce projet...",
+                                             "DescriptionPlaceholder":  "Décrivez l\u0027objectif de ce projet...",
                                              "Cancel":  "Annuler",
-                                             "Creating":  "CrÃƒÂ©ation...",
+                                             "Creating":  "Création...",
                                              "Confirm":  "Confirmer"
                                          },
                          "EditModal":  {
@@ -927,23 +927,23 @@
                                        },
                          "DeleteModal":  {
                                              "Title":  "Supprimer le projet",
-                                             "Description":  "ÃƒÅ tes-vous sÃƒÂ»r de vouloir supprimer ce projet ? Les sondages ne seront pas supprimÃƒÂ©s, seulement retirÃƒÂ©s de ce dossier.",
+                                             "Description":  "Êtes-vous sûr de vouloir supprimer ce projet ? Les sondages ne seront pas supprimés, seulement retirés de ce dossier.",
                                              "Cancel":  "Annuler",
                                              "Deleting":  "Suppression...",
                                              "Confirm":  "Confirmer la suppression"
                                          },
                          "ProjectSurveys":  {
                                                 "Empty":  {
-                                                              "Description":  "Aucun sondage ajoutÃƒÂ© ÃƒÂ  ce projet pour le moment.",
+                                                              "Description":  "Aucun sondage ajouté à ce projet pour le moment.",
                                                               "Button":  "Ajouter un sondage"
                                                           },
                                                 "AddAnother":  "Ajouter plus de sondages"
                                             },
                          "AddSurveyModal":  {
                                                 "Title":  "Ajouter des sondages au projet",
-                                                "Empty":  "Tous vos sondages sont dÃƒÂ©jÃƒÂ  dans ce projet.",
+                                                "Empty":  "Tous vos sondages sont déjà dans ce projet.",
                                                 "SearchPlaceholder":  "Rechercher des sondages...",
-                                                "NoSurveys":  "Aucun sondage disponible trouvÃƒÂ©.",
+                                                "NoSurveys":  "Aucun sondage disponible trouvé.",
                                                 "Cancel":  "Annuler",
                                                 "Confirm":  "Ajouter {count} sondage(s)"
                                             }
