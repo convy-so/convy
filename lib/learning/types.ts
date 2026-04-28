@@ -56,7 +56,7 @@ export const learningOutcomeDefinitionSchema = z.object({
   description: z.string().min(1),
   evidenceSignals: z.array(z.string()).default([]),
   misconceptionTags: z.array(z.string()).default([]),
-  masteryThreshold: z.number().min(0).max(100).default(70),
+  masteryThreshold: z.number().min(0).max(100).default(0),
 });
 
 export type LearningOutcomeDefinition = z.infer<

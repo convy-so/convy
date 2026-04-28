@@ -13,8 +13,8 @@ import { appLocales } from "@/lib/i18n/config";
 const classroomSchema = z.object({
   id: z.string(),
   title: z.string(),
-  description: z.string().nullable().optional(),
-  subject: z.string().nullable().optional(),
+  description: z.string(),
+  subject: z.string(),
   defaultContentLocale: z.enum(appLocales),
   gradeBand: z.string(),
   gradeLabel: z.string(),

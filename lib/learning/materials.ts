@@ -14,6 +14,9 @@ const materialAnalysisSchema = z.object({
   clarifyingQuestions: z.array(z.string()).default([]),
   coverageObservations: z.array(z.string()).default([]),
   recommendedOutcomeEdits: z.array(z.string()).default([]),
+  rigorNotes: z.array(z.string()).default([]),
+  notationNotes: z.array(z.string()).default([]),
+  scopeNotes: z.array(z.string()).default([]),
 });
 
 function stripHtmlTags(value: string) {
@@ -113,7 +116,10 @@ You are helping a teacher review whether the uploaded source material is suffici
 - Write a concise summary.
 - Ask only necessary clarifying questions.
 - Note where the material supports or fails to support the learning outcomes.
-- Suggest outcome edits only when the outcomes are too vague or unsupported.`,
+- Suggest outcome edits only when the outcomes are too vague or unsupported.
+- Extract Rigor Notes: What is the academic level? What complexity of problems are present?
+- Extract Notation Notes: What specific mathematical or scientific symbols, conventions, or units are used?
+- Extract Scope Notes: What specific sub-topics are included or explicitly excluded? What are the boundaries of the content?`,
   });
 
   return output;

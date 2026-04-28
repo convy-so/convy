@@ -224,6 +224,39 @@ export async function POST(
         sourceUpdatedAt: material.updatedAt,
       });
 
+      const currentTopic = await getDb().query.learningTopics.findFirst({
+        where: eq(learningTopics.id, topicId),
+        columns: { sourceBoundary: true },
+      });
+
+      const existingBoundary = currentTopic?.sourceBoundary ?? {
+        rigorNotes: [],
+        notationNotes: [],
+        scopeNotes: [],
+      };
+
+      const updatedBoundary = {
+        ...existingBoundary,
+        rigorNotes: Array.from(
+          new Set([
+            ...(existingBoundary.rigorNotes || []),
+            ...((analysis.rigorNotes as string[]) || []),
+          ]),
+        ),
+        notationNotes: Array.from(
+          new Set([
+            ...(existingBoundary.notationNotes || []),
+            ...((analysis.notationNotes as string[]) || []),
+          ]),
+        ),
+        scopeNotes: Array.from(
+          new Set([
+            ...(existingBoundary.scopeNotes || []),
+            ...((analysis.scopeNotes as string[]) || []),
+          ]),
+        ),
+      };
+
       await Promise.all([
         getDb()
           .update(topicMaterials)
@@ -236,6 +269,7 @@ export async function POST(
         getDb()
           .update(learningTopics)
           .set({
+            sourceBoundary: updatedBoundary,
             lastMaterialSyncAt: new Date(),
             updatedAt: new Date(),
           })
