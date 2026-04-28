@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1777055006826,
-      "tag": "0000_slimy_nomad",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1777055898483,
-      "tag": "0001_fancy_gabe_jones",
+      "when": 1777383501631,
+      "tag": "0000_tan_gabe_jones",
       "breakpoints": true
     }
   ]

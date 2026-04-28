@@ -1,36 +1,36 @@
 {
     "Index":  {
                   "title":  "Convyy",
-                  "description":  "KI-gestÃƒÂ¼tzte Umfragen"
+                  "description":  "KI-gestützte Umfragen"
               },
     "Survey":  {
                    "Create":  {
                                   "Title":  {
                                                 "Create":  "Neue Umfrage erstellen",
                                                 "View":  "Erstellungs-Konversation anzeigen",
-                                                "ChooseTopic":  "WÃƒÂ¤hlen Sie Ihr Umfragethema"
+                                                "ChooseTopic":  "Wählen Sie Ihr Umfragethema"
                                             },
-                                  "Subtitle":  "WÃƒÂ¤hlen Sie ein Thema aus, um Ihre Umfrage zu starten. Unsere Experten-KI wird Sie durch den Prozess fÃƒÂ¼hren.",
+                                  "Subtitle":  "Wählen Sie ein Thema aus, um Ihre Umfrage zu starten. Unsere Experten-KI wird Sie durch den Prozess führen.",
                                   "TextMode":  "Textmodus",
                                   "VoiceMode":  "Sprachmodus",
                                   "CreationMode":  {
                                                        "Title":  "KI-Designer-Modus",
-                                                       "Description":  "Wie mÃƒÂ¶chten Sie mit der KI zusammenarbeiten, um Ihre Umfrage zu erstellen?",
+                                                       "Description":  "Wie möchten Sie mit der KI zusammenarbeiten, um Ihre Umfrage zu erstellen?",
                                                        "Text":  "Text-Chat",
-                                                       "TextDescription":  "Schreiben Sie Nachrichten und iterieren Sie schrittweise an Ihrem Design in einer vertrauten Chat-OberflÃƒÂ¤che.",
+                                                       "TextDescription":  "Schreiben Sie Nachrichten und iterieren Sie schrittweise an Ihrem Design in einer vertrauten Chat-Oberfläche.",
                                                        "Voice":  "Sprachassistent",
-                                                       "VoiceDescription":  "Entwerfen Sie Ihre Umfrage freihÃƒÂ¤ndig mittels natÃƒÂ¼rlicher Echtzeit-Sprache mit der KI."
+                                                       "VoiceDescription":  "Entwerfen Sie Ihre Umfrage freihändig mittels natürlicher Echtzeit-Sprache mit der KI."
                                                    },
                                   "RespondentFormat":  {
                                                            "Title":  "Teilnehmer-Erlebnis",
-                                                           "Description":  "WÃƒÂ¤hlen Sie das Endformat fÃƒÂ¼r die Personen, die an Ihrer Umfrage teilnehmen.",
+                                                           "Description":  "Wählen Sie das Endformat für die Personen, die an Ihrer Umfrage teilnehmen.",
                                                            "Text":  "Text-Konversation",
-                                                           "TextDescription":  "Teilnehmer beantworten Fragen ÃƒÂ¼ber eine standardmÃƒÂ¤ÃƒÅ¸ige textbasierte Chat-Schnittstelle.",
+                                                           "TextDescription":  "Teilnehmer beantworten Fragen über eine standardmäßige textbasierte Chat-Schnittstelle.",
                                                            "Voice":  "Immersives Voice-Erlebnis",
-                                                           "VoiceDescription":  "Teilnehmer sprechen mit einem lebensechten KI-Agenten, der sie durch die Umfrage fÃƒÂ¼hrt."
+                                                           "VoiceDescription":  "Teilnehmer sprechen mit einem lebensechten KI-Agenten, der sie durch die Umfrage führt."
                                                        },
                                   "PageTitle":  "Neue Umfrage erstellen",
-                                  "PageSubtitle":  "WÃƒÂ¤hlen Sie die Fachkompetenz fÃƒÂ¼r Ihre Umfrage oder beschreiben Sie Ihre BedÃƒÂ¼rfnisse",
+                                  "PageSubtitle":  "Wählen Sie die Fachkompetenz für Ihre Umfrage oder beschreiben Sie Ihre Bedürfnisse",
                                   "AIExpertLabel":  "KI-Experte",
                                   "Domains":  {
                                                   "1":  {
@@ -39,35 +39,35 @@
                                                         },
                                                   "2":  {
                                                             "Title":  "Marktforschung \u0026 Konsumenten-Intelligenz",
-                                                            "Description":  "MÃƒÂ¤rkte, PrÃƒÂ¤ferenzen und Verhaltensweisen verstehen, um ZUKÃƒÅ“NFTIGE Entscheidungen zu treffen."
+                                                            "Description":  "Märkte, Präferenzen und Verhaltensweisen verstehen, um ZUKÜNFTIGE Entscheidungen zu treffen."
                                                         },
                                                   "3":  {
                                                             "Title":  "Personal- \u0026 Organisationsentwicklung",
-                                                            "Description":  "Bewertung der internen Gesundheit, EffektivitÃƒÂ¤t und Mitarbeiterzufriedenheit."
+                                                            "Description":  "Bewertung der internen Gesundheit, Effektivität und Mitarbeiterzufriedenheit."
                                                         },
                                                   "4":  {
                                                             "Title":  "Produktdesign \u0026 Nutzerforschung",
-                                                            "Description":  "Optimierung der Benutzerfreundlichkeit, Barrierefreiheit und Interface-EffektivitÃƒÂ¤t."
+                                                            "Description":  "Optimierung der Benutzerfreundlichkeit, Barrierefreiheit und Interface-Effektivität."
                                                         },
                                                   "5":  {
                                                             "Title":  "Bildung \u0026 Lernerfolgsmessung",
-                                                            "Description":  "Messung von Wissen, FÃƒÂ¤higkeiten, Lernergebnissen oder Bildungserfahrungen."
+                                                            "Description":  "Messung von Wissen, Fähigkeiten, Lernergebnissen oder Bildungserfahrungen."
                                                         },
                                                   "6":  {
-                                                            "Title":  "BÃƒÂ¼rgerschaftliches Engagement \u0026 Ãƒâ€“ffentliche Meinung",
-                                                            "Description":  "Erfassung der BÃƒÂ¼rgeransichten zu politischen Angelegenheiten, Richtlinien oder kommunaler Verwaltung."
+                                                            "Title":  "Bürgerschaftliches Engagement \u0026 Öffentliche Meinung",
+                                                            "Description":  "Erfassung der Bürgeransichten zu politischen Angelegenheiten, Richtlinien oder kommunaler Verwaltung."
                                                         },
                                                   "7":  {
                                                             "Title":  "Wissenschaftliche \u0026 Akademische Forschung",
-                                                            "Description":  "DurchfÃƒÂ¼hrung strenger Forschung fÃƒÂ¼r verallgemeinerbares Wissen."
+                                                            "Description":  "Durchführung strenger Forschung für verallgemeinerbares Wissen."
                                                         },
                                                   "8":  {
                                                             "Title":  "Gesundheit \u0026 Patientenerlebnis",
-                                                            "Description":  "Messung der PflegequalitÃƒÂ¤t, der Patientenergebnisse und der klinischen Kommunikation."
+                                                            "Description":  "Messung der Pflegequalität, der Patientenergebnisse und der klinischen Kommunikation."
                                                         },
                                                   "9":  {
                                                             "Title":  "Demographische \u0026 Soziale Charakterisierung",
-                                                            "Description":  "ZÃƒÂ¤hlen, Beschreiben und Verstehen von BevÃƒÂ¶lkerungsprofilen."
+                                                            "Description":  "Zählen, Beschreiben und Verstehen von Bevölkerungsprofilen."
                                                         },
                                                   "10":  {
                                                              "Title":  "Infrastruktur- \u0026 Systemleistung",
@@ -80,7 +80,7 @@
                                              },
                                   "Header":  {
                                                  "Title":  "Umfrage erstellen",
-                                                 "Publish":  "VerÃƒÂ¶ffentlichen",
+                                                 "Publish":  "Veröffentlichen",
                                                  "VoiceMode":  "Sprachmodus",
                                                  "StopVoice":  "Sprache stoppen",
                                                  "Mode":  {
@@ -92,34 +92,34 @@
                                              },
                                   "ReadOnlyBanner":  {
                                                          "Message":  "Sie sehen eine abgeschlossene Konversation.",
-                                                         "Link":  "Zu den Umfragedetails Ã¢â€ â€™"
+                                                         "Link":  "Zu den Umfragedetails →"
                                                      },
                                   "Chat":  {
                                                "Started":  "Sprachkonversation gestartet",
-                                               "Instruction":  "Sprechen Sie natÃƒÂ¼rlich, um Ihre Umfrage zu erstellen",
-                                               "Listening":  "ZuhÃƒÂ¶ren...",
+                                               "Instruction":  "Sprechen Sie natürlich, um Ihre Umfrage zu erstellen",
+                                               "Listening":  "Zuhören...",
                                                "Speaking":  "Sprechen...",
                                                "VoiceActive":  "Sprachmodus aktiv",
-                                               "VoiceInstruction":  "Sprechen Sie natÃƒÂ¼rlich. Ich antworte, wenn Sie aufhÃƒÂ¶ren.",
+                                               "VoiceInstruction":  "Sprechen Sie natürlich. Ich antworte, wenn Sie aufhören.",
                                                "VoiceListening":  "Antwort abwarten...",
-                                               "VoiceStart":  "Klicken Sie auf das Mikrofon, um das GesprÃƒÂ¤ch zu beginnen.",
+                                               "VoiceStart":  "Klicken Sie auf das Mikrofon, um das Gespräch zu beginnen.",
                                                "ExitVoice":  "Sprachmodus verlassen",
-                                               "Welcome":  "Hallo! Ich bin hier, um Ihnen bei der Erstellung der perfekten Umfrage zu helfen. Fangen wir mit den Grundlagen an - was ist das Hauptziel Ihrer Umfrage? Was mÃƒÂ¶chten Sie von Ihren Befragten erfahren?"
+                                               "Welcome":  "Hallo! Ich bin hier, um Ihnen bei der Erstellung der perfekten Umfrage zu helfen. Fangen wir mit den Grundlagen an - was ist das Hauptziel Ihrer Umfrage? Was möchten Sie von Ihren Befragten erfahren?"
                                            },
                                   "Status":  {
                                                  "AISpeaking":  "KI spricht",
-                                                 "Listening":  "ZuhÃƒÂ¶ren",
+                                                 "Listening":  "Zuhören",
                                                  "Connecting":  "Verbindung wird hergestellt...",
                                                  "Ready":  "Bereit",
                                                  "Speaking":  "Sprechen",
                                                  "SpeakingUser":  "Sie sprechen",
                                                  "TapToPause":  "Zum Pausieren tippen",
                                                  "TapToSpeak":  "Zum Sprechen tippen",
-                                                 "SelectTopicFirst":  "Zuerst Thema wÃƒÂ¤hlen"
+                                                 "SelectTopicFirst":  "Zuerst Thema wählen"
                                              },
                                   "Completion":  {
                                                      "Title":  "Hervorragend! Wir sind bereit.",
-                                                     "Message":  "Ich habe alle Informationen, die ich benÃƒÂ¶tige. Lassen Sie uns zurÃƒÂ¼ckwechseln, um die Zusammenfassung anzusehen und mit dem Testen zu beginnen.",
+                                                     "Message":  "Ich habe alle Informationen, die ich benötige. Lassen Sie uns zurückwechseln, um die Zusammenfassung anzusehen und mit dem Testen zu beginnen.",
                                                      "Button":  "Zusammenfassung ansehen \u0026 Testen"
                                                  },
                                   "ReadyCard":  {
@@ -130,7 +130,7 @@
                                                 },
                                   "Menu":  {
                                                "UploadFile":  "Datei hochladen",
-                                               "AddMedia":  "Medien hinzufÃƒÂ¼gen",
+                                               "AddMedia":  "Medien hinzufügen",
                                                "MediaTypes":  "Bilder, Video, Audio",
                                                "VoiceMode":  "Sprachmodus",
                                                "TalkToAI":  "Mit KI sprechen"
@@ -138,14 +138,14 @@
                                   "Input":  {
                                                 "Placeholder":  "Beschreiben Sie Ihre Umfrageziele...",
                                                 "VoiceMode":  "In den Sprachmodus wechseln",
-                                                "PlaceholderLocked":  "WÃƒÂ¤hlen Sie oben ein Thema, um zu beginnen...",
-                                                "AddMedia":  "Kontext/Medien hinzufÃƒÂ¼gen",
+                                                "PlaceholderLocked":  "Wählen Sie oben ein Thema, um zu beginnen...",
+                                                "AddMedia":  "Kontext/Medien hinzufügen",
                                                 "Send":  "Senden",
                                                 "ActionsTitle":  "Aktionen"
                                             },
                                   "DomainSelection":  {
-                                                          "Title":  "WÃƒÂ¤hlen Sie Ihren Umfragepfad",
-                                                          "Description":  "WÃƒÂ¤hlen Sie einen Bereich aus, um spezialisierte KI-Anleitung und branchenÃƒÂ¼bliche Vorlagen zu erhalten."
+                                                          "Title":  "Wählen Sie Ihren Umfragepfad",
+                                                          "Description":  "Wählen Sie einen Bereich aus, um spezialisierte KI-Anleitung und branchenübliche Vorlagen zu erhalten."
                                                       },
                                   "SuggestedPrompts":  {
                                                            "1":  [
@@ -155,7 +155,7 @@
                                                                      "Support-Interaktion bewerten"
                                                                  ],
                                                            "2":  [
-                                                                     "Marktforschung fÃƒÂ¼r ein neues Produkt",
+                                                                     "Marktforschung für ein neues Produkt",
                                                                      "Markenwahrnehmungsanalyse",
                                                                      "Umfrage zu Konsumgewohnheiten",
                                                                      "Werbekonzept-Test"
@@ -169,8 +169,8 @@
                                                        },
                                   "Authentication":  {
                                                          "Required":  "Authentifizierung erforderlich",
-                                                         "VerifyEmail":  "E-Mail bestÃƒÂ¤tigen",
-                                                         "GoBack":  "ZurÃƒÂ¼ck",
+                                                         "VerifyEmail":  "E-Mail bestätigen",
+                                                         "GoBack":  "Zurück",
                                                          "SignIn":  "Anmelden",
                                                          "GoHome":  "Startseite"
                                                      },
@@ -192,59 +192,59 @@
                                                }
                               },
                    "PublishModal":  {
-                                        "Title":  "Umfrage verÃƒÂ¶ffentlichen",
-                                        "TitlePublished":  "Umfrage verÃƒÂ¶ffentlicht!",
+                                        "Title":  "Umfrage veröffentlichen",
+                                        "TitlePublished":  "Umfrage veröffentlicht!",
                                         "Subtitle":  "Machen Sie Ihre Umfrage live und teilbar",
                                         "SubtitlePublished":  "Ihre Umfrage ist jetzt live und teilbar",
-                                        "SuccessMessage":  "Ã°Å¸Å½â€° Deine Umfrage ist jetzt live!",
+                                        "SuccessMessage":  "🎉 Deine Umfrage ist jetzt live!",
                                         "Buttons":  {
                                                         "CopyLink":  "Link kopieren",
                                                         "ViewSurvey":  "Umfrage ansehen",
                                                         "Done":  "Fertig",
                                                         "Cancel":  "Abbrechen",
-                                                        "Publish":  "Umfrage verÃƒÂ¶ffentlichen",
-                                                        "Publishing":  "Wird verÃƒÂ¶ffentlicht..."
+                                                        "Publish":  "Umfrage veröffentlichen",
+                                                        "Publishing":  "Wird veröffentlicht..."
                                                     },
                                         "Inputs":  {
                                                        "TitleLabel":  "Umfragetitel",
-                                                       "TitlePlaceholder":  "Geben Sie einen Titel fÃƒÂ¼r Ihre Umfrage ein",
+                                                       "TitlePlaceholder":  "Geben Sie einen Titel für Ihre Umfrage ein",
                                                        "DescLabel":  "Beschreibung",
                                                        "DescOptional":  "(optional)",
-                                                       "DescPlaceholder":  "FÃƒÂ¼gen Sie eine kurze Beschreibung fÃƒÂ¼r Ihre Umfrage hinzu",
+                                                       "DescPlaceholder":  "Fügen Sie eine kurze Beschreibung für Ihre Umfrage hinzu",
                                                        "VoiceModeLabel":  "Sprachmodus",
                                                        "VoiceModeDesc":  "Die Befragten beginnen mit der Stimme."
                                                    },
                                         "Toasts":  {
                                                        "TitleGenerated":  "Titelvorschlag generiert!",
                                                        "GenerateFailed":  "Titelvorschlag konnte nicht generiert werden",
-                                                       "EnterTitle":  "Bitte geben Sie einen Titel fÃƒÂ¼r Ihre Umfrage ein",
-                                                       "Success":  "Umfrage erfolgreich verÃƒÂ¶ffentlicht!",
-                                                       "Failed":  "Umfrage konnte nicht verÃƒÂ¶ffentlicht werden",
+                                                       "EnterTitle":  "Bitte geben Sie einen Titel für Ihre Umfrage ein",
+                                                       "Success":  "Umfrage erfolgreich veröffentlicht!",
+                                                       "Failed":  "Umfrage konnte nicht veröffentlicht werden",
                                                        "Copied":  "Link in die Zwischenablage kopiert!",
                                                        "CopyFailed":  "Link konnte nicht kopiert werden"
                                                    }
                                     },
                    "SampleReview":  {
                                         "Header":  {
-                                                       "Title":  "Beispielkonversation ÃƒÂ¼berprÃƒÂ¼fen",
-                                                       "Back":  "ZurÃƒÂ¼ck zur Umfrage"
+                                                       "Title":  "Beispielkonversation überprüfen",
+                                                       "Back":  "Zurück zur Umfrage"
                                                    },
                                         "Actions":  {
                                                         "ShowText":  "Text anzeigen",
                                                         "HideText":  "Text ausblenden",
-                                                        "Publish":  "Umfrage verÃƒÂ¶ffentlichen"
+                                                        "Publish":  "Umfrage veröffentlichen"
                                                     },
                                         "VoiceVisualizer":  {
-                                                                "Listening":  "ZuhÃƒÂ¶ren...",
+                                                                "Listening":  "Zuhören...",
                                                                 "AISpeaking":  "KI spricht...",
                                                                 "TapToSpeak":  "Zum Sprechen tippen",
-                                                                "SpeakInstruction":  "Sprechen Sie kontinuierlich. Die KI wird natÃƒÂ¼rlich antworten.",
+                                                                "SpeakInstruction":  "Sprechen Sie kontinuierlich. Die KI wird natürlich antworten.",
                                                                 "Connecting":  "Verbindung zum Sprachdienst wird hergestellt..."
                                                             },
                                         "EmptyState":  {
                                                            "StartTitle":  "Konversation starten",
                                                            "VoiceInstruction":  "Tippen Sie unten auf das Mikrofon, um mit dem Sprechen zu beginnen.",
-                                                           "TextInstruction":  "Geben Sie eine BegrÃƒÂ¼ÃƒÅ¸ung ein, um den Test zu starten."
+                                                           "TextInstruction":  "Geben Sie eine Begrüßung ein, um den Test zu starten."
                                                        },
                                         "Input":  {
                                                       "Voice":  "Stimme",
@@ -254,21 +254,21 @@
                                                   },
                                         "Feedback":  {
                                                          "Title":  "Simulation verfeinern",
-                                                         "Description":  "Nicht zufrieden mit dem Verhalten der KI? Geben Sie unten Anweisungen ein, um das nÃƒÂ¤chste Beispiel anzupassen.",
-                                                         "Placeholder":  "z.B. \u0027Fassen Sie sich kÃƒÂ¼rzer\u0027, \u0027Fragen Sie frÃƒÂ¼her nach dem Budget\u0027, \u0027Keine Emojis verwenden\u0027...",
+                                                         "Description":  "Nicht zufrieden mit dem Verhalten der KI? Geben Sie unten Anweisungen ein, um das nächste Beispiel anzupassen.",
+                                                         "Placeholder":  "z.B. \u0027Fassen Sie sich kürzer\u0027, \u0027Fragen Sie früher nach dem Budget\u0027, \u0027Keine Emojis verwenden\u0027...",
                                                          "Chars":  "{count} Zeichen",
-                                                         "RetriesLeft":  "{count} Versuche ÃƒÂ¼brig",
+                                                         "RetriesLeft":  "{count} Versuche übrig",
                                                          "Button":  "Aktualisieren \u0026 Neustarten",
                                                          "Applying":  "Wird angewendet...",
-                                                         "LimitReached":  "Du hast alle verfÃƒÂ¼gbaren Beispielkonversationen verbraucht. Bitte verÃƒÂ¶ffentliche oder bearbeite die Umfrage direkt."
+                                                         "LimitReached":  "Du hast alle verfügbaren Beispielkonversationen verbraucht. Bitte veröffentliche oder bearbeite die Umfrage direkt."
                                                      },
                                         "Toasts":  {
-                                                       "Finished":  "Konversation beendet! Sie kÃƒÂ¶nnen nun verfeinern oder verÃƒÂ¶ffentlichen.",
+                                                       "Finished":  "Konversation beendet! Sie können nun verfeinern oder veröffentlichen.",
                                                        "LimitReached":  "Du hast alle 3 Beispielkonversationen verbraucht",
                                                        "FeedbackApplied":  "Feedback angewendet! Starte neue Konversation...",
                                                        "FeedbackFailed":  "Feedback konnte nicht angewendet werden",
-                                                       "Confirmed":  "Umfrage bestÃƒÂ¤tigt und verÃƒÂ¶ffentlicht!",
-                                                       "ConfirmFailed":  "UmfragebestÃƒÂ¤tigung fehlgeschlagen",
+                                                       "Confirmed":  "Umfrage bestätigt und veröffentlicht!",
+                                                       "ConfirmFailed":  "Umfragebestätigung fehlgeschlagen",
                                                        "ResponseFailed":  "Antwort konnte nicht geladen werden",
                                                        "AIResponseFailed":  "KI-Antwort konnte nicht geladen werden",
                                                        "NoRetries":  "Du hast alle 3 Beispielkonversationen verbraucht",
@@ -276,9 +276,9 @@
                                                        "StartFailed":  "Konversation konnte nicht gestartet werden"
                                                    },
                                         "ConfirmDialog":  {
-                                                              "Title":  "Umfrage verÃƒÂ¶ffentlichen?",
-                                                              "Message":  "Sind Sie sicher, dass Sie diese Umfrage verÃƒÂ¶ffentlichen mÃƒÂ¶chten? Sobald sie live ist, kÃƒÂ¶nnen Sie die Kernfragen nicht mehr bearbeiten.",
-                                                              "Confirm":  "VerÃƒÂ¶ffentlichen",
+                                                              "Title":  "Umfrage veröffentlichen?",
+                                                              "Message":  "Sind Sie sicher, dass Sie diese Umfrage veröffentlichen möchten? Sobald sie live ist, können Sie die Kernfragen nicht mehr bearbeiten.",
+                                                              "Confirm":  "Veröffentlichen",
                                                               "Cancel":  "Weiter bearbeiten"
                                                           }
                                     },
@@ -288,17 +288,17 @@
                                     "loading":  "Ihre Umfrage wird vorbereitet...",
                                     "notFound":  "Umfrage konnte nicht geladen werden",
                                     "closed":  "Diese Umfrage nimmt keine Antworten mehr entgegen",
-                                    "errorHelp":  "Bitte ÃƒÂ¼berprÃƒÂ¼fen Sie den Link und versuchen Sie es erneut.",
+                                    "errorHelp":  "Bitte überprüfen Sie den Link und versuchen Sie es erneut.",
                                     "thankYou":  "Vielen Dank!",
-                                    "thankYouMessage":  "Ihre Erkenntnisse sind unglaublich wertvoll. Wir schÃƒÂ¤tzen es, dass Sie sich die Zeit nehmen, Ihre Gedanken mit uns zu teilen.",
-                                    "close":  "Umfrage schlieÃƒÅ¸en",
+                                    "thankYouMessage":  "Ihre Erkenntnisse sind unglaublich wertvoll. Wir schätzen es, dass Sie sich die Zeit nehmen, Ihre Gedanken mit uns zu teilen.",
+                                    "close":  "Umfrage schließen",
                                     "hideText":  "Text ausblenden",
                                     "showText":  "Text anzeigen",
                                     "voiceMode":  "Sprachmodus",
                                     "tryVoice":  "Sprache ausprobieren",
                                     "connectionFailed":  "Verbindung fehlgeschlagen",
                                     "connecting":  "Verbinden...",
-                                    "listening":  "ZuhÃƒÂ¶ren...",
+                                    "listening":  "Zuhören...",
                                     "aiSpeaking":  "KI spricht...",
                                     "tapToSpeak":  "Tippen zum Sprechen",
                                     "aiReady":  "KI bereit",
@@ -308,22 +308,22 @@
                                     "sharedMedia":  "Geteilte Medien",
                                     "tapToRetry":  "Zum Wiederholen auf das Symbol tippen",
                                     "loadFailed":  "Umfrage konnte nicht geladen werden",
-                                    "voiceSurveyIntro":  "Nehmen Sie an unserem sprachgesteuerten Interview teil. WÃƒÂ¤hlen Sie Ihre bevorzugte Sprache und sprechen Sie ganz natÃƒÂ¼rlich.",
-                                    "selectLanguage":  "Sprache wÃƒÂ¤hlen",
+                                    "voiceSurveyIntro":  "Nehmen Sie an unserem sprachgesteuerten Interview teil. Wählen Sie Ihre bevorzugte Sprache und sprechen Sie ganz natürlich.",
+                                    "selectLanguage":  "Sprache wählen",
                                     "startInterview":  "Interview starten",
-                                    "micPermissionDenied":  "Der Zugriff auf das Mikrofon ist fÃƒÂ¼r diese Umfrage erforderlich. Bitte aktivieren Sie ihn in Ihren Browservoreinstellungen, um fortzufahren.",
+                                    "micPermissionDenied":  "Der Zugriff auf das Mikrofon ist für diese Umfrage erforderlich. Bitte aktivieren Sie ihn in Ihren Browservoreinstellungen, um fortzufahren.",
                                     "micConsentTitle":  "Mikrofonzugriff",
-                                    "micConsentDescription":  "Ich verstehe, dass diese Umfrage Sprachaufzeichnungen verwendet. Ich erteile die Erlaubnis, mein Mikrofon fÃƒÂ¼r die Dauer des Interviews zu verwenden."
+                                    "micConsentDescription":  "Ich verstehe, dass diese Umfrage Sprachaufzeichnungen verwendet. Ich erteile die Erlaubnis, mein Mikrofon für die Dauer des Interviews zu verwenden."
                                 },
                    "Detail":  {
                                   "NotFound":  "Umfrage nicht gefunden",
-                                  "BackToSurveys":  "ZurÃƒÂ¼ck zu Umfragen",
+                                  "BackToSurveys":  "Zurück zu Umfragen",
                                   "Status":  {
                                                  "Active":  "Aktiv",
                                                  "Draft":  "Entwurf",
                                                  "Completed":  "Abgeschlossen",
                                                  "Paused":  "Pausiert",
-                                                 "SampleReview":  "In ÃƒÅ“berprÃƒÂ¼fung"
+                                                 "SampleReview":  "In Überprüfung"
                                              },
                                   "Header":  {
                                                  "Copied":  "Kopiert",
@@ -336,12 +336,12 @@
                                              },
                                   "SampleReview":  {
                                                        "Badge":  "Erforderlicher Schritt",
-                                                       "Title":  "Bereit fÃƒÂ¼r Beispielkonversationen",
-                                                       "Description":  "Ihre Umfragelogik wurde generiert! FÃƒÂ¼hren Sie eine Beispielkonversation mit der KI, um das Erlebnis zu prÃƒÂ¼fen, bevor Sie verÃƒÂ¶ffentlichen.",
+                                                       "Title":  "Bereit für Beispielkonversationen",
+                                                       "Description":  "Ihre Umfragelogik wurde generiert! Führen Sie eine Beispielkonversation mit der KI, um das Erlebnis zu prüfen, bevor Sie veröffentlichen.",
                                                        "Button":  "Beispielkonversation starten"
                                                    },
                                   "Tabs":  {
-                                               "Overview":  "ÃƒÅ“berblick",
+                                               "Overview":  "Überblick",
                                                "Responses":  "Antworten",
                                                "Settings":  "Einstellungen"
                                            },
@@ -366,7 +366,7 @@
                                                                          "Title":  "Umfrage-Konfiguration",
                                                                          "Objective":  "Zielsetzung",
                                                                          "TargetAudience":  "Zielgruppe",
-                                                                         "Tone":  "GesprÃƒÂ¤chston",
+                                                                         "Tone":  "Gesprächston",
                                                                          "NotSpecified":  "Nicht angegeben"
                                                                      },
                                                    "RecentResponses":  {
@@ -391,7 +391,7 @@
                                                                                  "Completed":  "Abgeschlossen",
                                                                                  "InProgress":  "In Bearbeitung"
                                                                              },
-                                                                  "Summary":  "Keine Zusammenfassung verfÃƒÂ¼gbar"
+                                                                  "Summary":  "Keine Zusammenfassung verfügbar"
                                                               },
                                                     "Card":  {
                                                                  "NoSummary":  "Noch keine Zusammenfassung generiert."
@@ -400,7 +400,7 @@
                                                                        "Page":  "Seite {current} von {total}",
                                                                        "FirstPage":  "Erste Seite",
                                                                        "PreviousPage":  "Vorherige Seite",
-                                                                       "NextPage":  "NÃƒÂ¤chste Seite",
+                                                                       "NextPage":  "Nächste Seite",
                                                                        "LastPage":  "Letzte Seite"
                                                                    }
                                                 },
@@ -412,18 +412,18 @@
                                                                   "Limit":  "Antwortlimit"
                                                               },
                                                    "VoiceMode":  {
-                                                                     "Title":  "Sprach-GesprÃƒÂ¤chsmodus",
-                                                                     "Description":  "Priorisierte Sprachinteraktion fÃƒÂ¼r diese Umfrage aktivieren."
+                                                                     "Title":  "Sprach-Gesprächsmodus",
+                                                                     "Description":  "Priorisierte Sprachinteraktion für diese Umfrage aktivieren."
                                                                  },
-                                                   "Save":  "Ãƒâ€žnderungen speichern",
+                                                   "Save":  "Änderungen speichern",
                                                    "Saving":  "Speichern..."
                                                },
                                   "DeleteModal":  {
-                                                      "Title":  "Umfrage lÃƒÂ¶schen",
-                                                      "Description":  "Sind Sie sicher, dass Sie \"{title}\" lÃƒÂ¶schen mÃƒÂ¶chten? Diese Aktion kann nicht rÃƒÂ¼ckgÃƒÂ¤ngig gemacht werden und alle Antworten werden dauerhaft entfernt.",
+                                                      "Title":  "Umfrage löschen",
+                                                      "Description":  "Sind Sie sicher, dass Sie \"{title}\" löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden und alle Antworten werden dauerhaft entfernt.",
                                                       "Cancel":  "Abbrechen",
-                                                      "Delete":  "Umfrage lÃƒÂ¶schen",
-                                                      "Deleting":  "Wird gelÃƒÂ¶scht..."
+                                                      "Delete":  "Umfrage löschen",
+                                                      "Deleting":  "Wird gelöscht..."
                                                   },
                                   "Toasts":  {
                                                  "ExportStarted":  "Export gestartet",
@@ -433,8 +433,8 @@
                                                  "SettingsFailed":  "Einstellungen konnten nicht gespeichert werden",
                                                  "StatusUpdated":  "Umfrage {status}",
                                                  "StatusFailed":  "Statusaktualisierung fehlgeschlagen",
-                                                 "Deleted":  "Umfrage gelÃƒÂ¶scht",
-                                                 "DeleteFailed":  "Umfrage konnte nicht gelÃƒÂ¶scht werden",
+                                                 "Deleted":  "Umfrage gelöscht",
+                                                 "DeleteFailed":  "Umfrage konnte nicht gelöscht werden",
                                                  "LinkCopied":  "Link kopiert!",
                                                  "Error":  "Ein Fehler ist aufgetreten"
                                              }
@@ -465,7 +465,7 @@
                },
     "Dashboard":  {
                       "Welcome":  {
-                                      "Title":  "Willkommen zurÃƒÂ¼ck! Ã°Å¸â€˜â€¹",
+                                      "Title":  "Willkommen zurück! 👋",
                                       "Subtitle":  "Hier sehen Sie, was heute mit Ihren Umfragen passiert."
                                   },
                       "CreateSurvey":  "Umfrage erstellen",
@@ -474,12 +474,12 @@
                                     "AllTime":  "Alle Zeit",
                                     "AvgDuration":  "Durchschn. Dauer",
                                     "PerCompleted":  "Pro abgeschlossener Umfrage",
-                                    "NoCompletions":  "Noch keine AbschlÃƒÂ¼sse"
+                                    "NoCompletions":  "Noch keine Abschlüsse"
                                 },
                       "QuickActions":  {
                                            "CreateSurvey":  {
                                                                 "Title":  "Umfrage erstellen",
-                                                                "Description":  "KI-gestÃƒÂ¼tzte Formulare erstellen"
+                                                                "Description":  "KI-gestützte Formulare erstellen"
                                                             },
                                            "ViewAnalytics":  {
                                                                  "Title":  "Analytik anzeigen",
@@ -498,33 +498,33 @@
                                             "Title":  "Aktuelle Umfragen",
                                             "ViewAll":  "Alle anzeigen",
                                             "NoSurveys":  "Noch keine Umfragen",
-                                            "GetStarted":  "Beginnen Sie mit der Erstellung Ihrer ersten KI-gestÃƒÂ¼tzten Umfrage",
+                                            "GetStarted":  "Beginnen Sie mit der Erstellung Ihrer ersten KI-gestützten Umfrage",
                                             "CreateFirst":  "Erstellen Sie Ihre erste Umfrage"
                                         },
                       "Activity":  {
-                                       "Title":  "Aktuelle AktivitÃƒÂ¤ten",
+                                       "Title":  "Aktuelle Aktivitäten",
                                        "ViewAll":  "Alle anzeigen",
                                        "NewResponse":  "Neue Antwort erhalten",
                                        "SurveyCreated":  "Umfrage erstellt",
-                                       "SurveyPublished":  "Umfrage verÃƒÂ¶ffentlicht"
+                                       "SurveyPublished":  "Umfrage veröffentlicht"
                                    }
                   },
     "SurveysPage":  {
                         "Header":  {
                                        "Title":  "Umfragen",
-                                       "Description":  "Erstellen und verwalten Sie Ihre KI-gestÃƒÂ¼tzten Sprachumfragen.",
+                                       "Description":  "Erstellen und verwalten Sie Ihre KI-gestützten Sprachumfragen.",
                                        "CreateButton":  "Neue Umfrage"
                                    },
                         "Tabs":  {
                                      "All":  "Alle",
-                                     "Published":  "VerÃƒÂ¶ffentlicht",
-                                     "Unpublished":  "EntwÃƒÂ¼rfe"
+                                     "Published":  "Veröffentlicht",
+                                     "Unpublished":  "Entwürfe"
                                  },
                         "Search":  {
                                        "Placeholder":  "Umfragen suchen..."
                                    },
                         "Status":  {
-                                       "Published":  "VerÃƒÂ¶ffentlicht",
+                                       "Published":  "Veröffentlicht",
                                        "Draft":  "Entwurf",
                                        "Creating":  "Erstellung",
                                        "Completed":  "Abgeschlossen",
@@ -536,16 +536,16 @@
                                       "NoMatching":  {
                                                          "Title":  "Keine passenden Umfragen gefunden",
                                                          "Description":  "Versuchen Sie, Ihre Suchkriterien anzupassen",
-                                                         "Clear":  "Suche lÃƒÂ¶schen"
+                                                         "Clear":  "Suche löschen"
                                                      },
                                       "NoPublished":  {
-                                                          "Title":  "Keine verÃƒÂ¶ffentlichten Umfragen",
-                                                          "Description":  "Erstellen und verÃƒÂ¶ffentlichen Sie eine Umfrage, um Antworten zu sammeln",
+                                                          "Title":  "Keine veröffentlichten Umfragen",
+                                                          "Description":  "Erstellen und veröffentlichen Sie eine Umfrage, um Antworten zu sammeln",
                                                           "Button":  "Umfrage erstellen"
                                                       },
                                       "NoUnpublished":  {
-                                                            "Title":  "Keine EntwÃƒÂ¼rfe oder Umfragen in Erstellung",
-                                                            "Description":  "Alle Ihre Umfragen sind bereits verÃƒÂ¶ffentlicht!"
+                                                            "Title":  "Keine Entwürfe oder Umfragen in Erstellung",
+                                                            "Description":  "Alle Ihre Umfragen sind bereits veröffentlicht!"
                                                         },
                                       "NoSurveys":  {
                                                         "Title":  "Noch keine Umfragen",
@@ -556,7 +556,7 @@
                         "Card":  {
                                      "Responses":  "Antworten",
                                      "Created":  "Erstellt",
-                                     "LastActivity":  "Letzte AktivitÃƒÂ¤t:",
+                                     "LastActivity":  "Letzte Aktivität:",
                                      "InProject":  "in {name}",
                                      "Menu":  {
                                                   "Continue":  "Erstellung fortsetzen",
@@ -565,14 +565,14 @@
                                                   "Edit":  "Bearbeiten",
                                                   "CopyLink":  "Link kopieren",
                                                   "Duplicate":  "Duplizieren",
-                                                  "Delete":  "LÃƒÂ¶schen",
+                                                  "Delete":  "Löschen",
                                                   "Resume":  "Erstellung fortsetzen",
                                                   "ViewChat":  "Erstellungs-Chat ansehen",
                                                   "ShareLink":  "Link teilen"
                                               },
                                      "Toasts":  {
-                                                    "Deleted":  "Umfrage erfolgreich gelÃƒÂ¶scht",
-                                                    "DeleteFailed":  "Umfrage konnte nicht gelÃƒÂ¶scht werden",
+                                                    "Deleted":  "Umfrage erfolgreich gelöscht",
+                                                    "DeleteFailed":  "Umfrage konnte nicht gelöscht werden",
                                                     "Duplicated":  "Umfrage dupliziert!",
                                                     "DuplicateFailed":  "Umfrage konnte nicht dupliziert werden",
                                                     "Duplicating":  "Umfrage wird dupliziert...",
@@ -581,15 +581,15 @@
                                                 }
                                  },
                         "DeleteModal":  {
-                                            "Title":  "Umfrage lÃƒÂ¶schen",
-                                            "Description":  "Sind Sie sicher, dass Sie \"{title}\" lÃƒÂ¶schen mÃƒÂ¶chten? Diese Aktion kann nicht rÃƒÂ¼ckgÃƒÂ¤ngig gemacht werden und alle Antworten werden dauerhaft entfernt.",
+                                            "Title":  "Umfrage löschen",
+                                            "Description":  "Sind Sie sicher, dass Sie \"{title}\" löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden und alle Antworten werden dauerhaft entfernt.",
                                             "Cancel":  "Abbrechen",
-                                            "Delete":  "LÃƒÂ¶schen",
-                                            "Confirm":  "Umfrage lÃƒÂ¶schen",
-                                            "Deleting":  "Wird gelÃƒÂ¶scht..."
+                                            "Delete":  "Löschen",
+                                            "Confirm":  "Umfrage löschen",
+                                            "Deleting":  "Wird gelöscht..."
                                         },
                         "Pagination":  {
-                                           "Previous":  "ZurÃƒÂ¼ck",
+                                           "Previous":  "Zurück",
                                            "Next":  "Weiter",
                                            "PerPage":  "pro Seite",
                                            "Showing":  "Zeige {start} bis {end} von {total} Umfragen"
@@ -598,7 +598,7 @@
     "ProjectsPage":  {
                          "Header":  {
                                         "Title":  "Projekte",
-                                        "Description":  "Organisieren Sie Ihre Umfragen in Projekten, um alles ÃƒÂ¼bersichtlich und systematisch zu halten.",
+                                        "Description":  "Organisieren Sie Ihre Umfragen in Projekten, um alles übersichtlich und systematisch zu halten.",
                                         "CreateButton":  "Projekt erstellen"
                                     },
                          "Search":  {
@@ -609,15 +609,15 @@
                                       "Responses":  "Antworten",
                                       "Menu":  {
                                                    "ViewDetails":  "Details anzeigen",
-                                                   "AddSurvey":  "Umfrage hinzufÃƒÂ¼gen",
+                                                   "AddSurvey":  "Umfrage hinzufügen",
                                                    "Edit":  "Bearbeiten",
-                                                   "Delete":  "LÃƒÂ¶schen"
+                                                   "Delete":  "Löschen"
                                                }
                                   },
                          "Empty":  {
                                        "CreateNew":  {
                                                          "Title":  "Neues Projekt erstellen",
-                                                         "Description":  "Gruppieren Sie verwandte Umfragen fÃƒÂ¼r eine bessere Nachverfolgung."
+                                                         "Description":  "Gruppieren Sie verwandte Umfragen für eine bessere Nachverfolgung."
                                                      },
                                        "NoMatching":  "Keine passenden Projekte gefunden."
                                    },
@@ -629,7 +629,7 @@
                                              "DescriptionPlaceholder":  "Beschreiben Sie das Ziel dieses Projekts...",
                                              "Cancel":  "Abbrechen",
                                              "Creating":  "Wird erstellt...",
-                                             "Confirm":  "BestÃƒÂ¤tigen"
+                                             "Confirm":  "Bestätigen"
                                          },
                          "EditModal":  {
                                            "Title":  "Projekt bearbeiten",
@@ -638,35 +638,35 @@
                                            "DescriptionLabel":  "Beschreibung",
                                            "DescriptionPlaceholder":  "Projektbeschreibung eingeben",
                                            "Cancel":  "Abbrechen",
-                                           "Confirm":  "Ãƒâ€žnderungen speichern"
+                                           "Confirm":  "Änderungen speichern"
                                        },
                          "DeleteModal":  {
-                                             "Title":  "Projekt lÃƒÂ¶schen",
-                                             "Description":  "Sind Sie sicher, dass Sie dieses Projekt lÃƒÂ¶schen mÃƒÂ¶chten? Umfragen werden nicht gelÃƒÂ¶scht, sondern nur aus diesem Ordner entfernt.",
+                                             "Title":  "Projekt löschen",
+                                             "Description":  "Sind Sie sicher, dass Sie dieses Projekt löschen möchten? Umfragen werden nicht gelöscht, sondern nur aus diesem Ordner entfernt.",
                                              "Cancel":  "Abbrechen",
-                                             "Deleting":  "Wird gelÃƒÂ¶scht...",
-                                             "Confirm":  "LÃƒÂ¶schen bestÃƒÂ¤tigen"
+                                             "Deleting":  "Wird gelöscht...",
+                                             "Confirm":  "Löschen bestätigen"
                                          },
                          "ProjectSurveys":  {
                                                 "Empty":  {
-                                                              "Description":  "Diesem Projekt wurden noch keine Umfragen hinzugefÃƒÂ¼gt.",
-                                                              "Button":  "Umfrage hinzufÃƒÂ¼gen"
+                                                              "Description":  "Diesem Projekt wurden noch keine Umfragen hinzugefügt.",
+                                                              "Button":  "Umfrage hinzufügen"
                                                           },
-                                                "AddAnother":  "Mehr Umfragen hinzufÃƒÂ¼gen"
+                                                "AddAnother":  "Mehr Umfragen hinzufügen"
                                             },
                          "AddSurveyModal":  {
-                                                "Title":  "Umfragen zum Projekt hinzufÃƒÂ¼gen",
+                                                "Title":  "Umfragen zum Projekt hinzufügen",
                                                 "Empty":  "Alle Ihre Umfragen befinden sich bereits in diesem Projekt.",
                                                 "SearchPlaceholder":  "Umfragen suchen...",
-                                                "NoSurveys":  "Keine verfÃƒÂ¼gbaren Umfragen gefunden.",
+                                                "NoSurveys":  "Keine verfügbaren Umfragen gefunden.",
                                                 "Cancel":  "Abbrechen",
-                                                "Confirm":  "{count} Umfrage(n) hinzufÃƒÂ¼gen"
+                                                "Confirm":  "{count} Umfrage(n) hinzufügen"
                                             }
                      },
     "AnalyticsPage":  {
                           "Header":  {
                                          "Title":  "Analytik",
-                                         "Description":  "ÃƒÅ“bersicht ÃƒÂ¼ber Ihre Umfrageleistung und Ihr Engagement"
+                                         "Description":  "Übersicht über Ihre Umfrageleistung und Ihr Engagement"
                                      },
                           "Search":  {
                                          "Placeholder":  "Umfragen suchen..."
@@ -676,7 +676,7 @@
                                    },
                           "Empty":  {
                                         "Title":  "Keine aktiven Umfragen",
-                                        "Description":  "Erstellen und verÃƒÂ¶ffentlichen Sie eine Umfrage, um Analysen zu sehen.",
+                                        "Description":  "Erstellen und veröffentlichen Sie eine Umfrage, um Analysen zu sehen.",
                                         "Button":  "Umfrage erstellen"
                                     }
                       },
@@ -696,21 +696,21 @@
                                          "Title":  "Einstellungen",
                                          "Description":  "Verwalten Sie Ihre Sprache und Anzeigeeinstellungen",
                                          "Language":  "Sprache",
-                                         "Toast":  "Sprache geÃƒÂ¤ndert"
+                                         "Toast":  "Sprache geändert"
                                      },
                      "Profile":  {
                                      "Title":  "Profilinformationen",
-                                     "Description":  "Aktualisieren Sie Ihre persÃƒÂ¶nlichen Daten",
+                                     "Description":  "Aktualisieren Sie Ihre persönlichen Daten",
                                      "RemovePhoto":  "Foto entfernen",
-                                     "FullName":  "VollstÃƒÂ¤ndiger Name",
+                                     "FullName":  "Vollständiger Name",
                                      "Email":  "E-Mail-Adresse",
-                                     "EmailHint":  "E-Mail kann nicht direkt geÃƒÂ¤ndert werden.",
-                                     "Save":  "Ãƒâ€žnderungen speichern",
+                                     "EmailHint":  "E-Mail kann nicht direkt geändert werden.",
+                                     "Save":  "Änderungen speichern",
                                      "Saving":  "Speichern..."
                                  },
                      "Notifications":  {
                                            "Title":  "Benachrichtigungseinstellungen",
-                                           "Description":  "WÃƒÂ¤hlen Sie, wie Sie benachrichtigt werden mÃƒÂ¶chten",
+                                           "Description":  "Wählen Sie, wie Sie benachrichtigt werden möchten",
                                            "Email":  "E-Mail-Benachrichtigungen",
                                            "Push":  "Push-Benachrichtigungen",
                                            "ChannelEmail":  "E-Mail",
@@ -718,20 +718,20 @@
                                            "Saved":  "Einstellungen gespeichert",
                                            "Types":  {
                                                          "NewResponse":  "Neue Umfrageantworten",
-                                                         "NewResponseDesc":  "Lassen Sie sich benachrichtigen, wenn jemand Ihre Umfrage abschlieÃƒÅ¸t",
-                                                         "WeeklySummary":  "WÃƒÂ¶chentliche Zusammenfassung",
-                                                         "WeeklySummaryDesc":  "Erhalten Sie eine wÃƒÂ¶chentliche Zusammenfassung Ihrer Umfrageanalysen",
+                                                         "NewResponseDesc":  "Lassen Sie sich benachrichtigen, wenn jemand Ihre Umfrage abschließt",
+                                                         "WeeklySummary":  "Wöchentliche Zusammenfassung",
+                                                         "WeeklySummaryDesc":  "Erhalten Sie eine wöchentliche Zusammenfassung Ihrer Umfrageanalysen",
                                                          "TeamUpdates":  "Team-Updates",
-                                                         "TeamUpdatesDesc":  "Lassen Sie sich ÃƒÂ¼ber Aktionen von Teammitgliedern benachrichtigen",
+                                                         "TeamUpdatesDesc":  "Lassen Sie sich über Aktionen von Teammitgliedern benachrichtigen",
                                                          "SurveyComplete":  "Umfrage abgeschlossen",
                                                          "SurveyCompleteDesc":  "Erhalten Sie Push-Benachrichtigungen, wenn ein wichtiger Umfrageablauf abgeschlossen ist",
                                                          "RealTime":  "Neue Antworten",
-                                                         "RealTimeDesc":  "Echtzeitwarnungen fÃƒÂ¼r neue Antworten",
+                                                         "RealTimeDesc":  "Echtzeitwarnungen für neue Antworten",
                                                          "MilestonesDesc":  "Wenn Umfragen Antwortziele erreichen"
                                                      },
                                            "Error":  "Ein Fehler ist aufgetreten",
                                            "Saving":  "Speichern...",
-                                           "Save":  "Ãƒâ€žnderungen speichern"
+                                           "Save":  "Änderungen speichern"
                                        },
                      "Billing":  {
                                      "Title":  "Abrechnung und Abo",
@@ -744,24 +744,24 @@
                      "Security":  {
                                       "PanelTitle":  "Sicherheitseinstellungen",
                                       "PanelDescription":  "Verwalten Sie Ihr Passwort und die Sicherheit Ihres Kontos.",
-                                      "Title":  "Passwort ÃƒÂ¤ndern",
+                                      "Title":  "Passwort ändern",
                                       "Description":  "Aktualisieren Sie Ihr Kontopasswort",
                                       "Current":  "Aktuelles Passwort",
                                       "New":  "Neues Passwort",
-                                      "Confirm":  "Neues Passwort bestÃƒÂ¤tigen",
+                                      "Confirm":  "Neues Passwort bestätigen",
                                       "Update":  "Passwort aktualisieren",
                                       "Updating":  "Aktualisierung...",
                                       "TwoFactor":  {
                                                         "Title":  "Zwei-Faktor-Authentifizierung",
-                                                        "Description":  "FÃƒÂ¼gen Sie Ihrem Konto eine zusÃƒÂ¤tzliche Sicherheitsebene hinzu",
+                                                        "Description":  "Fügen Sie Ihrem Konto eine zusätzliche Sicherheitsebene hinzu",
                                                         "Enable":  "Aktivieren"
                                                     },
                                       "Delete":  {
-                                                     "Title":  "Konto lÃƒÂ¶schen",
-                                                     "Description":  "Sobald Sie Ihr Konto lÃƒÂ¶schen, gibt es kein ZurÃƒÂ¼ck mehr. Seien Sie sicher.",
-                                                     "Button":  "Konto lÃƒÂ¶schen"
+                                                     "Title":  "Konto löschen",
+                                                     "Description":  "Sobald Sie Ihr Konto löschen, gibt es kein Zurück mehr. Seien Sie sicher.",
+                                                     "Button":  "Konto löschen"
                                                  },
-                                      "PasswordMismatch":  "PasswÃƒÂ¶rter stimmen nicht ÃƒÂ¼berein"
+                                      "PasswordMismatch":  "Passwörter stimmen nicht überein"
                                   }
                  },
     "Landing":  {
@@ -772,42 +772,42 @@
                                },
                     "Hero":  {
                                  "Badge":  "Formulare 2.0",
-                                 "Title":  "KI-native Umfragen \u003cbr /\u003e fÃƒÂ¼r jeden Bereich.",
+                                 "Title":  "KI-native Umfragen \u003cbr /\u003e für jeden Bereich.",
                                  "Description":  "Wir helfen CX, Forschern und im Bildungswesen, bessere Erkenntnisse zu gewinnen, indem wir starre Formulare durch dynamische KI-Chats ersetzen.",
                                  "CTA":  "Kostenlose Umfrage erstellen",
                                  "NoCreditCard":  "keine Kreditkarte erforderlich"
                              },
                     "Insights":  {
-                                     "Badge":  "HÃƒÂ¶ren Sie zu",
+                                     "Badge":  "Hören Sie zu",
                                      "Title":  "Entdecken Sie das \u0027Warum\u0027 hinter den Daten",
                                      "Description":  "Vom Mitarbeiter-Engagement bis zum Produkt-Feedback verwandeln KI-Chats Interaktionen in tiefe, hochwertige Erkenntnisse.",
                                      "Cards":  {
                                                    "AI":  {
-                                                              "Title":  "GesprÃƒÂ¤che, keine VerhÃƒÂ¶re",
-                                                              "Description":  "Statische Fragen sperren Nutzer ein. Echte GesprÃƒÂ¤che offenbaren ihre wahren PrioritÃƒÂ¤ten und Probleme."
+                                                              "Title":  "Gespräche, keine Verhöre",
+                                                              "Description":  "Statische Fragen sperren Nutzer ein. Echte Gespräche offenbaren ihre wahren Prioritäten und Probleme."
                                                           },
                                                    "Alive":  {
                                                                  "Title":  "Anpassbar an jedes Feld",
-                                                                 "Description":  "Ob bei der Befragung eines BÃƒÂ¼rgers oder eines Kunden, unsere KI passt ihren Ton natÃƒÂ¼rlich an."
+                                                                 "Description":  "Ob bei der Befragung eines Bürgers oder eines Kunden, unsere KI passt ihren Ton natürlich an."
                                                              },
                                                    "Flow":  {
-                                                                "Title":  "Formulare, die wirklich flieÃƒÅ¸en",
-                                                                "Description":  "Nutzer stoÃƒÅ¸en auf Sackgassen und brechen ab, aber reibungslose AblÃƒÂ¤ufe halten sie engagiert."
+                                                                "Title":  "Formulare, die wirklich fließen",
+                                                                "Description":  "Nutzer stoßen auf Sackgassen und brechen ab, aber reibungslose Abläufe halten sie engagiert."
                                                             },
                                                    "Data":  {
                                                                 "Title":  "Smarte Daten-Chats",
-                                                                "Description":  "Convyy verwandelt chaotische Antworten, Tippfehler und Slang in klare Erkenntnisse, die Sie nutzen kÃƒÂ¶nnen."
+                                                                "Description":  "Convyy verwandelt chaotische Antworten, Tippfehler und Slang in klare Erkenntnisse, die Sie nutzen können."
                                                             }
                                                }
                                  },
                     "Features":  {
                                      "Badge":  "Funktionen",
                                      "Title":  "Alles, was Sie brauchen, um mit Nutzern zu sprechen",
-                                     "Description":  "Convyy verwandelt statische Fragenlisten in lebendige GesprÃƒÂ¤che, um in allen Forschungsbereichen reichhaltigere Signale zu erfassen.",
+                                     "Description":  "Convyy verwandelt statische Fragenlisten in lebendige Gespräche, um in allen Forschungsbereichen reichhaltigere Signale zu erfassen.",
                                      "Cards":  {
                                                    "Builder":  {
                                                                    "Title":  "KI-Formular-Builder",
-                                                                   "Description":  "Erstellen Sie automatisch domÃƒÂ¤nenspezifische GesprÃƒÂ¤chsablÃƒÂ¤ufe aus einfachem Text."
+                                                                   "Description":  "Erstellen Sie automatisch domänenspezifische Gesprächsabläufe aus einfachem Text."
                                                                },
                                                    "Integrations":  {
                                                                         "Title":  "Integrationen",
@@ -819,11 +819,11 @@
                                                                 },
                                                    "Logic":  {
                                                                  "Title":  "Smarte Logik",
-                                                                 "Description":  "KI erkennt Absichten und ÃƒÂ¤ndert Fragen dynamisch mitten im GesprÃƒÂ¤ch."
+                                                                 "Description":  "KI erkennt Absichten und ändert Fragen dynamisch mitten im Gespräch."
                                                              },
                                                    "Summaries":  {
                                                                      "Title":  "Automatische Zusammenfassungen",
-                                                                     "Description":  "Erhalten Sie sofort strukturierte Erkenntnisse und Zusammenfassungen aus jedem GesprÃƒÂ¤ch."
+                                                                     "Description":  "Erhalten Sie sofort strukturierte Erkenntnisse und Zusammenfassungen aus jedem Gespräch."
                                                                  }
                                                }
                                  },
@@ -836,7 +836,7 @@
                     "Footer":  {
                                    "Message":  "Beginnen Sie noch heute mit dem Entdecken tieferer Erkenntnisse mit \u003cbr /\u003e Echtzeitdaten von Convyy.",
                                    "Contact":  "Kontaktieren Sie uns auf X",
-                                   "Rights":  "Ã‚Â© {year} convy. Alle Rechte vorbehalten.",
+                                   "Rights":  "© {year} convy. Alle Rechte vorbehalten.",
                                    "Privacy":  "Datenschutzrichtlinie",
                                    "Cookies":  "Cookie-Richtlinie",
                                    "Blog":  "Blog"
@@ -844,7 +844,7 @@
                 },
     "Auth":  {
                  "SignIn":  {
-                                "Title":  "Willkommen zurÃƒÂ¼ck",
+                                "Title":  "Willkommen zurück",
                                 "Subtitle":  "Melden Sie sich an, um fortzufahren",
                                 "EmailLabel":  "E-Mail-Adresse",
                                 "EmailPlaceholder":  "Geben Sie Ihre E-Mail ein",
@@ -863,8 +863,8 @@
                  "SignUp":  {
                                 "Title":  "Konto erstellen",
                                 "Subtitle":  "Beginnen Sie noch heute mit der Erstellung von KI-Umfragen",
-                                "NameLabel":  "VollstÃƒÂ¤ndiger Name",
-                                "NamePlaceholder":  "Geben Sie Ihren vollstÃƒÂ¤ndigen Namen ein",
+                                "NameLabel":  "Vollständiger Name",
+                                "NamePlaceholder":  "Geben Sie Ihren vollständigen Namen ein",
                                 "EmailLabel":  "E-Mail-Adresse",
                                 "EmailPlaceholder":  "Geben Sie Ihre E-Mail ein",
                                 "PasswordLabel":  "Passwort",
@@ -877,55 +877,55 @@
                                 "Loading":  "Konto wird erstellt...",
                                 "HasAccount":  "Haben Sie bereits ein Konto?",
                                 "SignInLink":  "Anmelden",
-                                "Success":  "Konto erstellt! Bitte ÃƒÂ¼berprÃƒÂ¼fen Sie Ihre E-Mail, um Ihr Konto zu bestÃƒÂ¤tigen.",
+                                "Success":  "Konto erstellt! Bitte überprüfen Sie Ihre E-Mail, um Ihr Konto zu bestätigen.",
                                 "SuccessVerified":  "Konto erstellt und verifiziert!",
                                 "Error":  "Etwas ist schief gelaufen. Bitte versuchen Sie es erneut.",
                                 "LoadingOverlay":  "Laden ...",
-                                "Redirecting":  "Sie werden in KÃƒÂ¼rze weitergeleitet"
+                                "Redirecting":  "Sie werden in Kürze weitergeleitet"
                             },
                  "ForgotPassword":  {
                                         "Title":  "Passwort vergessen?",
-                                        "Subtitle":  "Keine Sorge! Geben Sie Ihre E-Mail ein und wir senden Ihnen einen Link zum ZurÃƒÂ¼cksetzen.",
+                                        "Subtitle":  "Keine Sorge! Geben Sie Ihre E-Mail ein und wir senden Ihnen einen Link zum Zurücksetzen.",
                                         "EmailLabel":  "E-Mail-Adresse",
                                         "EmailPlaceholder":  "Geben Sie Ihre E-Mail-Adresse ein",
-                                        "Button":  "Link zum ZurÃƒÂ¼cksetzen senden",
-                                        "Loading":  "Link zum ZurÃƒÂ¼cksetzen wird gesendet...",
-                                        "BackToSignIn":  "ZurÃƒÂ¼ck zur Anmeldung",
+                                        "Button":  "Link zum Zurücksetzen senden",
+                                        "Loading":  "Link zum Zurücksetzen wird gesendet...",
+                                        "BackToSignIn":  "Zurück zur Anmeldung",
                                         "Success":  {
-                                                        "Title":  "ÃƒÅ“berprÃƒÂ¼fen Sie Ihre E-Mail",
-                                                        "Description":  "Wir haben einen Link zum ZurÃƒÂ¼cksetzen des Passworts an {email} gesendet",
+                                                        "Title":  "Überprüfen Sie Ihre E-Mail",
+                                                        "Description":  "Wir haben einen Link zum Zurücksetzen des Passworts an {email} gesendet",
                                                         "Button":  "Erneut versuchen"
                                                     }
                                     },
                  "ResetPassword":  {
-                                       "Title":  "Setzen Sie Ihr Passwort zurÃƒÂ¼ck",
+                                       "Title":  "Setzen Sie Ihr Passwort zurück",
                                        "Subtitle":  "Geben Sie unten Ihr neues Passwort ein",
                                        "PasswordLabel":  "Neues Passwort",
                                        "PasswordPlaceholder":  "Geben Sie Ihr neues Passwort ein",
-                                       "ConfirmPasswordLabel":  "Neues Passwort bestÃƒÂ¤tigen",
-                                       "ConfirmPasswordPlaceholder":  "BestÃƒÂ¤tigen Sie Ihr neues Passwort",
-                                       "Button":  "Passwort zurÃƒÂ¼cksetzen",
-                                       "Loading":  "Passwort wird zurÃƒÂ¼ckgesetzt...",
+                                       "ConfirmPasswordLabel":  "Neues Passwort bestätigen",
+                                       "ConfirmPasswordPlaceholder":  "Bestätigen Sie Ihr neues Passwort",
+                                       "Button":  "Passwort zurücksetzen",
+                                       "Loading":  "Passwort wird zurückgesetzt...",
                                        "Success":  {
-                                                       "Title":  "Passwort erfolgreich zurÃƒÂ¼ckgesetzt",
-                                                       "Description":  "Ihr Passwort wurde erfolgreich zurÃƒÂ¼ckgesetzt. Sie kÃƒÂ¶nnen sich jetzt mit Ihrem neuen Passwort anmelden.",
+                                                       "Title":  "Passwort erfolgreich zurückgesetzt",
+                                                       "Description":  "Ihr Passwort wurde erfolgreich zurückgesetzt. Sie können sich jetzt mit Ihrem neuen Passwort anmelden.",
                                                        "Button":  "Melden Sie sich bei Ihrem Konto an"
                                                    },
                                        "Errors":  {
-                                                      "Mismatch":  "PasswÃƒÂ¶rter stimmen nicht ÃƒÂ¼berein",
-                                                      "Failed":  "Fehler beim ZurÃƒÂ¼cksetzen des Passworts"
+                                                      "Mismatch":  "Passwörter stimmen nicht überein",
+                                                      "Failed":  "Fehler beim Zurücksetzen des Passworts"
                                                   },
-                                       "PasswordsMatch":  "PasswÃƒÂ¶rter stimmen ÃƒÂ¼berein"
+                                       "PasswordsMatch":  "Passwörter stimmen überein"
                                    },
                  "VerifyEmail":  {
-                                     "Title":  "ÃƒÅ“berprÃƒÂ¼fen Sie Ihre E-Mail",
-                                     "Description":  "Wir haben einen Verifizierungslink an {email} gesendet. Bitte ÃƒÂ¼berprÃƒÂ¼fen Sie Ihren Posteingang und befolgen Sie die Anweisungen zur Verifizierung Ihres Kontos.",
+                                     "Title":  "Überprüfen Sie Ihre E-Mail",
+                                     "Description":  "Wir haben einen Verifizierungslink an {email} gesendet. Bitte überprüfen Sie Ihren Posteingang und befolgen Sie die Anweisungen zur Verifizierung Ihres Kontos.",
                                      "DefaultEmail":  "Ihre E-Mail",
                                      "Verifying":  "Ihre E-Mail wird verifiziert...",
                                      "VerifyingSubtitle":  "Bitte warten Sie einen Moment",
                                      "ResendButton":  "Verifizierungs-E-Mail erneut senden",
                                      "ResendingButton":  "Wird gesendet...",
-                                     "BackToSignIn":  "ZurÃƒÂ¼ck zur Anmeldung",
+                                     "BackToSignIn":  "Zurück zur Anmeldung",
                                      "SuccessToast":  "E-Mail erfolgreich verifiziert!",
                                      "ErrorToast":  "Verifizierung fehlgeschlagen",
                                      "GenericError":  "Bei der Verifizierung ist ein Fehler aufgetreten",
@@ -936,7 +936,7 @@
     "Profile":  {
                     "Title":  "Mein Profil",
                     "EditButton":  "Profil bearbeiten",
-                    "PersonalInfo":  "PersÃƒÂ¶nliche Informationen",
+                    "PersonalInfo":  "Persönliche Informationen",
                     "FirstName":  "Vorname",
                     "LastName":  "Nachname",
                     "Email":  "E-Mail-Adresse",
@@ -946,7 +946,7 @@
                 },
     "SurveyAnalytics":  {
                             "Title":  "Umfrage-Analyse",
-                            "Subtitle":  "KI-gestÃƒÂ¼tzte Insights und Metriken"
+                            "Subtitle":  "KI-gestützte Insights und Metriken"
                         },
     "SurveyStatus":  {
                          "Active":  "Aktiv",
@@ -957,7 +957,7 @@
                      },
     "Common":  {
                    "Cancel":  "Abbrechen",
-                   "Delete":  "LÃƒÂ¶schen",
+                   "Delete":  "Löschen",
                    "Save":  "Speichern",
                    "Saving":  "Wird gespeichert...",
                    "Error":  "Ein Fehler ist aufgetreten",

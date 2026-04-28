@@ -61,16 +61,16 @@ function isRoutingLocale(
 
 const METADATA_CONFIG: Record<SupportedLanguage, { title: string; description: string }> = {
   en: {
-    title: "Convyy â€” Turn Forms into AI Conversations",
+    title: "Convyy — Turn Forms into AI Conversations",
     description: "Boring forms are dead. Meet modern, AI-native conversations.",
   },
   fr: {
-    title: "Convyy â€” Transformez vos formulaires en conversations IA",
-    description: "Les formulaires ennuyeux, c'est fini. DÃ©couvrez les conversations natives IA.",
+    title: "Convyy — Transformez vos formulaires en conversations IA",
+    description: "Les formulaires ennuyeux, c'est fini. Découvrez les conversations natives IA.",
   },
   de: {
-    title: "Convyy â€” Verwandeln Sie Formulare in KI-GesprÃ¤che",
-    description: "Langweilige Formulare sind passÃ©e. Erleben Sie moderne KI-GesprÃ¤che.",
+    title: "Convyy — Verwandeln Sie Formulare in KI-Gespräche",
+    description: "Langweilige Formulare sind passée. Erleben Sie moderne KI-Gespräche.",
   },
 };
 
