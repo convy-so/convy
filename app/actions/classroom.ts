@@ -5,7 +5,6 @@ import { z } from "zod";
 import { getTeacherClassroomAccess } from "@/lib/learning/access";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { resolveUiLocaleForContentCreation } from "@/lib/i18n/resolve-locale";
-import type { AppLocale } from "@/lib/i18n/config";
 
 import * as ClassroomService from "@/lib/learning/classroom-service";
 import * as StudentService from "@/lib/learning/student-service";
@@ -107,7 +106,7 @@ async function ensureClassroomOwnerAccess(
 
 export async function createClassroomAction(
   input: z.infer<typeof createClassroomSchema>,
-): Promise<ActionResult<any>> {
+): Promise<ActionResult<unknown>> {
   try {
     const body = createClassroomSchema.parse(input);
     const { session } = await requireTeachingSession();
@@ -135,7 +134,7 @@ export async function createClassroomAction(
   }
 }
 
-export async function getTeacherClassroomsAction(): Promise<ActionResult<any>> {
+export async function getTeacherClassroomsAction(): Promise<ActionResult<unknown>> {
   try {
     const { session } = await requireTeachingSession();
     const data = await ClassroomService.getTeacherClassrooms(session.user.id);
@@ -150,7 +149,7 @@ export async function getTeacherClassroomsAction(): Promise<ActionResult<any>> {
 
 export async function getClassroomAssignedSurveyProgressAction(
   classroomId: string,
-): Promise<ActionResult<any>> {
+): Promise<ActionResult<unknown>> {
   try {
     const { session } = await requireTeachingSession();
     const data = await ClassroomService.getClassroomSurveyProgress({
@@ -172,7 +171,7 @@ export async function getClassroomAssignedSurveyProgressAction(
 
 export async function inviteStudentToClassroomAction(
   input: z.infer<typeof inviteStudentSchema>,
-): Promise<ActionResult<any>> {
+): Promise<ActionResult<unknown>> {
   try {
     const body = inviteStudentSchema.parse(input);
     const { session } = await requireTeachingSession();
@@ -196,7 +195,7 @@ export async function inviteStudentToClassroomAction(
 
 export async function bulkInviteStudentsToClassroomAction(
   input: z.infer<typeof bulkInviteStudentsSchema>,
-): Promise<ActionResult<any>> {
+): Promise<ActionResult<unknown>> {
   try {
     const body = bulkInviteStudentsSchema.parse(input);
     const { session } = await requireTeachingSession();
@@ -223,7 +222,7 @@ export async function bulkInviteStudentsToClassroomAction(
 
 export async function createLearningTopicAction(
   input: z.infer<typeof createLearningTopicSchema>,
-): Promise<ActionResult<any>> {
+): Promise<ActionResult<unknown>> {
   try {
     const body = createLearningTopicSchema.parse(input);
     const { session } = await requireTeachingSession();
@@ -253,7 +252,7 @@ export async function createLearningTopicAction(
         id: result.id,
         classroomId: result.classroomId,
         title: result.title,
-        learningOutcomeCount: (result.learningOutcomes as any[]).length,
+        learningOutcomeCount: result.learningOutcomes.length,
         contentLocale: result.contentLocale,
       },
     };
@@ -273,7 +272,7 @@ export async function getLearningInterventionsAction(input: {
   classroomId: string;
   topicId?: string;
   classroomStudentId?: string;
-}): Promise<ActionResult<any>> {
+}): Promise<ActionResult<unknown>> {
   try {
     const { session } = await requireTeachingSession();
     await ensureClassroomOwnerAccess(session.user.id, input.classroomId);
@@ -290,7 +289,7 @@ export async function getLearningInterventionsAction(input: {
 
 export async function createLearningInterventionAction(
   input: z.infer<typeof learningInterventionSchema>,
-): Promise<ActionResult<any>> {
+): Promise<ActionResult<unknown>> {
   try {
     const body = learningInterventionSchema.parse(input);
     const { session } = await requireTeachingSession();
@@ -311,10 +310,10 @@ export async function createLearningInterventionAction(
 
 export async function updateLearningInterventionAction(
   input: z.infer<typeof learningInterventionUpdateSchema>,
-): Promise<ActionResult<any>> {
+): Promise<ActionResult<unknown>> {
   try {
     const body = learningInterventionUpdateSchema.parse(input);
-    const { session } = await requireTeachingSession();
+    await requireTeachingSession();
 
     const result = await InterventionService.updateIntervention(body);
     return { success: true, data: result };

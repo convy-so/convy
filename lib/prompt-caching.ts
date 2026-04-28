@@ -3,9 +3,14 @@
 import { createHash } from "node:crypto";
 
 import type { LanguageModel } from "ai";
-import type { ProviderOptions } from "@ai-sdk/provider-utils";
-
-export type { ProviderOptions };
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue | undefined };
+export type ProviderOptions = Record<string, { [key: string]: JsonValue | undefined }>;
 
 import { env } from "@/lib/env";
 import { getRedisClient } from "@/lib/redis";
@@ -272,4 +277,3 @@ export async function preparePromptCache(input: {
     systemPrompt,
   };
 }
-

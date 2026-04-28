@@ -59,20 +59,16 @@ export function TeacherLearningHome() {
   const [materialDescription, setMaterialDescription] = useState("");
   const [materialFile, setMaterialFile] = useState<File | null>(null);
   const {
-    classroomsQuery,
     classrooms,
     selectedDirectoryClassroom,
     selectedAccessibleClassroomId,
     canManageStudents,
-    studentsQuery,
-    topicsQuery,
     students,
     topics,
     selectedStudent,
     selectedTopic,
     materialsQuery,
     readinessQuery,
-    reportsQuery,
     assignedSurveysQuery,
     interventionsQuery,
     uploadMaterialMutation,

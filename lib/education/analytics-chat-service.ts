@@ -24,8 +24,20 @@ function parseClassifierResult(value: unknown): {
   theme?: string;
 } | null {
   if (!isRecord(value)) return null;
+  const allowedIntents = [
+    "metric",
+    "comparison",
+    "evidence",
+    "snapshot",
+    "mixed",
+  ] as const;
+  const intent =
+    typeof value.intent === "string" &&
+    allowedIntents.includes(value.intent as (typeof allowedIntents)[number])
+      ? (value.intent as (typeof allowedIntents)[number])
+      : undefined;
   return {
-    intent: ["metric", "comparison", "evidence", "snapshot", "mixed"].includes(value.intent as string) ? (value.intent as any) : undefined,
+    intent,
     needsChart: typeof value.needsChart === "boolean" ? value.needsChart : undefined,
     needsTable: typeof value.needsTable === "boolean" ? value.needsTable : undefined,
     theme: typeof value.theme === "string" ? value.theme : undefined,
@@ -38,10 +50,32 @@ function parseQuestionAnswerResult(value: unknown): {
   toolResult?: { toolName: "renderTable" | "renderChart" | null; output: Record<string, unknown> };
 } | null {
   if (!isRecord(value)) return null;
+  const sources = Array.isArray(value.sources)
+    ? value.sources
+        .filter(
+          (item): item is { id: string; label: string } =>
+            isRecord(item) &&
+            typeof item.id === "string" &&
+            typeof item.label === "string",
+        )
+    : undefined;
+
+  const toolResult =
+    isRecord(value.toolResult) &&
+    (value.toolResult.toolName === "renderTable" ||
+      value.toolResult.toolName === "renderChart" ||
+      value.toolResult.toolName === null) &&
+    isRecord(value.toolResult.output)
+      ? {
+          toolName: value.toolResult.toolName as "renderTable" | "renderChart" | null,
+          output: value.toolResult.output,
+        }
+      : undefined;
+
   return {
     response: typeof value.response === "string" ? value.response : undefined,
-    sources: Array.isArray(value.sources) ? value.sources.filter(isRecord) as any : undefined,
-    toolResult: isRecord(value.toolResult) ? (value.toolResult as any) : undefined,
+    sources,
+    toolResult,
   };
 }
 
@@ -110,12 +144,12 @@ export async function answerAnalyticsQuestion(params: {
   surveyId: string;
   question: string;
   context: {
-    leftSnapshot: any;
-    rightSnapshot: any;
-    requestedSnapshot: any;
-    retrieved: any[] | null;
+    leftSnapshot: { version: number; snapshot: unknown } | null;
+    rightSnapshot: { version: number; snapshot: unknown } | null;
+    requestedSnapshot: { version: number; snapshot: unknown } | null;
+    retrieved: Array<{ sourceId?: string | null; content: string }> | null;
   };
-  classifier: any;
+  classifier: { intent?: string };
 }) {
   const { leftSnapshot, rightSnapshot, requestedSnapshot, retrieved } = params.context;
   
@@ -127,7 +161,7 @@ export async function answerAnalyticsQuestion(params: {
     : "";
     
   const evidencePrompt = retrieved
-    ? `Retrieved Evidence:\n${retrieved.map((r: any) => {
+    ? `Retrieved Evidence:\n${retrieved.map((r) => {
         const sanitizedContent = sanitizeUserInput(r.content, { maxLength: 800 });
         return `[${r.sourceId}] ${sanitizedContent}`;
       }).join("\n\n")}`

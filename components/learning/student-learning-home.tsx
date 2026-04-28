@@ -123,7 +123,6 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
     setSelectedStudyLanguage,
     setSelectedMembershipId,
     selectedMembership,
-    availableTopics,
     availableSurveys,
     setSelectedTopicId,
     effectiveSelectedTopicId,
