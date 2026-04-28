@@ -11,16 +11,21 @@ import {
 import { generateStructuredOutput } from "@/lib/ai/runtime";
 import { searchLearningTopicContext } from "@/lib/learning/rag";
 import {
-  chunkText,
-  countTokens,
-  DEFAULT_CHUNKING_VERSION,
-  EMBEDDING_MODEL_NAME,
+  STANDARD_MODEL,
   EMBEDDING_VERSION,
-  generateEmbedding,
-  generateEmbeddings,
-} from "@/lib/rag/embeddings";
+  DEFAULT_CHUNKING_VERSION,
+  LANG_TO_PG_CONFIG,
+  type PgLanguage,
+  buildRRFCandidatePool,
+  prepareEmbeddingsForIndexing,
+  textMatchSql,
+  textRankSql,
+  vectorSimilaritySql,
+} from "@/lib/rag/core";
+import { generateEmbedding } from "@/lib/rag/embeddings";
 import { rerank } from "@/lib/rag/reranker";
-import { buildRetrievalContent, hashContent } from "@/lib/retrieval/metadata";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type EvidenceContextItem = {
   id: string;
@@ -56,38 +61,10 @@ const teacherEvidenceAnswerSchema = z.object({
   evidenceHighlights: z.array(z.string()).default([]),
 });
 
-const langConfigMap: Record<string, string> = {
-  en: "english",
-  fr: "french",
-  de: "german",
-};
+// ─── Internal Helpers ─────────────────────────────────────────────────────────
 
-function buildLearningEvidenceContent(params: {
-  sourceType: "material" | "report" | "interaction" | "pattern";
-  sourceTitle?: string | null;
-  subjectKey?: string | null;
-  gradeBand?: string | null;
-  language?: string | null;
-  interactionType?: string | null;
-  phaseType?: string | null;
-  conceptKey?: string | null;
-  scopeType?: string | null;
-  rawContent: string;
-}) {
-  return buildRetrievalContent({
-    headerEntries: [
-      { label: "Source type", value: params.sourceType },
-      { label: "Title", value: params.sourceTitle },
-      { label: "Subject", value: params.subjectKey },
-      { label: "Grade band", value: params.gradeBand },
-      { label: "Language", value: params.language },
-      { label: "Interaction type", value: params.interactionType },
-      { label: "Phase type", value: params.phaseType },
-      { label: "Concept", value: params.conceptKey },
-      { label: "Scope", value: params.scopeType },
-    ],
-    rawContent: params.rawContent,
-  });
+function getPgLanguage(lang?: string | null): PgLanguage {
+  return LANG_TO_PG_CONFIG[lang ?? "en"] ?? "english";
 }
 
 function buildReportEvidenceText(report: {
@@ -95,13 +72,9 @@ function buildReportEvidenceText(report: {
   masteryPercent: number;
   report: Record<string, unknown>;
 }) {
-  const payload = report.report as Record<string, unknown>;
-  const conceptProgress = Array.isArray(payload.conceptProgress)
-    ? payload.conceptProgress
-    : [];
-  const identifiedGaps = Array.isArray(payload.identifiedGaps)
-    ? payload.identifiedGaps
-    : [];
+  const payload = report.report;
+  const conceptProgress = Array.isArray(payload.conceptProgress) ? payload.conceptProgress : [];
+  const identifiedGaps = Array.isArray(payload.identifiedGaps) ? payload.identifiedGaps : [];
   const riskFlags = Array.isArray(payload.riskFlags) ? payload.riskFlags : [];
   const recommendedTeacherActions = Array.isArray(payload.recommendedTeacherActions)
     ? payload.recommendedTeacherActions
@@ -112,12 +85,8 @@ function buildReportEvidenceText(report: {
     `Mastery percent: ${report.masteryPercent}`,
     `Student summary: ${String(payload.studentSummary ?? "")}`,
     `Pedagogical summary: ${String(payload.pedagogicalSummary ?? "")}`,
-    conceptProgress.length
-      ? `Concept progress: ${JSON.stringify(conceptProgress)}`
-      : null,
-    identifiedGaps.length
-      ? `Identified gaps: ${identifiedGaps.join("; ")}`
-      : null,
+    conceptProgress.length ? `Concept progress: ${JSON.stringify(conceptProgress)}` : null,
+    identifiedGaps.length ? `Identified gaps: ${identifiedGaps.join("; ")}` : null,
     riskFlags.length ? `Risk flags: ${riskFlags.join("; ")}` : null,
     recommendedTeacherActions.length
       ? `Recommended teacher actions: ${recommendedTeacherActions.join("; ")}`
@@ -130,31 +99,39 @@ function buildReportEvidenceText(report: {
     .join("\n");
 }
 
+// ─── Indexing ─────────────────────────────────────────────────────────────────
+
+/**
+ * Replaces all stored embedding chunks for a piece of learning evidence
+ * (material, interaction, report, or pattern).
+ *
+ * Idempotent: deletes existing chunks for (sourceType, sourceId, language)
+ * then re-inserts fresh ones.
+ */
 async function replaceLearningEvidenceEmbeddings(
   params: ReplaceLearningEvidenceEmbeddingsParams,
 ) {
-  const chunks = chunkText(params.content, { maxTokens: 320, overlap: 40 });
-  if (chunks.length === 0) return [];
-
-  const retrievalChunks = chunks.map((chunk) =>
-    buildLearningEvidenceContent({
-      sourceType: params.sourceType,
-      sourceTitle: params.sourceTitle,
-      subjectKey: params.subjectKey,
-      gradeBand: params.gradeBand,
-      language: params.language,
-      interactionType: params.interactionType,
-      phaseType: params.phaseType,
-      conceptKey: params.conceptKey,
-      scopeType: params.scopeType,
-      rawContent: chunk,
-    }),
-  );
-
-  const embeddings = await generateEmbeddings(retrievalChunks, {
-    userId: params.studentUserId ?? undefined,
-    feature: `learning-evidence-indexing:${params.sourceType}`,
+  const chunks = await prepareEmbeddingsForIndexing({
+    content: params.content,
+    chunkOptions: { maxTokens: 320 },
+    headerEntries: [
+      { label: "Source type", value: params.sourceType },
+      { label: "Title", value: params.sourceTitle },
+      { label: "Subject", value: params.subjectKey },
+      { label: "Grade band", value: params.gradeBand },
+      { label: "Language", value: params.language },
+      { label: "Interaction type", value: params.interactionType },
+      { label: "Phase type", value: params.phaseType },
+      { label: "Concept", value: params.conceptKey },
+      { label: "Scope", value: params.scopeType },
+    ],
+    attribution: {
+      userId: params.studentUserId ?? undefined,
+      feature: `learning-evidence-indexing:${params.sourceType}`,
+    },
   });
+
+  if (chunks.length === 0) return [];
 
   return await getDb().transaction(async (tx) => {
     await tx
@@ -172,7 +149,7 @@ async function replaceLearningEvidenceEmbeddings(
     return await tx
       .insert(learningEvidenceEmbeddings)
       .values(
-        chunks.map((content, index) => ({
+        chunks.map((chunk) => ({
           id: nanoid(),
           topicId: params.topicId ?? null,
           classroomId: params.classroomId ?? null,
@@ -180,7 +157,7 @@ async function replaceLearningEvidenceEmbeddings(
           studentUserId: params.studentUserId ?? null,
           sourceType: params.sourceType,
           sourceId: params.sourceId,
-          chunkIndex: index,
+          chunkIndex: chunk.chunkIndex,
           language: params.language ?? "en",
           subjectKey: params.subjectKey ?? null,
           gradeBand: params.gradeBand ?? null,
@@ -189,17 +166,17 @@ async function replaceLearningEvidenceEmbeddings(
           conceptKey: params.conceptKey ?? null,
           scopeType: params.scopeType ?? null,
           sourceTitle: params.sourceTitle ?? null,
-          embeddingModel: EMBEDDING_MODEL_NAME,
+          embeddingModel: STANDARD_MODEL,
           embeddingVersion: EMBEDDING_VERSION,
           chunkingVersion: DEFAULT_CHUNKING_VERSION,
-          contentHash: hashContent(content),
+          contentHash: chunk.contentHash,
           sourceUpdatedAt: params.sourceUpdatedAt ?? new Date(),
-          tokenCount: countTokens(content),
-          rawContent: content,
-          retrievalContent: retrievalChunks[index],
-          content,
+          tokenCount: chunk.tokenCount,
+          rawContent: chunk.rawContent,
+          retrievalContent: chunk.retrievalContent,
+          content: chunk.rawContent,
           metadata: params.metadata ?? {},
-          embedding: embeddings[index],
+          embedding: chunk.embedding,
           createdAt: new Date(),
           updatedAt: new Date(),
         })),
@@ -208,6 +185,12 @@ async function replaceLearningEvidenceEmbeddings(
   });
 }
 
+// ─── Retrieval ────────────────────────────────────────────────────────────────
+
+/**
+ * Hybrid search (vector + BM25, RRF-fused, reranked) over learning evidence
+ * embeddings scoped to a single student.
+ */
 async function searchStudentLearningEvidenceContext(params: {
   classroomStudentId: string;
   query: string;
@@ -215,127 +198,95 @@ async function searchStudentLearningEvidenceContext(params: {
   limit?: number;
 }): Promise<EvidenceContextItem[]> {
   const limit = params.limit ?? 8;
-  const language = params.language ?? "en";
-  const tsConfig = langConfigMap[language] ?? "english";
-  const queryVector = JSON.stringify(await generateEmbedding(params.query, {
-    feature: "learning-evidence-search",
-  }));
-
-  const vectorResults = await getDb()
-    .select({
-      id: learningEvidenceEmbeddings.id,
-      content: learningEvidenceEmbeddings.rawContent,
-      retrievalContent: learningEvidenceEmbeddings.retrievalContent,
-      metadata: learningEvidenceEmbeddings.metadata,
-      sourceType: learningEvidenceEmbeddings.sourceType,
-      sourceId: learningEvidenceEmbeddings.sourceId,
-      score:
-        sql<number>`1 - (${learningEvidenceEmbeddings.embedding} <=> ${queryVector})`,
-    })
-    .from(learningEvidenceEmbeddings)
-    .where(
-      and(
-        eq(
-          learningEvidenceEmbeddings.classroomStudentId,
-          params.classroomStudentId,
-        ),
-        sql`${learningEvidenceEmbeddings.embedding} IS NOT NULL`,
-      ),
-    )
-    .orderBy(sql`${learningEvidenceEmbeddings.embedding} <=> ${queryVector} ASC`)
-    .limit(limit * 6);
-
-  const textQuery = sql`websearch_to_tsquery(${tsConfig}, ${params.query})`;
-  const textResults = await getDb()
-    .select({
-      id: learningEvidenceEmbeddings.id,
-      content: learningEvidenceEmbeddings.rawContent,
-      retrievalContent: learningEvidenceEmbeddings.retrievalContent,
-      metadata: learningEvidenceEmbeddings.metadata,
-      sourceType: learningEvidenceEmbeddings.sourceType,
-      sourceId: learningEvidenceEmbeddings.sourceId,
-      score:
-        sql<number>`ts_rank(to_tsvector(${tsConfig}, ${learningEvidenceEmbeddings.retrievalContent}), ${textQuery})`,
-    })
-    .from(learningEvidenceEmbeddings)
-    .where(
-      and(
-        eq(
-          learningEvidenceEmbeddings.classroomStudentId,
-          params.classroomStudentId,
-        ),
-        eq(learningEvidenceEmbeddings.language, language),
-        sql`to_tsvector(${tsConfig}, ${learningEvidenceEmbeddings.retrievalContent}) @@ ${textQuery}`,
-      ),
-    )
-    .orderBy(
-      desc(
-        sql`ts_rank(to_tsvector(${tsConfig}, ${learningEvidenceEmbeddings.retrievalContent}), ${textQuery})`,
-      ),
-    )
-    .limit(limit * 6);
-
-  const merged = new Map<
-    string,
-    {
-      id: string;
-      content: string;
-      retrievalContent: string;
-      metadata: Record<string, unknown> | null;
-      sourceType: "material" | "report" | "interaction" | "pattern";
-      sourceId: string;
-      score: number;
-    }
-  >();
-
-  for (const row of [...vectorResults, ...textResults]) {
-    const existing = merged.get(row.id);
-    if (!existing || row.score > existing.score) {
-      merged.set(row.id, {
-        id: row.id,
-        content: row.content,
-        retrievalContent: row.retrievalContent,
-        metadata: row.metadata as Record<string, unknown> | null,
-        sourceType: row.sourceType,
-        sourceId: row.sourceId,
-        score: row.score,
-      });
-    }
-  }
-
-  const reranked = await rerank(
-    params.query,
-    Array.from(merged.values())
-      .slice(0, limit * 8)
-      .map((row) => ({
-        id: row.id,
-        content: row.retrievalContent,
-        metadata: row.metadata ?? {},
-        sourceType: "document",
-        sourceId: row.sourceId,
-        score: row.score,
-        createdAt: new Date(),
-      })),
-    limit,
+  const lang = getPgLanguage(params.language);
+  const queryVector = JSON.stringify(
+    await generateEmbedding(params.query, { feature: "learning-evidence-search" }),
   );
 
-  const rowById = new Map(Array.from(merged.values()).map((row) => [row.id, row]));
-  return reranked.flatMap((item) => {
+  const scoreSql = vectorSimilaritySql(learningEvidenceEmbeddings.embedding, queryVector);
+  const rankSql = textRankSql(learningEvidenceEmbeddings.retrievalContent, params.query, lang);
+  const matchSql = textMatchSql(learningEvidenceEmbeddings.retrievalContent, params.query, lang);
+
+  const [vectorRows, textRows] = await Promise.all([
+    getDb()
+      .select({
+        id: learningEvidenceEmbeddings.id,
+        content: learningEvidenceEmbeddings.rawContent,
+        retrievalContent: learningEvidenceEmbeddings.retrievalContent,
+        metadata: learningEvidenceEmbeddings.metadata,
+        sourceType: learningEvidenceEmbeddings.sourceType,
+        sourceId: learningEvidenceEmbeddings.sourceId,
+        score: scoreSql,
+      })
+      .from(learningEvidenceEmbeddings)
+      .where(
+        and(
+          eq(learningEvidenceEmbeddings.classroomStudentId, params.classroomStudentId),
+          sql`${learningEvidenceEmbeddings.embedding} IS NOT NULL`,
+        ),
+      )
+      .orderBy(sql`${learningEvidenceEmbeddings.embedding} <=> ${queryVector}::vector ASC`)
+      .limit(limit * 6),
+
+    getDb()
+      .select({
+        id: learningEvidenceEmbeddings.id,
+        content: learningEvidenceEmbeddings.rawContent,
+        retrievalContent: learningEvidenceEmbeddings.retrievalContent,
+        metadata: learningEvidenceEmbeddings.metadata,
+        sourceType: learningEvidenceEmbeddings.sourceType,
+        sourceId: learningEvidenceEmbeddings.sourceId,
+        score: rankSql,
+      })
+      .from(learningEvidenceEmbeddings)
+      .where(
+        and(
+          eq(learningEvidenceEmbeddings.classroomStudentId, params.classroomStudentId),
+          eq(learningEvidenceEmbeddings.language, params.language ?? "en"),
+          matchSql,
+        ),
+      )
+      .orderBy(desc(rankSql))
+      .limit(limit * 6),
+  ]);
+
+  // Use RRF fusion instead of the old max-score merge
+  const candidatePool = buildRRFCandidatePool(vectorRows, textRows, limit * 8).map((row) => ({
+    id: row.id,
+    content: row.retrievalContent ?? row.content,
+    metadata: (row.metadata ?? {}) as Record<string, unknown>,
+    sourceType: "document" as const,
+    sourceId: row.sourceId,
+    score: row.score,
+    createdAt: new Date(),
+  }));
+
+  const reranked = await rerank(params.query, candidatePool, limit, {
+    feature: "learning-evidence-search",
+  });
+
+  // Re-hydrate to the richer EvidenceContextItem shape
+  const rowById = new Map(
+    [...vectorRows, ...textRows].map((row) => [row.id, row]),
+  );
+
+  return reranked.flatMap((item): EvidenceContextItem[] => {
     const row = rowById.get(item.id);
     if (!row) return [];
-
     return [
       {
         id: row.id,
         content: row.content,
         score: item.score,
-        sourceType: row.sourceType,
+        sourceType: row.sourceType as EvidenceContextItem["sourceType"],
         sourceId: row.sourceId,
-        metadata: row.metadata ?? {},
+        metadata: (row.metadata ?? {}) as Record<string, unknown>,
       },
     ];
   });
 }
+
+// ─── Public Indexing API ──────────────────────────────────────────────────────
 
 export async function indexLearningMaterialEvidence(params: {
   classroomId?: string | null;
@@ -404,10 +355,7 @@ export async function indexLearningInteractionEvidence(params: {
     phaseType: params.phaseType ?? null,
     conceptKey: params.conceptKey ?? null,
     sourceUpdatedAt: params.sourceUpdatedAt ?? null,
-    metadata: {
-      ...(params.metadata ?? {}),
-      role: params.role,
-    },
+    metadata: { ...(params.metadata ?? {}), role: params.role },
     content: `${params.role}: ${params.content}`,
   });
 }
@@ -438,9 +386,7 @@ export async function indexLearningReportEvidence(params: {
     gradeBand: params.gradeBand ?? null,
     sourceTitle: params.topicTitle ?? "Progress report",
     sourceUpdatedAt: params.sourceUpdatedAt ?? null,
-    metadata: {
-      masteryPercent: params.masteryPercent,
-    },
+    metadata: { masteryPercent: params.masteryPercent },
     content: buildReportEvidenceText({
       topic: params.topicTitle ? { title: params.topicTitle } : null,
       masteryPercent: params.masteryPercent,
@@ -449,6 +395,13 @@ export async function indexLearningReportEvidence(params: {
   });
 }
 
+// ─── On-Demand Hydration ──────────────────────────────────────────────────────
+
+/**
+ * Checks which reports and interactions are stale (source changed since last
+ * embed) and re-indexes them lazily. Called before evidence search to keep
+ * the index current without a background job.
+ */
 export async function hydrateStudentLearningEvidence(params: {
   classroomStudentId: string;
   studentUserId?: string | null;
@@ -456,40 +409,26 @@ export async function hydrateStudentLearningEvidence(params: {
   const [reports, interactions] = await Promise.all([
     getDb().query.studentProgressReports.findMany({
       where: eq(studentProgressReports.classroomStudentId, params.classroomStudentId),
-      with: {
-        topic: {
-          with: {
-            classroom: true,
-          },
-        },
-      },
-      orderBy: (table, { desc: orderDesc }) => [orderDesc(table.updatedAt)],
+      with: { topic: { with: { classroom: true } } },
+      orderBy: (table, { desc: d }) => [d(table.updatedAt)],
       limit: 12,
     }),
     getDb().query.learningInteractions.findMany({
       where: eq(learningInteractions.classroomStudentId, params.classroomStudentId),
-      with: {
-        topic: {
-          with: {
-            classroom: true,
-          },
-        },
-      },
-      orderBy: (table, { desc: orderDesc }) => [orderDesc(table.updatedAt)],
+      with: { topic: { with: { classroom: true } } },
+      orderBy: (table, { desc: d }) => [d(table.updatedAt)],
       limit: 40,
     }),
   ]);
 
-  const reportIds = reports.map((report) => report.id);
-  const interactionIds = interactions.map((interaction) => interaction.id);
-  const [existingReportEmbeddings, existingInteractionEmbeddings] = await Promise.all([
+  const reportIds = reports.map((r) => r.id);
+  const interactionIds = interactions.map((i) => i.id);
+
+  const [existingReportEmbs, existingInteractionEmbs] = await Promise.all([
     reportIds.length > 0
       ? getDb().query.learningEvidenceEmbeddings.findMany({
           where: and(
-            eq(
-              learningEvidenceEmbeddings.classroomStudentId,
-              params.classroomStudentId,
-            ),
+            eq(learningEvidenceEmbeddings.classroomStudentId, params.classroomStudentId),
             eq(learningEvidenceEmbeddings.sourceType, "report"),
             inArray(learningEvidenceEmbeddings.sourceId, reportIds),
           ),
@@ -498,10 +437,7 @@ export async function hydrateStudentLearningEvidence(params: {
     interactionIds.length > 0
       ? getDb().query.learningEvidenceEmbeddings.findMany({
           where: and(
-            eq(
-              learningEvidenceEmbeddings.classroomStudentId,
-              params.classroomStudentId,
-            ),
+            eq(learningEvidenceEmbeddings.classroomStudentId, params.classroomStudentId),
             eq(learningEvidenceEmbeddings.sourceType, "interaction"),
             inArray(learningEvidenceEmbeddings.sourceId, interactionIds),
           ),
@@ -509,23 +445,19 @@ export async function hydrateStudentLearningEvidence(params: {
       : Promise.resolve([]),
   ]);
 
+  // Build a map of the latest indexed timestamp per source
   const latestIndexedAt = new Map<string, Date>();
-  for (const embedding of [...existingReportEmbeddings, ...existingInteractionEmbeddings]) {
-    const key = `${embedding.sourceType}:${embedding.sourceId}`;
+  for (const emb of [...existingReportEmbs, ...existingInteractionEmbs]) {
+    const key = `${emb.sourceType}:${emb.sourceId}`;
+    const candidate = emb.sourceUpdatedAt ?? emb.updatedAt;
     const current = latestIndexedAt.get(key);
-    const candidate = embedding.sourceUpdatedAt ?? embedding.updatedAt;
-    if (!current || candidate > current) {
-      latestIndexedAt.set(key, candidate);
-    }
+    if (!current || candidate > current) latestIndexedAt.set(key, candidate);
   }
 
   for (const report of reports) {
-    const key = `report:${report.id}`;
     const sourceUpdatedAt = report.updatedAt ?? report.createdAt;
-    const indexedAt = latestIndexedAt.get(key);
-    if (indexedAt && indexedAt.getTime() >= sourceUpdatedAt.getTime()) {
-      continue;
-    }
+    const indexedAt = latestIndexedAt.get(`report:${report.id}`);
+    if (indexedAt && indexedAt.getTime() >= sourceUpdatedAt.getTime()) continue;
 
     await indexLearningReportEvidence({
       reportId: report.id,
@@ -544,12 +476,9 @@ export async function hydrateStudentLearningEvidence(params: {
   }
 
   for (const interaction of interactions) {
-    const key = `interaction:${interaction.id}`;
     const sourceUpdatedAt = interaction.updatedAt ?? interaction.createdAt;
-    const indexedAt = latestIndexedAt.get(key);
-    if (indexedAt && indexedAt.getTime() >= sourceUpdatedAt.getTime()) {
-      continue;
-    }
+    const indexedAt = latestIndexedAt.get(`interaction:${interaction.id}`);
+    if (indexedAt && indexedAt.getTime() >= sourceUpdatedAt.getTime()) continue;
 
     await indexLearningInteractionEvidence({
       interactionId: interaction.id,
@@ -572,6 +501,12 @@ export async function hydrateStudentLearningEvidence(params: {
   }
 }
 
+// ─── Public Retrieval API ─────────────────────────────────────────────────────
+
+/**
+ * Finds the most relevant learning evidence for a teacher's question about a
+ * specific topic (material-level, not student-level).
+ */
 export async function findLearningEvidenceContext(params: {
   topicId: string;
   query: string;
@@ -595,6 +530,10 @@ export async function findLearningEvidenceContext(params: {
   }));
 }
 
+/**
+ * Answers a teacher's question about a specific student by combining
+ * semantic evidence retrieval with structured output generation.
+ */
 export async function answerTeacherStudentQuestion(params: {
   classroomStudentId: string;
   studentUserId?: string | null;
@@ -604,20 +543,16 @@ export async function answerTeacherStudentQuestion(params: {
 }) {
   const [reports, interactions, retrievedEvidence] = await Promise.all([
     getDb().query.studentProgressReports.findMany({
-      where: (table, { eq }) => eq(table.classroomStudentId, params.classroomStudentId),
-      orderBy: (table, { desc: orderDesc }) => [orderDesc(table.createdAt)],
+      where: (table, { eq: eqFn }) => eqFn(table.classroomStudentId, params.classroomStudentId),
+      orderBy: (table, { desc: d }) => [d(table.createdAt)],
       limit: 4,
-      with: {
-        topic: true,
-      },
+      with: { topic: true },
     }),
     getDb().query.learningInteractions.findMany({
-      where: (table, { eq }) => eq(table.classroomStudentId, params.classroomStudentId),
-      orderBy: (table, { desc: orderDesc }) => [orderDesc(table.createdAt)],
+      where: (table, { eq: eqFn }) => eqFn(table.classroomStudentId, params.classroomStudentId),
+      orderBy: (table, { desc: d }) => [d(table.createdAt)],
       limit: 8,
-      with: {
-        topic: true,
-      },
+      with: { topic: true },
     }),
     searchStudentLearningEvidenceContext({
       classroomStudentId: params.classroomStudentId,
@@ -627,21 +562,13 @@ export async function answerTeacherStudentQuestion(params: {
     }),
   ]);
 
-  // --- Post-Retrieval Deterministic Deduplication ---
-  // Create a fast lookup Set of all source IDs retrieved via semantic RAG
+  // De-duplicate: remove fallback items already surfaced by the semantic search
   const ragSourceIds = new Set(retrievedEvidence.map((item) => item.sourceId));
-
-  // Filter out any recent fallbacks that already exist in the RAG evidence pool.
-  // We keep the RAG version because it contains the semantic relevance `score`
-  // which the LLM uses for weighting its conclusions.
-  const uniqueReports = reports.filter((report) => !ragSourceIds.has(report.id));
-  const uniqueInteractions = interactions.filter(
-    (interaction) => !ragSourceIds.has(interaction.id),
-  );
+  const uniqueReports = reports.filter((r) => !ragSourceIds.has(r.id));
+  const uniqueInteractions = interactions.filter((i) => !ragSourceIds.has(i.id));
 
   return await generateStructuredOutput({
     schema: teacherEvidenceAnswerSchema,
-
     prompt: `Answer a teacher's question about a student's learning trajectory.
 
 Reply in ${params.language}.
@@ -662,20 +589,20 @@ ${JSON.stringify(
 
 Recent reports fallback (excluding exact matches above):
 ${JSON.stringify(
-      uniqueReports.map((report) => ({
-        topicTitle: report.topic?.title ?? null,
-        masteryPercent: report.masteryPercent,
-        report: report.report,
+      uniqueReports.map((r) => ({
+        topicTitle: r.topic?.title ?? null,
+        masteryPercent: r.masteryPercent,
+        report: r.report,
       })),
     )}
 
 Recent interactions fallback (excluding exact matches above):
 ${JSON.stringify(
-      uniqueInteractions.map((interaction) => ({
-        topicTitle: interaction.topic?.title ?? null,
-        role: interaction.role,
-        interactionType: interaction.interactionType,
-        content: interaction.content,
+      uniqueInteractions.map((i) => ({
+        topicTitle: i.topic?.title ?? null,
+        role: i.role,
+        interactionType: i.interactionType,
+        content: i.content,
       })),
     )}
 

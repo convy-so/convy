@@ -28,15 +28,7 @@ const LEARNING_MATERIAL_EXTENSION_ALLOWLIST = new Set([
   "json",
 ]);
 
-export const AUDIO_MIME_ALLOWLIST = new Set([
-  "audio/mpeg",
-  "audio/wav",
-  "audio/webm",
-  "audio/ogg",
-  "audio/mp4",
-  "audio/x-m4a",
-  "audio/m4a",
-]);
+
 
 function getFileExtension(filename: string) {
   const lastPart = filename.split(".").pop()?.trim().toLowerCase();
@@ -46,15 +38,6 @@ function getFileExtension(filename: string) {
 export function assertFileSize(file: FileLike, maxBytes: number, label: string) {
   if (file.size > maxBytes) {
     throw new Error(`${label} exceeds the ${Math.round(maxBytes / MB)}MB limit`);
-  }
-}
-
-export function assertAudioUploadFile(file: FileLike, detectedMimeType?: string | null) {
-  assertFileSize(file, MAX_AUDIO_UPLOAD_BYTES, "Audio upload");
-  const mimeType = (detectedMimeType || file.type || "").toLowerCase();
-
-  if (!AUDIO_MIME_ALLOWLIST.has(mimeType)) {
-    throw new Error("Unsupported audio format");
   }
 }
 

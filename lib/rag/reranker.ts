@@ -1,73 +1,85 @@
-import { SearchResult } from "./search";
-import { logUsage } from "../billing/logger";
+import { VoyageAIClient } from "voyageai";
 import { generateText, Output } from "ai";
-import { flashLiteModel } from "../ai";
 import { z } from "zod";
 
-const VOYAGE_API_URL = "https://api.voyageai.com/v1/rerank";
+import { SearchResult } from "./search";
+import { logUsage, type UsageLogInput } from "../billing/logger";
+import { flashLiteModel } from "../ai";
+
+const voyage = new VoyageAIClient({ apiKey: process.env.VOYAGE_API_KEY });
+
+function getInstructionForFeature(feature?: string): string {
+  if (!feature) {
+    return "Prioritize documents that are structurally and semantically relevant to the user query.";
+  }
+
+  if (feature.includes("survey") || feature.includes("rag-query")) {
+    return "Prioritize documents that provide strong insight into respondent sentiment, qualitative analysis, and direct structural relevance to the survey query.";
+  }
+
+  if (feature.includes("learning-topic") || feature.includes("learning-material")) {
+    return "Prioritize educational materials that directly explain the queried concepts, focusing on structural relevance, conceptual clarity, and pedagogical utility.";
+  }
+
+  if (feature.includes("evidence")) {
+    return "Prioritize student progress reports, interactions, and assessment patterns that provide clear evidence of student understanding, struggle markers, and mastery progression.";
+  }
+
+  if (feature.includes("few-shot") || feature.includes("few_shot")) {
+    return "Prioritize exact prompt examples and system prompt templates that structurally match the requested scenario for few-shot in-context learning.";
+  }
+
+  return "Prioritize documents that are structurally and semantically relevant to the user query.";
+}
 
 export async function rerank(
   query: string,
   candidates: SearchResult[],
   topK: number = 5,
-  metadata?: {
-    userId?: string;
-    surveyId?: string;
-  },
+  attribution?: Partial<UsageLogInput>,
 ): Promise<SearchResult[]> {
   if (candidates.length === 0) return [];
 
-  // Protect against edge cases where the key is missing
   const apiKey = process.env.VOYAGE_API_KEY;
+  const instruction = getInstructionForFeature(attribution?.feature);
+  // Voyage rerank-2.5-lite supports prepended instructions
+  const queryWithInstruction = `Instruction: ${instruction}\nQuery: ${query}`;
+
   if (apiKey) {
     try {
       const documents = candidates.map((c) => c.content);
 
-      const response = await fetch(VOYAGE_API_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          query: `Instruction: Prioritize documents that provide strong pedagogical value, clear evidence of student understanding, or exact few-shot examples for AI tutoring and surveys. Focus on educational utility and structural relevance.\nQuery: ${query}`,
-          documents,
-          model: "rerank-2",
-          top_k: topK,
-        }),
+      const response = await voyage.rerank({
+        query: queryWithInstruction,
+        documents,
+        model: "rerank-2.5-lite",
+        topK,
+        truncation: false,
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Voyage API error: ${response.status} - ${errorText}`);
-      }
-
-      const data = await response.json();
-
-      // Log the usage
-      if (data.usage?.total_tokens) {
+      if (response.usage?.totalTokens) {
         logUsage({
-          userId: metadata?.userId,
-          surveyId: metadata?.surveyId,
+          ...attribution,
           type: "llm_text",
           provider: "voyage",
-          modelName: "rerank-2",
-          promptTokens: data.usage.total_tokens, // Voyage bills primarily on total tokens for reranking
+          modelName: "rerank-2.5-lite",
+          promptTokens: response.usage.totalTokens,
           completionTokens: 0,
-          totalTokens: data.usage.total_tokens,
+          totalTokens: response.usage.totalTokens,
         });
       }
 
       const rankedResults: SearchResult[] = [];
       const seenIndices = new Set<number>();
 
-      // Voyage returns data array sorted by relevance_score
-      for (const item of data.data) {
+      // response.data contains the ranked results
+      const results = response.data ?? [];
+      for (const item of results) {
         const index = item.index;
-        if (index >= 0 && index < candidates.length) {
+        if (index !== undefined && index >= 0 && index < candidates.length) {
           rankedResults.push({
             ...candidates[index],
-            score: item.relevance_score ?? candidates[index].score // Update the score with the new rerank score if available
+            score: item.relevanceScore ?? candidates[index].score,
           });
           seenIndices.add(index);
         }
@@ -84,11 +96,12 @@ export async function rerank(
       }
 
       return rankedResults;
-    } catch {
+    } catch (error) {
+      console.error("[reranker] Voyage API failed, falling back to Gemini", error);
     }
-  } else {
   }
 
+  // Fallback to Gemini 2.5 Flash Lite
   try {
     const { output: object, usage } = await generateText({
       model: flashLiteModel,
@@ -99,8 +112,8 @@ export async function rerank(
             .describe("Indices of the candidates in order of relevance (0-based)"),
         }),
       }),
-      system: `You are an expert educational search quality rater for a pedagogical AI platform. Your task is to rank the following search results based on their relevance to the user's query.
-Instruction: Prioritize documents that provide strong pedagogical value, clear evidence of student understanding, or exact few-shot examples for AI tutoring and surveys. Focus on educational utility and structural relevance over superficial keyword matches.
+      system: `You are an expert search quality rater. Your task is to rank the following search results based on their relevance to the user's query.
+Instruction: ${instruction}
 Return the indices of the most relevant results, ordered from most relevant to least relevant.
 Ignore results that are irrelevant to the query.`,
       prompt: `Query: "${query}"
@@ -113,8 +126,7 @@ Rank the top ${topK} results.`,
 
     if (usage) {
       logUsage({
-        userId: metadata?.userId,
-        surveyId: metadata?.surveyId,
+        ...attribution,
         type: "llm_text",
         provider: "google",
         modelName: "gemini-2.5-flash-lite",
@@ -145,7 +157,8 @@ Rank the top ${topK} results.`,
     }
 
     return rankedResults;
-  } catch {
+  } catch (error) {
+    console.error("[reranker] Gemini fallback failed", error);
     return candidates.slice(0, topK);
   }
 }
@@ -174,7 +187,6 @@ export async function rerankResults(
 
   return ranked.map((r) => ({
     item: r.content,
-    score: r.score
+    score: r.score,
   }));
 }
-

@@ -78,7 +78,6 @@ export const fewShotExamples = pgTable(
     ...timestamps,
     feature: text("feature").notNull(),
     tags: text("tags").array().default([]),
-    // Structured text used by the full-text search index (header + content)
     retrievalContent: text("retrieval_content").notNull().default(""),
     content: jsonb("content").$type<Record<string, unknown>>().notNull().default({}),
     isActive: boolean("is_active").default(true).notNull(),
@@ -87,18 +86,15 @@ export const fewShotExamples = pgTable(
       onDelete: "set null",
     }),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
-    // Semantic embedding for HNSW vector search
-    embedding: vector("embedding", { dimensions: 1536 }),
+    embedding: vector("embedding", { dimensions: 1024 }),
   },
   (table) => [
     index("few_shot_examples_feature_idx").on(table.feature),
     index("few_shot_examples_active_idx").on(table.isActive),
-    // HNSW index for sub-millisecond ANN vector search
     index("few_shot_examples_embedding_hnsw_idx").using(
       "hnsw",
       table.embedding.op("vector_cosine_ops"),
     ),
-    // GIN full-text index for keyword/BM25-style recall
     index("few_shot_examples_retrieval_en_idx").using(
       "gin",
       sql`to_tsvector('english', ${table.retrievalContent})`,

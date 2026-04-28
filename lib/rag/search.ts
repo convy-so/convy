@@ -1,21 +1,27 @@
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { generateText, Output } from "ai";
+import { z } from "zod";
+
 import { getDb } from "@/db";
 import { documentEmbeddings } from "@/db/schema/vectors";
+import { flashLiteModel } from "@/lib/ai";
+import type { SupportedLanguage } from "@/lib/translation-service";
 import { generateEmbedding } from "./embeddings";
-import { and, desc, eq, gt, sql, inArray } from "drizzle-orm";
-import { SupportedLanguage } from "../translation-service";
-import { generateText, Output } from "ai";
-import { flashLiteModel } from "../ai";
-import { z } from "zod";
+import {
+  LANG_TO_PG_CONFIG,
+  type PgLanguage,
+  buildRRFCandidatePool,
+  textMatchSql,
+  textRankSql,
+  vectorSimilaritySql,
+} from "./core";
 import { rerank } from "./reranker";
+
+// ─── Public Types ────────────────────────────────────────────────────────────
 
 export interface SearchFilters {
   surveyId?: string;
-  sourceType?: (
-    | "response"
-    | "insight"
-    | "analytics"
-    | "document"
-  )[];
+  sourceType?: ("response" | "insight" | "analytics" | "document")[];
   minDate?: Date;
   limit?: number;
   language?: SupportedLanguage;
@@ -33,24 +39,35 @@ export interface SearchResult {
   createdAt: Date;
 }
 
+// ─── Internal Helpers ────────────────────────────────────────────────────────
+
 function normalizeMetadata(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null) return {};
   return Object.fromEntries(Object.entries(value));
 }
 
+function getPgLanguage(lang?: string): PgLanguage {
+  return LANG_TO_PG_CONFIG[lang ?? "en"] ?? "english";
+}
 
+// ─── Core Search Functions ───────────────────────────────────────────────────
+
+/**
+ * Pure vector (HNSW) search over survey document embeddings.
+ * Returns results sorted by cosine similarity, highest first.
+ */
 export async function vectorSearch(
   query: string,
   filters: SearchFilters = {},
 ): Promise<SearchResult[]> {
-  const embedding = await generateEmbedding(query, {
-    surveyId: filters.surveyId,
+  const embedding = await generateEmbedding(query, { 
+    surveyId: filters.surveyId
   });
-  const limit = filters.limit || 20;
+  const limit = filters.limit ?? 20;
   const queryVector = JSON.stringify(embedding);
+  const scoreSql = vectorSimilaritySql(documentEmbeddings.embedding, queryVector);
 
-  // Search document embeddings
-  const docResults = await getDb()
+  const rows = await getDb()
     .select({
       id: documentEmbeddings.id,
       content: documentEmbeddings.rawContent,
@@ -59,65 +76,49 @@ export async function vectorSearch(
       sourceType: documentEmbeddings.sourceType,
       sourceId: documentEmbeddings.sourceId,
       createdAt: documentEmbeddings.createdAt,
-      similarity: sql<number>`1 - (${documentEmbeddings.embedding} <=> ${queryVector})`,
+      score: scoreSql,
     })
     .from(documentEmbeddings)
     .where(
       and(
-        filters.surveyId
-          ? eq(documentEmbeddings.surveyId, filters.surveyId)
-          : undefined,
-        filters.sourceType
-          ? inArray(documentEmbeddings.sourceType, filters.sourceType)
-          : undefined,
-        filters.minDate
-          ? gt(documentEmbeddings.createdAt, filters.minDate)
-          : undefined,
-        // Only valid embeddings
+        filters.surveyId ? eq(documentEmbeddings.surveyId, filters.surveyId) : undefined,
+        filters.sourceType ? inArray(documentEmbeddings.sourceType, filters.sourceType) : undefined,
+        filters.minDate ? gt(documentEmbeddings.createdAt, filters.minDate) : undefined,
+        filters.language ? eq(documentEmbeddings.language, filters.language) : undefined,
+        filters.sessionType ? eq(documentEmbeddings.sessionType, filters.sessionType) : undefined,
         sql`${documentEmbeddings.embedding} IS NOT NULL`,
-        filters.language
-          ? eq(documentEmbeddings.language, filters.language)
-          : undefined,
-        filters.sessionType
-          ? eq(documentEmbeddings.sessionType, filters.sessionType)
-          : undefined,
       ),
     )
-    .orderBy(sql`${documentEmbeddings.embedding} <=> ${queryVector} ASC`)
+    .orderBy(sql`${documentEmbeddings.embedding} <=> ${queryVector}::vector ASC`)
     .limit(limit);
 
-  return docResults.map((r) => ({
+  return rows.map((r) => ({
     id: r.id,
     content: r.content,
     retrievalContent: r.retrievalContent,
-    score: r.similarity,
+    score: r.score,
     metadata: normalizeMetadata(r.metadata),
     sourceType: r.sourceType,
-    sourceId: r.sourceId || undefined,
+    sourceId: r.sourceId ?? undefined,
     createdAt: r.createdAt,
   }));
 }
 
+/**
+ * Pure full-text (BM25) search over survey document embeddings.
+ * Returns results sorted by ts_rank, highest first.
+ */
 export async function fullTextSearch(
   query: string,
   filters: SearchFilters = {},
   language: SupportedLanguage = "en",
 ): Promise<SearchResult[]> {
-  const limit = filters.limit || 20;
-  const effectiveLanguage = filters.language ?? language;
+  const limit = filters.limit ?? 20;
+  const lang = getPgLanguage(filters.language ?? language);
+  const rankSql = textRankSql(documentEmbeddings.retrievalContent, query, lang);
+  const matchSql = textMatchSql(documentEmbeddings.retrievalContent, query, lang);
 
-  const langConfigMap: Record<SupportedLanguage, string> = {
-    en: "english",
-    fr: "french",
-    de: "german",
-  };
-
-  const tsConfig = langConfigMap[effectiveLanguage] || "english";
-  const tsQuery = sql`websearch_to_tsquery(${tsConfig}, ${query})`;
-
-  const docRank = sql<number>`ts_rank(to_tsvector(${tsConfig}, ${documentEmbeddings.retrievalContent}), ${tsQuery})`;
-
-  const docResults = await getDb()
+  const rows = await getDb()
     .select({
       id: documentEmbeddings.id,
       content: documentEmbeddings.rawContent,
@@ -126,94 +127,61 @@ export async function fullTextSearch(
       sourceType: documentEmbeddings.sourceType,
       sourceId: documentEmbeddings.sourceId,
       createdAt: documentEmbeddings.createdAt,
-      rank: docRank,
+      score: rankSql,
     })
     .from(documentEmbeddings)
     .where(
       and(
-        filters.surveyId
-          ? eq(documentEmbeddings.surveyId, filters.surveyId)
-          : undefined,
-        filters.sourceType
-          ? inArray(documentEmbeddings.sourceType, filters.sourceType)
-          : undefined,
-        filters.minDate
-          ? gt(documentEmbeddings.createdAt, filters.minDate)
-          : undefined,
-        sql`to_tsvector(${tsConfig}, ${documentEmbeddings.retrievalContent}) @@ ${tsQuery}`,
-        effectiveLanguage
-          ? eq(documentEmbeddings.language, effectiveLanguage)
-          : undefined,
-        filters.sessionType
-          ? eq(documentEmbeddings.sessionType, filters.sessionType)
-          : undefined,
+        filters.surveyId ? eq(documentEmbeddings.surveyId, filters.surveyId) : undefined,
+        filters.sourceType ? inArray(documentEmbeddings.sourceType, filters.sourceType) : undefined,
+        filters.minDate ? gt(documentEmbeddings.createdAt, filters.minDate) : undefined,
+        filters.language ? eq(documentEmbeddings.language, filters.language) : undefined,
+        filters.sessionType ? eq(documentEmbeddings.sessionType, filters.sessionType) : undefined,
+        matchSql,
       ),
     )
-    .orderBy(desc(docRank))
+    .orderBy(desc(rankSql))
     .limit(limit);
 
-  return docResults.map((r) => ({
+  return rows.map((r) => ({
     id: r.id,
     content: r.content,
     retrievalContent: r.retrievalContent,
-    score: r.rank,
+    score: r.score,
     metadata: normalizeMetadata(r.metadata),
     sourceType: r.sourceType,
-    sourceId: r.sourceId || undefined,
+    sourceId: r.sourceId ?? undefined,
     createdAt: r.createdAt,
   }));
 }
 
+/**
+ * Hybrid search: vector + BM25 fused with RRF.
+ * Does NOT rerank — use `executeRAGQuery` for the full pipeline with reranking.
+ */
 export async function hybridSearch(
   query: string,
   filters: SearchFilters = {},
   language: SupportedLanguage = "en",
 ): Promise<SearchResult[]> {
-  const limit = filters.limit || 20;
-
+  const limit = filters.limit ?? 20;
   const [vectorResults, textResults] = await Promise.all([
-    vectorSearch(query, {
-      ...filters,
-      limit: limit * 2,
-      language: filters.language || language,
-    }),
-    fullTextSearch(
-      query,
-      { ...filters, limit: limit * 2 },
-      filters.language || language,
-    ),
+    vectorSearch(query, { ...filters, limit: limit * 2, language: filters.language ?? language }),
+    fullTextSearch(query, { ...filters, limit: limit * 2 }, filters.language ?? language),
   ]);
 
-  const k = 60;
-  const scores = new Map<string, number>();
-  const resultsMap = new Map<string, SearchResult>();
-
-  vectorResults.forEach((result, index) => {
-    scores.set(result.id, (scores.get(result.id) || 0) + 1 / (k + index + 1));
-    resultsMap.set(result.id, result);
-  });
-
-  textResults.forEach((result, index) => {
-    scores.set(result.id, (scores.get(result.id) || 0) + 1 / (k + index + 1));
-    if (!resultsMap.has(result.id)) {
-      resultsMap.set(result.id, result);
-    }
-  });
-
-  const fusedResults = Array.from(scores.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, limit)
-    .map(([id, score]) => {
-      const result = resultsMap.get(id)!;
-      return {
-        ...result,
-        score: score,
-      };
-    });
-
-  return fusedResults;
+  return buildRRFCandidatePool(vectorResults, textResults, limit);
 }
 
+/**
+ * Full RAG query pipeline:
+ *   1. HyDE query expansion (generate a hypothetical answer + 3 variants).
+ *   2. Parallel hybrid search across all query variants.
+ *   3. Global RRF fusion of all partial results.
+ *   4. Voyage rerank-2 (LLM fallback) over the candidate pool.
+ *
+ * Requires `surveyId` for safety — survey data is tenant-scoped.
+ */
 export async function executeRAGQuery(
   rawQuery: string,
   filters: SearchFilters,
@@ -222,73 +190,60 @@ export async function executeRAGQuery(
   if (!filters.surveyId) {
     throw new Error("executeRAGQuery requires surveyId.");
   }
-  
+
   const queriesToRun = [rawQuery];
-  
+
   try {
     const { output: object } = await generateText({
       model: flashLiteModel,
       output: Output.object({
         schema: z.object({
-          hydeAnswer: z.string().describe("Write a hypothetical first-person respondent answer to the query constraint."),
-          variants: z.array(z.string()).describe("Write 3 semantically distinct variations or alternative vocabulary phrasings of the raw user query."),
+          hydeAnswer: z.string().describe(
+            "Write a hypothetical first-person respondent answer to the query constraint.",
+          ),
+          variants: z
+            .array(z.string())
+            .describe("3 semantically distinct alternative phrasings of the raw user query."),
         }),
       }),
       prompt: `Original Query: "${rawQuery}"\nLanguage: ${language}\nGenerate a hypothetical answer and query variants for better RAG retrieval.`,
     });
-    
+
     if (object.hydeAnswer) queriesToRun.push(object.hydeAnswer);
-    if (object.variants && object.variants.length > 0) {
-      queriesToRun.push(...object.variants.slice(0, 3));
-    }
+    if (object.variants?.length) queriesToRun.push(...object.variants.slice(0, 3));
   } catch {
+    // Non-fatal: fall through with just the raw query.
   }
 
-  const fetchLimit = filters.limit || 20;
-  const k = 60;
-  const scores = new Map<string, number>();
-  const resultsMap = new Map<string, SearchResult>();
+  const fetchLimit = filters.limit ?? 20;
+
+  // Collect partial results from all query variants in parallel.
+  const allVector: SearchResult[] = [];
+  const allText: SearchResult[] = [];
 
   await Promise.all(
     queriesToRun.map(async (q) => {
-      const [vectorResults, textResults] = await Promise.all([
+      const [v, t] = await Promise.all([
         vectorSearch(q, { ...filters, limit: fetchLimit * 2, language }),
         fullTextSearch(q, { ...filters, limit: fetchLimit * 2 }, language),
       ]);
-
-      vectorResults.forEach((result, index) => {
-        scores.set(result.id, (scores.get(result.id) || 0) + 1 / (k + index + 1));
-        resultsMap.set(result.id, result);
-      });
-
-      textResults.forEach((result, index) => {
-        scores.set(result.id, (scores.get(result.id) || 0) + 1 / (k + index + 1));
-        if (!resultsMap.has(result.id)) {
-          resultsMap.set(result.id, result);
-        }
-      });
-    })
+      allVector.push(...v);
+      allText.push(...t);
+    }),
   );
 
-  const candidatePool = Array.from(scores.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 150)
-    .map(([id, score]) => {
-      const result = resultsMap.get(id)!;
-      return {
-        ...result,
-        content: result.retrievalContent ?? result.content,
-        score,
-      };
-    });
+  const candidatePool = buildRRFCandidatePool(allVector, allText, fetchLimit * 10).map((r) => ({
+    ...r,
+    content: r.retrievalContent ?? r.content,
+  }));
 
-  const finalContextLimit = fetchLimit;
-  const reranked = await rerank(rawQuery, candidatePool, finalContextLimit);
-  
-  return reranked.map(r => {
-    const rawAnswer = r.content;
-    r.content = `[Source ID: ${r.id}] Context chunk:\n${rawAnswer}`;
+  const reranked = await rerank(rawQuery, candidatePool, fetchLimit, {
+    surveyId: filters.surveyId,
+    feature: "rag-query",
+  });
+
+  return reranked.map((r) => {
+    r.content = `[Source ID: ${r.id}] Context chunk:\n${r.content}`;
     return r;
   });
 }
-

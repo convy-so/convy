@@ -1,23 +1,61 @@
-import { openai } from "@ai-sdk/openai";
+import { voyage } from "@ai-sdk/voyage";
 import { embed, embedMany } from "ai";
-import { getEncoding } from "js-tiktoken";
 import { logUsage, type UsageLogInput } from "../billing/logger";
 
+const embeddingModel = voyage.embedding("voyage-4");
+
+export const STANDARD_MODEL = "voyage-4";
+export const EMBEDDING_DIMENSIONS = 1024;
+
+export const EMBEDDING_VERSION = "voyage:v4@1024";
+export const DEFAULT_CHUNKING_VERSION = "char-voyage-15p-buffer:v3";
+
+export interface ChunkOptions {
+  maxTokens?: number;
+}
+
 /**
- * OpenAI text-embedding-3-small
- *  - 1536 dimensions by default
- *  - Token limit: 8,191 tokens per request
- *  - Encoding: cl100k_base
- *  - Excellent multilingual support for EN, FR, DE, IT, ES
+ * Character-based token estimation for Voyage AI.
  */
-const embeddingModel = openai.embedding("text-embedding-3-small");
-export const EMBEDDING_MODEL_NAME = "text-embedding-3-small";
-export const EMBEDDING_DIMENSIONS = 1536;
-export const EMBEDDING_VERSION = "openai:text-embedding-3-small@default";
-export const DEFAULT_CHUNKING_VERSION = "token-512-overlap-50:v2";
+export function countTokens(text: string): number {
+  if (!text.trim()) return 0;
+  return Math.ceil((text.length / 5) * 1.15);
+}
 
-const enc = getEncoding("cl100k_base");
+/**
+ * Splits text into non-overlapping chunks.
+ */
+export function chunkText(text: string, options: ChunkOptions = {}): string[] {
+  const { maxTokens = 400 } = options;
+  if (!text.trim()) return [];
 
+  const targetChars = Math.floor(maxTokens * 0.85 * 5);
+  if (text.length <= targetChars) return [text.trim()];
+
+  const chunks: string[] = [];
+  let currentStart = 0;
+
+  while (currentStart < text.length) {
+    let currentEnd = currentStart + targetChars;
+    if (currentEnd < text.length) {
+      const boundary = text.lastIndexOf(" ", currentEnd);
+      if (boundary > currentStart && currentEnd - boundary < 100) {
+        currentEnd = boundary;
+      }
+    }
+    const chunk = text.slice(currentStart, currentEnd).trim();
+    if (chunk) chunks.push(chunk);
+    currentStart = currentEnd + 1;
+  }
+
+  return chunks;
+}
+
+/**
+ * Standard embedding for single queries or atomic items.
+ *
+ * Uses the Vercel AI SDK with voyage-4.
+ */
 export async function generateEmbedding(
   text: string,
   attribution?: Partial<UsageLogInput>,
@@ -31,23 +69,28 @@ export async function generateEmbedding(
     value: text,
   });
 
-  logUsage({
-    ...attribution,
-    type: "llm_embedding",
-    provider: "openai",
-    modelName: EMBEDDING_MODEL_NAME,
-    totalTokens: usage.tokens,
-  });
+  if (usage?.tokens) {
+    logUsage({
+      ...attribution,
+      type: "llm_embedding",
+      provider: "voyage",
+      modelName: STANDARD_MODEL,
+      totalTokens: usage.tokens,
+    });
+  }
 
   return embedding;
 }
 
-export async function generateEmbeddings(
+/**
+ * Batch embeddings using voyage-4 and the Vercel AI SDK.
+ * Efficiently embeds multiple independent strings in one call.
+ */
+export async function generateBatchEmbeddings(
   texts: string[],
   attribution?: Partial<UsageLogInput>,
 ): Promise<number[][]> {
-  // If all texts are empty, return an array of zero-vectors
-  if (texts.every((t) => !t.trim())) {
+  if (texts.length === 0 || texts.every((t) => !t.trim())) {
     return texts.map(() => new Array(EMBEDDING_DIMENSIONS).fill(0));
   }
 
@@ -56,70 +99,15 @@ export async function generateEmbeddings(
     values: texts,
   });
 
-  logUsage({
-    ...attribution,
-    type: "llm_embedding",
-    provider: "openai",
-    modelName: EMBEDDING_MODEL_NAME,
-    totalTokens: usage.tokens,
-  });
+  if (usage?.tokens) {
+    logUsage({
+      ...attribution,
+      type: "llm_embedding",
+      provider: "voyage",
+      modelName: STANDARD_MODEL,
+      totalTokens: usage.tokens,
+    });
+  }
 
   return embeddings;
-}
-
-export interface ChunkOptions {
-  maxTokens?: number; // Max tokens per chunk (default: 512, well within 8191 limit)
-  overlap?: number; // Overlap in tokens (default: 50)
-}
-
-export function countTokens(text: string) {
-  if (!text.trim()) return 0;
-  return enc.encode(text).length;
-}
-
-/**
- * Splits text into overlapping token-based chunks using js-tiktoken.
- *
- * This is the correct approach for multi-lingual content (EN, FR, DE, IT, ES),
- * where character counts differ significantly from token counts. Using tokens
- * ensures we never approach the 8,191-token model limit and produce semantically
- * consistent chunk sizes across all supported languages.
- */
-export function chunkText(text: string, options: ChunkOptions = {}): string[] {
-  const { maxTokens = 512, overlap = 50 } = options;
-
-  if (!text.trim()) return [];
-
-  // Encode the entire text into tokens
-  const tokens = enc.encode(text);
-
-  // If the text is short enough to fit in a single chunk, return it as-is
-  if (tokens.length <= maxTokens) {
-    return [text];
-  }
-
-  const chunks: string[] = [];
-  let start = 0;
-
-  while (start < tokens.length) {
-    const end = Math.min(start + maxTokens, tokens.length);
-
-    // Decode the token slice back to text
-    const chunkTokens = tokens.slice(start, end);
-    const chunk = new TextDecoder()
-      .decode(Buffer.from(enc.decode(chunkTokens)))
-      .trim();
-
-    if (chunk.length > 0) {
-      chunks.push(chunk);
-    }
-
-    // If we've reached the end, stop
-    if (end >= tokens.length) break;
-
-    // Advance by (maxTokens - overlap) to create overlapping window
-    start = end - overlap;
-  }
-
-  return chunks;
 }

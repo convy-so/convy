@@ -41,7 +41,7 @@ export const documentEmbeddings = pgTable(
     retrievalContent: text("retrieval_content").notNull().default(""),
     content: text("content").notNull(),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
-    embedding: vector("embedding", { dimensions: 1536 }),
+    embedding: vector("embedding", { dimensions: 1024 }),
   },
   (table) => [
     index("document_embeddings_survey_id_idx").on(table.surveyId),

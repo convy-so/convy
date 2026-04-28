@@ -80,10 +80,6 @@ export const classroomStudents = pgTable(
     onboardingStatus: text("onboarding_status")
       .default("interest_profile_pending")
       .notNull(),
-    lastActiveAt: timestamp("last_active_at", {
-      withTimezone: true,
-      mode: "date",
-    }),
   },
   (table) => [
     index("classroom_students_classroom_id_idx").on(table.classroomId),
@@ -309,7 +305,7 @@ export const learningMaterialEmbeddings = pgTable(
     retrievalContent: text("retrieval_content").notNull().default(""),
     content: text("content").notNull(),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
-    embedding: vector("embedding", { dimensions: 1536 }),
+    embedding: vector("embedding", { dimensions: 1024 }),
   },
   (table) => [
     index("learning_material_embeddings_classroom_id_idx").on(table.classroomId),
@@ -385,7 +381,7 @@ export const learningEvidenceEmbeddings = pgTable(
     retrievalContent: text("retrieval_content").notNull().default(""),
     content: text("content").notNull(),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
-    embedding: vector("embedding", { dimensions: 1536 }),
+    embedding: vector("embedding", { dimensions: 1024 }),
   },
   (table) => [
     index("learning_evidence_embeddings_topic_idx").on(table.topicId),
