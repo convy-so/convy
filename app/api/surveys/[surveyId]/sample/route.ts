@@ -491,8 +491,8 @@ Respond to the user in the language they are speaking to you in. Match the langu
     }
 
     // Sanitize conversation history before sending to the model
-    const sanitizedMessages = (canonicalTurn.originalMessages as any[]).map((m) => {
-      if (m.role === "user") {
+    const sanitizedMessages = (canonicalTurn.originalMessages as unknown as Array<Record<string, unknown>>).map((m) => {
+      if (m.role === "user" && typeof m.content === "string") {
         return {
           ...m,
           content: sanitizeUserInput(m.content, {

@@ -569,7 +569,7 @@ function SurveyContent() {
     }
   // Do NOT add isCompleted — it would force a new callback on every completion state change,
   // causing the WebSocket to re-subscribe unnecessarily.
-  }, [survey, t, setMessages, setCompletedOverride]);
+  }, [survey, t, setMessages, setCompletedOverride, completedOverride]);
 
   const voiceWs = useVoiceWebSocket({
     url: wsUrl,
@@ -1299,4 +1299,3 @@ export default function SurveyRespondPage() {
     </Suspense>
   );
 }
-

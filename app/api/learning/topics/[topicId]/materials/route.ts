@@ -18,6 +18,7 @@ import { replaceLearningMaterialEmbeddings } from "@/lib/learning/rag";
 import { uploadLearningMaterial } from "@/lib/storage";
 import { assertLearningMaterialFile } from "@/lib/security/uploads";
 import { getRateLimitKey, uploadRateLimiter } from "@/lib/ratelimit";
+import { topicSourceBoundarySchema } from "@/lib/learning/types";
 
 function inferMaterialKind(mimeType: string) {
   if (mimeType === "application/pdf") return "pdf";
@@ -229,13 +230,11 @@ export async function POST(
         columns: { sourceBoundary: true },
       });
 
-      const existingBoundary = currentTopic?.sourceBoundary ?? {
-        rigorNotes: [],
-        notationNotes: [],
-        scopeNotes: [],
-      };
+      const existingBoundary = topicSourceBoundarySchema.parse(
+        currentTopic?.sourceBoundary ?? {},
+      );
 
-      const updatedBoundary = {
+      const updatedBoundary = topicSourceBoundarySchema.parse({
         ...existingBoundary,
         rigorNotes: Array.from(
           new Set([
@@ -255,7 +254,7 @@ export async function POST(
             ...((analysis.scopeNotes as string[]) || []),
           ]),
         ),
-      };
+      });
 
       await Promise.all([
         getDb()

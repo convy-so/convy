@@ -1,7 +1,6 @@
 import {
   index,
   integer,
-  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -9,7 +8,6 @@ import {
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
-import { timestamps } from "./common";
 import { users } from "./auth";
 import { surveys } from "./surveys";
 

@@ -40,7 +40,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const payload: unknown = await request.json().catch(() => null);
-    const result = await createLearningInterventionAction(payload as any);
+    const result = await createLearningInterventionAction(
+      (typeof payload === "object" && payload !== null ? payload : {}) as Parameters<
+        typeof createLearningInterventionAction
+      >[0],
+    );
     return NextResponse.json(result, { status: result.success ? 200 : 400 });
   } catch (error) {
     return NextResponse.json(

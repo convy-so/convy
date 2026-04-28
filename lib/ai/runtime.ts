@@ -8,7 +8,7 @@ import {
 } from "ai";
 import { z } from "zod";
 
-import { calculateCost, logUsage, type UsageLogInput } from "@/lib/billing/logger";
+import { logUsage, type UsageLogInput } from "@/lib/billing/logger";
 import { tutorAnalysisModel, tutorChatModel } from "@/lib/ai/models";
 
 type StructuredGenerationParams<TSchema extends z.ZodTypeAny> = {
@@ -32,7 +32,6 @@ export async function generateStructuredOutput<TSchema extends z.ZodTypeAny>(
   params: StructuredGenerationParams<TSchema>,
 ): Promise<z.infer<TSchema>> {
   const model = params.model ?? tutorAnalysisModel;
-  const startedAt = Date.now();
 
   try {
     const result = await generateText({
@@ -61,8 +60,8 @@ export async function generateStructuredOutput<TSchema extends z.ZodTypeAny>(
     logUsage(usageInput);
 
     return result.output;
-  } catch (error) {
-    throw error;
+  } catch (err) {
+    throw err;
   }
 }
 

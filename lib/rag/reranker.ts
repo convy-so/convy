@@ -1,12 +1,20 @@
-import { VoyageAIClient } from "voyageai";
-import { generateText, Output } from "ai";
+import { voyage } from "@ai-sdk/voyage";
+import { generateText, Output, rerank as aiRerank } from "ai";
 import { z } from "zod";
 
 import { SearchResult } from "./search";
 import { logUsage, type UsageLogInput } from "../billing/logger";
 import { flashLiteModel } from "../ai";
 
-const voyage = new VoyageAIClient({ apiKey: process.env.VOYAGE_API_KEY });
+const voyageRerankingModel = voyage.reranking("rerank-2.5-lite");
+
+function getVoyageRerankTokenUsage(responseBody: unknown): number | null {
+  if (!responseBody || typeof responseBody !== "object") return null;
+  const usage = (responseBody as { usage?: unknown }).usage;
+  if (!usage || typeof usage !== "object") return null;
+  const totalTokens = (usage as { total_tokens?: unknown }).total_tokens;
+  return typeof totalTokens === "number" ? totalTokens : null;
+}
 
 function getInstructionForFeature(feature?: string): string {
   if (!feature) {
@@ -49,23 +57,28 @@ export async function rerank(
     try {
       const documents = candidates.map((c) => c.content);
 
-      const response = await voyage.rerank({
+      const response = await aiRerank({
+        model: voyageRerankingModel,
         query: queryWithInstruction,
         documents,
-        model: "rerank-2.5-lite",
-        topK,
-        truncation: false,
+        topN: topK,
+        providerOptions: {
+          voyage: {
+            truncation: false,
+          },
+        },
       });
 
-      if (response.usage?.totalTokens) {
+      const totalTokens = getVoyageRerankTokenUsage(response.response.body);
+      if (totalTokens) {
         logUsage({
           ...attribution,
           type: "llm_text",
           provider: "voyage",
           modelName: "rerank-2.5-lite",
-          promptTokens: response.usage.totalTokens,
+          promptTokens: totalTokens,
           completionTokens: 0,
-          totalTokens: response.usage.totalTokens,
+          totalTokens,
         });
       }
 
@@ -73,13 +86,13 @@ export async function rerank(
       const seenIndices = new Set<number>();
 
       // response.data contains the ranked results
-      const results = response.data ?? [];
+      const results = response.ranking ?? [];
       for (const item of results) {
-        const index = item.index;
+        const index = item.originalIndex;
         if (index !== undefined && index >= 0 && index < candidates.length) {
           rankedResults.push({
             ...candidates[index],
-            score: item.relevanceScore ?? candidates[index].score,
+            score: item.score ?? candidates[index].score,
           });
           seenIndices.add(index);
         }
