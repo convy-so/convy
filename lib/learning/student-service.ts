@@ -13,6 +13,16 @@ export type StudentInviteResult = {
   inviteStatus: string;
 };
 
+const PENDING_INVITE_STATUS = "pending";
+const INVITED_INVITE_STATUS = "invited";
+
+function normalizeStudentInviteInput(input: { fullName: string; email: string }) {
+  return {
+    normalizedEmail: input.email.trim().toLowerCase(),
+    normalizedFullName: input.fullName.trim(),
+  };
+}
+
 /**
  * Invite a managed student to a classroom
  * This creates a student record and provisions a managed account
@@ -23,8 +33,10 @@ export async function inviteManagedStudentToClassroom(params: {
   fullName: string;
   email: string;
 }) {
-  const normalizedEmail = params.email.trim().toLowerCase();
-  const normalizedFullName = params.fullName.trim();
+  const { normalizedEmail, normalizedFullName } = normalizeStudentInviteInput({
+    fullName: params.fullName,
+    email: params.email,
+  });
 
   // 1. Check if student already exists in this classroom
   const existingStudent = await getDb().query.classroomStudents.findFirst({
@@ -68,7 +80,7 @@ export async function inviteManagedStudentToClassroom(params: {
     invitedByUserId: params.invitedByUserId,
     fullName: normalizedFullName,
     email: normalizedEmail,
-    inviteStatus: "pending",
+    inviteStatus: PENDING_INVITE_STATUS,
     onboardingStatus: "interest_profile_pending",
     createdAt: now,
     updatedAt: now,
@@ -84,7 +96,7 @@ export async function inviteManagedStudentToClassroom(params: {
     classroomId: params.classroomId,
     fullName: normalizedFullName,
     email: provisioned.email,
-    inviteStatus: "invited",
+    inviteStatus: INVITED_INVITE_STATUS,
   };
 }
 
@@ -101,7 +113,10 @@ export async function bulkInviteStudents(params: {
   const failed: Array<{ fullName: string; email: string; error: string }> = [];
 
   for (const student of params.students) {
-    const normalizedEmail = student.email.trim().toLowerCase();
+    const { normalizedEmail } = normalizeStudentInviteInput({
+      fullName: student.fullName,
+      email: student.email,
+    });
 
     if (seenEmails.has(normalizedEmail)) {
       failed.push({

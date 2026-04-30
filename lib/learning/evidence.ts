@@ -9,6 +9,7 @@ import {
   studentProgressReports,
 } from "@/db/schema";
 import { generateStructuredOutput } from "@/lib/ai/runtime";
+import { buildTeacherEvidenceAnswerPrompt } from "@/lib/learning/prompts/evidence";
 import { searchLearningTopicContext } from "@/lib/learning/rag";
 import {
   STANDARD_MODEL,
@@ -569,48 +570,28 @@ export async function answerTeacherStudentQuestion(params: {
 
   return await generateStructuredOutput({
     schema: teacherEvidenceAnswerSchema,
-    prompt: `Answer a teacher's question about a student's learning trajectory.
-
-Reply in ${params.language}.
-
-Student: ${params.studentName}
-Question: ${params.question}
-
-Most relevant evidence:
-${JSON.stringify(
-      retrievedEvidence.map((item) => ({
+    prompt: buildTeacherEvidenceAnswerPrompt({
+      language: params.language,
+      studentName: params.studentName,
+      question: params.question,
+      retrievedEvidence: retrievedEvidence.map((item) => ({
         sourceType: item.sourceType,
         sourceId: item.sourceId,
         score: item.score,
         content: item.content,
         metadata: item.metadata,
       })),
-    )}
-
-Recent reports fallback (excluding exact matches above):
-${JSON.stringify(
-      uniqueReports.map((r) => ({
-        topicTitle: r.topic?.title ?? null,
-        masteryPercent: r.masteryPercent,
-        report: r.report,
+      uniqueReports: uniqueReports.map((reportItem) => ({
+        topicTitle: reportItem.topic?.title ?? null,
+        masteryPercent: reportItem.masteryPercent,
+        report: reportItem.report,
       })),
-    )}
-
-Recent interactions fallback (excluding exact matches above):
-${JSON.stringify(
-      uniqueInteractions.map((i) => ({
-        topicTitle: i.topic?.title ?? null,
-        role: i.role,
-        interactionType: i.interactionType,
-        content: i.content,
+      uniqueInteractions: uniqueInteractions.map((interactionItem) => ({
+        topicTitle: interactionItem.topic?.title ?? null,
+        role: interactionItem.role,
+        interactionType: interactionItem.interactionType,
+        content: interactionItem.content,
       })),
-    )}
-
-Rules:
-- answer only from the supplied evidence
-- prioritize the most relevant evidence over simple recency
-- be candid when evidence is insufficient
-- focus on understanding, struggle, and development rather than just correctness
-- include evidenceHighlights only for the strongest directly relevant signals`,
+    }),
   });
 }

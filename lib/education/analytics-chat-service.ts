@@ -1,21 +1,19 @@
 import { defaultModel, generateAIResponse } from "@/lib/ai";
+import { safeJsonParse } from "@/lib/ai/json";
 import { executeRAGQuery } from "@/lib/rag/search";
 import { getAnalyticsSnapshotByVersion } from "./storage";
 import { sanitizeUserInput } from "@/lib/ai/sanitization";
+import {
+  ANALYTICS_CHAT_ANSWER_SYSTEM_PROMPT,
+  ANALYTICS_CHAT_CLASSIFIER_SYSTEM_PROMPT,
+  buildAnalyticsChatAnswerUserPrompt,
+  buildAnalyticsChatClassifierUserPrompt,
+} from "./prompts/analytics-chat";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function safeJsonParse(raw: string): unknown | null {
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  try {
-    return JSON.parse(match[0]);
-  } catch {
-    return null;
-  }
-}
 
 function parseClassifierResult(value: unknown): {
   intent?: "metric" | "comparison" | "evidence" | "snapshot" | "mixed";
@@ -83,18 +81,27 @@ function parseQuestionAnswerResult(value: unknown): {
  * Classify the user's question to determine retrieval strategy
  */
 export async function classifyQuestionIntent(surveyId: string, question: string) {
-  const systemPrompt = `Classify this analytics question into one of: metric, comparison, evidence, snapshot, mixed.
-Return JSON only: {"intent":"metric|comparison|evidence|snapshot|mixed","needsChart":boolean,"needsTable":boolean,"theme":"string"}.`;
-
-  const raw = await generateAIResponse(`Question: ${question}`, systemPrompt, {
-    model: defaultModel,
-    temperature: 0,
-    maxTokens: 200,
-    attribution: {
+  let raw = "";
+  try {
+    raw = await generateAIResponse(
+      buildAnalyticsChatClassifierUserPrompt(question),
+      ANALYTICS_CHAT_CLASSIFIER_SYSTEM_PROMPT,
+      {
+        model: defaultModel,
+        temperature: 0,
+        maxTokens: 200,
+        attribution: {
+          surveyId,
+          feature: "survey-analytics-chat-classify",
+        },
+      },
+    );
+  } catch (error) {
+    console.error("classifyQuestionIntent failed; using fallback classifier", {
       surveyId,
-      feature: "survey-analytics-chat-classify",
-    },
-  }).catch(() => "");
+      error,
+    });
+  }
 
   return parseClassifierResult(safeJsonParse(raw)) ?? {
     intent: "mixed" as const,
@@ -167,22 +174,30 @@ export async function answerAnalyticsQuestion(params: {
       }).join("\n\n")}`
     : "";
 
-  const systemPrompt = `You are an education research assistant. Answer the user's question based on the provided data snapshots and evidence.
-If the question is about a specific version, use only that version's data.
-If the question asks for a chart or table, include a toolResult.
-Return JSON only: {"response":"string","sources":[{"id":"string","label":"string"}],"toolResult":{"toolName":"renderTable|renderChart|null","output":{}}}`;
+  const prompt = buildAnalyticsChatAnswerUserPrompt({
+    question: params.question,
+    snapshotPrompt,
+    comparisonPrompt,
+    evidencePrompt,
+  });
 
-  const prompt = `Question: ${params.question}\n\n${snapshotPrompt}\n${comparisonPrompt}\n${evidencePrompt}`;
-
-  const raw = await generateAIResponse(prompt, systemPrompt, {
-    model: defaultModel,
-    temperature: 0.1,
-    maxTokens: 1000,
-    attribution: {
+  let raw = "";
+  try {
+    raw = await generateAIResponse(prompt, ANALYTICS_CHAT_ANSWER_SYSTEM_PROMPT, {
+      model: defaultModel,
+      temperature: 0.1,
+      maxTokens: 1000,
+      attribution: {
+        surveyId: params.surveyId,
+        feature: "survey-analytics-chat-answer",
+      },
+    });
+  } catch (error) {
+    console.error("answerAnalyticsQuestion failed; returning null parse result", {
       surveyId: params.surveyId,
-      feature: "survey-analytics-chat-answer",
-    },
-  }).catch(() => "");
+      error,
+    });
+  }
 
   return parseQuestionAnswerResult(safeJsonParse(raw));
 }
