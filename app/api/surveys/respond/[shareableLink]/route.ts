@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { surveyConversations, surveys } from "@/db/schema";
+import { surveyConversations } from "@/db/schema";
 import {
   ensureSession,
   getActiveCoveragePlan,
@@ -25,6 +25,7 @@ import {
   jsonNoStore 
 } from "@/lib/surveys/respondent-session-service";
 import { processRespondentTurn } from "@/lib/surveys/respondent-runtime-service";
+import { fetchActiveSurveyByShareableLink } from "@/lib/surveys/public-survey-access";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 
@@ -55,22 +56,6 @@ const respondentRequestSchema = z.object({
   messages: z.array(z.unknown()).optional(),
 });
 
-async function fetchActiveSurveyByShareableLink(shareableLink: string) {
-  const survey = await getDb().query.surveys.findFirst({
-    where: eq(surveys.shareableLink, shareableLink),
-  });
-
-  if (!survey) {
-    return { error: jsonNoStore({ error: "Survey not found" }, { status: 404 }) };
-  }
-
-  if (survey.status !== "active") {
-    return { error: jsonNoStore({ error: "Survey is not active" }, { status: 403 }) };
-  }
-
-  return { survey };
-}
-
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ shareableLink: string }> },
@@ -82,8 +67,8 @@ export async function GET(
     const resumeToken = searchParams.get(RESPONDENT_RESUME_QUERY_PARAM);
 
     const surveyResult = await fetchActiveSurveyByShareableLink(shareableLink);
-    if (surveyResult.error) {
-      return surveyResult.error;
+    if ("error" in surveyResult) {
+      return jsonNoStore({ error: surveyResult.error.message }, { status: surveyResult.error.status });
     }
     const survey = surveyResult.survey;
 
@@ -174,8 +159,8 @@ export async function POST(
     const { shareableLink } = await params;
 
     const surveyResult = await fetchActiveSurveyByShareableLink(shareableLink);
-    if (surveyResult.error) {
-      return surveyResult.error;
+    if ("error" in surveyResult) {
+      return jsonNoStore({ error: surveyResult.error.message }, { status: surveyResult.error.status });
     }
     const survey = surveyResult.survey;
 
