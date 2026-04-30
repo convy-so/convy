@@ -1,8 +1,6 @@
-import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db";
-import { surveys } from "@/db/schema";
+import { fetchActiveSurveyByShareableLink } from "@/lib/surveys/public-survey-access";
 
 /**
  * Get a survey by its shareable link (public endpoint)
@@ -14,29 +12,23 @@ export async function GET(
   try {
     const { shareableLink } = await params;
 
-    const [survey] = await getDb()
-      .select({
-        id: surveys.id,
-        title: surveys.title,
-        programId: surveys.programId,
-        coreObjective: surveys.coreObjective,
-        status: surveys.status,
-        currentParticipants: surveys.currentParticipants,
-        participantLimit: surveys.participantLimit,
-      })
-      .from(surveys)
-      .where(eq(surveys.shareableLink, shareableLink));
-
-    if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    }
-
-    if (survey.status !== "active") {
+    const surveyResult = await fetchActiveSurveyByShareableLink(shareableLink);
+    if ("error" in surveyResult) {
       return NextResponse.json(
-        { error: "Survey is not active" },
-        { status: 403 },
+        { error: surveyResult.error.message },
+        { status: surveyResult.error.status },
       );
     }
+
+    const survey = {
+      id: surveyResult.survey.id,
+      title: surveyResult.survey.title,
+      programId: surveyResult.survey.programId,
+      coreObjective: surveyResult.survey.coreObjective,
+      status: surveyResult.survey.status,
+      currentParticipants: surveyResult.survey.currentParticipants,
+      participantLimit: surveyResult.survey.participantLimit,
+    };
 
     return NextResponse.json({
       survey,
@@ -48,4 +40,3 @@ export async function GET(
     );
   }
 }
-
