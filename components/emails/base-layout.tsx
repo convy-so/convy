@@ -40,7 +40,7 @@ export const BaseLayout = ({ previewText, children }: BaseLayoutProps) => {
             <Hr style={hr} />
             
             <Text style={footer}>
-              Convyy — AI-native surveys for every field.<br />
+              Convyy — AI-native tutoring intelligence for schools and learning teams.<br />
               <Link href={baseUrl} style={footerLink}>
                 getconvy.pro
               </Link>

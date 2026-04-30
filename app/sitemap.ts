@@ -4,7 +4,7 @@ import { routing } from "@/i18n/routing";
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://getconvy.pro";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const routes = [""];
+  const routes = ["", "/privacy", "/terms"];
   const locales = routing.locales;
 
   const sitemapEntries: MetadataRoute.Sitemap = [];
