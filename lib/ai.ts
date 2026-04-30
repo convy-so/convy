@@ -15,10 +15,7 @@ import {
   type ToolLoopAgentOnFinishCallback,
 } from "ai";
 import { wrapAISDK } from "braintrust";
-import {
-  logUsage,
-  type UsageLogInput,
-} from "./billing/logger";
+import { logUsage, type UsageLogInput } from "./billing/logger";
 
 import type { ContextBundle, PromptSpec } from "./ai-core";
 import type { PromptExample } from "@/lib/ai-core/types";
@@ -106,11 +103,13 @@ export async function generateAIResponse(
   // Apply rate limiting for AI operations
   if (options?.attribution?.userId) {
     const { expensiveAiRateLimiter } = await import("@/lib/ratelimit");
-    const { success, reset } = await expensiveAiRateLimiter.limit(options.attribution.userId);
+    const { success, reset } = await expensiveAiRateLimiter.limit(
+      options.attribution.userId,
+    );
     if (!success) {
       const resetDate = new Date(reset);
       throw new Error(
-        `AI_RATE_LIMIT_EXCEEDED: Rate limit exceeded. Try again at ${resetDate.toISOString()}`
+        `AI_RATE_LIMIT_EXCEEDED: Rate limit exceeded. Try again at ${resetDate.toISOString()}`,
       );
     }
   }
@@ -128,7 +127,6 @@ export async function generateAIResponse(
     systemPrompt: resolvedPrompt.systemPrompt,
     promptCache: options?.promptCache,
   });
-
 
   try {
     const result = await generateText({
@@ -165,8 +163,6 @@ export async function generateAIResponse(
     };
     logUsage(usageInput);
 
-
-
     return result.text;
   } catch (err) {
     throw err;
@@ -193,11 +189,13 @@ export function streamAIResponse(
   const rateLimitPromise = (async () => {
     if (options?.attribution?.userId) {
       const { expensiveAiRateLimiter } = await import("@/lib/ratelimit");
-      const { success, reset } = await expensiveAiRateLimiter.limit(options.attribution.userId);
+      const { success, reset } = await expensiveAiRateLimiter.limit(
+        options.attribution.userId,
+      );
       if (!success) {
         const resetDate = new Date(reset);
         throw new Error(
-          `AI_RATE_LIMIT_EXCEEDED: Rate limit exceeded. Try again at ${resetDate.toISOString()}`
+          `AI_RATE_LIMIT_EXCEEDED: Rate limit exceeded. Try again at ${resetDate.toISOString()}`,
         );
       }
     }
@@ -216,7 +214,6 @@ export function streamAIResponse(
     systemPrompt: resolvedPrompt.systemPrompt,
     promptCache: options?.promptCache,
   });
-
 
   return streamText({
     model,
@@ -264,10 +261,8 @@ export function streamAIResponse(
         cacheWriteTokens: result.usage.inputTokenDetails?.cacheWriteTokens,
       };
       logUsage(usageInput);
-
     },
-    onError: () => {
-    },
+    onError: () => {},
   });
 }
 
@@ -287,7 +282,9 @@ export async function streamAgentResponse<TOOLS extends ToolSet>(
   // Apply rate limiting
   if (options.attribution?.userId) {
     const { expensiveAiRateLimiter } = await import("@/lib/ratelimit");
-    const { success, reset } = await expensiveAiRateLimiter.limit(options.attribution.userId);
+    const { success, reset } = await expensiveAiRateLimiter.limit(
+      options.attribution.userId,
+    );
     if (!success) {
       const resetDate = new Date(reset);
       throw new Error(
@@ -319,7 +316,11 @@ export async function streamAgentResponse<TOOLS extends ToolSet>(
         type: "agent_loop",
         provider: getProviderName(model),
         modelName: getModelId(model) || GEMINI_FLASH_ID,
-        promptTokens: getTokenCount(result.totalUsage, "inputTokens", "promptTokens"),
+        promptTokens: getTokenCount(
+          result.totalUsage,
+          "inputTokens",
+          "promptTokens",
+        ),
         completionTokens: getTokenCount(
           result.totalUsage,
           "outputTokens",
