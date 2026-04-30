@@ -86,6 +86,56 @@ function getProviderName(model: LanguageModel) {
     : "google";
 }
 
+async function enforceAiRateLimit(userId?: string) {
+  if (!userId) {
+    return;
+  }
+
+  const { expensiveAiRateLimiter } = await import("@/lib/ratelimit");
+  const { success, reset } = await expensiveAiRateLimiter.limit(userId);
+  if (success) {
+    return;
+  }
+
+  throw new Error(
+    `AI_RATE_LIMIT_EXCEEDED: Rate limit exceeded. Try again at ${new Date(reset).toISOString()}`,
+  );
+}
+
+function createUsageLogInput(
+  type: UsageLogInput["type"],
+  model: LanguageModel,
+  usage: unknown,
+  attribution?: Partial<UsageLogInput>,
+): UsageLogInput {
+  const usageRecord = isRecord(usage) ? usage : {};
+  const inputTokenDetails = isRecord(usageRecord.inputTokenDetails)
+    ? usageRecord.inputTokenDetails
+    : {};
+
+  return {
+    ...(attribution ?? {}),
+    type,
+    provider: getProviderName(model),
+    modelName: getModelId(model) || GEMINI_FLASH_ID,
+    promptTokens: getTokenCount(usage, "inputTokens", "promptTokens"),
+    completionTokens: getTokenCount(usage, "outputTokens", "completionTokens"),
+    totalTokens: typeof usageRecord.totalTokens === "number" ? usageRecord.totalTokens : undefined,
+    inputNoCacheTokens:
+      typeof inputTokenDetails.noCacheTokens === "number"
+        ? inputTokenDetails.noCacheTokens
+        : undefined,
+    cacheReadTokens:
+      typeof inputTokenDetails.cacheReadTokens === "number"
+        ? inputTokenDetails.cacheReadTokens
+        : undefined,
+    cacheWriteTokens:
+      typeof inputTokenDetails.cacheWriteTokens === "number"
+        ? inputTokenDetails.cacheWriteTokens
+        : undefined,
+  };
+}
+
 export async function generateAIResponse(
   prompt: string,
   systemPrompt?: string,
@@ -100,19 +150,7 @@ export async function generateAIResponse(
     dynamicExamples?: PromptExample[];
   },
 ) {
-  // Apply rate limiting for AI operations
-  if (options?.attribution?.userId) {
-    const { expensiveAiRateLimiter } = await import("@/lib/ratelimit");
-    const { success, reset } = await expensiveAiRateLimiter.limit(
-      options.attribution.userId,
-    );
-    if (!success) {
-      const resetDate = new Date(reset);
-      throw new Error(
-        `AI_RATE_LIMIT_EXCEEDED: Rate limit exceeded. Try again at ${resetDate.toISOString()}`,
-      );
-    }
-  }
+  await enforceAiRateLimit(options?.attribution?.userId);
 
   const model = options?.model ?? defaultModel;
   const resolvedPrompt = resolvePromptExecution({
@@ -128,45 +166,26 @@ export async function generateAIResponse(
     promptCache: options?.promptCache,
   });
 
-  try {
-    const result = await generateText({
-      model,
-      prompt: resolvedPrompt.prompt,
-      system: preparedCache.systemPrompt,
-      temperature: options?.temperature ?? 0.7,
-      maxOutputTokens: options?.maxTokens ?? 2000,
-      providerOptions: preparedCache.providerOptions,
-      experimental_telemetry: {
-        isEnabled: true,
-        functionId: "generate_ai_response",
-        metadata: {
-          ...(options?.attribution ?? {}),
-        },
+
+  const result = await generateText({
+    model,
+    prompt: resolvedPrompt.prompt,
+    system: preparedCache.systemPrompt,
+    temperature: options?.temperature ?? 0.7,
+    maxOutputTokens: options?.maxTokens ?? 2000,
+    providerOptions: preparedCache.providerOptions,
+    experimental_telemetry: {
+      isEnabled: true,
+      functionId: "generate_ai_response",
+      metadata: {
+        ...(options?.attribution ?? {}),
       },
-    });
+    },
+  });
 
-    const usageInput: UsageLogInput = {
-      ...(options?.attribution ?? {}),
-      type: "llm_text",
-      provider: getProviderName(model),
-      modelName: getModelId(model) || GEMINI_FLASH_ID,
-      promptTokens: getTokenCount(result.usage, "inputTokens", "promptTokens"),
-      completionTokens: getTokenCount(
-        result.usage,
-        "outputTokens",
-        "completionTokens",
-      ),
-      totalTokens: result.usage.totalTokens,
-      inputNoCacheTokens: result.usage.inputTokenDetails?.noCacheTokens,
-      cacheReadTokens: result.usage.inputTokenDetails?.cacheReadTokens,
-      cacheWriteTokens: result.usage.inputTokenDetails?.cacheWriteTokens,
-    };
-    logUsage(usageInput);
+  logUsage(createUsageLogInput("llm_text", model, result.usage, options?.attribution));
 
-    return result.text;
-  } catch (err) {
-    throw err;
-  }
+  return result.text;
 }
 
 export function streamAIResponse(
@@ -185,21 +204,7 @@ export function streamAIResponse(
     dynamicExamples?: PromptExample[];
   },
 ) {
-  // Apply rate limiting for streaming AI operations
-  const rateLimitPromise = (async () => {
-    if (options?.attribution?.userId) {
-      const { expensiveAiRateLimiter } = await import("@/lib/ratelimit");
-      const { success, reset } = await expensiveAiRateLimiter.limit(
-        options.attribution.userId,
-      );
-      if (!success) {
-        const resetDate = new Date(reset);
-        throw new Error(
-          `AI_RATE_LIMIT_EXCEEDED: Rate limit exceeded. Try again at ${resetDate.toISOString()}`,
-        );
-      }
-    }
-  })();
+  const rateLimitPromise = enforceAiRateLimit(options?.attribution?.userId);
 
   const model = options?.model ?? defaultModel;
   const resolvedPrompt = resolvePromptExecution({
@@ -240,27 +245,7 @@ export function streamAIResponse(
       };
     },
     onFinish: (result) => {
-      const usageInput: UsageLogInput = {
-        ...(options?.attribution ?? {}),
-        type: "llm_text",
-        provider: getProviderName(model),
-        modelName: getModelId(model) || GEMINI_FLASH_ID,
-        promptTokens: getTokenCount(
-          result.usage,
-          "inputTokens",
-          "promptTokens",
-        ),
-        completionTokens: getTokenCount(
-          result.usage,
-          "outputTokens",
-          "completionTokens",
-        ),
-        totalTokens: result.usage.totalTokens,
-        inputNoCacheTokens: result.usage.inputTokenDetails?.noCacheTokens,
-        cacheReadTokens: result.usage.inputTokenDetails?.cacheReadTokens,
-        cacheWriteTokens: result.usage.inputTokenDetails?.cacheWriteTokens,
-      };
-      logUsage(usageInput);
+      logUsage(createUsageLogInput("llm_text", model, result.usage, options?.attribution));
     },
     onError: () => {},
   });
@@ -279,19 +264,7 @@ export async function streamAgentResponse<TOOLS extends ToolSet>(
     onFinish?: ToolLoopAgentOnFinishCallback<TOOLS>;
   },
 ) {
-  // Apply rate limiting
-  if (options.attribution?.userId) {
-    const { expensiveAiRateLimiter } = await import("@/lib/ratelimit");
-    const { success, reset } = await expensiveAiRateLimiter.limit(
-      options.attribution.userId,
-    );
-    if (!success) {
-      const resetDate = new Date(reset);
-      throw new Error(
-        `AI_RATE_LIMIT_EXCEEDED: Rate limit exceeded. Try again at ${resetDate.toISOString()}`,
-      );
-    }
-  }
+  await enforceAiRateLimit(options.attribution?.userId);
 
   const model = options.model ?? defaultModel;
 
@@ -310,25 +283,14 @@ export async function streamAgentResponse<TOOLS extends ToolSet>(
     temperature: options.temperature ?? 0.3,
     maxOutputTokens: options.maxTokens ?? 1000,
     onFinish: (result) => {
-      // Usage logging
-      const usageInput: UsageLogInput = {
-        ...(options.attribution ?? {}),
-        type: "agent_loop",
-        provider: getProviderName(model),
-        modelName: getModelId(model) || GEMINI_FLASH_ID,
-        promptTokens: getTokenCount(
+      logUsage(
+        createUsageLogInput(
+          "agent_loop",
+          model,
           result.totalUsage,
-          "inputTokens",
-          "promptTokens",
+          options.attribution,
         ),
-        completionTokens: getTokenCount(
-          result.totalUsage,
-          "outputTokens",
-          "completionTokens",
-        ),
-        totalTokens: result.totalUsage.totalTokens,
-      };
-      logUsage(usageInput);
+      );
 
       if (options.onFinish) {
         return options.onFinish(result);

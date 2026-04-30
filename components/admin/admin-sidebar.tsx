@@ -8,7 +8,6 @@ import {
     LogOut,
     Database,
     ShieldCheck,
-    ChevronLeft,
     Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -70,13 +69,6 @@ export function AdminSidebar() {
             </nav>
 
             <div className="p-4 border-t border-gray-100 space-y-2">
-                <Link
-                    href="/dashboard"
-                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
-                >
-                    <ChevronLeft className="w-4 h-4" />
-                    Back to Dashboard
-                </Link>
                 <button
                     onClick={handleSignOut}
                     className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"

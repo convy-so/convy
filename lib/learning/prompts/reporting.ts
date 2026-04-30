@@ -1,33 +1,48 @@
-import type { LearningSessionState } from "@/lib/learning/types";
+export function buildTeacherOnboardingSummaryPrompt(input: {
+  studentName: string;
+  profile: Record<string, unknown>;
+}) {
+  return `Write a concise teacher-facing onboarding summary.
 
-export function buildReportingPrompt(params: {
+Student: ${input.studentName}
+Profile:
+${JSON.stringify(input.profile)}
+
+Focus on what the tutor learned about motivation, confidence, and likely teaching entry points.`;
+}
+
+export function buildReportingPrompt(input: {
   studentName: string;
   topicTitle: string;
-  sessionState: LearningSessionState;
+  sessionState: unknown;
   studentModel: Record<string, unknown> | null;
-  transcript: Array<{ role: string; content: string; metadata?: Record<string, unknown> | null }>;
-  previousReport?: Record<string, unknown> | null;
+  transcript: Array<{
+    role: string;
+    content: string;
+    metadata?: Record<string, unknown> | null;
+  }>;
+  previousReport: unknown;
 }) {
-  return `Write a teacher-facing tutoring report.
+  return `Generate a teacher-facing progress report for one tutoring session.
 
-Student: ${params.studentName}
-Topic: ${params.topicTitle}
-
+Student: ${input.studentName}
+Topic: ${input.topicTitle}
 Session state:
-${JSON.stringify(params.sessionState)}
+${JSON.stringify(input.sessionState)}
 
 Student model:
-${JSON.stringify(params.studentModel)}
-
-Transcript:
-${JSON.stringify(params.transcript)}
+${JSON.stringify(input.studentModel)}
 
 Previous report:
-${JSON.stringify(params.previousReport ?? null)}
+${JSON.stringify(input.previousReport)}
 
-Focus on:
-- what the student genuinely understood
-- where understanding remained shallow or unstable
-- what motivational hooks and struggle calibration mattered
-- whether expert review is recommended`;
+Transcript:
+${input.transcript
+    .map((item) => `${item.role}: ${item.content}`)
+    .join("\n\n")}
+
+Rules:
+- Ground claims in the transcript and session state.
+- Be explicit about uncertainty when evidence is limited.
+- Focus on understanding, misconceptions, confidence, and next instructional moves.`;
 }

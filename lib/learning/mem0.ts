@@ -10,6 +10,9 @@ type Mem0MemoryRecord = {
   created_at?: string;
   updated_at?: string;
 };
+const MEM0_API_VERSION = "v2";
+const DEFAULT_LIST_LIMIT = 50;
+const DEFAULT_SEARCH_LIMIT = 8;
 
 let mem0Client: unknown | null = null;
 
@@ -127,11 +130,12 @@ export async function listLearningPatternMemories(params: {
   limit?: number;
 }) {
   const client = getMem0Client();
+  const listLimit = params.limit ?? DEFAULT_LIST_LIMIT;
   const payload = {
     filters: { AND: [{ user_id: params.studentUserId }] },
     page: 1,
-    page_size: Math.max(params.limit ?? 50, 50),
-    version: "v2",
+    page_size: Math.max(listLimit, DEFAULT_LIST_LIMIT),
+    version: MEM0_API_VERSION,
   };
 
   const result = await tryCall<unknown>([
@@ -162,7 +166,7 @@ export async function listLearningPatternMemories(params: {
       }
       return true;
     })
-    .slice(0, params.limit ?? 50);
+    .slice(0, listLimit);
 }
 
 export async function searchLearningPatternMemories(params: {
@@ -185,8 +189,8 @@ export async function searchLearningPatternMemories(params: {
 
   const options = {
     user_id: params.studentUserId,
-    version: "v2",
-    limit: params.limit ?? 8,
+    version: MEM0_API_VERSION,
+    limit: params.limit ?? DEFAULT_SEARCH_LIMIT,
     filters: { AND: filters },
   };
 
@@ -194,7 +198,7 @@ export async function searchLearningPatternMemories(params: {
     async () => await callClientMethod(client, "search", params.query, options),
     async () =>
       await callClientMethod(client, "search", params.query, params.studentUserId, {
-        version: "v2",
+        version: MEM0_API_VERSION,
         limit: options.limit,
         filters: options.filters,
       }),
@@ -245,13 +249,13 @@ export async function addLearningPatternObservations(params: {
         await callClientMethod(client, "add", messages, {
           user_id: params.studentUserId,
           infer: false,
-          version: "v2",
+          version: MEM0_API_VERSION,
           metadata: sharedMetadata,
         }),
       async () =>
         await callClientMethod(client, "add", messages, params.studentUserId, {
           infer: false,
-          version: "v2",
+          version: MEM0_API_VERSION,
           metadata: sharedMetadata,
         }),
     ]);
@@ -278,17 +282,17 @@ export async function deleteLearningPatternMemoriesForUser(studentUserId: string
     async () =>
       await callClientMethod(client, "delete_all", {
         filters: { AND: [{ user_id: studentUserId }] },
-        version: "v2",
+        version: MEM0_API_VERSION,
       }),
     async () =>
       await callClientMethod(client, "deleteAll", {
         filters: { AND: [{ user_id: studentUserId }] },
-        version: "v2",
+        version: MEM0_API_VERSION,
       }),
     async () =>
       await callClientMethod(client, "delete", {
         filters: { AND: [{ user_id: studentUserId }] },
-        version: "v2",
+        version: MEM0_API_VERSION,
       }),
   ]);
 }

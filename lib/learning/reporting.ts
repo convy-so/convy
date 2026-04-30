@@ -1,6 +1,7 @@
 import { teacherOnboardingSummarySchema, teacherProgressReportSchema, type LearningSessionState, type TeacherProgressReport } from "@/lib/learning/types";
 import { generateStructuredOutput } from "@/lib/ai/runtime";
 import { buildReportingPrompt } from "@/lib/learning/prompting";
+import { buildTeacherOnboardingSummaryPrompt } from "@/lib/learning/prompts/reporting";
 
 export async function generateTeacherOnboardingSummary(params: {
   studentName: string;
@@ -8,13 +9,7 @@ export async function generateTeacherOnboardingSummary(params: {
 }) {
   return await generateStructuredOutput({
     schema: teacherOnboardingSummarySchema,
-    prompt: `Write a concise teacher-facing onboarding summary.
-
-Student: ${params.studentName}
-Profile:
-${JSON.stringify(params.profile)}
-
-Focus on what the tutor learned about motivation, confidence, and likely teaching entry points.`,
+    prompt: buildTeacherOnboardingSummaryPrompt(params),
   });
 }
 
