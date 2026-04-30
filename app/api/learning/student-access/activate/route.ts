@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getDb } from "@/db";
-import { classroomStudents, studentAccessTokens, users } from "@/db/schema";
+import { accounts, classroomStudents, studentAccessTokens, users } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { hashOpaqueToken } from "@/lib/learning/tokens";
 
@@ -90,14 +90,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid or expired token." }, { status: 404 });
     }
 
-    await auth.api.setUserPassword({
-      body: {
-        userId: record.userId,
-        newPassword: body.password,
-      },
-    });
+    const ctx = await auth.$context;
+    const hashedPassword = await ctx.password.hash(body.password);
 
     await getDb().transaction(async (tx) => {
+      await tx
+        .update(accounts)
+        .set({
+          password: hashedPassword,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(accounts.userId, record.userId),
+            eq(accounts.providerId, "credential"),
+          ),
+        );
       await tx
         .update(users)
         .set({
@@ -139,6 +147,7 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    console.error("[Activation Error]", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

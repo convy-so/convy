@@ -61,6 +61,7 @@ export async function generateStructuredOutput<TSchema extends z.ZodTypeAny>(
 
     return result.output;
   } catch (err) {
+    console.error("[Structured Output Error]", err);
     throw err;
   }
 }

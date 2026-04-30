@@ -8,11 +8,19 @@ import {
   type StudentModelSnapshot,
 } from "@/lib/learning/types";
 
+/**
+ * Inner schema returned by the LLM — timestamps are optional here because
+ * the model reliably omits or gets them wrong. We inject them server-side.
+ */
 const onboardingTurnSchema = z.object({
   response: z.string(),
   status: z.enum(["continue", "complete"]),
-  interestProfile: studentInterestProfileSchema.nullable(),
-  studentModelSnapshot: studentModelSnapshotSchema.nullable(),
+  interestProfile: studentInterestProfileSchema
+    .extend({ lastUpdated: z.string().optional() })
+    .nullable(),
+  studentModelSnapshot: studentModelSnapshotSchema
+    .extend({ updatedAt: z.string().optional() })
+    .nullable(),
 });
 
 type OnboardingMessage = {
@@ -46,8 +54,9 @@ export async function runInterestOnboardingTurn(params: {
   messages: OnboardingMessage[];
 }) {
   const transcript = messagesToTranscript(params.messages);
+  const now = new Date().toISOString();
 
-  return await generateStructuredOutput({
+  const raw = await generateStructuredOutput({
     schema: onboardingTurnSchema,
     prompt: `You are Convy's onboarding tutor. This is a conversational intake, not a form.
 
@@ -73,14 +82,28 @@ Rules:
 - ask one strong next question at a time
 - go at least one layer deeper when the student reveals something meaningful
 - prioritize motivational context and early cognitive/struggle signals
-- only mark complete when you can produce both a useful interest profile and a first student model snapshot
+- only mark status as "complete" when you can produce both a useful interestProfile and a first studentModelSnapshot
+- when status is "continue", set interestProfile and studentModelSnapshot to null
+- when status is "complete", produce full, populated interestProfile and studentModelSnapshot objects
 
-Return:
-- response: the next tutor turn
-- status: continue or complete
-- interestProfile: null unless complete
-- studentModelSnapshot: null unless complete`,
+Return JSON with:
+- response: the next tutor turn (string)
+- status: "continue" or "complete"
+- interestProfile: null when continuing, full object when complete
+- studentModelSnapshot: null when continuing, full object when complete`,
   });
+
+  // Inject server-generated timestamps so the model doesn't have to produce them
+  return {
+    response: raw.response,
+    status: raw.status,
+    interestProfile: raw.interestProfile
+      ? { ...raw.interestProfile, lastUpdated: now }
+      : null,
+    studentModelSnapshot: raw.studentModelSnapshot
+      ? { ...raw.studentModelSnapshot, updatedAt: now }
+      : null,
+  };
 }
 
 export function buildOnboardingGreeting(studentName: string) {

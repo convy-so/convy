@@ -91,6 +91,7 @@ export async function GET() {
       messages,
     });
   } catch (error) {
+    console.error("[Onboarding GET Error]", error);
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Failed to load onboarding",
@@ -206,6 +207,7 @@ export async function POST(request: Request) {
       }),
     });
   } catch (error) {
+    console.error("[Onboarding POST Error]", error);
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Failed to continue onboarding",
