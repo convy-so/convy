@@ -5,6 +5,10 @@ import { z } from "zod";
 import { SearchResult } from "./search";
 import { logUsage, type UsageLogInput } from "../billing/logger";
 import { flashLiteModel } from "../ai";
+import {
+  buildRerankerFallbackSystemPrompt,
+  buildRerankerFallbackUserPrompt,
+} from "./prompts/reranker";
 
 const voyageRerankingModel = voyage.reranking("rerank-2.5-lite");
 
@@ -125,16 +129,12 @@ export async function rerank(
             .describe("Indices of the candidates in order of relevance (0-based)"),
         }),
       }),
-      system: `You are an expert search quality rater. Your task is to rank the following search results based on their relevance to the user's query.
-Instruction: ${instruction}
-Return the indices of the most relevant results, ordered from most relevant to least relevant.
-Ignore results that are irrelevant to the query.`,
-      prompt: `Query: "${query}"
-
-Results:
-${candidates.map((c, i) => `[${i}] ${c.content.substring(0, 300)}...`).join("\n")}
-
-Rank the top ${topK} results.`,
+      system: buildRerankerFallbackSystemPrompt(instruction),
+      prompt: buildRerankerFallbackUserPrompt({
+        query,
+        candidates,
+        topK,
+      }),
     });
 
     if (usage) {

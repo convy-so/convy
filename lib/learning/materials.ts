@@ -2,12 +2,15 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 
 import { analysisModel, defaultModel } from "@/lib/ai";
-import { renderUntrustedContextBlock } from "@/lib/ai/scope-policy";
 import { getOpenAIClient } from "@/lib/openai";
 import {
   clampExtractedTextLength,
   LEARNING_MATERIAL_MIME_ALLOWLIST,
 } from "@/lib/security/uploads";
+import {
+  buildMaterialAnalysisPrompt,
+  buildMaterialGroundingSummaryPrompt,
+} from "@/lib/learning/prompts/materials";
 
 const materialAnalysisSchema = z.object({
   summary: z.string(),
@@ -104,22 +107,8 @@ export async function analyzeLearningMaterial(params: {
     output: Output.object({
       schema: materialAnalysisSchema,
     }),
-    prompt: `Topic: ${params.topicTitle}
-Description: ${params.topicDescription ?? ""}
-Learning outcomes:
-${params.learningOutcomes.map((outcome, index) => `${index + 1}. ${outcome.title}: ${outcome.description}`).join("\n")}
-
-Material excerpt:
-${renderUntrustedContextBlock("learning_material", params.materialText.slice(0, 18000))}
-
-You are helping a teacher review whether the uploaded source material is sufficient for a tightly grounded tutor.
-- Write a concise summary.
-- Ask only necessary clarifying questions.
-- Note where the material supports or fails to support the learning outcomes.
-- Suggest outcome edits only when the outcomes are too vague or unsupported.
-- Extract Rigor Notes: What is the academic level? What complexity of problems are present?
-- Extract Notation Notes: What specific mathematical or scientific symbols, conventions, or units are used?
-- Extract Scope Notes: What specific sub-topics are included or explicitly excluded? What are the boundaries of the content?`,
+    maxOutputTokens: 1200,
+    prompt: buildMaterialAnalysisPrompt(params),
   });
 
   return output;
@@ -131,7 +120,8 @@ export async function generateMaterialGroundingSummary(params: {
 }) {
   const { text } = await generateText({
     model: defaultModel,
-    prompt: `Summarize the learning boundaries for the topic "${params.topicTitle}" based only on the source material below in 6 bullet points or fewer.\n\n${renderUntrustedContextBlock("learning_material", params.materialText.slice(0, 16000))}`,
+    maxOutputTokens: 500,
+    prompt: buildMaterialGroundingSummaryPrompt(params),
   });
 
   return text.trim();
