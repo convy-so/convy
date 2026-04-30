@@ -1,12 +1,14 @@
 import { nanoid } from "nanoid";
 
 import { analysisModel, generateAIResponse } from "@/lib/ai";
+import { safeJsonParse } from "@/lib/ai/json";
 import { buildContextBundle} from "@/lib/ai-core";
 import {
   renderStrictScopePolicyInstructions,
   renderUntrustedContextBlock,
 } from "@/lib/ai/scope-policy";
 import { getEducationProgram } from "./catalog";
+import { buildConductingTurnEvaluationPrompt } from "./prompts/conducting-runtime";
 
 import {
   listEvidenceForSession,
@@ -51,15 +53,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function safeJsonParse(raw: string): unknown | null {
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  try {
-    return JSON.parse(match[0]);
-  } catch {
-    return null;
-  }
-}
 
 function normalizeTurnAnalysisResult(value: unknown): TurnAnalysisResult | null {
   if (!isRecord(value)) {
@@ -338,41 +331,12 @@ async function evaluateTurn(input: {
   messages: ChatMessage[];
 }) {
   const activeNode = input.coveragePlan.nodes.find((node) => node.id === input.sessionState.currentNodeId) ?? null;
-  const prompt = `You are evaluating an education research interview turn. Return JSON only.
-
-<study>
-Research goal: ${input.brief.researchGoal}
-Program: ${input.brief.programId}
-Current node: ${activeNode?.id || "none"} ${activeNode?.label || ""}
-</study>
-
-<coverage-nodes>
-${input.coveragePlan.nodes.map((node) => `- ${node.id}: ${node.label} | threshold ${node.completionThreshold} | ${node.description}`).join("\n")}
-</coverage-nodes>
-
-<conversation>
-${input.messages.map((message) => `${message.role}: ${message.content}`).join("\n\n")}
-</conversation>
-
-<rules>
-- Score nodeCoverage from 0.0 to 1.0 using the evidence actually present.
-- Mark a node complete only when the response materially satisfies the node description.
-- Prefer behavioral-example and quote evidence when available.
-- Use shouldStop only when the participant is clearly done, too fatigued, or required coverage is essentially achieved.
-</rules>
-
-<schema>
-{
-  "nodeCoverage": {"NODE_ID": 0.0},
-  "completedNodeIds": ["NODE_ID"],
-  "evidence": [{"nodeId":"NODE_ID","evidenceType":"quote|behavioral-example|barrier|risk_signal|emotional_signal","excerpt":"string","sentiment":"positive|negative|neutral|mixed","reliability":70}],
-  "contradictions": ["string"],
-  "fatigueScore": 0.0,
-  "reliabilityScore": 0.0,
-  "notes": ["string"],
-  "shouldStop": false
-}
-</schema>`;
+  const prompt = buildConductingTurnEvaluationPrompt({
+    brief: input.brief,
+    coveragePlan: input.coveragePlan,
+    messages: input.messages,
+    activeNode,
+  });
 
   const raw = await generateAIResponse(prompt, undefined, {
     model: analysisModel,

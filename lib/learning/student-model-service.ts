@@ -19,6 +19,12 @@ const studentModelUpdateSchema = studentModelSnapshotSchema.extend({
   updatedAt: z.string(),
 });
 
+function buildStudentModelAnalysisNotes(conversationTurnCount: number) {
+  return {
+    conversationTurnCount,
+  };
+}
+
 export class StudentModelService {
   async ensureModel(params: {
     classroomStudentId: string;
@@ -74,9 +80,7 @@ export class StudentModelService {
       sourceType: params.sourceType,
       sourceId: params.sourceId,
       status: "completed",
-      notes: {
-        conversationTurnCount: params.conversationExcerpt.length,
-      },
+      notes: buildStudentModelAnalysisNotes(params.conversationExcerpt.length),
     });
 
     return savedSnapshot;

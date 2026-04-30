@@ -11,6 +11,20 @@ import {
   type TopicSourceBoundary,
 } from "@/lib/learning/types";
 
+function normalizeLearningOutcome(
+  outcome: LearningOutcomeDefinition,
+  index: number,
+): LearningOutcomeDefinition {
+  return learningOutcomeDefinitionSchema.parse({
+    id: outcome.id || `outcome-${index + 1}`,
+    title: outcome.title,
+    description: outcome.description,
+    evidenceSignals: outcome.evidenceSignals ?? [],
+    masteryThreshold: outcome.masteryThreshold ?? 70,
+    misconceptionTags: outcome.misconceptionTags ?? [],
+  });
+}
+
 /**
  * Create a new learning topic with outcomes and source boundaries
  */
@@ -29,32 +43,21 @@ export async function createLearningTopic(params: {
   const topicId = nanoid();
   const now = new Date();
 
-  // 1. Normalize learning outcomes
   const learningOutcomes = params.learningOutcomes.map((outcome, index) =>
-    learningOutcomeDefinitionSchema.parse({
-      id: outcome.id || `outcome-${index + 1}`,
-      title: outcome.title,
-      description: outcome.description,
-      evidenceSignals: outcome.evidenceSignals ?? [],
-      masteryThreshold: outcome.masteryThreshold ?? 70,
-      misconceptionTags: outcome.misconceptionTags ?? [],
-    }),
+    normalizeLearningOutcome(outcome, index),
   );
 
-  // 2. Normalize source boundary
   const sourceBoundary = topicSourceBoundarySchema.parse({
     ...params.sourceBoundary,
     teacherSummary: params.sourceBoundary?.teacherSummary ?? params.description ?? "",
   });
 
-  // 3. Derive subject info
   const subjectInfo = deriveSubjectInfo({
     subjectKey: params.subjectKey,
     subjectLabel: params.subjectLabel,
     subject: params.subject,
   });
 
-  // 4. Insert topic
   const [topic] = await getDb().insert(learningTopics).values({
     id: topicId,
     classroomId: params.classroomId,

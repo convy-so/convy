@@ -2,6 +2,10 @@ import { getLatestStudentProgressReport, logLearningInteraction, updateLearningS
 import type { ExpertTutorRuntimeModel, LearningSessionState } from "@/lib/learning/types";
 import { enqueueTutoringReportGeneration } from "@/lib/queue";
 
+const FRAMEWORK_COMPLETE_MESSAGE =
+  "Tutoring session completed after the framework reached its terminal stage.";
+const STUDENT_COMPLETE_MESSAGE = "Tutoring session completed by the student.";
+
 function getTerminalStageIds(runtimeModel: ExpertTutorRuntimeModel) {
   return new Set(
     runtimeModel.framework.stages
@@ -72,16 +76,18 @@ export async function finalizeTutoringSession(params: {
     expectedStateVersion: params.expectedStateVersion,
   });
 
+  const completionMessage =
+    params.reason === "framework_complete"
+      ? FRAMEWORK_COMPLETE_MESSAGE
+      : STUDENT_COMPLETE_MESSAGE;
+
   await logLearningInteraction({
     classroomStudentId: params.classroomStudentId,
     topicId: params.topicId,
     sessionId: params.sessionId,
     role: "system",
     interactionType: "session_event",
-    content:
-      params.reason === "framework_complete"
-        ? "Tutoring session completed after the framework reached its terminal stage."
-        : "Tutoring session completed by the student.",
+    content: completionMessage,
     metadata: {
       reason: params.reason,
     },

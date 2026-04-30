@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { generateStructuredOutput } from "@/lib/ai/runtime";
 import { tutorRuntimeService } from "@/lib/learning/tutor-runtime-service";
+import { buildAssessmentPreviewPrompt } from "@/lib/learning/prompts/session-engine";
 import {
   createDefaultLearningSessionState,
   learningSessionStateSchema,
@@ -80,17 +81,10 @@ export async function previewAssessmentQuestionForTopic(params: {
 }) {
   return await generateStructuredOutput({
     schema: assessmentPreviewSchema,
-    prompt: `Generate a pedagogically strong assessment question for the topic "${params.topicTitle}".
-
-Current stage: ${params.currentStageLabel ?? "unknown"}
-
-Retrieved course context:
-${params.retrievedContext.map((item) => `- ${item}`).join("\n")}
-
-Rules:
-- stay inside the retrieved course context
-- prefer conceptual depth over rote recall
-- make the prompt expose genuine understanding
-      - include a hint ladder and evidence requirements`,
+    prompt: buildAssessmentPreviewPrompt({
+      topicTitle: params.topicTitle,
+      currentStageLabel: params.currentStageLabel,
+      retrievedContext: params.retrievedContext,
+    }),
   });
 }
