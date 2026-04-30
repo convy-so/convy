@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, usePathname, useRouter } from "@/i18n/routing";
 import Image from "next/image";
 import {
@@ -18,6 +18,9 @@ import {
   Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { fetchLearningMe } from "@/lib/api/learning";
+import { queryKeys } from "@/lib/query-keys";
 
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/providers/auth-provider";
@@ -32,20 +35,48 @@ export function DashboardSidebar() {
   const t = useTranslations("Sidebar");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const navigation = [
-    { name: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard },
-    { name: t("Surveys"), href: "/dashboard/surveys", icon: MessageSquare },
-    { name: "Learning", href: "/dashboard/learning", icon: GraduationCap },
-    { name: "Folders", href: "/dashboard/folders", icon: FolderOpen },
-    { name: t("Analytics"), href: "/dashboard/analytics", icon: BarChart3 },
-  ];
+  const learningMeQuery = useQuery({ queryKey: queryKeys.learning.me, queryFn: fetchLearningMe, retry: false });
 
-  const bottomNavigation = [
-    { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
-    { name: "Feedback", href: "/dashboard/feedback", icon: Inbox },
-    { name: t("Profile"), href: "/dashboard/profile", icon: UserIcon },
-    { name: t("Settings"), href: "/dashboard/settings", icon: Settings },
-  ];
+  const isStudent = learningMeQuery.data?.role === "student";
+  const isAdminOrExpert = user?.role === "admin" || user?.role === "expert";
+
+  const navigation = useMemo(() => {
+    if (isAdminOrExpert) {
+      return [
+        { name: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard },
+        { name: "Learning", href: "/dashboard/learning", icon: GraduationCap },
+      ];
+    }
+
+    if (isStudent) {
+      return [
+        { name: "Learning", href: "/dashboard/learning", icon: GraduationCap },
+      ];
+    }
+
+    return [
+      { name: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard },
+      { name: t("Surveys"), href: "/dashboard/surveys", icon: MessageSquare },
+      { name: "Learning", href: "/dashboard/learning", icon: GraduationCap },
+      { name: "Folders", href: "/dashboard/folders", icon: FolderOpen },
+      { name: t("Analytics"), href: "/dashboard/analytics", icon: BarChart3 },
+    ];
+  }, [isStudent, isAdminOrExpert, t]);
+
+  const bottomNavigation = useMemo(() => {
+    if (isStudent) {
+      return [
+        { name: t("Settings"), href: "/dashboard/settings", icon: Settings },
+      ];
+    }
+
+    return [
+      { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
+      { name: "Feedback", href: "/dashboard/feedback", icon: Inbox },
+      { name: t("Profile"), href: "/dashboard/profile", icon: UserIcon },
+      { name: t("Settings"), href: "/dashboard/settings", icon: Settings },
+    ];
+  }, [isStudent, t]);
 
   const handleSignOut = async () => {
     await authClient.signOut({
