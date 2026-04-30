@@ -72,9 +72,7 @@ export function useSurveyCreationDraft({
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [surveyStatus, setSurveyStatus] = useState<string | null>(null);
   const [language, setLanguage] = useState<AppLocale>(getSupportedLocale(locale));
-  const [availableLanguages, setAvailableLanguages] = useState<AppLocale[]>([
-    ...appLocales,
-  ]);
+  const availableLanguages = appLocales;
   const [isVoiceSurvey, setIsVoiceSurvey] = useState(false);
   const [extractedData, setExtractedData] = useState<SurveyExtractedData | null>(
     null,
@@ -197,7 +195,6 @@ export function useSurveyCreationDraft({
         }
 
         if (!cancelled) {
-          setAvailableLanguages([...appLocales]);
           setLanguage((currentLanguage) =>
             currentLanguage === nextLanguage ? currentLanguage : nextLanguage,
           );

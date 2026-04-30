@@ -26,12 +26,49 @@ import {
 } from "@/lib/surveys/respondent-session-service";
 import { processRespondentTurn } from "@/lib/surveys/respondent-runtime-service";
 import { nanoid } from "nanoid";
+import { z } from "zod";
 
-function getRequestedLanguage(language: string | null): RespondentLanguage {
-  if (language === "fr" || language === "de" || language === "es" || language === "it") {
-    return language;
+const supportedRespondentLanguages = new Set<RespondentLanguage>([
+  "en",
+  "fr",
+  "de",
+  "es",
+  "it",
+]);
+
+function getRequestedLanguage(language: unknown): RespondentLanguage {
+  if (typeof language === "string" && supportedRespondentLanguages.has(language as RespondentLanguage)) {
+    return language as RespondentLanguage;
   }
+
   return "en";
+}
+
+const respondentRequestSchema = z.object({
+  conversationId: z.string().min(1).optional(),
+  language: z.string().optional(),
+  context: z
+    .object({
+      conversationId: z.string().min(1).optional(),
+    })
+    .optional(),
+  messages: z.array(z.unknown()).optional(),
+});
+
+async function fetchActiveSurveyByShareableLink(shareableLink: string) {
+  const survey = await getDb().query.surveys.findFirst({
+    where: eq(surveys.shareableLink, shareableLink),
+  });
+
+  if (!survey) {
+    return { error: jsonNoStore({ error: "Survey not found" }, { status: 404 }) };
+  }
+
+  if (survey.status !== "active") {
+    return { error: jsonNoStore({ error: "Survey is not active" }, { status: 403 }) };
+  }
+
+  return { survey };
 }
 
 export async function GET(
@@ -44,16 +81,11 @@ export async function GET(
     const language = getRequestedLanguage(searchParams.get("language"));
     const resumeToken = searchParams.get(RESPONDENT_RESUME_QUERY_PARAM);
 
-    const survey = await getDb().query.surveys.findFirst({
-      where: eq(surveys.shareableLink, shareableLink),
-    });
-
-    if (!survey) {
-      return jsonNoStore({ error: "Survey not found" }, { status: 404 });
+    const surveyResult = await fetchActiveSurveyByShareableLink(shareableLink);
+    if (surveyResult.error) {
+      return surveyResult.error;
     }
-    if (survey.status !== "active") {
-      return jsonNoStore({ error: "Survey is not active" }, { status: 403 });
-    }
+    const survey = surveyResult.survey;
 
     const access = await resolveClassroomAssignedAccess(survey);
     if (!access.success) {
@@ -138,20 +170,16 @@ export async function POST(
   { params }: { params: Promise<{ shareableLink: string }> },
 ) {
   try {
-    const body = await req.json();
+    const requestPayload = respondentRequestSchema.parse(await req.json());
     const { shareableLink } = await params;
 
-    const survey = await getDb().query.surveys.findFirst({
-      where: eq(surveys.shareableLink, shareableLink),
-    });
-    if (!survey) {
-      return jsonNoStore({ error: "Survey not found" }, { status: 404 });
+    const surveyResult = await fetchActiveSurveyByShareableLink(shareableLink);
+    if (surveyResult.error) {
+      return surveyResult.error;
     }
-    if (survey.status !== "active") {
-      return jsonNoStore({ error: "Survey is not active" }, { status: 403 });
-    }
+    const survey = surveyResult.survey;
 
-    const conversationId = body.conversationId || body.context?.conversationId;
+    const conversationId = requestPayload.conversationId ?? requestPayload.context?.conversationId;
     if (!conversationId) {
       return jsonNoStore({ error: "Conversation ID is required" }, { status: 400 });
     }
@@ -202,7 +230,7 @@ export async function POST(
 
     const canonicalTurn = buildCanonicalConversationTurn({
       storedMessages: Array.isArray(conversation.rawConversation) ? conversation.rawConversation : [],
-      incomingMessages: Array.isArray(body.messages) ? body.messages : [],
+      incomingMessages: Array.isArray(requestPayload.messages) ? requestPayload.messages : [],
     });
 
     if (!canonicalTurn.hasNewUserTurn) {
@@ -227,20 +255,20 @@ export async function POST(
       }
     }
 
-    const language = getRequestedLanguage(body.language);
+    const language = getRequestedLanguage(requestPayload.language);
     let sessionRow = await getSessionBySourceId(conversation.id);
     if (!sessionRow) {
       sessionRow = await ensureSession({
         surveyId: survey.id,
         sessionType: "live",
         sourceConversationId: conversation.id,
-        language: getRequestedLanguage(body.language || survey.language) || "en",
+        language: getRequestedLanguage(requestPayload.language ?? survey.language),
         respondentId: conversation.participantId,
         initialState: createInitialSessionState({
           surveyId: survey.id,
           sessionId: nanoid(),
           sessionType: "live",
-          language: getRequestedLanguage(body.language || survey.language) || "en",
+          language: getRequestedLanguage(requestPayload.language ?? survey.language),
           coveragePlan: planRow.plan,
         }),
       });
@@ -256,6 +284,10 @@ export async function POST(
       language,
     });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return jsonNoStore({ error: "Invalid request payload", details: error.issues }, { status: 400 });
+    }
+
     console.error("[Respondent POST] Error:", error);
     return jsonNoStore({ error: "Internal server error" }, { status: 500 });
   }
