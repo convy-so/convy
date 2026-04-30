@@ -12,6 +12,7 @@ import { resolveTeacherExpertAnchor } from "@/lib/learning/expert-access";
 import {
   createExpertReviewCase,
   listExpertReviewCases,
+  maybeCreateDraftCrystallizationFromReviewCases,
 } from "@/lib/learning/storage";
 
 const createReviewCaseSchema = z.object({
@@ -104,7 +105,21 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({ success: true, data: created });
+    const autoCrystallization =
+      anchor.topicId && body.reusableSignal
+        ? await maybeCreateDraftCrystallizationFromReviewCases({
+            topicId: anchor.topicId,
+            reviewType: body.reviewType,
+            relevanceScope: body.relevanceScope,
+            frameworkVersionId,
+          })
+        : { created: false as const };
+
+    return NextResponse.json({
+      success: true,
+      data: created,
+      autoCrystallization,
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors[0]?.message ?? "Validation error" }, { status: 400 });

@@ -61,16 +61,16 @@ function isRoutingLocale(
 
 const METADATA_CONFIG: Record<SupportedLanguage, { title: string; description: string }> = {
   en: {
-    title: "Convyy — Turn Forms into AI Conversations",
-    description: "Boring forms are dead. Meet modern, AI-native conversations.",
+    title: "Convyy — AI Tutoring Infrastructure for Schools",
+    description: "Launch adaptive tutoring, expert-guided pedagogy, and evidence-backed learning workflows in one AI-native platform.",
   },
   fr: {
-    title: "Convyy — Transformez vos formulaires en conversations IA",
-    description: "Les formulaires ennuyeux, c'est fini. Découvrez les conversations natives IA.",
+    title: "Convyy — Infrastructure de tutorat IA pour les écoles",
+    description: "Déployez un tutorat adaptatif, une pédagogie guidée par des experts et des workflows d'apprentissage pilotés par des preuves.",
   },
   de: {
-    title: "Convyy — Verwandeln Sie Formulare in KI-Gespräche",
-    description: "Langweilige Formulare sind passée. Erleben Sie moderne KI-Gespräche.",
+    title: "Convyy — KI-Tutoring-Infrastruktur für Schulen",
+    description: "Starten Sie adaptives Tutoring, expertengesteuerte Didaktik und evidenzbasierte Lern-Workflows auf einer KI-nativen Plattform.",
   },
 };
 
@@ -107,6 +107,15 @@ export async function generateMetadata({
       title,
       description,
     },
+    keywords: [
+      "AI tutoring",
+      "adaptive learning",
+      "school AI platform",
+      "learning analytics",
+      "expert pedagogy",
+      "education workflow automation",
+    ],
+    category: "education",
     robots: {
       index: true,
       follow: true,
@@ -149,9 +158,13 @@ export default async function LocaleLayout({
     "@type": "WebApplication",
     "name": "Convyy",
     "url": BASE_URL,
-    "description": "AI-native survey platform",
-    "applicationCategory": "BusinessApplication",
+    "description": "AI tutoring infrastructure for schools: adaptive sessions, expert crystallization, and evidence-backed learning analytics.",
+    "applicationCategory": "EducationalApplication",
     "operatingSystem": "Web",
+    "audience": {
+      "@type": "EducationalAudience",
+      "educationalRole": ["teacher", "student", "school-administrator"]
+    },
     "publisher": {
       "@type": "Person",
       "name": "Convyy AI",
@@ -218,4 +231,3 @@ export default async function LocaleLayout({
     </html>
   );
 }
-

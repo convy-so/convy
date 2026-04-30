@@ -1,15 +1,13 @@
-import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getDb } from "@/db";
-import { surveys } from "@/db/schema";
 import { env } from "@/lib/env";
 import {
   issueRespondentResumeToken,
   resolveRespondentAccess,
 } from "@/lib/privacy/respondent";
 import { getClientIP } from "@/lib/ratelimit";
+import { fetchSurveyByShareableLink } from "@/lib/surveys/public-survey-access";
 
 const bodySchema = z.object({
   conversationId: z.string().min(1),
@@ -41,11 +39,7 @@ export async function POST(
     const { shareableLink } = await params;
     const body = bodySchema.parse(await request.json());
 
-    const survey = await getDb()
-      .select()
-      .from(surveys)
-      .where(eq(surveys.shareableLink, shareableLink))
-      .then((rows) => rows[0]);
+    const survey = await fetchSurveyByShareableLink(shareableLink);
 
     if (!survey) {
       return jsonNoStore({ error: "Survey not found" }, { status: 404 });
