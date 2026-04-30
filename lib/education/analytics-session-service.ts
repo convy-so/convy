@@ -1,4 +1,5 @@
 import { analysisModel, generateAIResponse } from "@/lib/ai";
+import { safeJsonParse } from "@/lib/ai/json";
 import { getEducationProgram } from "./catalog";
 import {
   getSessionById,
@@ -21,15 +22,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function safeJsonParse(raw: string): unknown | null {
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  try {
-    return JSON.parse(match[0]);
-  } catch {
-    return null;
-  }
-}
 
 function parseSessionInsightSummary(value: unknown): {
   summary?: string;

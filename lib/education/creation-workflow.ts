@@ -3,6 +3,11 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { surveyCreationConversations, surveys } from "@/db/schema";
 import { analysisModel, defaultModel, generateAIResponse } from "@/lib/ai";
+import { safeJsonParse } from "@/lib/ai/json";
+import {
+  buildProgramClassificationSystemPrompt,
+  buildProgramClassificationUserPrompt,
+} from "@/lib/education/prompts/creation-workflow";
 import { nanoid } from "nanoid";
 import { getEducationProgram, classifyEducationProgramHeuristically, listEducationPrograms } from "./catalog";
 
@@ -39,15 +44,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function safeJsonParse(raw: string): unknown | null {
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  try {
-    return JSON.parse(match[0]);
-  } catch {
-    return null;
-  }
-}
 
 function isEducationProgramId(value: unknown): value is EducationProgramId {
   return listEducationPrograms().some((program) => program.manifest.id === value);
@@ -109,27 +105,25 @@ async function classifyProgram(messages: ChatMessage[]) {
   const catalog = listEducationPrograms()
     .map((program) => `${program.manifest.id}: ${program.manifest.description}`)
     .join("\n");
-  const systemPrompt = `Classify the creator intent into one education research program. Return JSON only.
-Programs:
-${catalog}
-
-Schema:
-{"programId":"education.course_efficacy|education.learning_outcome|education.institutional_experience|education.professional_development","confidence":0.0,"rationale":"string"}`;
-  const prompt = `Conversation:
-${conversationToText(messages)}`;
-
-  const modelText = await generateAIResponse(prompt, systemPrompt, {
-    model: analysisModel,
-    temperature: 0.1,
-    maxTokens: 250,
-    attribution: {
-      feature: "survey-creation-classify-program",
-    },
-    promptCache: {
-      namespace: "creation-classify-program",
-      staticSystemPrompt: systemPrompt,
-    },
-  }).catch(() => "");
+  const systemPrompt = buildProgramClassificationSystemPrompt(catalog);
+  const prompt = buildProgramClassificationUserPrompt(conversationToText(messages));
+  let modelText = "";
+  try {
+    modelText = await generateAIResponse(prompt, systemPrompt, {
+      model: analysisModel,
+      temperature: 0.1,
+      maxTokens: 250,
+      attribution: {
+        feature: "survey-creation-classify-program",
+      },
+      promptCache: {
+        namespace: "creation-classify-program",
+        staticSystemPrompt: systemPrompt,
+      },
+    });
+  } catch (error) {
+    console.error("classifyProgram failed; using heuristic fallback", { error });
+  }
   const parsed = parseProgramClassification(safeJsonParse(modelText));
   if (parsed?.programId) {
     return {

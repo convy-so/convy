@@ -2,6 +2,10 @@ import { generateText } from "ai";
 import { google } from "@ai-sdk/google";
 import { logUsage } from "./billing/logger";
 import { appLocaleLabels, type AppLocale } from "@/lib/i18n/config";
+import {
+  buildBatchTranslationPrompt,
+  buildConversationTranslationPrompt,
+} from "@/lib/prompts/translation";
 
 /**
  * Translation Service for Locale-Aware Survey System
@@ -9,6 +13,7 @@ import { appLocaleLabels, type AppLocale } from "@/lib/i18n/config";
  */
 
 export type SupportedLanguage = AppLocale;
+const TRANSLATION_MODEL_NAME = "gemini-2.5-flash-lite";
 
 export interface ConversationMessage {
   role: "user" | "assistant";
@@ -36,26 +41,15 @@ export async function translateTextBatch(
     return [];
   }
 
-  const prompt = `You are a professional translator. Translate each item into ${appLocaleLabels[targetLanguage]}.
-
-CRITICAL INSTRUCTIONS:
-1. Return valid JSON only.
-2. Keep array order exactly the same.
-3. Preserve tone, meaning, and specificity.
-4. If an item is already in the target language, keep it natural and unchanged unless a clearer translation is required.
-5. Do not add explanations.
-
-Return this schema exactly:
-{"items":["translated string 1","translated string 2"]}
-
-Task context: ${metadata?.task ?? "product UI content"}
-
-Items:
-${JSON.stringify(normalizedItems, null, 2)}`;
+  const prompt = buildBatchTranslationPrompt(
+    normalizedItems,
+    targetLanguage,
+    metadata,
+  );
 
   try {
     const { text, usage } = await generateText({
-      model: google("gemini-2.5-flash-lite"),
+      model: google(TRANSLATION_MODEL_NAME),
       prompt,
       temperature: 0.2,
     });
@@ -65,7 +59,7 @@ ${JSON.stringify(normalizedItems, null, 2)}`;
       surveyId: metadata?.surveyId,
       type: "llm_text",
       provider: "google",
-      modelName: "gemini-2.5-flash-lite",
+      modelName: TRANSLATION_MODEL_NAME,
       promptTokens: usage.inputTokens,
       completionTokens: usage.outputTokens,
       totalTokens: usage.totalTokens,
@@ -79,7 +73,13 @@ ${JSON.stringify(normalizedItems, null, 2)}`;
     ) {
       return parsed.items;
     }
-  } catch {
+  } catch (error) {
+    console.error("translateTextBatch failed; returning original items", {
+      targetLanguage,
+      itemCount: normalizedItems.length,
+      task: metadata?.task ?? null,
+      error,
+    });
   }
 
   return normalizedItems;
@@ -114,25 +114,15 @@ export async function translateConversation(
     )
     .join("\n\n");
 
-  const prompt = `You are a professional translator. Translate the following survey conversation from ${appLocaleLabels[sourceLanguage]} to ${appLocaleLabels[targetLanguage]}.
-
-CRITICAL INSTRUCTIONS:
-1. Maintain the exact structure: each line should start with either "RESPONDENT:" or "AI:"
-2. Translate the content accurately while preserving meaning, tone, and context
-3. Keep the conversation natural in the target language
-4. Do NOT add any additional commentary or explanations
-5. Output ONLY the translated conversation in the exact same format
-
-Original Conversation (${appLocaleLabels[sourceLanguage]}):
----
-${conversationText}
----
-
-Translated Conversation (${appLocaleLabels[targetLanguage]}):`;
+  const prompt = buildConversationTranslationPrompt({
+    sourceLanguage,
+    targetLanguage,
+    conversationText,
+  });
 
   try {
     const { text, usage } = await generateText({
-      model: google("gemini-2.5-flash-lite"),
+      model: google(TRANSLATION_MODEL_NAME),
       prompt,
       temperature: 0.3, // Lower temperature for more consistent translations
     });
@@ -143,7 +133,7 @@ Translated Conversation (${appLocaleLabels[targetLanguage]}):`;
       surveyId: metadata?.surveyId,
       type: "llm_text",
       provider: "google",
-      modelName: "gemini-2.5-flash-lite",
+      modelName: TRANSLATION_MODEL_NAME,
       promptTokens: usage.inputTokens,
       completionTokens: usage.outputTokens,
       totalTokens: usage.totalTokens,
@@ -155,44 +145,11 @@ Translated Conversation (${appLocaleLabels[targetLanguage]}):`;
 
     let currentRole: "user" | "assistant" | null = null;
     let currentContent = "";
-
-    for (const line of lines) {
-      const trimmedLine = line.trim();
-
-      if (trimmedLine.startsWith("RESPONDENT:")) {
-        // Save previous message if exists
-        if (currentRole && currentContent) {
-          translatedMessages.push({
-            role: currentRole,
-            content: currentContent.trim(),
-            timestamp:
-              conversation[translatedMessages.length]?.timestamp ||
-              new Date().toISOString(),
-          });
-        }
-        currentRole = "user";
-        currentContent = trimmedLine.substring("RESPONDENT:".length).trim();
-      } else if (trimmedLine.startsWith("AI:")) {
-        // Save previous message if exists
-        if (currentRole && currentContent) {
-          translatedMessages.push({
-            role: currentRole,
-            content: currentContent.trim(),
-            timestamp:
-              conversation[translatedMessages.length]?.timestamp ||
-              new Date().toISOString(),
-          });
-        }
-        currentRole = "assistant";
-        currentContent = trimmedLine.substring("AI:".length).trim();
-      } else if (trimmedLine && currentRole) {
-        // Continuation of current message
-        currentContent += " " + trimmedLine;
+    const flushCurrentMessage = () => {
+      if (!currentRole || !currentContent) {
+        return;
       }
-    }
 
-    // Add the last message
-    if (currentRole && currentContent) {
       translatedMessages.push({
         role: currentRole,
         content: currentContent.trim(),
@@ -200,7 +157,25 @@ Translated Conversation (${appLocaleLabels[targetLanguage]}):`;
           conversation[translatedMessages.length]?.timestamp ||
           new Date().toISOString(),
       });
+    };
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+
+      if (trimmedLine.startsWith("RESPONDENT:")) {
+        flushCurrentMessage();
+        currentRole = "user";
+        currentContent = trimmedLine.substring("RESPONDENT:".length).trim();
+      } else if (trimmedLine.startsWith("AI:")) {
+        flushCurrentMessage();
+        currentRole = "assistant";
+        currentContent = trimmedLine.substring("AI:".length).trim();
+      } else if (trimmedLine && currentRole) {
+        currentContent += " " + trimmedLine;
+      }
     }
+
+    flushCurrentMessage();
 
     // Validate we got the same number of messages
     if (translatedMessages.length !== conversation.length) {
@@ -216,8 +191,13 @@ Translated Conversation (${appLocaleLabels[targetLanguage]}):`;
       sourceLanguage,
       targetLanguage,
     };
-  } catch {
-    // Fallback: return original conversation
+  } catch (error) {
+    console.error("translateConversation failed; returning original conversation", {
+      sourceLanguage,
+      targetLanguage,
+      messageCount: conversation.length,
+      error,
+    });
     return {
       translatedConversation: conversation,
       sourceLanguage,
@@ -289,8 +269,11 @@ export async function getUserPreferredLanguage(
       default:
         return "en";
     }
-  } catch {
+  } catch (error) {
+    console.error("getUserPreferredLanguage failed; defaulting to en", {
+      userId,
+      error,
+    });
     return "en";
   }
 }
-

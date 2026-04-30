@@ -19,6 +19,70 @@ function createEmptyStudentSnapshot(): StudentModelSnapshot {
 }
 
 export class TutorRuntimeService {
+  private createAgentBaselineScope(params: {
+    topicId: string;
+    topicTitle: string;
+    sourceBoundary: TopicSourceBoundary;
+    studyLanguage: string;
+  }) {
+    return {
+      topicId: params.topicId,
+      topicTitle: params.topicTitle,
+      contentLocale: params.studyLanguage,
+      teacherSummary: params.sourceBoundary.teacherSummary,
+      materialIds: params.sourceBoundary.allowedMaterialIds,
+      scopeNotes: params.sourceBoundary.scopeNotes,
+      notationNotes: params.sourceBoundary.notationNotes,
+      rigorNotes: params.sourceBoundary.rigorNotes,
+      retrievedContext: [],
+    };
+  }
+
+  private async loadRuntimeAndStudentContext(params: {
+    topicId: string;
+    classroomId?: string | null;
+    classroomStudentId: string;
+    studentUserId?: string | null;
+  }) {
+    const runtimeModel = await expertTutorModelService.getRuntimeModel({
+      topicId: params.topicId,
+      classroomId: params.classroomId,
+    });
+    const studentModel = await studentModelService.ensureModel({
+      classroomStudentId: params.classroomStudentId,
+      studentUserId: params.studentUserId,
+    });
+    const latestSnapshotRecord = await studentModelService.getLatestSnapshot(studentModel.id);
+    const latestSnapshot = latestSnapshotRecord?.snapshot ?? createEmptyStudentSnapshot();
+
+    return {
+      runtimeModel,
+      studentModel,
+      latestSnapshotRecord,
+      latestSnapshot,
+    };
+  }
+
+  private async decideFrameworkState(params: {
+    runtimeModel: Awaited<ReturnType<typeof expertTutorModelService.getRuntimeModel>>;
+    state: LearningSessionState;
+    latestSnapshot: StudentModelSnapshot;
+    latestStudentMessage: string;
+    latestTutorMessage?: string | null;
+    sessionId?: string | null;
+    studentUserId?: string | null;
+  }) {
+    return await frameworkEngine.decideNextState({
+      runtimeModel: params.runtimeModel,
+      frameworkState: params.state.frameworkState,
+      studentModel: params.latestSnapshot,
+      latestStudentMessage: params.latestStudentMessage,
+      latestTutorMessage: params.latestTutorMessage,
+      sessionId: params.sessionId,
+      userId: params.studentUserId,
+    });
+  }
+
   async initializeSessionState(params: {
     topicId: string;
     topicTitle: string;
@@ -28,17 +92,17 @@ export class TutorRuntimeService {
     studentUserId?: string | null;
     studyLanguage: string;
   }): Promise<LearningSessionState> {
-    const runtimeModel = await expertTutorModelService.getRuntimeModel({
+    const {
+      runtimeModel,
+      studentModel,
+      latestSnapshotRecord,
+      latestSnapshot,
+    } = await this.loadRuntimeAndStudentContext({
       topicId: params.topicId,
       classroomId: params.classroomId,
-    });
-    const studentModel = await studentModelService.ensureModel({
       classroomStudentId: params.classroomStudentId,
       studentUserId: params.studentUserId,
     });
-    const latestSnapshot =
-      (await studentModelService.getLatestSnapshot(studentModel.id))?.snapshot ??
-      createEmptyStudentSnapshot();
     const contentScope = await contentScopeService.buildScope({
       topicId: params.topicId,
       sourceBoundary: params.sourceBoundary,
@@ -52,8 +116,7 @@ export class TutorRuntimeService {
       runtimeModelId: runtimeModel.id,
       runtimeModelVersion: runtimeModel.version,
       studentModelId: studentModel.id,
-      studentModelSnapshotId:
-        (await studentModelService.getLatestSnapshot(studentModel.id))?.id ?? null,
+      studentModelSnapshotId: latestSnapshotRecord?.id ?? null,
       frameworkState: {
         currentStageId: runtimeModel.framework.startStageId,
         completedStageIds: [],
@@ -86,30 +149,31 @@ export class TutorRuntimeService {
     latestStudentMessage: string;
     latestTutorMessage?: string | null;
   }) {
-    const runtimeModel = await expertTutorModelService.getRuntimeModel({
+    const {
+      runtimeModel,
+      studentModel,
+      latestSnapshotRecord,
+      latestSnapshot,
+    } = await this.loadRuntimeAndStudentContext({
       topicId: params.topicId,
       classroomId: params.classroomId,
-    });
-    const studentModel = await studentModelService.ensureModel({
       classroomStudentId: params.classroomStudentId,
       studentUserId: params.studentUserId,
     });
-    const latestSnapshotRecord = await studentModelService.getLatestSnapshot(studentModel.id);
-    const latestSnapshot = latestSnapshotRecord?.snapshot ?? createEmptyStudentSnapshot();
     const contentScope = await contentScopeService.buildScope({
       topicId: params.topicId,
       sourceBoundary: params.sourceBoundary,
       query: params.latestStudentMessage,
       contentLocale: params.studyLanguage,
     });
-    const frameworkState = await frameworkEngine.decideNextState({
+    const frameworkState = await this.decideFrameworkState({
       runtimeModel,
-      frameworkState: params.state.frameworkState,
-      studentModel: latestSnapshot,
+      state: params.state,
+      latestSnapshot,
       latestStudentMessage: params.latestStudentMessage,
       latestTutorMessage: params.latestTutorMessage,
       sessionId: params.sessionId,
-      userId: params.studentUserId,
+      studentUserId: params.studentUserId,
     });
     const systemPrompt = tutoringPromptService.buildStudentTurnPrompt({
       contentScope,
@@ -154,39 +218,33 @@ export class TutorRuntimeService {
     latestStudentMessage: string;
     latestTutorMessage?: string | null;
   }) {
-    const runtimeModel = await expertTutorModelService.getRuntimeModel({
+    const {
+      runtimeModel,
+      studentModel,
+      latestSnapshotRecord,
+      latestSnapshot,
+    } = await this.loadRuntimeAndStudentContext({
       topicId: params.topicId,
       classroomId: params.classroomId,
-    });
-    const studentModel = await studentModelService.ensureModel({
       classroomStudentId: params.classroomStudentId,
       studentUserId: params.studentUserId,
     });
-    const latestSnapshotRecord = await studentModelService.getLatestSnapshot(studentModel.id);
-    const latestSnapshot = latestSnapshotRecord?.snapshot ?? createEmptyStudentSnapshot();
 
-    // In agentic mode, we provide the boundary info but NOT the retrieved context upfront.
-    // The agent will use the search_course_materials tool to find evidence.
-    const baselineScope = {
+    const baselineScope = this.createAgentBaselineScope({
       topicId: params.topicId,
       topicTitle: params.topicTitle,
-      contentLocale: params.studyLanguage,
-      teacherSummary: params.sourceBoundary.teacherSummary,
-      materialIds: params.sourceBoundary.allowedMaterialIds,
-      scopeNotes: params.sourceBoundary.scopeNotes,
-      notationNotes: params.sourceBoundary.notationNotes,
-      rigorNotes: params.sourceBoundary.rigorNotes,
-      retrievedContext: [], // Empty initially
-    };
+      sourceBoundary: params.sourceBoundary,
+      studyLanguage: params.studyLanguage,
+    });
 
-    const frameworkState = await frameworkEngine.decideNextState({
+    const frameworkState = await this.decideFrameworkState({
       runtimeModel,
-      frameworkState: params.state.frameworkState,
-      studentModel: latestSnapshot,
+      state: params.state,
+      latestSnapshot,
       latestStudentMessage: params.latestStudentMessage,
       latestTutorMessage: params.latestTutorMessage,
       sessionId: params.sessionId,
-      userId: params.studentUserId,
+      studentUserId: params.studentUserId,
     });
 
     const systemPrompt = tutoringPromptService.buildStudentTurnPrompt({
