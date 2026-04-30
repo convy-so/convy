@@ -10,7 +10,7 @@ import { useAuth } from "@/components/providers/auth-provider";
 const supportedLanguages = [
   { value: "en", label: "English" },
   { value: "fr", label: "French" },
-  { value: "de", label: "German" },
+  { value: "de", label: "Germany" },
 ] as const;
 
 export default function SettingsPage() {
@@ -47,7 +47,7 @@ export default function SettingsPage() {
 
     try {
       const response = await fetch("/api/user/language", {
-        method: "POST",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ language }),
       });

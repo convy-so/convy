@@ -2,6 +2,11 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 
 import { analysisModel } from "@/lib/ai";
+import { buildPatternSummaryRewritePrompt } from "@/lib/learning/prompts/pattern-summaries";
+import {
+  buildOnboardingLearningPatternAnalysisPrompt,
+  buildSessionLearningPatternAnalysisPrompt,
+} from "@/lib/learning/prompts/learning-pattern-analysis";
 import {
   learningPatternAnalysisOutputSchema,
   learningTeachingPlaybookSchema,
@@ -160,38 +165,21 @@ export async function analyzeOnboardingLearningPatterns(params: {
   currentProfiles: StudentLearningPatternProfile[];
   relevantMemories: MemoryRecord[];
 }) {
+  const prompt = buildOnboardingLearningPatternAnalysisPrompt({
+    studentName: params.studentName,
+    interestProfileJson: JSON.stringify(params.interestProfile),
+    currentProfilesJson: JSON.stringify(sortProfilesForStorage(params.currentProfiles)),
+    relevantMemoriesText: formatMemoryRecall(params.relevantMemories),
+    transcriptText: formatTranscript(params.transcript),
+  });
+
   const { output } = await generateText({
     model: analysisModel,
     output: Output.object({
       schema: learningPatternAnalysisOutputSchema,
     }),
-    prompt: `You are creating the initial learning-pattern memory for a student after onboarding.
-
-Student name: ${params.studentName}
-Interest profile:
-${JSON.stringify(params.interestProfile)}
-
-Current learning-pattern profiles:
-${JSON.stringify(sortProfilesForStorage(params.currentProfiles))}
-
-Relevant existing memories:
-${formatMemoryRecall(params.relevantMemories)}
-
-Onboarding transcript:
-${formatTranscript(params.transcript)}
-
-Instructions:
-- Produce one global profile.
-- Use the onboarding conversation to form preliminary readings on:
-  concept entry point preference, abstraction tolerance, challenge response,
-  processing preference, social vs independent orientation, memory approach,
-  and relationship with being wrong.
-- Keep patternConfidence low because this is an onboarding hypothesis, not established evidence.
-- Cap patternConfidence at 0.25.
-- Keep studentSummary supportive and non-deterministic.
-- Keep teacherSummary practical and plain-language.
-- Add observation memories that are short, evidence-based, and useful later.
-- Do not invent certainty that the transcript does not support.`,
+    maxOutputTokens: 1400,
+    prompt,
   });
 
   return {
@@ -229,51 +217,27 @@ export async function analyzeSessionLearningPatterns(params: {
   currentProfiles: StudentLearningPatternProfile[];
   relevantMemories: MemoryRecord[];
 }) {
+  const prompt = buildSessionLearningPatternAnalysisPrompt({
+    studentName: params.studentName,
+    subjectKey: params.subjectKey,
+    subjectLabel: params.subjectLabel,
+    topicTitle: params.topicTitle,
+    interestProfileJson: JSON.stringify(params.interestProfile),
+    currentProfilesJson: JSON.stringify(sortProfilesForStorage(params.currentProfiles)),
+    relevantMemoriesText: formatMemoryRecall(params.relevantMemories),
+    reportJson: JSON.stringify(params.report),
+    stateJson: JSON.stringify(params.state),
+    transcriptText: formatTranscript(params.transcript),
+    outOfSessionEvidenceText: formatTranscript(params.outOfSessionEvidence),
+  });
+
   const { output } = await generateText({
     model: analysisModel,
     output: Output.object({
       schema: learningPatternAnalysisOutputSchema,
     }),
-    prompt: `You are updating a student's learning-pattern memory after a completed tutoring session.
-
-Student: ${params.studentName}
-Subject: ${params.subjectLabel} (${params.subjectKey})
-Topic: ${params.topicTitle}
-Interest profile:
-${JSON.stringify(params.interestProfile)}
-
-Current learning-pattern profiles:
-${JSON.stringify(sortProfilesForStorage(params.currentProfiles))}
-
-Relevant memory recall:
-${formatMemoryRecall(params.relevantMemories)}
-
-Session report:
-${JSON.stringify(params.report)}
-
-Session state:
-${JSON.stringify(params.state)}
-
-Session transcript:
-${formatTranscript(params.transcript)}
-
-Out-of-session evidence to treat as low-weight:
-${formatTranscript(params.outOfSessionEvidence)}
-
-Instructions:
-- Produce exactly two profiles:
-  1. a global profile
-  2. a subject profile for ${params.subjectLabel}
-- Update the six long-term dimensions:
-  explanation responsiveness, interest resonance, cognitive approach,
-  motivational pattern, confidence/mindset pattern, persistent misconceptions.
-- Preserve onboarding insights unless the new evidence clearly weakens them.
-- Pattern confidence must rise gradually based on evidence volume; do not jump to certainty from one session.
-- If evidence contradicts older assumptions, reflect that in the updated profile.
-- Persistent misconceptions become recurring at recurrenceCount 2 and persistent at 3.
-- studentSummary must explain tendencies, not identities.
-- teacherSummary must be operational and concise.
-- Add observation memories that capture useful evidence from this session.`,
+    maxOutputTokens: 1800,
+    prompt,
   });
 
   return {
@@ -305,17 +269,7 @@ export async function rewritePatternSummaries(params: {
     output: Output.object({
       schema: profileSummarySchema,
     }),
-    prompt: `Write two summaries of a student's learning pattern profile.
-
-Student: ${params.studentName}
-Profile:
-${JSON.stringify(params.profile)}
-
-Rules:
-- teacherSummary: practical, plain-language, directly useful for teaching
-- studentSummary: supportive, non-clinical, describes tendencies not fixed identity
-- mention confidence level implicitly when the profile is still early
-- do not contradict the profile`,
+    prompt: buildPatternSummaryRewritePrompt(params),
   });
 
   return output;

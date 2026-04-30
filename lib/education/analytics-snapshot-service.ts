@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import { analysisModel, generateAIResponse } from "@/lib/ai";
+import { safeJsonParse } from "@/lib/ai/json";
 import { getPromptSpec } from "@/lib/ai/prompt-specs";
 import { getEducationProgram } from "./catalog";
 
@@ -31,15 +32,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function safeJsonParse(raw: string): unknown | null {
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  try {
-    return JSON.parse(match[0]);
-  } catch {
-    return null;
-  }
-}
 
 function normalizeResearchBrief(value: unknown): ResearchBrief | null {
   const parsed = researchBriefSchema.safeParse(value);
