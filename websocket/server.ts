@@ -11,9 +11,9 @@ import { scrubSentryEvent } from "@/lib/privacy/sentry";
 
 // Initialize Sentry for the standalone Node.js Project
 Sentry.init({
-  dsn: process.env.SENTRY_DSN,
+  dsn: env.SENTRY_DSN,
   tracesSampleRate: 1.0,
-  environment: process.env.NODE_ENV || "development",
+  environment: env.NODE_ENV,
   serverName: "websocket-server",
   sendDefaultPii: false,
   beforeSend(event) {
@@ -654,4 +654,3 @@ process.on("SIGTERM", async () => {
 process.on("SIGINT", async () => {
   process.emit("SIGTERM");
 });
-

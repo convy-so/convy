@@ -8,6 +8,7 @@ import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/survey-access";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 type ConversationMessage = {
   role: string;
@@ -57,7 +58,7 @@ export async function GET(
 
     const permission = await getSurveyPermissionForSession(session, surveyId);
     if (!hasSurveyPermission(permission, "canView")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     // Build where clause
@@ -188,13 +189,13 @@ export async function GET(
         error.message === "UNAUTHENTICATED" ||
         error.message === "EMAIL_NOT_VERIFIED"
       ) {
-        return NextResponse.json({ error: error.message }, { status: 401 });
+        return apiError("UNAUTHENTICATED", error.message);
       }
     }
-    console.error("Error fetching survey responses:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
+    return apiUnhandledError(
+      error,
+      "Internal server error",
+      "survey-responses:list",
     );
   }
 }
