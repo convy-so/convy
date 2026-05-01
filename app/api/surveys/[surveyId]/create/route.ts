@@ -8,10 +8,8 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { surveyCreationConversations, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { toPersistedUIChatMessages } from "@/lib/chat-ui-messages";
-import { type ChatMessage, type ExtractedData } from "@/lib/chat-types";
+import { type ChatMessage } from "@/lib/chat-types";
 import {
-  acquireSurveyLease,
   getActiveSurveyLease,
   getCurrentSurveyRevision,
   incrementSurveyRevision,
@@ -25,71 +23,24 @@ import {
   deriveCreationMediaDecision,
 } from "@/lib/education/agent-tools";
 import {
-  buildCreationCollectedInfo,
-  buildCreationExtractedData,
+  buildCreationCollectedInfo, buildCreationExtractedData,
 } from "@/lib/education/creation-state";
 import {
   persistCreationConversation,
   runCreationWorkflow,
 } from "@/lib/education/creation-workflow";
 import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import {
+  ensureCreationLease,
+  loadSurveyCreationContext,
+  normalizeCreationMessages,
+  normalizeExtractedData,
+} from "@/lib/education/survey-create-orchestrator";
 
 
 export const maxDuration = 300;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function normalizeExtractedData(value: unknown): ExtractedData {
-  return isRecord(value) ? value : {};
-}
-
-function normalizeCreationMessages(messages: readonly unknown[]): ChatMessage[] {
-  return toPersistedUIChatMessages(messages, ["user", "assistant", "system", "tool"]).map(
-    (message) => ({
-      id: message.id,
-      role: message.role,
-      content: message.content,
-      parts: message.parts,
-      timestamp: message.timestamp,
-    }),
-  );
-}
-
-async function ensureCreationLease(input: {
-  surveyId: string;
-  userId: string;
-  sessionId?: string | null;
-  leaseToken?: string | null;
-  force?: boolean;
-}) {
-  const activeLease = await getActiveSurveyLease(input.surveyId, "creation");
-
-  if (
-    activeLease &&
-    activeLease.holderUserId !== input.userId &&
-    (!input.leaseToken || input.leaseToken !== activeLease.leaseToken)
-  ) {
-    return { ok: false as const, error: "LEASE_CONFLICT", lease: activeLease };
-  }
-
-  if (
-    activeLease &&
-    activeLease.holderUserId === input.userId &&
-    input.leaseToken === activeLease.leaseToken
-  ) {
-    return { ok: true as const, lease: activeLease };
-  }
-
-  return acquireSurveyLease({
-    surveyId: input.surveyId,
-    stage: "creation",
-    userId: input.userId,
-    sessionId: input.sessionId,
-    force: input.force,
-  });
-}
 
 export async function GET(
   _request: Request,
@@ -101,7 +52,7 @@ export async function GET(
     const permission = await getSurveyPermissionForSession(session, surveyId);
 
     if (!hasSurveyPermission(permission, "canView")) {
-      return new Response("Unauthorized", { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     const [survey, creationConversation, revision, lease] = await Promise.all([
@@ -120,7 +71,7 @@ export async function GET(
     ]);
 
     if (!survey) {
-      return new Response("Survey not found", { status: 404 });
+      return apiError("NOT_FOUND", "Survey not found");
     }
 
     return NextResponse.json({
@@ -141,8 +92,7 @@ export async function GET(
     ) {
       return new Response(error.message, { status: 401 });
     }
-    console.error("[Create Route GET] Error:", error);
-    return new Response("Internal server error", { status: 500 });
+    return apiUnhandledError(error, "Internal server error", "survey-create:get");
   }
 }
 
@@ -159,16 +109,9 @@ export async function POST(
       }),
     );
     if (!rateLimitResult.success) {
-      return new Response(
-        JSON.stringify({
-          error: "Rate limit exceeded",
-          retryAfter: rateLimitResult.reset,
-        }),
-        {
-          status: 429,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+      return apiError("RATE_LIMITED", "Rate limit exceeded", {
+        details: { retryAfter: rateLimitResult.reset },
+      });
     }
 
     const { surveyId } = await params;
@@ -177,27 +120,15 @@ export async function POST(
       ? body.messages
       : null;
     if (!incomingMessages)
-      return new Response("Invalid messages", { status: 400 });
+      return apiError("VALIDATION_ERROR", "Invalid messages");
 
-    const [survey, existingConversation] = await Promise.all([
-      getDb()
-        .select()
-        .from(surveys)
-        .where(eq(surveys.id, surveyId))
-        .then((rows) => rows[0]),
-      getDb()
-        .select()
-        .from(surveyCreationConversations)
-        .where(eq(surveyCreationConversations.surveyId, surveyId))
-        .then((rows) => rows[0]),
-    ]);
-    if (!survey) return new Response("Survey not found", { status: 404 });
+    const { survey, existingConversation } =
+      await loadSurveyCreationContext(surveyId);
+    if (!survey) return apiError("NOT_FOUND", "Survey not found");
 
     const permission = await getSurveyPermissionForSession(session, survey.id);
     if (!hasSurveyPermission(permission, "canEdit")) {
-      return new Response("Unauthorized: Editor access required", {
-        status: 403,
-      });
+      return apiError("UNAUTHORIZED", "Editor access required");
     }
     if (survey.status !== "creating") {
       return new Response(
@@ -213,6 +144,7 @@ export async function POST(
     ) {
       return NextResponse.json(
         {
+          success: false,
           error: "REVISION_CONFLICT",
           currentRevision,
         },
@@ -232,13 +164,11 @@ export async function POST(
     });
 
     if (!leaseResult.ok) {
-      return NextResponse.json(
-        {
-          error: leaseResult.error,
+      return apiError("CONFLICT", leaseResult.error, {
+        details: {
           lease: "lease" in leaseResult ? leaseResult.lease : null,
         },
-        { status: 409 },
-      );
+      });
     }
 
     const messages = normalizeCreationMessages(incomingMessages);
@@ -380,10 +310,9 @@ export async function POST(
       (error.message === "UNAUTHENTICATED" ||
         error.message === "EMAIL_NOT_VERIFIED")
     ) {
-      return new Response(error.message, { status: 401 });
+      return apiError("UNAUTHENTICATED", error.message);
     }
-    console.error("[Create Route] Error:", error);
-    return new Response("Internal server error", { status: 500 });
+    return apiUnhandledError(error, "Internal server error", "survey-create:post");
   }
 }
 
@@ -397,28 +326,23 @@ export async function PUT(
     const body = await request.json();
     const incomingMessages = Array.isArray(body.messages) ? body.messages : [];
 
-    const [survey] = await getDb()
-      .select()
-      .from(surveys)
-      .where(eq(surveys.id, surveyId));
-    if (!survey) return new Response("Survey not found", { status: 404 });
+    const { survey } = await loadSurveyCreationContext(surveyId);
+    if (!survey) return apiError("NOT_FOUND", "Survey not found");
 
     const permission = await getSurveyPermissionForSession(session, survey.id);
     if (!hasSurveyPermission(permission, "canEdit")) {
-      return new Response("Unauthorized: Editor access required", {
-        status: 403,
-      });
+      return apiError("UNAUTHORIZED", "Editor access required");
     }
 
     if (
       typeof body.expectedRevision === "number" &&
       body.expectedRevision !== (await getCurrentSurveyRevision(surveyId))
     ) {
-      return NextResponse.json({ error: "REVISION_CONFLICT" }, { status: 409 });
+      return apiError("CONFLICT", "REVISION_CONFLICT");
     }
 
     if (incomingMessages.length === 0) {
-      return new Response("OK", { status: 200 });
+      return NextResponse.json({ success: true });
     }
 
     const leaseResult = await ensureCreationLease({
@@ -433,13 +357,11 @@ export async function PUT(
     });
 
     if (!leaseResult.ok) {
-      return NextResponse.json(
-        {
-          error: leaseResult.error,
+      return apiError("CONFLICT", leaseResult.error, {
+        details: {
           lease: "lease" in leaseResult ? leaseResult.lease : null,
         },
-        { status: 409 },
-      );
+      });
     }
 
     const normalizedMessages = normalizeCreationMessages(incomingMessages);
@@ -456,9 +378,8 @@ export async function PUT(
       (error.message === "UNAUTHENTICATED" ||
         error.message === "EMAIL_NOT_VERIFIED")
     ) {
-      return new Response(error.message, { status: 401 });
+      return apiError("UNAUTHENTICATED", error.message);
     }
-    console.error("[Create Route PUT] Error:", error);
-    return new Response("Internal server error", { status: 500 });
+    return apiUnhandledError(error, "Internal server error", "survey-create:put");
   }
 }

@@ -8,6 +8,7 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { assertAiOpsUser } from "@/lib/auth/expert";
 import { getTeacherOwnedFramework } from "@/lib/learning/expert-access";
 import { expertFrameworkSchema } from "@/lib/learning/types";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 const createVersionSchema = z.object({
   artifact: expertFrameworkSchema,
@@ -24,7 +25,7 @@ export async function GET(
     const { packId } = await params;
     const framework = await getTeacherOwnedFramework(session.user.id, packId);
     if (!framework) {
-      return NextResponse.json({ error: "Framework not found" }, { status: 404 });
+      return apiError("NOT_FOUND", "Framework not found");
     }
     const versions = await getDb().query.expertFrameworkVersions.findMany({
       where: eq(expertFrameworkVersions.frameworkId, framework.id),
@@ -32,9 +33,10 @@ export async function GET(
     });
     return NextResponse.json({ success: true, data: versions });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load framework versions" },
-      { status: 400 },
+    return apiUnhandledError(
+      error,
+      "Failed to load framework versions",
+      "expert-framework-versions:get",
     );
   }
 }
@@ -49,7 +51,7 @@ export async function POST(
     const { packId } = await params;
     const framework = await getTeacherOwnedFramework(session.user.id, packId);
     if (!framework) {
-      return NextResponse.json({ error: "Framework not found" }, { status: 404 });
+      return apiError("NOT_FOUND", "Framework not found");
     }
     const body = createVersionSchema.parse(await request.json());
     const existing = await getDb().query.expertFrameworkVersions.findMany({
@@ -77,11 +79,15 @@ export async function POST(
     return NextResponse.json({ success: true, data: version });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors[0]?.message ?? "Validation error" }, { status: 400 });
+      return apiError(
+        "VALIDATION_ERROR",
+        error.errors[0]?.message ?? "Validation error",
+      );
     }
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to create framework version" },
-      { status: 400 },
+    return apiUnhandledError(
+      error,
+      "Failed to create framework version",
+      "expert-framework-versions:post",
     );
   }
 }
