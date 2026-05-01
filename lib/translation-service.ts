@@ -1,7 +1,7 @@
 import { generateText } from "ai";
 import { google } from "@ai-sdk/google";
 import { logUsage } from "./billing/logger";
-import { appLocaleLabels, type AppLocale } from "@/lib/i18n/config";
+import { type AppLocale } from "@/lib/i18n/config";
 import {
   buildBatchTranslationPrompt,
   buildConversationTranslationPrompt,

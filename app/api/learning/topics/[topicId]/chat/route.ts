@@ -54,7 +54,6 @@ export async function GET(
       userId: session.user.id,
       topicId,
       language: searchParams.get("language"),
-      uiLocale: session.user.uiLocale,
       preferredLanguage: session.user.preferredLanguage,
     });
 
@@ -129,7 +128,6 @@ export async function POST(
     const body = requestSchema.parse(await request.json());
     const studyLanguage = resolveStudyLanguage({
       language: body.language,
-      uiLocale: session.user.uiLocale,
       preferredLanguage: session.user.preferredLanguage,
     });
     const latestUserMessage = getLatestUserMessage(body.messages);
