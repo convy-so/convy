@@ -25,6 +25,7 @@ import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/survey-access";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 export async function GET(
   _request: Request,
@@ -44,12 +45,12 @@ export async function GET(
       .where(eq(surveys.id, surveyId));
 
     if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+      return apiError("NOT_FOUND", "Survey not found");
     }
 
     const permission = await getSurveyPermissionForSession(session, surveyId);
     if (!hasSurveyPermission(permission, "canView")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     const [sessionRow] = await getDb()
@@ -66,7 +67,7 @@ export async function GET(
       );
 
     if (!sessionRow) {
-      return NextResponse.json({ error: "Response not found" }, { status: 404 });
+      return apiError("NOT_FOUND", "Response not found");
     }
 
     const [insightRow, turnRows, evidenceRows, activePlan] = await Promise.all([
@@ -154,13 +155,12 @@ export async function GET(
       (error.message === "UNAUTHENTICATED" ||
         error.message === "EMAIL_NOT_VERIFIED")
     ) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      return apiError("UNAUTHENTICATED", error.message);
     }
-
-    console.error("[Response Details API] Error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch response details" },
-      { status: 500 },
+    return apiUnhandledError(
+      error,
+      "Failed to fetch response details",
+      "survey-responses:details",
     );
   }
 }

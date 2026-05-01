@@ -12,6 +12,7 @@ import {
 } from "@/lib/learning/expert-access";
 import { createDefaultDeepFramework } from "@/lib/learning/framework-packages";
 import { ensureTopicFramework } from "@/lib/learning/storage";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 const createFrameworkSchema = z.object({
   name: z.string().min(2),
@@ -55,10 +56,7 @@ export async function GET() {
         })),
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load frameworks" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to load frameworks", "expert-assets:get");
   }
 }
 
@@ -69,7 +67,7 @@ export async function POST(request: Request) {
     const body = createFrameworkSchema.parse(await request.json());
     const topic = await getTeacherOwnedTopic(session.user.id, body.topicId);
     if (!topic) {
-      return NextResponse.json({ error: "Topic not found" }, { status: 404 });
+      return apiError("NOT_FOUND", "Topic not found");
     }
 
     const ensured = await ensureTopicFramework({
@@ -78,7 +76,7 @@ export async function POST(request: Request) {
     });
     const framework = await getTeacherOwnedFramework(session.user.id, ensured.id);
     if (!framework) {
-      return NextResponse.json({ error: "Framework not found" }, { status: 404 });
+      return apiError("NOT_FOUND", "Framework not found");
     }
 
     await getDb()
@@ -113,11 +111,11 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors[0]?.message ?? "Validation error" }, { status: 400 });
+      return apiError(
+        "VALIDATION_ERROR",
+        error.errors[0]?.message ?? "Validation error",
+      );
     }
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to create framework" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to create framework", "expert-assets:post");
   }
 }

@@ -3,19 +3,14 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 
 import { getVerifiedSession } from "@/lib/auth/session";
-import { getStudentTopicAccess } from "@/lib/learning/access";
 import { extractMessageText, toPersistedUIChatMessages, toUIMessages } from "@/lib/chat-ui-messages";
 import {
   appendLearningMessage,
-  createLearningSession,
-  getActiveLearningSession,
-  getLearningSessionById,
   listLearningMessages,
   logLearningInteraction,
   updateLearningSessionState,
 } from "@/lib/learning/storage";
 import { tutorRuntimeService } from "@/lib/learning/tutor-runtime-service";
-import { generateSessionOpening } from "@/lib/learning/tutor";
 import {
   finalizeTutoringSession,
   shouldAutoCompleteTutoringSession,
@@ -28,6 +23,12 @@ import { sanitizeUserInput } from "@/lib/ai/sanitization";
 import { studentModelService } from "@/lib/learning/student-model-service";
 import { logBraintrustTrace } from "@/lib/ai/braintrust";
 import { getDynamicFewShotExamples } from "@/lib/ai/few-shot-library";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import {
+  ensureTutoringSession,
+  resolveStudyLanguage,
+  resolveStudentTutoringContext,
+} from "@/lib/learning/tutoring-route-orchestrator";
 
 const requestSchema = z.object({
   sessionId: z.string().optional(),
@@ -41,88 +42,6 @@ function getLatestUserMessage(messages: UIMessage[]) {
     .find((message) => message.role === "user");
 }
 
-async function ensureTutoringSession(params: {
-  topicId: string;
-  access: NonNullable<Awaited<ReturnType<typeof getStudentTopicAccess>>>;
-  sessionId?: string;
-  studyLanguage: string;
-}) {
-  const requestedSession = params.sessionId
-    ? await getLearningSessionById(params.sessionId)
-    : null;
-  const existing =
-    (requestedSession &&
-    requestedSession.sessionStatus === "active" &&
-    requestedSession.sessionType === "tutoring" &&
-    requestedSession.topicId === params.topicId &&
-    requestedSession.classroomStudentId === params.access.classroomStudent.id &&
-    requestedSession.sessionLocale === params.studyLanguage
-      ? requestedSession
-      : null) ??
-    (await getActiveLearningSession({
-      classroomStudentId: params.access.classroomStudent.id,
-      topicId: params.topicId,
-      sessionType: "tutoring",
-      sessionLocale: params.studyLanguage,
-    }));
-
-  if (existing) {
-    return existing;
-  }
-
-  const state = await tutorRuntimeService.initializeSessionState({
-    topicId: params.topicId,
-    topicTitle: params.access.topic.title,
-    sourceBoundary: params.access.topic.sourceBoundary,
-    classroomId: params.access.topic.classroomId,
-    classroomStudentId: params.access.classroomStudent.id,
-    studentUserId: params.access.classroomStudent.userId,
-    studyLanguage: params.studyLanguage,
-  });
-
-  const session = await createLearningSession({
-    topicId: params.topicId,
-    classroomStudentId: params.access.classroomStudent.id,
-    sessionType: "tutoring",
-    sessionLocale: params.studyLanguage,
-    state,
-  });
-
-  const opening = await generateSessionOpening({
-    topicTitle: params.access.topic.title,
-    studyLanguage: params.studyLanguage,
-    worldConnection:
-      params.access.classroomStudent.interestProfile?.profile.primaryInterests[0]?.label ??
-      null,
-  }).catch(
-    () =>
-      `Let's work on ${params.access.topic.title}. Start by telling me how you currently think about this topic.`,
-  );
-
-  await appendLearningMessage({
-    sessionId: session.id,
-    role: "assistant",
-    content: opening,
-    metadata: {
-      messageKind: "session_opening",
-    },
-  });
-
-  await logLearningInteraction({
-    classroomStudentId: params.access.classroomStudent.id,
-    topicId: params.topicId,
-    sessionId: session.id,
-    role: "assistant",
-    interactionType: "tutor_message",
-    content: opening,
-    metadata: {
-      messageKind: "session_opening",
-    },
-  });
-
-  return session;
-}
-
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ topicId: string }> },
@@ -131,22 +50,22 @@ export async function GET(
     const session = await getVerifiedSession();
     const { topicId } = await params;
     const { searchParams } = new URL(request.url);
-    const access = await getStudentTopicAccess(session.user.id, topicId);
-    const studyLanguage = normalizeAppLocale(
-      searchParams.get("language") ??
-        session.user.uiLocale ??
-        session.user.preferredLanguage ??
-        "en",
-    );
+    const { access, studyLanguage } = await resolveStudentTutoringContext({
+      userId: session.user.id,
+      topicId,
+      language: searchParams.get("language"),
+      uiLocale: session.user.uiLocale,
+      preferredLanguage: session.user.preferredLanguage,
+    });
 
     if (!access) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     if (!access.classroomStudent.interestProfile) {
-      return NextResponse.json(
-        { error: "Student profile onboarding is required before tutoring." },
-        { status: 409 },
+      return apiError(
+        "CONFLICT",
+        "Student profile onboarding is required before tutoring.",
       );
     }
 
@@ -176,9 +95,10 @@ export async function GET(
       },
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load tutoring session" },
-      { status: 400 },
+    return apiUnhandledError(
+      error,
+      "Failed to load tutoring session",
+      "learning-topic-chat:get",
     );
   }
 }
@@ -190,30 +110,35 @@ export async function POST(
   try {
     const session = await getVerifiedSession();
     const { topicId } = await params;
-    const access = await getStudentTopicAccess(session.user.id, topicId);
+    const { access } = await resolveStudentTutoringContext({
+      userId: session.user.id,
+      topicId,
+    });
 
     if (!access) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     if (!access.classroomStudent.interestProfile) {
-      return NextResponse.json(
-        { error: "Student profile onboarding is required before tutoring." },
-        { status: 409 },
+      return apiError(
+        "CONFLICT",
+        "Student profile onboarding is required before tutoring.",
       );
     }
 
     const body = requestSchema.parse(await request.json());
-    const studyLanguage = normalizeAppLocale(
-      body.language ?? session.user.uiLocale ?? session.user.preferredLanguage ?? "en",
-    );
+    const studyLanguage = resolveStudyLanguage({
+      language: body.language,
+      uiLocale: session.user.uiLocale,
+      preferredLanguage: session.user.preferredLanguage,
+    });
     const latestUserMessage = getLatestUserMessage(body.messages);
     const latestUserText = extractMessageText(
       latestUserMessage ? toPersistedUIChatMessages([latestUserMessage])[0] : null,
     ).trim();
 
     if (!latestUserText) {
-      return NextResponse.json({ error: "Message is required" }, { status: 400 });
+      return apiError("VALIDATION_ERROR", "Message is required");
     }
 
     const scopeDecision = await evaluateScopePolicy({
@@ -525,9 +450,10 @@ export async function POST(
       },
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to continue tutoring" },
-      { status: 400 },
+    return apiUnhandledError(
+      error,
+      "Failed to continue tutoring",
+      "learning-topic-chat:post",
     );
   }
 }

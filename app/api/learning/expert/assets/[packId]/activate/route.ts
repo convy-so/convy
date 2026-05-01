@@ -14,6 +14,7 @@ import { assertAiOpsUser } from "@/lib/auth/expert";
 import { getTeacherOwnedFramework } from "@/lib/learning/expert-access";
 import { createRuntimeModel } from "@/lib/learning/storage";
 import { expertTutorRuntimeModelSchema } from "@/lib/learning/types";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 const activateSchema = z.object({
   versionId: z.string().min(1),
@@ -38,7 +39,7 @@ export async function POST(
     });
 
     if (!framework || !version) {
-      return NextResponse.json({ error: "Framework or version not found" }, { status: 404 });
+      return apiError("NOT_FOUND", "Framework or version not found");
     }
 
     await getDb()
@@ -112,11 +113,15 @@ export async function POST(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors[0]?.message ?? "Validation error" }, { status: 400 });
+      return apiError(
+        "VALIDATION_ERROR",
+        error.errors[0]?.message ?? "Validation error",
+      );
     }
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to publish framework version" },
-      { status: 400 },
+    return apiUnhandledError(
+      error,
+      "Failed to publish framework version",
+      "expert-framework-activate:post",
     );
   }
 }

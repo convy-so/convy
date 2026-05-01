@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { assertAiOpsUser } from "@/lib/auth/expert";
 import { listExpertReviewQueue } from "@/lib/learning/storage";
+import { apiUnhandledError } from "@/lib/api/error-contract";
 
 export async function GET() {
   try {
@@ -18,9 +19,6 @@ export async function GET() {
       data: queue,
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load review queue" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to load review queue", "expert-review-queue");
   }
 }

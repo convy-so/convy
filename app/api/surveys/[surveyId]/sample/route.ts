@@ -52,6 +52,7 @@ import {
 import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
 import { sanitizeUserInput } from "@/lib/ai/sanitization";
 import { getDynamicFewShotExamples } from "@/lib/ai/few-shot-library";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { buildCanonicalConversationTurn } from "@/lib/respondent-conversation";
 
@@ -156,11 +157,11 @@ export async function GET(
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
-    if (!survey) return new Response("Survey not found", { status: 404 });
+    if (!survey) return apiError("NOT_FOUND", "Survey not found");
 
     const permission = await getSurveyPermissionForSession(session, survey.id,);
     if (!hasSurveyPermission(permission, "canView"))
-      return new Response("Unauthorized", { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
 
     const [sample] = await getDb()
       .select()
@@ -181,8 +182,7 @@ export async function GET(
       revision: await getCurrentSurveyRevision(surveyId),
     });
   } catch (error) {
-    console.error("[Sample GET] Error:", error);
-    return new Response("Internal server error", { status: 500 });
+    return apiUnhandledError(error, "Internal server error", "survey-sample:get");
   }
 }
 
@@ -199,16 +199,9 @@ export async function POST(
       }),
     );
     if (!rateLimitResult.success) {
-      return new Response(
-        JSON.stringify({
-          error: "Rate limit exceeded",
-          retryAfter: rateLimitResult.reset,
-        }),
-        {
-          status: 429,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+      return apiError("RATE_LIMITED", "Rate limit exceeded", {
+        details: { retryAfter: rateLimitResult.reset },
+      });
     }
 
     const { surveyId } = await params;
@@ -220,9 +213,9 @@ export async function POST(
       conversationNumber < 1 ||
       conversationNumber > MAX_SAMPLE_CONVERSATIONS
     ) {
-      return new Response(
+      return apiError(
+        "VALIDATION_ERROR",
         `Invalid conversation number. Must be between 1 and ${MAX_SAMPLE_CONVERSATIONS}`,
-        { status: 400 },
       );
     }
 
@@ -230,18 +223,16 @@ export async function POST(
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
-    if (!survey) return new Response("Survey not found", { status: 404 });
+    if (!survey) return apiError("NOT_FOUND", "Survey not found");
 
     const permission = await getSurveyPermissionForSession(session, survey.id,);
     if (!hasSurveyPermission(permission, "canEdit")) {
-      return new Response("Unauthorized: Editor access required", {
-        status: 403,
-      });
+      return apiError("UNAUTHORIZED", "Editor access required");
     }
     if (survey.status !== "draft" && survey.status !== "sample_review") {
-      return new Response(
+      return apiError(
+        "VALIDATION_ERROR",
         "Survey must be in draft or sample_review status for sample conversations",
-        { status: 400 },
       );
     }
 
@@ -250,13 +241,9 @@ export async function POST(
       typeof body.expectedRevision === "number" &&
       body.expectedRevision !== currentRevision
     ) {
-      return NextResponse.json(
-        {
-          error: "REVISION_CONFLICT",
-          currentRevision,
-        },
-        { status: 409 },
-      );
+      return apiError("CONFLICT", "REVISION_CONFLICT", {
+        details: { currentRevision },
+      });
     }
 
     const leaseResult = await ensureRehearsalLease({
@@ -271,13 +258,11 @@ export async function POST(
     });
 
     if (!leaseResult.ok) {
-      return NextResponse.json(
-        {
-          error: leaseResult.error,
+      return apiError("CONFLICT", leaseResult.error, {
+        details: {
           lease: "lease" in leaseResult ? leaseResult.lease : null,
         },
-        { status: 409 },
-      );
+      });
     }
 
     const [briefRow, planRow] = await Promise.all([
@@ -285,9 +270,9 @@ export async function POST(
       getActiveCoveragePlan(surveyId),
     ]);
     if (!briefRow || !planRow) {
-      return new Response(
+      return apiError(
+        "VALIDATION_ERROR",
         "This survey does not have an approved education brief yet.",
-        { status: 400 },
       );
     }
 
@@ -586,7 +571,6 @@ Respond to the user in the language they are speaking to you in. Match the langu
     response.headers.set("X-Lease-Token", leaseResult.lease.leaseToken);
     return response;
   } catch (error) {
-    console.error("[Sample Route] Error:", error);
-    return new Response("Internal server error", { status: 500 });
+    return apiUnhandledError(error, "Internal server error", "survey-sample:post");
   }
 }
