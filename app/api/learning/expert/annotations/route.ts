@@ -14,6 +14,7 @@ import {
   listExpertReviewCases,
   maybeCreateDraftCrystallizationFromReviewCases,
 } from "@/lib/learning/storage";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 const createReviewCaseSchema = z.object({
   topicId: z.string().nullable().optional(),
@@ -46,9 +47,10 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ success: true, data: reviewCases });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load review cases" },
-      { status: 400 },
+    return apiUnhandledError(
+      error,
+      "Failed to load review cases",
+      "expert-annotations:get",
     );
   }
 }
@@ -60,9 +62,9 @@ export async function POST(request: Request) {
     const body = createReviewCaseSchema.parse(await request.json());
     const anchor = await resolveTeacherExpertAnchor(session.user.id, body);
     if (!anchor) {
-      return NextResponse.json(
-        { error: "A teacher-owned topic, student, session, or interaction is required." },
-        { status: 404 },
+      return apiError(
+        "NOT_FOUND",
+        "A teacher-owned topic, student, session, or interaction is required.",
       );
     }
 
@@ -122,12 +124,11 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors[0]?.message ?? "Validation error" }, { status: 400 });
+      return apiError(
+        "VALIDATION_ERROR",
+        error.errors[0]?.message ?? "Validation error",
+      );
     }
-
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to save review case" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to save review case", "expert-annotations:post");
   }
 }

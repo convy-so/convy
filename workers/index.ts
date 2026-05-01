@@ -12,12 +12,13 @@ loadEnvConfig(process.cwd());
 
 import * as Sentry from "@sentry/node";
 import { scrubSentryEvent } from "@/lib/privacy/sentry";
+import { env } from "@/lib/env";
 
 // Initialize Sentry for the standalone Node.js Project (Workers)
 Sentry.init({
-  dsn: process.env.SENTRY_DSN,
+  dsn: env.SENTRY_DSN,
   tracesSampleRate: 1.0,
-  environment: process.env.NODE_ENV || "development",
+  environment: env.NODE_ENV,
   serverName: "worker-process",
   sendDefaultPii: false,
   beforeSend(event) {
@@ -104,5 +105,3 @@ async function gracefulShutdown() {
 // Handle shutdown signals
 process.on("SIGTERM", () => void gracefulShutdown());
 process.on("SIGINT", () => void gracefulShutdown());
-
-
