@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import {
   getAiOpsOverview,
   listExpertGuidanceSummary,
@@ -6,9 +7,10 @@ import {
 type GuidancePackSummary = Awaited<ReturnType<typeof listExpertGuidanceSummary>>[number];
 
 export async function AiOpsDashboard() {
+  const reqHeaders = await headers();
   const [overview, guidancePacks] = await Promise.all([
-    getAiOpsOverview(),
-    listExpertGuidanceSummary(),
+    getAiOpsOverview(reqHeaders),
+    listExpertGuidanceSummary(reqHeaders),
   ]);
 
   return (

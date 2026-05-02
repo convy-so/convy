@@ -20,7 +20,7 @@ export function AdminSidebar() {
 
     const navigation = [
         { name: "Overview", href: "/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI", icon: LayoutDashboard },
-        { name: "AI Ops", href: "/admin/ai-ops", icon: ShieldCheck },
+        { name: "AI Ops", href: "/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/ai-ops", icon: ShieldCheck },
         { name: "Surveys & Feedback", href: "/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/surveys", icon: MessageSquare },
         { name: "Complaints", href: "/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/feedback", icon: Inbox },
         { name: "Usage & Costs", href: "/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/usage", icon: Database },
