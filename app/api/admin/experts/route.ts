@@ -5,18 +5,19 @@ import { auth } from "@/lib/auth";
 import { getDb } from "@/db";
 import { users } from "@/db/schema/auth";
 import { eq } from "drizzle-orm";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 export async function POST(req: Request) {
     try {
         const session = await getVerifiedSession();
         if (!isAdmin(session.user)) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+            return apiError("UNAUTHORIZED", "Unauthorized");
         }
 
         const { name, email } = await req.json();
 
         if (!name || !email) {
-            return NextResponse.json({ error: "Name and email are required" }, { status: 400 });
+            return apiError("VALIDATION_ERROR", "Name and email are required");
         }
 
         // Generate a random secure temporary password
@@ -42,10 +43,6 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ success: true, userId: res.user.id });
     } catch (error) {
-        console.error("[Create Expert API] Error:", error);
-        return NextResponse.json(
-            { error: error instanceof Error ? error.message : "Internal Server Error" },
-            { status: 500 }
-        );
+        return apiUnhandledError(error, "Internal Server Error", "/api/admin/experts");
     }
 }

@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { topicMaterials } from "@/db/schema";
@@ -20,16 +21,16 @@ export async function GET(
     });
 
     if (!material) {
-      return NextResponse.json({ error: "Material not found" }, { status: 404 });
+      return apiError("NOT_FOUND", "Material not found");
     }
 
     const topic = await getTeacherTopicAccess(session.user.id, material.topicId);
     if (!topic) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     if (!material.storagePath) {
-      return NextResponse.json({ error: "Material storage path missing" }, { status: 404 });
+      return apiError("NOT_FOUND", "Material storage path missing");
     }
 
     const signedUrl = await createSignedLearningMaterialUrl(material.storagePath);
@@ -40,9 +41,9 @@ export async function GET(
       (error.message === "UNAUTHENTICATED" ||
         error.message === "EMAIL_NOT_VERIFIED")
     ) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      return apiError("UNAUTHENTICATED", error.message);
     }
-    return NextResponse.json({ error: "Failed to access material" }, { status: 500 });
+    return apiUnhandledError(error, "Failed to access material", "/api/media/learning/[materialId]");
   }
 }
 

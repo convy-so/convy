@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
@@ -25,26 +26,17 @@ export async function GET(
     const leftVersion = Number(searchParams.get("leftVersion"));
     const rightVersion = Number(searchParams.get("rightVersion"));
 
-    if (!leftVersion || !rightVersion) {
-      return NextResponse.json(
-        { error: "Both leftVersion and rightVersion are required" },
-        { status: 400 },
-      );
-    }
+    if (!leftVersion || !rightVersion) { return apiError("VALIDATION_ERROR", "Both leftVersion and rightVersion are required"); }
 
     const [survey] = await getDb()
       .select({ id: surveys.id })
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    }
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
 
     const permission = await getSurveyPermissionForSession(session, survey.id);
-    if (!hasSurveyPermission(permission, "canView")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (!hasSurveyPermission(permission, "canView")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
     const [leftRow, rightRow, planRow] = await Promise.all([
       getAnalyticsSnapshotByVersion(surveyId, leftVersion),
@@ -52,12 +44,7 @@ export async function GET(
       getActiveCoveragePlan(surveyId),
     ]);
 
-    if (!leftRow || !rightRow || !planRow) {
-      return NextResponse.json(
-        { error: "Unable to load one or both analytics snapshots" },
-        { status: 404 },
-      );
-    }
+    if (!leftRow || !rightRow || !planRow) { return apiError("NOT_FOUND", "Unable to load one or both analytics snapshots"); }
 
     return NextResponse.json(
       buildAnalyticsCompareData({
@@ -66,11 +53,6 @@ export async function GET(
         plan: planRow.plan,
       }),
     );
-  } catch (error) {
-    console.error("[Analytics Compare API] Error:", error);
-    return NextResponse.json(
-      { error: "Failed to compare analytics snapshots" },
-      { status: 500 },
-    );
-  }
+  } catch (error) { return apiUnhandledError(error, "Failed to compare analytics snapshots", "/api/surveys/[surveyId]/analytics/compare:get"); }
 }
+

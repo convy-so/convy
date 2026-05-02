@@ -1,5 +1,6 @@
 import { generateText, Output } from "ai";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { analysisModel } from "@/lib/ai";
@@ -25,12 +26,12 @@ export async function GET(
     const access = await getTeacherTopicAccess(session.user.id, topicId);
 
     if (!access) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     const topic = await getTopicWithMaterials(topicId);
     if (!topic) {
-      return NextResponse.json({ error: "Topic not found" }, { status: 404 });
+      return apiError("NOT_FOUND", "Topic not found");
     }
 
     const materialAnalyses = topic.materials.map((material) => ({
@@ -65,9 +66,6 @@ Rules:
       data: output,
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to evaluate topic readiness" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to evaluate topic readiness", "/api/learning/topics/[topicId]/readiness");
   }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { getVerifiedSession } from "@/lib/auth/session";
@@ -23,7 +24,7 @@ export async function POST(
     const access = await getStudentTopicAccess(auth.user.id, topicId);
 
     if (!access) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     const body = requestSchema.parse(await request.json());
@@ -35,7 +36,7 @@ export async function POST(
       tutoringSession.topicId !== topicId ||
       tutoringSession.classroomStudentId !== access.classroomStudent.id
     ) {
-      return NextResponse.json({ error: "Tutoring session not found" }, { status: 404 });
+      return apiError("NOT_FOUND", "Tutoring session not found");
     }
 
     if (tutoringSession.sessionStatus !== "active") {
@@ -78,11 +79,6 @@ export async function POST(
       },
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Failed to complete tutoring session",
-      },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to complete tutoring session", "/api/learning/topics/[topicId]/chat/complete");
   }
 }

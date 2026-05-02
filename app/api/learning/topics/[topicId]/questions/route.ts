@@ -1,5 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { learningInteractions } from "@/db/schema";
@@ -24,7 +25,7 @@ export async function GET(
     const topic = await getTeacherTopicAccess(session.user.id, topicId);
 
     if (!topic) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     const url = new URL(request.url);
@@ -65,10 +66,7 @@ export async function GET(
       })),
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load questions" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to load questions", "/api/learning/topics/[topicId]/questions");
   }
 }
 
@@ -83,18 +81,15 @@ export async function POST(
     const body = (await request.json()) as { message?: string; language?: string };
 
     if (!access) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     if (!access.classroomStudent.interestProfile) {
-      return NextResponse.json(
-        { error: "Student profile onboarding is required before asking questions." },
-        { status: 409 },
-      );
+      return apiError("CONFLICT", "Student profile onboarding is required before asking questions.");
     }
 
     if (!body.message?.trim()) {
-      return NextResponse.json({ error: "Message is required" }, { status: 400 });
+      return apiError("VALIDATION_ERROR", "Message is required");
     }
 
     const classification = await classifyOutOfSessionQuestion({
@@ -154,14 +149,6 @@ export async function POST(
       },
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to answer out-of-session question",
-      },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to answer out-of-session question", "/api/learning/topics/[topicId]/questions");
   }
 }

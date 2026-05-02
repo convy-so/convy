@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
@@ -29,7 +30,7 @@ export async function GET(
   });
 
   if (!survey) {
-    return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+    return apiError("NOT_FOUND", "Survey not found");
   }
 
   const media = Array.isArray(survey.media)
@@ -37,7 +38,7 @@ export async function GET(
     : null;
 
   if (!media || !isRecord(media)) {
-    return NextResponse.json({ error: "Media not found" }, { status: 404 });
+    return apiError("NOT_FOUND", "Media not found");
   }
 
   const session = await getCurrentSession();
@@ -61,12 +62,12 @@ export async function GET(
     });
 
     if (!tokenRecord) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
   }
 
   if (typeof media.storagePath !== "string" || typeof media.type !== "string") {
-    return NextResponse.json({ error: "Media is unavailable" }, { status: 404 });
+    return apiError("NOT_FOUND", "Media is unavailable");
   }
 
   const signedUrl = await createSignedSurveyMediaUrl(

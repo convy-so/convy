@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { getVerifiedSession } from "@/lib/auth/session";
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
     const body = previewSchema.parse(await request.json());
     const topic = await getTeacherOwnedTopic(session.user.id, body.topicId);
     if (!topic) {
-      return NextResponse.json({ error: "Topic not found" }, { status: 404 });
+      return apiError("NOT_FOUND", "Topic not found");
     }
 
     const retrieved = await searchLearningTopicContext({
@@ -48,15 +49,12 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: error.errors[0]?.message ?? "Validation error" },
-        { status: 400 },
+      return apiError(
+        "VALIDATION_ERROR",
+        error.errors[0]?.message ?? "Validation error",
       );
     }
 
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to preview question" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to preview question", "expert-assets-preview:post");
   }
 }

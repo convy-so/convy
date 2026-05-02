@@ -3,6 +3,7 @@ import { getRedisClient } from "@/lib/redis";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
+import { apiError } from "@/lib/api/error-contract";
 
 export async function GET() {
   const session = await auth.api.getSession({
@@ -10,7 +11,7 @@ export async function GET() {
   });
 
   if (!session) {
-    return NextResponse.json({ error: "No session token" }, { status: 401 });
+    return apiError("UNAUTHENTICATED", "No session token");
   }
 
   const redis = getRedisClient();

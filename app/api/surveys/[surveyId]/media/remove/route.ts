@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { removeSurveyMediaAction } from "@/app/actions/survey-media";
 
 export async function POST(
@@ -13,26 +14,13 @@ export async function POST(
       surveyId,
     });
 
-    if (!result.success) {
-      return new Response(
-        JSON.stringify({ success: false, error: result.error }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      );
-    }
+    if (!result.success) { return apiError("VALIDATION_ERROR", result.error); }
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
-  } catch (error) {
-    console.error("[removeMedia] Unexpected error:", error);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: "Failed to remove media",
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
-    );
-  }
+  } catch (error) { return apiUnhandledError(error, "Failed to remove media", "/api/surveys/[surveyId]/media/remove:post"); }
 }
+
 

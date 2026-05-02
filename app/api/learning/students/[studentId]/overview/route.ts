@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import {
@@ -28,13 +29,13 @@ export async function GET(
     });
 
     if (!membership) {
-      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      return apiError("NOT_FOUND", "Student not found");
     }
 
     const access = await getTeacherClassroomAccess(session.user.id, membership.classroomId);
 
     if (!access) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     const [topics, reports, interactions] = await Promise.all([
@@ -124,9 +125,6 @@ export async function GET(
       },
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load student overview" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to load student overview", "/api/learning/students/[studentId]/overview");
   }
 }

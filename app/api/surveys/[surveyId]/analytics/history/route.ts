@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
@@ -24,24 +25,15 @@ export async function GET(
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    }
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
 
     const permission = await getSurveyPermissionForSession(session, survey.id);
-    if (!hasSurveyPermission(permission, "canView")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (!hasSurveyPermission(permission, "canView")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
     const rows = await listAnalyticsSnapshots(surveyId);
     return NextResponse.json({
       history: rows.map((row) => buildTimelineEntry(row.snapshot)).reverse(),
     });
-  } catch (error) {
-    console.error("[Analytics History API] Error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch analytics history" },
-      { status: 500 },
-    );
-  }
+  } catch (error) { return apiUnhandledError(error, "Failed to fetch analytics history", "/api/surveys/[surveyId]/analytics/history:get"); }
 }
+

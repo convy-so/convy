@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
@@ -24,45 +25,22 @@ export async function POST(
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
-    if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    }
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
 
     const permission = await getSurveyPermissionForSession(session, survey.id);
-    if (!hasSurveyPermission(permission, "canView")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (!hasSurveyPermission(permission, "canView")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
     const formData = await request.formData();
     const audioFile = formData.get("audio");
     const language = normalizeSpeechToTextLanguage(formData.get("language"));
 
-    if (!(audioFile instanceof File)) {
-      return NextResponse.json({ error: "Audio file is required" }, { status: 400 });
-    }
+    if (!(audioFile instanceof File)) { return apiError("VALIDATION_ERROR", "Audio file is required"); }
     assertAudioUploadFile(audioFile);
 
     const audioBuffer = Buffer.from(await audioFile.arrayBuffer());
     const transcript = await transcribeAudioBuffer(audioBuffer, language);
 
     return NextResponse.json(transcript);
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")
-    ) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
-    }
-
-    console.error("[Analytics Transcribe API] Error:", error);
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to transcribe audio",
-      },
-      { status: 500 },
-    );
-  }
+  } catch (error) { if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Failed to transcribe audio", "/api/surveys/[surveyId]/analytics/transcribe:post"); }
 }
+

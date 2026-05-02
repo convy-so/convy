@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -19,7 +20,7 @@ export async function GET() {
     });
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("UNAUTHENTICATED", "Unauthorized");
     }
 
     const [user] = await getDb()
@@ -34,11 +35,8 @@ export async function GET() {
       uiLocale,
       preferredLanguage: uiLocale,
     });
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to fetch language" },
-      { status: 500 },
-    );
+  } catch (error) {
+    return apiUnhandledError(error, "Failed to fetch language", "/api/user/language:get");
   }
 }
 
@@ -53,14 +51,14 @@ export async function PATCH(request: NextRequest) {
     });
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return apiError("UNAUTHENTICATED", "Unauthorized");
     }
 
     const body = await request.json();
     const { language } = body;
 
     if (!isAppLocale(language)) {
-      return NextResponse.json({ error: "Invalid language" }, { status: 400 });
+      return apiError("VALIDATION_ERROR", "Invalid language");
     }
 
     await getDb()
@@ -80,11 +78,9 @@ export async function PATCH(request: NextRequest) {
       uiLocale: language,
       preferredLanguage: language,
     });
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to update language" },
-      { status: 500 },
-    );
+  } catch (error) {
+    return apiUnhandledError(error, "Failed to update language", "/api/user/language:patch");
   }
 }
+
 

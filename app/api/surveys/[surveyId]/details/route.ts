@@ -1,5 +1,7 @@
 import { eq, count, and, desc, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { surveyBriefs, surveys, surveyConversations } from "@/db/schema";
@@ -35,14 +37,10 @@ export async function GET(
       getDb().select().from(surveyBriefs).where(eq(surveyBriefs.surveyId, surveyId)).then((rows) => rows[0]),
     ]);
 
-    if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    }
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
 
     const permission = await getSurveyPermissionForSession(session, survey.id);
-    if (!hasSurveyPermission(permission, "canView")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (!hasSurveyPermission(permission, "canView")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
     // Get response statistics (only count if they have at least one user message)
     const [stats] = await getDb()
@@ -172,18 +170,8 @@ export async function GET(
       })),
     });
   } catch (error) {
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return NextResponse.json({ error: error.message }, { status: 401 });
-      }
-    }
-    console.error("Error fetching survey details:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+    if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/details:get");
   }
 }
+
+

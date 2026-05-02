@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
@@ -60,7 +61,7 @@ export async function POST() {
       (error.message === "UNAUTHENTICATED" ||
         error.message === "EMAIL_NOT_VERIFIED")
     ) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      return apiError("UNAUTHENTICATED", error.message);
     }
 
     if (deletionJobId) {
@@ -80,6 +81,6 @@ export async function POST() {
       }).catch(() => undefined);
     }
 
-    return NextResponse.json({ error: "Failed to delete account" }, { status: 400 });
+    return apiUnhandledError(error, "Failed to delete account", "/api/privacy/delete-account");
   }
 }

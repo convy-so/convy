@@ -157,11 +157,10 @@ export async function GET(
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
-    if (!survey) return apiError("NOT_FOUND", "Survey not found");
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
 
     const permission = await getSurveyPermissionForSession(session, survey.id,);
-    if (!hasSurveyPermission(permission, "canView"))
-      return apiError("UNAUTHORIZED", "Unauthorized");
+    if (!hasSurveyPermission(permission, "canView")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
     const [sample] = await getDb()
       .select()
@@ -223,7 +222,7 @@ export async function POST(
       .select()
       .from(surveys)
       .where(eq(surveys.id, surveyId));
-    if (!survey) return apiError("NOT_FOUND", "Survey not found");
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
 
     const permission = await getSurveyPermissionForSession(session, survey.id,);
     if (!hasSurveyPermission(permission, "canEdit")) {
@@ -574,3 +573,4 @@ Respond to the user in the language they are speaking to you in. Match the langu
     return apiUnhandledError(error, "Internal server error", "survey-sample:post");
   }
 }
+

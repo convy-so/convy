@@ -1,3 +1,4 @@
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { surveys } from "@/db/schema";
@@ -22,18 +23,12 @@ export async function POST(
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!survey) {
-      return new Response("Survey not found", { status: 404 });
-    }
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
 
     const permission = await getSurveyPermissionForSession(session, surveyId);
-    if (!hasSurveyPermission(permission, "canPublish")) {
-      return new Response("Unauthorized", { status: 403 });
-    }
+    if (!hasSurveyPermission(permission, "canPublish")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
-    if (survey.status !== "creating") {
-      return new Response("Survey is not in creation mode", { status: 400 });
-    }
+    if (survey.status !== "creating") { return apiError("VALIDATION_ERROR", "Survey is not in creation mode"); }
 
     // Generate shareable link if not exists
     let shareableLink = survey.shareableLink;
@@ -67,15 +62,7 @@ export async function POST(
       }
     );
   } catch (error) {
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return new Response(error.message, { status: 401 });
-      }
-    }
-    console.error("Error finalizing survey:", error);
-    return new Response("Internal server error", { status: 500 });
+    if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/finalize:post");
   }
 }
+
