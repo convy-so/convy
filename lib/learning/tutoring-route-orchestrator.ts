@@ -18,7 +18,6 @@ export async function resolveStudentTutoringContext(input: {
   userId: string;
   topicId: string;
   language?: string | null;
-  uiLocale?: string | null;
   preferredLanguage?: string | null;
 }) {
   const access = await getStudentTopicAccess(input.userId, input.topicId);
@@ -29,11 +28,10 @@ export async function resolveStudentTutoringContext(input: {
 
 export function resolveStudyLanguage(input: {
   language?: string | null;
-  uiLocale?: string | null;
   preferredLanguage?: string | null;
 }) {
   return normalizeAppLocale(
-    input.language ?? input.uiLocale ?? input.preferredLanguage ?? "en",
+    input.language ?? input.preferredLanguage ?? "en",
   );
 }
 

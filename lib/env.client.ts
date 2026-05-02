@@ -17,6 +17,12 @@ export const clientEnv = {
     // WebSocket
     NEXT_PUBLIC_WEBSOCKET_URL: process.env.NEXT_PUBLIC_WEBSOCKET_URL || "ws://localhost:3001",
     NEXT_PUBLIC_GDPR_EU_MODE: process.env.NEXT_PUBLIC_GDPR_EU_MODE === "true",
+
+    // Public URL
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || "https://getconvy.pro",
+
+    // Sentry
+    NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
 };
 
 export type ClientEnv = typeof clientEnv;

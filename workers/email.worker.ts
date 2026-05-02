@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { z } from "zod";
 import { render } from "@react-email/render";
 import * as React from "react";
+import * as Sentry from "@sentry/node";
 
 import type { EmailJobData } from "@/lib/queue";
 import { getRedisClient } from "@/lib/redis";
@@ -12,8 +13,9 @@ import { SecondaryVerificationEmail } from "@/components/emails/secondary-verifi
 import { SurveyDeletedEmail } from "@/components/emails/survey-deleted";
 import { StudentActivationEmail } from "@/components/emails/student-activation";
 import { defaultAppLocale, normalizeAppLocale } from "@/lib/i18n/config";
+import { env } from "@/lib/env";
 
-const resendApiKey = process.env.RESEND_API_KEY;
+const resendApiKey = env.RESEND_API_KEY;
 
 if (!resendApiKey) {
   throw new Error("RESEND_API_KEY is required for the email worker.");
@@ -153,7 +155,7 @@ const emailWorker = new Worker<EmailJobData>(
 
     const result = await resend.emails.send(
       {
-        from: process.env.RESEND_FROM_EMAIL || "Convyy <noreply@getconvy.pro>",
+        from: env.RESEND_FROM_EMAIL,
         to: email,
         subject,
         html,
@@ -193,9 +195,10 @@ const emailWorker = new Worker<EmailJobData>(
 emailWorker.on("completed", () => {});
 
 emailWorker.on("failed", (job, err) => {
-  console.error("[email-worker] job failed", {
-    jobId: job?.id,
-    message: err instanceof Error ? err.message : String(err),
+  Sentry.logger.error("Email worker job failed", {
+    service: "email-worker",
+    job_id: job?.id ?? "",
+    error_message: err instanceof Error ? err.message : String(err),
   });
 });
 

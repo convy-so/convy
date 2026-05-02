@@ -1,9 +1,7 @@
-/**
- * Centralized application configuration
- * All configurable constants and limits in one place
- */
+
 
 import { env } from "@/lib/env";
+import * as Sentry from "@sentry/nextjs";
 
 /**
  * Survey limits and constraints
@@ -216,7 +214,10 @@ export function getConfig<T>(
     try {
       return parser(envValue);
     } catch {
-      console.warn(`[Config] Failed to parse ${key}, using default`);
+      Sentry.logger.warn("Config: failed to parse env variable, using default", {
+        service: "config",
+        env_key: key,
+      });
       return defaultValue;
     }
   }

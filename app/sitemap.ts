@@ -1,7 +1,8 @@
 import { MetadataRoute } from "next";
 import { routing } from "@/i18n/routing";
+import { env } from "@/lib/env";
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://getconvy.pro";
+const BASE_URL = env.NEXT_PUBLIC_APP_URL;
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const routes = ["", "/privacy", "/terms"];

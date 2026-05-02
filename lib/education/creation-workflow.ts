@@ -10,6 +10,10 @@ import {
 } from "@/lib/education/prompts/creation-workflow";
 import { nanoid } from "nanoid";
 import { getEducationProgram, classifyEducationProgramHeuristically, listEducationPrograms } from "./catalog";
+import { createLogger, serializeError } from "@/lib/logger";
+
+const log = createLogger("creation-workflow");
+
 
 import { replaceCoveragePlan, upsertResearchBrief } from "./storage";
 import {
@@ -122,7 +126,7 @@ async function classifyProgram(messages: ChatMessage[]) {
       },
     });
   } catch (error) {
-    console.error("classifyProgram failed; using heuristic fallback", { error });
+    log.warn("classifyProgram failed; using heuristic fallback", serializeError(error));
   }
   const parsed = parseProgramClassification(safeJsonParse(modelText));
   if (parsed?.programId) {

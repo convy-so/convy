@@ -47,6 +47,7 @@ import {
 } from "@/lib/respondent-conversation";
 import { normalizeVoiceLocale } from "@/lib/voice/voice-locales";
 import { BaseVoiceAgentHandler } from "./base-voice-agent-handler";
+import * as Sentry from "@sentry/node";
 
 const ESTIMATED_STT_COST_PER_MINUTE = 0.0059;
 const ESTIMATED_TTS_COST_PER_CHAR = 0.000015;
@@ -208,9 +209,10 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
 
       await this.connectVoiceAgent();
     } catch (error) {
-      console.error("[survey-response-voice] failed to initialize voice session", {
-        surveyId: this.state.surveyId,
-        message: error instanceof Error ? error.message : "Unknown error",
+      Sentry.logger.error("Survey response voice: failed to initialize voice session", {
+        service: "survey-response-voice",
+        survey_id: this.state.surveyId,
+        error_message: error instanceof Error ? error.message : String(error),
       });
       this.sendError("Failed to initialize voice session");
       this.ws.close();
@@ -379,10 +381,11 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       surveyId: this.state.survey!.id,
       userId: this.ownerId || this.state.survey!.userId,
     }).catch((error) => {
-      console.error("[survey-response-voice] failed to schedule analytics refresh", {
-        surveyId: this.state.survey?.id,
-        conversationId: this.state.conversationId,
-        message: error instanceof Error ? error.message : "Unknown error",
+      Sentry.logger.error("Survey response voice: failed to schedule analytics refresh", {
+        service: "survey-response-voice",
+        survey_id: this.state.survey?.id ?? "",
+        conversation_id: this.state.conversationId ?? "",
+        error_message: error instanceof Error ? error.message : String(error),
       });
     });
 
@@ -520,10 +523,11 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
               userId: this.ownerId || this.state.survey.userId,
             });
           } catch (error) {
-            console.error("[survey-response-voice] failed to schedule completion analytics refresh", {
-              surveyId: this.state.survey?.id,
-              conversationId: this.state.conversationId,
-              message: error instanceof Error ? error.message : "Unknown error",
+            Sentry.logger.error("Survey response voice: failed to schedule completion analytics refresh", {
+              service: "survey-response-voice",
+              survey_id: this.state.survey?.id ?? "",
+              conversation_id: this.state.conversationId ?? "",
+              error_message: error instanceof Error ? error.message : String(error),
             });
           }
         }
@@ -567,10 +571,11 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       });
       this.ws.close();
     } catch (error) {
-      console.error("[survey-response-voice] failed to complete voice survey", {
-        surveyId: this.state.survey?.id,
-        conversationId: this.state.conversationId,
-        message: error instanceof Error ? error.message : "Unknown error",
+      Sentry.logger.error("Survey response voice: failed to complete voice survey", {
+        service: "survey-response-voice",
+        survey_id: this.state.survey?.id ?? "",
+        conversation_id: this.state.conversationId ?? "",
+        error_message: error instanceof Error ? error.message : String(error),
       });
       this.send({ type: "error", error: "Failed to complete survey" });
     }
@@ -623,10 +628,11 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
           .where(eq(surveyConversations.id, this.state.conversationId));
       }
     } catch (error) {
-      console.error("[survey-response-voice] cleanup failed", {
-        surveyId: this.state.survey?.id,
-        conversationId: this.state.conversationId,
-        message: error instanceof Error ? error.message : "Unknown error",
+      Sentry.logger.error("Survey response voice: cleanup failed", {
+        service: "survey-response-voice",
+        survey_id: this.state.survey?.id ?? "",
+        conversation_id: this.state.conversationId ?? "",
+        error_message: error instanceof Error ? error.message : String(error),
       });
     }
   }

@@ -33,6 +33,10 @@ import {
 import { generateEmbedding } from "@/lib/rag/embeddings";
 import { rerank } from "@/lib/rag/reranker";
 import type { SearchResult } from "@/lib/rag/search";
+import { createLogger, serializeError } from "@/lib/logger";
+
+const log = createLogger("few-shot-library");
+
 
 // ─── Internal Helpers ────────────────────────────────────────────────────────
 
@@ -202,7 +206,10 @@ export async function getDynamicFewShotExamples({
       .map((id) => hydratedMap.get(id)?.content as PromptExample | undefined)
       .filter((c): c is PromptExample => c !== undefined);
   } catch (error) {
-    console.error(`[few-shot-library] Retrieval failed for feature=${feature}`, error);
+    log.error("Retrieval failed", {
+      feature,
+      ...serializeError(error),
+    });
     return [];
   }
 }

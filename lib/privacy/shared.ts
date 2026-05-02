@@ -20,7 +20,7 @@ export const defaultConsentState = (): ConsentState => ({
 });
 
 export function serializeConsentState(state: ConsentState): string {
-  return encodeURIComponent(JSON.stringify(state));
+  return JSON.stringify(state);
 }
 
 export function parseConsentState(value: string | null | undefined): ConsentState | null {

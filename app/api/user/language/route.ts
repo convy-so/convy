@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { normalizeAppLocale, isAppLocale } from "@/lib/i18n/config";
 import { cookies } from "next/headers";
+import { env } from "@/lib/env";
 
 /**
  * GET /api/user/language
@@ -71,7 +72,7 @@ export async function PATCH(request: NextRequest) {
       path: "/",
       maxAge: 60 * 60 * 24 * 365,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: env.NODE_ENV === "production",
     });
 
     return NextResponse.json({
