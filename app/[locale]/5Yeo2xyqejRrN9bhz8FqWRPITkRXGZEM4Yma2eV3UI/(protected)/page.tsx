@@ -146,6 +146,9 @@ async function StatsGridSection() {
     totalUsers: number;
     newUsersLast30Days: number;
     totalSurveys: number;
+    totalTopics: number;
+    totalClassrooms: number;
+    totalLearningSessions: number;
     activeSessions: number;
   };
   let stats: AdminStats | null = null;
@@ -164,7 +167,7 @@ async function StatsGridSection() {
   if (!stats) return null;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <StatsCard
         title="Total Usage Cost"
         value={`$${parseFloat(stats.totalUsageCost).toFixed(2)}`}
@@ -177,14 +180,24 @@ async function StatsGridSection() {
         description={`${stats.newUsersLast30Days} new in last 30 days`}
       />
       <StatsCard
-        title="Active Surveys"
+        title="Total Surveys"
         value={stats.totalSurveys.toString()}
-        description="Total surveys created"
+        description="Surveys across all users"
+      />
+      <StatsCard
+        title="Learning Topics"
+        value={stats.totalTopics.toString()}
+        description="Total topics created"
+      />
+      <StatsCard
+        title="Classrooms"
+        value={stats.totalClassrooms.toString()}
+        description="Active classroom groups"
       />
       <StatsCard
         title="Active Sessions"
-        value={stats.activeSessions.toString()}
-        description="Currently authenticated users"
+        value={stats.totalLearningSessions.toString()}
+        description="Total student learning sessions"
       />
     </div>
   );

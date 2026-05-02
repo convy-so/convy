@@ -32,7 +32,7 @@ export default function CreateExpertPage() {
             }
 
             toast.success("Expert account provisioned successfully.");
-            router.push("/admin/users");
+            router.push("/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/manage-users");
             router.refresh();
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "An error occurred");
@@ -45,7 +45,7 @@ export default function CreateExpertPage() {
         <div className="max-w-2xl mx-auto space-y-6">
             <div className="flex items-center gap-4">
                 <Link
-                    href="/admin/users"
+                    href="/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/manage-users"
                     className="w-10 h-10 flex items-center justify-center rounded-full bg-white border border-slate-200 text-slate-500 hover:text-slate-900 transition-colors"
                 >
                     <ArrowLeft className="w-5 h-5" />
@@ -97,7 +97,7 @@ export default function CreateExpertPage() {
 
                     <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
                         <Link
-                            href="/admin/users"
+                            href="/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/manage-users"
                             className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 rounded-xl transition-colors"
                         >
                             Cancel

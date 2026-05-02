@@ -8,6 +8,9 @@ import {
   Sparkles,
   FolderOpen,
   GraduationCap,
+  BookOpen,
+  Users,
+  Clock,
 } from "lucide-react";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { SurveyCard } from "@/components/dashboard/survey-card";
@@ -16,6 +19,7 @@ import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema/surveys";
 import { and, count, desc, eq, sql } from "drizzle-orm";
+import { classrooms, learningTopics, classroomStudents } from "@/db/schema/learning";
 import { Suspense } from "react";
 import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
@@ -54,11 +58,11 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
 
   const quickActions = [
     {
-      title: t("QuickActions.CreateSurvey.Title"),
-      description: t("QuickActions.CreateSurvey.Description"),
+      title: "Start Learning",
+      description: "Create a new learning topic for your students",
       icon: Sparkles,
-      href: "/dashboard/create",
-      color: "from-blue-500 to-cyan-500",
+      href: "/dashboard/learning/create",
+      color: "from-blue-600 to-indigo-600",
     },
     {
       title: t("QuickActions.ViewAnalytics.Title"),
@@ -89,34 +93,32 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
     cache.wrap(
       cacheKeys.dashboardStats(userId),
       async () => {
-        const [surveysCountRes, durationStats] = await Promise.all([
+        const [surveysCountRes, classroomsCountRes, topicsCountRes, studentsCountRes] = await Promise.all([
           getDb()
             .select({ count: count() })
             .from(surveys)
             .where(eq(surveys.userId, userId)),
           getDb()
-            .select({
-              avgDuration: sql<number>`avg(extract(epoch from ${surveyConversations.updatedAt} - ${surveyConversations.createdAt}))`
-            })
-            .from(surveyConversations)
-            .innerJoin(surveys, eq(surveyConversations.surveyId, surveys.id))
-            .where(
-                and(
-                  eq(surveyConversations.completed, true),
-                  eq(surveys.userId, userId)
-                )
-            )
+            .select({ count: count() })
+            .from(classrooms)
+            .where(eq(classrooms.teacherUserId, userId)),
+          getDb()
+            .select({ count: count() })
+            .from(learningTopics)
+            .where(eq(learningTopics.createdByUserId, userId)),
+          getDb()
+            .select({ count: count() })
+            .from(classroomStudents)
+            .innerJoin(classrooms, eq(classroomStudents.classroomId, classrooms.id))
+            .where(eq(classrooms.teacherUserId, userId)),
         ]);
 
-        const totalSurveys = surveysCountRes[0]?.count || 0;
-        const avgSeconds = Math.round(durationStats[0]?.avgDuration || 0);
-        const avgMinutes = Math.floor(avgSeconds / 60);
-        const remainingSeconds = avgSeconds % 60;
-        const durationDisplay = avgSeconds > 0
-          ? `${avgMinutes}m ${remainingSeconds}s`
-          : "N/A";
-
-        return { totalSurveys, durationDisplay, avgSeconds };
+        return { 
+          totalSurveys: surveysCountRes[0]?.count || 0, 
+          totalClassrooms: classroomsCountRes[0]?.count || 0,
+          totalTopics: topicsCountRes[0]?.count || 0,
+          totalStudents: studentsCountRes[0]?.count || 0,
+        };
       },
       60 * 5 // Cache for 5 minutes
     ),
@@ -211,18 +213,18 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold text-[#111111] tracking-tight">
-            {t("Welcome.Title")}
+            Learning Hub Dashboard
           </h1>
           <p className="text-[#666666] mt-1 lg:mt-2 text-sm lg:text-base">
-            {t("Welcome.Subtitle")}
+            Manage your AI-powered classrooms and track student learning progress.
           </p>
         </div>
         <Link
-          href="/dashboard/create"
-          className="flex items-center justify-center gap-2 px-5 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors group w-full sm:w-auto"
+          href="/dashboard/learning"
+          className="flex items-center justify-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors group w-full sm:w-auto shadow-lg shadow-indigo-600/20"
         >
-          <Plus className="w-5 h-5" />
-          {t("CreateSurvey")}
+          <GraduationCap className="w-5 h-5" />
+          Go to Learning Hub
           <ArrowUpRight className="w-4 h-4 opacity-50 group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
         </Link>
       </div>
@@ -230,20 +232,38 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <StatsCard
-          title={t("Stats.TotalSurveys")}
-          value={stats.totalSurveys.toString()}
-          change={t("Stats.AllTime")}
+          title="Active Classrooms"
+          value={stats.totalClassrooms.toString()}
+          change="Manage Classes"
           changeType="neutral"
-          icon={<MessageSquare className="w-6 h-6" />}
-          iconColor="bg-blue-50 text-blue-600"
+          icon={<GraduationCap className="w-6 h-6" />}
+          iconColor="bg-sky-50 text-sky-600"
         />
 
         <StatsCard
-          title={t("Stats.AvgDuration")}
-          value={stats.durationDisplay}
-          change={stats.avgSeconds > 0 ? t("Stats.PerCompleted") : t("Stats.NoCompletions")}
+          title="Learning Topics"
+          value={stats.totalTopics.toString()}
+          change="Active Lessons"
           changeType="neutral"
-          icon={<TrendingUp className="w-6 h-6" />}
+          icon={<BookOpen className="w-6 h-6" />}
+          iconColor="bg-indigo-50 text-indigo-600"
+        />
+
+        <StatsCard
+          title="Total Students"
+          value={stats.totalStudents.toString()}
+          change="Enrolled"
+          changeType="neutral"
+          icon={<Users className="w-6 h-6" />}
+          iconColor="bg-emerald-50 text-emerald-600"
+        />
+
+        <StatsCard
+          title="Total Surveys"
+          value={stats.totalSurveys.toString()}
+          change="Form Builder"
+          changeType="neutral"
+          icon={<MessageSquare className="w-6 h-6" />}
           iconColor="bg-amber-50 text-amber-600"
         />
       </div>
