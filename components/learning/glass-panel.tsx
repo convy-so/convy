@@ -12,11 +12,11 @@ export function GlassPanel({
   return (
     <div
       className={cn(
-        "rounded-[20px] border border-slate-100 bg-white",
+        "relative overflow-hidden rounded-2xl border border-slate-100 bg-white",
         className,
       )}
     >
-      {children}
+      <div className="relative z-10">{children}</div>
     </div>
   );
 }
