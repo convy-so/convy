@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
+import { createLogger, serializeError } from "@/lib/logger";
+
+const log = createLogger("api");
+
 
 export type ApiErrorCode =
   | "UNAUTHENTICATED"
@@ -64,8 +69,12 @@ export function apiUnhandledError(
   context?: string,
 ) {
   if (context) {
-    console.error(`[${context}]`, error);
+    log.error("Unhandled API error", {
+      endpoint: context,
+      ...serializeError(error),
+    });
   }
+  Sentry.captureException(error, { tags: { endpoint: context } });
 
   return apiError(
     "INTERNAL_ERROR",

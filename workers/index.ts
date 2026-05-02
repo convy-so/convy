@@ -21,6 +21,7 @@ Sentry.init({
   environment: env.NODE_ENV,
   serverName: "worker-process",
   sendDefaultPii: false,
+  enableLogs: true,
   beforeSend(event) {
     return scrubSentryEvent(event);
   },
@@ -52,7 +53,7 @@ const workers = [
     process.exit(1);
   }
 
-  if (process.env.SENTRY_TEST_TRIGGER === "true") {
+  if (env.SENTRY_TEST_TRIGGER) {
     throw new Error("Sentry Test Worker Error: This is a test error from the Worker process.");
   }
 
@@ -78,9 +79,10 @@ async function gracefulShutdown() {
       try {
         await worker.close();
       } catch (error) {
-        console.error("[workers] failed to close worker during shutdown", {
-          name,
-          message: error instanceof Error ? error.message : "Unknown error",
+        Sentry.logger.error("Worker failed to close during shutdown", {
+          service: "workers",
+          worker_name: name,
+          error_message: error instanceof Error ? error.message : String(error),
         });
       }
     });
@@ -95,8 +97,9 @@ async function gracefulShutdown() {
 
     process.exit(0);
   } catch (error) {
-    console.error("[workers] graceful shutdown failed", {
-      message: error instanceof Error ? error.message : "Unknown error",
+    Sentry.logger.error("Graceful shutdown failed", {
+      service: "workers",
+      error_message: error instanceof Error ? error.message : String(error),
     });
     process.exit(1);
   }

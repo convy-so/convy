@@ -1,5 +1,6 @@
 import { initLogger } from "braintrust";
 import * as Sentry from "@sentry/nextjs";
+import { env } from "@/lib/env";
 
 type BraintrustTraceInput = {
   event: string;
@@ -12,7 +13,7 @@ type BraintrustTraceInput = {
 let cachedLogger: ReturnType<typeof initLogger> | null = null;
 
 function getBraintrustLogger(): ReturnType<typeof initLogger> | null {
-  const projectName = process.env.BRAINTRUST_PROJECT_NAME;
+  const projectName = env.BRAINTRUST_PROJECT_NAME;
   if (!projectName) {
     return null;
   }

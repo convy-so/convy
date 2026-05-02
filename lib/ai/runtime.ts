@@ -10,6 +10,11 @@ import { z } from "zod";
 
 import { logUsage, type UsageLogInput } from "@/lib/billing/logger";
 import { tutorAnalysisModel, tutorChatModel } from "@/lib/ai/models";
+import * as Sentry from "@sentry/nextjs";
+import { createLogger, serializeError } from "@/lib/logger";
+
+const log = createLogger("ai-runtime");
+
 
 type StructuredGenerationParams<TSchema extends z.ZodTypeAny> = {
   schema: TSchema;
@@ -61,7 +66,8 @@ export async function generateStructuredOutput<TSchema extends z.ZodTypeAny>(
 
     return result.output;
   } catch (err) {
-    console.error("[Structured Output Error]", err);
+    log.error("Structured output generation failed", serializeError(err));
+    Sentry.captureException(err, { tags: { service: "ai-runtime" } });
     throw err;
   }
 }

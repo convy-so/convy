@@ -162,9 +162,12 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
   const liveMessages = useMemo<LiveMessage[]>(
     () =>
       tutoringChatMessages.map((message) => {
-        const metadataAnnotation = message.annotations?.find(
-          (ann: any) => ann.type === "metadata",
-        ) as any;
+        const hasAnnotations = (msg: unknown): msg is { annotations: Array<{ type: string; data?: Record<string, unknown> }> } => {
+          return typeof msg === 'object' && msg !== null && 'annotations' in msg;
+        };
+        const metadataAnnotation = hasAnnotations(message) ? message.annotations?.find(
+          (ann) => ann.type === "metadata",
+        ) : undefined;
         return {
           id: message.id,
           role: message.role,
@@ -186,13 +189,13 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (langDropdownRef.current && !langDropdownRef.current.contains(event.target as Node)) {
+      if (langDropdownRef.current && event.target instanceof Node && !langDropdownRef.current.contains(event.target)) {
         setIsLangDropdownOpen(false);
       }
-      if (classDropdownRef.current && !classDropdownRef.current.contains(event.target as Node)) {
+      if (classDropdownRef.current && event.target instanceof Node && !classDropdownRef.current.contains(event.target)) {
         setIsClassDropdownOpen(false);
       }
-      if (topicDropdownRef.current && !topicDropdownRef.current.contains(event.target as Node)) {
+      if (topicDropdownRef.current && event.target instanceof Node && !topicDropdownRef.current.contains(event.target)) {
         setIsTopicDropdownOpen(false);
       }
     }

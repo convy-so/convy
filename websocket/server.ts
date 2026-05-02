@@ -16,6 +16,7 @@ Sentry.init({
   environment: env.NODE_ENV,
   serverName: "websocket-server",
   sendDefaultPii: false,
+  enableLogs: true,
   beforeSend(event) {
     return scrubSentryEvent(event);
   },
@@ -107,9 +108,10 @@ function cleanupStaleConnections(): void {
       if (isClosed || isTooOld) {
         if (hasCleanupMethod(connection.handler)) {
           void connection.handler.cleanup().catch((error) => {
-            console.error("[websocket] handler cleanup failed", {
-              connectionId,
-              message: error instanceof Error ? error.message : "Unknown error",
+            Sentry.logger.error("WebSocket handler cleanup failed", {
+              service: "websocket-server",
+              connection_id: connectionId,
+              error_message: error instanceof Error ? error.message : String(error),
             });
           });
         }
@@ -118,9 +120,10 @@ function cleanupStaleConnections(): void {
 
       }
     } catch (error) {
-      console.error("[websocket] stale connection cleanup failed", {
-        connectionId,
-        message: error instanceof Error ? error.message : "Unknown error",
+      Sentry.logger.error("WebSocket stale connection cleanup failed", {
+        service: "websocket-server",
+        connection_id: connectionId,
+        error_message: error instanceof Error ? error.message : String(error),
       });
       // If we can't check the connection, remove it to be safe
       activeConnections.delete(connectionId);
@@ -531,16 +534,18 @@ function initializeRedisSubscriber(): void {
           }
         }
       } catch (error) {
-        console.error("[websocket] redis message handling failed", {
-          message: error instanceof Error ? error.message : "Unknown error",
+        Sentry.logger.error("WebSocket Redis message handling failed", {
+          service: "websocket-server",
+          error_message: error instanceof Error ? error.message : String(error),
         });
       }
     });
 
     redisSubscriber.on("error", (error) => {
-      console.error("[websocket] redis subscriber error", {
-        message: error instanceof Error ? error.message : "Unknown error",
-        attempt: redisSubscriberReconnectAttempts + 1,
+      Sentry.logger.error("WebSocket Redis subscriber error", {
+        service: "websocket-server",
+        error_message: error instanceof Error ? error.message : String(error),
+        reconnect_attempt: redisSubscriberReconnectAttempts + 1,
       });
       if (redisSubscriberReconnectAttempts < MAX_REDIS_RECONNECT_ATTEMPTS) {
         const delay = REDIS_RECONNECT_DELAY_MS * Math.pow(2, redisSubscriberReconnectAttempts);
@@ -561,8 +566,9 @@ function initializeRedisSubscriber(): void {
     });
 
   } catch (error) {
-    console.error("[websocket] redis subscriber initialization failed", {
-      message: error instanceof Error ? error.message : "Unknown error",
+    Sentry.logger.error("WebSocket Redis subscriber initialization failed", {
+      service: "websocket-server",
+      error_message: error instanceof Error ? error.message : String(error),
     });
     if (redisSubscriberReconnectAttempts < MAX_REDIS_RECONNECT_ATTEMPTS) {
       redisSubscriberReconnectAttempts++;
@@ -575,8 +581,9 @@ function initializeRedisSubscriber(): void {
  * Handle server errors
  */
 wss.on("error", (error) => {
-  console.error("[websocket] server error", {
-    message: error instanceof Error ? error.message : "Unknown error",
+  Sentry.logger.error("WebSocket server error", {
+    service: "websocket-server",
+    error_message: error instanceof Error ? error.message : String(error),
   });
 });
 
@@ -588,7 +595,7 @@ server.listen(PORT, () => {
   initializeRedisSubscriber();
 
 
-  if (process.env.SENTRY_TEST_TRIGGER === "true") {
+  if (env.SENTRY_TEST_TRIGGER) {
     throw new Error("Sentry Test WebSocket Error: This is a test error from the WebSocket process.");
   }
 });
@@ -610,8 +617,9 @@ process.on("SIGTERM", async () => {
       await redisSubscriber.punsubscribe("pubsub:realtime:*");
       await redisSubscriber.quit();
     } catch (error) {
-      console.error("[websocket] redis subscriber shutdown failed", {
-        message: error instanceof Error ? error.message : "Unknown error",
+      Sentry.logger.error("WebSocket Redis subscriber shutdown failed", {
+        service: "websocket-server",
+        error_message: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -623,9 +631,10 @@ process.on("SIGTERM", async () => {
         await handler.cleanup();
       }
     } catch (error) {
-      console.error("[websocket] handler shutdown failed", {
-        connectionId,
-        message: error instanceof Error ? error.message : "Unknown error",
+      Sentry.logger.error("WebSocket handler shutdown failed", {
+        service: "websocket-server",
+        connection_id: connectionId,
+        error_message: error instanceof Error ? error.message : String(error),
       });
     }
   }

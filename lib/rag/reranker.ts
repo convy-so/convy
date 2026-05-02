@@ -5,10 +5,13 @@ import { z } from "zod";
 import { SearchResult } from "./search";
 import { logUsage, type UsageLogInput } from "../billing/logger";
 import { flashLiteModel } from "../ai";
+import { env } from "@/lib/env";
 import {
   buildRerankerFallbackSystemPrompt,
   buildRerankerFallbackUserPrompt,
 } from "./prompts/reranker";
+import * as Sentry from "@sentry/nextjs";
+import { createLogger, serializeError } from "@/lib/logger";
 
 const voyageRerankingModel = voyage.reranking("rerank-2.5-lite");
 
@@ -52,7 +55,7 @@ export async function rerank(
 ): Promise<SearchResult[]> {
   if (candidates.length === 0) return [];
 
-  const apiKey = process.env.VOYAGE_API_KEY;
+  const apiKey = env.VOYAGE_API_KEY;
   const instruction = getInstructionForFeature(attribution?.feature);
   // Voyage rerank-2.5-lite supports prepended instructions
   const queryWithInstruction = `Instruction: ${instruction}\nQuery: ${query}`;
@@ -114,7 +117,7 @@ export async function rerank(
 
       return rankedResults;
     } catch (error) {
-      console.error("[reranker] Voyage API failed, falling back to Gemini", error);
+      createLogger("reranker").warn("Voyage API failed, falling back to Gemini", serializeError(error));
     }
   }
 
@@ -171,7 +174,8 @@ export async function rerank(
 
     return rankedResults;
   } catch (error) {
-    console.error("[reranker] Gemini fallback failed", error);
+    createLogger("reranker").error("Gemini fallback failed", serializeError(error));
+    Sentry.captureException(error, { tags: { service: "reranker" } });
     return candidates.slice(0, topK);
   }
 }

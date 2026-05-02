@@ -26,7 +26,7 @@ const hasConsent =
   !clientEnv.NEXT_PUBLIC_GDPR_EU_MODE || hasAnalyticsConsent(consentState);
 
 Sentry.init({
-  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN,
+  dsn: clientEnv.NEXT_PUBLIC_SENTRY_DSN,
   enabled: hasConsent,
 
   sendDefaultPii: false,
