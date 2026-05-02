@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { getDb } from "@/db";
@@ -22,7 +23,7 @@ export async function POST(
     const topic = await getTeacherTopicAccess(session.user.id, topicId);
 
     if (!topic) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     await getDb()
@@ -41,9 +42,6 @@ export async function POST(
       },
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to update topic status" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to update topic status", "/api/learning/topics/[topicId]/status");
   }
 }

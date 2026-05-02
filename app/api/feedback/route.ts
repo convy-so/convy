@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getVerifiedSession } from "@/lib/auth/session";
 import {
@@ -16,12 +17,7 @@ export async function GET() {
       data: context,
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Unauthorized",
-      },
-      { status: 401 },
-    );
+    return apiUnhandledError(error, "Unauthorized", "/api/feedback");
   }
 }
 
@@ -39,13 +35,13 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to submit feedback";
-    const status =
-      message === "UNAUTHENTICATED" || message === "EMAIL_NOT_VERIFIED"
-        ? 401
-        : 400;
-
-    return NextResponse.json({ error: message }, { status });
+    const message = error instanceof Error ? error.message : "Failed to submit feedback";
+    const isAuthError = message === "UNAUTHENTICATED" || message === "EMAIL_NOT_VERIFIED";
+    
+    if (isAuthError) {
+        return apiError("UNAUTHENTICATED", message);
+    }
+    
+    return apiUnhandledError(error, "Failed to submit feedback", "/api/feedback");
   }
 }

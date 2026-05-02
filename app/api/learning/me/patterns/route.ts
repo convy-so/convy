@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { classroomStudents } from "@/db/schema";
@@ -56,9 +57,6 @@ export async function GET() {
       })),
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load student model summaries" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to load student model summaries", "/api/learning/me/patterns");
   }
 }

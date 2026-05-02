@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import {
   createLearningInterventionAction,
@@ -14,10 +15,7 @@ export async function GET(request: Request) {
       searchParams.get("classroomStudentId") ?? undefined;
 
     if (!classroomId) {
-      return NextResponse.json(
-        { error: "classroomId is required" },
-        { status: 400 },
-      );
+      return apiError("VALIDATION_ERROR", "classroomId is required");
     }
 
     const result = await getLearningInterventionsAction({
@@ -25,15 +23,10 @@ export async function GET(request: Request) {
       topicId,
       classroomStudentId,
     });
-    return NextResponse.json(result, { status: result.success ? 200 : 400 });
+    if (!result.success) return apiError("INTERNAL_ERROR", result.error);
+    return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Failed to load interventions",
-      },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to load interventions", "/api/learning/interventions");
   }
 }
 
@@ -45,14 +38,9 @@ export async function POST(request: Request) {
         typeof createLearningInterventionAction
       >[0],
     );
-    return NextResponse.json(result, { status: result.success ? 200 : 400 });
+    if (!result.success) return apiError("VALIDATION_ERROR", result.error);
+    return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Failed to create intervention",
-      },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to create intervention", "/api/learning/interventions");
   }
 }

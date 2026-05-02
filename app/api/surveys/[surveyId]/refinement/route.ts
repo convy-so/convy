@@ -1,5 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
@@ -27,11 +28,9 @@ export async function GET(
     const session = await getVerifiedSession();
     const { surveyId } = await params;
     const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
-    if (!survey) return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
     const permission = await getSurveyPermissionForSession(session, surveyId);
-    if (!hasSurveyPermission(permission, "canEdit")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (!hasSurveyPermission(permission, "canEdit")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
     const thread = await getOrCreateRefinementThread({
       surveyId,
@@ -50,10 +49,7 @@ export async function GET(
       activeConductingProfile: null,
       activeResearchBriefPatch: null,
     });
-  } catch (error) {
-    console.error("[Refinement GET] Error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
+  } catch (error) { return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/refinement:get"); }
 }
 
 export async function POST(
@@ -64,15 +60,13 @@ export async function POST(
     const session = await getVerifiedSession();
     const { surveyId } = await params;
     const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
-    if (!survey) return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
     const permission = await getSurveyPermissionForSession(session, surveyId);
-    if (!hasSurveyPermission(permission, "canEdit")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (!hasSurveyPermission(permission, "canEdit")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
     const body = await req.json();
     const content = String(body.content || "").trim();
-    if (!content) return NextResponse.json({ error: "content is required" }, { status: 400 });
+    if (!content) { return apiError("VALIDATION_ERROR", "content is required"); }
 
     const [briefRow, latestSample] = await Promise.all([
       getResearchBrief(surveyId),
@@ -83,9 +77,7 @@ export async function POST(
         .orderBy(desc(sampleConversations.conversationNumber))
         .then((rows) => rows[0]),
     ]);
-    if (!briefRow) {
-      return NextResponse.json({ error: "Survey brief is not ready." }, { status: 400 });
-    }
+    if (!briefRow) { return apiError("VALIDATION_ERROR", "Survey brief is not ready."); }
 
     const thread = await getOrCreateRefinementThread({
       surveyId,
@@ -131,8 +123,6 @@ export async function POST(
       reply: assistantResult.reply,
       proposals: savedProposals,
     });
-  } catch (error) {
-    console.error("[Refinement POST] Error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
+  } catch (error) { return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/refinement:post"); }
 }
+

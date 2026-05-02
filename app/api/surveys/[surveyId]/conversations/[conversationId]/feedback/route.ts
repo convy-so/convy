@@ -8,6 +8,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { eq, and } from "drizzle-orm";
@@ -44,16 +45,12 @@ export async function POST(
       )
       .limit(1);
 
-    if (!conv) {
-      return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
-    }
+    if (!conv) { return apiError("NOT_FOUND", "Conversation not found"); }
 
     // Parse + validate body
     const body = await request.json();
     const parsed = bodySchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid body", details: parsed.error.flatten() }, { status: 400 });
-    }
+    if (!parsed.success) { return apiError("VALIDATION_ERROR", "Invalid body", { details: parsed.error.flatten() }); }
 
     const { rating, feltNatural, uncomfortableTopics, freeText, respondentToken } = parsed.data;
 
@@ -71,9 +68,7 @@ export async function POST(
       clientIp: getClientIP(request),
       userAgent: request.headers.get("user-agent"),
     });
-    if (!tokenRecord) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (!tokenRecord) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
     // Insert feedback record
     await getDb().insert(participantFeedback).values({
@@ -88,8 +83,7 @@ export async function POST(
 
 
     return NextResponse.json({ success: true });
-  } catch {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
+  } catch (error) { return apiUnhandledError(error, "Internal server error", "survey-conversation-feedback:post"); }
 }
+
 

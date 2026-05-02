@@ -5,40 +5,18 @@ import { auth } from "@/lib/auth";
 import { getDb } from "@/db";
 import { users } from "@/db/schema/auth";
 import { eq } from "drizzle-orm";
-import { resolveAdminSessionEmail } from "@/lib/admin/session";
-import { env } from "@/lib/env";
-import { headers } from "next/headers";
-
 
 export async function POST(req: Request) {
     try {
-        const cookieHeader = (await headers()).get("cookie");
-        let authenticated = false;
-
-        // 1. Check secret admin session
-        if (cookieHeader) {
-            const email = await resolveAdminSessionEmail(cookieHeader);
-            if (email) {
-                authenticated = true;
-            }
-        }
-
-        // 2. Check better-auth session if not already authenticated
-        if (!authenticated) {
-            const session = await getCurrentSession();
-            if (session && isAdmin(session.user)) {
-                authenticated = true;
-            }
-        }
-
-        if (!authenticated) {
+        const session = await getCurrentSession();
+        if (!isAdmin(session.user)) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 
         const { name, email } = await req.json();
 
         if (!name || !email) {
-            return NextResponse.json({ error: "Name and email are required" }, { status: 400 });
+            return apiError("VALIDATION_ERROR", "Name and email are required");
         }
 
         // Generate a random secure temporary password
@@ -64,10 +42,6 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ success: true, userId: res.user.id });
     } catch (error) {
-        console.error("[Create Expert API] Error:", error);
-        return NextResponse.json(
-            { error: error instanceof Error ? error.message : "Internal Server Error" },
-            { status: 500 }
-        );
+        return apiUnhandledError(error, "Internal Server Error", "/api/admin/experts");
     }
 }

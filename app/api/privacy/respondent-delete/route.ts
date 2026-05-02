@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import {
   createDeletionJob,
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
     });
 
     if (!tokenRecord) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     const privacyRequest = await createPrivacyRequest({
@@ -114,12 +115,12 @@ export async function POST(request: Request) {
       }).catch(() => undefined);
     }
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: error.errors[0]?.message ?? "Invalid request body" },
-        { status: 400 },
+      return apiError(
+        "VALIDATION_ERROR",
+        error.errors[0]?.message ?? "Invalid request body",
       );
     }
 
-    return NextResponse.json({ error: "Failed to delete respondent data" }, { status: 400 });
+    return apiUnhandledError(error, "Failed to delete respondent data", "/api/privacy/respondent-delete");
   }
 }

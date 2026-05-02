@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getDb } from "@/db";
@@ -37,20 +38,10 @@ export async function POST(
     const { surveyId } = await params;
     const parsed = sampleFeedbackEntryInputSchema.safeParse(await req.json());
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: parsed.error.errors[0]?.message ?? "Invalid feedback payload" },
-        { status: 400 },
-      );
-    }
+    if (!parsed.success) { return apiError("VALIDATION_ERROR", parsed.error.errors[0]?.message ?? "Invalid feedback payload"); }
 
     const input = parsed.data;
-    if (input.conversationNumber >= MAX_SAMPLE_CONVERSATIONS) {
-      return NextResponse.json(
-        { error: `Max sample conversations reached (${MAX_SAMPLE_CONVERSATIONS})` },
-        { status: 400 },
-      );
-    }
+    if (input.conversationNumber >= MAX_SAMPLE_CONVERSATIONS) { return apiError("VALIDATION_ERROR", `Max sample conversations reached (${MAX_SAMPLE_CONVERSATIONS})`); }
 
     const [survey, sampleConversation, briefRow, planRow] = await Promise.all([
       getDb().select().from(surveys).where(eq(surveys.id, surveyId)).then((rows) => rows[0]),
@@ -68,18 +59,12 @@ export async function POST(
       getActiveCoveragePlan(surveyId),
     ]);
 
-    if (!survey) return new NextResponse("Survey not found", { status: 404 });
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
     const permission = await getSurveyPermissionForSession(session, surveyId);
     if (!hasSurveyPermission(permission, "canEdit")) return new NextResponse("Unauthorized", { status: 403 });
-    if (survey.status !== "draft" && survey.status !== "sample_review") {
-      return new NextResponse("Feedback can only be applied while the survey is in draft or sample review.", { status: 400 });
-    }
-    if (!sampleConversation) {
-      return new NextResponse("Sample conversation not found", { status: 404 });
-    }
-    if (!briefRow || !planRow) {
-      return new NextResponse("The survey brief is not ready for sample optimization.", { status: 400 });
-    }
+    if (survey.status !== "draft" && survey.status !== "sample_review") { return apiError("VALIDATION_ERROR", "Feedback can only be applied while the survey is in draft or sample review."); }
+    if (!sampleConversation) { return apiError("NOT_FOUND", "Sample conversation not found"); }
+    if (!briefRow || !planRow) { return apiError("VALIDATION_ERROR", "The survey brief is not ready for sample optimization."); }
 
     const feedbackEntry = await createSampleFeedbackEntry({
       surveyId,
@@ -162,8 +147,6 @@ export async function POST(
       briefUpdated,
       nextConversationNumber: input.conversationNumber + 1,
     });
-  } catch (error) {
-    console.error("[Sample Feedback] Error:", error);
-    return new NextResponse("Internal Server Error", { status: 500 });
-  }
+  } catch (error) { return apiUnhandledError(error, "Internal server error", "survey-sample-feedback:post"); }
 }
+

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { updateLearningInterventionAction } from "@/app/actions/classroom";
 
@@ -17,14 +18,9 @@ export async function PATCH(
       ...updatePayload,
       interventionId,
     } as Parameters<typeof updateLearningInterventionAction>[0]);
-    return NextResponse.json(result, { status: result.success ? 200 : 400 });
+    if (!result.success) return apiError("VALIDATION_ERROR", result.error);
+    return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Failed to update intervention",
-      },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to update intervention", "/api/learning/interventions/[interventionId]");
   }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { fetchActiveSurveyByShareableLink } from "@/lib/surveys/public-survey-access";
 
@@ -13,12 +14,7 @@ export async function GET(
     const { shareableLink } = await params;
 
     const surveyResult = await fetchActiveSurveyByShareableLink(shareableLink);
-    if ("error" in surveyResult) {
-      return NextResponse.json(
-        { error: surveyResult.error.message },
-        { status: surveyResult.error.status },
-      );
-    }
+    if ("error" in surveyResult) { return apiError("NOT_FOUND", surveyResult.error.message); }
 
     const survey = {
       id: surveyResult.survey.id,
@@ -33,10 +29,6 @@ export async function GET(
     return NextResponse.json({
       survey,
     });
-  } catch {
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
-  }
+  } catch (error) { return apiUnhandledError(error, "Internal server error", "/api/surveys/shared/[shareableLink]:get"); }
 }
+

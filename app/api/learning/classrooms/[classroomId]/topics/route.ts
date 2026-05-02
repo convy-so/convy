@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { createLearningTopicAction } from "@/app/actions/classroom";
 import { getDb } from "@/db";
@@ -15,7 +16,7 @@ export async function GET(
     const classroom = await getTeacherClassroomAccess(session.user.id, classroomId);
 
     if (!classroom) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     const topics = await getDb().query.learningTopics.findMany({
@@ -32,10 +33,7 @@ export async function GET(
       })),
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load topics" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to load topics", "/api/learning/classrooms/[classroomId]/topics");
   }
 }
 
@@ -56,5 +54,6 @@ export async function POST(
     sourceBoundary: body.sourceBoundary,
     contentLocale: body.contentLocale,
   });
-  return NextResponse.json(result, { status: result.success ? 200 : 400 });
+  if (!result.success) return apiError("VALIDATION_ERROR", result.error);
+  return NextResponse.json(result);
 }

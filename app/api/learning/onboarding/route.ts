@@ -1,6 +1,7 @@
 import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from "ai";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { getDb } from "@/db";
@@ -52,7 +53,7 @@ export async function GET() {
     const membership = await getPrimaryStudentMembership(session.user.id);
 
     if (!membership) {
-      return NextResponse.json({ error: "Student context not found" }, { status: 404 });
+      return apiError("NOT_FOUND", "Student context not found");
     }
 
     if (
@@ -92,12 +93,7 @@ export async function GET() {
     });
   } catch (error) {
     console.error("[Onboarding GET Error]", error);
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Failed to load onboarding",
-      },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to load onboarding", "/api/learning/onboarding");
   }
 }
 
@@ -107,7 +103,7 @@ export async function POST(request: Request) {
     const membership = await getPrimaryStudentMembership(session.user.id);
 
     if (!membership) {
-      return NextResponse.json({ error: "Student context not found" }, { status: 404 });
+      return apiError("NOT_FOUND", "Student context not found");
     }
 
     const body = requestSchema.parse(await request.json());
@@ -119,7 +115,7 @@ export async function POST(request: Request) {
     ).trim();
 
     if (!latestUserText) {
-      return NextResponse.json({ error: "Message is required" }, { status: 400 });
+      return apiError("VALIDATION_ERROR", "Message is required");
     }
 
     const activeSession = await ensureOnboardingSession(membership.id);
@@ -208,11 +204,6 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("[Onboarding POST Error]", error);
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Failed to continue onboarding",
-      },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to continue onboarding", "/api/learning/onboarding");
   }
 }

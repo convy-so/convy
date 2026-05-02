@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getVerifiedSession } from "@/lib/auth/session";
 import { assertAudioUploadFile } from "@/lib/security/uploads";
@@ -15,10 +16,7 @@ export async function POST(request: NextRequest) {
     const language = normalizeSpeechToTextLanguage(languageValue);
 
     if (!(audioFile instanceof File)) {
-      return NextResponse.json(
-        { error: "Audio file is required" },
-        { status: 400 },
-      );
+      return apiError("VALIDATION_ERROR", "Audio file is required");
     }
     assertAudioUploadFile(audioFile);
 
@@ -32,18 +30,10 @@ export async function POST(request: NextRequest) {
       (error.message === "UNAUTHENTICATED" ||
         error.message === "EMAIL_NOT_VERIFIED")
     ) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      return apiError("UNAUTHENTICATED", error.message);
     }
 
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to transcribe audio",
-      },
-      { status: 500 },
-    );
+    return apiUnhandledError(error, "Failed to transcribe audio", "/api/voice/transcribe");
   }
 }
 

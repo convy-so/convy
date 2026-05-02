@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { env } from "@/lib/env";
@@ -41,9 +42,7 @@ export async function POST(
 
     const survey = await fetchSurveyByShareableLink(shareableLink);
 
-    if (!survey) {
-      return jsonNoStore({ error: "Survey not found" }, { status: 404 });
-    }
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
 
     const respondentAccess = await resolveRespondentAccess({
       cookieHeader: request.headers.get("cookie"),
@@ -54,9 +53,7 @@ export async function POST(
       userAgent: request.headers.get("user-agent"),
     });
 
-    if (!respondentAccess) {
-      return jsonNoStore({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (!respondentAccess) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
     const resumeToken = await issueRespondentResumeToken({
       surveyId: survey.id,
@@ -74,17 +71,6 @@ export async function POST(
         locale: body.locale,
       }),
     });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return jsonNoStore(
-        { error: error.errors[0]?.message ?? "Invalid request body" },
-        { status: 400 },
-      );
-    }
-
-    return jsonNoStore(
-      { error: "Failed to create resume link" },
-      { status: 500 },
-    );
-  }
+  } catch (error) { if (error instanceof z.ZodError) { return apiError("VALIDATION_ERROR", error.errors[0]?.message ?? "Invalid request body"); } return apiUnhandledError(error, "Failed to create resume link", "/api/surveys/respond/[shareableLink]/resume-link:post"); }
 }
+

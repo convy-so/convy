@@ -1,5 +1,6 @@
 import { and, count, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { classroomStudents, learningInteractions, studentProgressReports } from "@/db/schema";
@@ -16,7 +17,7 @@ export async function GET(
     const topic = await getTeacherTopicAccess(session.user.id, topicId);
 
     if (!topic) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     const [reportCountResult, questionCountResult, activeStudentCountResult] = await Promise.all([
@@ -70,9 +71,6 @@ export async function GET(
       },
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load topic overview" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to load topic overview", "/api/learning/topics/[topicId]/overview");
   }
 }

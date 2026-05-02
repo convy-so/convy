@@ -1,3 +1,4 @@
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { surveyConversations } from "@/db/schema";
@@ -67,9 +68,7 @@ export async function GET(
     const resumeToken = searchParams.get(RESPONDENT_RESUME_QUERY_PARAM);
 
     const surveyResult = await fetchActiveSurveyByShareableLink(shareableLink);
-    if ("error" in surveyResult) {
-      return jsonNoStore({ error: surveyResult.error.message }, { status: surveyResult.error.status });
-    }
+    if ("error" in surveyResult) { return apiError("NOT_FOUND", surveyResult.error.message); }
     const survey = surveyResult.survey;
 
     const access = await resolveClassroomAssignedAccess(survey);
@@ -95,12 +94,7 @@ export async function GET(
       });
 
       if (existingConversation && existingConversation.surveyId === survey.id) {
-        if (
-          access.data.mode === "classroom_assigned" &&
-          existingConversation.participantId !== access.data.classroomStudent.id
-        ) {
-          return jsonNoStore({ error: "Unauthorized" }, { status: 403 });
-        }
+        if (access.data.mode === "classroom_assigned" && existingConversation.participantId !== access.data.classroomStudent.id) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
         return respondWithExistingConversation({
           request,
@@ -110,15 +104,7 @@ export async function GET(
       }
     }
 
-    if (
-      survey.deliveryMode !== "classroom_assigned" &&
-      survey.currentParticipants >= survey.participantLimit
-    ) {
-      return jsonNoStore(
-        { error: "Survey has reached its participant limit" },
-        { status: 403 },
-      );
-    }
+    if (survey.deliveryMode !== "classroom_assigned" && survey.currentParticipants >= survey.participantLimit) { return apiError("FORBIDDEN", "Survey has reached its participant limit"); }
 
     if (access.data.mode === "classroom_assigned") {
       const existingClassroomConversation = await getDb().query.surveyConversations.findFirst({
@@ -144,10 +130,7 @@ export async function GET(
       access: access.data,
       language,
     });
-  } catch (error) {
-    console.error("[Respondent GET] Error:", error);
-    return jsonNoStore({ error: "Internal server error" }, { status: 500 });
-  }
+  } catch (error) { return apiUnhandledError(error, "Internal server error", "/api/surveys/respond/[shareableLink]:get"); }
 }
 
 export async function POST(
@@ -159,15 +142,11 @@ export async function POST(
     const { shareableLink } = await params;
 
     const surveyResult = await fetchActiveSurveyByShareableLink(shareableLink);
-    if ("error" in surveyResult) {
-      return jsonNoStore({ error: surveyResult.error.message }, { status: surveyResult.error.status });
-    }
+    if ("error" in surveyResult) { return apiError("NOT_FOUND", surveyResult.error.message); }
     const survey = surveyResult.survey;
 
     const conversationId = requestPayload.conversationId ?? requestPayload.context?.conversationId;
-    if (!conversationId) {
-      return jsonNoStore({ error: "Conversation ID is required" }, { status: 400 });
-    }
+    if (!conversationId) { return apiError("VALIDATION_ERROR", "Conversation ID is required"); }
 
     const [conversation, briefRow, planRow] = await Promise.all([
       getDb().query.surveyConversations.findFirst({
@@ -182,16 +161,9 @@ export async function POST(
       return access.response;
     }
 
-    if (!conversation || conversation.surveyId !== survey.id) {
-      return jsonNoStore({ error: "Conversation not found" }, { status: 404 });
-    }
+    if (!conversation || conversation.surveyId !== survey.id) { return apiError("NOT_FOUND", "Conversation not found"); }
     
-    if (
-      access.data.mode === "classroom_assigned" &&
-      conversation.participantId !== access.data.classroomStudent.id
-    ) {
-      return jsonNoStore({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (access.data.mode === "classroom_assigned" && conversation.participantId !== access.data.classroomStudent.id) { return apiError("UNAUTHORIZED", "Unauthorized"); }
     
     const respondentAccess = await resolveRespondentAccess({
       cookieHeader: req.headers.get("cookie"),
@@ -202,26 +174,16 @@ export async function POST(
       userAgent: req.headers.get("user-agent"),
     });
     
-    if (!respondentAccess) {
-      return jsonNoStore({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (!respondentAccess) { return apiError("UNAUTHORIZED", "Unauthorized"); }
     
-    if (!briefRow || !planRow) {
-      return jsonNoStore(
-        { error: "This survey does not have an approved education brief yet." },
-        { status: 400 },
-      );
-    }
+    if (!briefRow || !planRow) { return apiError("VALIDATION_ERROR", "This survey does not have an approved education brief yet."); }
 
     const canonicalTurn = buildCanonicalConversationTurn({
       storedMessages: Array.isArray(conversation.rawConversation) ? conversation.rawConversation : [],
       incomingMessages: Array.isArray(requestPayload.messages) ? requestPayload.messages : [],
     });
 
-    if (!canonicalTurn.hasNewUserTurn) {
-       // Handled by client replay usually, but let's be safe
-       return jsonNoStore({ error: "No new user turn detected" }, { status: 400 });
-    }
+    if (!canonicalTurn.hasNewUserTurn) { return apiError("VALIDATION_ERROR", "No new user turn detected"); }
 
     const firstUserTurn = !conversation.rawConversation || 
       !(conversation.rawConversation as Array<{ role?: string }>).some(
@@ -235,9 +197,7 @@ export async function POST(
         enforceParticipantLimit: survey.deliveryMode !== "classroom_assigned",
       });
 
-      if (!admission.allowed) {
-        return jsonNoStore({ error: "Survey has reached participant limit" }, { status: 403 });
-      }
+      if (!admission.allowed) { return apiError("FORBIDDEN", "Survey has reached participant limit"); }
     }
 
     const language = getRequestedLanguage(requestPayload.language);
@@ -268,12 +228,6 @@ export async function POST(
       canonicalTurn,
       language,
     });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return jsonNoStore({ error: "Invalid request payload", details: error.issues }, { status: 400 });
-    }
-
-    console.error("[Respondent POST] Error:", error);
-    return jsonNoStore({ error: "Internal server error" }, { status: 500 });
-  }
+  } catch (error) { if (error instanceof z.ZodError) { return apiError("VALIDATION_ERROR", "Invalid request payload", { details: error.issues }); } return apiUnhandledError(error, "Internal server error", "/api/surveys/respond/[shareableLink]:post"); }
 }
+

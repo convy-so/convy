@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { getDb } from "@/db";
@@ -58,7 +59,7 @@ export async function POST(
     });
 
     if (!membership) {
-      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      return apiError("NOT_FOUND", "Student not found");
     }
 
     const access = await getTeacherClassroomAccess(
@@ -67,7 +68,7 @@ export async function POST(
     );
 
     if (!access) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     const latestUserMessage = [...(body.messages ?? [])]
@@ -76,10 +77,7 @@ export async function POST(
     const question = body.question?.trim() || getMessageText(latestUserMessage);
 
     if (!question) {
-      return NextResponse.json(
-        { error: "No teacher question to process" },
-        { status: 400 },
-      );
+      return apiError("VALIDATION_ERROR", "No teacher question to process");
     }
 
     await hydrateStudentLearningEvidence({
@@ -107,17 +105,9 @@ export async function POST(
       (error.message === "UNAUTHENTICATED" ||
         error.message === "EMAIL_NOT_VERIFIED")
     ) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      return apiError("UNAUTHENTICATED", error.message);
     }
 
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to answer teacher question",
-      },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to answer teacher question", "/api/learning/students/[studentId]/chat");
   }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiUnhandledError } from "@/lib/api/error-contract";
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/db";
@@ -119,11 +120,6 @@ export async function GET() {
       ),
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Failed to load student context",
-      },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to load student context", "/api/learning/me");
   }
 }
