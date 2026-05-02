@@ -29,6 +29,7 @@ function toTextUIMessages(
         id: string;
         role: string;
         content: string;
+        metadata?: Record<string, unknown>;
       }>
     | undefined,
 ): UIMessage[] {
@@ -42,6 +43,9 @@ function toTextUIMessages(
         id: message.id,
         role: message.role,
         parts: [{ type: "text", text: message.content }],
+        annotations: message.metadata
+          ? [{ type: "metadata", data: message.metadata }]
+          : [],
       } as UIMessage,
     ];
   });
@@ -116,6 +120,7 @@ export function useStudentLearningWorkspace({
           id: message.id,
           role: message.role,
           content: message.content,
+          metadata: message.metadata,
         })),
       ),
     [tutoringSessionQuery.data?.data.messages],

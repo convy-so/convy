@@ -18,21 +18,21 @@ export function SectionHeading({
   return (
     <div
       className={cn(
-        "flex flex-col gap-4 md:flex-row md:items-end md:justify-between",
+        "flex flex-col gap-8 md:flex-row md:items-end md:justify-between",
         className,
       )}
     >
-      <div className="space-y-2">
+      <div className="space-y-4">
         {eyebrow ? (
-          <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+          <div className="inline-flex items-center rounded-lg bg-white px-2.5 py-1 text-[10px] font-medium uppercase text-slate-400 border border-slate-100">
             {eyebrow}
           </div>
         ) : null}
-        <h2 className="text-2xl font-semibold tracking-tight text-slate-950 md:text-[32px]">
+        <h2 className="text-3xl font-medium text-slate-900 md:text-4xl leading-tight">
           {title}
         </h2>
         {description ? (
-          <p className="max-w-2xl text-sm leading-6 text-slate-600 md:text-[15px]">
+          <p className="max-w-2xl text-base font-medium leading-relaxed text-slate-500">
             {description}
           </p>
         ) : null}
