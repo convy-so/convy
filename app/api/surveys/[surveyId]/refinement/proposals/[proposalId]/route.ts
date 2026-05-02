@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
@@ -47,12 +48,10 @@ export async function POST(
       getDb().select().from(surveys).where(eq(surveys.id, surveyId)).then((rows) => rows[0]),
       getRefinementProposal(proposalId),
     ]);
-    if (!survey || !proposal) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!survey || !proposal) { return apiError("NOT_FOUND", "Not found"); }
 
     const permission = await getSurveyPermissionForSession(session, surveyId);
-    if (!hasSurveyPermission(permission, "canEdit")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (!hasSurveyPermission(permission, "canEdit")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
     if (action === "reject") {
       await updateRefinementProposalStatus(proposalId, "rejected");
@@ -99,9 +98,7 @@ export async function POST(
           getResearchBrief(surveyId),
           getActiveCoveragePlan(surveyId),
         ]);
-        if (!briefRow || !planRow) {
-          return NextResponse.json({ error: "The survey brief is not ready." }, { status: 400 });
-        }
+        if (!briefRow || !planRow) { return apiError("VALIDATION_ERROR", "The survey brief is not ready."); }
         const patch = normalizeResearchBriefPatch(
           typeof proposal.payload === "object" && proposal.payload !== null
             ? proposal.payload
@@ -137,13 +134,11 @@ export async function POST(
         break;
       }
       default:
-        return NextResponse.json({ error: "Unsupported proposal type" }, { status: 400 });
+        return apiError("VALIDATION_ERROR", "Unsupported proposal type");
     }
 
     await updateRefinementProposalStatus(proposalId, "approved");
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("[Refinement Proposal POST] Error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
+  } catch (error) { return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/refinement/proposals/[proposalId]:post"); }
 }
+

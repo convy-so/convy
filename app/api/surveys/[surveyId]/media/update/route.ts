@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { updateSurveyMediaAction } from "@/app/actions/survey-media";
 
 // export const runtime = "nodejs";
@@ -15,27 +16,14 @@ export async function POST(
       surveyId,
     });
 
-    if (!result.success) {
-      return new Response(
-        JSON.stringify({ success: false, error: result.error }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
-    }
+    if (!result.success) { return apiError("VALIDATION_ERROR", result.error); }
 
     return new Response(JSON.stringify({ success: true, ...result.data }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
-  } catch (error) {
-    console.error("[updateMedia] Unexpected error:", error);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: "Failed to update media",
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
-  }
+  } catch (error) { return apiUnhandledError(error, "Failed to update media", "/api/surveys/[surveyId]/media/update:post"); }
 }
+
 
 

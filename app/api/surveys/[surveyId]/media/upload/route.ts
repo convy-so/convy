@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { uploadSurveyMediaAction } from "@/app/actions/survey-media";
 
 export async function POST(
@@ -11,26 +12,13 @@ export async function POST(
     formData.set("surveyId", surveyId);
     const result = await uploadSurveyMediaAction(formData);
 
-    if (!result.success) {
-      return new Response(
-        JSON.stringify({ success: false, error: result.error }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      );
-    }
+    if (!result.success) { return apiError("VALIDATION_ERROR", result.error); }
 
     return new Response(JSON.stringify({ success: true, ...result.data }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
-  } catch (error) {
-    console.error("[uploadMedia] Unexpected error:", error);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: "Failed to upload media",
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
-    );
-  }
+  } catch (error) { return apiUnhandledError(error, "Failed to upload media", "/api/surveys/[surveyId]/media/upload:post"); }
 }
+
 

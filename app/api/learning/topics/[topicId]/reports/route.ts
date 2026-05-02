@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { studentProgressReports } from "@/db/schema";
@@ -17,7 +18,7 @@ export async function GET(
     const topic = await getTeacherTopicAccess(session.user.id, topicId);
 
     if (!topic) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     const reports = await getDb().query.studentProgressReports.findMany({
@@ -51,9 +52,6 @@ export async function GET(
       },
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load reports" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to load reports", "/api/learning/topics/[topicId]/reports");
   }
 }

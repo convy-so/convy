@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { and, desc, eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
@@ -34,14 +35,10 @@ export async function GET(
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    }
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
 
     const permission = await getSurveyPermissionForSession(session, survey.id);
-    if (!hasSurveyPermission(permission, "canView")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (!hasSurveyPermission(permission, "canView")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
     const chatSessions = await getDb()
       .select({
@@ -60,16 +57,7 @@ export async function GET(
       .orderBy(desc(analyticsChatSessions.updatedAt));
 
     return NextResponse.json({ sessions: chatSessions });
-  } catch (error) {
-    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
-      return NextResponse.json({ error: error.message }, { status: 401 });
-    }
-    console.error("[Chat Sessions GET] Error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
-  }
+  } catch (error) { if (error instanceof Error && error.message === "UNAUTHENTICATED") { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/analytics/chat-sessions:get"); }
 }
 
 /**
@@ -91,14 +79,10 @@ export async function POST(
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    }
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
 
     const permission = await getSurveyPermissionForSession(session, survey.id);
-    if (!hasSurveyPermission(permission, "canView")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (!hasSurveyPermission(permission, "canView")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
     // Derive title from first user message if not provided
     const derivedTitle =
@@ -120,12 +104,7 @@ export async function POST(
           ),
         );
 
-      if (!existing) {
-        return NextResponse.json(
-          { error: "Session not found" },
-          { status: 404 },
-        );
-      }
+      if (!existing) { return apiError("NOT_FOUND", "Session not found"); }
 
       const [updated] = await getDb()
         .update(analyticsChatSessions)
@@ -158,14 +137,6 @@ export async function POST(
     }
 
     return NextResponse.json({ session: resultSession });
-  } catch (error) {
-    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
-      return NextResponse.json({ error: error.message }, { status: 401 });
-    }
-    console.error("[Chat Sessions POST] Error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
-  }
+  } catch (error) { if (error instanceof Error && error.message === "UNAUTHENTICATED") { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/analytics/chat-sessions:post"); }
 }
+

@@ -1,6 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { getDb } from "@/db";
@@ -112,11 +113,7 @@ export async function GET() {
       }),
     });
   } catch (error) {
-    if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
-    }
-    console.error("Error fetching surveys:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Internal server error", "/api/surveys:get");
   }
 }
 
@@ -126,23 +123,10 @@ export async function POST(request: Request) {
     
     // Parse and validate request body
     const rawBody = await request.json().catch(() => null);
-    if (!rawBody) {
-      return NextResponse.json(
-        { error: "Invalid request body" },
-        { status: 400 }
-      );
-    }
+    if (!rawBody) { return apiError("VALIDATION_ERROR", "Invalid request body"); }
 
     const validationResult = createSurveySchema.safeParse(rawBody);
-    if (!validationResult.success) {
-      return NextResponse.json(
-        { 
-          error: "Validation failed", 
-          details: validationResult.error.errors[0]?.message 
-        },
-        { status: 400 }
-      );
-    }
+    if (!validationResult.success) { return apiError("VALIDATION_ERROR", "Validation failed", { details: validationResult.error.errors[0]?.message }); }
 
     const body = validationResult.data;
     const surveyId = nanoid();
@@ -155,23 +139,13 @@ export async function POST(request: Request) {
       session,
     });
 
-    if (deliveryMode === "classroom_assigned" && !classroomId) {
-      return NextResponse.json(
-        { error: "Class-linked surveys must target a classroom." },
-        { status: 400 },
-      );
-    }
+    if (deliveryMode === "classroom_assigned" && !classroomId) { return apiError("VALIDATION_ERROR", "Class-linked surveys must target a classroom."); }
 
     const classroomAccess = classroomId
       ? await getTeacherClassroomAccess(session.user.id, classroomId)
       : null;
 
-    if (classroomId && !classroomAccess) {
-      return NextResponse.json(
-        { error: "You need classroom access before creating a class-linked survey." },
-        { status: 403 },
-      );
-    }
+    if (classroomId && !classroomAccess) { return apiError("UNAUTHORIZED", "You need classroom access before creating a class-linked survey."); }
 
     const existingSurveys = await getDb()
       .select({ id: surveys.id, isVoice: surveys.isVoice })
@@ -180,16 +154,10 @@ export async function POST(request: Request) {
 
     const isVoice = body.isVoice;
     if (existingSurveys.length >= SURVEY_LIMITS.MAX_SURVEYS_PER_SCOPE) {
-      return NextResponse.json(
-        { error: `Limit reached: You can only have ${SURVEY_LIMITS.MAX_SURVEYS_PER_SCOPE} surveys in your account` },
-        { status: 403 },
-      );
+      return apiError("FORBIDDEN", `Limit reached: You can only have ${SURVEY_LIMITS.MAX_SURVEYS_PER_SCOPE} surveys in your account`);
     }
     if (isVoice && existingSurveys.filter((item) => item.isVoice).length >= SURVEY_LIMITS.MAX_VOICE_SURVEYS_PER_SCOPE) {
-      return NextResponse.json(
-        { error: `Limit reached: You can only have ${SURVEY_LIMITS.MAX_VOICE_SURVEYS_PER_SCOPE} voice surveys in your account` },
-        { status: 403 },
-      );
+      return apiError("FORBIDDEN", `Limit reached: You can only have ${SURVEY_LIMITS.MAX_VOICE_SURVEYS_PER_SCOPE} voice surveys in your account`);
     }
 
     const greeting = buildCreationGreeting(language);
@@ -250,20 +218,8 @@ export async function POST(request: Request) {
       ],
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { 
-          error: "Validation failed", 
-          details: error.errors[0]?.message 
-        },
-        { status: 400 }
-      );
-    }
-    if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
-    }
-    console.error("Error creating survey:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    if (error instanceof z.ZodError) { return apiError("VALIDATION_ERROR", "Validation failed", { details: error.errors[0]?.message }); } if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Internal server error", "/api/surveys:post");
   }
 }
+
 

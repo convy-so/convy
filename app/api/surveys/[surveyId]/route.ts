@@ -1,5 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
@@ -21,12 +23,7 @@ export async function DELETE(
     const { surveyId } = await params;
 
     const permission = await getSurveyPermissionForSession(session, surveyId);
-    if (!hasSurveyPermission(permission, "canDelete")) {
-      return NextResponse.json(
-        { error: "Unauthorized. You do not have permission to delete this survey." },
-        { status: 403 },
-      );
-    }
+    if (!hasSurveyPermission(permission, "canDelete")) { return apiError("UNAUTHORIZED", "Unauthorized. You do not have permission to delete this survey."); }
 
     const [survey] = await getDb()
       .select({
@@ -36,27 +33,13 @@ export async function DELETE(
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    }
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
 
     await getDb().delete(surveys).where(eq(surveys.id, surveyId));
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return NextResponse.json({ error: error.message }, { status: 401 });
-      }
-    }
-    console.error("Error deleting survey:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+    if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]:delete");
   }
 }
 
@@ -73,12 +56,7 @@ export async function PATCH(
     const body = await request.json();
 
     const permission = await getSurveyPermissionForSession(session, surveyId);
-    if (!hasSurveyPermission(permission, "canEdit")) {
-      return NextResponse.json(
-        { error: "Unauthorized. Only the creator and approved editors can modify surveys." },
-        { status: 403 },
-      );
-    }
+    if (!hasSurveyPermission(permission, "canEdit")) { return apiError("UNAUTHORIZED", "Unauthorized. Only the creator and approved editors can modify surveys."); }
 
     // Fetch survey for updates
     const [survey] = await getDb()
@@ -86,9 +64,7 @@ export async function PATCH(
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    }
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
 
     // Validate allowed fields (basic validation)
     const updates: Partial<typeof survey> = {};
@@ -116,25 +92,12 @@ export async function PATCH(
             ),
           );
 
-        if (existingVoiceSurveys.length >= 2) {
-          return NextResponse.json(
-            {
-              error:
-                "Limit reached: You can only have 2 voice surveys in your account",
-            },
-            { status: 403 },
-          );
-        }
+        if (existingVoiceSurveys.length >= 2) { return apiError("FORBIDDEN", "Limit reached: You can only have 2 voice surveys in your account"); }
       }
       updates.isVoice = body.isVoice;
     }
 
-    if (Object.keys(updates).length === 0) {
-      return NextResponse.json(
-        { error: "No valid fields to update" },
-        { status: 400 },
-      );
-    }
+    if (Object.keys(updates).length === 0) { return apiError("VALIDATION_ERROR", "No valid fields to update"); }
 
     // Update survey
     await getDb()
@@ -147,18 +110,8 @@ export async function PATCH(
 
     return NextResponse.json({ success: true, updates });
   } catch (error) {
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return NextResponse.json({ error: error.message }, { status: 401 });
-      }
-    }
-    console.error("Error updating survey:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+    if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]:patch");
   }
 }
+
+

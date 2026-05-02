@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getVerifiedSession } from "@/lib/auth/session";
 import { assertAiOpsUser } from "@/lib/auth/expert";
@@ -40,12 +41,6 @@ export async function POST() {
       data: tutoringEvalFamilies,
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Failed to bootstrap tutoring eval families",
-      },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to bootstrap tutoring eval families", "/api/learning/expert/evals/bootstrap");
   }
 }

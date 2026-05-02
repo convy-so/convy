@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getVerifiedSession } from "@/lib/auth/session";
 import { assertAiOpsUser } from "@/lib/auth/expert";
@@ -15,7 +16,7 @@ export async function GET(
     const { sessionId } = await props.params;
 
     if (!sessionId) {
-      return NextResponse.json({ error: "Session ID is required" }, { status: 400 });
+      return apiError("VALIDATION_ERROR", "Session ID is required");
     }
 
     const messages = await listLearningMessages(sessionId);
@@ -25,9 +26,6 @@ export async function GET(
       data: messages,
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load session transcript" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to load session transcript", "/api/learning/expert/sessions/[sessionId]/transcript");
   }
 }

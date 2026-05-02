@@ -1,5 +1,6 @@
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { getDb } from "@/db";
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
     const token = searchParams.get("token");
 
     if (!token) {
-      return NextResponse.json({ error: "Missing token" }, { status: 400 });
+      return apiError("VALIDATION_ERROR", "Missing token");
     }
 
     const tokenHash = hashOpaqueToken(token);
@@ -40,7 +41,8 @@ export async function GET(request: Request) {
     });
 
     if (!record) {
-      return NextResponse.json({ valid: false }, { status: 404 });
+      // Maintaining exactly 404 response for validation logic but using standard shape
+      return apiError("NOT_FOUND", "Invalid or expired token");
     }
 
     return NextResponse.json({
@@ -55,8 +57,8 @@ export async function GET(request: Request) {
       },
       expiresAt: record.expiresAt.toISOString(),
     });
-  } catch {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  } catch (error) {
+    return apiUnhandledError(error, "Internal server error", "/api/learning/student-access/activate");
   }
 }
 
@@ -65,10 +67,7 @@ export async function POST(request: Request) {
     const body = studentActivationBodySchema.parse(await request.json());
 
     if (!body.token || !body.password || body.password.length < 8) {
-      return NextResponse.json(
-        { error: "Token and a password of at least 8 characters are required." },
-        { status: 400 },
-      );
+      return apiError("VALIDATION_ERROR", "Token and a password of at least 8 characters are required.");
     }
 
     const normalizedName = body.fullName?.trim();
@@ -87,7 +86,7 @@ export async function POST(request: Request) {
     });
 
     if (!record) {
-      return NextResponse.json({ error: "Invalid or expired token." }, { status: 404 });
+      return apiError("NOT_FOUND", "Invalid or expired token.");
     }
 
     const ctx = await auth.$context;
@@ -142,13 +141,10 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: error.errors[0]?.message ?? "Invalid request body." },
-        { status: 400 },
-      );
+      return apiError("VALIDATION_ERROR", error.errors[0]?.message ?? "Invalid request body.");
     }
     console.error("[Activation Error]", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return apiUnhandledError(error, "Internal server error", "/api/learning/student-access/activate");
   }
 }
 

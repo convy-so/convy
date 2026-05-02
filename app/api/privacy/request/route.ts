@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getVerifiedSession } from "@/lib/auth/session";
 import { createPrivacyRequest } from "@/lib/privacy/service";
@@ -38,18 +39,15 @@ export async function POST(request: Request) {
       (error.message === "UNAUTHENTICATED" ||
         error.message === "EMAIL_NOT_VERIFIED")
     ) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      return apiError("UNAUTHENTICATED", error.message);
     }
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: error.errors[0]?.message ?? "Invalid request body" },
-        { status: 400 },
+      return apiError(
+        "VALIDATION_ERROR",
+        error.errors[0]?.message ?? "Invalid request body",
       );
     }
 
-    return NextResponse.json(
-      { error: "Failed to create privacy request" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to create privacy request", "/api/privacy/request");
   }
 }

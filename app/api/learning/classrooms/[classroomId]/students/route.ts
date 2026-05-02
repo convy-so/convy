@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import {
@@ -37,7 +38,7 @@ export async function GET(
     const classroom = await getTeacherClassroomAccess(session.user.id, classroomId);
 
     if (!classroom) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     const students = await getDb().query.classroomStudents.findMany({
@@ -59,10 +60,7 @@ export async function GET(
       })),
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load students" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to load students", "/api/learning/classrooms/[classroomId]/students");
   }
 }
 
@@ -80,7 +78,8 @@ export async function POST(
         classroomId,
         students: bulkInvite.data.students,
       });
-      return NextResponse.json(result, { status: result.success ? 200 : 400 });
+      if (!result.success) return apiError("VALIDATION_ERROR", result.error);
+      return NextResponse.json(result);
     }
 
     const singleInvite = singleStudentInviteSchema.safeParse(payload);
@@ -90,23 +89,15 @@ export async function POST(
         fullName: singleInvite.data.fullName,
         email: singleInvite.data.email,
       });
-      return NextResponse.json(result, { status: result.success ? 200 : 400 });
+      if (!result.success) return apiError("VALIDATION_ERROR", result.error);
+      return NextResponse.json(result);
     }
 
-    return NextResponse.json(
-      {
-        error:
-          "Provide either a single student with fullName and email, or a students array for bulk import.",
-      },
-      { status: 400 },
+    return apiError(
+      "VALIDATION_ERROR",
+      "Provide either a single student with fullName and email, or a students array for bulk import."
     );
   } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Failed to invite students",
-      },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to invite students", "/api/learning/classrooms/[classroomId]/students");
   }
 }

@@ -90,7 +90,7 @@ export async function GET(
       (error.message === "UNAUTHENTICATED" ||
         error.message === "EMAIL_NOT_VERIFIED")
     ) {
-      return new Response(error.message, { status: 401 });
+      return apiError("UNAUTHENTICATED", error.message);
     }
     return apiUnhandledError(error, "Internal server error", "survey-create:get");
   }
@@ -131,10 +131,7 @@ export async function POST(
       return apiError("UNAUTHORIZED", "Editor access required");
     }
     if (survey.status !== "creating") {
-      return new Response(
-        `Survey is not in creation mode. Status: ${survey.status}`,
-        { status: 400 },
-      );
+      return apiError("VALIDATION_ERROR", `Survey is not in creation mode. Status: ${survey.status}`);
     }
 
     const currentRevision = await getCurrentSurveyRevision(surveyId);
@@ -142,14 +139,7 @@ export async function POST(
       typeof body.expectedRevision === "number" &&
       body.expectedRevision !== currentRevision
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "REVISION_CONFLICT",
-          currentRevision,
-        },
-        { status: 409 },
-      );
+      return apiError("CONFLICT", "REVISION_CONFLICT", { currentRevision });
     }
 
     const leaseResult = await ensureCreationLease({
@@ -383,3 +373,4 @@ export async function PUT(
     return apiUnhandledError(error, "Internal server error", "survey-create:put");
   }
 }
+
