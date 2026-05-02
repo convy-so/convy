@@ -16,23 +16,23 @@ export function MetricTile({
   return (
     <div
       className={cn(
-        "bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-md hover:border-gray-200 transition-all duration-300 group",
+        "bg-white rounded-2xl border border-slate-100 p-5 transition-all hover:bg-slate-50 group cursor-default",
       )}
     >
-      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2 group-hover:text-slate-500 transition-colors">
+      <div className="text-[10px] font-medium uppercase text-slate-400 mb-2">
         {label}
       </div>
-      <div className="flex items-end justify-between gap-3">
-        <div className="text-2xl font-bold tracking-tight text-slate-900 group-hover:scale-[1.02] transition-transform origin-left">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xl font-medium text-slate-900">
           {value}
         </div>
         {accent ? (
-          <div className="rounded-lg border border-sky-100 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-600">
+          <div className="rounded-lg bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 uppercase">
             {accent}
           </div>
         ) : null}
       </div>
-      <p className="mt-3 text-[13px] text-slate-500 leading-relaxed font-medium">
+      <p className="mt-2 text-sm text-slate-500 font-medium">
         {helper}
       </p>
     </div>
