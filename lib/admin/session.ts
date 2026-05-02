@@ -66,7 +66,7 @@ export function getAdminSessionCookieConfig() {
     httpOnly: true as const,
     secure: env.NODE_ENV === "production",
     sameSite: "strict" as const,
-    path: "/en/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI",
+    path: "/",
     maxAge: ADMIN_SESSION_TTL_SECONDS,
   };
 }

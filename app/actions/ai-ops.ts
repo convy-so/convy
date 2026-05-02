@@ -4,14 +4,13 @@ import { count, desc, eq} from "drizzle-orm";
 import { headers } from "next/headers";
 import { nanoid } from "nanoid";
 
-import { getRedisClient } from "@/lib/redis";
-import { env } from "@/lib/env";
 import { getDb } from "@/db";
 import {
   expertGuidancePacks,
   expertGuidanceVersions,
   fewShotExamples,
 } from "@/db/schema";
+import { resolveAdminSessionEmail } from "@/lib/admin/session";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { hasAiOpsAccess } from "@/lib/auth/expert";
 import { getPlatformRole } from "@/lib/auth/roles";
@@ -31,25 +30,20 @@ async function requireAiOpsSession(authHeaders?: Headers | string | null) {
 
   // Allow bypass for the secret admin portal
   if (cookieHeader) {
-    const match = cookieHeader.match(/admin_session=([^;]+)/);
-    if (match) {
-      const token = match[1];
-      const redis = getRedisClient();
-      const email = await redis.get(`admin_session:${token}`);
-      if (email && env.ADMIN_EMAILS.includes(email.toLowerCase())) {
-        return {
-          user: {
-            id: "admin-system",
-            email: email.toLowerCase(),
-            role: "admin",
-            emailVerified: true,
-            name: "Admin",
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-          session: {} as any,
-        } as any;
-      }
+    const email = await resolveAdminSessionEmail(cookieHeader);
+    if (email) {
+      return {
+        user: {
+          id: "admin-system",
+          email: email.toLowerCase(),
+          role: "admin",
+          emailVerified: true,
+          name: "Admin",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        session: {} as any,
+      } as any;
     }
   }
 

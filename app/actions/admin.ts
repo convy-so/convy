@@ -5,7 +5,7 @@ import { users, sessions } from "@/db/schema/auth";
 import { usageLogs } from "@/db/schema/billing";
 import { surveys } from "@/db/schema/surveys";
 import { platformFeedback } from "@/db/schema/feedback";
-import { classroomStudents } from "@/db/schema/learning";
+import { classroomStudents, classrooms, learningTopics, learningSessions } from "@/db/schema/learning";
 import { sql, eq, gte, desc, count, sum } from "drizzle-orm";
 import { headers } from "next/headers";
 
@@ -43,12 +43,18 @@ export async function getAdminStats(authHeaders?: Headers | string | null) {
     const [
       totalUsers,
       totalSurveys,
+      totalTopics,
+      totalClassrooms,
+      totalLearningSessions,
       totalUsageCost,
       activeSessions,
       newUsersLast30Days,
     ] = await Promise.all([
       getDb().select({ count: count() }).from(users),
       getDb().select({ count: count() }).from(surveys),
+      getDb().select({ count: count() }).from(learningTopics),
+      getDb().select({ count: count() }).from(classrooms),
+      getDb().select({ count: count() }).from(learningSessions),
       getDb().select({ total: sum(usageLogs.cost) }).from(usageLogs),
       getDb()
         .select({ count: count() })
@@ -63,6 +69,9 @@ export async function getAdminStats(authHeaders?: Headers | string | null) {
     return {
       totalUsers: totalUsers[0].count,
       totalSurveys: totalSurveys[0].count,
+      totalTopics: totalTopics[0].count,
+      totalClassrooms: totalClassrooms[0].count,
+      totalLearningSessions: totalLearningSessions[0].count,
       totalUsageCost: totalUsageCost[0].total || "0",
       activeSessions: activeSessions[0].count,
       newUsersLast30Days: newUsersLast30Days[0].count,

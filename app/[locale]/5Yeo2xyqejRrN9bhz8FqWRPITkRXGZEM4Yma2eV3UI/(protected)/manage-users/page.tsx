@@ -1,16 +1,14 @@
-import { getVerifiedSession } from "@/lib/auth/session";
-import { isAdmin } from "@/lib/auth/admin";
-import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
-import { ShieldAlert, UserCog, UserCheck, Shield } from "lucide-react";
+import { desc } from "drizzle-orm";
+import { ShieldAlert, UserCog, UserCheck, Shield, UserCog2 } from "lucide-react";
 import { Link } from "@/i18n/routing";
 
 export default async function AdminUsersPage() {
-    const session = await getVerifiedSession();
-    if (!isAdmin(session.user)) redirect("/");
-
+    // Force dynamic rendering to support database access and resolve prerender errors
+    await headers();
+    
     const allUsers = await getDb()
         .select()
         .from(users)
@@ -24,10 +22,10 @@ export default async function AdminUsersPage() {
                     <p className="text-slate-500 mt-1">View and manage all platform users.</p>
                 </div>
                 <Link
-                    href="/admin/experts/create"
+                    href="/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/manage-users/create-expert"
                     className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors"
                 >
-                    <UserCog className="w-4 h-4" />
+                    <UserCog2 className="w-4 h-4" />
                     Provision Expert
                 </Link>
             </div>

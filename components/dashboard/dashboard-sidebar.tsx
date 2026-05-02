@@ -56,10 +56,10 @@ export function DashboardSidebar() {
 
     return [
       { name: t("Dashboard"), href: "/dashboard", icon: LayoutDashboard },
-      { name: t("Surveys"), href: "/dashboard/surveys", icon: MessageSquare },
-      { name: "Learning", href: "/dashboard/learning", icon: GraduationCap },
+      { name: "Learning Hub", href: "/dashboard/learning", icon: GraduationCap },
+      { name: "Assessment Surveys", href: "/dashboard/surveys", icon: MessageSquare },
       { name: "Folders", href: "/dashboard/folders", icon: FolderOpen },
-      { name: t("Analytics"), href: "/dashboard/analytics", icon: BarChart3 },
+      { name: "Learning Analytics", href: "/dashboard/analytics", icon: BarChart3 },
     ];
   }, [isStudent, isAdminOrExpert, t]);
 

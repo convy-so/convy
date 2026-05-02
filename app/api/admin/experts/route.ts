@@ -1,15 +1,37 @@
 import { NextResponse } from "next/server";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getCurrentSession } from "@/lib/auth/session";
 import { isAdmin } from "@/lib/auth/admin";
 import { auth } from "@/lib/auth";
 import { getDb } from "@/db";
 import { users } from "@/db/schema/auth";
 import { eq } from "drizzle-orm";
+import { resolveAdminSessionEmail } from "@/lib/admin/session";
+import { env } from "@/lib/env";
+import { headers } from "next/headers";
+
 
 export async function POST(req: Request) {
     try {
-        const session = await getVerifiedSession();
-        if (!isAdmin(session.user)) {
+        const cookieHeader = (await headers()).get("cookie");
+        let authenticated = false;
+
+        // 1. Check secret admin session
+        if (cookieHeader) {
+            const email = await resolveAdminSessionEmail(cookieHeader);
+            if (email) {
+                authenticated = true;
+            }
+        }
+
+        // 2. Check better-auth session if not already authenticated
+        if (!authenticated) {
+            const session = await getCurrentSession();
+            if (session && isAdmin(session.user)) {
+                authenticated = true;
+            }
+        }
+
+        if (!authenticated) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 
