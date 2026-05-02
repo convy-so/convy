@@ -32,6 +32,7 @@ import {
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { deleteSurveyAction, duplicateSurveyAction } from "@/app/actions/survey";
+import { getFriendlyActionError } from "@/lib/action-ux";
 import { fetchSurveys, type SurveyListItem } from "@/lib/api/surveys";
 import { queryKeys } from "@/lib/query-keys";
 import { useAuth } from "@/components/providers/auth-provider";
@@ -80,7 +81,7 @@ function SurveysContent() {
         toast.success(t("Card.Toasts.Deleted") || "Survey deleted successfully.");
         setSurveyToDelete(null);
       } else {
-        toast.error(t("Card.Toasts.DeleteFailed") || "Failed to delete survey.");
+        toast.error(getFriendlyActionError(result.error));
       }
     } catch (error) {
       console.error("[confirmDeleteSurvey] Failed:", error);
@@ -106,7 +107,7 @@ function SurveysContent() {
         toast.success(t("Card.Toasts.Duplicated") || "Survey duplicated successfully.");
         queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all(null) });
       } else {
-        toast.error(t("Card.Toasts.DuplicateFailed") || "Failed to duplicate survey.");
+        toast.error(getFriendlyActionError(result.error));
       }
     } catch (error) {
       console.error("[handleDuplicate] Failed:", error);

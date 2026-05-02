@@ -2,7 +2,6 @@ import { Link } from "@/i18n/routing";
 import {
   MessageSquare,
   BarChart3,
-  TrendingUp,
   Plus,
   ArrowUpRight,
   Sparkles,
@@ -10,7 +9,6 @@ import {
   GraduationCap,
   BookOpen,
   Users,
-  Clock,
 } from "lucide-react";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { SurveyCard } from "@/components/dashboard/survey-card";
@@ -18,7 +16,7 @@ import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema/surveys";
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { count, desc, eq } from "drizzle-orm";
 import { classrooms, learningTopics, classroomStudents } from "@/db/schema/learning";
 import { Suspense } from "react";
 import { headers } from "next/headers";

@@ -3,8 +3,8 @@ import { isExpertRole } from "@/lib/auth/roles";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { expertFrameworks, expertFrameworkVersions } from "@/db/schema/learning";
-import { desc, eq, and } from "drizzle-orm";
-import { GitBranch, GitCommit, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { desc, eq } from "drizzle-orm";
+import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Link } from "@/i18n/routing";
 
 export default async function ExpertFrameworkVersionsPage({
@@ -55,7 +55,7 @@ export default async function ExpertFrameworkVersionsPage({
 
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
                 <div className="relative border-l-2 border-slate-100 ml-4 space-y-8 pb-4">
-                    {versions.map((ver, index) => {
+                    {versions.map((ver) => {
                         const isLatest = ver.id === framework.activeVersionId;
                         return (
                             <div key={ver.id} className="relative pl-8">

@@ -104,7 +104,7 @@ export async function getSurveysAction(): Promise<
     }>
   >
 > {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
     const personalSurveys = await getDb()
       .select({
@@ -137,19 +137,7 @@ export async function getSurveysAction(): Promise<
         canEdit: true,
       })),
     };
-  } catch (error) {
-    console.error("[getSurveysAction] Failed:", error);
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return { success: false, error: error.message };
-      }
-      return { success: false, error: error.message };
-    }
-    return { success: false, error: "Failed to fetch surveys" };
-  }
+  }, "getSurveysAction");
 }
 
 /**
@@ -158,7 +146,7 @@ export async function getSurveysAction(): Promise<
 export async function getSurveyAction(
   surveyId: string,
 ): Promise<ActionResult<typeof surveys.$inferSelect>> {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
 
     const [survey] = await getDb()
@@ -166,30 +154,14 @@ export async function getSurveyAction(
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!survey) {
-      return { success: false, error: "Survey not found" };
-    }
+    assertExists(survey, "Survey");
 
     const permission = await getSurveyPermissionForSession(session, surveyId);
-    if (!hasSurveyPermission(permission, "canView")) {
-      return { success: false, error: "Unauthorized" };
-    }
+    assertPermission(hasSurveyPermission(permission, "canView"), "Unauthorized");
 
     // Access granted for the survey owner
     return { success: true, data: survey };
-  } catch (error) {
-    console.error("[getSurveyAction] Failed:", error);
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return { success: false, error: error.message };
-      }
-      return { success: false, error: error.message };
-    }
-    return { success: false, error: "Failed to fetch survey" };
-  }
+  }, "getSurveyAction");
 }
 
 /**
@@ -201,7 +173,7 @@ export async function confirmSurveyAction(
 ): Promise<
   ActionResult<{ id: string; shareableLink: string; publicUrl: string }>
 > {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
 
     const [survey] = await getDb()
@@ -209,42 +181,20 @@ export async function confirmSurveyAction(
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!survey) {
-      return { success: false, error: "Survey not found" };
-    }
+    assertExists(survey, "Survey");
 
     const permission = await getSurveyPermissionForSession(session, survey.id);
-    if (!hasSurveyPermission(permission, "canPublish")) {
-      return {
-        success: false,
-        error: "Unauthorized: Editor access required to publish survey",
-      };
-    }
+    assertPermission(hasSurveyPermission(permission, "canPublish"), "Editor access required to publish survey");
 
     // Allow confirmation from either draft or sample_review status
-    if (survey.status !== "sample_review" && survey.status !== "draft") {
-      return {
-        success: false,
-        error: "Survey must be in draft or sample_review status to confirm",
-      };
-    }
+    assertState(survey.status === "sample_review" || survey.status === "draft", "Survey must be in draft or sample_review status to confirm");
 
     const { getResearchBrief } = await import("@/lib/education/storage");
     const briefRow = await getResearchBrief(surveyId);
-    if (!briefRow?.brief) {
-      return {
-        success: false,
-        error:
-          "Survey is missing a canonical research brief. Please complete the creation workflow.",
-      };
-    }
+    assertState(!!briefRow?.brief, "Survey is missing a canonical research brief. Please complete the creation workflow.");
 
-    if (survey.status === "sample_review" && !survey.confirmed) {
-      return {
-        success: false,
-        error:
-          "Please confirm at least one sample conversation before activating the survey",
-      };
+    if (survey.status === "sample_review") {
+      assertState(survey.confirmed, "Please confirm at least one sample conversation before activating the survey");
     }
 
     let shareableLink = survey.shareableLink;
@@ -264,8 +214,6 @@ export async function confirmSurveyAction(
       "recentSurveys",
     ]);
 
-
-
     const publicUrl = `/s/${shareableLink}`;
 
     return {
@@ -276,19 +224,7 @@ export async function confirmSurveyAction(
         publicUrl,
       },
     };
-  } catch (error) {
-    console.error("[confirmSurveyAction] Failed:", error);
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return { success: false, error: error.message };
-      }
-      return { success: false, error: error.message };
-    }
-    return { success: false, error: "Failed to confirm survey" };
-  }
+  }, "confirmSurveyAction");
 }
 
 /**
@@ -299,7 +235,7 @@ export async function getShareableLinkAction(
 ): Promise<
   ActionResult<{ shareableLink: string; publicUrl: string; isActive: boolean }>
 > {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
 
     const [survey] = await getDb()
@@ -307,21 +243,12 @@ export async function getShareableLinkAction(
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!survey) {
-      return { success: false, error: "Survey not found" };
-    }
+    assertExists(survey, "Survey");
 
     const permission = await getSurveyPermissionForSession(session, survey.id);
-    if (!hasSurveyPermission(permission, "canView")) {
-      return { success: false, error: "Unauthorized" };
-    }
+    assertPermission(hasSurveyPermission(permission, "canView"), "Unauthorized");
 
-    if (!survey.shareableLink) {
-      return {
-        success: false,
-        error: "Survey does not have a shareable link yet",
-      };
-    }
+    assertState(!!survey.shareableLink, "Survey does not have a shareable link yet");
 
     return {
       success: true,
@@ -331,32 +258,17 @@ export async function getShareableLinkAction(
         isActive: survey.status === "active",
       },
     };
-  } catch (error) {
-    console.error("[getShareableLinkAction] Failed:", error);
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return { success: false, error: error.message };
-      }
-      return { success: false, error: error.message };
-    }
-    return { success: false, error: "Failed to get shareable link" };
-  }
+  }, "getShareableLinkAction");
 }
 
 /**
  * Set or update a human-friendly custom slug for a survey
  * (Typeform-style custom URL). Gated by plan entitlements.
  */
-export async function setSurveyCustomSlugAction(input: {
-  surveyId: string;
-  slug: string;
-}): Promise<
+export async function setSurveyCustomSlugAction(input: unknown): Promise<
   ActionResult<{ customSlug: string; publicUrl: string; shareableLink: string }>
 > {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
 
     const schema = z.object({
@@ -371,21 +283,17 @@ export async function setSurveyCustomSlugAction(input: {
         ),
     });
 
-    const body = schema.parse(input);
+    const body = validateInput(input, schema);
 
     const [survey] = await getDb()
       .select()
       .from(surveys)
       .where(eq(surveys.id, body.surveyId));
 
-    if (!survey) {
-      return { success: false, error: "Survey not found" };
-    }
+    assertExists(survey, "Survey");
 
     const permission = await getSurveyPermissionForSession(session, survey.id);
-    if (!hasSurveyPermission(permission, "canEdit")) {
-      return { success: false, error: "Unauthorized" };
-    }
+    assertPermission(hasSurveyPermission(permission, "canEdit"), "Unauthorized");
 
     // Check uniqueness against other surveys' customSlug and shareableLink
     const [conflict] = await getDb()
@@ -401,12 +309,7 @@ export async function setSurveyCustomSlugAction(input: {
         ),
       );
 
-    if (conflict) {
-      return {
-        success: false,
-        error: "This URL is already in use by another survey",
-      };
-    }
+    assertState(!conflict, "This URL is already in use by another survey");
 
     await getDb()
       .update(surveys)
@@ -424,25 +327,7 @@ export async function setSurveyCustomSlugAction(input: {
         shareableLink: survey.shareableLink ?? "",
       },
     };
-  } catch (error) {
-    console.error("[setSurveyCustomSlugAction] Failed:", error);
-    if (error instanceof z.ZodError) {
-      return {
-        success: false,
-        error: error.errors[0]?.message ?? "Validation error",
-      };
-    }
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return { success: false, error: error.message };
-      }
-      return { success: false, error: error.message };
-    }
-    return { success: false, error: "Failed to set custom URL" };
-  }
+  }, "setSurveyCustomSlugAction");
 }
 
 /**
@@ -451,7 +336,7 @@ export async function setSurveyCustomSlugAction(input: {
 export async function clearSurveyCustomSlugAction(
   surveyId: string,
 ): Promise<ActionResult<{ success: boolean }>> {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
 
     const [survey] = await getDb()
@@ -459,14 +344,10 @@ export async function clearSurveyCustomSlugAction(
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!survey) {
-      return { success: false, error: "Survey not found" };
-    }
+    assertExists(survey, "Survey");
 
     const permission = await getSurveyPermissionForSession(session, survey.id);
-    if (!hasSurveyPermission(permission, "canEdit")) {
-      return { success: false, error: "Unauthorized" };
-    }
+    assertPermission(hasSurveyPermission(permission, "canEdit"), "Unauthorized");
 
     await getDb()
       .update(surveys)
@@ -474,19 +355,7 @@ export async function clearSurveyCustomSlugAction(
       .where(eq(surveys.id, survey.id));
 
     return { success: true, data: { success: true } };
-  } catch (error) {
-    console.error("[clearSurveyCustomSlugAction] Failed:", error);
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return { success: false, error: error.message };
-      }
-      return { success: false, error: error.message };
-    }
-    return { success: false, error: "Failed to clear custom URL" };
-  }
+  }, "clearSurveyCustomSlugAction");
 }
 
 /**
@@ -500,7 +369,7 @@ export async function getSurveyPublicUrlsAction(surveyId: string): Promise<
     customUrl: string | null;
   }>
 > {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
 
     const [survey] = await getDb()
@@ -508,14 +377,10 @@ export async function getSurveyPublicUrlsAction(surveyId: string): Promise<
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!survey) {
-      return { success: false, error: "Survey not found" };
-    }
+    assertExists(survey, "Survey");
 
     const permission = await getSurveyPermissionForSession(session, survey.id);
-    if (!hasSurveyPermission(permission, "canView")) {
-      return { success: false, error: "Unauthorized" };
-    }
+    assertPermission(hasSurveyPermission(permission, "canView"), "Unauthorized");
 
     const baseUrl = env.APP_BASE_URL.replace(/\/+$/, "");
 
@@ -536,19 +401,7 @@ export async function getSurveyPublicUrlsAction(surveyId: string): Promise<
         customUrl,
       },
     };
-  } catch (error) {
-    console.error("[getSurveyPublicUrlsAction] Failed:", error);
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return { success: false, error: error.message };
-      }
-      return { success: false, error: error.message };
-    }
-    return { success: false, error: "Failed to get survey URLs" };
-  }
+  }, "getSurveyPublicUrlsAction");
 }
 
 /**
@@ -557,7 +410,7 @@ export async function getSurveyPublicUrlsAction(surveyId: string): Promise<
 export async function deactivateSurveyAction(
   surveyId: string,
 ): Promise<ActionResult<{ id: string }>> {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
 
     const [survey] = await getDb()
@@ -565,18 +418,12 @@ export async function deactivateSurveyAction(
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!survey) {
-      return { success: false, error: "Survey not found" };
-    }
+    assertExists(survey, "Survey");
 
     const permission = await getSurveyPermissionForSession(session, survey.id);
-    if (!hasSurveyPermission(permission, "canEdit")) {
-      return { success: false, error: "Unauthorized" };
-    }
+    assertPermission(hasSurveyPermission(permission, "canEdit"), "Unauthorized");
 
-    if (survey.status !== "active") {
-      return { success: false, error: "Survey is not active" };
-    }
+    assertState(survey.status === "active", "Survey is not active");
 
     await getDb()
       .update(surveys)
@@ -589,19 +436,7 @@ export async function deactivateSurveyAction(
     ]);
 
     return { success: true, data: { id: surveyId } };
-  } catch (error) {
-    console.error("[deactivateSurveyAction] Failed:", error);
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return { success: false, error: error.message };
-      }
-      return { success: false, error: error.message };
-    }
-    return { success: false, error: "Failed to deactivate survey" };
-  }
+  }, "deactivateSurveyAction");
 }
 
 /**
@@ -610,7 +445,7 @@ export async function deactivateSurveyAction(
 export async function reactivateSurveyAction(
   surveyId: string,
 ): Promise<ActionResult<{ id: string }>> {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
 
     const [survey] = await getDb()
@@ -618,26 +453,13 @@ export async function reactivateSurveyAction(
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!survey) {
-      return { success: false, error: "Survey not found" };
-    }
+    assertExists(survey, "Survey");
 
     const permission = await getSurveyPermissionForSession(session, survey.id);
-    if (!hasSurveyPermission(permission, "canEdit")) {
-      return { success: false, error: "Unauthorized" };
-    }
+    assertPermission(hasSurveyPermission(permission, "canEdit"), "Unauthorized");
 
-    if (survey.status !== "completed") {
-      return { success: false, error: "Survey is not completed" };
-    }
-
-    if (survey.currentParticipants >= survey.participantLimit) {
-      return {
-        success: false,
-        error:
-          "Survey has reached participant limit. Increase the limit to reactivate.",
-      };
-    }
+    assertState(survey.status === "completed", "Survey is not completed");
+    assertState(survey.currentParticipants < survey.participantLimit, "Survey has reached participant limit. Increase the limit to reactivate.");
 
     await getDb()
       .update(surveys)
@@ -650,19 +472,7 @@ export async function reactivateSurveyAction(
     ]);
 
     return { success: true, data: { id: surveyId } };
-  } catch (error) {
-    console.error("[reactivateSurveyAction] Failed:", error);
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return { success: false, error: error.message };
-      }
-      return { success: false, error: error.message };
-    }
-    return { success: false, error: "Failed to reactivate survey" };
-  }
+  }, "reactivateSurveyAction");
 }
 
 /**
@@ -672,7 +482,7 @@ export async function reactivateSurveyAction(
 export async function deleteSurveyAction(
   surveyId: string,
 ): Promise<ActionResult<{ id: string }>> {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
 
     const [survey] = await getDb()
@@ -684,36 +494,17 @@ export async function deleteSurveyAction(
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!survey) {
-      return { success: false, error: "Survey not found" };
-    }
+    assertExists(survey, "Survey");
 
     const permission = await getSurveyPermissionForSession(session, surveyId);
-    if (!hasSurveyPermission(permission, "canDelete")) {
-      return {
-        success: false,
-        error: "Unauthorized: Only the survey creator can delete this survey",
-      };
-    }
+    assertPermission(hasSurveyPermission(permission, "canDelete"), "Unauthorized: Only the survey creator can delete this survey");
 
     await getDb().delete(surveys).where(eq(surveys.id, surveyId));
 
     await invalidateDashboardCaches(session.user.id, null);
 
     return { success: true, data: { id: surveyId } };
-  } catch (error) {
-    console.error("[deleteSurveyAction] Failed:", error);
-    if (error instanceof Error) {
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return { success: false, error: error.message };
-      }
-      return { success: false, error: error.message };
-    }
-    return { success: false, error: "Failed to delete survey" };
-  }
+  }, "deleteSurveyAction");
 }
 
 export async function duplicateSurveyAction(
@@ -736,7 +527,7 @@ export async function duplicateSurveyAction(
     };
   }>
 > {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
 
     const [existingSurvey] = await getDb()
@@ -744,20 +535,13 @@ export async function duplicateSurveyAction(
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!existingSurvey) {
-      return { success: false, error: "Survey not found" };
-    }
+    assertExists(existingSurvey, "Survey");
 
     const permission = await getSurveyPermissionForSession(
       session,
       existingSurvey.id,
     );
-    if (!hasSurveyPermission(permission, "canEdit") || !permission.isSurveyCreator) {
-      return {
-        success: false,
-        error: "Unauthorized: Only the creator can duplicate this survey",
-      };
-    }
+    assertPermission(hasSurveyPermission(permission, "canEdit") && permission.isSurveyCreator, "Unauthorized: Only the creator can duplicate this survey");
 
     const newSurveyId = nanoid();
     const now = new Date();
@@ -783,9 +567,7 @@ export async function duplicateSurveyAction(
 
     });
 
-    if (!newSurvey) {
-      return { success: false, error: "Failed to duplicate survey" };
-    }
+    assertState(!!newSurvey, "Failed to duplicate survey");
 
     // Map to frontend format (similar to what GET /api/surveys returns)
     const formattedSurvey = {
@@ -809,14 +591,9 @@ export async function duplicateSurveyAction(
       ["stats", "recentSurveys"],
     );
 
-
-
     return {
       success: true,
       data: { id: newSurveyId, survey: formattedSurvey },
     };
-  } catch (error) {
-    console.error("Error duplicating survey:", error);
-    return { success: false, error: "Failed to duplicate survey" };
-  }
+  }, "duplicateSurveyAction");
 }

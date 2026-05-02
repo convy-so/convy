@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getVerifiedSession } from "@/lib/auth/session";
 import { assertAiOpsUser } from "@/lib/auth/expert";

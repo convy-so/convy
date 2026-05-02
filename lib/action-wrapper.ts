@@ -10,9 +10,23 @@ import { createLogger, serializeError } from "@/lib/logger";
 const log = createLogger("action");
 
 
-export type ActionResult<T> =
+export type ActionErrorCode = 
+  | "UNAUTHORIZED" 
+  | "FORBIDDEN" 
+  | "NOT_FOUND" 
+  | "VALIDATION_ERROR" 
+  | "RATE_LIMIT_EXCEEDED" 
+  | "INTERNAL_ERROR";
+
+export type ActionErrorPayload = {
+  code: ActionErrorCode | string;
+  message?: string;
+  details?: Record<string, string[] | undefined>;
+};
+
+export type ActionResult<T = void> =
   | { success: true; data: T }
-  | { success: false; error: string };
+  | { success: false; error: ActionErrorPayload };
 
 /**
  * Standard error types that can be thrown in actions
@@ -64,15 +78,6 @@ export class RateLimitError extends ActionError {
  * @param handler - The action handler function
  * @param context - Context name for logging (e.g., "updateSurveyAction")
  * @returns Promise resolving to ActionResult
- * 
- * @example
- * export async function updateSurveyAction(input) {
- *   return withErrorHandling(async () => {
- *     const session = await getVerifiedSession();
- *     // ... business logic
- *     return { success: true, data: result };
- *   }, "updateSurveyAction");
- * }
  */
 export async function withErrorHandling<T>(
   handler: () => Promise<ActionResult<T>>,
@@ -96,10 +101,13 @@ export async function withErrorHandling<T>(
 
     // Handle Zod validation errors
     if (error instanceof z.ZodError) {
-      const firstError = error.errors[0];
       return {
         success: false,
-        error: firstError?.message ?? "Validation error",
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Validation failed",
+          details: error.flatten().fieldErrors
+        }
       };
     }
 
@@ -107,7 +115,10 @@ export async function withErrorHandling<T>(
     if (error instanceof ActionError) {
       return {
         success: false,
-        error: error.message,
+        error: {
+          code: error.code,
+          message: error.message
+        }
       };
     }
 
@@ -118,20 +129,32 @@ export async function withErrorHandling<T>(
         error.message === "UNAUTHENTICATED" ||
         error.message === "EMAIL_NOT_VERIFIED"
       ) {
-        return { success: false, error: error.message };
+        return { 
+          success: false, 
+          error: { code: "UNAUTHORIZED", message: error.message }
+        };
       }
 
       // Rate limit errors
       if (error.message.startsWith("AI_RATE_LIMIT_EXCEEDED")) {
-        return { success: false, error: error.message };
+        return { 
+          success: false, 
+          error: { code: "RATE_LIMIT_EXCEEDED", message: error.message }
+        };
       }
 
-      // Generic error message
-      return { success: false, error: error.message };
+      // Generic error message (consider hiding this message in production if it exposes internals)
+      return { 
+        success: false, 
+        error: { code: "INTERNAL_ERROR", message: error.message }
+      };
     }
 
     // Unknown error type
-    return { success: false, error: `${context} failed` };
+    return { 
+      success: false, 
+      error: { code: "INTERNAL_ERROR", message: `${context} failed` }
+    };
   }
 }
 

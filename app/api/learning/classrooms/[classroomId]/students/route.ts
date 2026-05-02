@@ -78,7 +78,7 @@ export async function POST(
         classroomId,
         students: bulkInvite.data.students,
       });
-      if (!result.success) return apiError("VALIDATION_ERROR", result.error);
+      if (!result.success) return apiError("VALIDATION_ERROR", result.error.message || "Failed to invite students", { details: result.error.details });
       return NextResponse.json(result);
     }
 
@@ -89,7 +89,7 @@ export async function POST(
         fullName: singleInvite.data.fullName,
         email: singleInvite.data.email,
       });
-      if (!result.success) return apiError("VALIDATION_ERROR", result.error);
+      if (!result.success) return apiError("VALIDATION_ERROR", result.error.message || "Failed to invite student", { details: result.error.details });
       return NextResponse.json(result);
     }
 

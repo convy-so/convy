@@ -23,14 +23,14 @@ export async function POST(
     if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
     const permission = await getSurveyPermissionForSession(session, surveyId);
     if (!hasSurveyPermission(permission, "canEdit")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
-    if (survey.status !== "creating") { return apiError("VALIDATION_ERROR", "Survey has already been finalized", { survey }); }
+    if (survey.status !== "creating") { return apiError("VALIDATION_ERROR", "Survey has already been finalized", { details: { survey } }); }
 
     const [briefRow, planRow] = await Promise.all([
       getResearchBrief(surveyId),
       getActiveCoveragePlan(surveyId),
     ]);
     if (!briefRow || !planRow) { return apiError("VALIDATION_ERROR", "The education brief is not ready yet."); }
-    if (briefRow.missingFields.length > 0) { return apiError("VALIDATION_ERROR", "The brief is incomplete.", { missingFields: briefRow.missingFields }); }
+    if (briefRow.missingFields.length > 0) { return apiError("VALIDATION_ERROR", "The brief is incomplete.", { details: { missingFields: briefRow.missingFields } }); }
 
     const [updatedSurvey] = await getDb()
       .update(surveys)

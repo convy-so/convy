@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 
 import { createExpertFewShotExample } from "@/app/actions/ai-ops";
+import { getFriendlyActionError } from "@/lib/action-ux";
 
 type FewShotExample = {
   id: string;
@@ -59,11 +60,16 @@ export function FewShotManager({ initialExamples }: FewShotManagerProps) {
         return;
       }
 
-      await createExpertFewShotExample({
+      const result = await createExpertFewShotExample({
         feature,
         tags,
         content: parsedContent,
       });
+
+      if (!result.success) {
+        toast.error(getFriendlyActionError(result.error));
+        return;
+      }
 
       toast.success("Few-shot example created");
       setIsAdding(false);

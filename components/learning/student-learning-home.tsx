@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import Image from "next/image";
 import { type UIMessage } from "ai";
 import {
-  ArrowRight,
   BookOpen,
   Brain,
   ClipboardList,
@@ -23,9 +23,7 @@ import { useAudioTranscription } from "@/hooks/use-audio-transcription";
 import {
   appLocaleLabels,
   appLocales,
-  type AppLocale,
 } from "@/lib/i18n/config";
-import { GlassPanel } from "@/components/learning/glass-panel";
 import { useStudentLearningWorkspace } from "@/components/learning/hooks/use-student-learning-workspace";
 import { MetricTile } from "@/components/learning/metric-tile";
 import type { LearningMeData } from "@/lib/api/learning";
@@ -113,8 +111,6 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
     availableSurveys,
     setSelectedTopicId,
     effectiveSelectedTopicId,
-    onboardingQuery,
-    patternsQuery,
     tutoringSessionQuery,
     onboardingChatMessages,
     sendOnboardingMessage,
@@ -128,8 +124,6 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
     setOutOfSessionReply,
     selectedTopic,
     currentStageId,
-    completedPhaseCount,
-    conceptCount,
     patterns,
     strongestPattern,
     membershipCount,
@@ -474,7 +468,7 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
                                   <h4 className="text-base font-medium text-slate-900">{media.title}</h4>
                                   <div className="overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
                                     {media.assetType === "image" 
-                                      ? <img src={media.mediaUrl} className="w-full h-auto object-cover max-h-[450px]" alt={media.title} /> 
+                                      ? <Image src={media.mediaUrl} width={800} height={450} className="w-full h-auto object-cover max-h-[450px]" alt={media.title} /> 
                                       : <video controls className="w-full h-auto max-h-[450px] bg-black"><source src={media.mediaUrl} /></video>
                                     }
                                   </div>

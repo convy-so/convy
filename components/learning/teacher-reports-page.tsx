@@ -5,7 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   FileText,
-  GraduationCap,
   Loader2,
   Sparkles,
   ChevronDown,

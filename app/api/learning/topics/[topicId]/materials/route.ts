@@ -40,7 +40,7 @@ export async function GET(
       }),
     );
     if (!rateLimitResult.success) {
-      return apiError("TOO_MANY_REQUESTS", "Rate limit exceeded");
+      return apiError("RATE_LIMITED", "Rate limit exceeded");
     }
 
     const { topicId } = await params;

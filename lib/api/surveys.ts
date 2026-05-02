@@ -3,6 +3,7 @@
  */
 
 import { z } from "zod";
+import { getFriendlyActionError } from "@/lib/action-ux";
 
 export class SurveyApiError extends Error {
   constructor(
@@ -28,8 +29,8 @@ async function getErrorMessage(
     const payload = await response.json().catch(() => null);
 
     if (isRecord(payload)) {
-      if (typeof payload.error === "string") {
-        return payload.error;
+      if ("error" in payload) {
+        return getFriendlyActionError(payload.error);
       }
 
       if (typeof payload.message === "string") {

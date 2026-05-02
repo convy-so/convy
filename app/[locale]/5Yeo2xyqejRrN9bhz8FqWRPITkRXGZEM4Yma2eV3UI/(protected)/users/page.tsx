@@ -26,17 +26,17 @@ export default async function AdminUsersPage({ params }: { params: Promise<{ loc
 
 async function AdminUsersContent() {
     const cookieHeader = (await headers()).get("cookie");
-    let userGrowth: Awaited<ReturnType<typeof getUserGrowthData>> = [];
-    try {
-        userGrowth = await getUserGrowthData(cookieHeader);
-    } catch (error) {
-        console.error("[AdminUsers] Failed to load user growth data:", error);
+    const result = await getUserGrowthData(cookieHeader);
+
+    if (!result.success) {
         return (
             <div className="rounded-2xl border border-red-100 bg-red-50 p-6 text-sm text-red-600">
                 Failed to load user data. Please refresh to try again.
             </div>
         );
     }
+
+    const userGrowth = result.data;
 
     const chartData = userGrowth.map((ug) => {
         const date = typeof ug.date === "string" ? ug.date : "";

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { eq } from "drizzle-orm";

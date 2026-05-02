@@ -1,10 +1,7 @@
 "use server";
 
 import { z } from "zod";
-
-type ActionResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string };
+import { ActionResult } from "@/lib/action-wrapper";
 
 const SURVEY_MEDIA_DISABLED_ERROR =
   "Survey media has been removed from creation, rehearsal, and respondent flows.";
@@ -67,26 +64,26 @@ export async function uploadSurveyMediaAction(
 ): Promise<ActionResult<{ mediaId: string; media: SurveyMediaItem }>> {
   void uploadSurveyMediaSchema;
   void formData;
-  return { success: false, error: SURVEY_MEDIA_DISABLED_ERROR };
+  return { success: false, error: { code: "FORBIDDEN", message: SURVEY_MEDIA_DISABLED_ERROR } };
 }
 
 export async function addSurveyMediaAction(
-  input: z.infer<typeof addSurveyMediaSchema>,
+  input: unknown,
 ): Promise<ActionResult<{ mediaId: string }>> {
   void input;
-  return { success: false, error: SURVEY_MEDIA_DISABLED_ERROR };
+  return { success: false, error: { code: "FORBIDDEN", message: SURVEY_MEDIA_DISABLED_ERROR } };
 }
 
 export async function updateSurveyMediaAction(
-  input: z.infer<typeof updateSurveyMediaSchema>,
+  input: unknown,
 ): Promise<ActionResult<{ media: unknown }>> {
   void input;
-  return { success: false, error: SURVEY_MEDIA_DISABLED_ERROR };
+  return { success: false, error: { code: "FORBIDDEN", message: SURVEY_MEDIA_DISABLED_ERROR } };
 }
 
 export async function removeSurveyMediaAction(
-  input: z.infer<typeof removeSurveyMediaSchema>,
+  input: unknown,
 ): Promise<ActionResult<{ success: boolean }>> {
   void input;
-  return { success: false, error: SURVEY_MEDIA_DISABLED_ERROR };
+  return { success: false, error: { code: "FORBIDDEN", message: SURVEY_MEDIA_DISABLED_ERROR } };
 }

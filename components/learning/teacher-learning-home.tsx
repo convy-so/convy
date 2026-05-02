@@ -4,18 +4,15 @@ import { useState, useRef, useEffect } from "react";
 import {
   ArrowUpRight,
   BookOpen,
-  CheckCircle2,
   FileText,
   GraduationCap,
   Loader2,
-  Lock,
   Layout,
   Sparkles,
   UploadCloud,
   Users,
   Plus,
   PlusIcon,
-  Search,
   ChevronDown,
   Check,
 } from "lucide-react";
@@ -28,14 +25,9 @@ import { useTeacherLearningWorkspace } from "@/components/learning/hooks/use-tea
 import { InviteStudentModal } from "@/components/learning/invite-student-modal";
 import { LogInterventionModal } from "@/components/learning/log-intervention-modal";
 import { StatsCard } from "@/components/dashboard/stats-card";
-import { GlassPanel } from "@/components/learning/glass-panel";
 
 function countReadyTopics(statuses: string[]) {
   return statuses.filter((status) => status === "active").length;
-}
-
-function accessMeta() {
-  return { label: "Owner", tone: "border-emerald-100 bg-emerald-50 text-emerald-600" };
 }
 
 function formatInterventionTypeLabel(value: string) {

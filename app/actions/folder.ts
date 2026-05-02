@@ -9,9 +9,12 @@ import { folders, surveys, surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { invalidateDashboardCaches } from "@/lib/cache";
 
-type ActionResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string };
+import {
+  withErrorHandling,
+  ActionResult,
+  validateInput,
+  ActionError
+} from "@/lib/action-wrapper";
 
 const createFolderSchema = z.object({
   name: z.string().min(1).max(50),
@@ -68,11 +71,11 @@ async function requireOwnedFolder(userId: string, folderId: string) {
 }
 
 export async function createFolderAction(
-  input: z.infer<typeof createFolderSchema>,
+  input: unknown,
 ): Promise<ActionResult<{ id: string }>> {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
-    const body = createFolderSchema.parse(input);
+    const body = validateInput(input, createFolderSchema);
     const folderId = nanoid();
 
     await getDb().insert(folders).values({
@@ -90,17 +93,11 @@ export async function createFolderAction(
     ]);
 
     return { success: true, data: { id: folderId } };
-  } catch (error) {
-    console.error("[createFolderAction] Failed:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to create folder",
-    };
-  }
+  }, "createFolderAction");
 }
 
 export async function getFoldersAction(): Promise<ActionResult<FolderListItem[]>> {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
 
     const folderList = await getDb()
@@ -124,19 +121,16 @@ export async function getFoldersAction(): Promise<ActionResult<FolderListItem[]>
         ...personalFolderPermissions,
       })),
     };
-  } catch (error) {
-    console.error("[getFoldersAction] Failed:", error);
-    return { success: false, error: "Failed to fetch folders" };
-  }
+  }, "getFoldersAction");
 }
 
 export async function getFolderAction(id: string): Promise<ActionResult<FolderDetail>> {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
     const folder = await requireOwnedFolder(session.user.id, id);
 
     if (!folder) {
-      return { success: false, error: "Folder not found" };
+      throw new ActionError("Folder not found", "NOT_FOUND");
     }
 
     const folderSurveys = await getDb()
@@ -167,22 +161,19 @@ export async function getFolderAction(id: string): Promise<ActionResult<FolderDe
         })),
       },
     };
-  } catch (error) {
-    console.error("[getFolderAction] Failed:", error);
-    return { success: false, error: "Failed to fetch folder" };
-  }
+  }, "getFolderAction");
 }
 
 export async function addSurveyToFolderAction(
   folderId: string,
   surveyId: string,
 ): Promise<ActionResult<void>> {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
     const folder = await requireOwnedFolder(session.user.id, folderId);
 
     if (!folder) {
-      return { success: false, error: "Folder not found" };
+      throw new ActionError("Folder not found", "NOT_FOUND");
     }
 
     const [survey] = await getDb()
@@ -191,7 +182,7 @@ export async function addSurveyToFolderAction(
       .where(and(eq(surveys.id, surveyId), eq(surveys.userId, session.user.id)));
 
     if (!survey) {
-      return { success: false, error: "Survey not found" };
+      throw new ActionError("Survey not found", "NOT_FOUND");
     }
 
     await getDb()
@@ -205,22 +196,19 @@ export async function addSurveyToFolderAction(
     ]);
 
     return { success: true, data: undefined };
-  } catch (error) {
-    console.error("[addSurveyToFolderAction] Failed:", error);
-    return { success: false, error: "Failed to add survey to folder" };
-  }
+  }, "addSurveyToFolderAction");
 }
 
 export async function removeSurveyFromFolderAction(
   folderId: string,
   surveyId: string,
 ): Promise<ActionResult<void>> {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
     const folder = await requireOwnedFolder(session.user.id, folderId);
 
     if (!folder) {
-      return { success: false, error: "Folder not found" };
+      throw new ActionError("Folder not found", "NOT_FOUND");
     }
 
     const [survey] = await getDb()
@@ -235,7 +223,7 @@ export async function removeSurveyFromFolderAction(
       );
 
     if (!survey) {
-      return { success: false, error: "Survey not found in this folder" };
+      throw new ActionError("Survey not found in this folder", "NOT_FOUND");
     }
 
     await getDb()
@@ -249,22 +237,19 @@ export async function removeSurveyFromFolderAction(
     ]);
 
     return { success: true, data: undefined };
-  } catch (error) {
-    console.error("[removeSurveyFromFolderAction] Failed:", error);
-    return { success: false, error: "Failed to remove survey from folder" };
-  }
+  }, "removeSurveyFromFolderAction");
 }
 
 export async function updateFolderAction(
-  input: z.infer<typeof updateFolderSchema>,
+  input: unknown,
 ): Promise<ActionResult<{ id: string }>> {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
-    const body = updateFolderSchema.parse(input);
+    const body = validateInput(input, updateFolderSchema);
     const folder = await requireOwnedFolder(session.user.id, body.id);
 
     if (!folder) {
-      return { success: false, error: "Folder not found" };
+      throw new ActionError("Folder not found", "NOT_FOUND");
     }
 
     const updateData: Partial<typeof folders.$inferInsert> = {};
@@ -284,21 +269,18 @@ export async function updateFolderAction(
     ]);
 
     return { success: true, data: { id: body.id } };
-  } catch (error) {
-    console.error("[updateFolderAction] Failed:", error);
-    return { success: false, error: "Failed to update folder" };
-  }
+  }, "updateFolderAction");
 }
 
 export async function deleteFolderAction(
   id: string,
 ): Promise<ActionResult<void>> {
-  try {
+  return withErrorHandling(async () => {
     const session = await getVerifiedSession();
     const folder = await requireOwnedFolder(session.user.id, id);
 
     if (!folder) {
-      return { success: false, error: "Folder not found" };
+      throw new ActionError("Folder not found", "NOT_FOUND");
     }
 
     await getDb().transaction(async (tx) => {
@@ -316,8 +298,5 @@ export async function deleteFolderAction(
     ]);
 
     return { success: true, data: undefined };
-  } catch (error) {
-    console.error("[deleteFolderAction] Failed:", error);
-    return { success: false, error: "Failed to delete folder" };
-  }
+  }, "deleteFolderAction");
 }

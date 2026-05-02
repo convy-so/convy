@@ -10,6 +10,7 @@ import {
   Save,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { getFriendlyActionError } from "@/lib/action-ux";
 
 type AssetPack = {
   id: string;
@@ -42,9 +43,15 @@ async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
-  const payload = (await response.json()) as { error?: string } & T;
-  if (!response.ok) throw new Error(payload.error ?? "Request failed");
-  return payload;
+  const payload: unknown = await response.json();
+  if (!response.ok) {
+    let errorMessage = "Request failed";
+    if (payload && typeof payload === "object" && "error" in payload) {
+      errorMessage = getFriendlyActionError((payload as { error: unknown }).error) || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
+  return payload as T;
 }
 
 const SUBJECT_OPTIONS = [

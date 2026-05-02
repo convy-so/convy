@@ -4,14 +4,28 @@ import {
   listExpertGuidanceSummary,
 } from "@/app/actions/ai-ops";
 
-type GuidancePackSummary = Awaited<ReturnType<typeof listExpertGuidanceSummary>>[number];
+type GuidancePackSummary = Extract<Awaited<ReturnType<typeof listExpertGuidanceSummary>>, { success: true }>["data"][number];
 
 export async function AiOpsDashboard() {
   const reqHeaders = await headers();
-  const [overview, guidancePacks] = await Promise.all([
+  const [overviewResult, guidancePacksResult] = await Promise.all([
     getAiOpsOverview(reqHeaders),
     listExpertGuidanceSummary(reqHeaders),
   ]);
+
+  if (!overviewResult.success || !guidancePacksResult.success) {
+    return (
+      <div className="rounded-2xl border border-rose-100 bg-rose-50 p-8 text-center text-rose-900">
+        <h2 className="text-lg font-bold">Failed to load dashboard</h2>
+        <p className="mt-2 text-sm opacity-80">
+          Please ensure you have sufficient permissions and try again.
+        </p>
+      </div>
+    );
+  }
+
+  const overview = overviewResult.data;
+  const guidancePacks = guidancePacksResult.data;
 
   return (
     <div className="space-y-8">

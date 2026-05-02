@@ -9,6 +9,6 @@ export async function GET(
 ) {
   const { classroomId } = await params;
   const result = await getClassroomAssignedSurveyProgressAction(classroomId);
-  if (!result.success) return apiError("INTERNAL_ERROR", result.error);
+  if (!result.success) return apiError("INTERNAL_ERROR", result.error.message || "Failed to get survey progress");
   return NextResponse.json(result);
 }

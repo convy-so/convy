@@ -6,14 +6,14 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { eq, desc, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import type { ActionResult } from "@/lib/action-wrapper";
+import { ActionResult, withErrorHandling, UnauthorizedError, NotFoundError } from "@/lib/action-wrapper";
 
 type NotificationRecord = typeof notifications.$inferSelect;
 
 export async function getNotifications(): Promise<ActionResult<NotificationRecord[]>> {
-    try {
+    return withErrorHandling(async () => {
         const session = await auth.api.getSession({ headers: await headers() });
-        if (!session) return { success: false, error: "Unauthorized" };
+        if (!session) throw new UnauthorizedError();
 
         const userNotifications = await getDb().query.notifications.findMany({
             where: eq(notifications.userId, session.user.id),
@@ -25,19 +25,13 @@ export async function getNotifications(): Promise<ActionResult<NotificationRecor
             success: true,
             data: userNotifications,
         };
-    } catch (error) {
-        console.error("[getNotifications] Error fetching notifications:", error);
-        return {
-            success: false,
-            error: "Failed to get notifications",
-        };
-    }
+    }, "getNotifications");
 }
 
 export async function markNotificationAsRead(id: string): Promise<ActionResult<void>> {
-    try {
+    return withErrorHandling(async () => {
         const session = await auth.api.getSession({ headers: await headers() });
-        if (!session) return { success: false, error: "Unauthorized" };
+        if (!session) throw new UnauthorizedError();
 
         const updatedRows = await getDb()
             .update(notifications)
@@ -46,14 +40,11 @@ export async function markNotificationAsRead(id: string): Promise<ActionResult<v
             .returning({ id: notifications.id });
 
         if (updatedRows.length === 0) {
-            return { success: false, error: "Notification not found" };
+            throw new NotFoundError("Notification");
         }
 
         return { success: true, data: undefined };
-    } catch (error) {
-        console.error("[markNotificationAsRead] Error marking notification as read:", error);
-        return { success: false, error: "Failed to mark as read" };
-    }
+    }, "markNotificationAsRead");
 }
 
 export async function createNotification(
@@ -63,7 +54,7 @@ export async function createNotification(
     type: "info" | "success" | "warning" | "error" = "info",
     link?: string,
 ): Promise<ActionResult<void>> {
-    try {
+    return withErrorHandling(async () => {
         await getDb().insert(notifications).values({
             id: nanoid(),
             userId,
@@ -74,8 +65,5 @@ export async function createNotification(
             createdAt: new Date(),
         });
         return { success: true, data: undefined };
-    } catch (error) {
-        console.error("[createNotification] Failed:", error);
-        return { success: false, error: "Failed to create notification" };
-    }
+    }, "createNotification");
 }

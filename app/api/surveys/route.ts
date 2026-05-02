@@ -126,7 +126,7 @@ export async function POST(request: Request) {
     if (!rawBody) { return apiError("VALIDATION_ERROR", "Invalid request body"); }
 
     const validationResult = createSurveySchema.safeParse(rawBody);
-    if (!validationResult.success) { return apiError("VALIDATION_ERROR", "Validation failed", { details: validationResult.error.errors[0]?.message }); }
+    if (!validationResult.success) { return apiError("VALIDATION_ERROR", "Validation failed", { details: { message: validationResult.error.errors[0]?.message } }); }
 
     const body = validationResult.data;
     const surveyId = nanoid();
@@ -154,10 +154,10 @@ export async function POST(request: Request) {
 
     const isVoice = body.isVoice;
     if (existingSurveys.length >= SURVEY_LIMITS.MAX_SURVEYS_PER_SCOPE) {
-      return apiError("FORBIDDEN", `Limit reached: You can only have ${SURVEY_LIMITS.MAX_SURVEYS_PER_SCOPE} surveys in your account`);
+      return apiError("UNAUTHORIZED", `Limit reached: You can only have ${SURVEY_LIMITS.MAX_SURVEYS_PER_SCOPE} surveys in your account`);
     }
     if (isVoice && existingSurveys.filter((item) => item.isVoice).length >= SURVEY_LIMITS.MAX_VOICE_SURVEYS_PER_SCOPE) {
-      return apiError("FORBIDDEN", `Limit reached: You can only have ${SURVEY_LIMITS.MAX_VOICE_SURVEYS_PER_SCOPE} voice surveys in your account`);
+      return apiError("UNAUTHORIZED", `Limit reached: You can only have ${SURVEY_LIMITS.MAX_VOICE_SURVEYS_PER_SCOPE} voice surveys in your account`);
     }
 
     const greeting = buildCreationGreeting(language);
@@ -218,7 +218,7 @@ export async function POST(request: Request) {
       ],
     });
   } catch (error) {
-    if (error instanceof z.ZodError) { return apiError("VALIDATION_ERROR", "Validation failed", { details: error.errors[0]?.message }); } if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Internal server error", "/api/surveys:post");
+    if (error instanceof z.ZodError) { return apiError("VALIDATION_ERROR", "Validation failed", { details: { message: error.errors[0]?.message } }); } if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Internal server error", "/api/surveys:post");
   }
 }
 

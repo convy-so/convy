@@ -139,7 +139,7 @@ export async function POST(
       typeof body.expectedRevision === "number" &&
       body.expectedRevision !== currentRevision
     ) {
-      return apiError("CONFLICT", "REVISION_CONFLICT", { currentRevision });
+      return apiError("CONFLICT", "REVISION_CONFLICT", { details: { currentRevision } });
     }
 
     const leaseResult = await ensureCreationLease({

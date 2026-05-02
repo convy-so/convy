@@ -23,7 +23,7 @@ export async function GET(request: Request) {
       topicId,
       classroomStudentId,
     });
-    if (!result.success) return apiError("INTERNAL_ERROR", result.error);
+    if (!result.success) return apiError("INTERNAL_ERROR", result.error.message || "Failed to load interventions", { details: result.error.details });
     return NextResponse.json(result);
   } catch (error) {
     return apiUnhandledError(error, "Failed to load interventions", "/api/learning/interventions");
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
         typeof createLearningInterventionAction
       >[0],
     );
-    if (!result.success) return apiError("VALIDATION_ERROR", result.error);
+    if (!result.success) return apiError("VALIDATION_ERROR", result.error.message || "Failed to create intervention", { details: result.error.details });
     return NextResponse.json(result);
   } catch (error) {
     return apiUnhandledError(error, "Failed to create intervention", "/api/learning/interventions");

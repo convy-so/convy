@@ -3,13 +3,13 @@
 import { Link, usePathname, useRouter } from "@/i18n/routing";
 import {
     LayoutDashboard,
-    MessageSquare,
     Users,
     LogOut,
     Database,
     ShieldCheck,
     Inbox,
     UserCog2,
+    MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";

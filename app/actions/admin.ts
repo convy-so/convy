@@ -3,13 +3,101 @@
 import { getDb } from "@/db";
 import { users, sessions } from "@/db/schema/auth";
 import { usageLogs } from "@/db/schema/billing";
-import { surveys } from "@/db/schema/surveys";
+import { surveys, surveyCreationConversations, surveyBriefs } from "@/db/schema/surveys";
 import { platformFeedback } from "@/db/schema/feedback";
 import { classroomStudents, classrooms, learningTopics, learningSessions } from "@/db/schema/learning";
 import { sql, eq, gte, desc, count, sum } from "drizzle-orm";
 import { headers } from "next/headers";
 
 import { resolveAdminSessionEmail } from "@/lib/admin/session";
+import { withErrorHandling, ActionResult, UnauthorizedError, ActionError } from "@/lib/action-wrapper";
+
+export type AdminStats = {
+  totalUsers: number;
+  totalSurveys: number;
+  totalTopics: number;
+  totalClassrooms: number;
+  totalLearningSessions: number;
+  totalUsageCost: string;
+  activeSessions: number;
+  newUsersLast30Days: number;
+};
+
+export type UserGrowthData = {
+  date: string;
+  count: number;
+};
+
+export type UsageCostData = {
+  date: string;
+  cost: number;
+};
+
+export type UsageTypeBreakdown = {
+  type: string | null;
+  totalCost: string | null;
+  count: number;
+};
+
+export type SurveyWithUser = {
+  id: string;
+  title: string;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+  user: {
+    id: string;
+    name: string | null;
+    email: string;
+  };
+};
+
+export type PlatformFeedbackItem = {
+  id: string;
+  createdAt: Date;
+  updatedAt: Date;
+  submitterRole: string;
+  kind: string;
+  sourceArea: string;
+  status: string;
+  subject: string;
+  message: string;
+  contactEmail: string | null;
+  // The DB column is jsonb which can be null; the type must reflect that.
+  metadata: Record<string, unknown> | null;
+  userId: string | null;
+  userName: string | null;
+  userEmail: string | null;
+  classroomStudentId: string | null;
+  classroomStudentName: string | null;
+  classroomStudentEmail: string | null;
+};
+
+// Shape of a survey fetched with its related user, creation conversation, and brief.
+// Derived from Drizzle's $inferSelect so it always stays in sync with the schema.
+export type SurveyReviewDetails = (typeof surveys)["$inferSelect"] & {
+  user: (typeof users)["$inferSelect"] | null;
+  creationConversation: (typeof surveyCreationConversations)["$inferSelect"] | null;
+  brief: (typeof surveyBriefs)["$inferSelect"] | null;
+};
+
+// Runtime mappers for raw SQL execute() results.
+// getDb().execute() always returns Record<string, unknown>[] for rows regardless
+// of the sql<T> generic — the generic is only used by the Drizzle query builder,
+// not by execute(). These mappers safely extract and coerce each field.
+function toUserGrowthData(rows: Record<string, unknown>[]): UserGrowthData[] {
+  return rows.map((row) => ({
+    date: typeof row.date === "string" ? row.date : String(row.date ?? ""),
+    count: typeof row.count === "number" ? row.count : Number(row.count ?? 0),
+  }));
+}
+
+function toUsageCostData(rows: Record<string, unknown>[]): UsageCostData[] {
+  return rows.map((row) => ({
+    date: typeof row.date === "string" ? row.date : String(row.date ?? ""),
+    cost: typeof row.cost === "number" ? row.cost : Number(row.cost ?? 0),
+  }));
+}
 
 async function checkAdmin(authHeaders?: Headers | string | null) {
   let finalHeaders: Headers;
@@ -26,20 +114,20 @@ async function checkAdmin(authHeaders?: Headers | string | null) {
   const cookieStr = finalHeaders.get("cookie") || "";
   const email = await resolveAdminSessionEmail(cookieStr);
   if (!email) {
-    throw new Error("Unauthorized: Admin access required");
+    throw new UnauthorizedError("Admin access required");
   }
 
   return { email };
 }
 
-export async function getAdminStats(authHeaders?: Headers | string | null) {
-  await checkAdmin(authHeaders);
+export async function getAdminStats(authHeaders?: Headers | string | null): Promise<ActionResult<AdminStats>> {
+  return withErrorHandling(async () => {
+    await checkAdmin(authHeaders);
 
-  const now = new Date();
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(now.getDate() - 30);
+    const now = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(now.getDate() - 30);
 
-  try {
     const [
       totalUsers,
       totalSurveys,
@@ -67,28 +155,28 @@ export async function getAdminStats(authHeaders?: Headers | string | null) {
     ]);
 
     return {
-      totalUsers: totalUsers[0].count,
-      totalSurveys: totalSurveys[0].count,
-      totalTopics: totalTopics[0].count,
-      totalClassrooms: totalClassrooms[0].count,
-      totalLearningSessions: totalLearningSessions[0].count,
-      totalUsageCost: totalUsageCost[0].total || "0",
-      activeSessions: activeSessions[0].count,
-      newUsersLast30Days: newUsersLast30Days[0].count,
+      success: true,
+      data: {
+        totalUsers: totalUsers[0].count,
+        totalSurveys: totalSurveys[0].count,
+        totalTopics: totalTopics[0].count,
+        totalClassrooms: totalClassrooms[0].count,
+        totalLearningSessions: totalLearningSessions[0].count,
+        totalUsageCost: totalUsageCost[0].total || "0",
+        activeSessions: activeSessions[0].count,
+        newUsersLast30Days: newUsersLast30Days[0].count,
+      }
     };
-  } catch (error) {
-    console.error("[Admin] getAdminStats failed:", error);
-    throw new Error("Failed to fetch admin statistics");
-  }
+  }, "getAdminStats");
 }
 
-export async function getUserGrowthData(authHeaders?: Headers | string | null) {
-  await checkAdmin(authHeaders);
+export async function getUserGrowthData(authHeaders?: Headers | string | null): Promise<ActionResult<UserGrowthData[]>> {
+  return withErrorHandling(async () => {
+    await checkAdmin(authHeaders);
 
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  try {
     const results = await getDb().execute(
       sql<{ date: string; count: number }>`
       SELECT
@@ -100,20 +188,17 @@ export async function getUserGrowthData(authHeaders?: Headers | string | null) {
       ORDER BY date ASC
     `,
     );
-    return results.rows;
-  } catch (error) {
-    console.error("[Admin] getUserGrowthData failed:", error);
-    throw new Error("Failed to fetch user growth data");
-  }
+    return { success: true, data: toUserGrowthData(results.rows) };
+  }, "getUserGrowthData");
 }
 
-export async function getUsageCostData(authHeaders?: Headers | string | null) {
-  await checkAdmin(authHeaders);
+export async function getUsageCostData(authHeaders?: Headers | string | null): Promise<ActionResult<UsageCostData[]>> {
+  return withErrorHandling(async () => {
+    await checkAdmin(authHeaders);
 
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  try {
     const results = await getDb().execute(
       sql<{ date: string; cost: number }>`
       SELECT
@@ -125,20 +210,17 @@ export async function getUsageCostData(authHeaders?: Headers | string | null) {
       ORDER BY date ASC
     `,
     );
-    return results.rows;
-  } catch (error) {
-    console.error("[Admin] getUsageCostData failed:", error);
-    throw new Error("Failed to fetch usage cost data");
-  }
+    return { success: true, data: toUsageCostData(results.rows) };
+  }, "getUsageCostData");
 }
 
 export async function getUsageTypeBreakdown(
   authHeaders?: Headers | string | null,
-) {
-  await checkAdmin(authHeaders);
+): Promise<ActionResult<UsageTypeBreakdown[]>> {
+  return withErrorHandling(async () => {
+    await checkAdmin(authHeaders);
 
-  try {
-    return await getDb()
+    const data = await getDb()
       .select({
         type: usageLogs.type,
         totalCost: sum(usageLogs.cost),
@@ -146,25 +228,23 @@ export async function getUsageTypeBreakdown(
       })
       .from(usageLogs)
       .groupBy(usageLogs.type);
-  } catch (error) {
-    console.error("[Admin] getUsageTypeBreakdown failed:", error);
-    throw new Error("Failed to fetch usage breakdown");
-  }
+    return { success: true, data };
+  }, "getUsageTypeBreakdown");
 }
 
 export async function getSurveysForFeedback(
   authHeaders?: Headers | string | null,
   page = 1,
   limit = 20,
-) {
-  await checkAdmin(authHeaders);
+): Promise<ActionResult<SurveyWithUser[]>> {
+  return withErrorHandling(async () => {
+    await checkAdmin(authHeaders);
 
-  const safePage = Math.max(1, page);
-  const safeLimit = Math.min(100, Math.max(1, limit));
-  const offset = (safePage - 1) * safeLimit;
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.min(100, Math.max(1, limit));
+    const offset = (safePage - 1) * safeLimit;
 
-  try {
-    return await getDb().query.surveys.findMany({
+    const data = await getDb().query.surveys.findMany({
       orderBy: [desc(surveys.createdAt)],
       limit: safeLimit,
       offset,
@@ -172,24 +252,22 @@ export async function getSurveysForFeedback(
         user: true,
       },
     });
-  } catch (error) {
-    console.error("[Admin] getSurveysForFeedback failed:", error);
-    throw new Error("Failed to fetch surveys for review");
-  }
+    return { success: true, data };
+  }, "getSurveysForFeedback");
 }
 
 export async function getSurveyReviewDetails(
   surveyId: string,
   authHeaders?: Headers | string | null,
-) {
-  await checkAdmin(authHeaders);
+): Promise<ActionResult<SurveyReviewDetails | undefined>> {
+  return withErrorHandling(async () => {
+    await checkAdmin(authHeaders);
 
-  if (!surveyId?.trim()) {
-    throw new Error("Survey ID is required");
-  }
+    if (!surveyId?.trim()) {
+      throw new ActionError("Survey ID is required", "VALIDATION_ERROR");
+    }
 
-  try {
-    return await getDb().query.surveys.findFirst({
+    const data = await getDb().query.surveys.findFirst({
       where: eq(surveys.id, surveyId),
       with: {
         user: true,
@@ -197,19 +275,17 @@ export async function getSurveyReviewDetails(
         brief: true,
       },
     });
-  } catch (error) {
-    console.error("[Admin] getSurveyReviewDetails failed:", error);
-    throw new Error("Failed to fetch survey details");
-  }
+    return { success: true, data };
+  }, "getSurveyReviewDetails");
 }
 
 export async function getPlatformFeedbackItems(
   authHeaders?: Headers | string | null,
   status?: string,
-) {
-  await checkAdmin(authHeaders);
+): Promise<ActionResult<PlatformFeedbackItem[]>> {
+  return withErrorHandling(async () => {
+    await checkAdmin(authHeaders);
 
-  try {
     const query = getDb()
       .select({
         id: platformFeedback.id,
@@ -239,15 +315,12 @@ export async function getPlatformFeedbackItems(
       .orderBy(desc(platformFeedback.createdAt))
       .limit(200);
 
-    if (status) {
-      return await query.where(eq(platformFeedback.status, status));
-    }
-
-    return await query;
-  } catch (error) {
-    console.error("[Admin] getPlatformFeedbackItems failed:", error);
-    throw new Error("Failed to fetch feedback items");
-  }
+    const data = status
+      ? await query.where(eq(platformFeedback.status, status))
+      : await query;
+      
+    return { success: true, data };
+  }, "getPlatformFeedbackItems");
 }
 
 const VALID_FEEDBACK_STATUSES = [
@@ -266,17 +339,17 @@ export async function updatePlatformFeedbackStatus(
   feedbackId: string,
   status: FeedbackStatus,
   authHeaders?: Headers | string | null,
-) {
-  await checkAdmin(authHeaders);
+): Promise<ActionResult<{ id: string; status: string } | null>> {
+  return withErrorHandling(async () => {
+    await checkAdmin(authHeaders);
 
-  if (!feedbackId?.trim()) {
-    throw new Error("Feedback ID is required");
-  }
-  if (!isValidFeedbackStatus(status)) {
-    throw new Error(`Invalid status: ${status}`);
-  }
+    if (!feedbackId?.trim()) {
+      throw new ActionError("Feedback ID is required", "VALIDATION_ERROR");
+    }
+    if (!isValidFeedbackStatus(status)) {
+      throw new ActionError(`Invalid status: ${status}`, "VALIDATION_ERROR");
+    }
 
-  try {
     const [updated] = await getDb()
       .update(platformFeedback)
       .set({
@@ -289,9 +362,6 @@ export async function updatePlatformFeedbackStatus(
         status: platformFeedback.status,
       });
 
-    return updated ?? null;
-  } catch (error) {
-    console.error("[Admin] updatePlatformFeedbackStatus failed:", error);
-    throw new Error("Failed to update feedback status");
-  }
+    return { success: true, data: updated ?? null };
+  }, "updatePlatformFeedbackStatus");
 }

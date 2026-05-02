@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getFriendlyActionError } from "@/lib/action-ux";
 
 import { learningSessionStateSchema, teacherProgressReportSchema } from "@/lib/learning/types";
 import {
@@ -383,12 +384,15 @@ function getApiErrorMessage(payload: unknown) {
     return payload.message;
   }
 
-  if (!("error" in payload)) {
-    return null;
+  if ("error" in payload) {
+    return getFriendlyActionError(payload.error);
   }
 
-  const error = payload.error;
-  return typeof error === "string" ? error : null;
+  if ("message" in payload && typeof payload.message === "string") {
+    return payload.message;
+  }
+
+  return null;
 }
 
 async function parseResponse<T>(

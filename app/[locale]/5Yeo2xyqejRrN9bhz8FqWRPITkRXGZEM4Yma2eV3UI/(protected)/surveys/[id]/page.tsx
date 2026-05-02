@@ -14,6 +14,7 @@ import {
 import { Link } from "@/i18n/routing";
 import { Suspense } from "react";
 import { headers } from "next/headers";
+import { ChatMessage } from "@/lib/chat-types";
 
 
 
@@ -25,11 +26,13 @@ async function ReviewContent({
     cookieHeader: string | null;
 }) {
     const { id } = await params;
-    const survey = await getSurveyReviewDetails(id, cookieHeader);
+    const result = await getSurveyReviewDetails(id, cookieHeader);
 
-    if (!survey) {
+    if (!result.success || !result.data) {
         notFound();
     }
+
+    const survey = result.data;
 
     const brief = survey.brief?.brief;
 
@@ -167,7 +170,7 @@ async function ReviewContent({
                         </div>
 
                         <div className="space-y-6 max-h-[500px] overflow-y-auto pr-4 custom-scrollbar">
-                            {survey.creationConversation?.messages?.map((msg, idx: number) => (
+                            {survey.creationConversation?.messages?.map((msg: ChatMessage, idx: number) => (
                                 <div key={idx} className={`space-y-1 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
                                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">
                                         {msg.role}
