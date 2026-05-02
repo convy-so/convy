@@ -129,6 +129,26 @@ export const env = {
   MEM0_PROJECT_ID: optional("MEM0_PROJECT_ID"),
   OPENAI_API_KEY: optional("OPENAI_API_KEY"),
   SENTRY_DSN: optional("SENTRY_DSN"),
+
+  // System / Build
+  NEXT_PHASE: optional("NEXT_PHASE"),
+  NEXT_RUNTIME: optional("NEXT_RUNTIME"),
+  get IS_WORKER() { return process.env.IS_WORKER === "true"; },
+  get isBuild() { return this.NEXT_PHASE === "phase-production-build"; },
+  CI: optionalBoolean("CI", false),
+
+  // RAG / AI
+  VOYAGE_API_KEY: optional("VOYAGE_API_KEY"),
+  BRAINTRUST_PROJECT_NAME: optional("BRAINTRUST_PROJECT_NAME"),
+
+  // Sentry
+  NEXT_PUBLIC_SENTRY_DSN: optional("NEXT_PUBLIC_SENTRY_DSN"),
+  SENTRY_ORG: optional("SENTRY_ORG"),
+  SENTRY_PROJECT: optional("SENTRY_PROJECT"),
+  SENTRY_TEST_TRIGGER: optionalBoolean("SENTRY_TEST_TRIGGER", false),
+
+  // Public URLs
+  NEXT_PUBLIC_APP_URL: optional("NEXT_PUBLIC_APP_URL") || "https://getconvy.pro",
 };
 
 export type Env = typeof env;

@@ -1,6 +1,6 @@
 "use client";
 
-import { ShieldCheck, ChevronLeft, LogOut, Settings } from "lucide-react";
+import { ShieldCheck, ChevronLeft, LogOut, Settings, BookOpen, Cpu } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { authClient } from "@/lib/auth-client";
@@ -12,6 +12,8 @@ export function ExpertSidebar() {
   const router = useRouter();
 
   const navigation = [
+    { name: "Pedagogical Frameworks", href: "/expert/frameworks", icon: BookOpen },
+    { name: "Runtime Models", href: "/expert/runtime-models", icon: Cpu },
     { name: "QA Review", href: "/expert/qa", icon: ShieldCheck },
     { name: "Settings", href: "/expert/settings", icon: Settings },
   ];

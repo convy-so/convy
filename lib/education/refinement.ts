@@ -4,6 +4,10 @@ import { z } from "zod";
 import { defaultModel, generateAIResponse } from "@/lib/ai";
 import { safeJsonParse } from "@/lib/ai/json";
 import { buildRefinementAssistantPrompt } from "@/lib/education/prompts/refinement-assistant";
+import { createLogger, serializeError } from "@/lib/logger";
+
+const log = createLogger("refinement");
+
 
 import { buildCoveragePlan } from "./creation-workflow";
 import type { SampleConductingProfile, SampleRequestedChange } from "./sample-feedback";
@@ -233,9 +237,9 @@ export async function buildRefinementAssistantResponse(input: {
       },
     });
   } catch (error) {
-    console.error("buildRefinementAssistantResponse failed; returning fallback response", {
-      surveyTitle: input.surveyTitle,
-      error,
+    log.error("buildRefinementAssistantResponse failed; returning fallback response", {
+      survey_title: input.surveyTitle,
+      ...serializeError(error),
     });
   }
 

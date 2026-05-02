@@ -17,7 +17,9 @@ interface BaseLayoutProps {
   children: React.ReactNode;
 }
 
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://getconvy.pro";
+import { env } from "@/lib/env";
+
+const baseUrl = env.NEXT_PUBLIC_APP_URL;
 
 export const BaseLayout = ({ previewText, children }: BaseLayoutProps) => {
   return (

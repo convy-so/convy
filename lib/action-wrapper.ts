@@ -4,6 +4,11 @@
  */
 
 import { z } from "zod";
+import * as Sentry from "@sentry/nextjs";
+import { createLogger, serializeError } from "@/lib/logger";
+
+const log = createLogger("action");
+
 
 export type ActionResult<T> =
   | { success: true; data: T }
@@ -76,11 +81,18 @@ export async function withErrorHandling<T>(
   try {
     return await handler();
   } catch (error) {
-    // Log error with context
-    console.error(`[${context}] Failed:`, {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
+    // Log and capture unknown errors for debugging
+    log.error("Server action failed", {
+      action: context,
+      ...serializeError(error),
     });
+    // Capture as Sentry issue for alerting & stack trace (only for unexpected errors)
+    if (
+      !(error instanceof z.ZodError) &&
+      !(error instanceof ActionError)
+    ) {
+      Sentry.captureException(error, { tags: { action: context } });
+    }
 
     // Handle Zod validation errors
     if (error instanceof z.ZodError) {

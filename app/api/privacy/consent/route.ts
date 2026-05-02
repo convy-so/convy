@@ -8,6 +8,7 @@ import {
   buildConsentState,
   serializeConsentState,
 } from "@/lib/privacy/shared";
+import { env } from "@/lib/env";
 
 const bodySchema = z.object({
   analytics: z.boolean().default(false),
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
     maxAge: 60 * 60 * 24 * 180,
     httpOnly: false,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: env.NODE_ENV === "production",
   });
 
   return response;

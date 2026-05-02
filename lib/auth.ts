@@ -154,6 +154,13 @@ export const auth = betterAuth({
           if (user.email && env.ADMIN_EMAILS.includes(user.email.toLowerCase())) {
             throw new Error("Admin emails cannot be registered as normal users.");
           }
+          
+          // STRICT ROLE ENFORCEMENT: Only admin plugin / server operations should ever 
+          // successfully create an expert. Public signups must default to 'user'.
+          if (user.role === "expert") {
+             throw new Error("Expert accounts must be provisioned by an administrator.");
+          }
+
           return { data: user };
         }
       }

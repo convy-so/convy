@@ -13,6 +13,7 @@ import {
 } from "@/lib/voice/voice-agent-provider";
 import { logUsage } from "@/lib/billing/logger";
 import { logBraintrustTrace } from "@/lib/ai/braintrust";
+import * as Sentry from "@sentry/node";
 
 // Configuration constants
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -159,9 +160,10 @@ export abstract class BaseVoiceAgentHandler {
         try {
           await this.onConversationText(event);
         } catch (error) {
-          console.error("[voice-agent] failed to handle conversation text", {
+          Sentry.logger.error("Voice agent failed to handle conversation text", {
+            service: "voice-agent",
             identifier: this.identifier,
-            message: error instanceof Error ? error.message : "Unknown error",
+            error_message: error instanceof Error ? error.message : String(error),
           });
         }
       },
@@ -173,10 +175,11 @@ export abstract class BaseVoiceAgentHandler {
         try {
           await this.onFunctionCall(event);
         } catch (error) {
-          console.error("[voice-agent] function call handler failed", {
+          Sentry.logger.error("Voice agent function call handler failed", {
+            service: "voice-agent",
             identifier: this.identifier,
-            functionName: event.function_name,
-            message: error instanceof Error ? error.message : "Unknown error",
+            function_name: event.function_name,
+            error_message: error instanceof Error ? error.message : String(error),
           });
           // Respond with error so the agent can continue
           this.voiceAgent?.sendFunctionCallResponse(
@@ -325,9 +328,10 @@ export abstract class BaseVoiceAgentHandler {
 
           await this.handleControlMessage(message);
         } catch (error) {
-          console.error("[voice-agent] failed to parse browser control message", {
+          Sentry.logger.error("Voice agent failed to parse browser control message", {
+            service: "voice-agent",
             identifier: this.identifier,
-            message: error instanceof Error ? error.message : "Unknown error",
+            error_message: error instanceof Error ? error.message : String(error),
           });
         }
       } else {
@@ -370,9 +374,10 @@ export abstract class BaseVoiceAgentHandler {
       try {
         this.ws.send(Buffer.isBuffer(data) ? data : JSON.stringify(data));
       } catch (error) {
-        console.error("[voice-agent] failed to send websocket message", {
+        Sentry.logger.error("Voice agent failed to send WebSocket message", {
+          service: "voice-agent",
           identifier: this.identifier,
-          message: error instanceof Error ? error.message : "Unknown error",
+          error_message: error instanceof Error ? error.message : String(error),
         });
       }
     }

@@ -43,6 +43,7 @@ import {
   renewSurveyLease,
 } from "@/lib/collaboration-service";
 import { isSupportedVoiceLocale, normalizeVoiceLocale } from "@/lib/voice/voice-locales";
+import * as Sentry from "@sentry/node";
 
 interface SampleState {
   surveyId: string;
@@ -256,10 +257,11 @@ export class SampleSurveyVoiceHandler extends BaseVoiceAgentHandler {
 
       await this.connectVoiceAgent();
     } catch (error) {
-      console.error("[sample-survey-voice] failed to initialize voice session", {
-        surveyId: this.state.surveyId,
-        conversationNumber: this.state.conversationNumber,
-        message: error instanceof Error ? error.message : "Unknown error",
+      Sentry.logger.error("Sample survey voice: failed to initialize voice session", {
+        service: "sample-survey-voice",
+        survey_id: this.state.surveyId,
+        conversation_number: this.state.conversationNumber,
+        error_message: error instanceof Error ? error.message : String(error),
       });
       this.sendError("Failed to initialize session");
       this.ws.close();
@@ -379,10 +381,11 @@ Additional sample-session rules:
         })
         .where(eq(sampleConversations.id, this.state.conversationId));
       await incrementSurveyRevision(this.state.surveyId).catch((error) => {
-        console.error("[sample-survey-voice] failed to increment survey revision", {
-          surveyId: this.state.surveyId,
-          conversationId: this.state.conversationId,
-          message: error instanceof Error ? error.message : "Unknown error",
+        Sentry.logger.error("Sample survey voice: failed to increment survey revision", {
+          service: "sample-survey-voice",
+          survey_id: this.state.surveyId,
+          conversation_id: this.state.conversationId ?? "",
+          error_message: error instanceof Error ? error.message : String(error),
         });
       });
     }
@@ -413,10 +416,11 @@ Additional sample-session rules:
       surveyId: this.state.surveyId,
       sessionId: this.state.sessionId,
     }).catch((error) => {
-      console.error("[sample-survey-voice] failed to purge analytics artifacts", {
-        surveyId: this.state.surveyId,
-        sessionId: this.state.sessionId,
-        message: error instanceof Error ? error.message : "Unknown error",
+      Sentry.logger.error("Sample survey voice: failed to purge analytics artifacts", {
+        service: "sample-survey-voice",
+        survey_id: this.state.surveyId,
+        session_id: this.state.sessionId ?? "",
+        error_message: error instanceof Error ? error.message : String(error),
       });
     });
 
@@ -545,9 +549,10 @@ Additional sample-session rules:
         userId: this.userId!,
         leaseToken: this.leaseToken,
       }).catch((error) => {
-        console.error("[sample-survey-voice] failed to release rehearsal lease", {
-          surveyId: this.state.surveyId,
-          message: error instanceof Error ? error.message : "Unknown error",
+        Sentry.logger.error("Sample survey voice: failed to release rehearsal lease", {
+          service: "sample-survey-voice",
+          survey_id: this.state.surveyId,
+          error_message: error instanceof Error ? error.message : String(error),
         });
         return null;
       });

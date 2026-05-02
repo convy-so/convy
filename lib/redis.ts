@@ -1,6 +1,10 @@
 import IORedis, { Redis, RedisOptions } from "ioredis";
 import dns from "node:dns";
 import { env } from "@/lib/env";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("redis");
+
 
 // Configure DNS resolution to prefer IPv4.
 dns.setDefaultResultOrder("ipv4first");
@@ -9,17 +13,12 @@ const redisOptions: RedisOptions = {
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
   retryStrategy(times) {
-    const delay = Math.min(times * 50, 2000);
-    // Suppress reconnection logs during build to keep output clean, but log in dev/prod
-    if (process.env.NEXT_PHASE !== "phase-production-build") {
-    }
-    return delay;
+    return Math.min(times * 50, 2000);
   },
   connectTimeout: 10000,
   keepAlive: 30000,
 };
 
-// Only add TLS if using a secure redis URL (rediss://)
 const getEffectiveOptions = (url: string) => {
   if (url.startsWith("rediss://")) {
     const rejectUnauthorized = !env.ALLOW_INSECURE_TLS;
@@ -41,17 +40,35 @@ const getEffectiveOptions = (url: string) => {
  */
 
 declare global {
-   
   var sharedRedisClient: Redis | undefined;
-   
   var sharedRedisSubscriber: Redis | undefined;
 }
 
+
+let productionRedisClient: Redis | undefined;
+let productionRedisSubscriber: Redis | undefined;
+
 export function getRedisClient(options?: { fresh?: boolean }): Redis {
-  // If we're in a worker process or a fresh client is requested, bypass the singleton
-  // This ensures workers don't share the same instance as producers in the same environment.
-  if (options?.fresh || process.env.IS_WORKER === "true") {
+  if (options?.fresh || env.IS_WORKER) {
     return new IORedis(env.REDIS_URL, getEffectiveOptions(env.REDIS_URL));
+  }
+
+  
+  if (env.NODE_ENV === "production") {
+    if (!productionRedisClient) {
+      productionRedisClient = new IORedis(
+        env.REDIS_URL,
+        getEffectiveOptions(env.REDIS_URL),
+      );
+
+      productionRedisClient.on("error", (err) => {
+        log.error("Redis client error", {
+          error_message: err?.message,
+          error_name: err?.name,
+        });
+      });
+    }
+    return productionRedisClient;
   }
 
   if (!global.sharedRedisClient) {
@@ -61,13 +78,13 @@ export function getRedisClient(options?: { fresh?: boolean }): Redis {
     );
 
     global.sharedRedisClient.on("error", (err) => {
-      console.error("[redis] shared client error", {
-        message: err?.message,
-        name: err?.name,
+      log.error("Redis shared client error", {
+        error_message: err?.message,
+        error_name: err?.name,
       });
     });
 
-    if (process.env.NEXT_PHASE !== "phase-production-build") {
+    if (!env.isBuild) {
       global.sharedRedisClient.on("connect", () => {});
       global.sharedRedisClient.on("ready", () => {});
     }
@@ -81,8 +98,25 @@ export function getRedisClient(options?: { fresh?: boolean }): Redis {
  * Used for pub/sub operations
  */
 export function getRedisSubscriber(options?: { fresh?: boolean }): Redis {
-  if (options?.fresh || process.env.IS_WORKER === "true") {
+  if (options?.fresh || env.IS_WORKER) {
     return new IORedis(env.REDIS_URL, getEffectiveOptions(env.REDIS_URL));
+  }
+
+  if (env.NODE_ENV === "production") {
+    if (!productionRedisSubscriber) {
+      productionRedisSubscriber = new IORedis(
+        env.REDIS_URL,
+        getEffectiveOptions(env.REDIS_URL),
+      );
+
+      productionRedisSubscriber.on("error", (err) => {
+        log.error("Redis subscriber error", {
+          error_message: err?.message,
+          error_name: err?.name,
+        });
+      });
+    }
+    return productionRedisSubscriber;
   }
 
   if (!global.sharedRedisSubscriber) {
@@ -92,9 +126,9 @@ export function getRedisSubscriber(options?: { fresh?: boolean }): Redis {
     );
 
     global.sharedRedisSubscriber.on("error", (err) => {
-      console.error("[redis] shared subscriber error", {
-        message: err?.message,
-        name: err?.name,
+      log.error("Redis shared subscriber error", {
+        error_message: err?.message,
+        error_name: err?.name,
       });
     });
   }
@@ -110,13 +144,13 @@ export function getRedisSubscriber(options?: { fresh?: boolean }): Redis {
 export function createBlockingClient(): Redis {
   const client = new IORedis(env.REDIS_URL, {
     ...getEffectiveOptions(env.REDIS_URL),
-    maxRetriesPerRequest: null, // Required by BullMQ
+    maxRetriesPerRequest: null, 
   });
 
   client.on("error", (err) => {
-    console.error("[redis] blocking client error", {
-      message: err?.message,
-      name: err?.name,
+    log.error("Redis blocking client error", {
+      error_message: err?.message,
+      error_name: err?.name,
     });
   });
 
@@ -129,6 +163,16 @@ export function createBlockingClient(): Redis {
  */
 export async function closeRedisConnections(): Promise<void> {
   const promises: Promise<string>[] = [];
+
+  if (productionRedisClient) {
+    promises.push(productionRedisClient.quit());
+    productionRedisClient = undefined;
+  }
+
+  if (productionRedisSubscriber) {
+    promises.push(productionRedisSubscriber.quit());
+    productionRedisSubscriber = undefined;
+  }
 
   if (global.sharedRedisClient) {
     promises.push(global.sharedRedisClient.quit());
@@ -153,8 +197,8 @@ export async function testRedisConnection(): Promise<boolean> {
     const result = await client.ping();
     return result === "PONG";
   } catch (error) {
-    console.error("[redis] test connection failed", {
-      message: error instanceof Error ? error.message : "Unknown error",
+    log.error("Redis test connection failed", {
+      error_message: error instanceof Error ? error.message : String(error),
     });
     return false;
   }

@@ -14,7 +14,9 @@ export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://convy.ai";
+import { env } from "@/lib/env";
+
+const BASE_URL = env.NEXT_PUBLIC_APP_URL;
 
 const aspekta = localFont({
   src: [
@@ -86,7 +88,7 @@ export async function generateMetadata({
   return {
     title,
     description,
-    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://convy.ai"),
+    metadataBase: new URL(env.NEXT_PUBLIC_APP_URL),
     alternates: {
       canonical: `/${locale}`,
       languages: {
