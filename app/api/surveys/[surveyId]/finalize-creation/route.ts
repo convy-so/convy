@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { surveyCreationConversations, surveys } from "@/db/schema";
@@ -19,28 +20,17 @@ export async function POST(
     const { surveyId } = await params;
 
     const [survey] = await getDb().select().from(surveys).where(eq(surveys.id, surveyId));
-    if (!survey) return NextResponse.json({ error: "Survey not found" }, { status: 404 });
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
     const permission = await getSurveyPermissionForSession(session, surveyId);
-    if (!hasSurveyPermission(permission, "canEdit")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
-    if (survey.status !== "creating") {
-      return NextResponse.json({ error: "Survey has already been finalized", survey }, { status: 400 });
-    }
+    if (!hasSurveyPermission(permission, "canEdit")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
+    if (survey.status !== "creating") { return apiError("VALIDATION_ERROR", "Survey has already been finalized", { survey }); }
 
     const [briefRow, planRow] = await Promise.all([
       getResearchBrief(surveyId),
       getActiveCoveragePlan(surveyId),
     ]);
-    if (!briefRow || !planRow) {
-      return NextResponse.json({ error: "The education brief is not ready yet." }, { status: 400 });
-    }
-    if (briefRow.missingFields.length > 0) {
-      return NextResponse.json({
-        error: "The brief is incomplete.",
-        missingFields: briefRow.missingFields,
-      }, { status: 400 });
-    }
+    if (!briefRow || !planRow) { return apiError("VALIDATION_ERROR", "The education brief is not ready yet."); }
+    if (briefRow.missingFields.length > 0) { return apiError("VALIDATION_ERROR", "The brief is incomplete.", { missingFields: briefRow.missingFields }); }
 
     const [updatedSurvey] = await getDb()
       .update(surveys)
@@ -76,10 +66,7 @@ export async function POST(
       coveragePlan: planRow.plan,
     });
   } catch (error) {
-    if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
-    }
-    console.error("[Finalize Creation] Error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/finalize-creation:post");
   }
 }
+

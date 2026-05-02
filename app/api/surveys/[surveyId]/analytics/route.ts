@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { surveySessions, surveys } from "@/db/schema";
@@ -36,9 +37,7 @@ export async function GET(
     const { searchParams } = new URL(request.url);
 
     const permission = await getSurveyPermissionForSession(session, surveyId);
-    if (!hasSurveyPermission(permission, "canView")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (!hasSurveyPermission(permission, "canView")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
     const [survey, briefRow, planRow, snapshotRow, stateRow, snapshotRows, sessionRows, evidenceRows] = await Promise.all([
       getDb()
@@ -66,9 +65,7 @@ export async function GET(
       listEvidenceForSurveyByType(surveyId, "live"),
     ]);
 
-    if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    }
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
 
     const analyticsState = stateRow?.state ?? {
       surveyId,
@@ -134,13 +131,7 @@ export async function GET(
         surveyId,
       }),
     );
-  } catch (error) {
-    console.error("[Analytics API] Error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch analytics" },
-      { status: 500 },
-    );
-  }
+  } catch (error) { return apiUnhandledError(error, "Failed to fetch analytics", "/api/surveys/[surveyId]/analytics:get"); }
 }
 
 export async function POST(
@@ -152,12 +143,7 @@ export async function POST(
     const { surveyId } = await params;
 
     const permission = await getSurveyPermissionForSession(session, surveyId);
-    if (!hasSurveyPermission(permission, "canEdit")) {
-      return NextResponse.json(
-        { error: "Unauthorized. Only owners and editors can trigger analytics." },
-        { status: 403 },
-      );
-    }
+    if (!hasSurveyPermission(permission, "canEdit")) { return apiError("UNAUTHORIZED", "Unauthorized. Only owners and editors can trigger analytics."); }
 
     await scheduleAnalyticsRefresh({
       surveyId,
@@ -168,11 +154,6 @@ export async function POST(
     return NextResponse.json({
       status: "queued",
     });
-  } catch (error) {
-    console.error("[Analytics API POST] Error:", error);
-    return NextResponse.json(
-      { error: "Failed to trigger analytics generation" },
-      { status: 500 },
-    );
-  }
+  } catch (error) { return apiUnhandledError(error, "Failed to trigger analytics generation", "/api/surveys/[surveyId]/analytics:post"); }
 }
+

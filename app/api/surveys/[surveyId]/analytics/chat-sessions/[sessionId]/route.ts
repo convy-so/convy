@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { and, eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
@@ -26,14 +27,10 @@ export async function GET(
       .from(surveys)
       .where(eq(surveys.id, surveyId));
 
-    if (!survey) {
-      return NextResponse.json({ error: "Survey not found" }, { status: 404 });
-    }
+    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
 
     const permission = await getSurveyPermissionForSession(session, survey.id);
-    if (!hasSurveyPermission(permission, "canView")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (!hasSurveyPermission(permission, "canView")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
     const [chatSession] = await getDb()
       .select({
@@ -52,22 +49,9 @@ export async function GET(
         ),
       );
 
-    if (!chatSession) {
-      return NextResponse.json({ error: "Session not found" }, { status: 404 });
-    }
+    if (!chatSession) { return apiError("NOT_FOUND", "Session not found"); }
 
     return NextResponse.json({ session: chatSession });
-  } catch (error) {
-    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
-      return NextResponse.json({ error: error.message }, { status: 401 });
-    }
-    console.error(
-      `[Chat Session ${params?.toString() || ""} GET] Error:`,
-      error,
-    );
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
-  }
+  } catch (error) { if (error instanceof Error && error.message === "UNAUTHENTICATED") { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/analytics/chat-sessions/[sessionId]:get"); }
 }
+

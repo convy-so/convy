@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { fileTypeFromBuffer } from "file-type";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { learningTopics, topicMaterials } from "@/db/schema";
@@ -39,17 +40,14 @@ export async function GET(
       }),
     );
     if (!rateLimitResult.success) {
-      return NextResponse.json(
-        { error: "Rate limit exceeded", retryAfter: rateLimitResult.reset },
-        { status: 429 },
-      );
+      return apiError("TOO_MANY_REQUESTS", "Rate limit exceeded");
     }
 
     const { topicId } = await params;
     const topic = await getTeacherTopicAccess(session.user.id, topicId);
 
     if (!topic) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     const materials = await getDb().query.topicMaterials.findMany({
@@ -62,10 +60,7 @@ export async function GET(
       data: materials,
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load materials" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to load materials", "/api/learning/topics/[topicId]/materials");
   }
 }
 
@@ -79,7 +74,7 @@ export async function POST(
     const topic = await getTeacherTopicAccess(session.user.id, topicId);
 
     if (!topic) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     const formData = await request.formData();
@@ -88,7 +83,7 @@ export async function POST(
     const description = String(formData.get("description") || "");
 
     if (!(file instanceof File)) {
-      return NextResponse.json({ error: "File is required" }, { status: 400 });
+      return apiError("VALIDATION_ERROR", "File is required");
     }
     assertLearningMaterialFile(file);
 
@@ -317,9 +312,6 @@ export async function POST(
       },
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to upload material" },
-      { status: 400 },
-    );
+    return apiUnhandledError(error, "Failed to upload material", "/api/learning/topics/[topicId]/materials");
   }
 }

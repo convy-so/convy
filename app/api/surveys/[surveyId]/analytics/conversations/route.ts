@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getVerifiedSession } from "@/lib/auth/session";
 import { translateConversationListItems } from "@/lib/analytics";
@@ -29,9 +30,7 @@ export async function GET(
     );
 
     const permission = await getSurveyPermissionForSession(session, surveyId);
-    if (!hasSurveyPermission(permission, "canView")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    if (!hasSurveyPermission(permission, "canView")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
 
     const result = await getConversationInsights(surveyId, page, limit);
 
@@ -45,18 +44,6 @@ export async function GET(
       ...result,
       conversations: translated,
     });
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED")
-    ) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
-    }
-    console.error("[Analytics Conversations API] Error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch conversation insights" },
-      { status: 500 },
-    );
-  }
+  } catch (error) { if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Failed to fetch conversation insights", "/api/surveys/[surveyId]/analytics/conversations:get"); }
 }
+
