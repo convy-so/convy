@@ -9,6 +9,10 @@ import {
   buildAnalyticsChatAnswerUserPrompt,
   buildAnalyticsChatClassifierUserPrompt,
 } from "./prompts/analytics-chat";
+import { createLogger, serializeError } from "@/lib/logger";
+
+const log = createLogger("analytics-chat");
+
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -97,9 +101,9 @@ export async function classifyQuestionIntent(surveyId: string, question: string)
       },
     );
   } catch (error) {
-    console.error("classifyQuestionIntent failed; using fallback classifier", {
-      surveyId,
-      error,
+    log.error("classifyQuestionIntent failed; using fallback classifier", {
+      survey_id: surveyId,
+      ...serializeError(error),
     });
   }
 
@@ -193,9 +197,9 @@ export async function answerAnalyticsQuestion(params: {
       },
     });
   } catch (error) {
-    console.error("answerAnalyticsQuestion failed; returning null parse result", {
-      surveyId: params.surveyId,
-      error,
+    log.error("answerAnalyticsQuestion failed; returning null parse result", {
+      survey_id: params.surveyId,
+      ...serializeError(error),
     });
   }
 

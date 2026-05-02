@@ -1,11 +1,15 @@
 import { generateText } from "ai";
 import { google } from "@ai-sdk/google";
 import { logUsage } from "./billing/logger";
-import { appLocaleLabels, type AppLocale } from "@/lib/i18n/config";
+import { type AppLocale } from "@/lib/i18n/config";
 import {
   buildBatchTranslationPrompt,
   buildConversationTranslationPrompt,
 } from "@/lib/prompts/translation";
+import { createLogger, serializeError } from "@/lib/logger";
+
+const log = createLogger("translation");
+
 
 /**
  * Translation Service for Locale-Aware Survey System
@@ -74,11 +78,11 @@ export async function translateTextBatch(
       return parsed.items;
     }
   } catch (error) {
-    console.error("translateTextBatch failed; returning original items", {
-      targetLanguage,
-      itemCount: normalizedItems.length,
-      task: metadata?.task ?? null,
-      error,
+    log.error("translateTextBatch failed; returning original items", {
+      target_language: targetLanguage,
+      item_count: normalizedItems.length,
+      task: metadata?.task ?? "",
+      ...serializeError(error),
     });
   }
 
@@ -192,11 +196,11 @@ export async function translateConversation(
       targetLanguage,
     };
   } catch (error) {
-    console.error("translateConversation failed; returning original conversation", {
-      sourceLanguage,
-      targetLanguage,
-      messageCount: conversation.length,
-      error,
+    log.error("translateConversation failed; returning original conversation", {
+      source_language: sourceLanguage,
+      target_language: targetLanguage,
+      message_count: conversation.length,
+      ...serializeError(error),
     });
     return {
       translatedConversation: conversation,
@@ -270,9 +274,8 @@ export async function getUserPreferredLanguage(
         return "en";
     }
   } catch (error) {
-    console.error("getUserPreferredLanguage failed; defaulting to en", {
-      userId,
-      error,
+    log.error("getUserPreferredLanguage failed; defaulting to en", {
+      ...serializeError(error),
     });
     return "en";
   }

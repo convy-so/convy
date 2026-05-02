@@ -1,6 +1,7 @@
 import { MetricsTime, Worker, type Job } from "bullmq";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import * as Sentry from "@sentry/node";
 
 import { getDb } from "@/db";
 import { learningSessions, studentProgressReports } from "@/db/schema";
@@ -129,10 +130,11 @@ const tutoringReportWorker = new Worker<TutoringReportJobData>(
 );
 
 tutoringReportWorker.on("failed", (job, err) => {
-  console.error("[tutoring-report-worker] job failed", {
-    jobId: job?.id,
-    sessionId: job?.data?.sessionId,
-    message: err instanceof Error ? err.message : String(err),
+  Sentry.logger.error("Tutoring report worker job failed", {
+    service: "tutoring-report-worker",
+    job_id: job?.id ?? "",
+    session_id: job?.data?.sessionId ?? "",
+    error_message: err instanceof Error ? err.message : String(err),
   });
 });
 

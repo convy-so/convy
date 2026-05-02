@@ -1,5 +1,6 @@
 import { MetricsTime, Worker, Job } from "bullmq";
 import { z } from "zod";
+import * as Sentry from "@sentry/node";
 
 import { getRedisClient } from "@/lib/redis";
 import type { ContentTranslationJobData } from "@/lib/queue";
@@ -56,11 +57,12 @@ const contentTranslationWorker = new Worker<ContentTranslationJobData>(
 );
 
 contentTranslationWorker.on("failed", (job, err) => {
-  console.error("[content-translation-worker] job failed", {
-    jobId: job?.id,
-    resourceType: job?.data?.resourceType,
-    resourceId: job?.data?.resourceId,
-    message: err instanceof Error ? err.message : String(err),
+  Sentry.logger.error("Content translation worker job failed", {
+    service: "content-translation-worker",
+    job_id: job?.id ?? "",
+    resource_type: job?.data?.resourceType ?? "",
+    resource_id: job?.data?.resourceId ?? "",
+    error_message: err instanceof Error ? err.message : String(err),
   });
 });
 

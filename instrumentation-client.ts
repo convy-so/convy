@@ -30,7 +30,7 @@ const hasConsent =
 const allowReplay = hasConsent;
 
 Sentry.init({
-  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+  dsn: clientEnv.NEXT_PUBLIC_SENTRY_DSN,
   enabled: hasConsent,
 
   // Add optional integrations for additional features

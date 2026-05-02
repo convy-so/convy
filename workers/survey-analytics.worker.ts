@@ -1,5 +1,6 @@
 import { MetricsTime, Worker, Job } from "bullmq";
 import { z } from "zod";
+import * as Sentry from "@sentry/node";
 
 import type { SurveyAnalyticsJobData } from "@/lib/queue";
 import { buildAnalyticsSnapshot } from "@/lib/education/analytics-workflow";
@@ -73,10 +74,11 @@ const surveyAnalyticsWorker = new Worker<SurveyAnalyticsJobData>(
 );
 
 surveyAnalyticsWorker.on("failed", (job, err) => {
-  console.error("[survey-analytics-worker] job failed", {
-    jobId: job?.id,
-    surveyId: job?.data?.surveyId,
-    message: err instanceof Error ? err.message : String(err),
+  Sentry.logger.error("Survey analytics worker job failed", {
+    service: "survey-analytics-worker",
+    job_id: job?.id ?? "",
+    survey_id: job?.data?.surveyId ?? "",
+    error_message: err instanceof Error ? err.message : String(err),
   });
 });
 

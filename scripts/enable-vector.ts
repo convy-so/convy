@@ -1,11 +1,12 @@
 import { Pool } from "pg";
 import * as path from "path";
 import { loadEnvConfig } from "@next/env";
+import { env } from "@/lib/env";
 
 loadEnvConfig(path.join(process.cwd()));
 
 async function enableVector() {
-  const connectionString = process.env.DATABASE_URL;
+  const connectionString = env.DATABASE_URL;
   if (!connectionString) {
     console.error("DATABASE_URL is not set in .env");
     process.exit(1);

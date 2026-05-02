@@ -54,7 +54,7 @@ export function getDb() {
   // In Next.js, we want to persist the connection across HMR in dev.
   // In production, each request/edge function might get its own,
   // but during build, we MUST NOT instantiate this at the top level of a module.
-  if (process.env.NODE_ENV !== "production") {
+  if (env.NODE_ENV !== "production") {
     global.db = db;
     global.pool = pool;
   }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { normalizeAppLocale } from "@/lib/i18n/config";
+import { env } from "@/lib/env";
 
 /**
  * GET /api/user/language/sync
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
     path: "/",
     maxAge: 60 * 60 * 24 * 365, // 1 year
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: env.NODE_ENV === "production",
   });
 
   return response;

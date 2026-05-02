@@ -1,5 +1,9 @@
 import { getRedisClient } from "./redis";
 import { CACHE_CONFIG } from "@/lib/config";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("cache");
+
 
 /**
  * Robust Redis Caching Utility
@@ -27,9 +31,9 @@ export const cache = {
       if (!data) return null;
       return JSON.parse(data);
     } catch (error) {
-      console.error("[cache] get failed", {
-        key,
-        message: error instanceof Error ? error.message : "Unknown error",
+      log.error("Cache get failed", {
+        cache_key: key,
+        error_message: error instanceof Error ? error.message : String(error),
       });
       return null;
     }
@@ -52,10 +56,10 @@ export const cache = {
         await redis.set(key, serialized);
       }
     } catch (error) {
-      console.error("[cache] set failed", {
-        key,
-        ttlSeconds,
-        message: error instanceof Error ? error.message : "Unknown error",
+      log.error("Cache set failed", {
+        cache_key: key,
+        ttl_seconds: ttlSeconds,
+        error_message: error instanceof Error ? error.message : String(error),
       });
     }
   },
@@ -68,9 +72,9 @@ export const cache = {
       const redis = getRedisClient();
       await redis.del(key);
     } catch (error) {
-      console.error("[cache] delete failed", {
-        key,
-        message: error instanceof Error ? error.message : "Unknown error",
+      log.error("Cache delete failed", {
+        cache_key: key,
+        error_message: error instanceof Error ? error.message : String(error),
       });
     }
   },
@@ -97,9 +101,9 @@ export const cache = {
         }
       } while (cursor !== "0");
     } catch (error) {
-      console.error("[cache] deletePattern failed", {
+      log.error("Cache deletePattern failed", {
         pattern,
-        message: error instanceof Error ? error.message : "Unknown error",
+        error_message: error instanceof Error ? error.message : String(error),
       });
     }
   },
