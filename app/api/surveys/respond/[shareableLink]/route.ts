@@ -22,8 +22,7 @@ import { getClientIP } from "@/lib/ratelimit";
 import { 
   resolveClassroomAssignedAccess, 
   respondWithExistingConversation, 
-  createNewConversation,
-  jsonNoStore 
+  createNewConversation
 } from "@/lib/surveys/respondent-session-service";
 import { processRespondentTurn } from "@/lib/surveys/respondent-runtime-service";
 import { fetchActiveSurveyByShareableLink } from "@/lib/surveys/public-survey-access";
@@ -104,7 +103,7 @@ export async function GET(
       }
     }
 
-    if (survey.deliveryMode !== "classroom_assigned" && survey.currentParticipants >= survey.participantLimit) { return apiError("FORBIDDEN", "Survey has reached its participant limit"); }
+    if (survey.deliveryMode !== "classroom_assigned" && survey.currentParticipants >= survey.participantLimit) { return apiError("UNAUTHORIZED", "Survey has reached its participant limit"); }
 
     if (access.data.mode === "classroom_assigned") {
       const existingClassroomConversation = await getDb().query.surveyConversations.findFirst({
@@ -197,7 +196,7 @@ export async function POST(
         enforceParticipantLimit: survey.deliveryMode !== "classroom_assigned",
       });
 
-      if (!admission.allowed) { return apiError("FORBIDDEN", "Survey has reached participant limit"); }
+      if (!admission.allowed) { return apiError("UNAUTHORIZED", "Survey has reached participant limit"); }
     }
 
     const language = getRequestedLanguage(requestPayload.language);
@@ -228,6 +227,5 @@ export async function POST(
       canonicalTurn,
       language,
     });
-  } catch (error) { if (error instanceof z.ZodError) { return apiError("VALIDATION_ERROR", "Invalid request payload", { details: error.issues }); } return apiUnhandledError(error, "Internal server error", "/api/surveys/respond/[shareableLink]:post"); }
+  } catch (error) { if (error instanceof z.ZodError) { return apiError("VALIDATION_ERROR", "Invalid request payload", { details: { issues: error.issues } }); } return apiUnhandledError(error, "Internal server error", "/api/surveys/respond/[shareableLink]:post"); }
 }
-

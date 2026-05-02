@@ -37,7 +37,7 @@ export async function POST(
       getActiveCoveragePlan(surveyId),
     ]);
     if (!briefRow || !planRow) { return apiError("VALIDATION_ERROR", "The education brief is not ready yet."); }
-    if (briefRow.missingFields.length > 0) { return apiError("VALIDATION_ERROR", "The brief is incomplete.", { missingFields: briefRow.missingFields }); }
+    if (briefRow.missingFields.length > 0) { return apiError("VALIDATION_ERROR", "The brief is incomplete.", { details: { missingFields: briefRow.missingFields } }); }
 
     const activeSampleProfile = await getActiveConductingProfile(surveyId, "sample");
     if (activeSampleProfile?.profile) {

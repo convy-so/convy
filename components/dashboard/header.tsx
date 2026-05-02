@@ -13,6 +13,7 @@ import toast from "react-hot-toast";
 
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/providers/auth-provider";
+import { getFriendlyActionError } from "@/lib/action-ux";
 
 type NotificationListItem = {
   id: string;
@@ -57,7 +58,7 @@ export function DashboardHeader() {
     }
 
     queryClient.setQueryData(queryKeys.notifications.all(), previousNotifications);
-    toast.error(result.error ?? t("Notifications"));
+    toast.error(getFriendlyActionError(result.error));
   };
 
   const handleSignOut = async () => {

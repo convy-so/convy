@@ -15,6 +15,7 @@ import toast from "react-hot-toast";
 import { cn } from "@/lib/utils";
 import { useAudioTranscription } from "@/hooks/use-audio-transcription";
 import { uploadSurveyMediaAction } from "@/app/actions/survey-media";
+import { getFriendlyActionError } from "@/lib/action-ux";
 import type { CreationMediaRecommendation } from "@/lib/education/agent-tools";
 import type { AppLocale } from "@/lib/i18n/config";
 
@@ -158,14 +159,15 @@ export function MediaUploadFlow({
           );
           uploadedMedia.push(result.data.media);
         } else {
+          const friendlyError = getFriendlyActionError(result.error);
           setQueue((prev) =>
             prev.map((q) =>
               q.id === item.id
-                ? { ...q, status: "error", errorMsg: result.error }
+                ? { ...q, status: "error", errorMsg: friendlyError }
                 : q,
             ),
           );
-          toast.error(`Failed: ${result.error}`);
+          toast.error(`Failed: ${friendlyError}`);
         }
       } catch {
         setQueue((prev) =>

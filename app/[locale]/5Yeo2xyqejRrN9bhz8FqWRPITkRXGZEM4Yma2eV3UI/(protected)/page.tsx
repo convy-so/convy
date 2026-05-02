@@ -76,16 +76,12 @@ export default async function AdminOverviewPage({
 }
 
 async function GrowthByDateSection() {
-  let userGrowth: { date: unknown; count: unknown }[] = [];
-  let usageCosts: { date: unknown; cost: unknown }[] = [];
+  const [userGrowthResult, usageCostsResult] = await Promise.all([
+    getUserGrowthData(),
+    getUsageCostData(),
+  ]);
 
-  try {
-    [userGrowth, usageCosts] = await Promise.all([
-      getUserGrowthData() as Promise<{ date: unknown; count: unknown }[]>,
-      getUsageCostData() as Promise<{ date: unknown; cost: unknown }[]>,
-    ]);
-  } catch (error) {
-    console.error("[AdminOverview] GrowthByDateSection failed:", error);
+  if (!userGrowthResult.success || !usageCostsResult.success) {
     return (
       <div className="h-80 flex items-center justify-center text-sm text-gray-400">
         Failed to load growth data.
@@ -93,9 +89,12 @@ async function GrowthByDateSection() {
     );
   }
 
+  const userGrowth = userGrowthResult.data;
+  const usageCosts = usageCostsResult.data;
+
   const data = userGrowth.map((ug) => {
-    const ugDate = typeof ug.date === "string" ? ug.date : "";
-    const count = typeof ug.count === "number" ? ug.count : 0;
+    const ugDate = ug.date;
+    const count = ug.count;
     const costEntry = usageCosts.find((c) => c.date === ugDate);
     const costVal =
       costEntry && typeof costEntry.cost === "number" ? costEntry.cost : 0;
@@ -113,12 +112,9 @@ async function GrowthByDateSection() {
 }
 
 async function UsageBreakdownSection() {
-  let breakdown: { type: unknown; totalCost: unknown; count: unknown }[] = [];
+  const result = await getUsageTypeBreakdown();
 
-  try {
-    breakdown = await getUsageTypeBreakdown() as typeof breakdown;
-  } catch (error) {
-    console.error("[AdminOverview] UsageBreakdownSection failed:", error);
+  if (!result.success) {
     return (
       <div className="h-80 flex items-center justify-center text-sm text-gray-400">
         Failed to load usage breakdown.
@@ -126,10 +122,10 @@ async function UsageBreakdownSection() {
     );
   }
 
-  const data = breakdown.map((b) => {
-    const typeStr = typeof b.type === "string" ? b.type : "unknown";
-    const costStr = typeof b.totalCost === "string" ? b.totalCost : "0";
-    const itemCount = typeof b.count === "number" ? b.count : 0;
+  const data = result.data.map((b) => {
+    const typeStr = b.type || "unknown";
+    const costStr = b.totalCost || "0";
+    const itemCount = b.count;
     return {
       name: typeStr.replace("llm_", "").toUpperCase(),
       value: parseFloat(costStr),
@@ -141,28 +137,17 @@ async function UsageBreakdownSection() {
 }
 
 async function StatsGridSection() {
-  type AdminStats = {
-    totalUsageCost: string;
-    totalUsers: number;
-    newUsersLast30Days: number;
-    totalSurveys: number;
-    totalTopics: number;
-    totalClassrooms: number;
-    totalLearningSessions: number;
-    activeSessions: number;
-  };
-  let stats: AdminStats | null = null;
+  const result = await getAdminStats();
 
-  try {
-    stats = (await getAdminStats()) as AdminStats;
-  } catch (error) {
-    console.error("[AdminOverview] StatsGridSection failed:", error);
+  if (!result.success) {
     return (
       <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-sm text-red-600">
         Failed to load platform statistics. Please refresh to try again.
       </div>
     );
   }
+
+  const stats = result.data;
 
   if (!stats) return null;
 

@@ -69,7 +69,7 @@ export default async function StudentSessionsPage() {
                                     )}
                                     {lsession.sessionStatus === 'completed' && lsession.summary && (
                                         <div className="text-sm text-slate-500 italic max-w-xs truncate hidden lg:block">
-                                            "{lsession.summary}"
+                                            &quot;{lsession.summary}&quot;
                                         </div>
                                     )}
                                 </div>

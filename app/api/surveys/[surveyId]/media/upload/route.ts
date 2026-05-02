@@ -12,13 +12,15 @@ export async function POST(
     formData.set("surveyId", surveyId);
     const result = await uploadSurveyMediaAction(formData);
 
-    if (!result.success) { return apiError("VALIDATION_ERROR", result.error); }
+    if (!result.success) { 
+      return apiError("VALIDATION_ERROR", result.error.message || "Failed to upload media", { details: result.error.details }); 
+    }
 
     return new Response(JSON.stringify({ success: true, ...result.data }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
-  } catch (error) { return apiUnhandledError(error, "Failed to upload media", "/api/surveys/[surveyId]/media/upload:post"); }
+  } catch (error) { 
+    return apiUnhandledError(error, "Failed to upload media", "/api/surveys/[surveyId]/media/upload:post"); 
+  }
 }
-
-

@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import { cn } from "@/lib/utils";
 
 import { approveCrystallization, rejectCrystallization } from "@/app/actions/expert-knowledge";
+import { getFriendlyActionError } from "@/lib/action-ux";
 import type { ExpertHeuristic } from "@/lib/learning/types";
 
 // Type matching the DB query output
@@ -48,11 +49,16 @@ export function ExpertCrystallizationInbox({
         relevanceScope: currentData.relevanceScope,
       };
 
-      await approveCrystallization({
+      const result = await approveCrystallization({
         id,
         ...dataToSubmit,
       });
       
+      if (!result.success) {
+        toast.error(getFriendlyActionError(result.error));
+        return;
+      }
+
       setDrafts(drafts.filter((d) => d.id !== id));
       setEditingId(null);
       toast.success("Heuristic approved and added to Runtime Model");
@@ -68,7 +74,11 @@ export function ExpertCrystallizationInbox({
     
     setIsProcessing(id);
     try {
-      await rejectCrystallization(id);
+      const result = await rejectCrystallization(id);
+      if (!result.success) {
+        toast.error(getFriendlyActionError(result.error));
+        return;
+      }
       setDrafts(drafts.filter((d) => d.id !== id));
       toast.success("Heuristic archived");
     } catch {

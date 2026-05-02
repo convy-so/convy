@@ -7,21 +7,21 @@ import { headers } from "next/headers";
 
 
 async function UsageDashboard({ cookieHeader }: { cookieHeader: string | null }) {
-    let usageCosts: Awaited<ReturnType<typeof getUsageCostData>> = [];
-    let breakdown: Awaited<ReturnType<typeof getUsageTypeBreakdown>> = [];
-    try {
-        [usageCosts, breakdown] = await Promise.all([
-            getUsageCostData(cookieHeader),
-            getUsageTypeBreakdown(cookieHeader),
-        ]);
-    } catch (error) {
-        console.error("[AdminUsage] Failed to load data:", error);
+    const [usageCostsResult, breakdownResult] = await Promise.all([
+        getUsageCostData(cookieHeader),
+        getUsageTypeBreakdown(cookieHeader),
+    ]);
+
+    if (!usageCostsResult.success || !breakdownResult.success) {
         return (
             <div className="rounded-2xl border border-red-100 bg-red-50 p-6 text-sm text-red-600">
                 Failed to load usage data. Please refresh to try again.
             </div>
         );
     }
+
+    const usageCosts = usageCostsResult.data;
+    const breakdown = breakdownResult.data;
 
     const chartData = usageCosts.map(c => {
         const date = typeof c.date === "string" ? c.date : "";

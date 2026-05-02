@@ -12,6 +12,7 @@ import {
   removeSurveyFromFolderAction,
 } from "@/app/actions/folder";
 import { getSurveysAction } from "@/app/actions/survey";
+import { getFriendlyActionError } from "@/lib/action-ux";
 
 type FolderResponse = Awaited<ReturnType<typeof getFoldersAction>>;
 type FolderList = Extract<FolderResponse, { success: true }>["data"];
@@ -35,7 +36,7 @@ export function useFolders() {
     queryKey: folderKeys.lists(),
     queryFn: async () => {
       const result = await getFoldersAction();
-      if (!result.success) throw new Error(result.error);
+      if (!result.success) throw new Error(getFriendlyActionError(result.error));
       return result.data;
     },
   });
@@ -46,7 +47,7 @@ export function useFolder(id: string) {
     queryKey: folderKeys.detail(id),
     queryFn: async () => {
       const result = await getFolderAction(id);
-      if (!result.success) throw new Error(result.error);
+      if (!result.success) throw new Error(getFriendlyActionError(result.error));
       return result.data;
     },
     enabled: !!id,
@@ -59,7 +60,7 @@ export function useAvailableSurveys() {
     queryKey: surveyKeys.lists(),
     queryFn: async () => {
       const result = await getSurveysAction();
-      if (!result.success) throw new Error(result.error);
+      if (!result.success) throw new Error(getFriendlyActionError(result.error));
       // Filter client-side for simplicity, or backend action could optionally filter
       return result.data.filter((s) => !s.folderId);
     },
@@ -77,7 +78,7 @@ export function useCreateFolder() {
       color?: string;
     }) => {
       const result = await createFolderAction(data);
-      if (!result.success) throw new Error(result.error);
+      if (!result.success) throw new Error(getFriendlyActionError(result.error));
       return result.data;
     },
     onMutate: async (newFolder) => {
@@ -130,7 +131,7 @@ export function useUpdateFolder() {
       description?: string;
     }) => {
       const result = await updateFolderAction(data);
-      if (!result.success) throw new Error(result.error);
+      if (!result.success) throw new Error(getFriendlyActionError(result.error));
       return result.data;
     },
     onMutate: async (updatedFolder) => {
@@ -191,7 +192,7 @@ export function useDeleteFolder() {
   return useMutation({
     mutationFn: async (id: string) => {
       const result = await deleteFolderAction(id);
-      if (!result.success) throw new Error(result.error);
+      if (!result.success) throw new Error(getFriendlyActionError(result.error));
       return result.data;
     },
     onMutate: async (id) => {
@@ -242,7 +243,7 @@ export function useAddSurveyToFolder() {
       surveyId: string;
     }) => {
       const result = await addSurveyToFolderAction(folderId, surveyId);
-      if (!result.success) throw new Error(result.error);
+      if (!result.success) throw new Error(getFriendlyActionError(result.error));
       return result.data;
     },
     onSuccess: (_, variables) => {
@@ -275,7 +276,7 @@ export function useRemoveSurveyFromFolder() {
       surveyId: string;
     }) => {
       const result = await removeSurveyFromFolderAction(folderId, surveyId);
-      if (!result.success) throw new Error(result.error);
+      if (!result.success) throw new Error(getFriendlyActionError(result.error));
       return result.data;
     },
     onSuccess: (_, variables) => {

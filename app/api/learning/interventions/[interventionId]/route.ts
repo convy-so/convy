@@ -18,7 +18,7 @@ export async function PATCH(
       ...updatePayload,
       interventionId,
     } as Parameters<typeof updateLearningInterventionAction>[0]);
-    if (!result.success) return apiError("VALIDATION_ERROR", result.error);
+    if (!result.success) return apiError("VALIDATION_ERROR", result.error.message || "Failed to update intervention", { details: result.error.details });
     return NextResponse.json(result);
   } catch (error) {
     return apiUnhandledError(error, "Failed to update intervention", "/api/learning/interventions/[interventionId]");

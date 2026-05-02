@@ -1,7 +1,7 @@
 import { getVerifiedSession } from "@/lib/auth/session";
 import { getDb } from "@/db";
 import { classroomStudents, learningSessions, studentProgressReports } from "@/db/schema/learning";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { GraduationCap, TrendingUp, BookOpen, Clock, PlayCircle } from "lucide-react";
 import { Link } from "@/i18n/routing";
 
@@ -48,7 +48,7 @@ export default async function StudentDashboardPage() {
                         Welcome back, <span className="text-sky-400">{session.user.name?.split(' ')[0]}</span>!
                     </h1>
                     <p className="text-slate-300 text-lg md:text-xl leading-relaxed">
-                        You've achieved <span className="text-white font-bold">{avgMastery}% mastery</span> across your active topics. Keep up the great momentum!
+                        You&apos;ve achieved <span className="text-white font-bold">{avgMastery}% mastery</span> across your active topics. Keep up the great momentum!
                     </p>
                     <div className="mt-8 flex flex-wrap gap-4">
                         <Link 
@@ -162,7 +162,7 @@ export default async function StudentDashboardPage() {
                             </div>
                             <h3 className="text-xl font-bold text-slate-900 mb-2">Start your first session</h3>
                             <p className="text-slate-500 max-w-sm mx-auto leading-relaxed">
-                                You don't have any recent activity. Head over to your classes to begin your learning journey.
+                                You don&apos;t have any recent activity. Head over to your classes to begin your learning journey.
                             </p>
                         </div>
                     )}

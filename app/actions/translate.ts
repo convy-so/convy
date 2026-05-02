@@ -9,18 +9,19 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { normalizeAppLocale, type AppLocale } from "@/lib/i18n/config";
+import { withErrorHandling, ActionResult, UnauthorizedError } from "@/lib/action-wrapper";
 
 /**
  * Server Action to update the user's preferred language
  */
-export async function updateUserLanguage(language: AppLocale) {
-  try {
+export async function updateUserLanguage(language: AppLocale): Promise<ActionResult<void>> {
+  return withErrorHandling(async () => {
     const session = await auth.api.getSession({
       headers: await headers(),
     });
 
     if (!session?.user) {
-      return { success: false, error: "Unauthorized" };
+      throw new UnauthorizedError();
     }
 
     const db = getDb();
@@ -36,10 +37,8 @@ export async function updateUserLanguage(language: AppLocale) {
       maxAge: 60 * 60 * 24 * 365, // 1 year
     });
 
-    return { success: true };
-  } catch {
-    return { success: false, error: "Failed to update language" };
-  }
+    return { success: true, data: undefined };
+  }, "updateUserLanguage");
 }
 
 export async function getCurrentUiLocale() {

@@ -1,15 +1,16 @@
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { getDb } from "@/db";
+import { users } from "@/db/schema/auth";
+import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth/session";
 import { isAdmin } from "@/lib/auth/admin";
 import { auth } from "@/lib/auth";
-import { getDb } from "@/db";
-import { users } from "@/db/schema/auth";
-import { eq } from "drizzle-orm";
 
 export async function POST(req: Request) {
     try {
         const session = await getCurrentSession();
-        if (!isAdmin(session.user)) {
+        if (!session || !isAdmin(session.user)) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 

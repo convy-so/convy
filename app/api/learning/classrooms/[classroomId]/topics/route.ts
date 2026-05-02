@@ -54,6 +54,6 @@ export async function POST(
     sourceBoundary: body.sourceBoundary,
     contentLocale: body.contentLocale,
   });
-  if (!result.success) return apiError("VALIDATION_ERROR", result.error);
+  if (!result.success) return apiError("VALIDATION_ERROR", result.error.message || "Failed to create topic", { details: result.error.details });
   return NextResponse.json(result);
 }

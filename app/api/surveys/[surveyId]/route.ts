@@ -1,7 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
@@ -92,7 +91,7 @@ export async function PATCH(
             ),
           );
 
-        if (existingVoiceSurveys.length >= 2) { return apiError("FORBIDDEN", "Limit reached: You can only have 2 voice surveys in your account"); }
+        if (existingVoiceSurveys.length >= 2) { return apiError("UNAUTHORIZED", "Limit reached: You can only have 2 voice surveys in your account"); }
       }
       updates.isVoice = body.isVoice;
     }

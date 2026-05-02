@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getNotifications, markNotificationAsRead } from "@/app/actions/notifications";
+import { getFriendlyActionError } from "@/lib/action-ux";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, CheckCircle2, AlertCircle, Info, Loader2, BellRing, MousePointerClick, CalendarClock } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -12,20 +13,30 @@ export default function NotificationsDashboard() {
   const queryClient = useQueryClient();
   const router = useRouter();
 
-  const { data: response, isLoading } = useQuery({
+  const { data: notifications = [], isLoading } = useQuery({
     queryKey: ["all-notifications"],
-    queryFn: () => getNotifications(),
-  });
-
-  const markAsReadMutation = useMutation({
-    mutationFn: (id: string) => markNotificationAsRead(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["all-notifications"] });
-      // Also invalidate header notifications if they use a similar key or header needs updating
+    queryFn: async () => {
+      const result = await getNotifications();
+      if (!result.success) throw new Error(getFriendlyActionError(result.error));
+      return result.data;
     },
   });
 
-  const data = response?.success ? response.data : [];
+  const markAsReadMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const result = await markNotificationAsRead(id);
+      if (!result.success) throw new Error(getFriendlyActionError(result.error));
+      return result.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["all-notifications"] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const data = notifications;
   
   if (isLoading) {
     return (

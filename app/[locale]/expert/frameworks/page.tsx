@@ -3,7 +3,7 @@ import { isExpertRole } from "@/lib/auth/roles";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { expertFrameworks } from "@/db/schema/learning";
-import { desc, eq } from "drizzle-orm";
+import { desc } from "drizzle-orm";
 import { FileText, Plus, GitBranch, ShieldCheck } from "lucide-react";
 import { Link } from "@/i18n/routing";
 

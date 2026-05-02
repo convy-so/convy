@@ -22,7 +22,8 @@ export default async function AdminFeedbackPage({
 }) {
   const { locale } = await params;
   const cookieHeader = (await headers()).get("cookie");
-  const items = await getPlatformFeedbackItems(cookieHeader).catch(() => []);
+  const result = await getPlatformFeedbackItems(cookieHeader);
+  const items = result.success ? result.data : [];
 
   const validStatuses: FeedbackStatus[] = ["open", "reviewing", "resolved", "dismissed"];
 
@@ -35,11 +36,11 @@ export default async function AdminFeedbackPage({
       return;
     }
 
-    try {
-      await updatePlatformFeedbackStatus(feedbackId, rawStatus as FeedbackStatus);
+    const result = await updatePlatformFeedbackStatus(feedbackId, rawStatus as FeedbackStatus);
+    if (result.success) {
       revalidatePath(`/${locale}/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/feedback`);
-    } catch (error) {
-      console.error("[AdminFeedback] setFeedbackStatus failed:", error);
+    } else {
+      console.error("[AdminFeedback] setFeedbackStatus failed:", result.error);
     }
   }
 

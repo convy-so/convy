@@ -11,11 +11,16 @@ import * as StudentService from "@/lib/learning/student-service";
 import * as TopicService from "@/lib/learning/topic-service";
 import * as InterventionService from "@/lib/learning/intervention-service";
 
-const appLocaleSchema = z.enum(["en", "fr", "de"]);
+import {
+  withErrorHandling,
+  ActionResult,
+  validateInput,
+  UnauthorizedError,
+  ForbiddenError,
+  NotFoundError,
+} from "@/lib/action-wrapper";
 
-type ActionResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string };
+const appLocaleSchema = z.enum(["en", "fr", "de"]);
 
 const createClassroomSchema = z.object({
   title: z.string().trim().min(2),
@@ -79,7 +84,7 @@ const learningInterventionUpdateSchema = z.object({
 
 async function requireTeachingSession() {
   const session = await getVerifiedSession();
-  if (!session) throw new Error("Unauthorized");
+  if (!session) throw new UnauthorizedError();
   return { session };
 }
 
@@ -90,11 +95,11 @@ async function ensureClassroomOwnerAccess(
   const classroomAccess = await getTeacherClassroomAccess(userId, classroomId);
 
   if (!classroomAccess) {
-    throw new Error("Classroom not found");
+    throw new NotFoundError("Classroom");
   }
 
   if (classroomAccess.accessLevel !== "owner") {
-    throw new Error("Only the classroom owner can perform this action.");
+    throw new ForbiddenError("Only the classroom owner can perform this action.");
   }
 
   return classroomAccess;
@@ -105,10 +110,10 @@ async function ensureClassroomOwnerAccess(
  */
 
 export async function createClassroomAction(
-  input: z.infer<typeof createClassroomSchema>,
+  input: unknown,
 ): Promise<ActionResult<unknown>> {
-  try {
-    const body = createClassroomSchema.parse(input);
+  return withErrorHandling(async () => {
+    const body = validateInput(input, createClassroomSchema);
     const { session } = await requireTeachingSession();
     
     const defaultContentLocale = await resolveUiLocaleForContentCreation({
@@ -126,43 +131,28 @@ export async function createClassroomAction(
     });
 
     return { success: true, data: result };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to create classroom",
-    };
-  }
+  }, "createClassroomAction");
 }
 
 export async function getTeacherClassroomsAction(): Promise<ActionResult<unknown>> {
-  try {
+  return withErrorHandling(async () => {
     const { session } = await requireTeachingSession();
     const data = await ClassroomService.getTeacherClassrooms(session.user.id);
     return { success: true, data };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to load classrooms",
-    };
-  }
+  }, "getTeacherClassroomsAction");
 }
 
 export async function getClassroomAssignedSurveyProgressAction(
   classroomId: string,
 ): Promise<ActionResult<unknown>> {
-  try {
+  return withErrorHandling(async () => {
     const { session } = await requireTeachingSession();
     const data = await ClassroomService.getClassroomSurveyProgress({
       classroomId,
       teacherUserId: session.user.id,
     });
     return { success: true, data };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to load progress",
-    };
-  }
+  }, "getClassroomAssignedSurveyProgressAction");
 }
 
 /**
@@ -170,10 +160,10 @@ export async function getClassroomAssignedSurveyProgressAction(
  */
 
 export async function inviteStudentToClassroomAction(
-  input: z.infer<typeof inviteStudentSchema>,
+  input: unknown,
 ): Promise<ActionResult<unknown>> {
-  try {
-    const body = inviteStudentSchema.parse(input);
+  return withErrorHandling(async () => {
+    const body = validateInput(input, inviteStudentSchema);
     const { session } = await requireTeachingSession();
     await ensureClassroomOwnerAccess(session.user.id, body.classroomId);
 
@@ -185,19 +175,14 @@ export async function inviteStudentToClassroomAction(
     });
 
     return { success: true, data: result };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to invite student",
-    };
-  }
+  }, "inviteStudentToClassroomAction");
 }
 
 export async function bulkInviteStudentsToClassroomAction(
-  input: z.infer<typeof bulkInviteStudentsSchema>,
+  input: unknown,
 ): Promise<ActionResult<unknown>> {
-  try {
-    const body = bulkInviteStudentsSchema.parse(input);
+  return withErrorHandling(async () => {
+    const body = validateInput(input, bulkInviteStudentsSchema);
     const { session } = await requireTeachingSession();
     await ensureClassroomOwnerAccess(session.user.id, body.classroomId);
 
@@ -208,12 +193,7 @@ export async function bulkInviteStudentsToClassroomAction(
     });
 
     return { success: true, data: result };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to import roster",
-    };
-  }
+  }, "bulkInviteStudentsToClassroomAction");
 }
 
 /**
@@ -221,10 +201,10 @@ export async function bulkInviteStudentsToClassroomAction(
  */
 
 export async function createLearningTopicAction(
-  input: z.infer<typeof createLearningTopicSchema>,
+  input: unknown,
 ): Promise<ActionResult<unknown>> {
-  try {
-    const body = createLearningTopicSchema.parse(input);
+  return withErrorHandling(async () => {
+    const body = validateInput(input, createLearningTopicSchema);
     const { session } = await requireTeachingSession();
     await ensureClassroomOwnerAccess(session.user.id, body.classroomId);
 
@@ -256,12 +236,7 @@ export async function createLearningTopicAction(
         contentLocale: result.contentLocale,
       },
     };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to create topic",
-    };
-  }
+  }, "createLearningTopicAction");
 }
 
 /**
@@ -273,25 +248,20 @@ export async function getLearningInterventionsAction(input: {
   topicId?: string;
   classroomStudentId?: string;
 }): Promise<ActionResult<unknown>> {
-  try {
+  return withErrorHandling(async () => {
     const { session } = await requireTeachingSession();
     await ensureClassroomOwnerAccess(session.user.id, input.classroomId);
 
     const data = await InterventionService.listInterventions(input);
     return { success: true, data };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to load interventions",
-    };
-  }
+  }, "getLearningInterventionsAction");
 }
 
 export async function createLearningInterventionAction(
-  input: z.infer<typeof learningInterventionSchema>,
+  input: unknown,
 ): Promise<ActionResult<unknown>> {
-  try {
-    const body = learningInterventionSchema.parse(input);
+  return withErrorHandling(async () => {
+    const body = validateInput(input, learningInterventionSchema);
     const { session } = await requireTeachingSession();
     await ensureClassroomOwnerAccess(session.user.id, body.classroomId);
 
@@ -300,27 +270,17 @@ export async function createLearningInterventionAction(
       createdByUserId: session.user.id,
     });
     return { success: true, data: result };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to create intervention",
-    };
-  }
+  }, "createLearningInterventionAction");
 }
 
 export async function updateLearningInterventionAction(
-  input: z.infer<typeof learningInterventionUpdateSchema>,
+  input: unknown,
 ): Promise<ActionResult<unknown>> {
-  try {
-    const body = learningInterventionUpdateSchema.parse(input);
+  return withErrorHandling(async () => {
+    const body = validateInput(input, learningInterventionUpdateSchema);
     await requireTeachingSession();
 
     const result = await InterventionService.updateIntervention(body);
     return { success: true, data: result };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to update intervention",
-    };
-  }
+  }, "updateLearningInterventionAction");
 }
