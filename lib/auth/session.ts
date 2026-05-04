@@ -54,8 +54,9 @@ async function buildSessionHeaders(authHeaders?: Headers | string | null): Promi
  * Accepts standard Headers, cookie strings, or handles automatic context retrieval.
  */
 export async function getCurrentSession(
-  authHeaders?: Headers | string | null,
+  authHeaders?: Headers | string | null
 ): Promise<AuthSessionWithUser | null> {
+
   return toTypedSession(
     await auth.api.getSession({
       headers: await buildSessionHeaders(authHeaders),

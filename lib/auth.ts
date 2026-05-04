@@ -38,8 +38,8 @@ export const auth = betterAuth({
     provider: "pg",
   }),
   session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
-    updateAge: 60 * 60 * 24, // 24 hours (sliding session)
+    expiresIn: 60 * 60 * 24 * 7,
+    updateAge: 60 * 60 * 24,
   },
   plugins: [
     admin({
@@ -155,8 +155,6 @@ export const auth = betterAuth({
             throw new Error("Admin emails cannot be registered as normal users.");
           }
           
-          // STRICT ROLE ENFORCEMENT: Only admin plugin / server operations should ever 
-          // successfully create an expert. Public signups must default to 'user'.
           if (user.role === "expert") {
              throw new Error("Expert accounts must be provisioned by an administrator.");
           }
