@@ -15,6 +15,7 @@ import {
   Sparkles,
   ChevronDown,
   Check,
+  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -28,7 +29,16 @@ import { useStudentLearningWorkspace } from "@/components/learning/hooks/use-stu
 import { MetricTile } from "@/components/learning/metric-tile";
 import type { LearningMeData } from "@/lib/api/learning";
 
-type StudentLearningMeData = Extract<LearningMeData, { role: "student" }>;
+type StudentLearningMeData = Extract<LearningMeData, { role: "student" }> & {
+  invitations?: Array<{
+    id: string;
+    classroomId: string;
+    classroomTitle: string;
+    invitedEmail: string;
+    status: string;
+    expiresAt: string | null;
+  }>;
+};
 
 type LiveMessage = {
   id: string;
@@ -127,6 +137,9 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
     patterns,
     strongestPattern,
     membershipCount,
+    invitations,
+    acceptInvitationMutation,
+    rejectInvitationMutation,
   } = useStudentLearningWorkspace({ learningMe });
 
   const [onboardingInput, setOnboardingInput] = useState("");
@@ -219,6 +232,44 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
         
         {/* Header Section */}
         <div className="space-y-10">
+          {invitations.length > 0 && (
+            <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                Pending classroom invitations
+              </p>
+              <div className="mt-3 space-y-2">
+                {invitations.map((invitation) => (
+                  <div
+                    key={invitation.id}
+                    className="flex flex-col gap-3 rounded-xl border border-blue-100 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{invitation.classroomTitle}</p>
+                      <p className="text-xs text-slate-500">{invitation.invitedEmail}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => acceptInvitationMutation.mutate(invitation.id)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+                        disabled={acceptInvitationMutation.isPending || rejectInvitationMutation.isPending}
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => rejectInvitationMutation.mutate(invitation.id)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                        disabled={acceptInvitationMutation.isPending || rejectInvitationMutation.isPending}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-8">
             <div className="space-y-6 max-w-3xl">
               <div className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-[10px] font-medium uppercase tracking-widest text-slate-400 border border-slate-100">
