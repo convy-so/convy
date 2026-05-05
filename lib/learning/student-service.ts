@@ -1,9 +1,8 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
-import { classroomStudents, users } from "@/db/schema";
-import { provisionManagedStudentAccount } from "@/lib/learning/provisioning";
+import { classroomInvitations, classroomStudents, users } from "@/db/schema";
 
 export type StudentInviteResult = {
   id: string;
@@ -14,7 +13,6 @@ export type StudentInviteResult = {
 };
 
 const PENDING_INVITE_STATUS = "pending";
-const INVITED_INVITE_STATUS = "invited";
 
 function normalizeStudentInviteInput(input: { fullName: string; email: string }) {
   return {
@@ -24,8 +22,8 @@ function normalizeStudentInviteInput(input: { fullName: string; email: string })
 }
 
 /**
- * Invite a managed student to a classroom
- * This creates a student record and provisions a managed account
+ * Invite a student email to a classroom.
+ * This no longer provisions managed accounts. Invitations are accepted by self-registered users.
  */
 export async function inviteManagedStudentToClassroom(params: {
   classroomId: string;
@@ -50,54 +48,112 @@ export async function inviteManagedStudentToClassroom(params: {
     throw new Error("That student email is already attached to this classroom.");
   }
 
-  // 2. Check if email already belongs to a non-managed user
-  const existingUser = await getDb().query.users.findFirst({
-    where: sql`lower(${users.email}) = ${normalizedEmail}`,
+  // 2. Ensure no active pending invitation already exists.
+  const pendingInvitation = await getDb().query.classroomInvitations.findFirst({
+    where: and(
+      eq(classroomInvitations.classroomId, params.classroomId),
+      eq(classroomInvitations.invitedEmail, normalizedEmail),
+      eq(classroomInvitations.status, PENDING_INVITE_STATUS),
+    ),
   });
 
-  if (existingUser) {
-    const existingManagedSeat = await getDb().query.classroomStudents.findFirst({
-      where: and(
-        eq(classroomStudents.userId, existingUser.id),
-        eq(classroomStudents.email, normalizedEmail),
-      ),
-    });
-
-    if (!existingManagedSeat) {
-      throw new Error(
-        "That email already belongs to an existing account and cannot be auto-managed as a student.",
-      );
-    }
+  if (pendingInvitation) {
+    throw new Error("An active invitation already exists for this email.");
   }
 
   const studentId = nanoid();
   const now = new Date();
 
-  // 3. Insert student record
-  await getDb().insert(classroomStudents).values({
+  // 3. Create invitation record (seat/membership is created on acceptance).
+  await getDb().insert(classroomInvitations).values({
     id: studentId,
     classroomId: params.classroomId,
     invitedByUserId: params.invitedByUserId,
-    fullName: normalizedFullName,
-    email: normalizedEmail,
-    inviteStatus: PENDING_INVITE_STATUS,
-    onboardingStatus: "interest_profile_pending",
+    invitedEmail: normalizedEmail,
+    status: PENDING_INVITE_STATUS,
     createdAt: now,
     updatedAt: now,
-  });
-
-  // 4. Provision account
-  const provisioned = await provisionManagedStudentAccount({
-    classroomStudentId: studentId,
   });
 
   return {
     id: studentId,
     classroomId: params.classroomId,
     fullName: normalizedFullName,
-    email: provisioned.email,
-    inviteStatus: INVITED_INVITE_STATUS,
+    email: normalizedEmail,
+    inviteStatus: PENDING_INVITE_STATUS,
   };
+}
+
+export async function listPendingInvitationsForUser(userId: string) {
+  const user = await getDb().query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) return [];
+  const normalizedEmail = user.email.trim().toLowerCase();
+  return getDb().query.classroomInvitations.findMany({
+    where: and(
+      eq(classroomInvitations.invitedEmail, normalizedEmail),
+      eq(classroomInvitations.status, PENDING_INVITE_STATUS),
+    ),
+    with: { classroom: true },
+  });
+}
+
+export async function respondToInvitation(params: {
+  invitationId: string;
+  userId: string;
+  decision: "accepted" | "rejected";
+}) {
+  const invitation = await getDb().query.classroomInvitations.findFirst({
+    where: eq(classroomInvitations.id, params.invitationId),
+  });
+  if (!invitation || invitation.status !== PENDING_INVITE_STATUS) {
+    throw new Error("Invitation not found or no longer pending.");
+  }
+
+  const user = await getDb().query.users.findFirst({ where: eq(users.id, params.userId) });
+  if (!user || user.email.trim().toLowerCase() !== invitation.invitedEmail) {
+    throw new Error("Invitation email does not match the signed-in user.");
+  }
+
+  const now = new Date();
+
+  await getDb()
+    .update(classroomInvitations)
+    .set({
+      status: params.decision,
+      acceptedByUserId: params.decision === "accepted" ? params.userId : null,
+      respondedAt: now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(classroomInvitations.id, params.invitationId),
+        eq(classroomInvitations.status, PENDING_INVITE_STATUS),
+      ),
+    );
+
+  if (params.decision === "accepted") {
+    const existingMembership = await getDb().query.classroomStudents.findFirst({
+      where: and(
+        eq(classroomStudents.classroomId, invitation.classroomId),
+        eq(classroomStudents.userId, params.userId),
+      ),
+    });
+
+    if (!existingMembership) {
+      await getDb().insert(classroomStudents).values({
+        id: nanoid(),
+        classroomId: invitation.classroomId,
+        userId: params.userId,
+        invitedByUserId: invitation.invitedByUserId,
+        fullName: user.name,
+        email: invitation.invitedEmail,
+        inviteStatus: "accepted",
+        onboardingStatus: "interest_profile_pending",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  }
 }
 
 /**

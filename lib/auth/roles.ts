@@ -1,11 +1,16 @@
 import type { AuthUser } from "@/lib/auth";
 import { env } from "@/lib/env";
 
-export type PlatformRole = "user" | "expert" | "admin";
+export type PlatformRole = "student" | "teacher" | "expert" | "admin";
 
 export function getPlatformRole(user: AuthUser | null | undefined): PlatformRole {
-  if (!user) return "user";
-  if (user.role === "admin" || user.role === "expert") {
+  if (!user) return "student";
+  if (
+    user.role === "admin" ||
+    user.role === "expert" ||
+    user.role === "teacher" ||
+    user.role === "student"
+  ) {
     return user.role;
   }
 
@@ -13,7 +18,7 @@ export function getPlatformRole(user: AuthUser | null | undefined): PlatformRole
     return "admin";
   }
 
-  return "user";
+  return "student";
 }
 
 export function isAdminRole(user: AuthUser | null | undefined) {

@@ -59,7 +59,11 @@ export function LearningHub() {
   }
 
   if (learningMe.role === "student") {
-    return <StudentLearningHome learningMe={learningMe} />;
+    return (
+      <StudentLearningHome
+        learningMe={{ ...learningMe, invitations: learningMe.invitations ?? [] }}
+      />
+    );
   }
 
   return <TeacherLearningHome />;
