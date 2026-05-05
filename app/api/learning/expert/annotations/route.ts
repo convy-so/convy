@@ -7,7 +7,7 @@ import { getDb } from "@/db";
 import { learningSessions, expertRuntimeModels } from "@/db/schema/learning";
 
 import { getVerifiedSession } from "@/lib/auth/session";
-import { isExpertRole } from "@/lib/auth/roles";
+import { isExpert } from "@/lib/auth/roles";
 import { resolveTeacherExpertAnchor } from "@/lib/learning/expert-access";
 import {
   createExpertReviewCase,
@@ -33,7 +33,7 @@ const createReviewCaseSchema = z.object({
 export async function GET(request: Request) {
   try {
     const session = await getVerifiedSession();
-    if (!isExpertRole(session.user)) {
+    if (!isExpert(session.user)) {
       throw new Error("Unauthorized: Expert or admin access required");
     }
 
@@ -60,7 +60,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await getVerifiedSession();
-    if (!isExpertRole(session.user)) {
+    if (!isExpert(session.user)) {
       throw new Error("Unauthorized: Expert or admin access required");
     }
     const body = createReviewCaseSchema.parse(await request.json());

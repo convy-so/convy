@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getVerifiedSession } from "@/lib/auth/session";
-import { isExpertRole } from "@/lib/auth/roles";
+import { isExpert } from "@/lib/auth/roles";
 import { listLearningMessages } from "@/lib/learning/storage";
 
 export async function GET(
@@ -11,7 +11,7 @@ export async function GET(
 ) {
   try {
     const session = await getVerifiedSession();
-    if (!isExpertRole(session.user)) {
+    if (!isExpert(session.user)) {
       throw new Error("Unauthorized: Expert or admin access required");
     }
 

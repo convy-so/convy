@@ -21,12 +21,26 @@ export function getPlatformRole(user: AuthUser | null | undefined): PlatformRole
   return "student";
 }
 
-export function isAdminRole(user: AuthUser | null | undefined) {
+export function isAdmin(user: AuthUser | null | undefined): boolean {
+  if (!user || user.emailVerified === false) return false;
   return getPlatformRole(user) === "admin";
 }
 
-export function isExpertRole(user: AuthUser | null | undefined) {
+export function isExpert(user: AuthUser | null | undefined): boolean {
+  if (!user || user.emailVerified === false) return false;
   const role = getPlatformRole(user);
   return role === "expert" || role === "admin";
+}
+
+export async function assertAdmin(user: AuthUser | null | undefined) {
+  if (!isAdmin(user)) {
+    throw new Error("Unauthorized: Admin access required");
+  }
+}
+
+export async function assertExpert(user: AuthUser | null | undefined) {
+  if (!isExpert(user)) {
+    throw new Error("Unauthorized: Expert access required");
+  }
 }
 

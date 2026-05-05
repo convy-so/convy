@@ -4,7 +4,7 @@ import { users } from "@/db/schema/auth";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth/session";
-import { isAdmin } from "@/lib/auth/admin";
+import { isAdmin } from "@/lib/auth/roles";
 import { auth } from "@/lib/auth";
 
 export async function POST(req: Request) {

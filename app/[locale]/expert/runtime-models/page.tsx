@@ -1,5 +1,5 @@
 import { getVerifiedSession } from "@/lib/auth/session";
-import { isExpertRole } from "@/lib/auth/roles";
+import { isExpert } from "@/lib/auth/roles";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { expertRuntimeModels } from "@/db/schema/learning";
@@ -8,7 +8,7 @@ import { BrainCircuit, Cpu, Zap, Settings2 } from "lucide-react";
 
 export default async function ExpertRuntimeModelsPage() {
     const session = await getVerifiedSession();
-    if (!isExpertRole(session.user)) redirect("/");
+    if (!isExpert(session.user)) redirect("/");
 
     const models = await getDb()
         .select()

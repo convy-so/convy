@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { getDb } from "@/db";
 import { expertCrystallizations } from "@/db/schema/learning";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { isExpertRole } from "@/lib/auth/roles";
+import { isExpert } from "@/lib/auth/roles";
 import type { ExpertHeuristic } from "@/lib/learning/types";
 import { withErrorHandling, ActionResult, UnauthorizedError } from "@/lib/action-wrapper";
 import { InferSelectModel } from "drizzle-orm";
@@ -19,7 +19,7 @@ export type ExpertCrystallizationWithTopic = InferSelectModel<typeof expertCryst
 export async function listDraftCrystallizations(): Promise<ActionResult<ExpertCrystallizationWithTopic[]>> {
   return withErrorHandling(async () => {
     const session = await getVerifiedSession();
-    if (!session || !isExpertRole(session.user)) {
+    if (!session || !isExpert(session.user)) {
       throw new UnauthorizedError();
     }
 
@@ -43,7 +43,7 @@ export async function approveCrystallization(params: {
 }): Promise<ActionResult<void>> {
   return withErrorHandling(async () => {
     const session = await getVerifiedSession();
-    if (!session || !isExpertRole(session.user)) {
+    if (!session || !isExpert(session.user)) {
       throw new UnauthorizedError();
     }
 
@@ -68,7 +68,7 @@ export async function approveCrystallization(params: {
 export async function rejectCrystallization(id: string): Promise<ActionResult<void>> {
   return withErrorHandling(async () => {
     const session = await getVerifiedSession();
-    if (!session || !isExpertRole(session.user)) {
+    if (!session || !isExpert(session.user)) {
       throw new UnauthorizedError();
     }
 

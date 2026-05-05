@@ -10,7 +10,7 @@ import {
   expertFrameworkVersions,
 } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { isExpertRole } from "@/lib/auth/roles";
+import { isExpert } from "@/lib/auth/roles";
 import { getTeacherOwnedFramework } from "@/lib/learning/expert-access";
 import { createRuntimeModel } from "@/lib/learning/storage";
 import { expertTutorRuntimeModelSchema } from "@/lib/learning/types";
@@ -26,7 +26,7 @@ export async function POST(
 ) {
   try {
     const session = await getVerifiedSession();
-    if (!isExpertRole(session.user)) {
+    if (!isExpert(session.user)) {
       throw new Error("Unauthorized: Expert or admin access required");
     }
     const { packId } = await params;
