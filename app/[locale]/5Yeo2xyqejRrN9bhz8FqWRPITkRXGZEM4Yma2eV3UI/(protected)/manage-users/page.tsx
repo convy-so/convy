@@ -64,7 +64,7 @@ export default async function AdminUsersPage() {
                                     }`}>
                                         {user.role === 'admin' && <Shield className="w-3.5 h-3.5" />}
                                         {user.role === 'expert' && <UserCog className="w-3.5 h-3.5" />}
-                                        {user.role === 'user' && <UserCheck className="w-3.5 h-3.5" />}
+                                        {(user.role === 'student' || user.role === 'teacher') && <UserCheck className="w-3.5 h-3.5" />}
                                         {user.role}
                                     </span>
                                 </td>

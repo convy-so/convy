@@ -105,14 +105,25 @@ const learningStudentMembershipSchema = z.object({
   ),
 });
 
+const classroomInvitationSchema = z.object({
+  id: z.string(),
+  classroomId: z.string(),
+  classroomTitle: z.string(),
+  invitedEmail: z.string().email(),
+  status: z.string(),
+  expiresAt: z.string().nullable(),
+});
+
 const learningMeSchema = z.discriminatedUnion("role", [
   z.object({
     role: z.literal("student"),
     student: z.array(learningStudentMembershipSchema),
+    invitations: z.array(classroomInvitationSchema).default([]),
   }),
   z.object({
     role: z.literal("non-student"),
     student: z.null(),
+    invitations: z.array(classroomInvitationSchema).default([]),
   }),
 ]);
 
@@ -419,6 +430,26 @@ export async function fetchTeacherClassrooms() {
   return await parseResponse(
     await fetch("/api/learning/classrooms", { credentials: "include" }),
     z.object({ success: z.literal(true), data: z.array(classroomSchema) }),
+  );
+}
+
+export async function acceptClassroomInvitation(invitationId: string) {
+  return await parseResponse(
+    await fetch(`/api/learning/invitations/${invitationId}/accept`, {
+      method: "POST",
+      credentials: "include",
+    }),
+    z.object({ success: z.literal(true) }),
+  );
+}
+
+export async function rejectClassroomInvitation(invitationId: string) {
+  return await parseResponse(
+    await fetch(`/api/learning/invitations/${invitationId}/reject`, {
+      method: "POST",
+      credentials: "include",
+    }),
+    z.object({ success: z.literal(true) }),
   );
 }
 

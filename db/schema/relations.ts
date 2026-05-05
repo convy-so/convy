@@ -4,6 +4,7 @@ import { surveys } from "./surveys";
 import { notifications } from "./notifications";
 import {
   classrooms,
+  classroomInvitations,
   classroomStudents,
   learningTopics,
   topicMaterials,
@@ -21,6 +22,12 @@ export const usersRelations = relations(users, ({ many }) => ({
   invitedStudents: many(classroomStudents, {
     relationName: "student_classroom_invites_created",
   }),
+  classroomInvitationsSent: many(classroomInvitations, {
+    relationName: "classroom_invitations_created",
+  }),
+  classroomInvitationsAccepted: many(classroomInvitations, {
+    relationName: "classroom_invitations_accepted",
+  }),
   learningTopics: many(learningTopics, {
     relationName: "created_learning_topics",
   }),
@@ -28,6 +35,26 @@ export const usersRelations = relations(users, ({ many }) => ({
     relationName: "uploaded_topic_materials",
   }),
 }));
+
+export const classroomInvitationsRelations = relations(
+  classroomInvitations,
+  ({ one }) => ({
+    classroom: one(classrooms, {
+      fields: [classroomInvitations.classroomId],
+      references: [classrooms.id],
+    }),
+    invitedBy: one(users, {
+      fields: [classroomInvitations.invitedByUserId],
+      references: [users.id],
+      relationName: "classroom_invitations_created",
+    }),
+    acceptedBy: one(users, {
+      fields: [classroomInvitations.acceptedByUserId],
+      references: [users.id],
+      relationName: "classroom_invitations_accepted",
+    }),
+  }),
+);
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, { fields: [notifications.userId], references: [users.id] }),
