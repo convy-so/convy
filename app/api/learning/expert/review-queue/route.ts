@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 
 import { getVerifiedSession } from "@/lib/auth/session";
-import { assertAiOpsUser } from "@/lib/auth/expert";
+import { isExpertRole } from "@/lib/auth/roles";
 import { listExpertReviewQueue } from "@/lib/learning/storage";
 import { apiUnhandledError } from "@/lib/api/error-contract";
 
 export async function GET() {
   try {
     const session = await getVerifiedSession();
-    await assertAiOpsUser(session.user);
+    if (!isExpertRole(session.user)) {
+      throw new Error("Unauthorized: Expert or admin access required");
+    }
 
     const queue = await listExpertReviewQueue({
       teacherUserId: session.user.id,

@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { expertFrameworks } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { assertAiOpsUser } from "@/lib/auth/expert";
+import { isExpertRole } from "@/lib/auth/roles";
 import {
   getTeacherOwnedFramework,
   getTeacherOwnedTopic,
@@ -23,7 +23,9 @@ const createFrameworkSchema = z.object({
 export async function GET() {
   try {
     const session = await getVerifiedSession();
-    await assertAiOpsUser(session.user);
+    if (!isExpertRole(session.user)) {
+      throw new Error("Unauthorized: Expert or admin access required");
+    }
     const frameworks = await getDb().query.expertFrameworks.findMany({
       with: {
         topic: {
@@ -63,7 +65,9 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await getVerifiedSession();
-    await assertAiOpsUser(session.user);
+    if (!isExpertRole(session.user)) {
+      throw new Error("Unauthorized: Expert or admin access required");
+    }
     const body = createFrameworkSchema.parse(await request.json());
     const topic = await getTeacherOwnedTopic(session.user.id, body.topicId);
     if (!topic) {
