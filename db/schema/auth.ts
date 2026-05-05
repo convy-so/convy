@@ -20,7 +20,7 @@ const users = pgTable(
     emailVerified: boolean("email_verified").default(false).notNull(),
     name: text("name").notNull(),
     image: text("image"),
-    role: userRoleEnum("role").default("user").notNull(),
+    role: userRoleEnum("role").default("student").notNull(),
     banned: boolean("banned").default(false).notNull(),
     banReason: text("ban_reason"),
     banExpires: timestamp("ban_expires", {
