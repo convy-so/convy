@@ -8,6 +8,8 @@ import { useLocale } from "next-intl";
 import toast from "react-hot-toast";
 
 import {
+  acceptClassroomInvitation,
+  rejectClassroomInvitation,
   askOutOfSessionQuestion,
   completeTutoringSession,
   fetchMyPatterns,
@@ -21,7 +23,16 @@ import {
   type AppLocale,
 } from "@/lib/i18n/config";
 
-type StudentLearningMeData = Extract<LearningMeData, { role: "student" }>;
+type StudentLearningMeData = Extract<LearningMeData, { role: "student" }> & {
+  invitations?: Array<{
+    id: string;
+    classroomId: string;
+    classroomTitle: string;
+    invitedEmail: string;
+    status: string;
+    expiresAt: string | null;
+  }>;
+};
 
 function toTextUIMessages(
   messages:
@@ -62,6 +73,7 @@ export function useStudentLearningWorkspace({
     isAppLocale(locale) ? locale : "en",
   );
   const memberships = learningMe.student;
+  const invitations = learningMe.invitations ?? [];
   const [selectedMembershipId, setSelectedMembershipId] = useState<string | null>(
     memberships[0]?.classroomStudentId ?? null,
   );
@@ -279,6 +291,28 @@ export function useStudentLearningWorkspace({
     },
   });
 
+  const acceptInvitationMutation = useMutation({
+    mutationFn: acceptClassroomInvitation,
+    onSuccess: async () => {
+      toast.success("Invitation accepted");
+      await queryClient.invalidateQueries({ queryKey: queryKeys.learning.me });
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to accept invitation");
+    },
+  });
+
+  const rejectInvitationMutation = useMutation({
+    mutationFn: rejectClassroomInvitation,
+    onSuccess: async () => {
+      toast.success("Invitation dismissed");
+      await queryClient.invalidateQueries({ queryKey: queryKeys.learning.me });
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to reject invitation");
+    },
+  });
+
   const selectedTopic =
     selectedMembership?.topics.find((topic) => topic.id === effectiveSelectedTopicId) ?? null;
   const sessionState = tutoringSessionQuery.data?.data.sessionState ?? null;
@@ -325,5 +359,8 @@ export function useStudentLearningWorkspace({
     patterns,
     strongestPattern,
     membershipCount,
+    invitations,
+    acceptInvitationMutation,
+    rejectInvitationMutation,
   };
 }
