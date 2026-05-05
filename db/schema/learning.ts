@@ -91,6 +91,41 @@ export const classroomStudents = pgTable(
   ],
 );
 
+export const classroomInvitations = pgTable(
+  "classroom_invitations",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    classroomId: text("classroom_id")
+      .notNull()
+      .references(() => classrooms.id, { onDelete: "cascade" }),
+    invitedByUserId: text("invited_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    invitedEmail: text("invited_email").notNull(),
+    status: text("status").default("pending").notNull(),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    acceptedByUserId: text("accepted_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    respondedAt: timestamp("responded_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+  },
+  (table) => [
+    index("classroom_invitations_classroom_id_idx").on(table.classroomId),
+    index("classroom_invitations_email_idx").on(table.invitedEmail),
+    index("classroom_invitations_status_idx").on(table.status),
+    uniqueIndex("classroom_invitations_pending_unique")
+      .on(table.classroomId, table.invitedEmail)
+      .where(sql`${table.status} = 'pending'`),
+  ],
+);
+
 export const learningTopics = pgTable(
   "learning_topics",
   {

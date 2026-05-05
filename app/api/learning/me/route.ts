@@ -6,16 +6,28 @@ import { getDb } from "@/db";
 import { surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { listStudentMemberships } from "@/lib/learning/access";
+import { listPendingInvitationsForUser } from "@/lib/learning/student-service";
 
 export async function GET() {
   try {
     const session = await getVerifiedSession();
-    const memberships = await listStudentMemberships(session.user.id);
+    const [memberships, invitations] = await Promise.all([
+      listStudentMemberships(session.user.id),
+      listPendingInvitationsForUser(session.user.id),
+    ]);
 
     if (memberships.length === 0) {
       return NextResponse.json({
         role: "non-student",
         student: null,
+        invitations: invitations.map((invitation) => ({
+          id: invitation.id,
+          classroomId: invitation.classroomId,
+          classroomTitle: invitation.classroom?.title ?? "Classroom",
+          invitedEmail: invitation.invitedEmail,
+          status: invitation.status,
+          expiresAt: invitation.expiresAt?.toISOString() ?? null,
+        })),
       });
     }
 
@@ -118,6 +130,14 @@ export async function GET() {
           };
         }),
       ),
+      invitations: invitations.map((invitation) => ({
+        id: invitation.id,
+        classroomId: invitation.classroomId,
+        classroomTitle: invitation.classroom?.title ?? "Classroom",
+        invitedEmail: invitation.invitedEmail,
+        status: invitation.status,
+        expiresAt: invitation.expiresAt?.toISOString() ?? null,
+      })),
     });
   } catch (error) {
     return apiUnhandledError(error, "Failed to load student context", "/api/learning/me");
