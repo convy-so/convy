@@ -3,7 +3,7 @@ import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { getVerifiedSession } from "@/lib/auth/session";
-import { assertAiOpsUser } from "@/lib/auth/expert";
+import { isExpertRole } from "@/lib/auth/roles";
 import { getTeacherOwnedTopic } from "@/lib/learning/expert-access";
 import { searchLearningTopicContext } from "@/lib/learning/rag";
 import { previewAssessmentQuestionForTopic } from "@/lib/learning/session-engine";
@@ -15,7 +15,9 @@ const previewSchema = z.object({
 export async function POST(request: Request) {
   try {
     const session = await getVerifiedSession();
-    await assertAiOpsUser(session.user);
+    if (!isExpertRole(session.user)) {
+      throw new Error("Unauthorized: Expert or admin access required");
+    }
 
     const body = previewSchema.parse(await request.json());
     const topic = await getTeacherOwnedTopic(session.user.id, body.topicId);

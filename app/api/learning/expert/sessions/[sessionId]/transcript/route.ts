@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getVerifiedSession } from "@/lib/auth/session";
-import { assertAiOpsUser } from "@/lib/auth/expert";
+import { isExpertRole } from "@/lib/auth/roles";
 import { listLearningMessages } from "@/lib/learning/storage";
 
 export async function GET(
@@ -11,7 +11,9 @@ export async function GET(
 ) {
   try {
     const session = await getVerifiedSession();
-    await assertAiOpsUser(session.user);
+    if (!isExpertRole(session.user)) {
+      throw new Error("Unauthorized: Expert or admin access required");
+    }
 
     const { sessionId } = await props.params;
 

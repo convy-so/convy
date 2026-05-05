@@ -12,7 +12,7 @@ import {
 } from "@/db/schema";
 import { resolveAdminSessionEmail } from "@/lib/admin/session";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { hasAiOpsAccess } from "@/lib/auth/expert";
+import { isExpertRole } from "@/lib/auth/roles";
 import { getPlatformRole } from "@/lib/auth/roles";
 import { type AuthSessionWithUser } from "@/lib/auth";
 import { indexFewShotExample } from "@/lib/ai/few-shot-library";
@@ -73,7 +73,7 @@ async function requireAiOpsSession(authHeaders?: Headers | string | null) {
   }
 
   const session = await getVerifiedSession(cookieHeader);
-  if (!hasAiOpsAccess(session.user)) {
+  if (!isExpertRole(session.user)) {
     throw new UnauthorizedError("Expert or admin access required");
   }
 

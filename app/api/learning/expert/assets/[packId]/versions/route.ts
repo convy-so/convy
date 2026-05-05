@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import { expertFrameworkVersions } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/session";
-import { assertAiOpsUser } from "@/lib/auth/expert";
+import { isExpertRole } from "@/lib/auth/roles";
 import { getTeacherOwnedFramework } from "@/lib/learning/expert-access";
 import { expertFrameworkSchema } from "@/lib/learning/types";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
@@ -21,7 +21,9 @@ export async function GET(
 ) {
   try {
     const session = await getVerifiedSession();
-    await assertAiOpsUser(session.user);
+    if (!isExpertRole(session.user)) {
+      throw new Error("Unauthorized: Expert or admin access required");
+    }
     const { packId } = await params;
     const framework = await getTeacherOwnedFramework(session.user.id, packId);
     if (!framework) {
@@ -47,7 +49,9 @@ export async function POST(
 ) {
   try {
     const session = await getVerifiedSession();
-    await assertAiOpsUser(session.user);
+    if (!isExpertRole(session.user)) {
+      throw new Error("Unauthorized: Expert or admin access required");
+    }
     const { packId } = await params;
     const framework = await getTeacherOwnedFramework(session.user.id, packId);
     if (!framework) {

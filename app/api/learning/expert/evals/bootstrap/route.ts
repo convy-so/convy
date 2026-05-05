@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getVerifiedSession } from "@/lib/auth/session";
-import { assertAiOpsUser } from "@/lib/auth/expert";
+import { isExpertRole } from "@/lib/auth/roles";
 
 const tutoringEvalFamilies = [
   {
@@ -34,7 +34,9 @@ const tutoringEvalFamilies = [
 export async function POST() {
   try {
     const session = await getVerifiedSession();
-    await assertAiOpsUser(session.user);
+    if (!isExpertRole(session.user)) {
+      throw new Error("Unauthorized: Expert or admin access required");
+    }
 
     return NextResponse.json({
       success: true,
