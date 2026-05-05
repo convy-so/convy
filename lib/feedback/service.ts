@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import { classrooms, classroomStudents, platformFeedback } from "@/db/schema";
 import type { AuthUser } from "@/lib/auth";
-import { isExpertRole } from "@/lib/auth/roles";
+import { isExpert } from "@/lib/auth/roles";
 
 export const feedbackRoles = ["teacher", "student", "expert"] as const;
 export const feedbackKinds = ["complaint", "suggestion"] as const;
@@ -55,7 +55,7 @@ export async function resolveFeedbackFormContext(user: AuthUser) {
   if (studentMembership) {
     allowedRoles.push("student");
   }
-  if (isExpertRole(user)) {
+  if (isExpert(user)) {
     allowedRoles.push("expert");
   }
 

@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { ExpertSidebar } from "@/components/expert/expert-sidebar";
-import { isExpertRole } from "@/lib/auth/roles";
+import { isExpert } from "@/lib/auth/roles";
 import { getVerifiedSession } from "@/lib/auth/session";
 
 export default function ExpertLayout(props: {
@@ -35,7 +35,7 @@ async function ExpertLayoutContent({
   const cookieHeader = (await headers()).get("cookie");
   const session = await getVerifiedSession(cookieHeader).catch(() => null);
 
-  if (!session || !isExpertRole(session.user)) {
+  if (!session || !isExpert(session.user)) {
     redirect(`/${locale}/expert-login`);
   }
 

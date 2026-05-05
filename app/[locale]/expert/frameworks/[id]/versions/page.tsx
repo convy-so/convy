@@ -1,5 +1,5 @@
 import { getVerifiedSession } from "@/lib/auth/session";
-import { isExpertRole } from "@/lib/auth/roles";
+import { isExpert } from "@/lib/auth/roles";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { expertFrameworks, expertFrameworkVersions } from "@/db/schema/learning";
@@ -13,7 +13,7 @@ export default async function ExpertFrameworkVersionsPage({
     params: Promise<{ locale: string, id: string }>
 }) {
     const session = await getVerifiedSession();
-    if (!isExpertRole(session.user)) redirect("/");
+    if (!isExpert(session.user)) redirect("/");
 
     const { id } = await params;
 

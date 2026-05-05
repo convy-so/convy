@@ -1,5 +1,5 @@
 import { getVerifiedSession } from "@/lib/auth/session";
-import { isAdmin } from "@/lib/auth/admin";
+import { isAdmin } from "@/lib/auth/roles";
 import { redirect } from "next/navigation";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { Suspense } from "react";

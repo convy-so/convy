@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 
 import { FeedbackForm } from "@/components/feedback/feedback-form";
-import { isExpertRole } from "@/lib/auth/roles";
+import { isExpert } from "@/lib/auth/roles";
 import { getVerifiedSession } from "@/lib/auth/session";
 import { resolveFeedbackFormContext } from "@/lib/feedback/service";
 
@@ -15,7 +15,7 @@ export default async function ExpertFeedbackPage({
   const cookieHeader = (await headers()).get("cookie");
   const session = await getVerifiedSession(cookieHeader).catch(() => null);
 
-  if (!session || !isExpertRole(session.user)) {
+  if (!session || !isExpert(session.user)) {
     redirect(`/${locale}`);
   }
 
