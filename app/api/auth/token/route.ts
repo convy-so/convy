@@ -1,8 +1,9 @@
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { getRedisClient } from "@/lib/redis";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { toApiAuthError } from "@/lib/auth/error-map";
 
 export async function GET() {
   try {
@@ -17,13 +18,8 @@ export async function GET() {
     response.headers.set("Cache-Control", "no-store");
     return response;
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED")
-    ) {
-      return apiError("UNAUTHENTICATED", error.message);
-    }
+    const mapped = toApiAuthError(error);
+    if (mapped) return mapped;
     return apiUnhandledError(
       error,
       "Failed to generate WebSocket token",

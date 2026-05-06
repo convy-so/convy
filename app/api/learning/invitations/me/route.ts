@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiUnhandledError } from "@/lib/api/error-contract";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { listPendingInvitationsForUser } from "@/lib/learning/student-service";
 
 export async function GET() {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getCurrentSession } from "@/lib/auth/session";
+import { getCurrentSession } from "@/lib/auth/dal";
 import { recordConsentEvent } from "@/lib/privacy/compliance";
 import {
   CONSENT_COOKIE_NAME,

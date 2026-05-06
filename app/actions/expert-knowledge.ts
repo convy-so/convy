@@ -5,8 +5,8 @@ import { revalidatePath } from "next/cache";
 
 import { getDb } from "@/db";
 import { expertCrystallizations } from "@/db/schema/learning";
-import { getVerifiedSession } from "@/lib/auth/session";
-import { isExpert } from "@/lib/auth/roles";
+import { getVerifiedSession } from "@/lib/auth/dal";
+import { isExpert } from "@/lib/auth/dal";
 import type { ExpertHeuristic } from "@/lib/learning/types";
 import { withErrorHandling, ActionResult, UnauthorizedError } from "@/lib/action-wrapper";
 import { InferSelectModel } from "drizzle-orm";

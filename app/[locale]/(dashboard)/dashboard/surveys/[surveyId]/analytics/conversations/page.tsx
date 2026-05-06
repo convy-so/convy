@@ -3,7 +3,7 @@ import { ArrowLeft, Loader2, Search } from "lucide-react";
 
 import { ConversationCard } from "@/components/analytics/ConversationCard";
 import { Link, redirect } from "@/i18n/routing";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,

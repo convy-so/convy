@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { headers } from "next/headers";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { ProfileContent } from "@/components/dashboard/profile-content";
 

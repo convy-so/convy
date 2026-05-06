@@ -3,7 +3,7 @@ import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { getDb } from "@/db";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import {
   answerTeacherStudentQuestion,
   hydrateStudentLearningEvidence,

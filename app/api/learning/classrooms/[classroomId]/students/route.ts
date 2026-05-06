@@ -9,7 +9,7 @@ import {
 } from "@/app/actions/classroom";
 import { getDb } from "@/db";
 import { classroomStudents } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { getTeacherClassroomAccess } from "@/lib/learning/access";
 
 const singleStudentInviteSchema = z.object({

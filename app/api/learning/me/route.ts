@@ -4,7 +4,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { surveyConversations } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { listStudentMemberships } from "@/lib/learning/access";
 import { listPendingInvitationsForUser } from "@/lib/learning/student-service";
 

@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { getVerifiedSession } from "@/lib/auth/session";
-import { getPlatformRole } from "@/lib/auth/roles";
+import { getVerifiedSession } from "@/lib/auth/dal";
+import { getPlatformRole } from "@/lib/auth/dal";
 
 export default async function SurveysLayout({ children, params }: { children: React.ReactNode; params: Promise<{ locale: string }> }) {
   const { locale } = await params;

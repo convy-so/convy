@@ -4,8 +4,8 @@ import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { expertFrameworks } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
-import { isExpert } from "@/lib/auth/roles";
+import { getVerifiedSession } from "@/lib/auth/dal";
+import { isExpert } from "@/lib/auth/dal";
 import {
   getTeacherOwnedFramework,
   getTeacherOwnedTopic,

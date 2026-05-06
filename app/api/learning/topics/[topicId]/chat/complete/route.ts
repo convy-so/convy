@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { getStudentTopicAccess } from "@/lib/learning/access";
 import { finalizeTutoringSession } from "@/lib/learning/tutoring-session-lifecycle";
 import { getLearningSessionById } from "@/lib/learning/storage";

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { getVerifiedSession } from "@/lib/auth/session";
-import { isExpert } from "@/lib/auth/roles";
+import { getVerifiedSession } from "@/lib/auth/dal";
+import { isExpert } from "@/lib/auth/dal";
 import { listExpertReviewQueue } from "@/lib/learning/storage";
 import { apiUnhandledError } from "@/lib/api/error-contract";
 

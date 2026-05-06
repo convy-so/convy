@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { getDb } from "@/db";
 import { learningTeacherChatSessions } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { getTeacherClassroomAccess } from "@/lib/learning/access";
 import { normalizeAppLocale } from "@/lib/i18n/config";
 
