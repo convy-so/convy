@@ -19,7 +19,7 @@ import {
   toPersistedUIChatMessages,
   toVisibleConversationMessages,
 } from "@/lib/chat-ui-messages";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import {
   acquireSurveyLease,
   getActiveSurveyLease,

@@ -1,4 +1,4 @@
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { getDb } from "@/db";
 import { classroomStudents, studentInterestProfiles } from "@/db/schema/learning";
 import { eq } from "drizzle-orm";

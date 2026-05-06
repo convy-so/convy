@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { FeedbackForm } from "@/components/feedback/feedback-form";
-import { getCurrentSession } from "@/lib/auth/session";
+import { getCurrentSession } from "@/lib/auth/dal";
 import { resolveFeedbackFormContext } from "@/lib/feedback/service";
 
 export default async function DashboardFeedbackPage() {

@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
-import { getVerifiedSession } from "@/lib/auth/session";
-import { isExpert } from "@/lib/auth/roles";
+import { getVerifiedSession } from "@/lib/auth/dal";
+import { isExpert } from "@/lib/auth/dal";
 import { getTeacherOwnedTopic } from "@/lib/learning/expert-access";
 import { searchLearningTopicContext } from "@/lib/learning/rag";
 import { previewAssessmentQuestionForTopic } from "@/lib/learning/session-engine";

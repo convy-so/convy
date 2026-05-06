@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
 import { surveyCreationConversations, surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { type ChatMessage } from "@/lib/chat-types";
 import {
   getActiveSurveyLease,

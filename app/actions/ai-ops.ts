@@ -11,9 +11,9 @@ import {
   fewShotExamples,
 } from "@/db/schema";
 import { resolveAdminSessionEmail } from "@/lib/admin/session";
-import { getVerifiedSession } from "@/lib/auth/session";
-import { isExpert } from "@/lib/auth/roles";
-import { getPlatformRole } from "@/lib/auth/roles";
+import { getVerifiedSession } from "@/lib/auth/dal";
+import { isExpert } from "@/lib/auth/dal";
+import { getPlatformRole } from "@/lib/auth/dal";
 import { type AuthSessionWithUser } from "@/lib/auth";
 import { indexFewShotExample } from "@/lib/ai/few-shot-library";
 import type { CoreAiFeature } from "@/lib/ai/types";

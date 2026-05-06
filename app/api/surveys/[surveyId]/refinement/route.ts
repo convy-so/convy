@@ -4,7 +4,7 @@ import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { buildRefinementAssistantResponse } from "@/lib/education/refinement";
 import {
   appendRefinementMessage,

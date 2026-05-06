@@ -9,6 +9,15 @@ import {
   resolveRespondentAccess,
 } from "@/lib/privacy/respondent";
 import { resolveTrustedNodeClientIp } from "@/lib/security/client-ip";
+import { getPlatformRole, type PlatformRole, AuthError as DalAuthError } from "@/lib/auth/dal";
+import { assertPermission } from "@/lib/auth/policy";
+
+type WebsocketPrincipal = {
+  id: string;
+  email: string;
+  emailVerified: boolean;
+  role: PlatformRole;
+};
 
 /**
  * WebSocket Authentication Middleware
@@ -21,7 +30,7 @@ export interface AuthenticatedConnection {
   sessionId: string;
   userEmail: string;
   emailVerified: boolean;
-  role: "user" | "admin";
+  role: PlatformRole;
 }
 
 export interface AuthError {
@@ -99,7 +108,7 @@ async function verifySessionToken(token: string): Promise<{
   sessionId: string;
   userEmail: string;
   emailVerified: boolean;
-  role: "user" | "admin";
+  role: PlatformRole;
 } | null> {
   try {
     const resolvedToken = await resolveSessionToken(token);
@@ -149,12 +158,10 @@ async function verifySessionToken(token: string): Promise<{
       }
 
       // Determine the derived role
-      let derivedRole: "user" | "admin" = "user";
-
-      // 1. Global Admin always wins
-      if (user.role === "admin") {
-        derivedRole = "admin";
-      }
+      const derivedRole = getPlatformRole({
+        role: user.role,
+        emailVerified: user.emailVerified,
+      });
 
       return {
         userId: session.userId,
@@ -209,6 +216,21 @@ export async function authenticateWebSocket(
       code: "EMAIL_NOT_VERIFIED",
       message: "Email not verified",
     };
+  }
+
+  try {
+    const principal: WebsocketPrincipal = {
+      id: userInfo.userId,
+      email: userInfo.userEmail,
+      emailVerified: userInfo.emailVerified,
+      role: userInfo.role,
+    };
+    assertPermission(principal, "auth:read");
+  } catch (error) {
+    if (error instanceof DalAuthError) {
+      return { code: error.code, message: error.message };
+    }
+    return { code: "UNAUTHORIZED", message: "Unauthorized" };
   }
 
   return {

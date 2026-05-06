@@ -6,6 +6,7 @@
 import { z } from "zod";
 import * as Sentry from "@sentry/nextjs";
 import { createLogger, serializeError } from "@/lib/logger";
+import { toActionAuthError } from "@/lib/auth/error-map";
 
 const log = createLogger("action");
 
@@ -122,18 +123,16 @@ export async function withErrorHandling<T>(
       };
     }
 
+    const mappedAuthError = toActionAuthError(error);
+    if (mappedAuthError) {
+      return {
+        success: false,
+        error: { code: mappedAuthError.code, message: mappedAuthError.message },
+      };
+    }
+
     // Handle standard errors
     if (error instanceof Error) {
-      // Authentication errors
-      if (
-        error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED"
-      ) {
-        return { 
-          success: false, 
-          error: { code: "UNAUTHORIZED", message: error.message }
-        };
-      }
 
       // Rate limit errors
       if (error.message.startsWith("AI_RATE_LIMIT_EXCEEDED")) {

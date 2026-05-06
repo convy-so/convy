@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { getDb } from "@/db";
 import { notifications } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { getPrimaryStudentMembership } from "@/lib/learning/access";
 import {
   buildOnboardingGreeting,

@@ -4,7 +4,7 @@ import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { topicMaterials } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { getTeacherTopicAccess } from "@/lib/learning/access";
 import { createSignedLearningMaterialUrl } from "@/lib/storage";
 

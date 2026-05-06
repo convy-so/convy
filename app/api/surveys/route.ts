@@ -12,7 +12,7 @@ import {
   surveys,
   users,
 } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { buildCreationGreeting } from "@/lib/education/creation-agent";
 import { resolveUiLocaleForContentCreation } from "@/lib/i18n/resolve-locale";
 import { getTeacherClassroomAccess } from "@/lib/learning/access";

@@ -4,8 +4,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { ExpertSidebar } from "@/components/expert/expert-sidebar";
-import { isExpert } from "@/lib/auth/roles";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { isExpert } from "@/lib/auth/dal";
+import { getVerifiedSession } from "@/lib/auth/dal";
 
 export default function ExpertLayout(props: {
   children: React.ReactNode;

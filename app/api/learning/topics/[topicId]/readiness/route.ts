@@ -4,7 +4,7 @@ import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { analysisModel } from "@/lib/ai";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { getTeacherTopicAccess } from "@/lib/learning/access";
 import { getTopicWithMaterials } from "@/lib/learning/storage";
 

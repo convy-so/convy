@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
 import type { ChatSessionMessage } from "@/db/schema/surveys";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { askAnalyticsQuestion } from "@/lib/education/analytics-workflow";
 import { normalizeSpeechToTextLanguage } from "@/lib/voice/voice-locales";
 import {
