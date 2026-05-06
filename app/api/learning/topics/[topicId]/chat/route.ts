@@ -2,7 +2,7 @@ import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } 
 import { z } from "zod";
 import { NextResponse } from "next/server";
 
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { extractMessageText, toPersistedUIChatMessages, toUIMessages } from "@/lib/chat-ui-messages";
 import {
   appendLearningMessage,

@@ -1,4 +1,4 @@
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { getDb } from "@/db";
 import { surveys, surveyAnalyticsSnapshots, surveySessions } from "@/db/schema";
 import { and, count, desc, eq } from "drizzle-orm";

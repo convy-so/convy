@@ -13,7 +13,7 @@ import {
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { SurveyCard } from "@/components/dashboard/survey-card";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { getDb } from "@/db";
 import { surveys, surveyConversations } from "@/db/schema/surveys";
 import { count, desc, eq } from "drizzle-orm";

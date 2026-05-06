@@ -6,7 +6,7 @@ import { and, eq, ne, or, sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { surveys, users } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,

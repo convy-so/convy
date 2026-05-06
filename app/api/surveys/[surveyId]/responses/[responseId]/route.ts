@@ -10,7 +10,7 @@ import {
   surveyTurns,
   surveys,
 } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import type { AnalyticsSessionDetail } from "@/lib/analytics";
 import type {
   ConversationInsight,

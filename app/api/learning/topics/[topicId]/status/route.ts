@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { getDb } from "@/db";
 import { learningTopics } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { getTeacherTopicAccess } from "@/lib/learning/access";
 
 const schema = z.object({

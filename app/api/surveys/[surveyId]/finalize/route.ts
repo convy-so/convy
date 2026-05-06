@@ -2,7 +2,7 @@ import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { env } from "@/lib/env";
 import { getDb } from "@/db";
 import {

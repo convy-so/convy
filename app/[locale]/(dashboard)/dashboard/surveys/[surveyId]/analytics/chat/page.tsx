@@ -5,7 +5,7 @@ import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { Suspense } from "react";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import {
     getSurveyPermissionForSession,
     hasSurveyPermission,

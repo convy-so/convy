@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { translateConversationListItems } from "@/lib/analytics";
 import { getConversationInsights } from "@/lib/analytics/conversation-queries";
 import {

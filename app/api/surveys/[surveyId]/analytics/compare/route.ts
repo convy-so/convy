@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { buildAnalyticsCompareData } from "@/lib/analytics";
 import {
   getActiveCoveragePlan,

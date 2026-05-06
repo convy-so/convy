@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import {
   createPrivacyRequest,
   exportUserPrivacyData,

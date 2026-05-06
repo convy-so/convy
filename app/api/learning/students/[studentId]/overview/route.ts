@@ -9,7 +9,7 @@ import {
   learningTopics,
   studentProgressReports,
 } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { getTeacherClassroomAccess } from "@/lib/learning/access";
 
 export async function GET(

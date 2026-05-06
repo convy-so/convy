@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { classroomStudents, surveys, surveyConversations } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { getRespondentSessionCookieName, getRespondentSessionCookieOptions, issueRespondentSessionToken } from "@/lib/privacy/respondent";
 import { getClientIP } from "@/lib/ratelimit";
 import { buildRespondentVoiceGreeting, getUsableRespondentMessages, type RespondentLanguage } from "@/lib/respondent-conversation";

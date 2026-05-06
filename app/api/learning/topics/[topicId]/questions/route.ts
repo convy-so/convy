@@ -4,7 +4,7 @@ import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { learningInteractions } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { getStudentTopicAccess, getTeacherTopicAccess } from "@/lib/learning/access";
 import {
   classifyOutOfSessionQuestion,

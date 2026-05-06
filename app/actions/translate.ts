@@ -1,6 +1,6 @@
 "use server";
 
-import { getCurrentSession } from "@/lib/auth/session";
+import { getCurrentSession } from "@/lib/auth/dal";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getDb } from "@/db";

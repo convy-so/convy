@@ -6,8 +6,8 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { learningSessions, expertRuntimeModels } from "@/db/schema/learning";
 
-import { getVerifiedSession } from "@/lib/auth/session";
-import { isExpert } from "@/lib/auth/roles";
+import { getVerifiedSession } from "@/lib/auth/dal";
+import { isExpert } from "@/lib/auth/dal";
 import { resolveTeacherExpertAnchor } from "@/lib/learning/expert-access";
 import {
   createExpertReviewCase,

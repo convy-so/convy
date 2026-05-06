@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getDb } from "@/db";
 import { sampleConversations, surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
