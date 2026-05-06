@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { assertAudioUploadFile } from "@/lib/security/uploads";
 import { transcribeAudioBuffer } from "@/lib/voice/speech-to-text-provider";
 import { normalizeSpeechToTextLanguage } from "@/lib/voice/voice-locales";

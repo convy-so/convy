@@ -9,8 +9,8 @@ import {
   expertFrameworks,
   expertFrameworkVersions,
 } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
-import { isExpert } from "@/lib/auth/roles";
+import { getVerifiedSession } from "@/lib/auth/dal";
+import { isExpert } from "@/lib/auth/dal";
 import { getTeacherOwnedFramework } from "@/lib/learning/expert-access";
 import { createRuntimeModel } from "@/lib/learning/storage";
 import { expertTutorRuntimeModelSchema } from "@/lib/learning/types";

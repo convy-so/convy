@@ -4,7 +4,7 @@ import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { assertAudioUploadFile } from "@/lib/security/uploads";
 import { transcribeAudioBuffer } from "@/lib/voice/analytics-stt";
 import { normalizeSpeechToTextLanguage } from "@/lib/voice/voice-locales";

@@ -4,8 +4,8 @@ import { z } from "zod";
 
 import { getDb } from "@/db";
 import { expertFrameworkVersions } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
-import { isExpert } from "@/lib/auth/roles";
+import { getVerifiedSession } from "@/lib/auth/dal";
+import { isExpert } from "@/lib/auth/dal";
 import { getTeacherOwnedFramework } from "@/lib/learning/expert-access";
 import { expertFrameworkSchema } from "@/lib/learning/types";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";

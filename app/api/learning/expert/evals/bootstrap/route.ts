@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { apiUnhandledError } from "@/lib/api/error-contract";
 
-import { getVerifiedSession } from "@/lib/auth/session";
-import { isExpert } from "@/lib/auth/roles";
+import { getVerifiedSession } from "@/lib/auth/dal";
+import { isExpert } from "@/lib/auth/dal";
 
 const tutoringEvalFamilies = [
   {

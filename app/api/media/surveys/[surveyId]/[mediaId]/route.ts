@@ -4,7 +4,7 @@ import { apiError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
-import { getCurrentSession } from "@/lib/auth/session";
+import { getCurrentSession } from "@/lib/auth/dal";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,

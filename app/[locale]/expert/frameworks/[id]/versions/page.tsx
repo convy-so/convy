@@ -1,5 +1,5 @@
-import { getVerifiedSession } from "@/lib/auth/session";
-import { isExpert } from "@/lib/auth/roles";
+import { getVerifiedSession } from "@/lib/auth/dal";
+import { isExpert } from "@/lib/auth/dal";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
 import { expertFrameworks, expertFrameworkVersions } from "@/db/schema/learning";

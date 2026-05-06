@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 import { getTeacherClassroomAccess } from "@/lib/learning/access";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { resolveUiLocaleForContentCreation } from "@/lib/i18n/resolve-locale";
 
 import * as ClassroomService from "@/lib/learning/classroom-service";

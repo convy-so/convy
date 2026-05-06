@@ -5,7 +5,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { surveys, analyticsChatSessions } from "@/db/schema";
 import type { ChatSessionMessage } from "@/db/schema/surveys";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,

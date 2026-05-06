@@ -1,4 +1,4 @@
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { redirect } from "next/navigation";
 import { StudentSidebar } from "@/components/student/student-sidebar";
 import { Suspense } from "react";

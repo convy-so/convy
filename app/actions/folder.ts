@@ -6,7 +6,7 @@ import { and, count, eq, getTableColumns, sum } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { folders, surveys, surveyConversations } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/session";
+import { getVerifiedSession } from "@/lib/auth/dal";
 import { invalidateDashboardCaches } from "@/lib/cache";
 
 import {
