@@ -1,31 +1,14 @@
-import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { surveyErrors } from "@/lib/surveys/errors";
 
-import { getDb } from "@/db";
-import { surveySessions, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/dal";
-import {
-  buildDashboardAnalyticsData,
-  buildTimelineEntry,
-  translateSurveyAnalyticsData,
-} from "@/lib/analytics";
 import { scheduleAnalyticsRefresh } from "@/lib/analytics-scheduler";
-import { getEducationProgram } from "@/lib/education/catalog";
 import {
   getSurveyPermissionForSession,
   hasSurveyPermission,
 } from "@/lib/survey-access";
-import {
-  getActiveCoveragePlan,
-  getAnalyticsState,
-  getLatestAnalyticsSnapshot,
-  getResearchBrief,
-  listAnalyticsSnapshots,
-  listEvidenceForSurveyByType,
-} from "@/lib/education/storage";
-import { getUserPreferredLanguage } from "@/lib/translation-service";
-import { normalizeAppLocale } from "@/lib/i18n/config";
+import { getSurveyAnalyticsViewModel } from "@/lib/surveys/use-cases/get-survey-analytics";
 
 export async function GET(
   request: Request,
@@ -36,102 +19,14 @@ export async function GET(
     const { surveyId } = await params;
     const { searchParams } = new URL(request.url);
 
-    const permission = await getSurveyPermissionForSession(session, surveyId);
-    if (!hasSurveyPermission(permission, "canView")) { return apiError("UNAUTHORIZED", "Unauthorized"); }
-
-    const [survey, briefRow, planRow, snapshotRow, stateRow, snapshotRows, sessionRows, evidenceRows] = await Promise.all([
-      getDb()
-        .select({ title: surveys.title })
-        .from(surveys)
-        .where(eq(surveys.id, surveyId))
-        .then((rows) => rows[0]),
-      getResearchBrief(surveyId),
-      getActiveCoveragePlan(surveyId),
-      getLatestAnalyticsSnapshot(surveyId),
-      getAnalyticsState(surveyId),
-      listAnalyticsSnapshots(surveyId),
-      getDb()
-        .select({
-          id: surveySessions.id,
-          status: surveySessions.sessionStatus,
-        })
-        .from(surveySessions)
-        .where(
-          and(
-            eq(surveySessions.surveyId, surveyId),
-            eq(surveySessions.sessionType, "live"),
-          ),
-        ),
-      listEvidenceForSurveyByType(surveyId, "live"),
-    ]);
-
-    if (!survey) { return apiError("NOT_FOUND", "Survey not found"); }
-
-    const analyticsState = stateRow?.state ?? {
+    return getSurveyAnalyticsViewModel({
       surveyId,
-      status: "idle",
-      latestSnapshotVersion: snapshotRow?.version ?? 0,
-      pendingJobId: null,
-      lastRequestedAt: null,
-      lastCompletedAt: null,
-      lastMaterialityReason: null,
-      lastMaterialityScore: 0,
-      lastError: null,
-    };
-
-    if (!snapshotRow || !briefRow || !planRow) {
-      const completed = sessionRows.filter((row) => row.status === "completed").length;
-      return NextResponse.json({
-        status: analyticsState.status === "failed"
-          ? "failed"
-          : analyticsState.status === "running"
-            ? "running"
-            : analyticsState.status === "queued"
-              ? "queued"
-              : "not_generated",
-        message:
-          analyticsState.status === "failed"
-            ? analyticsState.lastError || "Analytics generation failed. Retry to regenerate the snapshot."
-            : analyticsState.status === "running"
-              ? "Analytics are currently being rebuilt in the background."
-              : analyticsState.status === "queued"
-                ? "A new analytics snapshot has been queued and will appear once the background job completes."
-                : "We are waiting for enough grounded session evidence to build the analytics snapshot.",
-        analyticsState,
-        conversationStats: {
-          total: sessionRows.length,
-          completed,
-        },
-      });
-    }
-
-    const brief = briefRow.brief;
-    const program = getEducationProgram(brief.programId);
-
-    const viewerLanguage = normalizeAppLocale(
-      searchParams.get("language") ??
-        (await getUserPreferredLanguage(session.user.id).catch(() => "en")),
-    );
-    const analyticsData = buildDashboardAnalyticsData({
-        surveyTitle: survey.title,
-        brief,
-        briefVersion: briefRow.version,
-        plan: planRow.plan,
-        snapshot: snapshotRow.snapshot,
-        analyticsState,
-        timeline: snapshotRows.map((row) => buildTimelineEntry(row.snapshot)),
-        programDisplayName: program.manifest.displayName,
-        programDescription: program.manifest.description,
-        evidence: evidenceRows.map((row) => row.metadata),
-      });
-
-    return NextResponse.json(
-      await translateSurveyAnalyticsData(analyticsData, viewerLanguage, {
-        userId: session.user.id,
-        surveyId,
-      }),
-    );
-  } catch (error) { return apiUnhandledError(error, "Failed to fetch analytics", "/api/surveys/[surveyId]/analytics:get"); }
+      session,
+      language: searchParams.get("language"),
+    });
+  } catch (error) {
+    return apiUnhandledError(error, "Failed to fetch analytics", "/api/surveys/[surveyId]/analytics:get");
+  }
 }
 
 export async function POST(
@@ -143,7 +38,9 @@ export async function POST(
     const { surveyId } = await params;
 
     const permission = await getSurveyPermissionForSession(session, surveyId);
-    if (!hasSurveyPermission(permission, "canEdit")) { return apiError("UNAUTHORIZED", "Unauthorized. Only owners and editors can trigger analytics."); }
+    if (!hasSurveyPermission(permission, "canEdit")) {
+      return surveyErrors.unauthorized("Unauthorized. Only owners and editors can trigger analytics.");
+    }
 
     await scheduleAnalyticsRefresh({
       surveyId,
@@ -154,6 +51,7 @@ export async function POST(
     return NextResponse.json({
       status: "queued",
     });
-  } catch (error) { return apiUnhandledError(error, "Failed to trigger analytics generation", "/api/surveys/[surveyId]/analytics:post"); }
+  } catch (error) {
+    return apiUnhandledError(error, "Failed to trigger analytics generation", "/api/surveys/[surveyId]/analytics:post");
+  }
 }
-
