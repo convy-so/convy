@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { getVerifiedSession } from "@/lib/auth/dal";
-import { getStudentTopicAccess } from "@/lib/learning/access";
+import { getStudentTutoringAccess } from "@/lib/learning/access";
 import { finalizeTutoringSession } from "@/lib/learning/tutoring-session-lifecycle";
 import { getLearningSessionById } from "@/lib/learning/storage";
 import { learningSessionStateSchema } from "@/lib/learning/types";
 import { normalizeAppLocale } from "@/lib/i18n/config";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 const requestSchema = z.object({
   sessionId: z.string().min(1),
@@ -21,7 +22,7 @@ export async function POST(
   try {
     const auth = await getVerifiedSession();
     const { topicId } = await params;
-    const access = await getStudentTopicAccess(auth.user.id, topicId);
+    const access = await getStudentTutoringAccess(auth.user.id, topicId);
 
     if (!access) {
       return apiError("UNAUTHORIZED", "Unauthorized");
@@ -79,6 +80,10 @@ export async function POST(
       },
     });
   } catch (error) {
-    return apiUnhandledError(error, "Failed to complete tutoring session", "/api/learning/topics/[topicId]/chat/complete");
+    return handleLearningRouteError(
+      error,
+      "Failed to complete tutoring session",
+      "/api/learning/topics/[topicId]/chat/complete",
+    );
   }
 }

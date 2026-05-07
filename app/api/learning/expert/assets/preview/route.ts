@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   try {
     const session = await getVerifiedSession();
     if (!isExpert(session.user)) {
-      throw new Error("Unauthorized: Expert or admin access required");
+      return apiError("UNAUTHORIZED", "Expert or admin access required");
     }
 
     const body = previewSchema.parse(await request.json());

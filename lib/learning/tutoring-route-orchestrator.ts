@@ -1,5 +1,5 @@
 import { normalizeAppLocale } from "@/lib/i18n/config";
-import { getStudentTopicAccess } from "@/lib/learning/access";
+import { getStudentTutoringAccess } from "@/lib/learning/access";
 import {
   appendLearningMessage,
   createLearningSession,
@@ -11,7 +11,7 @@ import { tutorRuntimeService } from "@/lib/learning/tutor-runtime-service";
 import { generateSessionOpening } from "@/lib/learning/tutor";
 
 export type StudentTopicAccess = NonNullable<
-  Awaited<ReturnType<typeof getStudentTopicAccess>>
+  Awaited<ReturnType<typeof getStudentTutoringAccess>>
 >;
 
 export async function resolveStudentTutoringContext(input: {
@@ -20,7 +20,7 @@ export async function resolveStudentTutoringContext(input: {
   language?: string | null;
   preferredLanguage?: string | null;
 }) {
-  const access = await getStudentTopicAccess(input.userId, input.topicId);
+  const access = await getStudentTutoringAccess(input.userId, input.topicId);
   const studyLanguage = resolveStudyLanguage(input);
 
   return { access, studyLanguage };

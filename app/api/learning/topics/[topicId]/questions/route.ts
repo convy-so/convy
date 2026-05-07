@@ -5,7 +5,7 @@ import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 import { getDb } from "@/db";
 import { learningInteractions } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/dal";
-import { getStudentTopicAccess, getTeacherTopicAccess } from "@/lib/learning/access";
+import { getStudentTutoringAccess, getTeacherTopicAccess } from "@/lib/learning/access";
 import {
   classifyOutOfSessionQuestion,
   generateOutOfSessionReply,
@@ -77,15 +77,11 @@ export async function POST(
   try {
     const session = await getVerifiedSession();
     const { topicId } = await params;
-    const access = await getStudentTopicAccess(session.user.id, topicId);
+    const access = await getStudentTutoringAccess(session.user.id, topicId);
     const body = (await request.json()) as { message?: string; language?: string };
 
     if (!access) {
       return apiError("UNAUTHORIZED", "Unauthorized");
-    }
-
-    if (!access.classroomStudent.interestProfile) {
-      return apiError("CONFLICT", "Student profile onboarding is required before asking questions.");
     }
 
     if (!body.message?.trim()) {

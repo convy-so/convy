@@ -27,7 +27,7 @@ export async function POST(
   try {
     const session = await getVerifiedSession();
     if (!isExpert(session.user)) {
-      throw new Error("Unauthorized: Expert or admin access required");
+      return apiError("UNAUTHORIZED", "Expert or admin access required");
     }
     const { packId } = await params;
     const body = activateSchema.parse(await request.json());
