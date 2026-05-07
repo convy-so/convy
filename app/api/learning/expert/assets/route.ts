@@ -24,7 +24,7 @@ export async function GET() {
   try {
     const session = await getVerifiedSession();
     if (!isExpert(session.user)) {
-      throw new Error("Unauthorized: Expert or admin access required");
+      return apiError("UNAUTHORIZED", "Expert or admin access required");
     }
     const frameworks = await getDb().query.expertFrameworks.findMany({
       with: {
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
   try {
     const session = await getVerifiedSession();
     if (!isExpert(session.user)) {
-      throw new Error("Unauthorized: Expert or admin access required");
+      return apiError("UNAUTHORIZED", "Expert or admin access required");
     }
     const body = createFrameworkSchema.parse(await request.json());
     const topic = await getTeacherOwnedTopic(session.user.id, body.topicId);

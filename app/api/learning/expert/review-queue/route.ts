@@ -3,13 +3,13 @@ import { NextResponse } from "next/server";
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { isExpert } from "@/lib/auth/dal";
 import { listExpertReviewQueue } from "@/lib/learning/storage";
-import { apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 export async function GET() {
   try {
     const session = await getVerifiedSession();
     if (!isExpert(session.user)) {
-      throw new Error("Unauthorized: Expert or admin access required");
+      return apiError("UNAUTHORIZED", "Expert or admin access required");
     }
 
     const queue = await listExpertReviewQueue({

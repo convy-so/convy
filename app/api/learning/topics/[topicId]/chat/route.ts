@@ -8,7 +8,7 @@ import {
   appendLearningMessage,
   listLearningMessages,
   logLearningInteraction,
-  updateLearningSessionState,
+  persistTutorTurnOutcome,
 } from "@/lib/learning/storage";
 import { tutorRuntimeService } from "@/lib/learning/tutor-runtime-service";
 import {
@@ -29,6 +29,7 @@ import {
   resolveStudyLanguage,
   resolveStudentTutoringContext,
 } from "@/lib/learning/tutoring-route-orchestrator";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 const requestSchema = z.object({
   sessionId: z.string().optional(),
@@ -40,6 +41,127 @@ function getLatestUserMessage(messages: UIMessage[]) {
   return [...messages]
     .reverse()
     .find((message) => message.role === "user");
+}
+
+async function logUserTurn(params: {
+  sessionId: string;
+  classroomStudentId: string;
+  topicId: string;
+  content: string;
+  metadata: Record<string, unknown>;
+}) {
+  await appendLearningMessage({
+    sessionId: params.sessionId,
+    role: "user",
+    content: params.content,
+    metadata: params.metadata,
+  });
+  await logLearningInteraction({
+    classroomStudentId: params.classroomStudentId,
+    topicId: params.topicId,
+    sessionId: params.sessionId,
+    role: "user",
+    interactionType: "student_message",
+    content: params.content,
+    metadata: params.metadata,
+  });
+}
+
+function buildScopeRedirectResponse(params: {
+  sessionId: string;
+  classroomStudentId: string;
+  topicId: string;
+  classification: string;
+  redirectMessage: string;
+}) {
+  return createUIMessageStreamResponse({
+    stream: createUIMessageStream({
+      execute: async ({ writer }) => {
+        writer.write({
+          type: "text-delta",
+          id: `redirect-${crypto.randomUUID()}`,
+          delta: params.redirectMessage,
+        });
+        await appendLearningMessage({
+          sessionId: params.sessionId,
+          role: "assistant",
+          content: params.redirectMessage,
+          metadata: {
+            messageKind: "scope_redirect",
+            classification: params.classification,
+          },
+        });
+        await logLearningInteraction({
+          classroomStudentId: params.classroomStudentId,
+          topicId: params.topicId,
+          sessionId: params.sessionId,
+          role: "assistant",
+          interactionType: "tutor_message",
+          content: params.redirectMessage,
+          metadata: {
+            messageKind: "scope_redirect",
+            classification: params.classification,
+          },
+        });
+      },
+    }),
+  });
+}
+
+async function prepareTutoringTurn(params: {
+  topicId: string;
+  access: NonNullable<Awaited<ReturnType<typeof resolveStudentTutoringContext>>["access"]>;
+  tutorSessionId: string;
+  studyLanguage: string;
+  state: z.infer<typeof learningSessionStateSchema>;
+  latestUserText: string;
+  messages: UIMessage[];
+}) {
+  const previousAssistant = [...(await listLearningMessages(params.tutorSessionId))]
+    .reverse()
+    .find((message) => message.role === "assistant");
+
+  const [prepared, fewShotExamples] = await Promise.all([
+    tutorRuntimeService.prepareAgentTurn({
+      topicId: params.topicId,
+      topicTitle: params.access.topic.title,
+      sourceBoundary: params.access.topic.sourceBoundary,
+      classroomId: params.access.topic.classroomId,
+      classroomStudentId: params.access.classroomStudent.id,
+      studentUserId: params.access.classroomStudent.userId,
+      sessionId: params.tutorSessionId,
+      studyLanguage: params.studyLanguage,
+      state: params.state,
+      latestStudentMessage: params.latestUserText,
+      latestTutorMessage: previousAssistant?.content ?? null,
+    }),
+    getDynamicFewShotExamples({
+      feature: "tutoring",
+      limit: 3,
+      context: [params.latestUserText, params.access.topic.title, params.access.topic.subject]
+        .filter(Boolean)
+        .join(" | "),
+    }),
+  ]);
+
+  const { createTutorTools } = await import("@/lib/learning/agent-tools");
+  const tools = createTutorTools({
+    topicId: params.topicId,
+    contentLocale: params.access.topic.contentLocale,
+  });
+
+  const sanitizedMessages = toUIMessages(
+    toPersistedUIChatMessages(params.messages).map((m) =>
+      m.role === "user"
+        ? {
+            ...m,
+            content: sanitizeUserInput(m.content, { maxLength: 2000, allowNewlines: true }),
+          }
+        : m,
+    ),
+  );
+
+  return { previousAssistant, prepared, fewShotExamples, tools, sanitizedMessages };
 }
 
 export async function GET(
@@ -57,16 +179,7 @@ export async function GET(
       preferredLanguage: session.user.preferredLanguage,
     });
 
-    if (!access) {
-      return apiError("UNAUTHORIZED", "Unauthorized");
-    }
-
-    if (!access.classroomStudent.interestProfile) {
-      return apiError(
-        "CONFLICT",
-        "Student profile onboarding is required before tutoring.",
-      );
-    }
+    if (!access) return apiError("UNAUTHORIZED", "Unauthorized");
 
     const tutorSession = await ensureTutoringSession({
       topicId,
@@ -114,16 +227,7 @@ export async function POST(
       topicId,
     });
 
-    if (!access) {
-      return apiError("UNAUTHORIZED", "Unauthorized");
-    }
-
-    if (!access.classroomStudent.interestProfile) {
-      return apiError(
-        "CONFLICT",
-        "Student profile onboarding is required before tutoring.",
-      );
-    }
+    if (!access) return apiError("UNAUTHORIZED", "Unauthorized");
 
     const body = requestSchema.parse(await request.json());
     const studyLanguage = resolveStudyLanguage({
@@ -163,126 +267,44 @@ export async function POST(
     const state = learningSessionStateSchema.parse(tutorSession.state ?? {});
 
     if (scopeDecision.shouldRedirect) {
-      await appendLearningMessage({
+      await logUserTurn({
         sessionId: tutorSession.id,
-        role: "user",
-        content: latestUserText,
-        metadata: {
-          classification: scopeDecision.classification,
-        },
-      });
-      await logLearningInteraction({
         classroomStudentId: access.classroomStudent.id,
         topicId,
-        sessionId: tutorSession.id,
-        role: "user",
-        interactionType: "student_message",
         content: latestUserText,
         metadata: {
           classification: scopeDecision.classification,
         },
       });
-
-      return createUIMessageStreamResponse({
-        stream: createUIMessageStream({
-          execute: async ({ writer }) => {
-            writer.write({
-              type: "text-delta",
-              id: `redirect-${Date.now()}`,
-              delta: scopeDecision.redirectMessage,
-            });
-            await appendLearningMessage({
-              sessionId: tutorSession.id,
-              role: "assistant",
-              content: scopeDecision.redirectMessage,
-              metadata: {
-                messageKind: "scope_redirect",
-                classification: scopeDecision.classification,
-              },
-            });
-            await logLearningInteraction({
-              classroomStudentId: access.classroomStudent.id,
-              topicId,
-              sessionId: tutorSession.id,
-              role: "assistant",
-              interactionType: "tutor_message",
-              content: scopeDecision.redirectMessage,
-              metadata: {
-                messageKind: "scope_redirect",
-                classification: scopeDecision.classification,
-              },
-            });
-          },
-        }),
+      return buildScopeRedirectResponse({
+        sessionId: tutorSession.id,
+        classroomStudentId: access.classroomStudent.id,
+        topicId,
+        classification: scopeDecision.classification,
+        redirectMessage: scopeDecision.redirectMessage,
       });
     }
 
-    await appendLearningMessage({
+    await logUserTurn({
       sessionId: tutorSession.id,
-      role: "user",
-      content: latestUserText,
-      metadata: {
-        messageKind: "student_turn",
-      },
-    });
-    await logLearningInteraction({
       classroomStudentId: access.classroomStudent.id,
       topicId,
-      sessionId: tutorSession.id,
-      role: "user",
-      interactionType: "student_message",
       content: latestUserText,
       metadata: {
         messageKind: "student_turn",
       },
     });
 
-    const previousAssistant = [...(await listLearningMessages(tutorSession.id))]
-      .reverse()
-      .find((message) => message.role === "assistant");
-
-    const [prepared, fewShotExamples] = await Promise.all([
-      tutorRuntimeService.prepareAgentTurn({
+    const { previousAssistant, prepared, fewShotExamples, tools, sanitizedMessages } =
+      await prepareTutoringTurn({
         topicId,
-        topicTitle: access.topic.title,
-        sourceBoundary: access.topic.sourceBoundary,
-        classroomId: access.topic.classroomId,
-        classroomStudentId: access.classroomStudent.id,
-        studentUserId: access.classroomStudent.userId,
-        sessionId: tutorSession.id,
+        access,
+        tutorSessionId: tutorSession.id,
         studyLanguage,
         state,
-        latestStudentMessage: latestUserText,
-        latestTutorMessage: previousAssistant?.content ?? null,
-      }),
-      getDynamicFewShotExamples({
-        feature: "tutoring",
-        limit: 3,
-        context: [latestUserText, access.topic.title, access.topic.subject].filter(Boolean).join(" | "),
-      }),
-    ]);
-
-    const { createTutorTools } = await import("@/lib/learning/agent-tools");
-    const tools = createTutorTools({
-      topicId,
-      contentLocale: access.topic.contentLocale,
-    });
-
-    // Sanitize conversation history before sending to the model
-    const sanitizedMessages = toUIMessages(
-      toPersistedUIChatMessages(body.messages).map((m) => {
-        if (m.role === "user") {
-          return {
-            ...m,
-            content: sanitizeUserInput(m.content, {
-              maxLength: 2000,
-              allowNewlines: true,
-            }),
-          };
-        }
-        return m;
-      }),
-    );
+        latestUserText,
+        messages: body.messages,
+      });
 
     const { streamAgentResponse } = await import("@/lib/ai");
 
@@ -303,29 +325,6 @@ export async function POST(
         if (!assistantText) {
           return;
         }
-
-        await appendLearningMessage({
-          sessionId: tutorSession.id,
-          role: "assistant",
-          content: assistantText,
-          metadata: {
-            frameworkStageId: prepared.frameworkState.currentStageId,
-            runtimeModelId: prepared.runtimeModel.id,
-            runtimeModelVersion: prepared.runtimeModel.version,
-            toolCalls: result.steps.flatMap((s) => s.toolCalls),
-          },
-        });
-        await logLearningInteraction({
-          classroomStudentId: access.classroomStudent.id,
-          topicId,
-          sessionId: tutorSession.id,
-          role: "assistant",
-          interactionType: "tutor_message",
-          content: assistantText,
-          metadata: {
-            frameworkStageId: prepared.frameworkState.currentStageId,
-          },
-        });
 
         const autoComplete = shouldAutoCompleteTutoringSession({
           runtimeModel: prepared.runtimeModel,
@@ -395,9 +394,21 @@ export async function POST(
             : state.lastStudentModelRefreshAt,
         };
 
-        const persistedSession = await updateLearningSessionState({
+        const persistedSession = await persistTutorTurnOutcome({
           sessionId: tutorSession.id,
-          state: nextState,
+          classroomStudentId: access.classroomStudent.id,
+          topicId,
+          assistantText,
+          assistantMetadata: {
+            frameworkStageId: prepared.frameworkState.currentStageId,
+            runtimeModelId: prepared.runtimeModel.id,
+            runtimeModelVersion: prepared.runtimeModel.version,
+            toolCalls: result.steps.flatMap((s) => s.toolCalls),
+          },
+          interactionMetadata: {
+            frameworkStageId: prepared.frameworkState.currentStageId,
+          },
+          nextState,
           expectedStateVersion: tutorSession.stateVersion ?? 1,
         });
 
@@ -448,7 +459,7 @@ export async function POST(
       },
     });
   } catch (error) {
-    return apiUnhandledError(
+    return handleLearningRouteError(
       error,
       "Failed to continue tutoring",
       "learning-topic-chat:post",
