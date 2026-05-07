@@ -116,6 +116,13 @@ export async function getStudentTopicAccess(userId: string, topicId: string) {
   };
 }
 
+export async function getStudentTutoringAccess(userId: string, topicId: string) {
+  const access = await getStudentTopicAccess(userId, topicId);
+  if (!access) return null;
+  if (!access.classroomStudent.interestProfile) return null;
+  return access;
+}
+
 export async function getPrimaryStudentMembership(userId: string) {
   const memberships = await listStudentMemberships(userId);
   return (

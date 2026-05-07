@@ -12,7 +12,7 @@ export async function GET(
   try {
     const session = await getVerifiedSession();
     if (!isExpert(session.user)) {
-      throw new Error("Unauthorized: Expert or admin access required");
+      return apiError("UNAUTHORIZED", "Expert or admin access required");
     }
 
     const { sessionId } = await props.params;

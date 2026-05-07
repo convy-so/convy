@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { isExpert } from "@/lib/auth/dal";
@@ -35,7 +35,7 @@ export async function POST() {
   try {
     const session = await getVerifiedSession();
     if (!isExpert(session.user)) {
-      throw new Error("Unauthorized: Expert or admin access required");
+      return apiError("UNAUTHORIZED", "Expert or admin access required");
     }
 
     return NextResponse.json({

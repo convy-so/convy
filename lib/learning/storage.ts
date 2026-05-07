@@ -35,6 +35,7 @@ import {
   expertTutorRuntimeModelSchema,
   studentModelSnapshotSchema,
 } from "@/lib/learning/types";
+import { LearningStateConflictError } from "@/lib/learning/errors";
 
 export async function getTopicWithMaterials(topicId: string) {
   return await getDb().query.learningTopics.findFirst({
@@ -118,7 +119,7 @@ export async function updateLearningSessionState(params: {
     .returning();
 
   if (!session) {
-    throw new Error("Learning session state update conflict.");
+    throw new LearningStateConflictError();
   }
 
   return session;
@@ -278,6 +279,63 @@ export async function logLearningInteraction(params: {
     .returning();
 
   return interaction;
+}
+
+export async function persistTutorTurnOutcome(params: {
+  sessionId: string;
+  classroomStudentId: string;
+  topicId: string;
+  assistantText: string;
+  assistantMetadata?: Record<string, unknown>;
+  interactionMetadata?: Record<string, unknown>;
+  nextState: LearningSessionState;
+  expectedStateVersion: number;
+}) {
+  return await getDb().transaction(async (tx) => {
+    await tx.insert(learningMessages).values({
+      id: nanoid(),
+      sessionId: params.sessionId,
+      role: "assistant",
+      content: params.assistantText,
+      metadata: params.assistantMetadata ?? {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    await tx.insert(learningInteractions).values({
+      id: nanoid(),
+      classroomStudentId: params.classroomStudentId,
+      topicId: params.topicId,
+      sessionId: params.sessionId,
+      role: "assistant",
+      interactionType: "tutor_message",
+      content: params.assistantText,
+      metadata: params.interactionMetadata ?? {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const [session] = await tx
+      .update(learningSessions)
+      .set({
+        state: params.nextState,
+        stateVersion: params.expectedStateVersion + 1,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(learningSessions.id, params.sessionId),
+          eq(learningSessions.stateVersion, params.expectedStateVersion),
+        ),
+      )
+      .returning();
+
+    if (!session) {
+      throw new LearningStateConflictError();
+    }
+
+    return session;
+  });
 }
 
 export async function createStudentProgressReport(params: {

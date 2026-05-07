@@ -34,7 +34,7 @@ export async function GET(request: Request) {
   try {
     const session = await getVerifiedSession();
     if (!isExpert(session.user)) {
-      throw new Error("Unauthorized: Expert or admin access required");
+      return apiError("UNAUTHORIZED", "Expert or admin access required");
     }
 
     const { searchParams } = new URL(request.url);
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
   try {
     const session = await getVerifiedSession();
     if (!isExpert(session.user)) {
-      throw new Error("Unauthorized: Expert or admin access required");
+      return apiError("UNAUTHORIZED", "Expert or admin access required");
     }
     const body = createReviewCaseSchema.parse(await request.json());
     const anchor = await resolveTeacherExpertAnchor(session.user.id, body);
