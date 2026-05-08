@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
 import { z } from "zod";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 import { getDb } from "@/db";
 import { learningTopics } from "@/db/schema";
@@ -42,6 +43,6 @@ export async function POST(
       },
     });
   } catch (error) {
-    return apiUnhandledError(error, "Failed to update topic status", "/api/learning/topics/[topicId]/status");
+    return handleLearningRouteError(error, "Failed to update topic status", "/api/learning/topics/[topicId]/status");
   }
 }
