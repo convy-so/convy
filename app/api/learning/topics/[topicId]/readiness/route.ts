@@ -1,7 +1,8 @@
 import { generateText, Output } from "ai";
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
 import { z } from "zod";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 import { analysisModel } from "@/lib/ai";
 import { getVerifiedSession } from "@/lib/auth/dal";
@@ -66,6 +67,6 @@ Rules:
       data: output,
     });
   } catch (error) {
-    return apiUnhandledError(error, "Failed to evaluate topic readiness", "/api/learning/topics/[topicId]/readiness");
+    return handleLearningRouteError(error, "Failed to evaluate topic readiness", "/api/learning/topics/[topicId]/readiness");
   }
 }
