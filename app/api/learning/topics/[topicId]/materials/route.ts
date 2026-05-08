@@ -2,12 +2,13 @@ import { eq } from "drizzle-orm";
 import { fileTypeFromBuffer } from "file-type";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { learningTopics, topicMaterials } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { getTeacherTopicAccess } from "@/lib/learning/access";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 import {
   analyzeLearningMaterial,
   extractLearningMaterialText,
@@ -60,7 +61,7 @@ export async function GET(
       data: materials,
     });
   } catch (error) {
-    return apiUnhandledError(error, "Failed to load materials", "/api/learning/topics/[topicId]/materials");
+    return handleLearningRouteError(error, "Failed to load materials", "/api/learning/topics/[topicId]/materials");
   }
 }
 
@@ -312,6 +313,6 @@ export async function POST(
       },
     });
   } catch (error) {
-    return apiUnhandledError(error, "Failed to upload material", "/api/learning/topics/[topicId]/materials");
+    return handleLearningRouteError(error, "Failed to upload material", "/api/learning/topics/[topicId]/materials");
   }
 }
