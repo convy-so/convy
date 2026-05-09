@@ -1,11 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { apiUnhandledError } from "@/lib/api/error-contract";
+
 
 import { getDb } from "@/db";
 import { classroomStudents } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { listStudentModelSummaries } from "@/lib/learning/storage";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 export async function GET() {
   try {
@@ -57,6 +58,6 @@ export async function GET() {
       })),
     });
   } catch (error) {
-    return apiUnhandledError(error, "Failed to load student model summaries", "/api/learning/me/patterns");
+    return handleLearningRouteError(error, "Failed to load student model summaries", "/api/learning/me/patterns");
   }
 }

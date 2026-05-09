@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { apiUnhandledError } from "@/lib/api/error-contract";
+
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/db";
@@ -7,6 +7,7 @@ import { surveyConversations } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { listStudentMemberships } from "@/lib/learning/access";
 import { listPendingInvitationsForUser } from "@/lib/learning/student-service";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 export async function GET() {
   try {
@@ -140,6 +141,6 @@ export async function GET() {
       })),
     });
   } catch (error) {
-    return apiUnhandledError(error, "Failed to load student context", "/api/learning/me");
+    return handleLearningRouteError(error, "Failed to load student context", "/api/learning/me");
   }
 }

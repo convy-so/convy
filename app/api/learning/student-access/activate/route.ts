@@ -1,12 +1,13 @@
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { getDb } from "@/db";
 import { accounts, classroomStudents, studentAccessTokens, users } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { hashOpaqueToken } from "@/lib/learning/tokens";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 const studentActivationBodySchema = z.object({
   token: z.string().min(1).optional(),
@@ -58,7 +59,7 @@ export async function GET(request: Request) {
       expiresAt: record.expiresAt.toISOString(),
     });
   } catch (error) {
-    return apiUnhandledError(error, "Internal server error", "/api/learning/student-access/activate");
+    return handleLearningRouteError(error, "Internal server error", "/api/learning/student-access/activate");
   }
 }
 
@@ -143,8 +144,7 @@ export async function POST(request: Request) {
     if (error instanceof z.ZodError) {
       return apiError("VALIDATION_ERROR", error.errors[0]?.message ?? "Invalid request body.");
     }
-    console.error("[Activation Error]", error);
-    return apiUnhandledError(error, "Internal server error", "/api/learning/student-access/activate");
+    return handleLearningRouteError(error, "Internal server error", "/api/learning/student-access/activate");
   }
 }
 
