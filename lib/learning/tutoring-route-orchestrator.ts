@@ -116,3 +116,18 @@ export async function ensureTutoringSession(input: {
 
   return session;
 }
+
+export async function resolveStudentTutoringSessionById(input: {
+  sessionId: string;
+  topicId: string;
+  classroomStudentId: string;
+}) {
+  const tutoringSession = await getLearningSessionById(input.sessionId);
+
+  if (!tutoringSession) return null;
+  if (tutoringSession.sessionType !== "tutoring") return null;
+  if (tutoringSession.topicId !== input.topicId) return null;
+  if (tutoringSession.classroomStudentId !== input.classroomStudentId) return null;
+
+  return tutoringSession;
+}
