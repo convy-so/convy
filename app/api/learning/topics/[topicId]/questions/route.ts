@@ -1,6 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { learningInteractions } from "@/db/schema";
@@ -14,6 +14,7 @@ import { findLearningEvidenceContext } from "@/lib/learning/evidence";
 import { logLearningInteraction } from "@/lib/learning/storage";
 import type { GradeBand } from "@/lib/learning/types";
 import { normalizeAppLocale } from "@/lib/i18n/config";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 export async function GET(
   request: Request,
@@ -66,7 +67,11 @@ export async function GET(
       })),
     });
   } catch (error) {
-    return apiUnhandledError(error, "Failed to load questions", "/api/learning/topics/[topicId]/questions");
+    return handleLearningRouteError(
+      error,
+      "Failed to load questions",
+      "/api/learning/topics/[topicId]/questions:get",
+    );
   }
 }
 
@@ -145,6 +150,10 @@ export async function POST(
       },
     });
   } catch (error) {
-    return apiUnhandledError(error, "Failed to answer out-of-session question", "/api/learning/topics/[topicId]/questions");
+    return handleLearningRouteError(
+      error,
+      "Failed to answer out-of-session question",
+      "/api/learning/topics/[topicId]/questions:post",
+    );
   }
 }

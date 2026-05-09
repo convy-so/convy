@@ -3,12 +3,14 @@ import { apiError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { getVerifiedSession } from "@/lib/auth/dal";
-import { getStudentTutoringAccess } from "@/lib/learning/access";
 import { finalizeTutoringSession } from "@/lib/learning/tutoring-session-lifecycle";
-import { getLearningSessionById } from "@/lib/learning/storage";
 import { learningSessionStateSchema } from "@/lib/learning/types";
 import { normalizeAppLocale } from "@/lib/i18n/config";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
+import {
+  resolveStudentTutoringContext,
+  resolveStudentTutoringSessionById,
+} from "@/lib/learning/tutoring-route-orchestrator";
 
 const requestSchema = z.object({
   sessionId: z.string().min(1),
@@ -22,21 +24,23 @@ export async function POST(
   try {
     const auth = await getVerifiedSession();
     const { topicId } = await params;
-    const access = await getStudentTutoringAccess(auth.user.id, topicId);
+    const { access } = await resolveStudentTutoringContext({
+      userId: auth.user.id,
+      topicId,
+    });
 
     if (!access) {
       return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     const body = requestSchema.parse(await request.json());
-    const tutoringSession = await getLearningSessionById(body.sessionId);
+    const tutoringSession = await resolveStudentTutoringSessionById({
+      sessionId: body.sessionId,
+      topicId,
+      classroomStudentId: access.classroomStudent.id,
+    });
 
-    if (
-      !tutoringSession ||
-      tutoringSession.sessionType !== "tutoring" ||
-      tutoringSession.topicId !== topicId ||
-      tutoringSession.classroomStudentId !== access.classroomStudent.id
-    ) {
+    if (!tutoringSession) {
       return apiError("NOT_FOUND", "Tutoring session not found");
     }
 
