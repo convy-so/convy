@@ -1,7 +1,7 @@
 import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from "ai";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { getDb } from "@/db";
@@ -26,6 +26,7 @@ import {
 } from "@/lib/learning/storage";
 import { extractMessageText, toPersistedUIChatMessages } from "@/lib/chat-ui-messages";
 import { studentModelService } from "@/lib/learning/student-model-service";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 const requestSchema = z.object({
   sessionId: z.string().optional(),
@@ -92,8 +93,7 @@ export async function GET() {
       messages,
     });
   } catch (error) {
-    console.error("[Onboarding GET Error]", error);
-    return apiUnhandledError(error, "Failed to load onboarding", "/api/learning/onboarding");
+    return handleLearningRouteError(error, "Failed to load onboarding", "/api/learning/onboarding");
   }
 }
 
@@ -203,7 +203,6 @@ export async function POST(request: Request) {
       }),
     });
   } catch (error) {
-    console.error("[Onboarding POST Error]", error);
-    return apiUnhandledError(error, "Failed to continue onboarding", "/api/learning/onboarding");
+    return handleLearningRouteError(error, "Failed to continue onboarding", "/api/learning/onboarding");
   }
 }
