@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { listLearningMessages } from "@/lib/learning/storage";
+import { tutorRuntimeService } from "@/lib/learning/tutor-runtime-service";
 import { learningSessionStateSchema } from "@/lib/learning/types";
 import { normalizeAppLocale } from "@/lib/i18n/config";
 import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
@@ -14,9 +15,13 @@ import {
   resolveStudentTutoringContext,
 } from "@/lib/learning/tutoring-route-orchestrator";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
-import { finalizeTutoringTurn } from "@/lib/learning/tutoring-turn-finalization";
-import { buildScopeRedirectResponse, logUserTurn } from "@/lib/learning/tutoring-turn-logging";
-import { getLatestUserText, prepareTutoringTurn } from "@/lib/learning/tutoring-turn-preparation";
+import {
+  buildScopeRedirectResponse,
+  finalizeTutoringTurn,
+  getLatestUserText,
+  logUserTurn,
+  prepareTutoringTurn,
+} from "@/lib/learning/tutoring-chat-turn";
 
 const requestSchema = z.object({
   sessionId: z.string().optional(),
