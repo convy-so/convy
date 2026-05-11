@@ -1,0 +1,55 @@
+"use server";
+
+import { z } from "zod";
+
+import { resolveUiLocaleForContentCreation } from "@/lib/i18n/resolve-locale";
+import * as ClassroomService from "@/lib/learning/classroom-service";
+import {
+  ActionResult,
+  validateInput,
+  withErrorHandling,
+} from "@/lib/action-wrapper";
+
+import { appLocaleSchema, requireTeachingSession } from "./shared";
+
+const createClassroomSchema = z.object({
+  title: z.string().trim().min(2),
+  description: z.string().trim().optional(),
+  subject: z.string().trim().optional(),
+  gradeLabel: z.string().trim().min(1),
+  defaultContentLocale: appLocaleSchema.optional(),
+});
+
+export async function createClassroomAction(input: unknown): Promise<ActionResult<unknown>> {
+  return withErrorHandling(async () => {
+    const body = validateInput(input, createClassroomSchema);
+    const { session } = await requireTeachingSession();
+    const defaultContentLocale = await resolveUiLocaleForContentCreation({ explicitLocale: body.defaultContentLocale ?? null, session });
+
+    const result = await ClassroomService.createClassroom({
+      teacherUserId: session.user.id,
+      title: body.title,
+      description: body.description,
+      subject: body.subject,
+      gradeLabel: body.gradeLabel,
+      defaultContentLocale,
+    });
+    return { success: true, data: result };
+  }, "createClassroomAction");
+}
+
+export async function getTeacherClassroomsAction(): Promise<ActionResult<unknown>> {
+  return withErrorHandling(async () => {
+    const { session } = await requireTeachingSession();
+    const data = await ClassroomService.getTeacherClassrooms(session.user.id);
+    return { success: true, data };
+  }, "getTeacherClassroomsAction");
+}
+
+export async function getClassroomAssignedSurveyProgressAction(classroomId: string): Promise<ActionResult<unknown>> {
+  return withErrorHandling(async () => {
+    const { session } = await requireTeachingSession();
+    const data = await ClassroomService.getClassroomSurveyProgress({ classroomId, teacherUserId: session.user.id });
+    return { success: true, data };
+  }, "getClassroomAssignedSurveyProgressAction");
+}

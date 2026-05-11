@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { mapSessionAuthError } from "@/lib/route-auth-error";
 
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
@@ -41,6 +42,10 @@ export async function POST(
     const transcript = await transcribeAudioBuffer(audioBuffer, language);
 
     return NextResponse.json(transcript);
-  } catch (error) { if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Failed to transcribe audio", "/api/surveys/[surveyId]/analytics/transcribe:post"); }
+  } catch (error) {
+    const authError = mapSessionAuthError(error);
+    if (authError) return authError;
+    return apiUnhandledError(error, "Failed to transcribe audio", "/api/surveys/[surveyId]/analytics/transcribe:post");
+  }
 }
 

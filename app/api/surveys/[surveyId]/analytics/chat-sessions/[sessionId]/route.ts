@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { mapSessionAuthError } from "@/lib/route-auth-error";
 import { and, eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
@@ -52,6 +53,10 @@ export async function GET(
     if (!chatSession) { return apiError("NOT_FOUND", "Session not found"); }
 
     return NextResponse.json({ session: chatSession });
-  } catch (error) { if (error instanceof Error && error.message === "UNAUTHENTICATED") { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/analytics/chat-sessions/[sessionId]:get"); }
+  } catch (error) {
+    const authError = mapSessionAuthError(error);
+    if (authError) return authError;
+    return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/analytics/chat-sessions/[sessionId]:get");
+  }
 }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import { getDb } from "@/db";
@@ -8,8 +8,11 @@ import {
   answerTeacherStudentQuestion,
   hydrateStudentLearningEvidence,
 } from "@/lib/learning/evidence";
-import { getTeacherClassroomAccess } from "@/lib/learning/access";
+import { resolveTeacherStudentAccess } from "@/lib/learning/teacher-route-access";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
+import { mapSessionAuthError } from "@/lib/route-auth-error";
 import { normalizeAppLocale } from "@/lib/i18n/config";
+import { getMessageText } from "@/lib/chat-message-text";
 
 const chatMessageSchema = z.object({
   role: z.string(),
@@ -23,25 +26,6 @@ const requestSchema = z.object({
   messages: z.array(chatMessageSchema).optional(),
 });
 
-function getMessageText(
-  message: z.infer<typeof chatMessageSchema> | undefined,
-) {
-  if (typeof message?.content === "string" && message.content.trim()) {
-    return message.content.trim();
-  }
-
-  if (!Array.isArray(message?.parts)) {
-    return "";
-  }
-
-  return message.parts
-    .flatMap((part) =>
-      part.type === "text" && typeof part.text === "string" ? [part.text] : [],
-    )
-    .join("")
-    .trim();
-}
-
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ studentId: string }> },
@@ -51,25 +35,20 @@ export async function POST(
     const { studentId } = await params;
     const body = requestSchema.parse(await request.json());
 
-    const membership = await getDb().query.classroomStudents.findFirst({
-      where: (table, { eq }) => eq(table.id, studentId),
-      with: {
-        classroom: true,
-      },
+    const accessResult = await resolveTeacherStudentAccess({
+      teacherUserId: session.user.id,
+      classroomStudentId: studentId,
     });
 
-    if (!membership) {
+    if (accessResult.error === "NOT_FOUND") {
       return apiError("NOT_FOUND", "Student not found");
     }
 
-    const access = await getTeacherClassroomAccess(
-      session.user.id,
-      membership.classroomId,
-    );
-
-    if (!access) {
+    if (accessResult.error === "UNAUTHORIZED") {
       return apiError("UNAUTHORIZED", "Unauthorized");
     }
+
+    const { membership } = accessResult;
 
     const latestUserMessage = [...(body.messages ?? [])]
       .reverse()
@@ -100,14 +79,9 @@ export async function POST(
       data: answer,
     });
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED")
-    ) {
-      return apiError("UNAUTHENTICATED", error.message);
-    }
+    const authError = mapSessionAuthError(error);
+    if (authError) return authError;
 
-    return apiUnhandledError(error, "Failed to answer teacher question", "/api/learning/students/[studentId]/chat");
+    return handleLearningRouteError(error, "Failed to answer teacher question", "/api/learning/students/[studentId]/chat");
   }
 }

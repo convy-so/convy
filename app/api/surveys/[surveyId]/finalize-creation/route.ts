@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { mapSessionAuthError } from "@/lib/route-auth-error";
 
 import { getDb } from "@/db";
 import { surveyCreationConversations, surveys } from "@/db/schema";
@@ -66,7 +67,7 @@ export async function POST(
       coveragePlan: planRow.plan,
     });
   } catch (error) {
-    if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/finalize-creation:post");
+    const authError = mapSessionAuthError(error); if (authError) return authError; return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/finalize-creation:post");
   }
 }
 

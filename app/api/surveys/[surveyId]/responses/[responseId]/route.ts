@@ -26,6 +26,7 @@ import {
   hasSurveyPermission,
 } from "@/lib/survey-access";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { mapSessionAuthError } from "@/lib/route-auth-error";
 
 export async function GET(
   _request: Request,
@@ -150,13 +151,8 @@ export async function GET(
 
     return NextResponse.json(payload);
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED")
-    ) {
-      return apiError("UNAUTHENTICATED", error.message);
-    }
+    const authError = mapSessionAuthError(error);
+    if (authError) return authError;
     return apiUnhandledError(
       error,
       "Failed to fetch response details",

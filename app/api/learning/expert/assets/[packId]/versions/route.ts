@@ -4,11 +4,11 @@ import { z } from "zod";
 
 import { getDb } from "@/db";
 import { expertFrameworkVersions } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { isExpert } from "@/lib/auth/dal";
+import { requireExpertSession } from "@/lib/learning/expert-route-guard";
 import { getTeacherOwnedFramework } from "@/lib/learning/expert-access";
 import { expertFrameworkSchema } from "@/lib/learning/types";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 const createVersionSchema = z.object({
   artifact: expertFrameworkSchema,
@@ -20,10 +20,9 @@ export async function GET(
   { params }: { params: Promise<{ packId: string }> },
 ) {
   try {
-    const session = await getVerifiedSession();
-    if (!isExpert(session.user)) {
-      return apiError("UNAUTHORIZED", "Expert or admin access required");
-    }
+    const expert = await requireExpertSession();
+    if ("error" in expert) return expert.error;
+    const { session } = expert;
     const { packId } = await params;
     const framework = await getTeacherOwnedFramework(session.user.id, packId);
     if (!framework) {
@@ -35,7 +34,7 @@ export async function GET(
     });
     return NextResponse.json({ success: true, data: versions });
   } catch (error) {
-    return apiUnhandledError(
+    return handleLearningRouteError(
       error,
       "Failed to load framework versions",
       "expert-framework-versions:get",
@@ -48,10 +47,9 @@ export async function POST(
   { params }: { params: Promise<{ packId: string }> },
 ) {
   try {
-    const session = await getVerifiedSession();
-    if (!isExpert(session.user)) {
-      return apiError("UNAUTHORIZED", "Expert or admin access required");
-    }
+    const expert = await requireExpertSession();
+    if ("error" in expert) return expert.error;
+    const { session } = expert;
     const { packId } = await params;
     const framework = await getTeacherOwnedFramework(session.user.id, packId);
     if (!framework) {
@@ -88,7 +86,7 @@ export async function POST(
         error.errors[0]?.message ?? "Validation error",
       );
     }
-    return apiUnhandledError(
+    return handleLearningRouteError(
       error,
       "Failed to create framework version",
       "expert-framework-versions:post",

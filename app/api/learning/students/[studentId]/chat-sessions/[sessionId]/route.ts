@@ -1,11 +1,13 @@
 import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { learningTeacherChatSessions } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/dal";
-import { getTeacherClassroomAccess } from "@/lib/learning/access";
+import { resolveTeacherStudentAccess } from "@/lib/learning/teacher-route-access";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
+import { mapSessionAuthError } from "@/lib/route-auth-error";
 
 export async function GET(
   _request: NextRequest,
@@ -15,20 +17,16 @@ export async function GET(
     const session = await getVerifiedSession();
     const { studentId, sessionId } = await params;
 
-    const membership = await getDb().query.classroomStudents.findFirst({
-      where: (table, { eq }) => eq(table.id, studentId),
+    const accessResult = await resolveTeacherStudentAccess({
+      teacherUserId: session.user.id,
+      classroomStudentId: studentId,
     });
 
-    if (!membership) {
+    if (accessResult.error === "NOT_FOUND") {
       return apiError("NOT_FOUND", "Student not found");
     }
 
-    const access = await getTeacherClassroomAccess(
-      session.user.id,
-      membership.classroomId,
-    );
-
-    if (!access) {
+    if (accessResult.error === "UNAUTHORIZED") {
       return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
@@ -56,9 +54,8 @@ export async function GET(
 
     return NextResponse.json({ session: chatSession });
   } catch (error) {
-    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
-      return apiError("UNAUTHENTICATED", error.message);
-    }
-    return apiUnhandledError(error, "Internal server error", "/api/learning/students/[studentId]/chat-sessions/[sessionId]");
+    const authError = mapSessionAuthError(error);
+    if (authError) return authError;
+    return handleLearningRouteError(error, "Internal server error", "/api/learning/students/[studentId]/chat-sessions/[sessionId]");
   }
 }
