@@ -170,7 +170,14 @@ export async function GET(
       })),
     });
   } catch (error) {
-    const authError = mapSessionAuthError(error); if (authError) return authError; return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/details:get");
+    const authError = mapSessionAuthError(error);
+    if (authError) return authError;
+
+    return apiUnhandledError(
+      error,
+      "Internal server error",
+      "/api/surveys/[surveyId]/details:get",
+    );
   }
 }
 

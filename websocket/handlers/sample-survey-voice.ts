@@ -16,7 +16,6 @@ import {
   getResearchBrief,
   getSessionBySourceId,
   purgeSessionAnalyticsArtifacts,
-  updateSessionState,
 } from "@/lib/education/storage";
 import { getConductingRuntimeLayers } from "@/lib/education/runtime-context";
 import type {
@@ -44,6 +43,11 @@ import {
 } from "@/lib/collaboration-service";
 import { isSupportedVoiceLocale, normalizeVoiceLocale } from "@/lib/voice/voice-locales";
 import * as Sentry from "@sentry/node";
+import {
+  appendConversationText,
+  buildConductingProgressPayload,
+  resolveFinishSurveyRequest,
+} from "./survey-voice-shared";
 
 interface SampleState {
   surveyId: string;
@@ -353,24 +357,7 @@ Additional sample-session rules:
       return;
     }
 
-    const now = new Date();
-    const lastMessage = this.state.messages[this.state.messages.length - 1];
-
-    if (
-      lastMessage &&
-      lastMessage.role === event.role &&
-      now.getTime() - new Date(lastMessage.timestamp).getTime() < 3000
-    ) {
-      lastMessage.content += ` ${event.content}`;
-      lastMessage.timestamp = now.toISOString();
-    } else {
-      this.state.messages.push({
-        id: nanoid(),
-        role: event.role,
-        content: event.content,
-        timestamp: now.toISOString(),
-      });
-    }
+    appendConversationText(this.state.messages, event);
 
     if (this.state.conversationId) {
       await getDb()
@@ -424,12 +411,7 @@ Additional sample-session rules:
       });
     });
 
-    this.send({
-      type: "progress",
-      completionPercentage: Math.round(nextState.overallCoverage * 100),
-      state: nextState.status,
-      shouldWrapUp: nextState.status === "completed",
-    });
+    this.send(buildConductingProgressPayload(nextState));
 
     const [refreshedSampleProfile, refreshedRuntimeLayers] = await Promise.all([
       getActiveConductingProfile(this.state.surveyId, "sample"),
@@ -480,42 +462,22 @@ Additional sample-session rules:
           return;
         }
 
-        const threshold = this.state.coveragePlan.completionRule.minimumRequiredNodeCoverage;
-        if (
-          this.state.sessionState.status !== "completed" &&
-          this.state.sessionState.overallCoverage < threshold
-        ) {
-          this.voiceAgent?.sendFunctionCallResponse(
-            event.function_call_id,
-            event.function_name,
-            JSON.stringify({
-              error: "Interview coverage is not high enough to finish yet",
-              currentCoverage: this.state.sessionState.overallCoverage,
-              requiredCoverage: threshold,
-            }),
-          );
-          return;
-        }
-
-        const completedState: SessionState =
-          this.state.sessionState.status === "completed"
-            ? this.state.sessionState
-            : {
-                ...this.state.sessionState,
-                status: "completed",
-                stopReason: "agent_finish_signal",
-              };
-
-        if (completedState !== this.state.sessionState) {
-          await updateSessionState(this.state.sessionId, completedState);
-          this.state.sessionState = completedState;
-        }
+        const result = await resolveFinishSurveyRequest({
+          sessionId: this.state.sessionId,
+          sessionState: this.state.sessionState,
+          coveragePlan: this.state.coveragePlan,
+        });
+        this.state.sessionState = result.nextState;
 
         this.voiceAgent?.sendFunctionCallResponse(
           event.function_call_id,
           event.function_name,
-          JSON.stringify({ success: true, message: "Survey marked as complete" }),
+          JSON.stringify(result.response),
         );
+
+        if (!result.ok) {
+          return;
+        }
 
         setTimeout(() => {
           this.send({ type: "survey_completed" });

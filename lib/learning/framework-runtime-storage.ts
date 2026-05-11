@@ -11,7 +11,7 @@ import {
 } from "@/db/schema";
 import { createDefaultDeepFramework } from "@/lib/learning/framework-packages";
 import type { ExpertTutorRuntimeModel } from "@/lib/learning/types";
-import { expertFrameworkSchema, expertTutorRuntimeModelSchema } from "@/lib/learning/types";
+import { expertTutorRuntimeModelSchema } from "@/lib/learning/types";
 
 export async function ensureTopicFramework(params: {
   topicId: string;

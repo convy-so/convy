@@ -2,7 +2,7 @@ import { getVerifiedSession } from "@/lib/auth/dal";
 import { getRedisClient } from "@/lib/redis";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiUnhandledError } from "@/lib/api/error-contract";
 import { toApiAuthError } from "@/lib/auth/error-map";
 
 export async function GET() {

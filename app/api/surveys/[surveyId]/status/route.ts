@@ -48,7 +48,14 @@ export async function PATCH(
 
         return NextResponse.json({ success: true, status });
     } catch (error) {
-        const authError = mapSessionAuthError(error); if (authError) return authError; return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/status:patch");
+        const authError = mapSessionAuthError(error);
+        if (authError) return authError;
+
+        return apiUnhandledError(
+            error,
+            "Internal server error",
+            "/api/surveys/[surveyId]/status:patch",
+        );
     }
 }
 

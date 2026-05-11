@@ -67,7 +67,14 @@ export async function POST(
       coveragePlan: planRow.plan,
     });
   } catch (error) {
-    const authError = mapSessionAuthError(error); if (authError) return authError; return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/finalize-creation:post");
+    const authError = mapSessionAuthError(error);
+    if (authError) return authError;
+
+    return apiUnhandledError(
+      error,
+      "Internal server error",
+      "/api/surveys/[surveyId]/finalize-creation:post",
+    );
   }
 }
 

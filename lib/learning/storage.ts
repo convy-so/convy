@@ -1,39 +1,20 @@
-import { and, asc, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
 import {
-  classroomStudents,
-  expertConflicts,
-  expertCrystallizations,
-  expertFrameworks,
-  expertFrameworkVersions,
-  expertReviewCases,
-  expertRuntimeModels,
-  learningInteractions,
   learningMessages,
   learningSessions,
   learningTopics,
-  studentInterestProfiles,
-  studentModelAnalyses,
-  studentModels,
-  studentModelSnapshots,
-  studentProgressReports,
   topicMaterials,
 } from "@/db/schema";
-import { createDefaultDeepFramework } from "@/lib/learning/framework-packages";
+import { learningInteractions } from "@/db/schema/learning";
 import type {
-  ExpertTutorRuntimeModel,
   LearningInteractionType,
   LearningSessionState,
-  StudentInterestProfile,
-  StudentModelSnapshot,
-  TeacherProgressReport,
 } from "@/lib/learning/types";
 import {
   createDefaultLearningSessionState,
-  expertTutorRuntimeModelSchema,
-  studentModelSnapshotSchema,
 } from "@/lib/learning/types";
 import { LearningStateConflictError } from "@/lib/learning/errors";
 

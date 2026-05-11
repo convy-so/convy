@@ -12,7 +12,6 @@ export async function GET(
   try {
     const expert = await requireExpertSession();
     if ("error" in expert) return expert.error;
-    const { session } = expert;
 
     const { sessionId } = await props.params;
 
