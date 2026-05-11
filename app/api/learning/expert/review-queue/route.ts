@@ -1,16 +1,15 @@
 import { NextResponse } from "next/server";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { isExpert } from "@/lib/auth/dal";
+import { requireExpertSession } from "@/lib/learning/expert-route-guard";
 import { listExpertReviewQueue } from "@/lib/learning/storage";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 export async function GET() {
   try {
-    const session = await getVerifiedSession();
-    if (!isExpert(session.user)) {
-      return apiError("UNAUTHORIZED", "Expert or admin access required");
-    }
+    const expert = await requireExpertSession();
+    if ("error" in expert) return expert.error;
+    const { session } = expert;
 
     const queue = await listExpertReviewQueue({
       teacherUserId: session.user.id,
@@ -21,6 +20,6 @@ export async function GET() {
       data: queue,
     });
   } catch (error) {
-    return apiUnhandledError(error, "Failed to load review queue", "expert-review-queue");
+    return handleLearningRouteError(error, "Failed to load review queue", "expert-review-queue");
   }
 }

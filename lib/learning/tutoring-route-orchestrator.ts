@@ -1,12 +1,11 @@
 import { normalizeAppLocale } from "@/lib/i18n/config";
 import { getStudentTutoringAccess } from "@/lib/learning/access";
 import {
-  appendLearningMessage,
   createLearningSession,
   getActiveLearningSession,
   getLearningSessionById,
-  logLearningInteraction,
 } from "@/lib/learning/storage";
+import { logAssistantTurn } from "@/lib/learning/tutoring-turn-logging";
 import { tutorRuntimeService } from "@/lib/learning/tutor-runtime-service";
 import { generateSessionOpening } from "@/lib/learning/tutor";
 
@@ -93,21 +92,10 @@ export async function ensureTutoringSession(input: {
       `Let's work on ${input.access.topic.title}. Start by telling me how you currently think about this topic.`,
   );
 
-  await appendLearningMessage({
+  await logAssistantTurn({
     sessionId: session.id,
-    role: "assistant",
-    content: opening,
-    metadata: {
-      messageKind: "session_opening",
-    },
-  });
-
-  await logLearningInteraction({
     classroomStudentId: input.access.classroomStudent.id,
     topicId: input.topicId,
-    sessionId: session.id,
-    role: "assistant",
-    interactionType: "tutor_message",
     content: opening,
     metadata: {
       messageKind: "session_opening",

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { isExpert } from "@/lib/auth/dal";
+import { requireExpertSession } from "@/lib/learning/expert-route-guard";
 import { listLearningMessages } from "@/lib/learning/storage";
 
 export async function GET(
@@ -10,10 +10,9 @@ export async function GET(
   props: { params: Promise<{ sessionId: string }> }
 ) {
   try {
-    const session = await getVerifiedSession();
-    if (!isExpert(session.user)) {
-      return apiError("UNAUTHORIZED", "Expert or admin access required");
-    }
+    const expert = await requireExpertSession();
+    if ("error" in expert) return expert.error;
+    const { session } = expert;
 
     const { sessionId } = await props.params;
 
@@ -28,6 +27,6 @@ export async function GET(
       data: messages,
     });
   } catch (error) {
-    return apiUnhandledError(error, "Failed to load session transcript", "/api/learning/expert/sessions/[sessionId]/transcript");
+    return handleLearningRouteError(error, "Failed to load session transcript", "/api/learning/expert/sessions/[sessionId]/transcript");
   }
 }

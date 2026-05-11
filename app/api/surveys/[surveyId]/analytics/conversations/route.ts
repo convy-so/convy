@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { mapSessionAuthError } from "@/lib/route-auth-error";
 
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { translateConversationListItems } from "@/lib/analytics";
@@ -44,6 +45,10 @@ export async function GET(
       ...result,
       conversations: translated,
     });
-  } catch (error) { if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Failed to fetch conversation insights", "/api/surveys/[surveyId]/analytics/conversations:get"); }
+  } catch (error) {
+    const authError = mapSessionAuthError(error);
+    if (authError) return authError;
+    return apiUnhandledError(error, "Failed to fetch conversation insights", "/api/surveys/[surveyId]/analytics/conversations:get");
+  }
 }
 
