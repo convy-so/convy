@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 
 import { requireExpertSession } from "@/lib/learning/expert-route-guard";
 import { listExpertReviewQueue } from "@/lib/learning/storage";
-import { apiError } from "@/lib/api/error-contract";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 export async function GET() {

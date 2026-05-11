@@ -9,7 +9,6 @@ import {
   hasSurveyPermission,
 } from "@/lib/survey-access";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
-import { mapSessionAuthError } from "@/lib/route-auth-error";
 
 type ConversationMessage = {
   role: string;

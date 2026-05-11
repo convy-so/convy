@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
-import { getDb } from "@/db";
 import { getVerifiedSession } from "@/lib/auth/dal";
 import {
   answerTeacherStudentQuestion,

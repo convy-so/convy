@@ -3,12 +3,8 @@ import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
 import {
-  expertConflicts,
   expertCrystallizations,
   expertReviewCases,
-  expertRuntimeModels,
-  learningInteractions,
-  learningSessions,
 } from "@/db/schema";
 
 export async function listExpertReviewCases(params: {

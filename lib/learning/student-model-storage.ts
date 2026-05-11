@@ -4,7 +4,6 @@ import { nanoid } from "nanoid";
 import { getDb } from "@/db";
 import {
   classroomStudents,
-  learningTopics,
   studentInterestProfiles,
   studentModelAnalyses,
   studentModels,

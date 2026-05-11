@@ -20,7 +20,6 @@ import {
   getActiveCoveragePlan,
   getResearchBrief,
   getSessionBySourceId,
-  updateSessionState,
 } from "@/lib/education/storage";
 import { getConductingRuntimeLayers } from "@/lib/education/runtime-context";
 import { scheduleAnalyticsRefresh } from "@/lib/analytics-scheduler";
@@ -47,6 +46,11 @@ import {
 } from "@/lib/respondent-conversation";
 import { normalizeVoiceLocale } from "@/lib/voice/voice-locales";
 import { BaseVoiceAgentHandler } from "./base-voice-agent-handler";
+import {
+  appendConversationText,
+  buildConductingProgressPayload,
+  resolveFinishSurveyRequest,
+} from "./survey-voice-shared";
 import * as Sentry from "@sentry/node";
 
 const ESTIMATED_STT_COST_PER_MINUTE = 0.0059;
@@ -307,24 +311,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
   }
 
   protected async onConversationText(event: ConversationTextEvent): Promise<void> {
-    const now = new Date();
-    const lastMessage = this.state.messages[this.state.messages.length - 1];
-
-    if (
-      lastMessage &&
-      lastMessage.role === event.role &&
-      now.getTime() - new Date(lastMessage.timestamp).getTime() < 3000
-    ) {
-      lastMessage.content += ` ${event.content}`;
-      lastMessage.timestamp = now.toISOString();
-    } else {
-      this.state.messages.push({
-        id: nanoid(),
-        role: event.role,
-        content: event.content,
-        timestamp: now.toISOString(),
-      });
-    }
+    appendConversationText(this.state.messages, event);
 
     if (!this.state.conversationId) return;
 
@@ -389,12 +376,7 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
       });
     });
 
-    this.send({
-      type: "progress",
-      completionPercentage: Math.round(nextState.overallCoverage * 100),
-      state: nextState.status,
-      shouldWrapUp: nextState.status === "completed",
-    });
+    this.send(buildConductingProgressPayload(nextState));
 
     const [refreshedLiveProfile, refreshedSampleProfile, refreshedRuntimeLayers] = await Promise.all([
       getActiveConductingProfile(this.state.survey!.id, "live"),
@@ -447,42 +429,22 @@ export class SurveyResponseVoiceHandler extends BaseVoiceAgentHandler {
           return;
         }
 
-        const threshold = this.state.coveragePlan.completionRule.minimumRequiredNodeCoverage;
-        if (
-          this.state.sessionState.status !== "completed" &&
-          this.state.sessionState.overallCoverage < threshold
-        ) {
-          this.voiceAgent?.sendFunctionCallResponse(
-            event.function_call_id,
-            event.function_name,
-            JSON.stringify({
-              error: "Interview coverage is not high enough to finish yet",
-              currentCoverage: this.state.sessionState.overallCoverage,
-              requiredCoverage: threshold,
-            }),
-          );
-          return;
-        }
-
-        const completedState: SessionState =
-          this.state.sessionState.status === "completed"
-            ? this.state.sessionState
-            : {
-                ...this.state.sessionState,
-                status: "completed",
-                stopReason: "agent_finish_signal",
-              };
-
-        if (completedState !== this.state.sessionState) {
-          await updateSessionState(this.state.sessionId, completedState);
-          this.state.sessionState = completedState;
-        }
+        const result = await resolveFinishSurveyRequest({
+          sessionId: this.state.sessionId,
+          sessionState: this.state.sessionState,
+          coveragePlan: this.state.coveragePlan,
+        });
+        this.state.sessionState = result.nextState;
 
         this.voiceAgent?.sendFunctionCallResponse(
           event.function_call_id,
           event.function_name,
-          JSON.stringify({ success: true, message: "Survey marked as complete" }),
+          JSON.stringify(result.response),
         );
+
+        if (!result.ok) {
+          return;
+        }
 
         setTimeout(() => {
           this.send({ type: "survey_completed" });

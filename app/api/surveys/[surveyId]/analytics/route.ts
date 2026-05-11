@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiUnhandledError } from "@/lib/api/error-contract";
 import { surveyErrors } from "@/lib/surveys/errors";
 
 import { getVerifiedSession } from "@/lib/auth/dal";

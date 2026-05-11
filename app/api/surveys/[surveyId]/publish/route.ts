@@ -87,7 +87,14 @@ export async function POST(
       shareUrl: `${env.APP_BASE_URL}/s/${shareableLink}`,
     });
   } catch (error) {
-    const authError = mapSessionAuthError(error); if (authError) return authError; return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/publish:post");
+    const authError = mapSessionAuthError(error);
+    if (authError) return authError;
+
+    return apiUnhandledError(
+      error,
+      "Internal server error",
+      "/api/surveys/[surveyId]/publish:post",
+    );
   }
 }
 

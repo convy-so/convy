@@ -19,11 +19,6 @@ import { getMessageText } from "@/lib/chat-message-text";
 
 export const maxDuration = 300;
 
-type AnalyticsChatMessage = {
-  role: string;
-  content?: string;
-  parts?: ChatSessionMessage["parts"];
-};
 
 const analyticsChatMessageSchema = z.object({
   role: z.string(),

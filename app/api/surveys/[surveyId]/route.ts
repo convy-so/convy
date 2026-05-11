@@ -39,7 +39,14 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    const authError = mapSessionAuthError(error); if (authError) return authError; return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]:delete");
+    const authError = mapSessionAuthError(error);
+    if (authError) return authError;
+
+    return apiUnhandledError(
+      error,
+      "Internal server error",
+      "/api/surveys/[surveyId]:delete",
+    );
   }
 }
 
@@ -110,7 +117,14 @@ export async function PATCH(
 
     return NextResponse.json({ success: true, updates });
   } catch (error) {
-    const authError = mapSessionAuthError(error); if (authError) return authError; return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]:patch");
+    const authError = mapSessionAuthError(error);
+    if (authError) return authError;
+
+    return apiUnhandledError(
+      error,
+      "Internal server error",
+      "/api/surveys/[surveyId]:patch",
+    );
   }
 }
 
