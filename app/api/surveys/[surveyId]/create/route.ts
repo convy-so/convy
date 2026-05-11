@@ -31,6 +31,7 @@ import {
 } from "@/lib/education/creation-workflow";
 import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { mapSessionAuthError } from "@/lib/route-auth-error";
 import {
   ensureCreationLease,
   loadSurveyCreationContext,
@@ -85,13 +86,8 @@ export async function GET(
       extractedData: creationConversation?.extractedData || {},
     });
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED")
-    ) {
-      return apiError("UNAUTHENTICATED", error.message);
-    }
+    const authError = mapSessionAuthError(error);
+    if (authError) return authError;
     return apiUnhandledError(error, "Internal server error", "survey-create:get");
   }
 }
@@ -295,13 +291,8 @@ export async function POST(
     response.headers.set("X-Lease-Token", leaseResult.lease.leaseToken);
     return response;
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED")
-    ) {
-      return apiError("UNAUTHENTICATED", error.message);
-    }
+    const authError = mapSessionAuthError(error);
+    if (authError) return authError;
     return apiUnhandledError(error, "Internal server error", "survey-create:post");
   }
 }
@@ -363,13 +354,8 @@ export async function PUT(
     response.headers.set("X-Lease-Token", leaseResult.lease.leaseToken);
     return response;
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message === "UNAUTHENTICATED" ||
-        error.message === "EMAIL_NOT_VERIFIED")
-    ) {
-      return apiError("UNAUTHENTICATED", error.message);
-    }
+    const authError = mapSessionAuthError(error);
+    if (authError) return authError;
     return apiUnhandledError(error, "Internal server error", "survey-create:put");
   }
 }

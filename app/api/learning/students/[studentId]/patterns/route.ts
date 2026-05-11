@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
 import { getVerifiedSession } from "@/lib/auth/dal";
-import { getTeacherClassroomAccess } from "@/lib/learning/access";
+import { resolveTeacherStudentAccess } from "@/lib/learning/teacher-route-access";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 export async function GET(
   _request: Request,
@@ -12,6 +13,19 @@ export async function GET(
   try {
     const session = await getVerifiedSession();
     const { studentId } = await params;
+
+    const accessResult = await resolveTeacherStudentAccess({
+      teacherUserId: session.user.id,
+      classroomStudentId: studentId,
+    });
+
+    if (accessResult.error === "NOT_FOUND") {
+      return apiError("NOT_FOUND", "Student not found");
+    }
+
+    if (accessResult.error === "UNAUTHORIZED") {
+      return apiError("UNAUTHORIZED", "Unauthorized");
+    }
 
     const membership = await getDb().query.classroomStudents.findFirst({
       where: (table, { eq }) => eq(table.id, studentId),
@@ -30,12 +44,6 @@ export async function GET(
 
     if (!membership) {
       return apiError("NOT_FOUND", "Student not found");
-    }
-
-    const access = await getTeacherClassroomAccess(session.user.id, membership.classroomId);
-
-    if (!access) {
-      return apiError("UNAUTHORIZED", "Unauthorized");
     }
 
     const latestSnapshot = membership.studentModel?.snapshots[0]?.snapshot ?? null;
@@ -75,6 +83,6 @@ export async function GET(
       },
     });
   } catch (error) {
-    return apiUnhandledError(error, "Failed to load student model", "/api/learning/students/[studentId]/patterns");
+    return handleLearningRouteError(error, "Failed to load student model", "/api/learning/students/[studentId]/patterns");
   }
 }

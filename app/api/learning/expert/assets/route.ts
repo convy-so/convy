@@ -4,15 +4,15 @@ import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { expertFrameworks } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { isExpert } from "@/lib/auth/dal";
+import { requireExpertSession } from "@/lib/learning/expert-route-guard";
 import {
   getTeacherOwnedFramework,
   getTeacherOwnedTopic,
 } from "@/lib/learning/expert-access";
 import { createDefaultDeepFramework } from "@/lib/learning/framework-packages";
 import { ensureTopicFramework } from "@/lib/learning/storage";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 const createFrameworkSchema = z.object({
   name: z.string().min(2),
@@ -22,10 +22,9 @@ const createFrameworkSchema = z.object({
 
 export async function GET() {
   try {
-    const session = await getVerifiedSession();
-    if (!isExpert(session.user)) {
-      return apiError("UNAUTHORIZED", "Expert or admin access required");
-    }
+    const expert = await requireExpertSession();
+    if ("error" in expert) return expert.error;
+    const { session } = expert;
     const frameworks = await getDb().query.expertFrameworks.findMany({
       with: {
         topic: {
@@ -58,16 +57,15 @@ export async function GET() {
         })),
     });
   } catch (error) {
-    return apiUnhandledError(error, "Failed to load frameworks", "expert-assets:get");
+    return handleLearningRouteError(error, "Failed to load frameworks", "expert-assets:get");
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const session = await getVerifiedSession();
-    if (!isExpert(session.user)) {
-      return apiError("UNAUTHORIZED", "Expert or admin access required");
-    }
+    const expert = await requireExpertSession();
+    if ("error" in expert) return expert.error;
+    const { session } = expert;
     const body = createFrameworkSchema.parse(await request.json());
     const topic = await getTeacherOwnedTopic(session.user.id, body.topicId);
     if (!topic) {
@@ -120,6 +118,6 @@ export async function POST(request: Request) {
         error.errors[0]?.message ?? "Validation error",
       );
     }
-    return apiUnhandledError(error, "Failed to create framework", "expert-assets:post");
+    return handleLearningRouteError(error, "Failed to create framework", "expert-assets:post");
   }
 }

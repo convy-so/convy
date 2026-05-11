@@ -32,6 +32,7 @@ import { ChatMessagePart, SurveyMedia } from "@/lib/chat-types";
 import { toUIMessages } from "@/lib/chat-ui-messages";
 import { DefaultChatTransport } from "ai";
 import { SurveyStartOverlay } from "@/components/surveys/survey-start-overlay";
+import { getMessageText } from "@/lib/chat-message-text";
 import { RefinementAssistantPanel } from "@/components/surveys/refinement-assistant-panel";
 
 const MAX_SAMPLE_CONVERSATIONS = 3;
@@ -81,13 +82,6 @@ function normalizeSampleMessage(
         ...uiMessage,
         createdAt: message.timestamp ? new Date(message.timestamp) : new Date(),
     };
-}
-
-function getMessageText(message: UIMessage): string {
-    return message.parts
-        ?.filter((part): part is { type: "text"; text: string } => part.type === "text")
-        .map((part) => part.text)
-        .join("") || "";
 }
 
 function isFinishSurveyPart(part: UIMessage["parts"][number]): boolean {
