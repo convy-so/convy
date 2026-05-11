@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
 import { z } from "zod";
 
 import {
@@ -10,23 +10,25 @@ import {
 import { getDb } from "@/db";
 import { classroomStudents } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/dal";
-import { getTeacherClassroomAccess } from "@/lib/learning/access";
+import { resolveTeacherClassroomAccess } from "@/lib/learning/teacher-route-access";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
-const singleStudentInviteSchema = z.object({
-  fullName: z.string().min(2),
-  email: z.string().email(),
-});
-
-const bulkStudentInviteSchema = z.object({
-  students: z
-    .array(
-      z.object({
-        fullName: z.string().min(2),
-        email: z.string().email(),
-      }),
-    )
-    .min(1),
-});
+const invitePayloadSchema = z.union([
+  z.object({
+    fullName: z.string().min(2),
+    email: z.string().email(),
+  }),
+  z.object({
+    students: z
+      .array(
+        z.object({
+          fullName: z.string().min(2),
+          email: z.string().email(),
+        }),
+      )
+      .min(1),
+  }),
+]);
 
 export async function GET(
   _request: Request,
@@ -35,11 +37,16 @@ export async function GET(
   try {
     const session = await getVerifiedSession();
     const { classroomId } = await params;
-    const classroom = await getTeacherClassroomAccess(session.user.id, classroomId);
+    const accessResult = await resolveTeacherClassroomAccess({
+      teacherUserId: session.user.id,
+      classroomId,
+    });
 
-    if (!classroom) {
+    if (accessResult.error === "UNAUTHORIZED") {
       return apiError("UNAUTHORIZED", "Unauthorized");
     }
+
+    const { classroom } = accessResult;
 
     const students = await getDb().query.classroomStudents.findMany({
       where: eq(classroomStudents.classroomId, classroom.id),
@@ -60,7 +67,7 @@ export async function GET(
       })),
     });
   } catch (error) {
-    return apiUnhandledError(error, "Failed to load students", "/api/learning/classrooms/[classroomId]/students");
+    return handleLearningRouteError(error, "Failed to load students", "/api/learning/classrooms/[classroomId]/students");
   }
 }
 
@@ -72,32 +79,31 @@ export async function POST(
     const payload: unknown = await request.json().catch(() => null);
     const { classroomId } = await params;
 
-    const bulkInvite = bulkStudentInviteSchema.safeParse(payload);
-    if (bulkInvite.success) {
+    const parsedInvitePayload = invitePayloadSchema.safeParse(payload);
+    if (!parsedInvitePayload.success) {
+      return apiError(
+        "VALIDATION_ERROR",
+        "Provide either a single student with fullName and email, or a students array for bulk import.",
+      );
+    }
+
+    if ("students" in parsedInvitePayload.data) {
       const result = await bulkInviteStudentsToClassroomAction({
         classroomId,
-        students: bulkInvite.data.students,
+        students: parsedInvitePayload.data.students,
       });
       if (!result.success) return apiError("VALIDATION_ERROR", result.error.message || "Failed to invite students", { details: result.error.details });
       return NextResponse.json(result);
     }
 
-    const singleInvite = singleStudentInviteSchema.safeParse(payload);
-    if (singleInvite.success) {
-      const result = await inviteStudentToClassroomAction({
-        classroomId,
-        fullName: singleInvite.data.fullName,
-        email: singleInvite.data.email,
-      });
-      if (!result.success) return apiError("VALIDATION_ERROR", result.error.message || "Failed to invite student", { details: result.error.details });
-      return NextResponse.json(result);
-    }
-
-    return apiError(
-      "VALIDATION_ERROR",
-      "Provide either a single student with fullName and email, or a students array for bulk import."
-    );
+    const result = await inviteStudentToClassroomAction({
+      classroomId,
+      fullName: parsedInvitePayload.data.fullName,
+      email: parsedInvitePayload.data.email,
+    });
+    if (!result.success) return apiError("VALIDATION_ERROR", result.error.message || "Failed to invite student", { details: result.error.details });
+    return NextResponse.json(result);
   } catch (error) {
-    return apiUnhandledError(error, "Failed to invite students", "/api/learning/classrooms/[classroomId]/students");
+    return handleLearningRouteError(error, "Failed to invite students", "/api/learning/classrooms/[classroomId]/students");
   }
 }

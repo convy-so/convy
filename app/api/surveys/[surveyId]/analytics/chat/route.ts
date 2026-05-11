@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { mapSessionAuthError } from "@/lib/route-auth-error";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { eq } from "drizzle-orm";
 
@@ -14,6 +15,7 @@ import {
   hasSurveyPermission,
 } from "@/lib/survey-access";
 import { z } from "zod";
+import { getMessageText } from "@/lib/chat-message-text";
 
 export const maxDuration = 300;
 
@@ -36,30 +38,6 @@ const analyticsChatRequestSchema = z.object({
   audio: z.string().optional(),
   language: z.string().optional(),
 });
-
-function getMessageText(
-  message: Pick<AnalyticsChatMessage, "content" | "parts"> | undefined,
-) {
-  if (typeof message?.content === "string") {
-    return message.content;
-  }
-
-  if (!Array.isArray(message?.parts)) {
-    return "";
-  }
-
-  return message.parts
-    .filter(
-      (
-        part,
-      ): part is Extract<
-        ChatSessionMessage["parts"][number],
-        { type: "text" }
-      > => part.type === "text",
-    )
-    .map((part) => part.text)
-    .join("");
-}
 
 export async function POST(
   request: NextRequest,
@@ -131,6 +109,10 @@ export async function POST(
         },
       }),
     });
-  } catch (error) { if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message === "EMAIL_NOT_VERIFIED")) { return apiError("UNAUTHENTICATED", error.message); } return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/analytics/chat:post"); }
+  } catch (error) {
+    const authError = mapSessionAuthError(error);
+    if (authError) return authError;
+    return apiUnhandledError(error, "Internal server error", "/api/surveys/[surveyId]/analytics/chat:post");
+  }
 }
 

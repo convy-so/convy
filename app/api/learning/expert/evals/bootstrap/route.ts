@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { isExpert } from "@/lib/auth/dal";
+import { requireExpertSession } from "@/lib/learning/expert-route-guard";
 
 const tutoringEvalFamilies = [
   {
@@ -33,16 +33,15 @@ const tutoringEvalFamilies = [
 
 export async function POST() {
   try {
-    const session = await getVerifiedSession();
-    if (!isExpert(session.user)) {
-      return apiError("UNAUTHORIZED", "Expert or admin access required");
-    }
+    const expert = await requireExpertSession();
+    if ("error" in expert) return expert.error;
+    const { session } = expert;
 
     return NextResponse.json({
       success: true,
       data: tutoringEvalFamilies,
     });
   } catch (error) {
-    return apiUnhandledError(error, "Failed to bootstrap tutoring eval families", "/api/learning/expert/evals/bootstrap");
+    return handleLearningRouteError(error, "Failed to bootstrap tutoring eval families", "/api/learning/expert/evals/bootstrap");
   }
 }
