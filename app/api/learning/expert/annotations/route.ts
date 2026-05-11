@@ -6,15 +6,15 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { learningSessions, expertRuntimeModels } from "@/db/schema/learning";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { isExpert } from "@/lib/auth/dal";
+import { requireExpertSession } from "@/lib/learning/expert-route-guard";
 import { resolveTeacherExpertAnchor } from "@/lib/learning/expert-access";
 import {
   createExpertReviewCase,
   listExpertReviewCases,
   maybeCreateDraftCrystallizationFromReviewCases,
 } from "@/lib/learning/storage";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 const createReviewCaseSchema = z.object({
   topicId: z.string().nullable().optional(),
@@ -32,10 +32,9 @@ const createReviewCaseSchema = z.object({
 
 export async function GET(request: Request) {
   try {
-    const session = await getVerifiedSession();
-    if (!isExpert(session.user)) {
-      return apiError("UNAUTHORIZED", "Expert or admin access required");
-    }
+    const expert = await requireExpertSession();
+    if ("error" in expert) return expert.error;
+    const { session } = expert;
 
     const { searchParams } = new URL(request.url);
     const topicId = searchParams.get("topicId");
@@ -49,7 +48,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ success: true, data: reviewCases });
   } catch (error) {
-    return apiUnhandledError(
+    return handleLearningRouteError(
       error,
       "Failed to load review cases",
       "expert-annotations:get",
@@ -59,10 +58,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await getVerifiedSession();
-    if (!isExpert(session.user)) {
-      return apiError("UNAUTHORIZED", "Expert or admin access required");
-    }
+    const expert = await requireExpertSession();
+    if ("error" in expert) return expert.error;
+    const { session } = expert;
     const body = createReviewCaseSchema.parse(await request.json());
     const anchor = await resolveTeacherExpertAnchor(session.user.id, body);
     if (!anchor) {
@@ -133,6 +131,6 @@ export async function POST(request: Request) {
         error.errors[0]?.message ?? "Validation error",
       );
     }
-    return apiUnhandledError(error, "Failed to save review case", "expert-annotations:post");
+    return handleLearningRouteError(error, "Failed to save review case", "expert-annotations:post");
   }
 }

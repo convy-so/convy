@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
 
 import { createLearningTopicAction } from "@/app/actions/classroom";
 import { getDb } from "@/db";
 import { getVerifiedSession } from "@/lib/auth/dal";
-import { getTeacherClassroomAccess } from "@/lib/learning/access";
+import { resolveTeacherClassroomAccess } from "@/lib/learning/teacher-route-access";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 
 export async function GET(
   _request: Request,
@@ -13,11 +14,16 @@ export async function GET(
   try {
     const session = await getVerifiedSession();
     const { classroomId } = await params;
-    const classroom = await getTeacherClassroomAccess(session.user.id, classroomId);
+    const accessResult = await resolveTeacherClassroomAccess({
+      teacherUserId: session.user.id,
+      classroomId,
+    });
 
-    if (!classroom) {
+    if (accessResult.error === "UNAUTHORIZED") {
       return apiError("UNAUTHORIZED", "Unauthorized");
     }
+
+    const { classroom } = accessResult;
 
     const topics = await getDb().query.learningTopics.findMany({
       where: (table, { eq }) => eq(table.classroomId, classroom.id),
@@ -33,7 +39,7 @@ export async function GET(
       })),
     });
   } catch (error) {
-    return apiUnhandledError(error, "Failed to load topics", "/api/learning/classrooms/[classroomId]/topics");
+    return handleLearningRouteError(error, "Failed to load topics", "/api/learning/classrooms/[classroomId]/topics");
   }
 }
 

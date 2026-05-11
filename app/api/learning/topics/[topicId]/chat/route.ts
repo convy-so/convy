@@ -1,13 +1,11 @@
-import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from "ai";
+import { type UIMessage } from "ai";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { listLearningMessages } from "@/lib/learning/storage";
-import { tutorRuntimeService } from "@/lib/learning/tutor-runtime-service";
 import { learningSessionStateSchema } from "@/lib/learning/types";
 import { normalizeAppLocale } from "@/lib/i18n/config";
-import { evaluateScopePolicy } from "@/lib/ai/scope-policy";
 import { apiError } from "@/lib/api/error-contract";
 import {
   ensureTutoringSession,
@@ -15,13 +13,10 @@ import {
   resolveStudentTutoringContext,
 } from "@/lib/learning/tutoring-route-orchestrator";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
-import {
-  buildScopeRedirectResponse,
-  finalizeTutoringTurn,
-  getLatestUserText,
-  logUserTurn,
-  prepareTutoringTurn,
-} from "@/lib/learning/tutoring-chat-turn";
+import { getLatestUserText, prepareTutoringTurn } from "@/lib/learning/tutoring-turn-preparation";
+import { logUserTurn } from "@/lib/learning/tutoring-turn-logging";
+import { evaluateTutoringScope, maybeHandleScopeRedirect } from "@/lib/learning/tutoring-chat-route-service";
+import { finalizeTutoringTurn } from "@/lib/learning/tutoring-turn-finalization";
 
 const requestSchema = z.object({
   sessionId: z.string().optional(),
@@ -101,19 +96,9 @@ export async function POST(
       return apiError("VALIDATION_ERROR", "Message is required");
     }
 
-    const scopeDecision = await evaluateScopePolicy({
-      feature: "tutoring_chat",
-      objective: `Help the student learn ${access.topic.title} using uploaded course materials`,
-      currentPhase: "active tutoring session",
-      activeTopic: access.topic.title,
-      latestUserMessage: latestUserText,
-      strictMode: true,
-      driftCount: 0,
-      allowedDetours: [
-        "brief clarification of the current concept",
-        "asking what a current term means",
-        "replying in another supported language while staying on lesson",
-      ],
+    const scopeDecision = await evaluateTutoringScope({
+      topicTitle: access.topic.title,
+      latestUserText,
     });
 
     const tutorSession = await ensureTutoringSession({
@@ -124,32 +109,17 @@ export async function POST(
     });
     const state = learningSessionStateSchema.parse(tutorSession.state ?? {});
 
-    if (scopeDecision.shouldRedirect) {
-      await logUserTurn({
-        sessionId: tutorSession.id,
-        classroomStudentId: access.classroomStudent.id,
-        topicId,
-        content: latestUserText,
-        metadata: {
-          classification: scopeDecision.classification,
-        },
-      });
-      const redirect = buildScopeRedirectResponse({
-        sessionId: tutorSession.id,
-        classroomStudentId: access.classroomStudent.id,
-        topicId,
-        classification: scopeDecision.classification,
-        redirectMessage: scopeDecision.redirectMessage,
-      });
-      return createUIMessageStreamResponse({
-        stream: createUIMessageStream({
-          execute: async ({ writer }) => {
-            writer.write({ type: "text-delta", id: redirect.streamId, delta: redirect.text });
-            await redirect.persist();
-          },
-        }),
-      });
-    }
+    const scopeRedirectResponse = await maybeHandleScopeRedirect({
+      shouldRedirect: scopeDecision.shouldRedirect,
+      sessionId: tutorSession.id,
+      classroomStudentId: access.classroomStudent.id,
+      topicId,
+      latestUserText,
+      classification: scopeDecision.classification,
+      redirectMessage: scopeDecision.redirectMessage,
+    });
+
+    if (scopeRedirectResponse) return scopeRedirectResponse;
 
     await logUserTurn({
       sessionId: tutorSession.id,

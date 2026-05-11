@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
+import { apiError } from "@/lib/api/error-contract";
+import { handleLearningRouteError } from "@/lib/learning/route-errors";
 import { z } from "zod";
 
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { isExpert } from "@/lib/auth/dal";
+import { requireExpertSession } from "@/lib/learning/expert-route-guard";
 import { getTeacherOwnedTopic } from "@/lib/learning/expert-access";
 import { searchLearningTopicContext } from "@/lib/learning/rag";
 import { previewAssessmentQuestionForTopic } from "@/lib/learning/session-engine";
@@ -14,10 +14,9 @@ const previewSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const session = await getVerifiedSession();
-    if (!isExpert(session.user)) {
-      return apiError("UNAUTHORIZED", "Expert or admin access required");
-    }
+    const expert = await requireExpertSession();
+    if ("error" in expert) return expert.error;
+    const { session } = expert;
 
     const body = previewSchema.parse(await request.json());
     const topic = await getTeacherOwnedTopic(session.user.id, body.topicId);
@@ -57,6 +56,6 @@ export async function POST(request: Request) {
       );
     }
 
-    return apiUnhandledError(error, "Failed to preview question", "expert-assets-preview:post");
+    return handleLearningRouteError(error, "Failed to preview question", "expert-assets-preview:post");
   }
 }
