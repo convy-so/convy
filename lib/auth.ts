@@ -21,6 +21,7 @@ function readLocaleField(
   return isAppLocale(candidate) ? candidate : undefined;
 }
 
+const pendingRoles = new Map<string, string>();
 
 export const auth = betterAuth({
   appName: "Convyy",
@@ -45,8 +46,8 @@ export const auth = betterAuth({
     before: async (ctx) => {
       if (ctx.path === "/sign-up/email") {
         const body = ctx.body as any;
-        if (body && body.role) {
-          body.role = body.role;
+        if (body && body.email && body.role) {
+          pendingRoles.set(body.email.toLowerCase(), body.role);
           delete body.role;
         }
       }
@@ -130,12 +131,6 @@ export const auth = betterAuth({
       }
     },
     additionalFields: {
-      role: {
-        type: "string",
-        required: false,
-        input: true,
-        returned: false,
-      },
       banned: {
         type: "boolean",
         defaultValue: false,
@@ -172,8 +167,10 @@ export const auth = betterAuth({
             throw new Error("Admin emails cannot be registered as normal users.");
           }
 
-          if (user.initialRole) {
-             user.role = user.initialRole;
+          const cachedRole = user.email ? pendingRoles.get(user.email.toLowerCase()) : null;
+          if (cachedRole) {
+             user.role = cachedRole;
+             pendingRoles.delete(user.email.toLowerCase());
           }
 
           if (user.role === "expert" || user.role === "admin") {
