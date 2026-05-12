@@ -48,6 +48,7 @@ function translateCode(code: string, fallback?: string): string {
     case "CONFLICT":
       return "This record already exists or there is a conflict.";
     case "INTERNAL_ERROR":
+      return "Something went wrong on our end. Please try again later.";
     default:
       return (
         fallback ||

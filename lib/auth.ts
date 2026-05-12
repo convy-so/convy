@@ -44,7 +44,7 @@ export const auth = betterAuth({
   plugins: [
     admin({
       adminRoles: ["admin"],
-      defaultRole: "user",
+      defaultRole: "teacher",
       adminUserIds: env.ADMIN_USER_IDS,
     }),
     nextCookies(),
@@ -64,7 +64,7 @@ export const auth = betterAuth({
       id: string;
     }) => ({
       ...coreFields,
-      role: "user",
+      role: (coreFields.role as string) || "student",
       banned: false,
       banReason: null,
       banExpires: null,
@@ -112,13 +112,12 @@ export const auth = betterAuth({
   },
   user: {
     modelName: "users",
-    additionalFields: {
+    fields: {
       role: {
-        type: "string",
-        defaultValue: "user",
-        required: true,
-        input: false,
-      },
+        input: true,
+      }
+    },
+    additionalFields: {
       banned: {
         type: "boolean",
         defaultValue: false,
@@ -154,9 +153,9 @@ export const auth = betterAuth({
           if (user.email && env.ADMIN_EMAILS.includes(user.email.toLowerCase())) {
             throw new Error("Admin emails cannot be registered as normal users.");
           }
-          
-          if (user.role === "expert") {
-             throw new Error("Expert accounts must be provisioned by an administrator.");
+
+          if (user.role === "expert" || user.role === "admin") {
+             throw new Error("Privileged accounts must be provisioned by an administrator.");
           }
 
           return { data: user };

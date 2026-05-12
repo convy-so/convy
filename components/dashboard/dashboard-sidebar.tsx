@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Link, usePathname, useRouter } from "@/i18n/routing";
+import { Link, useRouter } from "@/i18n/routing";
 import Image from "next/image";
 import {
   LayoutDashboard,
@@ -24,6 +24,7 @@ import { queryKeys } from "@/lib/query-keys";
 
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/providers/auth-provider";
+import { usePathname } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
