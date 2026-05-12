@@ -16,10 +16,12 @@ import {
   ChevronDown,
   Check,
   X,
+  UserCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Link } from "@/i18n/routing";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAudioTranscription } from "@/hooks/use-audio-transcription";
 import {
   appLocaleLabels,
@@ -231,58 +233,109 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
         
         {/* Header Section */}
-        <div className="space-y-10">
+        <div className="space-y-12">
           {invitations.length > 0 && (
-            <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-                Pending classroom invitations
-              </p>
-              <div className="mt-3 space-y-2">
+            <motion.div 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-[2rem] border border-blue-100 bg-gradient-to-br from-blue-50/50 to-white p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                 <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
+                    <Check className="w-4 h-4" />
+                 </div>
+                 <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
+                   New Classroom Invitations
+                 </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {invitations.map((invitation) => (
                   <div
                     key={invitation.id}
-                    className="flex flex-col gap-3 rounded-xl border border-blue-100 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-4 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm"
                   >
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">{invitation.classroomTitle}</p>
-                      <p className="text-xs text-slate-500">{invitation.invitedEmail}</p>
+                      <p className="text-sm font-bold text-slate-900">{invitation.classroomTitle}</p>
+                      <p className="text-xs font-medium text-slate-500 mt-0.5">{invitation.invitedEmail}</p>
                     </div>
                     <div className="flex gap-2">
                       <button
                         onClick={() => acceptInvitationMutation.mutate(invitation.id)}
-                        className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+                        className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-500 transition-all disabled:opacity-60"
                         disabled={acceptInvitationMutation.isPending || rejectInvitationMutation.isPending}
                       >
-                        <Check className="h-3.5 w-3.5" />
                         Accept
                       </button>
                       <button
                         onClick={() => rejectInvitationMutation.mutate(invitation.id)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                        className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-60"
                         disabled={acceptInvitationMutation.isPending || rejectInvitationMutation.isPending}
                       >
-                        <X className="h-3.5 w-3.5" />
                         Decline
                       </button>
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
+            </motion.div>
           )}
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-8">
-            <div className="space-y-6 max-w-3xl">
-              <div className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-[10px] font-medium uppercase tracking-widest text-slate-400 border border-slate-100">
+
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-10">
+            <motion.div 
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="space-y-6 max-w-2xl"
+            >
+              <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-blue-600 border border-blue-100 shadow-sm shadow-blue-100/50">
                 <Sparkles className="h-3 w-3" />
-                Adaptive Learning
+                Adaptive Learning Space
               </div>
-              <h1 className="text-3xl font-medium text-slate-900 md:text-5xl leading-tight">
-                Learn with a <span className="font-medium text-blue-500">tutor</span> that knows you.
+              <h1 className="text-5xl font-bold text-slate-900 md:text-7xl tracking-tight leading-[1.05]">
+                Hello, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-violet-600">{learningMe.student[0]?.fullName?.split(' ')[0] ?? 'Explorer'}</span>.
               </h1>
-              <p className="text-base font-medium text-slate-500 leading-relaxed">
-                A personalized experience that adapts to your mental models and tracks your progress toward mastery.
+              <p className="text-xl font-medium text-slate-500 leading-relaxed max-w-xl">
+                Ready to continue your journey? Your AI tutor has prepared some new insights for you.
               </p>
-            </div>
+            </motion.div>
+            
+            {selectedTopic && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex-shrink-0"
+              >
+                 <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-2xl shadow-slate-200/40 flex flex-col items-center gap-5 min-w-[240px] relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50/30 rounded-full -mr-16 -mt-16 blur-2xl" />
+                    <div className="relative w-24 h-24">
+                      <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                        <path className="text-slate-50" strokeWidth="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        <motion.path 
+                          initial={{ pathLength: 0 }}
+                          animate={{ pathLength: Math.max(0.1, tutoringSessionQuery.data?.data.sessionState.turnCount ? Math.min(1, tutoringSessionQuery.data?.data.sessionState.turnCount / 20) : 0.1) }}
+                          transition={{ duration: 1, ease: "easeOut" }}
+                          className="text-blue-500" 
+                          strokeWidth="3" 
+                          strokeLinecap="round" 
+                          stroke="currentColor" 
+                          fill="none" 
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" 
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-2xl font-bold text-slate-900 leading-none">{tutoringSessionQuery.data?.data.sessionState.turnCount ?? 0}</span>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-1">Turns</span>
+                      </div>
+                    </div>
+                    <div className="text-center relative z-10">
+                      <div className="text-sm font-bold text-slate-900 truncate max-w-[180px]">{selectedTopic.title}</div>
+                      <div className="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-2 px-3 py-1 bg-blue-50 rounded-full border border-blue-100">
+                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                        Live Session
+                      </div>
+                    </div>
+                 </div>
+              </motion.div>
+            )}
           </div>
 
           {/* Control Bar */}
@@ -414,10 +467,10 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
           </div>
 
           <div className="grid gap-6 grid-cols-2 lg:grid-cols-4">
-            <MetricTile label="Enrollment" value={String(membershipCount)} helper="Active classes" />
-            <MetricTile label="Available" value={String(selectedMembership?.topics.length ?? 0)} helper="Learning topics" />
-            <MetricTile label="Insights" value={String(patterns.length)} helper="Cognitive patterns" />
-            <MetricTile label="Status" value={currentStageId ? formatPhaseLabel(currentStageId) : "Ready"} helper="Session phase" />
+            <MetricTile label="Enrollment" value={String(membershipCount)} helper="Joined classes" color="blue" />
+            <MetricTile label="Availability" value={String(selectedMembership?.topics.length ?? 0)} helper="Ready topics" color="violet" />
+            <MetricTile label="Your Patterns" value={String(patterns.length)} helper="Cognitive insights" color="emerald" accent={strongestPattern ? "Active" : undefined} />
+            <MetricTile label="Current Phase" value={currentStageId ? formatPhaseLabel(currentStageId) : "Ready"} helper="Session status" color="amber" accent={currentStageId ? "Live" : undefined} />
           </div>
         </div>
 
@@ -498,39 +551,54 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
                     <div className="space-y-10">
                       <div className="space-y-6 max-h-[600px] overflow-y-auto p-10 bg-slate-50/50 rounded-2xl border border-slate-100 custom-scrollbar">
                         {liveMessages.map((message) => (
-                          <div key={message.id} className="space-y-5">
-                            <div className={`flex ${message.role === "assistant" ? "justify-start" : "justify-end"}`}>
+                          <div key={message.id} className="space-y-6">
+                            <div className={`flex items-start gap-4 ${message.role === "assistant" ? "justify-start" : "justify-end"}`}>
+                              {message.role === "assistant" && (
+                                <div className="flex-shrink-0 w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-100 ring-4 ring-blue-50">
+                                  <Sparkles className="w-5 h-5 text-white" />
+                                </div>
+                              )}
                               <div 
-                                className={`max-w-[85%] rounded-xl px-5 py-4 text-sm font-medium leading-relaxed ${
+                                className={`max-w-[80%] rounded-[1.5rem] px-6 py-4 text-sm font-medium leading-relaxed ${
                                   message.role === "assistant" 
-                                  ? "bg-white text-slate-600 border border-slate-100" 
-                                  : "ml-auto bg-slate-900 text-white border border-slate-900 shadow-sm"
+                                  ? "bg-white text-slate-700 border border-slate-100 shadow-sm rounded-tl-none" 
+                                  : "bg-slate-900 text-white border border-slate-900 shadow-lg shadow-slate-200/50 rounded-tr-none"
                                 }`}
                               >
                                 {message.content}
                               </div>
+                              {message.role === "user" && (
+                                <div className="flex-shrink-0 w-10 h-10 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center">
+                                  <UserCircle className="w-6 h-6 text-slate-400" />
+                                </div>
+                              )}
                             </div>
                             
                             {message.role === "assistant" && (() => {
                               const media = getTutorMediaMetadata(message.metadata);
                               if (!media) return null;
                               return (
-                                <div className="max-w-[90%] rounded-2xl border border-slate-100 bg-white p-8 space-y-6">
-                                  <h4 className="text-base font-medium text-slate-900">{media.title}</h4>
-                                  <div className="overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
+                                <div className="ml-14 max-w-[85%] rounded-[2rem] border border-slate-100 bg-white p-8 space-y-6 shadow-sm">
+                                  <div className="flex items-center gap-3">
+                                     <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                                        <BookOpen className="w-4 h-4" />
+                                     </div>
+                                     <h4 className="text-base font-bold text-slate-900 tracking-tight">{media.title}</h4>
+                                  </div>
+                                  <div className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 shadow-inner">
                                     {media.assetType === "image" 
                                       ? <Image src={media.mediaUrl} width={800} height={450} className="w-full h-auto object-cover max-h-[450px]" alt={media.title} /> 
                                       : <video controls className="w-full h-auto max-h-[450px] bg-black"><source src={media.mediaUrl} /></video>
                                     }
                                   </div>
                                   <div className="grid grid-cols-2 gap-6">
-                                    <div className="p-5 rounded-xl bg-slate-50/50 space-y-1.5">
-                                      <div className="text-[9px] font-medium text-slate-400 uppercase">Purpose</div>
-                                      <p className="text-[11px] text-slate-600 font-medium leading-relaxed">{media.reason}</p>
+                                    <div className="p-5 rounded-2xl bg-slate-50/50 space-y-2 border border-slate-100/50">
+                                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Purpose</div>
+                                      <p className="text-xs text-slate-600 font-medium leading-relaxed">{media.reason}</p>
                                     </div>
-                                    <div className="p-5 rounded-xl bg-slate-50/50 space-y-1.5">
-                                      <div className="text-[9px] font-medium text-slate-400 uppercase">Focus</div>
-                                      <p className="text-[11px] text-slate-600 font-medium leading-relaxed">{media.expectedBenefit}</p>
+                                    <div className="p-5 rounded-2xl bg-slate-50/50 space-y-2 border border-slate-100/50">
+                                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Expected Outcome</div>
+                                      <p className="text-xs text-slate-600 font-medium leading-relaxed">{media.expectedBenefit}</p>
                                     </div>
                                   </div>
                                 </div>
@@ -628,10 +696,25 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
                     </div>
                     <div className="space-y-4">
                       {strongestPattern ? patterns.slice(0, 3).map((p, i) => (
-                        <div key={i} className="p-5 rounded-xl bg-slate-50/50 text-[11px] font-medium text-slate-500 italic leading-relaxed border border-transparent hover:border-slate-100 hover:bg-white transition-all">
-                          &ldquo;{p.studentSummary}&rdquo;
+                        <div key={i} className="group relative p-6 rounded-2xl bg-gradient-to-br from-violet-50/50 to-white border border-violet-100 hover:shadow-lg hover:shadow-violet-200/20 transition-all cursor-default">
+                          <div className="absolute top-4 right-4 text-violet-300 group-hover:text-violet-500 transition-colors">
+                            <Brain className="w-4 h-4 opacity-20" />
+                          </div>
+                          <div className="text-[11px] font-bold text-violet-600 uppercase tracking-wider mb-2">{p.scopeType}</div>
+                          <p className="text-sm font-medium text-slate-600 italic leading-relaxed">
+                            &ldquo;{p.studentSummary}&rdquo;
+                          </p>
                         </div>
-                      )) : <div className="text-[10px] font-medium text-slate-300 py-10 text-center uppercase tracking-widest">Awaiting data</div>}
+                      )) : (
+                        <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-4 rounded-2xl border border-dashed border-slate-100 bg-slate-50/30">
+                           <div className="p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
+                              <Loader2 className="w-5 h-5 text-slate-200 animate-spin" />
+                           </div>
+                           <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest leading-relaxed">
+                             Gathering cognitive evidence...
+                           </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

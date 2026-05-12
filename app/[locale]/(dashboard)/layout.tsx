@@ -9,6 +9,7 @@ import { redirect } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
 import { resolvePreferredUiLocale } from "@/lib/i18n/resolve-locale";
+import { getPlatformRole } from "@/lib/auth/dal";
 
 export default function DashboardLayout({
   children,
@@ -40,6 +41,13 @@ async function DashboardLayoutContent({
   const session = await getCurrentSession(authHeaders);
 
   if (session?.user) {
+    const role = getPlatformRole(session.user);
+    
+    // Safety check: redirect students away from teacher dashboard area
+    if (role === "student") {
+      redirect(`/${locale}/student/dashboard`);
+    }
+
     const preferredLocale = await resolvePreferredUiLocale(session);
 
     if (preferredLocale !== locale) {

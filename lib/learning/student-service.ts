@@ -88,13 +88,19 @@ export async function listPendingInvitationsForUser(userId: string) {
   const user = await getDb().query.users.findFirst({ where: eq(users.id, userId) });
   if (!user) return [];
   const normalizedEmail = user.email.trim().toLowerCase();
-  return getDb().query.classroomInvitations.findMany({
-    where: and(
-      eq(classroomInvitations.invitedEmail, normalizedEmail),
-      eq(classroomInvitations.status, PENDING_INVITE_STATUS),
-    ),
-    with: { classroom: true },
-  });
+  try {
+    return await getDb().query.classroomInvitations.findMany({
+      where: and(
+        eq(classroomInvitations.invitedEmail, normalizedEmail),
+        eq(classroomInvitations.status, PENDING_INVITE_STATUS),
+      ),
+      with: { classroom: true },
+    });
+  } catch (error) {
+    // Log error but don't break the whole dashboard for invitations
+    console.error("Failed to list pending invitations:", error);
+    return [];
+  }
 }
 
 export async function respondToInvitation(params: {

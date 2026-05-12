@@ -49,6 +49,7 @@ function normalizeDashboardSurveyStatus(status: string | null | undefined): Dash
 
 async function DashboardContent({ authHeaders }: { authHeaders: Headers | string | null }) {
   const session = await getVerifiedSession(authHeaders);
+
   const t = await getTranslations("Dashboard");
 
   const userId = session.user.id;

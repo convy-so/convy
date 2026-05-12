@@ -58,6 +58,6 @@ export async function invalidateSurveyCaches(
   await invalidateDashboardCaches(userId, null, tags);
 }
 
-export function buildSurveyPublicPath(identifier: string) {
+export async function buildSurveyPublicPath(identifier: string) {
   return `/s/${identifier}`;
 }

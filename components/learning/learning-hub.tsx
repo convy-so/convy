@@ -29,12 +29,10 @@ export function LearningHub() {
       <div className="mx-auto max-w-[1200px] px-6 py-12">
         <GlassPanel className="px-6 py-8">
           <h1 className="text-xl font-semibold tracking-tight text-slate-950">
-            Learning hub unavailable
+            Learning hub
           </h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            {learningMeQuery.error instanceof Error
-              ? learningMeQuery.error.message
-              : "Something went wrong while loading the learning hub."}
+            No learning data loaded at the moment.
           </p>
         </GlassPanel>
       </div>

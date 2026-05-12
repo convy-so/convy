@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useLocale } from "next-intl";
+import { useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 
 import {
@@ -69,14 +70,35 @@ export function useStudentLearningWorkspace({
 }) {
   const queryClient = useQueryClient();
   const locale = useLocale();
+  const searchParams = useSearchParams();
+  const classroomId = searchParams.get("classroomId");
+
   const [selectedStudyLanguage, setSelectedStudyLanguage] = useState<AppLocale>(
     isAppLocale(locale) ? locale : "en",
   );
   const memberships = learningMe.student;
   const invitations = learningMe.invitations ?? [];
+
+  // Find membership matching the classroomId from URL, or default to the first one
+  const initialMembershipId = useMemo(() => {
+    if (classroomId) {
+      const match = memberships.find(m => m.classroom.id === classroomId);
+      if (match) return match.classroomStudentId;
+    }
+    return memberships[0]?.classroomStudentId ?? null;
+  }, [classroomId, memberships]);
+
   const [selectedMembershipId, setSelectedMembershipId] = useState<string | null>(
-    memberships[0]?.classroomStudentId ?? null,
+    initialMembershipId,
   );
+
+  // Sync selectedMembershipId when initialMembershipId changes (URL navigation)
+  useEffect(() => {
+    if (initialMembershipId) {
+      setSelectedMembershipId(initialMembershipId);
+    }
+  }, [initialMembershipId]);
+
   const selectedMembership =
     memberships.find((item) => item.classroomStudentId === selectedMembershipId) ??
     memberships[0] ??

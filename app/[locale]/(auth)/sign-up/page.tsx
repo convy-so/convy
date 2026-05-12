@@ -14,6 +14,7 @@ import { SubmitButton } from "@/components/auth/submit-button";
 import { LoadingOverlay } from "@/components/auth/loading-overlay";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast"; 
+import { RoleSelector } from "@/components/auth/role-selector";
 
 export default function SignUpPage() {
   const params = useParams<{ locale?: string | string[] }>();
@@ -29,6 +30,7 @@ export default function SignUpPage() {
     name: "",
     email: "",
     password: "",
+    role: "student" as "student" | "teacher",
     agreeToTerms: false,
   });
 
@@ -58,6 +60,7 @@ export default function SignUpPage() {
         email: formData.email,
         password: formData.password,
         name: formData.name,
+        role: formData.role,
         callbackURL: `/${locale}/dashboard`,
         fetchOptions: {
           onError: (ctx) => {
@@ -111,11 +114,11 @@ export default function SignUpPage() {
       >
       <GoogleButton onClick={handleGoogleSignUp} />
 
-      <div className="my-6">
+      <div className="my-4">
         <FormDivider />
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-3">
         <InputField
           id="name"
           type="text"
@@ -137,6 +140,13 @@ export default function SignUpPage() {
           placeholder={t('EmailPlaceholder')}
           required
         />
+
+        <div className="pt-1">
+          <RoleSelector 
+            value={formData.role} 
+            onChange={(role) => setFormData({ ...formData, role })} 
+          />
+        </div>
 
         <div>
           <InputField
@@ -196,7 +206,7 @@ export default function SignUpPage() {
         </SubmitButton>
       </form>
 
-      <div className="text-center mt-6">
+      <div className="text-center mt-4">
         <p className="text-[#696969] text-sm">
           {t('HasAccount')}{" "}
           <Link
