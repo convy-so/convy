@@ -41,6 +41,18 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 7,
     updateAge: 60 * 60 * 24,
   },
+  hooks: {
+    before: async (ctx) => {
+      if (ctx.path === "/sign-up/email") {
+        const body = ctx.body as any;
+        if (body && body.role) {
+          body.role = body.role;
+          delete body.role;
+        }
+      }
+      return { context: ctx };
+    }
+  },
   plugins: [
     admin({
       adminRoles: ["admin"],
@@ -114,10 +126,16 @@ export const auth = betterAuth({
     modelName: "users",
     fields: {
       role: {
-        input: true,
+        input: false,
       }
     },
     additionalFields: {
+      role: {
+        type: "string",
+        required: false,
+        input: true,
+        returned: false,
+      },
       banned: {
         type: "boolean",
         defaultValue: false,
@@ -152,6 +170,10 @@ export const auth = betterAuth({
         before: async (user) => {
           if (user.email && env.ADMIN_EMAILS.includes(user.email.toLowerCase())) {
             throw new Error("Admin emails cannot be registered as normal users.");
+          }
+
+          if (user.initialRole) {
+             user.role = user.initialRole;
           }
 
           if (user.role === "expert" || user.role === "admin") {
