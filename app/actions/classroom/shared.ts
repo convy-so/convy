@@ -1,5 +1,3 @@
-"use server";
-
 import { z } from "zod";
 
 import { resolveTeacherOwnedClassroomAccess } from "@/lib/access/classroom-access";
