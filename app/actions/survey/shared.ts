@@ -1,6 +1,7 @@
 "use server";
 
 import { eq } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
@@ -56,8 +57,9 @@ export async function invalidateSurveyCaches(
   tags?: DashboardCacheSection[],
 ) {
   await invalidateDashboardCaches(userId, null, tags);
+  revalidatePath("/", "layout");
 }
 
-export async function buildSurveyPublicPath(identifier: string) {
+export function buildSurveyPublicPath(identifier: string) {
   return `/s/${identifier}`;
 }

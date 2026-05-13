@@ -1,9 +1,4 @@
-// Load .env file for non-Next.js contexts (workers, websocket server)
-// This must happen before any env variables are read
-// NOTE: loadEnvConfig(process.cwd()) MUST be called in the entry point of the server process (e.g. server.ts, worker.ts)
-// It cannot be here because this file is shared with Client Components and 'fs' is not available.
-
-const required = (key: string): string => {
+ const required = (key: string): string => {
   const value = process.env[key];
 
   if (!value || value.length === 0) {

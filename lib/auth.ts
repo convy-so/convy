@@ -21,6 +21,9 @@ function readLocaleField(
   return isAppLocale(candidate) ? candidate : undefined;
 }
 
+function isMutableRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
 export const auth = betterAuth({
   appName: "Convyy",
@@ -43,11 +46,14 @@ export const auth = betterAuth({
   },
   hooks: {
     before: async (ctx) => {
-      if (ctx.path === "/sign-up/email") {
-        const body = ctx.body as any;
-        if (body && body.role) {
-          body.role = body.role;
-          delete body.role;
+      if (ctx.request?.url?.includes("/sign-up/email")) {
+        const body = ctx.body;
+        if (isMutableRecord(body)) {
+          const role = Reflect.get(body, "role");
+          if (typeof role === "string") {
+            Reflect.set(body, "initialRole", role);
+          }
+          Reflect.deleteProperty(body, "role");
         }
       }
       return { context: ctx };
@@ -66,23 +72,6 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     maxPasswordLength: 64,
     requireEmailVerification: true,
-    customSyntheticUser: ({
-      coreFields,
-      additionalFields,
-      id,
-    }: {
-      coreFields: Record<string, unknown>;
-      additionalFields: Record<string, unknown>;
-      id: string;
-    }) => ({
-      ...coreFields,
-      role: (coreFields.role as string) || "student",
-      banned: false,
-      banReason: null,
-      banExpires: null,
-      ...additionalFields,
-      id,
-    }),
     resetPasswordTokenExpiresIn: 60 * 60,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
@@ -124,11 +113,6 @@ export const auth = betterAuth({
   },
   user: {
     modelName: "users",
-    fields: {
-      role: {
-        input: false,
-      }
-    },
     additionalFields: {
       role: {
         type: "string",

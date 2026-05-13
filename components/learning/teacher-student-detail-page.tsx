@@ -1,22 +1,20 @@
-"use client";
-
-import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Brain,
   GraduationCap,
-  Loader2,
   MessageSquare,
   Sparkles,
 } from "lucide-react";
 
 import { Link } from "@/i18n/routing";
-import { fetchStudentOverview, fetchStudentPatterns } from "@/lib/api/learning";
-import { queryKeys } from "@/lib/query-keys";
 import { GlassPanel } from "@/components/learning/glass-panel";
 import { MetricTile } from "@/components/learning/metric-tile";
 import { SectionHeading } from "@/components/learning/section-heading";
 import { TeacherStudentChat } from "@/components/learning/teacher-student-chat";
+import type {
+  getStudentOverviewData,
+  getStudentPatternData,
+} from "@/lib/server/app-queries";
 
 function formatDate(value: string | Date | null | undefined) {
   if (!value) return "Not yet";
@@ -27,47 +25,15 @@ function formatDate(value: string | Date | null | undefined) {
   }).format(new Date(value));
 }
 
-export function TeacherStudentDetailPage({ studentId }: { studentId: string }) {
-  const overviewQuery = useQuery({
-    queryKey: queryKeys.learning.studentOverview(studentId),
-    queryFn: () => fetchStudentOverview(studentId),
-  });
-
-  const patternsQuery = useQuery({
-    queryKey: queryKeys.learning.studentPatterns(studentId),
-    queryFn: () => fetchStudentPatterns(studentId),
-  });
-
-  if (overviewQuery.isLoading) {
-    return (
-      <div className="mx-auto flex min-h-[60vh] max-w-[1200px] items-center justify-center px-2">
-        <GlassPanel className="flex items-center gap-3 px-6 py-6">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
-          <span className="text-sm text-slate-600">Loading student view...</span>
-        </GlassPanel>
-      </div>
-    );
-  }
-
-  if (overviewQuery.isError || !overviewQuery.data) {
-    return (
-      <div className="mx-auto max-w-[1200px] px-2 pb-12">
-        <GlassPanel className="px-6 py-8">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-950">
-            Student view unavailable
-          </h1>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            {overviewQuery.error instanceof Error
-              ? overviewQuery.error.message
-              : "We could not load this student right now."}
-          </p>
-        </GlassPanel>
-      </div>
-    );
-  }
-
-  const { student, topics, recentReports, recentInteractions } = overviewQuery.data.data;
-  const patterns = patternsQuery.data?.data.profiles ?? [];
+export function TeacherStudentDetailPage({
+  initialOverview,
+  initialPatterns,
+}: {
+  initialOverview: Awaited<ReturnType<typeof getStudentOverviewData>>;
+  initialPatterns: Awaited<ReturnType<typeof getStudentPatternData>>;
+}) {
+  const { student, topics, recentReports, recentInteractions } = initialOverview.data;
+  const patterns = initialPatterns.data.profiles ?? [];
   const recentRiskFlags = recentReports
     .flatMap((report) => report.report.riskFlags)
     .slice(0, 4);
@@ -133,12 +99,7 @@ export function TeacherStudentDetailPage({ studentId }: { studentId: string }) {
               description="This card translates the memory system into teacher-ready language you can act on."
             />
             <div className="mt-6 space-y-4">
-              {patternsQuery.isLoading ? (
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading patterns...
-                </div>
-              ) : patterns.length ? (
+              {patterns.length ? (
                 patterns.map((pattern) => (
                   <div
                     key={`${pattern.scopeType}-${pattern.subjectKey ?? "global"}`}

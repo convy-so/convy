@@ -3,13 +3,14 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Loader2, Plus, Sparkles, BookOpen, Hash, AlertCircle } from "lucide-react";
-import { createTopic } from "@/lib/api/learning";
+import { createLearningTopicAction } from "@/app/actions/classroom";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
 import toast from "react-hot-toast";
 import { InputField } from "@/components/auth/input-field";
 import { TextareaField } from "@/components/auth/textarea-field";
 import { cn } from "@/lib/utils";
+import { getFriendlyActionError } from "@/lib/action-ux";
 
 type CreateTopicModalProps = {
     isOpen: boolean;
@@ -77,13 +78,16 @@ export function CreateTopicModal({
         try {
             const parsedOutcomes = parseOutcomes(outcomes);
             
-            await createTopic({
+            const result = await createLearningTopicAction({
                 classroomId,
                 title: title.trim(),
                 description: description.trim() || undefined,
                 subjectLabel: subjectLabel.trim() || undefined,
                 learningOutcomes: parsedOutcomes,
             });
+            if (!result.success) {
+                throw new Error(getFriendlyActionError(result.error));
+            }
 
             toast.success("Topic curriculum defined");
             await queryClient.invalidateQueries({

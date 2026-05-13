@@ -69,16 +69,14 @@ export async function provisionManagedStudentAccount(params: {
       defaultAppLocale,
     );
     const randomPassword = generateOpaqueToken(18);
-    const created = await auth.api.createUser({
+    const created = await auth.api.signUpEmail({
       body: {
         email: normalizedEmail,
         password: randomPassword,
         name: classroomStudent.fullName,
         role: "user",
-        data: {
-          preferredLanguage: studentLocale,
-          uiLocale: studentLocale,
-        },
+        preferredLanguage: studentLocale,
+        uiLocale: studentLocale,
       },
     });
 

@@ -84,7 +84,6 @@ export const documentEmbeddings = pgTable(
   ],
 );
 
-
 export const documentEmbeddingsRelations = relations(
   documentEmbeddings,
   ({ one }) => ({

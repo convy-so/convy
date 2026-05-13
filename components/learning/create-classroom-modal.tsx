@@ -3,12 +3,13 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Loader2, Plus, GraduationCap, Sparkles, BookOpen, Layers, Hash } from "lucide-react";
-import { createClassroom } from "@/lib/api/learning";
+import { createClassroomAction } from "@/app/actions/classroom";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
 import toast from "react-hot-toast";
 import { InputField } from "@/components/auth/input-field";
 import { cn } from "@/lib/utils";
+import { getFriendlyActionError } from "@/lib/action-ux";
 
 type CreateClassroomModalProps = {
     isOpen: boolean;
@@ -49,18 +50,22 @@ export function CreateClassroomModal({
         setError(null);
 
         try {
-            const result = await createClassroom({
+            const result = await createClassroomAction({
                 title: title.trim(),
                 gradeLabel: gradeLabel.trim(),
                 subject: subject.trim() || undefined,
                 description: description.trim() || undefined,
             });
 
+            if (!result.success) {
+                throw new Error(getFriendlyActionError(result.error));
+            }
+
             toast.success("Classroom established");
             await queryClient.invalidateQueries({
                 queryKey: queryKeys.learning.classrooms,
             });
-            onSuccess?.(result.data.id);
+            onSuccess?.((result.data as { id: string }).id);
             resetForm();
             onClose();
         } catch (err) {

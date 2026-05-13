@@ -37,7 +37,13 @@ export async function GET(
       orderBy: (table, { desc }) => [desc(table.createdAt)],
     });
 
-    return NextResponse.json({ success: true, data: materials });
+    return NextResponse.json({
+      success: true,
+      data: materials.map((material) => ({
+        ...material,
+        analysis: material.analysis ?? undefined,
+      })),
+    });
   } catch (error) {
     return handleLearningRouteError(error, "Failed to load materials", "/api/learning/topics/[topicId]/materials");
   }

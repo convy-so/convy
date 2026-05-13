@@ -15,13 +15,12 @@ import {
   Sparkles,
   ChevronDown,
   Check,
-  X,
   UserCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Link } from "@/i18n/routing";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useAudioTranscription } from "@/hooks/use-audio-transcription";
 import {
   appLocaleLabels,
@@ -30,6 +29,10 @@ import {
 import { useStudentLearningWorkspace } from "@/components/learning/hooks/use-student-learning-workspace";
 import { MetricTile } from "@/components/learning/metric-tile";
 import type { LearningMeData } from "@/lib/api/learning";
+import type {
+  getOnboardingStateData,
+  getStudentLearningWorkspaceInitialData,
+} from "@/lib/server/app-queries";
 
 type StudentLearningMeData = Extract<LearningMeData, { role: "student" }> & {
   invitations?: Array<{
@@ -113,7 +116,21 @@ function appendTranscript(currentValue: string, transcript: string) {
   return trimmedCurrent ? `${trimmedCurrent} ${transcript}`.trim() : transcript;
 }
 
-export function StudentLearningHome({ learningMe }: { learningMe: StudentLearningMeData }) {
+export function StudentLearningHome({
+  learningMe,
+  initialPatterns,
+  initialOnboardingState,
+  initialTutoringSession,
+}: {
+  learningMe: StudentLearningMeData;
+  initialPatterns?: Awaited<
+    ReturnType<typeof getStudentLearningWorkspaceInitialData>
+  >["initialPatterns"];
+  initialOnboardingState?: Awaited<ReturnType<typeof getOnboardingStateData>>;
+  initialTutoringSession?: Awaited<
+    ReturnType<typeof getStudentLearningWorkspaceInitialData>
+  >["initialTutoringSession"];
+}) {
   const {
     memberships,
     selectedStudyLanguage,
@@ -142,7 +159,12 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
     invitations,
     acceptInvitationMutation,
     rejectInvitationMutation,
-  } = useStudentLearningWorkspace({ learningMe });
+  } = useStudentLearningWorkspace({
+    learningMe,
+    initialPatterns,
+    initialOnboardingState,
+    initialTutoringSession,
+  });
 
   const [onboardingInput, setOnboardingInput] = useState("");
   const [sessionInput, setSessionInput] = useState("");

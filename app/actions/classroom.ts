@@ -1,20 +1,26 @@
-"use server";
-
 export {
   createClassroomAction,
-  getTeacherClassroomsAction,
-  getClassroomAssignedSurveyProgressAction,
 } from "./classroom/classroom-actions";
 
 export {
   inviteStudentToClassroomAction,
   bulkInviteStudentsToClassroomAction,
+  respondToInvitationAction,
 } from "./classroom/student-actions";
 
-export { createLearningTopicAction } from "./classroom/topic-actions";
+export {
+  createLearningTopicAction,
+  updateTopicStatusAction,
+} from "./classroom/topic-actions";
 
 export {
-  getLearningInterventionsAction,
   createLearningInterventionAction,
   updateLearningInterventionAction,
 } from "./classroom/intervention-actions";
+
+export {
+  answerTeacherStudentQuestionAction,
+  askOutOfSessionQuestionAction,
+  completeTutoringSessionAction,
+  persistTeacherChatSessionAction,
+} from "./classroom/tutoring-actions";

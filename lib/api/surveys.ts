@@ -187,7 +187,7 @@ export type SurveyListItem = z.infer<typeof surveyListItemSchema>;
 export type SurveyDetailsResponse = z.infer<typeof surveyDetailsResponseSchema>;
 export type SurveyResponsesResponse = z.infer<typeof surveyResponsesResponseSchema>;
 
-const surveyDraftCreateResponseSchema = z.object({
+export const surveyDraftCreateResponseSchema = z.object({
   id: z.string(),
   title: z.string(),
   deliveryMode: z.enum(["link", "classroom_assigned"]),
@@ -213,28 +213,6 @@ export async function fetchSurveys(): Promise<SurveyListItem[]> {
     surveyListResponseSchema,
   );
   return data.surveys;
-}
-
-export async function createSurveyDraft(input?: {
-  language?: "en" | "fr" | "de" | "es" | "it";
-  isVoice?: boolean;
-  deliveryMode?: "link" | "classroom_assigned";
-  classroomId?: string;
-}): Promise<z.infer<typeof surveyDraftCreateResponseSchema>> {
-  const response = await fetch("/api/surveys", {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(input ?? {}),
-  });
-
-  return parseJsonOrThrow(
-    response,
-    "Failed to create survey draft",
-    surveyDraftCreateResponseSchema,
-  );
 }
 
 export async function fetchSurveyDetails(

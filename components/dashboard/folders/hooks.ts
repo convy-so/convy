@@ -1,22 +1,15 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import {
-  getFoldersAction,
-  getFolderAction,
   createFolderAction,
   updateFolderAction,
   deleteFolderAction,
   addSurveyToFolderAction,
   removeSurveyFromFolderAction,
 } from "@/app/actions/folder";
-import { getSurveysAction } from "@/app/actions/survey";
 import { getFriendlyActionError } from "@/lib/action-ux";
-
-type FolderResponse = Awaited<ReturnType<typeof getFoldersAction>>;
-type FolderList = Extract<FolderResponse, { success: true }>["data"];
-type FolderListItem = FolderList extends Array<infer T> ? T : never;
 
 // Keys
 export const folderKeys = {
@@ -29,43 +22,6 @@ export const surveyKeys = {
   all: () => ["surveys"] as const,
   lists: () => [...surveyKeys.all(), "list"] as const,
 };
-
-// Queries
-export function useFolders() {
-  return useQuery({
-    queryKey: folderKeys.lists(),
-    queryFn: async () => {
-      const result = await getFoldersAction();
-      if (!result.success) throw new Error(getFriendlyActionError(result.error));
-      return result.data;
-    },
-  });
-}
-
-export function useFolder(id: string) {
-  return useQuery({
-    queryKey: folderKeys.detail(id),
-    queryFn: async () => {
-      const result = await getFolderAction(id);
-      if (!result.success) throw new Error(getFriendlyActionError(result.error));
-      return result.data;
-    },
-    enabled: !!id,
-  });
-}
-
-// Helper query to get surveys available for assignment (no folder)
-export function useAvailableSurveys() {
-  return useQuery({
-    queryKey: surveyKeys.lists(),
-    queryFn: async () => {
-      const result = await getSurveysAction();
-      if (!result.success) throw new Error(getFriendlyActionError(result.error));
-      // Filter client-side for simplicity, or backend action could optionally filter
-      return result.data.filter((s) => !s.folderId);
-    },
-  });
-}
 
 // Mutations
 export function useCreateFolder() {
@@ -149,8 +105,8 @@ export function useUpdateFolder() {
         folderKeys.detail(updatedFolder.id),
       );
 
-      queryClient.setQueryData(folderKeys.lists(), (old: FolderList | undefined) =>
-        old?.map((p: FolderListItem) =>
+      queryClient.setQueryData(folderKeys.lists(), (old: Array<Record<string, unknown>> | undefined) =>
+        old?.map((p) =>
           p.id === updatedFolder.id ? { ...p, ...updatedFolder } : p,
         ),
       );
@@ -204,8 +160,8 @@ export function useDeleteFolder() {
         folderKeys.lists(),
       );
 
-      queryClient.setQueryData(folderKeys.lists(), (old: FolderList | undefined) =>
-        old?.filter((p: FolderListItem) => p.id !== id),
+      queryClient.setQueryData(folderKeys.lists(), (old: Array<Record<string, unknown>> | undefined) =>
+        old?.filter((p) => p.id !== id),
       );
 
       return { previousFolders };

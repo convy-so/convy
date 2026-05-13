@@ -1,20 +1,16 @@
-"use client";
-
-import { useQuery } from "@tanstack/react-query";
-import { BookOpen, CheckCircle2, FileText, Loader2, MessageSquare, Sparkles } from "lucide-react";
+import { BookOpen, CheckCircle2, FileText, MessageSquare, Sparkles } from "lucide-react";
 
 import { Link } from "@/i18n/routing";
-import {
-  fetchTopicMaterials,
-  fetchTopicOverview,
-  fetchTopicQuestions,
-  fetchTopicReadiness,
-  fetchTopicReports,
-} from "@/lib/api/learning";
-import { queryKeys } from "@/lib/query-keys";
 import { GlassPanel } from "@/components/learning/glass-panel";
 import { MetricTile } from "@/components/learning/metric-tile";
 import { SectionHeading } from "@/components/learning/section-heading";
+import type {
+  getTopicMaterialsData,
+  getTopicOverviewData,
+  getTopicQuestionsData,
+  getTopicReadinessData,
+  getTopicReportsData,
+} from "@/lib/server/app-queries";
 
 function formatDate(value: string | Date | null | undefined) {
   if (!value) return "Not yet";
@@ -25,62 +21,25 @@ function formatDate(value: string | Date | null | undefined) {
   }).format(new Date(value));
 }
 
-export function TeacherTopicDetailPage({ topicId }: { topicId: string }) {
-  const overviewQuery = useQuery({
-    queryKey: queryKeys.learning.topicOverview(topicId),
-    queryFn: () => fetchTopicOverview(topicId),
-  });
-  const materialsQuery = useQuery({
-    queryKey: queryKeys.learning.materials(topicId),
-    queryFn: () => fetchTopicMaterials(topicId),
-  });
-  const readinessQuery = useQuery({
-    queryKey: queryKeys.learning.readiness(topicId),
-    queryFn: () => fetchTopicReadiness(topicId),
-  });
-  const reportsQuery = useQuery({
-    queryKey: queryKeys.learning.reports(topicId),
-    queryFn: () => fetchTopicReports(topicId),
-  });
-  const questionsQuery = useQuery({
-    queryKey: queryKeys.learning.questions(topicId),
-    queryFn: () => fetchTopicQuestions(topicId),
-  });
-
-  if (overviewQuery.isLoading) {
-    return (
-      <div className="mx-auto flex min-h-[60vh] max-w-[1200px] items-center justify-center px-2">
-        <GlassPanel className="flex items-center gap-3 px-6 py-6">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
-          <span className="text-sm text-slate-600">Loading topic view...</span>
-        </GlassPanel>
-      </div>
-    );
-  }
-
-  if (overviewQuery.isError || !overviewQuery.data) {
-    return (
-      <div className="mx-auto max-w-[1200px] px-2 pb-12">
-        <GlassPanel className="px-6 py-8">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-950">
-            Topic view unavailable
-          </h1>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            {overviewQuery.error instanceof Error
-              ? overviewQuery.error.message
-              : "We could not load this topic right now."}
-          </p>
-        </GlassPanel>
-      </div>
-    );
-  }
-
-  const { topic, reportCount, questionCount, activeStudentCount } = overviewQuery.data.data;
-  const readiness = readinessQuery.data?.data ?? null;
-  const reportsPayload = reportsQuery.data?.data ?? null;
+export function TeacherTopicDetailPage({
+  initialOverview,
+  initialMaterials,
+  initialReadiness,
+  initialReports,
+  initialQuestions,
+}: {
+  initialOverview: Awaited<ReturnType<typeof getTopicOverviewData>>;
+  initialMaterials: Awaited<ReturnType<typeof getTopicMaterialsData>>;
+  initialReadiness: Awaited<ReturnType<typeof getTopicReadinessData>>;
+  initialReports: Awaited<ReturnType<typeof getTopicReportsData>>;
+  initialQuestions: Awaited<ReturnType<typeof getTopicQuestionsData>>;
+}) {
+  const { topic, reportCount, questionCount, activeStudentCount } = initialOverview.data;
+  const readiness = initialReadiness.data ?? null;
+  const reportsPayload = initialReports.data ?? null;
   const reports = reportsPayload?.reports ?? [];
-  const questions = questionsQuery.data?.data ?? [];
-  const materials = materialsQuery.data?.data ?? [];
+  const questions = initialQuestions.data ?? [];
+  const materials = initialMaterials.data ?? [];
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-8 px-2 pb-12">
@@ -136,12 +95,7 @@ export function TeacherTopicDetailPage({ topicId }: { topicId: string }) {
                   <div className="text-sm font-semibold text-slate-950">Source materials</div>
                 </div>
                 <div className="mt-4 space-y-3">
-                  {materialsQuery.isLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading materials...
-                    </div>
-                  ) : materials.length ? (
+                  {materials.length ? (
                     materials.map((material) => (
                       <div key={material.id} className="rounded-[16px] border border-white/70 bg-white/80 px-4 py-3">
                         <div className="flex items-center justify-between gap-3">
@@ -169,12 +123,7 @@ export function TeacherTopicDetailPage({ topicId }: { topicId: string }) {
                   <CheckCircle2 className="h-4 w-4 text-emerald-700" />
                   <div className="text-sm font-semibold text-slate-950">Readiness</div>
                 </div>
-                {readinessQuery.isLoading ? (
-                  <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Reviewing readiness...
-                  </div>
-                ) : readiness ? (
+                {readiness ? (
                   <div className="mt-4 space-y-4">
                     <div className="rounded-[16px] border border-white/70 bg-white/80 px-4 py-4">
                       <div className="text-sm font-semibold text-slate-950">

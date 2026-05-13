@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/api/error-contract";
 
-import {
-  createClassroomAction,
-  getTeacherClassroomsAction,
-} from "@/app/actions/classroom";
+import { getVerifiedSession } from "@/lib/auth/dal";
+import * as ClassroomService from "@/lib/learning/classroom-service";
 
 export async function GET() {
-  const result = await getTeacherClassroomsAction();
-  if (!result.success) return apiError("INTERNAL_ERROR", result.error.message || "Failed to fetch classrooms");
-  return NextResponse.json(result);
-}
-
-export async function POST(request: Request) {
-  const body = await request.json();
-  const result = await createClassroomAction(body);
-  if (!result.success) return apiError("VALIDATION_ERROR", result.error.message || "Failed to create classroom", { details: result.error.details });
-  return NextResponse.json(result);
+  try {
+    const session = await getVerifiedSession();
+    const data = await ClassroomService.getTeacherClassrooms(session.user.id);
+    return NextResponse.json({ success: true, data });
+  } catch (error) {
+    return apiError(
+      "INTERNAL_ERROR",
+      error instanceof Error ? error.message : "Failed to fetch classrooms",
+    );
+  }
 }

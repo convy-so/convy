@@ -18,9 +18,6 @@ import {
   Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
-import { fetchLearningMe } from "@/lib/api/learning";
-import { queryKeys } from "@/lib/query-keys";
 
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/providers/auth-provider";
@@ -28,17 +25,20 @@ import { usePathname } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
+import type { LearningMeData } from "@/lib/api/learning";
 
-export function DashboardSidebar() {
+export function DashboardSidebar({
+  initialLearningMe,
+}: {
+  initialLearningMe: LearningMeData;
+}) {
   const { user } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const t = useTranslations("Sidebar");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const learningMeQuery = useQuery({ queryKey: queryKeys.learning.me, queryFn: fetchLearningMe, retry: false });
-
-  const isStudent = learningMeQuery.data?.role === "student";
+  const isStudent = initialLearningMe.role === "student";
   const isAdminOrExpert = user?.role === "admin" || user?.role === "expert";
 
   const navigation = useMemo(() => {

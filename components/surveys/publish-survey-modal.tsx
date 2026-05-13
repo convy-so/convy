@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { X, Loader2, Share2, Copy, Check, Sparkles, ExternalLink } from "lucide-react";
 import toast from "react-hot-toast";
+import { publishSurveyAction } from "@/app/actions/survey";
+import { getFriendlyActionError } from "@/lib/action-ux";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 
@@ -57,23 +59,22 @@ export function PublishSurveyModal({
 
     setIsPublishing(true);
     try {
-      const response = await fetch(`/api/surveys/${surveyId}/publish`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ title, description, isVoice }),
+      const result = await publishSurveyAction({
+        surveyId,
+        title,
+        description,
+        isVoice,
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to publish survey");
+      if (!result.success) {
+        throw new Error(getFriendlyActionError(result.error));
       }
 
-      const data = await response.json();
-      setPublishedUrl(data.shareUrl);
+      setPublishedUrl(result.data.shareUrl);
       toast.success(t("Toasts.Success"));
-      onPublished?.(data.shareUrl);
-    } catch {
-      toast.error(t("Toasts.Failed"));
+      onPublished?.(result.data.shareUrl);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Toasts.Failed"));
     } finally {
       setIsPublishing(false);
     }

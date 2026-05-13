@@ -54,7 +54,7 @@ export async function GET(
       data: {
         sessionId: tutorSession.id,
         sessionLocale: normalizeAppLocale(tutorSession.sessionLocale),
-        sourceLocale: access.topic.contentLocale,
+        sourceLocale: normalizeAppLocale(access.topic.contentLocale),
         topic: {
           id: access.topic.id,
           title: access.topic.title,
@@ -63,7 +63,10 @@ export async function GET(
           subjectLabel: access.topic.subjectLabel,
         },
         sessionState: state,
-        messages,
+        messages: messages.map((message) => ({
+          ...message,
+          metadata: message.metadata ?? undefined,
+        })),
       },
     });
   } catch (error) {
