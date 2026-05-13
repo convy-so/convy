@@ -1,7 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api/error-contract";
-import { z } from "zod";
 
 import { getDb } from "@/db";
 import { learningTeacherChatSessions } from "@/db/schema";
@@ -9,40 +8,6 @@ import { getVerifiedSession } from "@/lib/auth/dal";
 import { resolveTeacherStudentAccess } from "@/lib/learning/teacher-route-access";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
 import { mapSessionAuthError } from "@/lib/route-auth-error";
-import { normalizeAppLocale } from "@/lib/i18n/config";
-
-const learningChatMessageSchema = z.object({
-  role: z.string(),
-  content: z.string().optional(),
-  parts: z.array(z.record(z.string(), z.unknown())).optional(),
-  id: z.string().optional(),
-  createdAt: z.string().optional(),
-});
-
-const requestSchema = z.object({
-  sessionId: z.string().optional(),
-  title: z.string().optional(),
-  language: z.string().optional(),
-  messages: z.array(learningChatMessageSchema),
-});
-
-function deriveTitle(messages: Array<z.infer<typeof learningChatMessageSchema>>) {
-  const firstUser = messages.find((message) => message.role === "user");
-  if (!firstUser) return "New Chat";
-
-  if (typeof firstUser.content === "string" && firstUser.content.trim()) {
-    return firstUser.content.trim().slice(0, 72);
-  }
-
-  const partText = firstUser.parts
-    ?.flatMap((part) =>
-      part.type === "text" && typeof part.text === "string" ? [part.text] : [],
-    )
-    .join("")
-    .trim();
-
-  return partText?.slice(0, 72) || "New Chat";
-}
 
 export async function GET(
   _request: NextRequest,
@@ -83,85 +48,6 @@ export async function GET(
       .orderBy(desc(learningTeacherChatSessions.updatedAt));
 
     return NextResponse.json({ sessions });
-  } catch (error) {
-    const authError = mapSessionAuthError(error);
-    if (authError) return authError;
-    return handleLearningRouteError(error, "Internal server error", "/api/learning/students/[studentId]/chat-sessions");
-  }
-}
-
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ studentId: string }> },
-) {
-  try {
-    const session = await getVerifiedSession();
-    const { studentId } = await params;
-    const body = requestSchema.parse(await request.json());
-
-    const accessResult = await resolveTeacherStudentAccess({
-      teacherUserId: session.user.id,
-      classroomStudentId: studentId,
-    });
-
-    if (accessResult.error === "NOT_FOUND") {
-      return apiError("NOT_FOUND", "Student not found");
-    }
-
-    if (accessResult.error === "UNAUTHORIZED") {
-      return apiError("UNAUTHORIZED", "Unauthorized");
-    }
-
-    const { membership } = accessResult;
-
-    const title = body.title?.trim() || deriveTitle(body.messages);
-    const language = normalizeAppLocale(
-      body.language ?? membership.classroom.defaultContentLocale,
-    );
-
-    if (body.sessionId) {
-      const [updated] = await getDb()
-        .update(learningTeacherChatSessions)
-        .set({
-          title,
-          language,
-          messages: body.messages,
-        })
-        .where(
-          and(
-            eq(learningTeacherChatSessions.id, body.sessionId),
-            eq(learningTeacherChatSessions.classroomStudentId, studentId),
-            eq(learningTeacherChatSessions.userId, session.user.id),
-          ),
-        )
-        .returning({
-          id: learningTeacherChatSessions.id,
-          title: learningTeacherChatSessions.title,
-        });
-
-      if (!updated) {
-        return apiError("NOT_FOUND", "Session not found");
-      }
-
-      return NextResponse.json({ session: updated });
-    }
-
-    const [created] = await getDb()
-      .insert(learningTeacherChatSessions)
-      .values({
-        id: `learn_chat_${crypto.randomUUID()}`,
-        classroomStudentId: studentId,
-        userId: session.user.id,
-        language,
-        title,
-        messages: body.messages,
-      })
-      .returning({
-        id: learningTeacherChatSessions.id,
-        title: learningTeacherChatSessions.title,
-      });
-
-    return NextResponse.json({ session: created });
   } catch (error) {
     const authError = mapSessionAuthError(error);
     if (authError) return authError;

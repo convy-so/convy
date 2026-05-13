@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/api/error-contract";
 
-import { createLearningTopicAction } from "@/app/actions/classroom";
 import { getDb } from "@/db";
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { resolveTeacherClassroomAccess } from "@/lib/learning/teacher-route-access";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
+import { normalizeAppLocale } from "@/lib/i18n/config";
 
 export async function GET(
   _request: Request,
@@ -34,6 +34,7 @@ export async function GET(
       success: true,
       data: topics.map((topic) => ({
         ...topic,
+        contentLocale: normalizeAppLocale(topic.contentLocale),
         subjectKey: topic.subjectKey,
         subjectLabel: topic.subjectLabel,
       })),
@@ -41,25 +42,4 @@ export async function GET(
   } catch (error) {
     return handleLearningRouteError(error, "Failed to load topics", "/api/learning/classrooms/[classroomId]/topics");
   }
-}
-
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ classroomId: string }> },
-) {
-  const body = await request.json();
-  const { classroomId } = await params;
-  const result = await createLearningTopicAction({
-    classroomId,
-    title: body.title,
-    description: body.description,
-    subject: body.subject,
-    subjectKey: body.subjectKey,
-    subjectLabel: body.subjectLabel,
-    learningOutcomes: body.learningOutcomes,
-    sourceBoundary: body.sourceBoundary,
-    contentLocale: body.contentLocale,
-  });
-  if (!result.success) return apiError("VALIDATION_ERROR", result.error.message || "Failed to create topic", { details: result.error.details });
-  return NextResponse.json(result);
 }

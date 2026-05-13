@@ -10,6 +10,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
 import { resolvePreferredUiLocale } from "@/lib/i18n/resolve-locale";
 import { getPlatformRole } from "@/lib/auth/dal";
+import { getLearningMeData, getNotificationsForCurrentUser } from "@/lib/server/app-queries";
 
 export default function DashboardLayout({
   children,
@@ -56,14 +57,18 @@ async function DashboardLayoutContent({
   }
 
   const messages = await getMessages();
+  const [learningMe, notifications] = await Promise.all([
+    getLearningMeData(),
+    getNotificationsForCurrentUser(),
+  ]);
 
   return (
     <NextIntlClientProvider messages={messages} locale={locale}>
       <AuthProvider initialSession={session}>
       <div className="min-h-screen bg-[#FAFAFA]">
-        <DashboardSidebar />
+        <DashboardSidebar initialLearningMe={learningMe} />
         <div className="lg:pl-72 transition-all duration-300 flex flex-col min-h-screen">
-          <DashboardHeader />
+          <DashboardHeader initialNotifications={notifications} />
           <main className="flex-1 p-4 lg:p-6">
             <Suspense fallback={
               <div className="flex items-center justify-center min-h-[50vh]">

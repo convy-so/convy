@@ -34,9 +34,21 @@ function formatDate(value: string | Date | null | undefined) {
   }).format(new Date(value));
 }
 
-export function TeacherReportsPage() {
-  const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(null);
-  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+export function TeacherReportsPage({
+  initialClassrooms,
+  initialTopics,
+  initialReportsPayload,
+}: {
+  initialClassrooms?: Awaited<ReturnType<typeof fetchTeacherClassrooms>>;
+  initialTopics?: Awaited<ReturnType<typeof fetchClassroomTopics>>;
+  initialReportsPayload?: Awaited<ReturnType<typeof fetchTopicReports>>;
+}) {
+  const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(
+    initialClassrooms?.data?.[0]?.id ?? null,
+  );
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(
+    initialTopics?.data?.[0]?.id ?? null,
+  );
   
   const [isClassDropdownOpen, setIsClassDropdownOpen] = useState(false);
   const [isTopicDropdownOpen, setIsTopicDropdownOpen] = useState(false);
@@ -59,6 +71,8 @@ export function TeacherReportsPage() {
   const classroomsQuery = useQuery({
     queryKey: queryKeys.learning.classrooms,
     queryFn: fetchTeacherClassrooms,
+    initialData: initialClassrooms,
+    staleTime: 30_000,
   });
 
   const classrooms = useMemo(() => classroomsQuery.data?.data ?? [], [classroomsQuery.data]);
@@ -83,6 +97,12 @@ export function TeacherReportsPage() {
       return fetchClassroomTopics(effectiveSelectedClassroomId);
     },
     enabled: Boolean(effectiveSelectedClassroomId),
+    initialData:
+      initialTopics &&
+      effectiveSelectedClassroomId === (initialClassrooms?.data?.[0]?.id ?? null)
+        ? initialTopics
+        : undefined,
+    staleTime: 30_000,
   });
 
   const topics = useMemo(() => topicsQuery.data?.data ?? [], [topicsQuery.data]);
@@ -104,6 +124,12 @@ export function TeacherReportsPage() {
       return fetchTopicReports(effectiveSelectedTopicId);
     },
     enabled: Boolean(effectiveSelectedTopicId),
+    initialData:
+      initialReportsPayload &&
+      effectiveSelectedTopicId === (initialTopics?.data?.[0]?.id ?? null)
+        ? initialReportsPayload
+        : undefined,
+    staleTime: 30_000,
   });
 
   const reportsPayload = reportsQuery.data?.data ?? null;

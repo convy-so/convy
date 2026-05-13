@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
-import { createSurveyDraft, SurveyApiError } from "@/lib/api/surveys";
+import {
+  createSurveyDraftAction,
+  updateSurveyAction,
+} from "@/app/actions/survey";
+import { getFriendlyActionError } from "@/lib/action-ux";
 import {
   appLocales,
   isAppLocale,
@@ -32,20 +36,30 @@ export type SurveyCollectedInfo = {
   personalInfo?: boolean;
 };
 
-type SurveyDraftCreateResponse = Awaited<ReturnType<typeof createSurveyDraft>>;
+type SurveyDraftCreateResponse = {
+  id: string;
+  title: string;
+  deliveryMode: "link" | "classroom_assigned";
+  classroomId?: string | null;
+  messages?: Array<{
+    id: string;
+    role: string;
+    content: string;
+    parts: Array<{ type: "text"; text: string }>;
+    timestamp: string;
+  }>;
+};
 
 type UseSurveyCreationDraftParams = {
   authLoading: boolean;
+  initialLanguage?: AppLocale;
+  initialSurveyId?: string | null;
   locale: string;
   t: (key: string) => string;
   user: {
     emailVerified?: boolean | null;
   } | null;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function getSupportedLocale(
   value: unknown,
@@ -62,16 +76,20 @@ export function isSupportedSurveyCreationLocale(
 
 export function useSurveyCreationDraft({
   authLoading,
+  initialLanguage,
+  initialSurveyId,
   locale,
   t,
   user,
 }: UseSurveyCreationDraftParams) {
-  const [surveyId, setSurveyId] = useState<string | null>(null);
+  const [surveyId, setSurveyId] = useState<string | null>(initialSurveyId ?? null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [surveyStatus, setSurveyStatus] = useState<string | null>(null);
-  const [language, setLanguage] = useState<AppLocale>(getSupportedLocale(locale));
+  const [language, setLanguage] = useState<AppLocale>(
+    getSupportedLocale(initialLanguage ?? locale),
+  );
   const availableLanguages = appLocales;
   const [isVoiceSurvey, setIsVoiceSurvey] = useState(false);
   const [extractedData, setExtractedData] = useState<SurveyExtractedData | null>(
@@ -90,11 +108,10 @@ export function useSurveyCreationDraft({
     }
 
     try {
-      await fetch(`/api/surveys/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isVoice }),
-      });
+      const result = await updateSurveyAction({ id, isVoice });
+      if (!result.success) {
+        throw new Error(getFriendlyActionError(result.error));
+      }
     } catch {
       toast.error("Failed to save survey mode. Please try again.");
     }
@@ -111,37 +128,24 @@ export function useSurveyCreationDraft({
 
     setIsCreatingDraft(true);
     try {
-      const surveyData = await createSurveyDraft({
+      const result = await createSurveyDraftAction({
         language,
         isVoice: isVoiceSurvey,
       });
+      if (!result.success) {
+        if (result.error.code === "UNAUTHORIZED" || result.error.code === "UNAUTHENTICATED") {
+          setAuthError(t("Authentication.Required"));
+          return null;
+        }
+        toast.error(getFriendlyActionError(result.error, "Failed to initialize draft."));
+        return null;
+      }
+
+      const surveyData = result.data;
       setSurveyId(surveyData.id);
       window.history.replaceState(null, "", `?id=${surveyData.id}`);
       return surveyData;
     } catch (error) {
-      if (error instanceof SurveyApiError) {
-        console.error(
-          `[Client] ensureDraftExists FAILED: ${error.status} ${error.message}`,
-        );
-
-        if (error.status === 401) {
-          if (error.message === "EMAIL_NOT_VERIFIED") {
-            setAuthError("Please verify your email to continue.");
-          } else {
-            setAuthError(t("Authentication.Required"));
-          }
-          return null;
-        }
-
-        if (error.status === 403) {
-          toast.error(error.message);
-          return null;
-        }
-
-        toast.error(error.message || "Failed to initialize draft.");
-        return null;
-      }
-
       console.error("[EnsureDraft] Failed:", error);
       toast.error("Failed to initialize draft.");
       throw error;
@@ -168,48 +172,6 @@ export function useSurveyCreationDraft({
     setAuthError(null);
     setIsInitializing(false);
   }, [authLoading, t, user]);
-
-  useEffect(() => {
-    if (!user || authLoading || surveyId) return;
-
-    let cancelled = false;
-
-    const resolveInitialLanguage = async () => {
-      try {
-        let nextLanguage = getSupportedLocale(locale);
-        const response = await fetch("/api/user/language");
-
-        if (response.ok) {
-          const data = await response.json();
-          if (isRecord(data)) {
-            const userLocale = isAppLocale(data.uiLocale)
-              ? data.uiLocale
-              : isAppLocale(data.preferredLanguage)
-                ? data.preferredLanguage
-                : null;
-
-            if (userLocale) {
-              nextLanguage = userLocale;
-            }
-          }
-        }
-
-        if (!cancelled) {
-          setLanguage((currentLanguage) =>
-            currentLanguage === nextLanguage ? currentLanguage : nextLanguage,
-          );
-        }
-      } catch (error) {
-        console.error("Failed to fetch user language:", error);
-      }
-    };
-
-    void resolveInitialLanguage();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, locale, surveyId, user]);
 
   return {
     surveyId,

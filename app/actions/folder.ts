@@ -2,10 +2,10 @@
 
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { and, count, eq, getTableColumns, sum } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
-import { folders, surveys, surveyConversations } from "@/db/schema";
+import { folders, surveys } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { invalidateDashboardCaches } from "@/lib/cache";
 
@@ -30,36 +30,6 @@ const updateFolderSchema = z.object({
   color: z.string().optional(),
   icon: z.string().optional(),
 });
-
-type FolderPermissions = {
-  canEditMetadata: true;
-  canOrganizeSurveys: true;
-  canDelete: true;
-  isSharedFolder: false;
-};
-
-type FolderListRow = typeof folders.$inferSelect & {
-  surveyCount: number;
-  totalResponses: number;
-};
-
-type FolderSurveySummary = typeof surveys.$inferSelect & {
-  summary: string | null;
-  completedCount: number;
-};
-
-type FolderListItem = FolderListRow & FolderPermissions;
-type FolderDetail = typeof folders.$inferSelect &
-  FolderPermissions & {
-    surveys: FolderSurveySummary[];
-  };
-
-const personalFolderPermissions: FolderPermissions = {
-  canEditMetadata: true,
-  canOrganizeSurveys: true,
-  canDelete: true,
-  isSharedFolder: false,
-};
 
 async function requireOwnedFolder(userId: string, folderId: string) {
   const [folder] = await getDb()
@@ -94,74 +64,6 @@ export async function createFolderAction(
 
     return { success: true, data: { id: folderId } };
   }, "createFolderAction");
-}
-
-export async function getFoldersAction(): Promise<ActionResult<FolderListItem[]>> {
-  return withErrorHandling(async () => {
-    const session = await getVerifiedSession();
-
-    const folderList = await getDb()
-      .select({
-        ...getTableColumns(folders),
-        surveyCount: count(surveys.id),
-        totalResponses: sum(surveys.currentParticipants),
-      })
-      .from(folders)
-      .leftJoin(surveys, eq(folders.id, surveys.folderId))
-      .where(eq(folders.userId, session.user.id))
-      .groupBy(folders.id)
-      .orderBy(folders.createdAt);
-
-    return {
-      success: true,
-      data: folderList.map((folder) => ({
-        ...folder,
-        surveyCount: Number(folder.surveyCount),
-        totalResponses: Number(folder.totalResponses || 0),
-        ...personalFolderPermissions,
-      })),
-    };
-  }, "getFoldersAction");
-}
-
-export async function getFolderAction(id: string): Promise<ActionResult<FolderDetail>> {
-  return withErrorHandling(async () => {
-    const session = await getVerifiedSession();
-    const folder = await requireOwnedFolder(session.user.id, id);
-
-    if (!folder) {
-      throw new ActionError("Folder not found", "NOT_FOUND");
-    }
-
-    const folderSurveys = await getDb()
-      .select({
-        ...getTableColumns(surveys),
-        completedCount: count(surveyConversations.id),
-      })
-      .from(surveys)
-      .leftJoin(
-        surveyConversations,
-        and(
-          eq(surveyConversations.surveyId, surveys.id),
-          eq(surveyConversations.completed, true),
-        ),
-      )
-      .where(and(eq(surveys.folderId, id), eq(surveys.userId, session.user.id)))
-      .groupBy(surveys.id);
-
-    return {
-      success: true,
-      data: {
-        ...folder,
-        ...personalFolderPermissions,
-        surveys: folderSurveys.map((survey) => ({
-          ...survey,
-          summary: null,
-          completedCount: Number(survey.completedCount),
-        })),
-      },
-    };
-  }, "getFolderAction");
 }
 
 export async function addSurveyToFolderAction(

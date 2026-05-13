@@ -5,12 +5,16 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, LayoutDashboard, Loader2, MessageSquare, RefreshCw } from "lucide-react";
 
 import type { AnalyticsPendingData, SurveyAnalyticsData } from "@/lib/analytics";
+import { refreshSurveyAnalyticsAction } from "@/app/actions/survey";
 import { Link } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 import { NarrativeReport } from "./NarrativeReport";
+import { getFriendlyActionError } from "@/lib/action-ux";
+import toast from "react-hot-toast";
 
 interface AnalyticsDashboardProps {
   surveyId: string;
+  initialData?: SurveyAnalyticsData | AnalyticsPendingData;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -48,12 +52,15 @@ async function fetchAnalytics(
 
 export function AnalyticsDashboard({
   surveyId,
+  initialData,
 }: AnalyticsDashboardProps) {
   const [isRegenerating, setIsRegenerating] = useState(false);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["survey-analytics", surveyId],
     queryFn: () => fetchAnalytics(surveyId),
+    initialData,
+    staleTime: 30_000,
     refetchInterval: (query) =>
       query.state.data?.status === "queued" || query.state.data?.status === "running"
         ? 5000
@@ -65,20 +72,24 @@ export function AnalyticsDashboard({
   const handleRegenerate = async () => {
     setIsRegenerating(true);
     try {
-      const res = await fetch(`/api/surveys/${surveyId}/analytics`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ force: true }),
-      });
-      if (res.ok) {
-        await refetch();
+      const result = await refreshSurveyAnalyticsAction({ surveyId });
+
+      if (!result.success) {
+        toast.error(getFriendlyActionError(result.error, "Failed to queue analytics refresh"));
+        return;
       }
+
+      toast.success("Analytics refresh queued");
+      await refetch();
+    } catch (error) {
+      console.error("[handleRegenerate] Failed:", error);
+      toast.error("Failed to queue analytics refresh");
     } finally {
       setIsRegenerating(false);
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
       <div className="flex min-h-[400px] flex-col items-center justify-center text-gray-500">
         <Loader2 className="mb-4 h-8 w-8 animate-spin text-black" />
@@ -87,7 +98,7 @@ export function AnalyticsDashboard({
     );
   }
 
-  if (error) {
+  if (!data && error) {
     return (
       <div className="flex min-h-[400px] flex-col items-center justify-center text-red-500">
         <AlertCircle className="mb-4 h-10 w-10" />
@@ -101,6 +112,19 @@ export function AnalyticsDashboard({
         </button>
       </div>
     );
+  }
+
+  if (!data) {
+    return (
+      <div className="flex min-h-[400px] flex-col items-center justify-center text-gray-500">
+        <Loader2 className="mb-4 h-8 w-8 animate-spin text-black" />
+        <p className="text-sm font-medium">Loading research intelligence...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    console.error("[AnalyticsDashboard] Background refresh failed:", error);
   }
 
   if (!isSurveyAnalyticsData(data)) {

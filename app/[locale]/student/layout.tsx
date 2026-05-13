@@ -4,6 +4,7 @@ import { StudentSidebar } from "@/components/student/student-sidebar";
 import { Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { headers } from "next/headers";
+import { getLearningMeData, getMyPatternSummaries } from "@/lib/server/app-queries";
 
 export default function StudentLayout(props: {
     children: React.ReactNode;
@@ -37,9 +38,14 @@ async function StudentLayoutContent({
         redirect(`/${locale}/sign-in`);
     }
 
+    const [learningMe, patterns] = await Promise.all([
+        getLearningMeData(),
+        getMyPatternSummaries(),
+    ]);
+
     return (
         <div className="flex min-h-screen bg-[#F8F9FB]">
-            <StudentSidebar />
+            <StudentSidebar initialLearningMe={learningMe} initialPatterns={patterns} />
             <div className="flex-1 flex flex-col">
                 <header className="h-16 border-b border-gray-200 bg-white flex items-center px-8 sticky top-0 z-10 shadow-sm">
                     <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">

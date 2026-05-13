@@ -9,10 +9,12 @@ import { useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 
 import {
-  acceptClassroomInvitation,
-  rejectClassroomInvitation,
-  askOutOfSessionQuestion,
-  completeTutoringSession,
+  askOutOfSessionQuestionAction,
+  completeTutoringSessionAction,
+  respondToInvitationAction,
+} from "@/app/actions/classroom";
+import { useRouter } from "@/i18n/routing";
+import {
   fetchMyPatterns,
   fetchOnboardingState,
   fetchTutoringSession,
@@ -23,6 +25,11 @@ import {
   isAppLocale,
   type AppLocale,
 } from "@/lib/i18n/config";
+import { getFriendlyActionError } from "@/lib/action-ux";
+import type {
+  getOnboardingStateData,
+  getStudentLearningWorkspaceInitialData,
+} from "@/lib/server/app-queries";
 
 type StudentLearningMeData = Extract<LearningMeData, { role: "student" }> & {
   invitations?: Array<{
@@ -65,9 +72,20 @@ function toTextUIMessages(
 
 export function useStudentLearningWorkspace({
   learningMe,
+  initialPatterns,
+  initialOnboardingState,
+  initialTutoringSession,
 }: {
   learningMe: StudentLearningMeData;
+  initialPatterns?: Awaited<
+    ReturnType<typeof getStudentLearningWorkspaceInitialData>
+  >["initialPatterns"];
+  initialOnboardingState?: Awaited<ReturnType<typeof getOnboardingStateData>>;
+  initialTutoringSession?: Awaited<
+    ReturnType<typeof getStudentLearningWorkspaceInitialData>
+  >["initialTutoringSession"];
 }) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const locale = useLocale();
   const searchParams = useSearchParams();
@@ -88,16 +106,21 @@ export function useStudentLearningWorkspace({
     return memberships[0]?.classroomStudentId ?? null;
   }, [classroomId, memberships]);
 
-  const [selectedMembershipId, setSelectedMembershipId] = useState<string | null>(
-    initialMembershipId,
-  );
-
-  // Sync selectedMembershipId when initialMembershipId changes (URL navigation)
-  useEffect(() => {
-    if (initialMembershipId) {
-      setSelectedMembershipId(initialMembershipId);
+  const [manualSelectedMembershipId, setManualSelectedMembershipId] = useState<
+    string | null
+  >(null);
+  const selectedMembershipId = useMemo(() => {
+    if (
+      manualSelectedMembershipId &&
+      memberships.some(
+        (item) => item.classroomStudentId === manualSelectedMembershipId,
+      )
+    ) {
+      return manualSelectedMembershipId;
     }
-  }, [initialMembershipId]);
+
+    return initialMembershipId;
+  }, [initialMembershipId, manualSelectedMembershipId, memberships]);
 
   const selectedMembership =
     memberships.find((item) => item.classroomStudentId === selectedMembershipId) ??
@@ -118,11 +141,19 @@ export function useStudentLearningWorkspace({
     queryKey: queryKeys.learning.onboarding,
     queryFn: fetchOnboardingState,
     enabled: Boolean(selectedMembership?.needsOnboarding),
+    initialData:
+      selectedMembership?.needsOnboarding &&
+      selectedMembership.classroomStudentId === initialMembershipId
+        ? initialOnboardingState
+        : undefined,
+    staleTime: 30_000,
   });
 
   const patternsQuery = useQuery({
     queryKey: queryKeys.learning.myPatterns,
     queryFn: fetchMyPatterns,
+    initialData: initialPatterns,
+    staleTime: 30_000,
   });
 
   const tutoringSessionQuery = useQuery({
@@ -138,12 +169,27 @@ export function useStudentLearningWorkspace({
         selectedStudyLanguage,
       ),
     enabled: Boolean(effectiveSelectedTopicId && !selectedMembership?.needsOnboarding),
+    initialData:
+      initialTutoringSession &&
+      !selectedMembership?.needsOnboarding &&
+      selectedMembership?.classroomStudentId === initialMembershipId &&
+      effectiveSelectedTopicId === (selectedMembership?.topics[0]?.id ?? null)
+        ? initialTutoringSession
+        : undefined,
+    staleTime: 30_000,
   });
 
   const initialOnboardingMessages = useMemo(
     () =>
       onboardingQuery.data && !onboardingQuery.data.completed
-        ? toTextUIMessages(onboardingQuery.data.messages)
+        ? toTextUIMessages(
+            onboardingQuery.data.messages.map((message) => ({
+              id: message.id,
+              role: message.role,
+              content: message.content,
+              metadata: message.metadata ?? undefined,
+            })),
+          )
         : [],
     [onboardingQuery.data],
   );
@@ -154,7 +200,7 @@ export function useStudentLearningWorkspace({
           id: message.id,
           role: message.role,
           content: message.content,
-          metadata: message.metadata,
+          metadata: message.metadata ?? undefined,
         })),
       ),
     [tutoringSessionQuery.data?.data.messages],
@@ -241,11 +287,16 @@ export function useStudentLearningWorkspace({
       onboardingSyncRef.current = onboardingChatMessages.length;
       void Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.learning.onboarding }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.learning.me }),
         queryClient.invalidateQueries({ queryKey: queryKeys.learning.myPatterns }),
       ]);
     }
   }, [onboardingChatMessages.length, onboardingChatStatus, queryClient]);
+
+  useEffect(() => {
+    if (onboardingQuery.data?.completed) {
+      router.refresh();
+    }
+  }, [onboardingQuery.data?.completed, router]);
 
   useEffect(() => {
     if (
@@ -270,9 +321,19 @@ export function useStudentLearningWorkspace({
   ]);
 
   const outOfSessionMutation = useMutation({
-    mutationFn: askOutOfSessionQuestion,
+    mutationFn: async (input: {
+      topicId: string;
+      message: string;
+      language?: string;
+    }) => {
+      const result = await askOutOfSessionQuestionAction(input);
+      if (!result.success) {
+        throw new Error(getFriendlyActionError(result.error));
+      }
+      return result.data;
+    },
     onSuccess: (data) => {
-      setOutOfSessionReply(data.data.response);
+      setOutOfSessionReply(data.response);
       toast.success("Question sent");
     },
     onError: (error) => {
@@ -286,11 +347,15 @@ export function useStudentLearningWorkspace({
         throw new Error("No active tutoring session to finish.");
       }
 
-      return await completeTutoringSession({
+      const result = await completeTutoringSessionAction({
         topicId: effectiveSelectedTopicId,
         sessionId: tutoringSessionQuery.data.data.sessionId,
         language: selectedStudyLanguage,
       });
+      if (!result.success) {
+        throw new Error(getFriendlyActionError(result.error));
+      }
+      return result.data;
     },
     onSuccess: async () => {
       setTutoringChatMessages([]);
@@ -314,10 +379,19 @@ export function useStudentLearningWorkspace({
   });
 
   const acceptInvitationMutation = useMutation({
-    mutationFn: acceptClassroomInvitation,
+    mutationFn: async (invitationId: string) => {
+      const result = await respondToInvitationAction({
+        invitationId,
+        decision: "accepted",
+      });
+      if (!result.success) {
+        throw new Error(getFriendlyActionError(result.error));
+      }
+      return result.data;
+    },
     onSuccess: async () => {
       toast.success("Invitation accepted");
-      await queryClient.invalidateQueries({ queryKey: queryKeys.learning.me });
+      await router.refresh();
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "Failed to accept invitation");
@@ -325,10 +399,19 @@ export function useStudentLearningWorkspace({
   });
 
   const rejectInvitationMutation = useMutation({
-    mutationFn: rejectClassroomInvitation,
+    mutationFn: async (invitationId: string) => {
+      const result = await respondToInvitationAction({
+        invitationId,
+        decision: "rejected",
+      });
+      if (!result.success) {
+        throw new Error(getFriendlyActionError(result.error));
+      }
+      return result.data;
+    },
     onSuccess: async () => {
       toast.success("Invitation dismissed");
-      await queryClient.invalidateQueries({ queryKey: queryKeys.learning.me });
+      await router.refresh();
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "Failed to reject invitation");
@@ -351,7 +434,7 @@ export function useStudentLearningWorkspace({
     selectedStudyLanguage,
     setSelectedStudyLanguage,
     selectedMembershipId,
-    setSelectedMembershipId,
+    setSelectedMembershipId: setManualSelectedMembershipId,
     selectedMembership,
     availableTopics,
     availableSurveys,

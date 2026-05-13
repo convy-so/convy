@@ -25,6 +25,7 @@ import { useTeacherLearningWorkspace } from "@/components/learning/hooks/use-tea
 import { InviteStudentModal } from "@/components/learning/invite-student-modal";
 import { LogInterventionModal } from "@/components/learning/log-intervention-modal";
 import { StatsCard } from "@/components/dashboard/stats-card";
+import type { getTeacherLearningWorkspaceInitialData } from "@/lib/server/app-queries";
 
 function countReadyTopics(statuses: string[]) {
   return statuses.filter((status) => status === "active").length;
@@ -44,7 +45,9 @@ function formatInterventionStatusLabel(value: string) {
     .join(" ");
 }
 
-export function TeacherLearningHome() {
+export function TeacherLearningHome(
+  initialData: Awaited<ReturnType<typeof getTeacherLearningWorkspaceInitialData>>,
+) {
   const [isCreateClassModalOpen, setIsCreateClassModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
@@ -82,7 +85,7 @@ export function TeacherLearningHome() {
     setSelectedClassroomId,
     setSelectedTopicId,
     setSelectedStudentId,
-  } = useTeacherLearningWorkspace();
+  } = useTeacherLearningWorkspace(initialData);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

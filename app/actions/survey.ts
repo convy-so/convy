@@ -1,22 +1,7 @@
 "use server";
 
-import * as readActions from "./survey/survey-read-actions";
 import * as settingsActions from "./survey/survey-settings-actions";
 import * as lifecycleActions from "./survey/survey-lifecycle-actions";
-
-// Read Actions
-export async function getSurveyAction(...args: Parameters<typeof readActions.getSurveyAction>) {
-  return readActions.getSurveyAction(...args);
-}
-export async function getShareableLinkAction(...args: Parameters<typeof readActions.getShareableLinkAction>) {
-  return readActions.getShareableLinkAction(...args);
-}
-export async function getSurveyPublicUrlsAction(...args: Parameters<typeof readActions.getSurveyPublicUrlsAction>) {
-  return readActions.getSurveyPublicUrlsAction(...args);
-}
-export async function getSurveysAction(...args: Parameters<typeof readActions.getSurveysAction>) {
-  return readActions.getSurveysAction(...args);
-}
 
 // Settings Actions
 export async function clearSurveyCustomSlugAction(...args: Parameters<typeof settingsActions.clearSurveyCustomSlugAction>) {
@@ -42,6 +27,21 @@ export async function deleteSurveyAction(...args: Parameters<typeof lifecycleAct
 export async function duplicateSurveyAction(...args: Parameters<typeof lifecycleActions.duplicateSurveyAction>) {
   return lifecycleActions.duplicateSurveyAction(...args);
 }
+export async function createSurveyDraftAction(...args: Parameters<typeof lifecycleActions.createSurveyDraftAction>) {
+  return lifecycleActions.createSurveyDraftAction(...args);
+}
+export async function finalizeSurveyCreationAction(...args: Parameters<typeof lifecycleActions.finalizeSurveyCreationAction>) {
+  return lifecycleActions.finalizeSurveyCreationAction(...args);
+}
+export async function publishSurveyAction(...args: Parameters<typeof lifecycleActions.publishSurveyAction>) {
+  return lifecycleActions.publishSurveyAction(...args);
+}
+export async function refreshSurveyAnalyticsAction(...args: Parameters<typeof lifecycleActions.refreshSurveyAnalyticsAction>) {
+  return lifecycleActions.refreshSurveyAnalyticsAction(...args);
+}
 export async function reactivateSurveyAction(...args: Parameters<typeof lifecycleActions.reactivateSurveyAction>) {
   return lifecycleActions.reactivateSurveyAction(...args);
+}
+export async function setSurveyStatusAction(...args: Parameters<typeof lifecycleActions.setSurveyStatusAction>) {
+  return lifecycleActions.setSurveyStatusAction(...args);
 }
