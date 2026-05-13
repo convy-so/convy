@@ -125,6 +125,7 @@ const surveyDetailsResponseSchema = z.object({
     programId: z.string().nullable().optional(),
     brief: surveyBriefSchema.nullish(),
     tone: z.string().nullable().optional(),
+    customSlug: z.string().nullable().optional(),
     shareableLink: z.string().nullable().optional(),
     shareableUrl: z.string().nullable().optional(),
     participantLimit: z.number(),

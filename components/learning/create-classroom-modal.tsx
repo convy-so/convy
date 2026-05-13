@@ -10,6 +10,7 @@ import toast from "react-hot-toast";
 import { InputField } from "@/components/auth/input-field";
 import { cn } from "@/lib/utils";
 import { getFriendlyActionError } from "@/lib/action-ux";
+import { appLocaleLabels, appLocales, type AppLocale } from "@/lib/i18n/config";
 
 type CreateClassroomModalProps = {
     isOpen: boolean;
@@ -27,6 +28,7 @@ export function CreateClassroomModal({
     const [gradeLabel, setGradeLabel] = useState("");
     const [subject, setSubject] = useState("");
     const [description, setDescription] = useState("");
+    const [defaultContentLocale, setDefaultContentLocale] = useState<AppLocale>("en");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [mounted, setMounted] = useState(false);
@@ -40,6 +42,7 @@ export function CreateClassroomModal({
         setGradeLabel("");
         setSubject("");
         setDescription("");
+        setDefaultContentLocale("en");
         setError(null);
     };
 
@@ -55,6 +58,7 @@ export function CreateClassroomModal({
                 gradeLabel: gradeLabel.trim(),
                 subject: subject.trim() || undefined,
                 description: description.trim() || undefined,
+                defaultContentLocale,
             });
 
             if (!result.success) {
@@ -152,6 +156,26 @@ export function CreateClassroomModal({
                             placeholder="Brief purpose of this course..."
                             className="w-full px-4 py-3 resize-none rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-[#292929] focus:border-transparent outline-none transition-all placeholder:text-gray-400"
                         />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="block text-sm font-medium text-[#292929]">
+                            Default study language
+                        </label>
+                        <select
+                            value={defaultContentLocale}
+                            onChange={(e) => setDefaultContentLocale(e.target.value as AppLocale)}
+                            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-[#292929] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[#292929]"
+                        >
+                            {appLocales.map((locale) => (
+                                <option key={locale} value={locale}>
+                                    {appLocaleLabels[locale]}
+                                </option>
+                            ))}
+                        </select>
+                        <p className="text-[11px] font-medium leading-relaxed text-gray-500">
+                            New topic tutors and student onboarding default to this language unless you override it later.
+                        </p>
                     </div>
 
                     <div className="bg-sky-50 rounded-xl p-3 border border-sky-100/50 flex gap-3">

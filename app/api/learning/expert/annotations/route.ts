@@ -41,7 +41,6 @@ export async function GET(request: Request) {
     const sessionId = searchParams.get("sessionId");
 
     const reviewCases = await listExpertReviewCases({
-      teacherUserId: session.user.id,
       topicId,
       sessionId,
     });
@@ -66,7 +65,7 @@ export async function POST(request: Request) {
     if (!anchor) {
       return apiError(
         "NOT_FOUND",
-        "A teacher-owned topic, student, session, or interaction is required.",
+        "A valid topic, student, session, or interaction is required.",
       );
     }
 

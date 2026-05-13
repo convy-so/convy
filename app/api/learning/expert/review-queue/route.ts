@@ -10,9 +10,7 @@ export async function GET() {
     if ("error" in expert) return expert.error;
     const { session } = expert;
 
-    const queue = await listExpertReviewQueue({
-      teacherUserId: session.user.id,
-    });
+    const queue = await listExpertReviewQueue();
 
     return NextResponse.json({
       success: true,

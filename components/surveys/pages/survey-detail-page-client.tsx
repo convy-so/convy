@@ -94,7 +94,12 @@ import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useTranslations } from "next-intl";
 import {
+  clearSurveyCustomSlugAction,
+  confirmSurveyAction,
+  deactivateSurveyAction,
   deleteSurveyAction,
+  reactivateSurveyAction,
+  setSurveyCustomSlugAction,
   setSurveyStatusAction,
   updateSurveyAction,
 } from "@/app/actions/survey";
@@ -107,6 +112,8 @@ import {
 } from "@/lib/api/surveys";
 import { queryKeys } from "@/lib/query-keys";
 import { CreatorSettingsPanel } from "@/components/surveys/creator-settings-panel";
+import { PublishSurveyModal } from "@/components/surveys/publish-survey-modal";
+import { appLocaleLabels, appLocales, type AppLocale } from "@/lib/i18n/config";
 
 interface Response {
   id: string;
@@ -152,9 +159,14 @@ export function SurveyDetailPageClient({
   const [settingsForm, setSettingsForm] = useState({
     title: "",
     participantLimit: 50,
+    language: "en" as AppLocale,
     isVoice: false,
   });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [customSlug, setCustomSlug] = useState("");
+  const [isSavingSlug, setIsSavingSlug] = useState(false);
+  const [isLifecyclePending, setIsLifecyclePending] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeletingSurvey, setIsDeletingSurvey] = useState(false);
 
@@ -188,8 +200,12 @@ export function SurveyDetailPageClient({
       setSettingsForm({
         title: survey.title,
         participantLimit: survey.participantLimit,
+        language: (survey.language && appLocales.includes(survey.language as AppLocale)
+          ? survey.language
+          : "en") as AppLocale,
         isVoice: survey.isVoice || false,
       });
+      setCustomSlug(survey.customSlug || "");
     }
   }, [survey]);
 
@@ -217,8 +233,7 @@ export function SurveyDetailPageClient({
 
       if (result.success) {
         toast.success(t("Toasts.SettingsSaved") || "Settings saved successfully", { id: loadingToast });
-        // Invalidate survey query to refetch updated data
-        queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
+        await refreshSurveyDetail();
       } else {
         toast.error(getFriendlyActionError(result.error, t("Toasts.SettingsFailed")), { id: loadingToast });
       }
@@ -246,8 +261,7 @@ export function SurveyDetailPageClient({
       });
 
       if (result.success) {
-        // Invalidate survey query to refetch updated data
-        queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
+        await refreshSurveyDetail();
         toast.success(t("Toasts.StatusUpdated", { status: newStatus === "active" ? "resumed" : "paused" }));
       } else {
         toast.error(getFriendlyActionError(result.error, t("Toasts.StatusFailed")));
@@ -255,6 +269,108 @@ export function SurveyDetailPageClient({
     } catch (error) {
       console.error("[handleStatusUpdate] Failed:", error);
       toast.error(t("Toasts.Error"));
+    }
+  };
+
+  const refreshSurveyDetail = async () => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.surveys.detail(surveyId) });
+  };
+
+  const handleConfirmSurvey = async () => {
+    setIsLifecyclePending(true);
+    try {
+      const result = await confirmSurveyAction(surveyId);
+      if (!result.success) {
+        toast.error(getFriendlyActionError(result.error, "Failed to activate survey"));
+        return;
+      }
+      await refreshSurveyDetail();
+      toast.success("Survey activated");
+    } catch (error) {
+      console.error("[handleConfirmSurvey] Failed:", error);
+      toast.error("Failed to activate survey");
+    } finally {
+      setIsLifecyclePending(false);
+    }
+  };
+
+  const handleDeactivateSurvey = async () => {
+    setIsLifecyclePending(true);
+    try {
+      const result = await deactivateSurveyAction(surveyId);
+      if (!result.success) {
+        toast.error(getFriendlyActionError(result.error, "Failed to close survey"));
+        return;
+      }
+      await refreshSurveyDetail();
+      toast.success("Survey closed");
+    } catch (error) {
+      console.error("[handleDeactivateSurvey] Failed:", error);
+      toast.error("Failed to close survey");
+    } finally {
+      setIsLifecyclePending(false);
+    }
+  };
+
+  const handleReactivateSurvey = async () => {
+    setIsLifecyclePending(true);
+    try {
+      const result = await reactivateSurveyAction(surveyId);
+      if (!result.success) {
+        toast.error(getFriendlyActionError(result.error, "Failed to reactivate survey"));
+        return;
+      }
+      await refreshSurveyDetail();
+      toast.success("Survey reactivated");
+    } catch (error) {
+      console.error("[handleReactivateSurvey] Failed:", error);
+      toast.error("Failed to reactivate survey");
+    } finally {
+      setIsLifecyclePending(false);
+    }
+  };
+
+  const handleSaveSlug = async () => {
+    const nextSlug = customSlug.trim();
+    if (!nextSlug) {
+      toast.error("Enter a custom URL slug first");
+      return;
+    }
+
+    setIsSavingSlug(true);
+    try {
+      const result = await setSurveyCustomSlugAction({ surveyId, slug: nextSlug });
+      if (!result.success) {
+        toast.error(getFriendlyActionError(result.error, "Failed to save custom URL"));
+        return;
+      }
+      await refreshSurveyDetail();
+      setCustomSlug(result.data.customSlug);
+      toast.success("Custom URL updated");
+    } catch (error) {
+      console.error("[handleSaveSlug] Failed:", error);
+      toast.error("Failed to save custom URL");
+    } finally {
+      setIsSavingSlug(false);
+    }
+  };
+
+  const handleClearSlug = async () => {
+    setIsSavingSlug(true);
+    try {
+      const result = await clearSurveyCustomSlugAction(surveyId);
+      if (!result.success) {
+        toast.error(getFriendlyActionError(result.error, "Failed to clear custom URL"));
+        return;
+      }
+      await refreshSurveyDetail();
+      setCustomSlug("");
+      toast.success("Custom URL cleared");
+    } catch (error) {
+      console.error("[handleClearSlug] Failed:", error);
+      toast.error("Failed to clear custom URL");
+    } finally {
+      setIsSavingSlug(false);
     }
   };
 
@@ -380,6 +496,14 @@ export function SurveyDetailPageClient({
               <span className="text-sm font-medium">{copied ? t("Header.Copied") : t("Header.CopyLink")}</span>
             </button>
 
+            <Link
+              href={`/dashboard/surveys/${surveyId}/analytics`}
+              className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <TrendingUp className="w-4 h-4" />
+              <span className="text-sm font-medium">Analytics</span>
+            </Link>
+
             {survey.status === "active" ? (
               <button
                 onClick={() => handleStatusUpdate("paused")}
@@ -398,6 +522,28 @@ export function SurveyDetailPageClient({
               </button>
             ) : null}
 
+            {survey.status === "active" && (
+              <button
+                onClick={handleDeactivateSurvey}
+                disabled={isLifecyclePending}
+                className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-100 transition-colors disabled:opacity-50"
+              >
+                <Pause className="w-4 h-4" />
+                <span className="hidden sm:inline">Close Survey</span>
+              </button>
+            )}
+
+            {survey.status === "completed" && (
+              <button
+                onClick={handleReactivateSurvey}
+                disabled={isLifecyclePending}
+                className="flex items-center gap-2 px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-sm font-medium hover:bg-emerald-100 transition-colors disabled:opacity-50"
+              >
+                <Play className="w-4 h-4" />
+                <span className="hidden sm:inline">Reactivate</span>
+              </button>
+            )}
+
             {(survey.status === "draft" || survey.status === "creating" || survey.status === "sample_review") && (
               <Link
                 href={`/dashboard/create?id=${survey.id}`}
@@ -406,6 +552,26 @@ export function SurveyDetailPageClient({
                 <Sparkles className="w-4 h-4" />
                 <span>{t("Header.Continue")}</span>
               </Link>
+            )}
+
+            {(survey.status === "draft" || survey.status === "sample_review") && (
+              <>
+                <button
+                  onClick={() => setShowPublishModal(true)}
+                  className="flex items-center gap-2 px-3 py-2 bg-gray-900 text-white border border-gray-900 rounded-xl text-sm font-medium hover:bg-black transition-colors"
+                >
+                  <Share2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Publish</span>
+                </button>
+                <button
+                  onClick={handleConfirmSurvey}
+                  disabled={isLifecyclePending}
+                  className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl text-sm font-medium hover:bg-blue-100 transition-colors disabled:opacity-50"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span className="hidden sm:inline">Quick Activate</span>
+                </button>
+              </>
             )}
 
             <button
@@ -762,6 +928,21 @@ export function SurveyDetailPageClient({
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Survey language</label>
+                <select
+                  value={settingsForm.language}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, language: e.target.value as AppLocale })}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none bg-white"
+                >
+                  {appLocales.map((locale) => (
+                    <option key={locale} value={locale}>
+                      {appLocaleLabels[locale]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
                 <div>
                   <h4 className="font-medium text-gray-900 mb-1">{t("Settings.VoiceMode.Title")}</h4>
@@ -783,6 +964,39 @@ export function SurveyDetailPageClient({
                   />
                 </button>
               </div>
+
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-3">
+                <div>
+                  <h4 className="font-medium text-gray-900">Custom survey URL</h4>
+                  <p className="text-sm text-gray-500">Replace the random public identifier with a teacher-defined slug.</p>
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <input
+                    type="text"
+                    value={customSlug}
+                    onChange={(e) => setCustomSlug(e.target.value.toLowerCase())}
+                    placeholder="e.g. year10-pulse-check"
+                    className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 outline-none"
+                  />
+                  <button
+                    onClick={handleSaveSlug}
+                    disabled={isSavingSlug || !customSlug.trim()}
+                    className="px-4 py-2.5 bg-gray-900 text-white rounded-xl font-medium text-sm hover:bg-gray-800 transition-colors disabled:opacity-50"
+                  >
+                    {isSavingSlug ? "Saving..." : "Save URL"}
+                  </button>
+                  <button
+                    onClick={handleClearSlug}
+                    disabled={isSavingSlug || !survey.customSlug}
+                    className="px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-medium text-sm hover:bg-white transition-colors disabled:opacity-50"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div className="text-xs text-gray-500">
+                  Public URL: {survey.shareableUrl || "Publish the survey to generate a public link."}
+                </div>
+              </div>
             </div>
             <div className="mt-6 flex justify-end">
               <button
@@ -798,6 +1012,18 @@ export function SurveyDetailPageClient({
           <CreatorSettingsPanel surveyId={surveyId} />
         </div>
       )}
+
+      <PublishSurveyModal
+        isOpen={showPublishModal}
+        onClose={() => setShowPublishModal(false)}
+        surveyId={surveyId}
+        initialTitle={survey.title}
+        initialIsVoice={survey.isVoice || false}
+        onPublished={async () => {
+          setShowPublishModal(false);
+          await refreshSurveyDetail();
+        }}
+      />
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (

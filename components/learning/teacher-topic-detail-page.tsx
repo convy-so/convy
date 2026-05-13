@@ -1,4 +1,4 @@
-import { BookOpen, CheckCircle2, FileText, MessageSquare, Sparkles } from "lucide-react";
+import { BookOpen, CheckCircle2, ExternalLink, FileText, MessageSquare, Sparkles } from "lucide-react";
 
 import { Link } from "@/i18n/routing";
 import { GlassPanel } from "@/components/learning/glass-panel";
@@ -105,9 +105,19 @@ export function TeacherTopicDetailPage({
                               {material.materialKind} · {material.mimeType}
                             </div>
                           </div>
-                          <div className="text-right text-[11px] text-slate-500">
-                            <div>{material.extractionStatus}</div>
-                            <div className="mt-1">{material.indexingStatus}</div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right text-[11px] text-slate-500">
+                              <div>{material.extractionStatus}</div>
+                              <div className="mt-1">{material.indexingStatus}</div>
+                            </div>
+                            <a
+                              href={`/api/media/learning/${material.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-950"
+                            >
+                              Open <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
                           </div>
                         </div>
                       </div>
