@@ -38,6 +38,17 @@ type TranscriptMessage = {
   createdAt: string;
 };
 
+type ReviewHistoryItem = {
+  id: string;
+  reviewType: string;
+  priority: "low" | "medium" | "high";
+  relevanceScope: "general" | "framework_specific";
+  tutorFailureSummary: string;
+  expertCorrection: string;
+  status: string;
+  createdAt: string;
+};
+
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
     credentials: "include",
@@ -88,6 +99,21 @@ export function ExpertQaReview() {
       ).data;
     },
     enabled: Boolean(selectedQueueItem?.sessionId),
+  });
+
+  const reviewHistoryQuery = useQuery({
+    queryKey: ["expertReviewHistory", selectedQueueItem?.topicId, selectedQueueItem?.sessionId],
+    queryFn: async () => {
+      const search = new URLSearchParams();
+      if (selectedQueueItem?.topicId) search.set("topicId", selectedQueueItem.topicId);
+      if (selectedQueueItem?.sessionId) search.set("sessionId", selectedQueueItem.sessionId);
+      return (
+        await fetchJson<{ success: true; data: ReviewHistoryItem[] }>(
+          `/api/learning/expert/annotations?${search.toString()}`,
+        )
+      ).data;
+    },
+    enabled: Boolean(selectedQueueItem?.topicId || selectedQueueItem?.sessionId),
   });
 
   // Auto-scroll transcript to bottom when loaded
@@ -305,98 +331,144 @@ export function ExpertQaReview() {
             {/* Annotation Form */}
             <div className="border-t border-slate-200 bg-white p-5">
               <h3 className="text-sm font-bold text-slate-950 mb-4 uppercase tracking-wider">Expert Annotation</h3>
-              <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                      Error Type
-                    </label>
-                    <select
-                      value={annotationType}
-                      onChange={(event) => setAnnotationType(event.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-900 shadow-sm focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none"
+              <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                        Error Type
+                      </label>
+                      <select
+                        value={annotationType}
+                        onChange={(event) => setAnnotationType(event.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-900 shadow-sm focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none"
+                      >
+                        <option value="reasoning_gap">Reasoning Gap</option>
+                        <option value="misconception">Misconception</option>
+                        <option value="question_quality">Question Quality</option>
+                        <option value="rubric_improvement">Rubric Improvement</option>
+                        <option value="hint_ladder">Hint Ladder</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                        Relevance Scope
+                      </label>
+                      <div className="space-y-2">
+                        <label className={cn(
+                          "flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all",
+                          relevanceScope === "general" ? "border-slate-900 bg-slate-50" : "border-slate-200"
+                        )}>
+                          <input 
+                            type="radio" 
+                            name="scope" 
+                            className="w-3 h-3 text-slate-900" 
+                            checked={relevanceScope === "general"} 
+                            onChange={() => setRelevanceScope("general")} 
+                          />
+                          <span className="text-xs font-medium">General Pedagogy</span>
+                        </label>
+                        <label className={cn(
+                          "flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all",
+                          relevanceScope === "framework_specific" ? "border-slate-900 bg-slate-50" : "border-slate-200"
+                        )}>
+                          <input 
+                            type="radio" 
+                            name="scope" 
+                            className="w-3 h-3 text-slate-900" 
+                            checked={relevanceScope === "framework_specific"} 
+                            onChange={() => setRelevanceScope("framework_specific")} 
+                          />
+                          <span className="text-xs font-medium">Framework Specific</span>
+                        </label>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => createAnnotationMutation.mutate()}
+                      disabled={createAnnotationMutation.isPending || !annotationSummary.trim()}
+                      className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
-                      <option value="reasoning_gap">Reasoning Gap</option>
-                      <option value="misconception">Misconception</option>
-                      <option value="question_quality">Question Quality</option>
-                      <option value="rubric_improvement">Rubric Improvement</option>
-                      <option value="hint_ladder">Hint Ladder</option>
-                    </select>
+                      {createAnnotationMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4" />
+                      )}
+                      Submit Review
+                    </button>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                      Relevance Scope
-                    </label>
-                    <div className="space-y-2">
-                      <label className={cn(
-                        "flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all",
-                        relevanceScope === "general" ? "border-slate-900 bg-slate-50" : "border-slate-200"
-                      )}>
-                        <input 
-                          type="radio" 
-                          name="scope" 
-                          className="w-3 h-3 text-slate-900" 
-                          checked={relevanceScope === "general"} 
-                          onChange={() => setRelevanceScope("general")} 
-                        />
-                        <span className="text-xs font-medium">General Pedagogy</span>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                        Correction Summary
                       </label>
-                      <label className={cn(
-                        "flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all",
-                        relevanceScope === "framework_specific" ? "border-slate-900 bg-slate-50" : "border-slate-200"
-                      )}>
-                        <input 
-                          type="radio" 
-                          name="scope" 
-                          className="w-3 h-3 text-slate-900" 
-                          checked={relevanceScope === "framework_specific"} 
-                          onChange={() => setRelevanceScope("framework_specific")} 
-                        />
-                        <span className="text-xs font-medium">Framework Specific</span>
+                      <textarea
+                        value={annotationSummary}
+                        onChange={(event) => setAnnotationSummary(event.target.value)}
+                        rows={4}
+                        placeholder="Explain exactly what the AI tutor should have done..."
+                        className="w-full rounded-xl border border-slate-200 bg-[#FAFAFA] px-4 py-3 text-sm text-slate-900 shadow-sm focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">
+                        <span>Evidence</span>
+                        <span className="text-[10px] font-medium normal-case text-slate-400 flex items-center gap-1">
+                          <Quote className="h-3 w-3" /> Hover transcript to quote
+                        </span>
                       </label>
+                      <textarea
+                        value={annotationEvidence}
+                        onChange={(event) => setAnnotationEvidence(event.target.value)}
+                        rows={4}
+                        placeholder="Paste or quote evidence from the transcript..."
+                        className="w-full rounded-xl border border-slate-200 bg-[#FAFAFA] px-4 py-3 text-sm text-slate-900 shadow-sm focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-colors"
+                      />
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => createAnnotationMutation.mutate()}
-                    disabled={createAnnotationMutation.isPending || !annotationSummary.trim()}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                  >
-                    {createAnnotationMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4" />
-                    )}
-                    Submit Review
-                  </button>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                      Correction Summary
-                    </label>
-                    <textarea
-                      value={annotationSummary}
-                      onChange={(event) => setAnnotationSummary(event.target.value)}
-                      rows={4}
-                      placeholder="Explain exactly what the AI tutor should have done..."
-                      className="w-full rounded-xl border border-slate-200 bg-[#FAFAFA] px-4 py-3 text-sm text-slate-900 shadow-sm focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-colors"
-                    />
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Review History
+                    </h4>
+                    <span className="text-[10px] font-semibold uppercase text-slate-400">
+                      session/topic
+                    </span>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">
-                      <span>Evidence</span>
-                      <span className="text-[10px] font-medium normal-case text-slate-400 flex items-center gap-1">
-                        <Quote className="h-3 w-3" /> Hover transcript to quote
-                      </span>
-                    </label>
-                    <textarea
-                      value={annotationEvidence}
-                      onChange={(event) => setAnnotationEvidence(event.target.value)}
-                      rows={4}
-                      placeholder="Paste or quote evidence from the transcript..."
-                      className="w-full rounded-xl border border-slate-200 bg-[#FAFAFA] px-4 py-3 text-sm text-slate-900 shadow-sm focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-colors"
-                    />
+                  <div className="mt-4 space-y-3">
+                    {reviewHistoryQuery.isLoading ? (
+                      <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading history...
+                      </div>
+                    ) : reviewHistoryQuery.data?.length ? (
+                      reviewHistoryQuery.data.slice(0, 6).map((item) => (
+                        <div
+                          key={item.id}
+                          className="rounded-xl border border-slate-200 bg-white p-3"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="text-xs font-semibold uppercase text-slate-500">
+                              {item.reviewType}
+                            </div>
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">
+                              {item.status}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-sm font-medium text-slate-900 line-clamp-2">
+                            {item.tutorFailureSummary}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500 line-clamp-3">
+                            {item.expertCorrection}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-400">
+                        No existing review history for this context.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

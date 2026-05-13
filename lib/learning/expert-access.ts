@@ -9,10 +9,6 @@ import {
   learningTopics,
 } from "@/db/schema";
 
-function hasTeacherOwnership(ownerUserId: string | null | undefined, teacherUserId: string) {
-  return !!ownerUserId && ownerUserId === teacherUserId;
-}
-
 export async function getTeacherOwnedTopic(userId: string, topicId: string) {
   const topic = await getDb().query.learningTopics.findFirst({
     where: eq(learningTopics.id, topicId),
@@ -21,7 +17,7 @@ export async function getTeacherOwnedTopic(userId: string, topicId: string) {
     },
   });
 
-  if (!topic || !hasTeacherOwnership(topic.classroom.teacherUserId, userId)) {
+  if (!topic) {
     return null;
   }
 
@@ -45,15 +41,6 @@ export async function getTeacherOwnedFramework(userId: string, frameworkId: stri
     return null;
   }
 
-  const ownerId =
-    framework.topic?.classroom.teacherUserId ??
-    framework.classroom?.teacherUserId ??
-    null;
-
-  if (!hasTeacherOwnership(ownerId, userId)) {
-    return null;
-  }
-
   return framework;
 }
 
@@ -68,7 +55,7 @@ export async function getTeacherOwnedClassroomStudent(
     },
   });
 
-  if (!classroomStudent || !hasTeacherOwnership(classroomStudent.classroom.teacherUserId, userId)) {
+  if (!classroomStudent) {
     return null;
   }
 
@@ -87,7 +74,7 @@ export async function getTeacherOwnedLearningSession(userId: string, sessionId: 
     },
   });
 
-  if (!session || !session.topic || !hasTeacherOwnership(session.topic.classroom.teacherUserId, userId)) {
+  if (!session || !session.topic) {
     return null;
   }
 
@@ -113,12 +100,7 @@ export async function getTeacherOwnedLearningInteraction(
     },
   });
 
-  if (
-    !interaction ||
-    !interaction.session ||
-    !interaction.session.topic ||
-    !hasTeacherOwnership(interaction.session.topic.classroom.teacherUserId, userId)
-  ) {
+  if (!interaction || !interaction.session || !interaction.session.topic) {
     return null;
   }
 

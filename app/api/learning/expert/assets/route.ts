@@ -39,15 +39,7 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      data: frameworks
-        .filter((framework) => {
-          const ownerId =
-            framework.topic?.classroom.teacherUserId ??
-            framework.classroom?.teacherUserId ??
-            null;
-          return ownerId === session.user.id;
-        })
-        .map((framework) => ({
+      data: frameworks.map((framework) => ({
           id: framework.id,
           name: framework.name,
           description: framework.description,

@@ -8,7 +8,6 @@ import {
 } from "@/db/schema";
 
 export async function listExpertReviewCases(params: {
-  teacherUserId: string;
   topicId?: string | null;
   sessionId?: string | null;
 }) {
@@ -41,14 +40,7 @@ export async function listExpertReviewCases(params: {
     orderBy: [desc(expertReviewCases.updatedAt)],
   });
 
-  return reviewCases.filter((reviewCase) => {
-    const ownerId =
-      reviewCase.topic?.classroom.teacherUserId ??
-      reviewCase.classroomStudent?.classroom.teacherUserId ??
-      reviewCase.session?.topic?.classroom.teacherUserId ??
-      null;
-    return ownerId === params.teacherUserId;
-  });
+  return reviewCases;
 }
 
 export async function createExpertReviewCase(params: {
@@ -196,7 +188,7 @@ export async function maybeCreateDraftCrystallizationFromReviewCases(params: {
   });
 }
 
-export async function listExpertReviewQueue(params: { teacherUserId: string }) {
+export async function listExpertReviewQueue() {
   const reviewCases = await getDb().query.expertReviewCases.findMany({
     where: and(
       eq(expertReviewCases.status, "open"),
@@ -225,16 +217,7 @@ export async function listExpertReviewQueue(params: { teacherUserId: string }) {
     orderBy: [desc(expertReviewCases.createdAt)],
   });
 
-  return reviewCases
-    .filter((reviewCase) => {
-      const ownerId =
-        reviewCase.topic?.classroom.teacherUserId ??
-        reviewCase.classroomStudent?.classroom.teacherUserId ??
-        reviewCase.session?.topic?.classroom.teacherUserId ??
-        null;
-      return ownerId === params.teacherUserId;
-    })
-    .map((reviewCase) => ({
+  return reviewCases.map((reviewCase) => ({
     key: reviewCase.id,
     sessionId: reviewCase.sessionId,
     topicId: reviewCase.topicId,

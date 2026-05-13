@@ -1171,8 +1171,9 @@ export async function getSurveyDetailsData(surveyId: string): Promise<SurveyDeta
     }
   }
 
-  const shareableUrl = survey.shareableLink
-    ? `${env.APP_BASE_URL}/s/${survey.shareableLink}`
+  const publicIdentifier = survey.customSlug ?? survey.shareableLink;
+  const shareableUrl = publicIdentifier
+    ? `${env.APP_BASE_URL}/s/${publicIdentifier}`
     : null;
 
   return {
@@ -1187,6 +1188,7 @@ export async function getSurveyDetailsData(surveyId: string): Promise<SurveyDeta
       programId: survey.programId,
       brief: briefRow?.brief || null,
       tone: survey.tone,
+      customSlug: survey.customSlug,
       shareableLink: survey.shareableLink,
       shareableUrl,
       participantLimit: survey.participantLimit,
