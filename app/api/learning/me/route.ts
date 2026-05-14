@@ -19,8 +19,8 @@ export async function GET() {
 
     if (memberships.length === 0) {
       return NextResponse.json({
-        role: "non-student",
-        student: null,
+        role: session.user.role === "student" ? "student" : "non-student",
+        student: session.user.role === "student" ? [] : null,
         invitations: invitations.map((invitation) => ({
           id: invitation.id,
           classroomId: invitation.classroomId,
