@@ -10,7 +10,7 @@ import {
   withErrorHandling,
 } from "@/lib/action-wrapper";
 
-import { appLocaleSchema, requireTeachingSession } from "./shared";
+import { appLocaleSchema, requireTeachingSession, revalidateLearningUi } from "./shared";
 
 const createClassroomSchema = z.object({
   title: z.string().trim().min(2),
@@ -34,22 +34,7 @@ export async function createClassroomAction(input: unknown): Promise<ActionResul
       gradeLabel: body.gradeLabel,
       defaultContentLocale,
     });
+    revalidateLearningUi();
     return { success: true, data: result };
   }, "createClassroomAction");
-}
-
-export async function getTeacherClassroomsAction(): Promise<ActionResult<unknown>> {
-  return withErrorHandling(async () => {
-    const { session } = await requireTeachingSession();
-    const data = await ClassroomService.getTeacherClassrooms(session.user.id);
-    return { success: true, data };
-  }, "getTeacherClassroomsAction");
-}
-
-export async function getClassroomAssignedSurveyProgressAction(classroomId: string): Promise<ActionResult<unknown>> {
-  return withErrorHandling(async () => {
-    const { session } = await requireTeachingSession();
-    const data = await ClassroomService.getClassroomSurveyProgress({ classroomId, teacherUserId: session.user.id });
-    return { success: true, data };
-  }, "getClassroomAssignedSurveyProgressAction");
 }

@@ -17,27 +17,24 @@ import {
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
-import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/query-keys";
-import { fetchLearningMe, fetchMyPatterns } from "@/lib/api/learning";
+import type { LearningMeData } from "@/lib/api/learning";
 
-export function StudentSidebar() {
+type PatternSummary = Awaited<ReturnType<typeof import("@/lib/server/app-queries").getMyPatternSummaries>>;
+
+export function StudentSidebar({
+    initialLearningMe,
+    initialPatterns,
+}: {
+    initialLearningMe: LearningMeData;
+    initialPatterns: PatternSummary;
+}) {
     const pathname = usePathname();
     const router = useRouter();
-
-    const { data: learningMe, isLoading: isMeLoading } = useQuery({
-        queryKey: queryKeys.learning.me,
-        queryFn: fetchLearningMe,
-    });
-
-    const { data: patterns, isLoading: isPatternsLoading } = useQuery({
-        queryKey: queryKeys.learning.myPatterns,
-        queryFn: fetchMyPatterns,
-    });
-
-    const memberships = learningMe?.role === "student" ? learningMe.student : [];
-    const invitations = learningMe?.invitations ?? [];
-    const recentPatterns = patterns?.success ? patterns.data.slice(0, 2) : [];
+    const memberships = initialLearningMe.role === "student" ? initialLearningMe.student : [];
+    const invitations = initialLearningMe.invitations ?? [];
+    const recentPatterns = initialPatterns.success ? initialPatterns.data.slice(0, 2) : [];
+    const isMeLoading = false;
+    const isPatternsLoading = false;
 
     // Collect all pending surveys from all memberships
     const pendingSurveys = memberships.flatMap(m => 

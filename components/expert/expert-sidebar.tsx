@@ -1,6 +1,18 @@
 "use client";
 
-import { ShieldCheck, ChevronLeft, LogOut, Settings, BookOpen, Cpu } from "lucide-react";
+import {
+  ShieldCheck,
+  ChevronLeft,
+  LogOut,
+  Settings,
+  BookOpen,
+  Cpu,
+  BrainCircuit,
+  FlaskConical,
+  Sparkles,
+  Inbox,
+  Boxes,
+} from "lucide-react";
 import toast from "react-hot-toast";
 
 import { authClient } from "@/lib/auth-client";
@@ -15,6 +27,11 @@ export function ExpertSidebar() {
     { name: "Pedagogical Frameworks", href: "/expert/frameworks", icon: BookOpen },
     { name: "Runtime Models", href: "/expert/runtime-models", icon: Cpu },
     { name: "QA Review", href: "/expert/qa", icon: ShieldCheck },
+    { name: "Knowledge Inbox", href: "/expert/knowledge", icon: Inbox },
+    { name: "Runtime Preview", href: "/expert/runtime-preview", icon: Sparkles },
+    { name: "Eval Baselines", href: "/expert/evals", icon: FlaskConical },
+    { name: "AI Ops", href: "/expert/ai-ops", icon: BrainCircuit },
+    { name: "Few-Shot Library", href: "/expert/few-shot", icon: Boxes },
     { name: "Settings", href: "/expert/settings", icon: Settings },
   ];
 

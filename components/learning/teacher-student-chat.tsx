@@ -5,8 +5,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Brain, History, Loader2, Send } from "lucide-react";
 import { useLocale } from "next-intl";
 
+import {
+  answerTeacherStudentQuestionAction,
+  persistTeacherChatSessionAction,
+} from "@/app/actions/classroom";
 import { GlassPanel } from "@/components/learning/glass-panel";
 import { SectionHeading } from "@/components/learning/section-heading";
+import { getFriendlyActionError } from "@/lib/action-ux";
 import { cn } from "@/lib/utils";
 
 type TeacherChatSource = {
@@ -87,27 +92,18 @@ export function TeacherStudentChat({
   }, [messages, isSubmitting]);
 
   async function persistSession(nextMessages: TeacherChatMessage[], sessionId?: string | null) {
-    const response = await fetch(`/api/learning/students/${studentId}/chat-sessions`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        sessionId: sessionId ?? currentSessionId,
-        language: locale,
-        messages: nextMessages,
-      }),
+    const result = await persistTeacherChatSessionAction({
+      studentId,
+      sessionId: sessionId ?? currentSessionId ?? undefined,
+      language: locale,
+      messages: nextMessages,
     });
 
-    if (!response.ok) {
-      throw new Error("Failed to save teacher chat session.");
+    if (!result.success) {
+      throw new Error(getFriendlyActionError(result.error));
     }
 
-    const payload = (await response.json()) as {
-      session: { id: string; title: string };
-    };
-    setCurrentSessionId(payload.session.id);
+    setCurrentSessionId(result.data.id);
     void sessionsQuery.refetch();
   }
 
@@ -154,40 +150,27 @@ export function TeacherStudentChat({
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`/api/learning/students/${studentId}/chat`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          language: locale,
-          messages: optimisticMessages,
-        }),
+      const result = await answerTeacherStudentQuestionAction({
+        studentId,
+        language: locale,
+        messages: optimisticMessages,
       });
 
-      if (!response.ok) {
-        throw new Error("Teacher copilot could not answer right now.");
+      if (!result.success) {
+        throw new Error(getFriendlyActionError(result.error));
       }
-
-      const payload = (await response.json()) as {
-        success: true;
-        data: {
-          response: string;
-          confidence: string;
-          sources: TeacherChatSource[];
-        };
-      };
 
       const assistantMessage: TeacherChatMessage = {
         id: `assistant-${Date.now()}`,
         role: "assistant",
-        content: payload.data.response,
+        content: result.data.answer,
         parts: [
           {
             type: "sources",
-            confidence: payload.data.confidence,
-            sources: payload.data.sources,
+            sources: result.data.evidenceHighlights.map((item, index) => ({
+              id: `evidence-${index + 1}`,
+              label: item,
+            })),
           },
         ],
       };

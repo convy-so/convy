@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import {
   ArrowUpRight,
   BookOpen,
+  ExternalLink,
   FileText,
   GraduationCap,
   Loader2,
@@ -25,6 +26,8 @@ import { useTeacherLearningWorkspace } from "@/components/learning/hooks/use-tea
 import { InviteStudentModal } from "@/components/learning/invite-student-modal";
 import { LogInterventionModal } from "@/components/learning/log-intervention-modal";
 import { StatsCard } from "@/components/dashboard/stats-card";
+import type { getTeacherLearningWorkspaceInitialData } from "@/lib/server/app-queries";
+import { appLocaleLabels } from "@/lib/i18n/config";
 
 function countReadyTopics(statuses: string[]) {
   return statuses.filter((status) => status === "active").length;
@@ -44,7 +47,15 @@ function formatInterventionStatusLabel(value: string) {
     .join(" ");
 }
 
-export function TeacherLearningHome() {
+function formatTopicStatusLabel(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+const TOPIC_STATUSES = ["draft", "active", "paused", "archived"] as const;
+
+export function TeacherLearningHome(
+  initialData: Awaited<ReturnType<typeof getTeacherLearningWorkspaceInitialData>>,
+) {
   const [isCreateClassModalOpen, setIsCreateClassModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
@@ -82,7 +93,7 @@ export function TeacherLearningHome() {
     setSelectedClassroomId,
     setSelectedTopicId,
     setSelectedStudentId,
-  } = useTeacherLearningWorkspace();
+  } = useTeacherLearningWorkspace(initialData);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -93,6 +104,8 @@ export function TeacherLearningHome() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const materials = materialsQuery.data?.data ?? [];
 
   return (
     <div className="min-h-screen bg-slate-50/20 pb-20 pt-10">
@@ -219,7 +232,7 @@ export function TeacherLearningHome() {
                   </div>
                   <h2 className="text-3xl font-medium text-slate-900 leading-tight">{selectedDirectoryClassroom.title}</h2>
                   <p className="text-slate-500 font-medium text-sm">
-                    {selectedDirectoryClassroom.gradeLabel} <span className="mx-2 opacity-30">|</span> {selectedDirectoryClassroom.subject ?? "General"}
+                    {selectedDirectoryClassroom.gradeLabel} <span className="mx-2 opacity-30">|</span> {selectedDirectoryClassroom.subject ?? "General"} <span className="mx-2 opacity-30">|</span> {appLocaleLabels[selectedDirectoryClassroom.defaultContentLocale]}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-4">
@@ -409,16 +422,33 @@ export function TeacherLearningHome() {
                             Topic Deep Dive
                           </div>
                           <h2 className="text-3xl font-medium text-slate-900 md:text-5xl leading-tight">{selectedTopic.title}</h2>
-                          <div className="flex items-center gap-4">
+                          <div className="flex flex-wrap items-center gap-4">
                             <span className="px-3 py-1.5 rounded-lg bg-white text-slate-500 font-medium text-xs border border-slate-100 shadow-none">
                                {selectedTopic.subjectLabel ?? selectedTopic.subject ?? "General"}
                             </span>
-                            <button 
-                              onClick={() => updateTopicStatusMutation.mutate({ topicId: selectedTopic.id, status: selectedTopic.status === "active" ? "paused" : "active" })}
-                              className={`px-5 py-2.5 rounded-xl font-medium text-xs transition-all border ${selectedTopic.status === "active" ? "bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100" : "bg-slate-900 text-white border-slate-950 hover:bg-slate-800"}`}
-                            >
-                              {selectedTopic.status === "active" ? "Pause Resource" : "Activate Resource"}
-                            </button>
+                            <span className="px-3 py-1.5 rounded-lg bg-slate-50 text-slate-500 font-medium text-xs border border-slate-100 shadow-none">
+                              {appLocaleLabels[selectedTopic.contentLocale ?? "en"]}
+                            </span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {TOPIC_STATUSES.map((status) => {
+                                const isSelected = selectedTopic.status === status;
+                                return (
+                                  <button
+                                    key={status}
+                                    type="button"
+                                    onClick={() => updateTopicStatusMutation.mutate({ topicId: selectedTopic.id, status })}
+                                    disabled={isSelected || updateTopicStatusMutation.isPending}
+                                    className={`px-4 py-2.5 rounded-xl font-medium text-xs transition-all border ${
+                                      isSelected
+                                        ? "bg-slate-900 text-white border-slate-950"
+                                        : "bg-white text-slate-500 border-slate-100 hover:border-slate-200 hover:bg-slate-50"
+                                    } disabled:opacity-60`}
+                                  >
+                                    {formatTopicStatusLabel(status)}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -494,8 +524,52 @@ export function TeacherLearningHome() {
                           </div>
                           <div className="p-8 bg-white border border-slate-100 rounded-2xl space-y-4">
                             <div className="text-[10px] font-medium uppercase tracking-widest text-slate-400">Total Indexed</div>
-                            <div className="text-xl font-medium text-slate-900">{materialsQuery.data?.data.length ?? 0} Assets</div>
+                            <div className="text-xl font-medium text-slate-900">{materials.length} Assets</div>
                             <p className="text-xs text-slate-500 font-medium leading-relaxed">{reports[0] ? `${reports[0].masteryPercent}% Mastery` : "No interactions recorded yet."}</p>
+                          </div>
+                        </div>
+
+                        <div className="bg-white rounded-2xl border border-slate-100 p-8 space-y-6">
+                          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                            <div>
+                              <div className="text-[10px] font-medium uppercase tracking-widest text-slate-400">Teacher Assets</div>
+                              <h4 className="mt-2 text-xl font-medium text-slate-900">Open the exact material set grounding this topic</h4>
+                            </div>
+                            <Link href={`/dashboard/learning/topics/${selectedTopic.id}`} className="inline-flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-medium text-slate-600 transition-all hover:bg-slate-100">
+                              Full Topic Detail <ArrowUpRight className="h-3.5 w-3.5" />
+                            </Link>
+                          </div>
+
+                          <div className="space-y-3">
+                            {materials.length ? (
+                              materials.map((material) => (
+                                <div key={material.id} className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-4">
+                                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                    <div className="min-w-0">
+                                      <div className="truncate text-sm font-medium text-slate-900">{material.title}</div>
+                                      <div className="mt-1 text-[11px] font-medium uppercase tracking-widest text-slate-400">
+                                        {material.materialKind} <span className="mx-1 opacity-40">•</span> {material.mimeType}
+                                      </div>
+                                      <div className="mt-2 text-xs font-medium text-slate-500">
+                                        Extraction: {material.extractionStatus} <span className="mx-2 opacity-30">|</span> Indexing: {material.indexingStatus}
+                                      </div>
+                                    </div>
+                                    <a
+                                      href={`/api/media/learning/${material.id}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-xs font-medium text-slate-600 transition-all hover:border-slate-200 hover:text-slate-900"
+                                    >
+                                      Open Asset <ExternalLink className="h-3.5 w-3.5" />
+                                    </a>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="rounded-2xl border border-dashed border-slate-100 bg-slate-50/50 px-4 py-5 text-sm text-slate-400">
+                                No materials uploaded for this topic yet.
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>

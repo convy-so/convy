@@ -7,16 +7,8 @@ import type { AppLocale } from "@/lib/i18n/config";
 
 const SUPPORTED_LOCALE_SET = new Set<string>(["en", "fr", "de"]);
 
-export class AuthError extends Error {
-  constructor(
-    public readonly code: "UNAUTHENTICATED" | "EMAIL_NOT_VERIFIED" | "FORBIDDEN",
-    message?: string,
-  ) {
-    super(message ?? code);
-  }
-}
-
-export type PlatformRole = "student" | "teacher" | "expert" | "admin";
+export { AuthError, type PlatformRole, type RolePrincipal } from "./roles";
+import { AuthError } from "./roles";
 
 function isSupportedLocale(value: unknown): value is AppLocale {
   return typeof value === "string" && SUPPORTED_LOCALE_SET.has(value);
@@ -73,30 +65,10 @@ export async function getVerifiedSession(
   return session;
 }
 
-export type RolePrincipal = { role?: string | null; emailVerified?: boolean | null };
-
-export function getPlatformRole(user: RolePrincipal | null | undefined): PlatformRole {
-  if (!user) return "student";
-  if (user.role === "admin" || user.role === "expert" || user.role === "teacher" || user.role === "student") {
-    return user.role;
-  }
-  return "student";
-}
-
-export function isAdmin(user: RolePrincipal | null | undefined): boolean {
-  return Boolean(user && user.emailVerified !== false && getPlatformRole(user) === "admin");
-}
-
-export function isExpert(user: RolePrincipal | null | undefined): boolean {
-  if (!user || user.emailVerified === false) return false;
-  const role = getPlatformRole(user);
-  return role === "expert" || role === "admin";
-}
-
-export function assertAdmin(user: RolePrincipal | null | undefined): void {
-  if (!isAdmin(user)) throw new AuthError("FORBIDDEN", "Admin access required");
-}
-
-export function assertExpert(user: RolePrincipal | null | undefined): void {
-  if (!isExpert(user)) throw new AuthError("FORBIDDEN", "Expert access required");
-}
+export {
+  getPlatformRole,
+  isAdmin,
+  isExpert,
+  assertAdmin,
+  assertExpert,
+} from "./roles";

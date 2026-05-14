@@ -5,7 +5,7 @@ import { z } from "zod";
 import * as StudentService from "@/lib/learning/student-service";
 import { ActionResult, validateInput, withErrorHandling } from "@/lib/action-wrapper";
 
-import { ensureClassroomOwnerAccess, requireTeachingSession } from "./shared";
+import { ensureClassroomOwnerAccess, requireTeachingSession, revalidateLearningUi } from "./shared";
 
 const inviteStudentSchema = z.object({
   classroomId: z.string().min(1),
@@ -16,6 +16,11 @@ const inviteStudentSchema = z.object({
 const bulkInviteStudentsSchema = z.object({
   classroomId: z.string().min(1),
   students: z.array(z.object({ fullName: z.string().trim().min(2), email: z.string().email() })).min(1),
+});
+
+const respondToInvitationSchema = z.object({
+  invitationId: z.string().min(1),
+  decision: z.enum(["accepted", "rejected"]),
 });
 
 export async function inviteStudentToClassroomAction(input: unknown): Promise<ActionResult<unknown>> {
@@ -30,6 +35,7 @@ export async function inviteStudentToClassroomAction(input: unknown): Promise<Ac
       fullName: body.fullName,
       email: body.email,
     });
+    revalidateLearningUi();
     return { success: true, data: result };
   }, "inviteStudentToClassroomAction");
 }
@@ -45,6 +51,23 @@ export async function bulkInviteStudentsToClassroomAction(input: unknown): Promi
       invitedByUserId: session.user.id,
       students: body.students,
     });
+    revalidateLearningUi();
     return { success: true, data: result };
   }, "bulkInviteStudentsToClassroomAction");
+}
+
+export async function respondToInvitationAction(input: unknown): Promise<ActionResult<{ success: boolean }>> {
+  return withErrorHandling(async () => {
+    const body = validateInput(input, respondToInvitationSchema);
+    const { session } = await requireTeachingSession();
+
+    await StudentService.respondToInvitation({
+      invitationId: body.invitationId,
+      userId: session.user.id,
+      decision: body.decision,
+    });
+
+    revalidateLearningUi();
+    return { success: true, data: { success: true } };
+  }, "respondToInvitationAction");
 }

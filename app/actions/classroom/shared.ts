@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { revalidatePath } from "next/cache";
 
 import { resolveTeacherOwnedClassroomAccess } from "@/lib/access/classroom-access";
 import { getVerifiedSession } from "@/lib/auth/dal";
@@ -28,4 +29,8 @@ export async function ensureClassroomOwnerAccess(userId: string, classroomId: st
   }
 
   return classroomAccess.classroom;
+}
+
+export function revalidateLearningUi() {
+  revalidatePath("/", "layout");
 }

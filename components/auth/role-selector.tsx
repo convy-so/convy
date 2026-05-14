@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { GraduationCap, ChevronDown, Check, UserCircle, Presentation } from "lucide-react";
+import { GraduationCap, ChevronDown, Check, Presentation } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface RoleSelectorProps {

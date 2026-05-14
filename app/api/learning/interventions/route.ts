@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
 
-import {
-  createLearningInterventionAction,
-  getLearningInterventionsAction,
-} from "@/app/actions/classroom";
+import { getVerifiedSession } from "@/lib/auth/dal";
+import * as InterventionService from "@/lib/learning/intervention-service";
+import { resolveTeacherClassroomAccess } from "@/lib/learning/teacher-route-access";
 
 export async function GET(request: Request) {
   try {
+    const session = await getVerifiedSession();
     const { searchParams } = new URL(request.url);
     const classroomId = searchParams.get("classroomId");
     const topicId = searchParams.get("topicId") ?? undefined;
@@ -18,29 +18,21 @@ export async function GET(request: Request) {
       return apiError("VALIDATION_ERROR", "classroomId is required");
     }
 
-    const result = await getLearningInterventionsAction({
+    const accessResult = await resolveTeacherClassroomAccess({
+      teacherUserId: session.user.id,
+      classroomId,
+    });
+    if (accessResult.error) {
+      return apiError("UNAUTHORIZED", "Unauthorized");
+    }
+
+    const data = await InterventionService.listInterventions({
       classroomId,
       topicId,
       classroomStudentId,
     });
-    if (!result.success) return apiError("INTERNAL_ERROR", result.error.message || "Failed to load interventions", { details: result.error.details });
-    return NextResponse.json(result);
+    return NextResponse.json({ success: true, data });
   } catch (error) {
     return apiUnhandledError(error, "Failed to load interventions", "/api/learning/interventions");
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    const payload: unknown = await request.json().catch(() => null);
-    const result = await createLearningInterventionAction(
-      (typeof payload === "object" && payload !== null ? payload : {}) as Parameters<
-        typeof createLearningInterventionAction
-      >[0],
-    );
-    if (!result.success) return apiError("VALIDATION_ERROR", result.error.message || "Failed to create intervention", { details: result.error.details });
-    return NextResponse.json(result);
-  } catch (error) {
-    return apiUnhandledError(error, "Failed to create intervention", "/api/learning/interventions");
   }
 }

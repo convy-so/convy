@@ -3,13 +3,15 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Loader2, Plus, Sparkles, BookOpen, Hash, AlertCircle } from "lucide-react";
-import { createTopic } from "@/lib/api/learning";
+import { createLearningTopicAction } from "@/app/actions/classroom";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
 import toast from "react-hot-toast";
 import { InputField } from "@/components/auth/input-field";
 import { TextareaField } from "@/components/auth/textarea-field";
 import { cn } from "@/lib/utils";
+import { getFriendlyActionError } from "@/lib/action-ux";
+import { appLocaleLabels, appLocales, type AppLocale } from "@/lib/i18n/config";
 
 type CreateTopicModalProps = {
     isOpen: boolean;
@@ -43,8 +45,14 @@ export function CreateTopicModal({
     const queryClient = useQueryClient();
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
+    const [subjectKey, setSubjectKey] = useState("");
     const [subjectLabel, setSubjectLabel] = useState("");
     const [outcomes, setOutcomes] = useState("");
+    const [contentLocale, setContentLocale] = useState<AppLocale>("en");
+    const [teacherSummary, setTeacherSummary] = useState("");
+    const [scopeNotes, setScopeNotes] = useState("");
+    const [notationNotes, setNotationNotes] = useState("");
+    const [rigorNotes, setRigorNotes] = useState("");
     
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -57,8 +65,14 @@ export function CreateTopicModal({
     const resetForm = () => {
         setTitle("");
         setDescription("");
+        setSubjectKey("");
         setSubjectLabel("");
         setOutcomes("");
+        setContentLocale("en");
+        setTeacherSummary("");
+        setScopeNotes("");
+        setNotationNotes("");
+        setRigorNotes("");
         setError(null);
     };
 
@@ -77,13 +91,24 @@ export function CreateTopicModal({
         try {
             const parsedOutcomes = parseOutcomes(outcomes);
             
-            await createTopic({
+            const result = await createLearningTopicAction({
                 classroomId,
                 title: title.trim(),
                 description: description.trim() || undefined,
+                subjectKey: subjectKey.trim() || undefined,
                 subjectLabel: subjectLabel.trim() || undefined,
+                contentLocale,
                 learningOutcomes: parsedOutcomes,
+                sourceBoundary: {
+                    teacherSummary: teacherSummary.trim() || description.trim() || undefined,
+                    scopeNotes: scopeNotes.split("\n").map((line) => line.trim()).filter(Boolean),
+                    notationNotes: notationNotes.split("\n").map((line) => line.trim()).filter(Boolean),
+                    rigorNotes: rigorNotes.split("\n").map((line) => line.trim()).filter(Boolean),
+                },
             });
+            if (!result.success) {
+                throw new Error(getFriendlyActionError(result.error));
+            }
 
             toast.success("Topic curriculum defined");
             await queryClient.invalidateQueries({
@@ -162,6 +187,15 @@ export function CreateTopicModal({
                                 onChange={(e) => setSubjectLabel(e.target.value)}
                             />
 
+                            <InputField
+                                label="Subject key"
+                                id="subject-key"
+                                placeholder="e.g. physics.mechanics"
+                                icon={Hash}
+                                value={subjectKey}
+                                onChange={(e) => setSubjectKey(e.target.value)}
+                            />
+
                             <TextareaField
                                 label="Overview"
                                 id="topic-overview"
@@ -171,6 +205,23 @@ export function CreateTopicModal({
                                 placeholder="Brief context for this curriculum topic..."
                                 className="resize-none"
                             />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="block text-sm font-medium text-[#292929]">
+                                Content language
+                            </label>
+                            <select
+                                value={contentLocale}
+                                onChange={(e) => setContentLocale(e.target.value as AppLocale)}
+                                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-[#292929] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[#292929]"
+                            >
+                                {appLocales.map((locale) => (
+                                    <option key={locale} value={locale}>
+                                        {appLocaleLabels[locale]}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
 
                         <TextareaField
@@ -184,6 +235,49 @@ export function CreateTopicModal({
                             className="resize-none font-mono text-[13px] leading-5"
                             required
                         />
+
+                        <TextareaField
+                            label="Teacher grounding summary"
+                            id="topic-teacher-summary"
+                            value={teacherSummary}
+                            onChange={(e) => setTeacherSummary(e.target.value)}
+                            rows={3}
+                            placeholder="Summarize the boundaries, framing, and what the tutor should emphasize for this topic."
+                            className="resize-none"
+                        />
+
+                        <div className="grid gap-4 md:grid-cols-3">
+                            <TextareaField
+                                label="Scope notes"
+                                id="topic-scope-notes"
+                                value={scopeNotes}
+                                onChange={(e) => setScopeNotes(e.target.value)}
+                                rows={4}
+                                placeholder={"Stay within Newtonian mechanics\nAvoid relativistic edge cases"}
+                                helperText="One note per line."
+                                className="resize-none text-[13px] leading-5"
+                            />
+                            <TextareaField
+                                label="Notation notes"
+                                id="topic-notation-notes"
+                                value={notationNotes}
+                                onChange={(e) => setNotationNotes(e.target.value)}
+                                rows={4}
+                                placeholder={"Use F = ma\nPrefer SI units"}
+                                helperText="One note per line."
+                                className="resize-none text-[13px] leading-5"
+                            />
+                            <TextareaField
+                                label="Rigor notes"
+                                id="topic-rigor-notes"
+                                value={rigorNotes}
+                                onChange={(e) => setRigorNotes(e.target.value)}
+                                rows={4}
+                                placeholder={"Derive before summarizing\nShow assumptions explicitly"}
+                                helperText="One note per line."
+                                className="resize-none text-[13px] leading-5"
+                            />
+                        </div>
                     </div>
 
                     <div className="flex items-center justify-end gap-3 border-t border-gray-100 bg-gray-50/60 px-6 py-4">

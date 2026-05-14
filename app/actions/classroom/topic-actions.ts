@@ -4,9 +4,13 @@ import { z } from "zod";
 
 import { resolveUiLocaleForContentCreation } from "@/lib/i18n/resolve-locale";
 import * as TopicService from "@/lib/learning/topic-service";
+import { getDb } from "@/db";
+import { learningTopics } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { getTeacherTopicAccess } from "@/lib/learning/access";
 import { ActionResult, validateInput, withErrorHandling } from "@/lib/action-wrapper";
 
-import { appLocaleSchema, ensureClassroomOwnerAccess, requireTeachingSession } from "./shared";
+import { appLocaleSchema, ensureClassroomOwnerAccess, requireTeachingSession, revalidateLearningUi } from "./shared";
 
 const createLearningTopicSchema = z.object({
   classroomId: z.string().min(1),
@@ -18,6 +22,11 @@ const createLearningTopicSchema = z.object({
   learningOutcomes: z.array(z.any()).min(1),
   sourceBoundary: z.any().optional(),
   contentLocale: appLocaleSchema.optional(),
+});
+
+const updateTopicStatusSchema = z.object({
+  topicId: z.string().min(1),
+  status: z.enum(["draft", "active", "paused", "archived"]),
 });
 
 export async function createLearningTopicAction(input: unknown): Promise<ActionResult<unknown>> {
@@ -40,6 +49,30 @@ export async function createLearningTopicAction(input: unknown): Promise<ActionR
       sourceBoundary: body.sourceBoundary,
     });
 
+    revalidateLearningUi();
     return { success: true, data: { id: result.id, classroomId: result.classroomId, title: result.title, learningOutcomeCount: result.learningOutcomes.length, contentLocale: result.contentLocale } };
   }, "createLearningTopicAction");
+}
+
+export async function updateTopicStatusAction(input: unknown): Promise<ActionResult<{ id: string; status: string }>> {
+  return withErrorHandling(async () => {
+    const body = validateInput(input, updateTopicStatusSchema);
+    const { session } = await requireTeachingSession();
+    const topic = await getTeacherTopicAccess(session.user.id, body.topicId);
+
+    if (!topic) {
+      throw new Error("Unauthorized");
+    }
+
+    await getDb()
+      .update(learningTopics)
+      .set({
+        status: body.status,
+        updatedAt: new Date(),
+      })
+      .where(eq(learningTopics.id, body.topicId));
+
+    revalidateLearningUi();
+    return { success: true, data: { id: body.topicId, status: body.status } };
+  }, "updateTopicStatusAction");
 }

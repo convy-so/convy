@@ -1,14 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Brain, Compass, Loader2, Sparkles, User2 } from "lucide-react";
+import { Brain, Compass, Sparkles, User2 } from "lucide-react";
 
-import { fetchLearningMe, fetchMyPatterns, fetchOnboardingState } from "@/lib/api/learning";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  type LearningMeData,
+} from "@/lib/api/learning";
 import { GlassPanel } from "@/components/learning/glass-panel";
 import { MetricTile } from "@/components/learning/metric-tile";
 import { SectionHeading } from "@/components/learning/section-heading";
+import type {
+  getMyPatternSummaries,
+  getOnboardingStateData,
+} from "@/lib/server/app-queries";
 
 const patternScopes = ["all", "global", "subject"] as const;
 
@@ -40,34 +44,29 @@ function getStringValue(record: Record<string, unknown> | null | undefined, key:
   return typeof value === "string" ? value : null;
 }
 
-export function StudentProfilePage() {
+type PatternSummaryResult = Awaited<ReturnType<typeof getMyPatternSummaries>>;
+
+export function StudentProfilePage({
+  initialLearningMe,
+  initialPatterns,
+  initialOnboardingState,
+}: {
+  initialLearningMe: LearningMeData;
+  initialPatterns: PatternSummaryResult;
+  initialOnboardingState?: Awaited<ReturnType<typeof getOnboardingStateData>>;
+}) {
   const [selectedScope, setSelectedScope] = useState<"all" | "global" | "subject">("all");
-
-  const learningMeQuery = useQuery({
-    queryKey: queryKeys.learning.me,
-    queryFn: fetchLearningMe,
-  });
-
-  const patternsQuery = useQuery({
-    queryKey: queryKeys.learning.myPatterns,
-    queryFn: fetchMyPatterns,
-  });
-
-  const onboardingQuery = useQuery({
-    queryKey: queryKeys.learning.onboarding,
-    queryFn: fetchOnboardingState,
-  });
 
   const memberships = useMemo(
     () =>
-      learningMeQuery.data?.role === "student"
-        ? learningMeQuery.data.student
+      initialLearningMe.role === "student"
+        ? initialLearningMe.student
         : [],
-    [learningMeQuery.data],
+    [initialLearningMe],
   );
   const profile =
-    onboardingQuery.data && onboardingQuery.data.completed ? onboardingQuery.data.profile ?? null : null;
-  const patterns = patternsQuery.data?.data ?? [];
+    initialOnboardingState?.completed ? initialOnboardingState.profile ?? null : null;
+  const patterns = initialPatterns.data ?? [];
   const filteredPatterns =
     selectedScope === "all"
       ? patterns
@@ -128,13 +127,7 @@ export function StudentProfilePage() {
               </h2>
             </div>
 
-            {onboardingQuery.isLoading ? (
-              <div className="mt-6 flex items-center gap-2 text-sm text-slate-500">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading your onboarding profile...
-              </div>
-            ) : (
-              <div className="mt-6 space-y-5">
+            <div className="mt-6 space-y-5">
                 <div className="rounded-[20px] border border-white/70 bg-white/75 p-5">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
                     Primary interests
@@ -214,7 +207,6 @@ export function StudentProfilePage() {
                   </div>
                 </GlassPanel>
               </div>
-            )}
           </GlassPanel>
         </div>
 
@@ -244,12 +236,7 @@ export function StudentProfilePage() {
             </div>
 
             <div className="mt-6 space-y-4">
-              {patternsQuery.isLoading ? (
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading pattern summaries...
-                </div>
-              ) : filteredPatterns.length ? (
+              {filteredPatterns.length ? (
                 filteredPatterns.map((pattern) => (
                   <div key={`${pattern.scopeType}-${pattern.subjectKey ?? "global"}`} className="rounded-[20px] border border-white/70 bg-white/75 p-5">
                     <div className="flex items-center justify-between gap-3">
