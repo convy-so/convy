@@ -16,6 +16,8 @@ import {
   User as UserIcon,
   Bell,
   Inbox,
+  TrendingUp,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -38,7 +40,7 @@ export function DashboardSidebar() {
 
   const learningMeQuery = useQuery({ queryKey: queryKeys.learning.me, queryFn: fetchLearningMe, retry: false });
 
-  const isStudent = learningMeQuery.data?.role === "student";
+  const isStudent = user?.role === "student" || learningMeQuery.data?.role === "student";
   const isAdminOrExpert = user?.role === "admin" || user?.role === "expert";
 
   const navigation = useMemo(() => {
@@ -51,7 +53,9 @@ export function DashboardSidebar() {
 
     if (isStudent) {
       return [
-        { name: "Learning", href: "/dashboard/learning", icon: GraduationCap },
+        { name: t("Dashboard"), href: "/student/dashboard", icon: LayoutDashboard },
+        { name: "My Progress", href: "/student/progress", icon: TrendingUp },
+        { name: "Learning Sessions", href: "/student/sessions", icon: BookOpen },
       ];
     }
 
@@ -67,7 +71,9 @@ export function DashboardSidebar() {
   const bottomNavigation = useMemo(() => {
     if (isStudent) {
       return [
-        { name: t("Settings"), href: "/dashboard/settings", icon: Settings },
+        { name: "Notifications", href: "/student/notifications", icon: Bell },
+        { name: t("Profile"), href: "/student/profile", icon: UserIcon },
+        { name: t("Settings"), href: "/student/settings", icon: Settings },
       ];
     }
 

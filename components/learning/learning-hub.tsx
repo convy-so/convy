@@ -8,8 +8,10 @@ import { queryKeys } from "@/lib/query-keys";
 import { GlassPanel } from "@/components/learning/glass-panel";
 import { TeacherLearningHome } from "@/components/learning/teacher-learning-home";
 import { StudentLearningHome } from "@/components/learning/student-learning-home";
+import { useAuth } from "../providers/auth-provider";
 
 export function LearningHub() {
+  const { user } = useAuth();
   const learningMeQuery = useQuery({
     queryKey: queryKeys.learning.me,
     queryFn: fetchLearningMe,
@@ -25,6 +27,7 @@ export function LearningHub() {
   }
 
   if (learningMeQuery.isError) {
+    console.error("LearningMeQuery error:", learningMeQuery.error);
     return (
       <div className="mx-auto max-w-[1200px] px-6 py-12">
         <GlassPanel className="px-6 py-8">
@@ -56,10 +59,17 @@ export function LearningHub() {
     );
   }
 
-  if (learningMe.role === "student") {
+  const isStudent = user?.role === "student" || learningMe.role === "student";
+
+  if (isStudent) {
     return (
       <StudentLearningHome
-        learningMe={{ ...learningMe, invitations: learningMe.invitations ?? [] }}
+        learningMe={{ 
+          ...learningMe, 
+          role: "student",
+          student: learningMe.student ?? [],
+          invitations: learningMe.invitations ?? [] 
+        } as any}
       />
     );
   }
