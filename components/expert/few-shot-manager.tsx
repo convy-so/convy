@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { z } from "zod";
 import { Plus, X, Tag as TagIcon, Loader2, Save } from "lucide-react";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
@@ -19,6 +20,8 @@ type FewShotExample = {
 interface FewShotManagerProps {
   initialExamples: FewShotExample[];
 }
+
+const jsonObjectSchema = z.record(z.string(), z.unknown());
 
 export function FewShotManager({ initialExamples }: FewShotManagerProps) {
   const router = useRouter();
@@ -52,18 +55,23 @@ export function FewShotManager({ initialExamples }: FewShotManagerProps) {
   const handleSubmit = async () => {
     try {
       setIsPending(true);
-      let parsedContent;
+      let parsedJson: unknown;
       try {
-        parsedContent = JSON.parse(contentJson);
+        parsedJson = JSON.parse(contentJson);
       } catch {
         toast.error("Invalid JSON content");
+        return;
+      }
+      const parsedContent = jsonObjectSchema.safeParse(parsedJson);
+      if (!parsedContent.success) {
+        toast.error("Example JSON must be an object");
         return;
       }
 
       const result = await createExpertFewShotExample({
         feature,
         tags,
-        content: parsedContent,
+        content: parsedContent.data,
       });
 
       if (!result.success) {

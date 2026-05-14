@@ -7,7 +7,7 @@ import { useLocale } from "next-intl";
 
 import {
   answerTeacherStudentQuestionAction,
-  persistTeacherChatSessionAction,
+  saveTeacherStudentChatSessionAction,
 } from "@/app/actions/classroom";
 import { GlassPanel } from "@/components/learning/glass-panel";
 import { SectionHeading } from "@/components/learning/section-heading";
@@ -47,10 +47,10 @@ function extractConfidence(message: TeacherChatMessage) {
 }
 
 export function TeacherStudentChat({
-  studentId,
+  classroomStudentId,
   studentName,
 }: {
-  studentId: string;
+  classroomStudentId: string;
   studentName: string;
 }) {
   const locale = useLocale();
@@ -71,11 +71,14 @@ export function TeacherStudentChat({
   );
 
   const sessionsQuery = useQuery({
-    queryKey: ["learningTeacherChatSessions", studentId],
+    queryKey: ["teacherStudentChatSessions", classroomStudentId],
     queryFn: async () => {
-      const response = await fetch(`/api/learning/students/${studentId}/chat-sessions`, {
-        credentials: "include",
-      });
+      const response = await fetch(
+        `/api/learning/students/${classroomStudentId}/chat-sessions`,
+        {
+          credentials: "include",
+        },
+      );
       if (!response.ok) {
         throw new Error("Failed to load teacher chat sessions.");
       }
@@ -92,8 +95,8 @@ export function TeacherStudentChat({
   }, [messages, isSubmitting]);
 
   async function persistSession(nextMessages: TeacherChatMessage[], sessionId?: string | null) {
-    const result = await persistTeacherChatSessionAction({
-      studentId,
+    const result = await saveTeacherStudentChatSessionAction({
+      classroomStudentId,
       sessionId: sessionId ?? currentSessionId ?? undefined,
       language: locale,
       messages: nextMessages,
@@ -109,7 +112,7 @@ export function TeacherStudentChat({
 
   async function loadSession(sessionId: string) {
     const response = await fetch(
-      `/api/learning/students/${studentId}/chat-sessions/${sessionId}`,
+      `/api/learning/students/${classroomStudentId}/chat-sessions/${sessionId}`,
       { credentials: "include" },
     );
 
@@ -138,6 +141,7 @@ export function TeacherStudentChat({
   async function submitQuestion(question: string) {
     const normalized = question.trim();
     if (!normalized || isSubmitting) return;
+    const previousMessages = messages;
 
     const userMessage: TeacherChatMessage = {
       id: `user-${Date.now()}`,
@@ -151,7 +155,7 @@ export function TeacherStudentChat({
 
     try {
       const result = await answerTeacherStudentQuestionAction({
-        studentId,
+        classroomStudentId,
         language: locale,
         messages: optimisticMessages,
       });
@@ -176,20 +180,11 @@ export function TeacherStudentChat({
       };
 
       const nextMessages = [...optimisticMessages, assistantMessage];
-      setMessages(nextMessages);
       await persistSession(nextMessages);
+      setMessages(nextMessages);
     } catch (error) {
-      setMessages((current) => [
-        ...current,
-        {
-          id: `assistant-error-${Date.now()}`,
-          role: "assistant",
-          content:
-            error instanceof Error
-              ? error.message
-              : "Teacher copilot could not answer right now.",
-        },
-      ]);
+      setMessages(previousMessages);
+      setInput(normalized);
     } finally {
       setIsSubmitting(false);
     }

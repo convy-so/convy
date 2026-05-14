@@ -25,7 +25,6 @@ import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { finalizeSurveyCreationAction } from "@/app/actions/survey";
 import { useAuth } from "@/components/providers/auth-provider";
-import { PublishSurveyModal } from "@/components/surveys/publish-survey-modal";
 import { useAudioTranscription } from "@/hooks/use-audio-transcription";
 import {
   isCreationMediaDecisionResolved,
@@ -77,12 +76,14 @@ export function CreateSurveyPageClient({
   initialSurveyId = null,
   initialCreationState = null,
   initialSurveyData = null,
+  initialLoadError = null,
 }: {
   locale: string;
   initialLanguage: AppLocale;
   initialSurveyId?: string | null;
   initialCreationState?: InitialSurveyCreationState | null;
   initialSurveyData?: SurveyDetailsResponse | null;
+  initialLoadError?: string | null;
 }) {
   const t = useTranslations("Survey.Create");
   const router = useRouter();
@@ -122,7 +123,6 @@ export function CreateSurveyPageClient({
 
   // Page-local UI state
   const [isVoiceMode, setIsVoiceMode] = useState(false);
-  const [showPublishModal, setShowPublishModal] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isResearching, setIsResearching] = useState(false);
   const [hasAutoGreeted, setHasAutoGreeted] = useState(false);
@@ -142,10 +142,9 @@ export function CreateSurveyPageClient({
     useChat({
       id: "survey-creation-session",
       transport: new DefaultChatTransport({
-        api: "/api/surveys/create-draft",
+        api: "/api/surveys/draft-required",
         fetch: fetch as typeof fetch,
         prepareSendMessagesRequest: async ({
-          api,
           body,
           id,
           messages: msgs,
@@ -153,8 +152,13 @@ export function CreateSurveyPageClient({
           messageId,
         }) => {
           const sid = surveyIdRef.current;
+          if (!sid) {
+            throw new Error(
+              "Survey draft is not initialized. Start the creation session first.",
+            );
+          }
           return {
-            api: sid ? `/api/surveys/${sid}/create` : api,
+            api: `/api/surveys/${sid}/create`,
             body: {
               id,
               messages: msgs,
@@ -279,6 +283,11 @@ export function CreateSurveyPageClient({
     setMessages,
     setSurveyStatus,
   ]);
+
+  useEffect(() => {
+    if (!initialLoadError) return;
+    toast.error(initialLoadError);
+  }, [initialLoadError]);
 
   // Load existing survey from URL param
   useEffect(() => {
@@ -690,6 +699,12 @@ export function CreateSurveyPageClient({
             surveyId ? "bg-transparent" : "",
           )}
         >
+          {initialLoadError ? (
+            <div className="mx-2 mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              {initialLoadError}
+            </div>
+          ) : null}
+
           {/* Header */}
           <div
             className={cn(
@@ -904,13 +919,6 @@ export function CreateSurveyPageClient({
           </div>
         </div>
 
-        {surveyId && (
-          <PublishSurveyModal
-            isOpen={showPublishModal}
-            onClose={() => setShowPublishModal(false)}
-            surveyId={surveyId}
-          />
-        )}
       </div>
     </>
   );

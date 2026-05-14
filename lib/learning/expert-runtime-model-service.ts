@@ -13,7 +13,7 @@ import {
   listOpenConflicts,
 } from "@/lib/learning/storage";
 
-export class ExpertTutorModelService {
+export class ExpertRuntimeModelService {
   async getRuntimeModel(params: {
     topicId: string;
     classroomId?: string | null;
@@ -73,4 +73,4 @@ export class ExpertTutorModelService {
   }
 }
 
-export const expertTutorModelService = new ExpertTutorModelService();
+export const expertRuntimeModelService = new ExpertRuntimeModelService();

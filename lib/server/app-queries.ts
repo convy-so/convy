@@ -48,8 +48,8 @@ import {
 import { getSurveyPermissionForSession, hasSurveyPermission } from "@/lib/survey-access";
 import { normalizeAppLocale, type AppLocale } from "@/lib/i18n/config";
 import type {
+  ClassroomStudentOverviewResponse,
   LearningMeData,
-  StudentOverviewResponse,
   TeacherPatternResponse,
   TopicOverviewResponse,
 } from "@/lib/api/learning";
@@ -283,11 +283,13 @@ export const getMyPatternSummaries = cache(async () => {
   };
 });
 
-export async function getStudentOverviewData(studentId: string): Promise<StudentOverviewResponse> {
+export async function getClassroomStudentOverviewData(
+  classroomStudentId: string,
+): Promise<ClassroomStudentOverviewResponse> {
   const session = await getVerifiedSession();
   const accessResult = await resolveTeacherStudentAccess({
     teacherUserId: session.user.id,
-    classroomStudentId: studentId,
+    classroomStudentId,
   });
 
   if (accessResult.error) {
@@ -295,7 +297,7 @@ export async function getStudentOverviewData(studentId: string): Promise<Student
   }
 
   const membership = await getDb().query.classroomStudents.findFirst({
-    where: eq(classroomStudents.id, studentId),
+    where: eq(classroomStudents.id, classroomStudentId),
     with: {
       classroom: true,
       interestProfile: true,
@@ -394,11 +396,13 @@ export async function getStudentOverviewData(studentId: string): Promise<Student
   };
 }
 
-export async function getStudentPatternData(studentId: string): Promise<TeacherPatternResponse> {
+export async function getClassroomStudentPatternData(
+  classroomStudentId: string,
+): Promise<TeacherPatternResponse> {
   const session = await getVerifiedSession();
   const accessResult = await resolveTeacherStudentAccess({
     teacherUserId: session.user.id,
-    classroomStudentId: studentId,
+    classroomStudentId,
   });
 
   if (accessResult.error) {
@@ -406,7 +410,7 @@ export async function getStudentPatternData(studentId: string): Promise<TeacherP
   }
 
   const membership = await getDb().query.classroomStudents.findFirst({
-    where: (table, { eq: eqTable }) => eqTable(table.id, studentId),
+    where: (table, { eq: eqTable }) => eqTable(table.id, classroomStudentId),
     with: {
       classroom: true,
       studentModel: {
@@ -622,7 +626,10 @@ export async function getTopicReportsData(topicId: string) {
   };
 }
 
-export async function getTopicQuestionsData(topicId: string, studentId?: string) {
+export async function getTopicQuestionsData(
+  topicId: string,
+  classroomStudentId?: string,
+) {
   const session = await getVerifiedSession();
   const topic = await getTeacherTopicAccess(session.user.id, topicId);
 
@@ -631,11 +638,11 @@ export async function getTopicQuestionsData(topicId: string, studentId?: string)
   }
 
   const interactions = await getDb().query.learningInteractions.findMany({
-    where: studentId
+    where: classroomStudentId
       ? and(
           eq(learningInteractions.topicId, topicId),
           isNull(learningInteractions.sessionId),
-          eq(learningInteractions.classroomStudentId, studentId),
+          eq(learningInteractions.classroomStudentId, classroomStudentId),
         )
       : and(
           eq(learningInteractions.topicId, topicId),
@@ -981,7 +988,7 @@ export async function getTeacherLearningWorkspaceInitialData() {
       ])
     : [undefined, undefined, undefined];
 
-  const initialStudentId = initialStudents?.data[0]?.id ?? null;
+  const initialClassroomStudentId = initialStudents?.data[0]?.id ?? null;
   const initialTopicId = initialTopics?.data[0]?.id ?? null;
 
   const [
@@ -989,18 +996,20 @@ export async function getTeacherLearningWorkspaceInitialData() {
     initialReadiness,
     initialReportsPayload,
     initialQuestions,
-    initialStudentPatterns,
+    initialClassroomStudentPatterns,
     initialInterventions,
   ] = await Promise.all([
     initialTopicId ? getTopicMaterialsData(initialTopicId) : Promise.resolve(undefined),
     initialTopicId ? getTopicReadinessData(initialTopicId) : Promise.resolve(undefined),
     initialTopicId ? getTopicReportsData(initialTopicId) : Promise.resolve(undefined),
     initialTopicId ? getTopicQuestionsData(initialTopicId) : Promise.resolve(undefined),
-    initialStudentId ? getStudentPatternData(initialStudentId) : Promise.resolve(undefined),
-    initialClassroomId && initialStudentId
+    initialClassroomStudentId
+      ? getClassroomStudentPatternData(initialClassroomStudentId)
+      : Promise.resolve(undefined),
+    initialClassroomId && initialClassroomStudentId
       ? getLearningInterventionsData({
           classroomId: initialClassroomId,
-          classroomStudentId: initialStudentId,
+          classroomStudentId: initialClassroomStudentId,
           topicId: initialTopicId ?? undefined,
         })
       : Promise.resolve(undefined),
@@ -1015,7 +1024,7 @@ export async function getTeacherLearningWorkspaceInitialData() {
     initialReadiness,
     initialReportsPayload,
     initialQuestions,
-    initialStudentPatterns,
+    initialClassroomStudentPatterns,
     initialInterventions,
   };
 }

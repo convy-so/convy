@@ -1,9 +1,18 @@
 "use server";
 
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { getDb } from "@/db";
+import { classroomStudents, learningTopics } from "@/db/schema";
 import * as InterventionService from "@/lib/learning/intervention-service";
-import { ActionResult, validateInput, withErrorHandling } from "@/lib/action-wrapper";
+import {
+  ActionResult,
+  ActionError,
+  NotFoundError,
+  validateInput,
+  withErrorHandling,
+} from "@/lib/action-wrapper";
 
 import { ensureClassroomOwnerAccess, requireTeachingSession, revalidateLearningUi } from "./shared";
 
@@ -31,6 +40,33 @@ export async function createLearningInterventionAction(input: unknown): Promise<
     const { session } = await requireTeachingSession();
     await ensureClassroomOwnerAccess(session.user.id, body.classroomId);
 
+    const classroomStudent = await getDb().query.classroomStudents.findFirst({
+      where: and(
+        eq(classroomStudents.id, body.classroomStudentId),
+        eq(classroomStudents.classroomId, body.classroomId),
+      ),
+    });
+
+    if (!classroomStudent) {
+      throw new NotFoundError("Student");
+    }
+
+    if (body.topicId) {
+      const topic = await getDb().query.learningTopics.findFirst({
+        where: and(
+          eq(learningTopics.id, body.topicId),
+          eq(learningTopics.classroomId, body.classroomId),
+        ),
+      });
+
+      if (!topic) {
+        throw new ActionError(
+          "Topic does not belong to the selected classroom",
+          "VALIDATION_ERROR",
+        );
+      }
+    }
+
     const result = await InterventionService.createIntervention({ ...body, createdByUserId: session.user.id });
     revalidateLearningUi();
     return { success: true, data: result };
@@ -40,9 +76,24 @@ export async function createLearningInterventionAction(input: unknown): Promise<
 export async function updateLearningInterventionAction(input: unknown): Promise<ActionResult<unknown>> {
   return withErrorHandling(async () => {
     const body = validateInput(input, learningInterventionUpdateSchema);
-    await requireTeachingSession();
+    const { session } = await requireTeachingSession();
+    const intervention = await InterventionService.getInterventionById(body.interventionId);
 
-    const result = await InterventionService.updateIntervention(body);
+    if (!intervention) {
+      throw new NotFoundError("Intervention");
+    }
+
+    await ensureClassroomOwnerAccess(session.user.id, intervention.classroomId);
+
+    const result = await InterventionService.updateIntervention({
+      ...body,
+      classroomId: intervention.classroomId,
+    });
+
+    if (!result) {
+      throw new NotFoundError("Intervention");
+    }
+
     revalidateLearningUi();
     return { success: true, data: result };
   }, "updateLearningInterventionAction");

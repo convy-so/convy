@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, Loader2, Share2, Copy, Check, Sparkles, ExternalLink } from "lucide-react";
+import { X, Loader2, Share2, Copy, Check, ExternalLink } from "lucide-react";
 import toast from "react-hot-toast";
 import { publishSurveyAction } from "@/app/actions/survey";
 import { getFriendlyActionError } from "@/lib/action-ux";
@@ -30,26 +30,10 @@ export function PublishSurveyModal({
   const [description, setDescription] = useState("");
   const [isVoice, setIsVoice] = useState(initialIsVoice);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
-
-  const handleSuggestTitle = async () => {
-    setIsGeneratingTitle(true);
-    try {
-      // TODO: Call AI to suggest title based on survey data
-      // For now, just show a placeholder
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setTitle("Customer Satisfaction Survey");
-      toast.success(t("Toasts.TitleSuggestionGenerated"));
-    } catch {
-      toast.error(t("Toasts.TitleSuggestionFailed"));
-    } finally {
-      setIsGeneratingTitle(false);
-    }
-  };
 
   const handlePublish = async () => {
     if (!title.trim()) {
@@ -177,27 +161,13 @@ export function PublishSurveyModal({
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 {t("SurveyTitle")}
               </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder={t("Placeholders.Title")}
-                  className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300"
-                />
-                <button
-                  onClick={handleSuggestTitle}
-                  disabled={isGeneratingTitle}
-                  className="px-3 py-2 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                  title={t("SuggestTitle.Tooltip")}
-                >
-                  {isGeneratingTitle ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={t("Placeholders.Title")}
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300"
+              />
             </div>
 
             {/* Description input (optional) */}

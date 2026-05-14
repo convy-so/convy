@@ -18,7 +18,7 @@ type LogInterventionModalProps = {
     isOpen: boolean;
     onClose: () => void;
     classroomId: string;
-    studentId: string;
+    classroomStudentId: string;
     studentName: string;
     topicId?: string | null;
 };
@@ -40,7 +40,7 @@ export function LogInterventionModal({
     isOpen, 
     onClose, 
     classroomId,
-    studentId,
+    classroomStudentId,
     studentName,
     topicId
 }: LogInterventionModalProps) {
@@ -69,14 +69,14 @@ export function LogInterventionModal({
     };
 
     const handleSubmit = async () => {
-        if (!title.trim() || !studentId) return;
+        if (!title.trim() || !classroomStudentId) return;
 
         setIsSubmitting(true);
 
         try {
             const result = await createLearningInterventionAction({
                 classroomId,
-                classroomStudentId: studentId,
+                classroomStudentId,
                 topicId: topicId ?? undefined,
                 interventionType: type,
                 priority,
@@ -92,7 +92,7 @@ export function LogInterventionModal({
             await queryClient.invalidateQueries({
                 queryKey: queryKeys.learning.interventions(
                     classroomId, 
-                    studentId, 
+                    classroomStudentId, 
                     topicId ?? undefined
                 ),
             });

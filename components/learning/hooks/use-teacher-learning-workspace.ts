@@ -12,10 +12,10 @@ import {
 import { createSurveyDraftAction } from "@/app/actions/survey";
 import {
   fetchClassroomAssignedSurveys,
+  fetchClassroomStudentPatterns,
   fetchClassroomStudents,
   fetchClassroomTopics,
   fetchLearningInterventions,
-  fetchStudentPatterns,
   fetchTeacherClassrooms,
   fetchTopicMaterials,
   fetchTopicQuestions,
@@ -34,7 +34,9 @@ export function useTeacherLearningWorkspace(
   const queryClient = useQueryClient();
   const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(null);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
-  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [selectedClassroomStudentId, setSelectedClassroomStudentId] = useState<
+    string | null
+  >(null);
 
   const classroomsQuery = useQuery({
     queryKey: queryKeys.learning.classrooms,
@@ -93,7 +95,9 @@ export function useTeacherLearningWorkspace(
   const students = useMemo(() => studentsQuery.data?.data ?? [], [studentsQuery.data]);
   const topics = useMemo(() => topicsQuery.data?.data ?? [], [topicsQuery.data]);
   const selectedStudent =
-    students.find((student) => student.id === selectedStudentId) ?? students[0] ?? null;
+    students.find((student) => student.id === selectedClassroomStudentId) ??
+    students[0] ??
+    null;
   const selectedTopic =
     topics.find((topic) => topic.id === selectedTopicId) ?? topics[0] ?? null;
 
@@ -161,19 +165,21 @@ export function useTeacherLearningWorkspace(
         : undefined,
     staleTime: 30_000,
   });
-  const studentPatternsQuery = useQuery({
-    queryKey: selectedStudent ? queryKeys.learning.studentPatterns(selectedStudent.id) : ["learningStudentPatterns", "idle"],
+  const classroomStudentPatternsQuery = useQuery({
+    queryKey: selectedStudent
+      ? queryKeys.learning.classroomStudentPatterns(selectedStudent.id)
+      : ["learningClassroomStudentPatterns", "idle"],
     queryFn: async () => {
       if (!selectedStudent) {
         throw new Error("Missing student");
       }
-      return fetchStudentPatterns(selectedStudent.id);
+      return fetchClassroomStudentPatterns(selectedStudent.id);
     },
     enabled: Boolean(selectedStudent),
     initialData:
-      initialData.initialStudentPatterns &&
+      initialData.initialClassroomStudentPatterns &&
       selectedStudent?.id === (initialData.initialStudents?.data[0]?.id ?? null)
-        ? initialData.initialStudentPatterns
+        ? initialData.initialClassroomStudentPatterns
         : undefined,
     staleTime: 30_000,
   });
@@ -327,7 +333,8 @@ export function useTeacherLearningWorkspace(
       survey.students.find((student) => student.classroomStudentId === selectedStudent?.id) ??
       null,
   }));
-  const patternSummary = studentPatternsQuery.data?.data.profiles[0]?.studentSummary ?? null;
+  const patternSummary =
+    classroomStudentPatternsQuery.data?.data.profiles[0]?.studentSummary ?? null;
 
   return {
     classroomsQuery,
@@ -345,7 +352,7 @@ export function useTeacherLearningWorkspace(
     readinessQuery,
     reportsQuery,
     questionsQuery,
-    studentPatternsQuery,
+    classroomStudentPatternsQuery,
     assignedSurveysQuery,
     interventionsQuery,
     uploadMaterialMutation,
@@ -364,7 +371,7 @@ export function useTeacherLearningWorkspace(
     setSelectedClassroomId,
     selectedTopicId,
     setSelectedTopicId,
-    selectedStudentId,
-    setSelectedStudentId,
+    selectedClassroomStudentId,
+    setSelectedClassroomStudentId,
   };
 }

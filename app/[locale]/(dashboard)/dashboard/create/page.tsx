@@ -22,6 +22,7 @@ export default async function CreateSurveyPage({
   let initialSurveyId: string | null = null;
   let initialCreationState = null;
   let initialSurveyData = null;
+  let initialLoadError: string | null = null;
 
   if (requestedSurveyId) {
     try {
@@ -30,10 +31,14 @@ export default async function CreateSurveyPage({
         getSurveyDetailsData(requestedSurveyId),
       ]);
       initialSurveyId = requestedSurveyId;
-    } catch {
+    } catch (error) {
       initialSurveyId = null;
       initialCreationState = null;
       initialSurveyData = null;
+      initialLoadError =
+        error instanceof Error
+          ? error.message
+          : "Existing survey draft could not be loaded.";
     }
   }
 
@@ -51,6 +56,7 @@ export default async function CreateSurveyPage({
         initialSurveyId={initialSurveyId}
         initialCreationState={initialCreationState}
         initialSurveyData={initialSurveyData}
+        initialLoadError={initialLoadError}
       />
     </Suspense>
   );

@@ -1,6 +1,6 @@
 import { frameworkEngine } from "@/lib/learning/framework-engine";
 import { contentScopeService } from "@/lib/learning/content-scope-service";
-import { expertTutorModelService } from "@/lib/learning/expert-tutor-model-service";
+import { expertRuntimeModelService } from "@/lib/learning/expert-runtime-model-service";
 import { studentModelService } from "@/lib/learning/student-model-service";
 import { tutoringPromptService } from "@/lib/learning/tutoring-prompt-service";
 import {
@@ -44,7 +44,7 @@ export class TutorRuntimeService {
     classroomStudentId: string;
     studentUserId?: string | null;
   }) {
-    const runtimeModel = await expertTutorModelService.getRuntimeModel({
+    const runtimeModel = await expertRuntimeModelService.getRuntimeModel({
       topicId: params.topicId,
       classroomId: params.classroomId,
     });
@@ -64,7 +64,7 @@ export class TutorRuntimeService {
   }
 
   private async decideFrameworkState(params: {
-    runtimeModel: Awaited<ReturnType<typeof expertTutorModelService.getRuntimeModel>>;
+    runtimeModel: Awaited<ReturnType<typeof expertRuntimeModelService.getRuntimeModel>>;
     state: LearningSessionState;
     latestSnapshot: StudentModelSnapshot;
     latestStudentMessage: string;

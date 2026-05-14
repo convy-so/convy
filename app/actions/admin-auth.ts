@@ -1,7 +1,7 @@
 "use server";
 
 import { env } from "@/lib/env";
-import { sendVerificationEmail } from "@/lib/email";
+import { EmailService } from "@/lib/email-service";
 import { getRedisClient } from "@/lib/redis";
 import { timingSafeEqual } from "crypto";
 import { headers } from "next/headers";
@@ -62,9 +62,10 @@ export async function requestAdminLogin(email: string, password: string) {
   // Use the existing email verification template but direct to our custom route
   const verificationUrl = `${env.APP_BASE_URL}/api/admin-verify/${token}`;
 
-  await sendVerificationEmail({
+  await EmailService.sendVerificationEmail({
     email,
-    url: verificationUrl,
+    token, // The service doesn't use this if customUrl is provided, but it's required in the type
+    customUrl: verificationUrl,
     name: "Admin",
   });
 

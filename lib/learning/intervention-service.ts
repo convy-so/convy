@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
@@ -24,6 +24,12 @@ export type InterventionRecord = {
     email: string;
   };
 };
+
+export async function getInterventionById(interventionId: string) {
+  return await getDb().query.learningInterventions.findFirst({
+    where: eq(learningInterventions.id, interventionId),
+  });
+}
 
 /**
  * List interventions for a classroom, optionally filtered by topic or student
@@ -102,6 +108,7 @@ export async function createIntervention(params: {
  */
 export async function updateIntervention(params: {
   interventionId: string;
+  classroomId: string;
   status: "planned" | "in_progress" | "completed" | "dismissed";
   notes?: string;
   dueAt?: string;
@@ -118,7 +125,12 @@ export async function updateIntervention(params: {
       completedAt,
       updatedAt: now,
     })
-    .where(eq(learningInterventions.id, params.interventionId))
+    .where(
+      and(
+        eq(learningInterventions.id, params.interventionId),
+        eq(learningInterventions.classroomId, params.classroomId),
+      ),
+    )
     .returning();
 
   return record;

@@ -17,7 +17,7 @@
  * never crashes.
  */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { fewShotExamples } from "@/db/schema/ai";
@@ -84,6 +84,19 @@ export function buildFewShotRetrievalContent(params: {
   return [`Feature: ${params.feature}`, tagLine, contentText].filter(Boolean).join("\n");
 }
 
+export async function prepareFewShotExampleIndex(params: {
+  feature: string;
+  tags: string[];
+  content: Record<string, unknown>;
+}) {
+  const retrievalContent = buildFewShotRetrievalContent(params);
+  const embedding = await generateEmbedding(retrievalContent, {
+    feature: params.feature,
+  });
+
+  return { retrievalContent, embedding };
+}
+
 /**
  * Re-generates the `retrievalContent` and `embedding` for an existing
  * few-shot example record. Call this immediately after insert or update so
@@ -95,8 +108,7 @@ export async function indexFewShotExample(params: {
   tags: string[];
   content: Record<string, unknown>;
 }) {
-  const retrievalContent = buildFewShotRetrievalContent(params);
-  const embedding = await generateEmbedding(retrievalContent, { feature: params.feature });
+  const { retrievalContent, embedding } = await prepareFewShotExampleIndex(params);
 
   await getDb()
     .update(fewShotExamples)
@@ -195,9 +207,7 @@ export async function getDynamicFewShotExamples({
     const hydrated = await db.query.fewShotExamples.findMany({
       where: and(
         featureFilter,
-        sql`${fewShotExamples.id} = ANY(ARRAY[${sql.raw(
-          finalIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(","),
-        )}])`,
+        inArray(fewShotExamples.id, finalIds),
       ),
     });
 
@@ -210,6 +220,26 @@ export async function getDynamicFewShotExamples({
       feature,
       ...serializeError(error),
     });
-    return [];
+
+    try {
+      const fallbackRows = await getDb().query.fewShotExamples.findMany({
+        where: and(
+          eq(fewShotExamples.feature, feature),
+          eq(fewShotExamples.isActive, true),
+        ),
+        orderBy: [desc(fewShotExamples.updatedAt)],
+        limit,
+      });
+
+      return fallbackRows
+        .map((row) => row.content as PromptExample)
+        .filter((row) => row !== undefined);
+    } catch (fallbackError) {
+      log.error("Few-shot fallback retrieval failed", {
+        feature,
+        ...serializeError(fallbackError),
+      });
+      return [];
+    }
   }
 }

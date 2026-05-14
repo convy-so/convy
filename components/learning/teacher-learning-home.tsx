@@ -92,7 +92,7 @@ export function TeacherLearningHome(
     patternSummary,
     setSelectedClassroomId,
     setSelectedTopicId,
-    setSelectedStudentId,
+    setSelectedClassroomStudentId,
   } = useTeacherLearningWorkspace(initialData);
 
   useEffect(() => {
@@ -147,7 +147,7 @@ export function TeacherLearningHome(
                         onClick={() => {
                           setSelectedClassroomId(classroom.id);
                           setSelectedTopicId(null);
-                          setSelectedStudentId(null);
+                          setSelectedClassroomStudentId(null);
                           setIsClassDropdownOpen(false);
                         }}
                         className="flex items-center justify-between w-full px-4 py-3 text-xs font-medium text-slate-500 hover:bg-slate-50 transition-colors text-left"
@@ -274,7 +274,7 @@ export function TeacherLearningHome(
                       <button
                         key={student.id}
                         type="button"
-                        onClick={() => setSelectedStudentId(student.id)}
+                        onClick={() => setSelectedClassroomStudentId(student.id)}
                         className={`w-full group rounded-xl border p-5 text-left transition-all ${selectedStudent?.id === student.id ? "border-violet-500 bg-violet-50 text-violet-700" : "border-slate-50 bg-slate-50/50 hover:bg-white hover:border-slate-200 text-slate-600"}`}
                       >
                         <div className="flex items-center justify-between gap-4">
@@ -730,7 +730,7 @@ export function TeacherLearningHome(
               isOpen={isInterventionModalOpen}
               onClose={() => setIsInterventionModalOpen(false)}
               classroomId={selectedAccessibleClassroomId}
-              studentId={selectedStudent.id}
+              classroomStudentId={selectedStudent.id}
               studentName={selectedStudent.fullName}
               topicId={selectedTopic?.id}
             />

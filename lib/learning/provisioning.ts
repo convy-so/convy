@@ -4,7 +4,7 @@ import { nanoid } from "nanoid";
 import { getDb } from "@/db";
 import { classroomStudents, studentAccessTokens, users } from "@/db/schema";
 import { auth } from "@/lib/auth";
-import { sendStudentActivationEmail } from "@/lib/email";
+import { EmailService } from "@/lib/email-service";
 import { env } from "@/lib/env";
 import { defaultAppLocale, normalizeAppLocale } from "@/lib/i18n/config";
 import { generateOpaqueToken, hashOpaqueToken } from "@/lib/learning/tokens";
@@ -134,11 +134,12 @@ export async function provisionManagedStudentAccount(params: {
   );
   const activationLink = `${env.APP_BASE_URL}/${locale}/student-access/activate?token=${activationToken}`;
 
-  await sendStudentActivationEmail({
+  await EmailService.sendStudentActivationEmail({
     email: normalizedEmail,
+    invitationId: activationToken,
     studentName: classroomStudent.fullName,
     classroomName: classroomStudent.classroom.title,
-    activationLink,
+    customUrl: activationLink,
     locale,
   });
 

@@ -12,11 +12,11 @@ export async function GET(
 ) {
   try {
     const session = await getVerifiedSession();
-    const { studentId } = await params;
+    const { studentId: classroomStudentId } = await params;
 
     const accessResult = await resolveTeacherStudentAccess({
       teacherUserId: session.user.id,
-      classroomStudentId: studentId,
+      classroomStudentId,
     });
 
     if (accessResult.error === "NOT_FOUND") {
@@ -28,7 +28,7 @@ export async function GET(
     }
 
     const membership = await getDb().query.classroomStudents.findFirst({
-      where: (table, { eq }) => eq(table.id, studentId),
+      where: (table, { eq }) => eq(table.id, classroomStudentId),
       with: {
         classroom: true,
         studentModel: {
@@ -83,6 +83,10 @@ export async function GET(
       },
     });
   } catch (error) {
-    return handleLearningRouteError(error, "Failed to load student model", "/api/learning/students/[studentId]/patterns");
+    return handleLearningRouteError(
+      error,
+      "Failed to load student model",
+      "/api/learning/students/[studentId]/patterns",
+    );
   }
 }

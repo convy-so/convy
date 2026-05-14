@@ -3,7 +3,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 
 import { resolveTeacherOwnedClassroomAccess } from "@/lib/access/classroom-access";
-import { getVerifiedSession } from "@/lib/auth/dal";
+import { getPlatformRole, getVerifiedSession } from "@/lib/auth/dal";
 import {
   ForbiddenError,
   NotFoundError,
@@ -15,6 +15,10 @@ export const appLocaleSchema = z.enum(["en", "fr", "de"]);
 export async function requireTeachingSession() {
   const session = await getVerifiedSession();
   if (!session) throw new UnauthorizedError();
+  const role = getPlatformRole(session.user);
+  if (role !== "teacher" && role !== "admin") {
+    throw new ForbiddenError("Teacher access required.");
+  }
   return { session };
 }
 

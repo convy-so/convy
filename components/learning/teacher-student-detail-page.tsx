@@ -12,8 +12,8 @@ import { MetricTile } from "@/components/learning/metric-tile";
 import { SectionHeading } from "@/components/learning/section-heading";
 import { TeacherStudentChat } from "@/components/learning/teacher-student-chat";
 import type {
-  getStudentOverviewData,
-  getStudentPatternData,
+  getClassroomStudentOverviewData,
+  getClassroomStudentPatternData,
 } from "@/lib/server/app-queries";
 
 function formatDate(value: string | Date | null | undefined) {
@@ -29,8 +29,8 @@ export function TeacherStudentDetailPage({
   initialOverview,
   initialPatterns,
 }: {
-  initialOverview: Awaited<ReturnType<typeof getStudentOverviewData>>;
-  initialPatterns: Awaited<ReturnType<typeof getStudentPatternData>>;
+  initialOverview: Awaited<ReturnType<typeof getClassroomStudentOverviewData>>;
+  initialPatterns: Awaited<ReturnType<typeof getClassroomStudentPatternData>>;
 }) {
   const { student, topics, recentReports, recentInteractions } = initialOverview.data;
   const patterns = initialPatterns.data.profiles ?? [];
@@ -318,7 +318,10 @@ export function TeacherStudentDetailPage({
         </div>
       </section>
 
-      <TeacherStudentChat studentId={student.id} studentName={student.fullName} />
+      <TeacherStudentChat
+        classroomStudentId={student.id}
+        studentName={student.fullName}
+      />
     </div>
   );
 }

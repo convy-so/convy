@@ -53,10 +53,10 @@ export const queryKeys = {
     readiness: (topicId: string) => ["learningReadiness", topicId] as const,
     reports: (topicId: string) => ["learningReports", topicId] as const,
     questions: (topicId: string) => ["learningQuestions", topicId] as const,
-    studentPatterns: (studentId: string) =>
-      ["learningStudentPatterns", studentId] as const,
-    studentOverview: (studentId: string) =>
-      ["learningStudentOverview", studentId] as const,
+    classroomStudentPatterns: (classroomStudentId: string) =>
+      ["learningClassroomStudentPatterns", classroomStudentId] as const,
+    classroomStudentOverview: (classroomStudentId: string) =>
+      ["learningClassroomStudentOverview", classroomStudentId] as const,
     topicOverview: (topicId: string) =>
       ["learningTopicOverview", topicId] as const,
     onboarding: ["learningOnboarding"] as const,

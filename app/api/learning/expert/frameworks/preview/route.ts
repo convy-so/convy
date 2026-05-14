@@ -4,22 +4,22 @@ import { handleLearningRouteError } from "@/lib/learning/route-errors";
 import { z } from "zod";
 
 import { requireExpertSession } from "@/lib/learning/expert-route-guard";
-import { getTeacherOwnedTopic } from "@/lib/learning/expert-access";
+import { getExpertAccessibleTopic } from "@/lib/learning/expert-access";
 import { searchLearningTopicContext } from "@/lib/learning/rag";
 import { previewAssessmentQuestionForTopic } from "@/lib/learning/session-engine";
 
 const previewSchema = z.object({
   topicId: z.string().min(1),
+  questionType: z.string().optional(),
+  difficulty: z.string().optional(),
 });
 
 export async function POST(request: Request) {
   try {
     const expert = await requireExpertSession();
     if ("error" in expert) return expert.error;
-    const { session } = expert;
-
     const body = previewSchema.parse(await request.json());
-    const topic = await getTeacherOwnedTopic(session.user.id, body.topicId);
+    const topic = await getExpertAccessibleTopic(body.topicId);
     if (!topic) {
       return apiError("NOT_FOUND", "Topic not found");
     }
@@ -39,6 +39,8 @@ export async function POST(request: Request) {
         topicId: topic.id,
       },
       currentStageLabel: "Probe",
+      questionType: body.questionType,
+      difficulty: body.difficulty,
     });
 
     return NextResponse.json({
@@ -56,6 +58,10 @@ export async function POST(request: Request) {
       );
     }
 
-    return handleLearningRouteError(error, "Failed to preview question", "expert-assets-preview:post");
+    return handleLearningRouteError(
+      error,
+      "Failed to preview question",
+      "expert-frameworks-preview:post",
+    );
   }
 }
