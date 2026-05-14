@@ -22,14 +22,15 @@ export async function GET(
     }
 
     const url = new URL(request.url);
-    const studentId = url.searchParams.get("studentId");
+    const classroomStudentId =
+      url.searchParams.get("classroomStudentId") ?? url.searchParams.get("studentId");
 
     const interactions = await getDb().query.learningInteractions.findMany({
-      where: studentId
+      where: classroomStudentId
         ? and(
             eq(learningInteractions.topicId, topicId),
             isNull(learningInteractions.sessionId),
-            eq(learningInteractions.classroomStudentId, studentId),
+            eq(learningInteractions.classroomStudentId, classroomStudentId),
           )
         : and(
             eq(learningInteractions.topicId, topicId),

@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { getDb } from "@/db";
-import { learningTeacherChatSessions } from "@/db/schema";
+import { teacherStudentChatSessions } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/dal";
 import {
   ActionError,
@@ -56,15 +56,15 @@ const teacherChatMessageSchema = z.object({
   createdAt: z.string().optional(),
 });
 
-const teacherChatQuestionSchema = z.object({
-  studentId: z.string().min(1),
+const teacherStudentQuestionSchema = z.object({
+  classroomStudentId: z.string().min(1),
   question: z.string().optional(),
   language: z.string().optional(),
   messages: z.array(teacherChatMessageSchema).optional(),
 });
 
-const persistTeacherChatSessionSchema = z.object({
-  studentId: z.string().min(1),
+const saveTeacherStudentChatSessionSchema = z.object({
+  classroomStudentId: z.string().min(1),
   sessionId: z.string().optional(),
   title: z.string().optional(),
   language: z.string().optional(),
@@ -262,11 +262,11 @@ export async function answerTeacherStudentQuestionAction(
 > {
   return withErrorHandling(async () => {
     const session = await getVerifiedSession();
-    const body = validateInput(input, teacherChatQuestionSchema);
+    const body = validateInput(input, teacherStudentQuestionSchema);
 
     const accessResult = await resolveTeacherStudentAccess({
       teacherUserId: session.user.id,
-      classroomStudentId: body.studentId,
+      classroomStudentId: body.classroomStudentId,
     });
 
     if (accessResult.error === "NOT_FOUND") {
@@ -307,16 +307,16 @@ export async function answerTeacherStudentQuestionAction(
   }, "answerTeacherStudentQuestionAction");
 }
 
-export async function persistTeacherChatSessionAction(
+export async function saveTeacherStudentChatSessionAction(
   input: unknown,
 ): Promise<ActionResult<{ id: string; title: string }>> {
   return withErrorHandling(async () => {
     const session = await getVerifiedSession();
-    const body = validateInput(input, persistTeacherChatSessionSchema);
+    const body = validateInput(input, saveTeacherStudentChatSessionSchema);
 
     const accessResult = await resolveTeacherStudentAccess({
       teacherUserId: session.user.id,
-      classroomStudentId: body.studentId,
+      classroomStudentId: body.classroomStudentId,
     });
 
     if (accessResult.error === "NOT_FOUND") {
@@ -335,7 +335,7 @@ export async function persistTeacherChatSessionAction(
 
     if (body.sessionId) {
       const [updated] = await getDb()
-        .update(learningTeacherChatSessions)
+        .update(teacherStudentChatSessions)
         .set({
           title,
           language,
@@ -343,14 +343,14 @@ export async function persistTeacherChatSessionAction(
         })
         .where(
           and(
-            eq(learningTeacherChatSessions.id, body.sessionId),
-            eq(learningTeacherChatSessions.classroomStudentId, body.studentId),
-            eq(learningTeacherChatSessions.userId, session.user.id),
+            eq(teacherStudentChatSessions.id, body.sessionId),
+            eq(teacherStudentChatSessions.classroomStudentId, body.classroomStudentId),
+            eq(teacherStudentChatSessions.teacherUserId, session.user.id),
           ),
         )
         .returning({
-          id: learningTeacherChatSessions.id,
-          title: learningTeacherChatSessions.title,
+          id: teacherStudentChatSessions.id,
+          title: teacherStudentChatSessions.title,
         });
 
       if (!updated) {
@@ -362,21 +362,21 @@ export async function persistTeacherChatSessionAction(
     }
 
     const [created] = await getDb()
-      .insert(learningTeacherChatSessions)
+      .insert(teacherStudentChatSessions)
       .values({
         id: `learn_chat_${crypto.randomUUID()}`,
-        classroomStudentId: body.studentId,
-        userId: session.user.id,
+        classroomStudentId: body.classroomStudentId,
+        teacherUserId: session.user.id,
         language,
         title,
         messages: body.messages,
       })
       .returning({
-        id: learningTeacherChatSessions.id,
-        title: learningTeacherChatSessions.title,
+        id: teacherStudentChatSessions.id,
+        title: teacherStudentChatSessions.title,
       });
 
     revalidateLearningUi();
     return { success: true, data: created };
-  }, "persistTeacherChatSessionAction");
+  }, "saveTeacherStudentChatSessionAction");
 }

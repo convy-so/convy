@@ -60,7 +60,7 @@ async function DashboardContent({ authHeaders }: { authHeaders: Headers | string
       title: "Start Learning",
       description: "Create a new learning topic for your students",
       icon: Sparkles,
-      href: "/dashboard/learning/create",
+      href: "/dashboard/learning",
       color: "from-blue-600 to-indigo-600",
     },
     {

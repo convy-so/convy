@@ -8,10 +8,7 @@ import { authSchema } from "@/db/schema";
 import { env } from "@/lib/env";
 import type { AppLocale } from "@/lib/i18n/config";
 import { defaultAppLocale, isAppLocale } from "@/lib/i18n/config";
-import {
-  sendPasswordResetEmail,
-  sendVerificationEmail,
-} from "@/lib/email";
+import { EmailService } from "@/lib/email-service";
 
 function readLocaleField(
   value: object,
@@ -79,10 +76,11 @@ export const auth = betterAuth({
         readLocaleField(user, "uiLocale") ??
         readLocaleField(user, "preferredLanguage") ??
         defaultAppLocale;
-      await sendPasswordResetEmail({
+      await EmailService.sendPasswordResetEmail({
         email: user.email,
         name: user.name,
-        url,
+        token: "",
+        customUrl: url,
         locale,
       });
     },
@@ -96,10 +94,11 @@ export const auth = betterAuth({
         readLocaleField(user, "uiLocale") ??
         readLocaleField(user, "preferredLanguage") ??
         defaultAppLocale;
-      await sendVerificationEmail({
+      await EmailService.sendVerificationEmail({
         email: user.email,
         name: user.name,
-        url,
+        token: "",
+        customUrl: url,
         locale,
       });
     },

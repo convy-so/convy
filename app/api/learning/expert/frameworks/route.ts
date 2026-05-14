@@ -6,10 +6,10 @@ import { getDb } from "@/db";
 import { expertFrameworks } from "@/db/schema";
 import { requireExpertSession } from "@/lib/learning/expert-route-guard";
 import {
-  getTeacherOwnedFramework,
-  getTeacherOwnedTopic,
+  getExpertAccessibleFramework,
+  getExpertAccessibleTopic,
 } from "@/lib/learning/expert-access";
-import { createDefaultDeepFramework } from "@/lib/learning/framework-packages";
+import { createDefaultDeepFramework } from "@/lib/learning/framework-presets";
 import { ensureTopicFramework } from "@/lib/learning/storage";
 import { apiError } from "@/lib/api/error-contract";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
@@ -24,7 +24,6 @@ export async function GET() {
   try {
     const expert = await requireExpertSession();
     if ("error" in expert) return expert.error;
-    const { session } = expert;
     const frameworks = await getDb().query.expertFrameworks.findMany({
       with: {
         topic: {
@@ -49,7 +48,7 @@ export async function GET() {
         })),
     });
   } catch (error) {
-    return handleLearningRouteError(error, "Failed to load frameworks", "expert-assets:get");
+    return handleLearningRouteError(error, "Failed to load frameworks", "expert-frameworks:get");
   }
 }
 
@@ -59,7 +58,7 @@ export async function POST(request: Request) {
     if ("error" in expert) return expert.error;
     const { session } = expert;
     const body = createFrameworkSchema.parse(await request.json());
-    const topic = await getTeacherOwnedTopic(session.user.id, body.topicId);
+    const topic = await getExpertAccessibleTopic(body.topicId);
     if (!topic) {
       return apiError("NOT_FOUND", "Topic not found");
     }
@@ -68,7 +67,7 @@ export async function POST(request: Request) {
       topicId: body.topicId,
       classroomId: topic.classroomId,
     });
-    const framework = await getTeacherOwnedFramework(session.user.id, ensured.id);
+    const framework = await getExpertAccessibleFramework(ensured.id);
     if (!framework) {
       return apiError("NOT_FOUND", "Framework not found");
     }
@@ -110,6 +109,6 @@ export async function POST(request: Request) {
         error.errors[0]?.message ?? "Validation error",
       );
     }
-    return handleLearningRouteError(error, "Failed to create framework", "expert-assets:post");
+    return handleLearningRouteError(error, "Failed to create framework", "expert-frameworks:post");
   }
 }

@@ -19,17 +19,96 @@ import { createSurveySchema } from "@/lib/validation/survey-schemas";
 import { scheduleAnalyticsRefresh } from "@/lib/analytics-scheduler";
 
 import {
-  buildSurveyPublicPath,
   invalidateSurveyCaches,
   requireSurveyActionSession,
   requireSurveyWithPermission,
 } from "./shared";
+import { buildSurveyPublicPath } from "@/lib/surveys/utils";
 import {
   getActiveConductingProfile,
   getActiveCoveragePlan,
   getResearchBrief,
   replaceConductingProfile,
 } from "@/lib/education/storage";
+
+async function activateSurveyWithCanonicalData(params: {
+  surveyId: string;
+  survey: typeof surveys.$inferSelect;
+  titleOverride?: string;
+  descriptionOverride?: string;
+  isVoiceOverride?: boolean;
+}) {
+  const { surveyId, survey, titleOverride, descriptionOverride, isVoiceOverride } = params;
+
+  assertState(
+    survey.status === "sample_review" || survey.status === "draft",
+    "Survey must be in draft or sample_review status to activate",
+  );
+
+  const [briefRow, planRow] = await Promise.all([
+    getResearchBrief(surveyId),
+    getActiveCoveragePlan(surveyId),
+  ]);
+
+  assertState(!!briefRow && !!planRow, "The education brief is not ready yet.");
+  assertState(
+    briefRow.missingFields.length === 0,
+    "The brief is incomplete.",
+  );
+
+  if (survey.status === "sample_review") {
+    assertState(
+      survey.confirmed,
+      "Please confirm at least one sample conversation before activating the survey",
+    );
+  }
+
+  const activeSampleProfile = await getActiveConductingProfile(surveyId, "sample");
+  if (activeSampleProfile?.profile) {
+    await replaceConductingProfile({
+      surveyId,
+      mode: "live",
+      sourcePatchId: activeSampleProfile.sourcePatchId,
+      profile: {
+        ...activeSampleProfile.profile,
+        mode: "live",
+        version: activeSampleProfile.profile.version,
+        createdAt: new Date().toISOString(),
+      },
+    });
+  }
+
+  const shareableLink = survey.shareableLink ?? nanoid(10);
+  const title = titleOverride?.trim() || survey.title || briefRow.brief.title;
+  const description =
+    descriptionOverride?.trim() ||
+    survey.description ||
+    briefRow.brief.learningContext;
+
+  await getDb()
+    .update(surveys)
+    .set({
+      status: "active",
+      shareableLink,
+      title,
+      description,
+      coreObjective: briefRow.brief.researchGoal,
+      programId: briefRow.programId,
+      isVoice: isVoiceOverride ?? survey.isVoice,
+      updatedAt: new Date(),
+    })
+    .where(eq(surveys.id, surveyId));
+
+  const publicUrl = buildSurveyPublicPath(shareableLink);
+  return {
+    id: surveyId,
+    shareableLink,
+    publicUrl,
+    shareUrl: `${env.APP_BASE_URL.replace(/\/+$/, "")}${publicUrl}`,
+    title,
+    description,
+  };
+}
 
 export async function createSurveyDraftAction(
   input: unknown,
@@ -119,44 +198,19 @@ export async function confirmSurveyAction(
       capability: "canPublish",
       message: "Editor access required to publish survey",
     });
-
-    assertState(
-      survey.status === "sample_review" || survey.status === "draft",
-      "Survey must be in draft or sample_review status to confirm",
-    );
-
-    const { getResearchBrief } = await import("@/lib/education/storage");
-    const briefRow = await getResearchBrief(surveyId);
-    assertState(
-      !!briefRow?.brief,
-      "Survey is missing a canonical research brief. Please complete the creation workflow.",
-    );
-
-    if (survey.status === "sample_review") {
-      assertState(
-        survey.confirmed,
-        "Please confirm at least one sample conversation before activating the survey",
-      );
-    }
-
-    const shareableLink = survey.shareableLink ?? `survey-${nanoid(12)}`;
-
-    await getDb()
-      .update(surveys)
-      .set({
-        status: "active",
-        shareableLink,
-      })
-      .where(eq(surveys.id, surveyId));
+    const activatedSurvey = await activateSurveyWithCanonicalData({
+      surveyId,
+      survey,
+    });
 
     await invalidateSurveyCaches(session.user.id, ["recentSurveys"]);
 
     return {
       success: true,
       data: {
-        id: surveyId,
-        shareableLink,
-        publicUrl: buildSurveyPublicPath(shareableLink),
+        id: activatedSurvey.id,
+        shareableLink: activatedSurvey.shareableLink,
+        publicUrl: activatedSurvey.publicUrl,
       },
     };
   }, "confirmSurveyAction");
@@ -319,63 +373,25 @@ export async function publishSurveyAction(
       capability: "canPublish",
       message: "Unauthorized",
     });
-
-    const [briefRow, planRow] = await Promise.all([
-      getResearchBrief(body.surveyId),
-      getActiveCoveragePlan(body.surveyId),
-    ]);
-
-    assertState(!!briefRow && !!planRow, "The education brief is not ready yet.");
-    assertState(
-      briefRow.missingFields.length === 0,
-      "The brief is incomplete.",
-    );
-
-    const activeSampleProfile = await getActiveConductingProfile(body.surveyId, "sample");
-    if (activeSampleProfile?.profile) {
-      await replaceConductingProfile({
-        surveyId: body.surveyId,
-        mode: "live",
-        sourcePatchId: activeSampleProfile.sourcePatchId,
-        profile: {
-          ...activeSampleProfile.profile,
-          mode: "live",
-          version: activeSampleProfile.profile.version,
-          createdAt: new Date().toISOString(),
-        },
-      });
-    }
-
-    const shareableLink = survey.shareableLink ?? nanoid(10);
-    const title = body.title?.trim() || briefRow.brief.title;
-    const description = body.description?.trim() || briefRow.brief.learningContext;
-
-    await getDb()
-      .update(surveys)
-      .set({
-        status: "active",
-        shareableLink,
-        title,
-        description,
-        coreObjective: briefRow.brief.researchGoal,
-        programId: briefRow.programId,
-        isVoice: body.isVoice ?? survey.isVoice,
-        updatedAt: new Date(),
-      })
-      .where(eq(surveys.id, body.surveyId));
+    const activatedSurvey = await activateSurveyWithCanonicalData({
+      surveyId: body.surveyId,
+      survey,
+      titleOverride: body.title,
+      descriptionOverride: body.description,
+      isVoiceOverride: body.isVoice,
+    });
 
     await invalidateSurveyCaches(session.user.id, ["recentSurveys", "stats"]);
 
-    const publicUrl = buildSurveyPublicPath(shareableLink);
     return {
       success: true,
       data: {
-        id: body.surveyId,
-        shareableLink,
-        publicUrl,
-        shareUrl: `${env.APP_BASE_URL.replace(/\/+$/, "")}${publicUrl}`,
-        title,
-        description,
+        id: activatedSurvey.id,
+        shareableLink: activatedSurvey.shareableLink,
+        publicUrl: activatedSurvey.publicUrl,
+        shareUrl: activatedSurvey.shareUrl,
+        title: activatedSurvey.title,
+        description: activatedSurvey.description,
       },
     };
   }, "publishSurveyAction");

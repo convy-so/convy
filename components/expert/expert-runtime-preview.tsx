@@ -42,7 +42,7 @@ export function ExpertRuntimePreview() {
         await fetchJson<{
           success: true;
           data: { question: PreviewPayload; guidanceCount: number };
-        }>("/api/learning/expert/assets/preview", {
+        }>("/api/learning/expert/frameworks/preview", {
           method: "POST",
           body: JSON.stringify({ topicId: topicId.trim(), questionType, difficulty }),
         })
@@ -61,7 +61,7 @@ export function ExpertRuntimePreview() {
         <div>
           <h2 className="text-lg font-bold tracking-tight text-slate-950">Runtime Preview</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Generate a sample question against a topic before publishing assets.
+            Generate a sample question against a topic before publishing a framework version.
           </p>
         </div>
         <Sparkles className="h-5 w-5 text-slate-400" />

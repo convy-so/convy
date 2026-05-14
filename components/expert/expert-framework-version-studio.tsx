@@ -5,7 +5,8 @@ import { ArrowUpCircle, FileJson2, Loader2, Save, Sparkles } from "lucide-react"
 import toast from "react-hot-toast";
 
 import { Link } from "@/i18n/routing";
-import { createDefaultDeepFramework } from "@/lib/learning/framework-packages";
+import { createDefaultDeepFramework } from "@/lib/learning/framework-presets";
+import { expertFrameworkSchema } from "@/lib/learning/types";
 
 type FrameworkVersion = {
   id: string;
@@ -63,13 +64,26 @@ export function ExpertFrameworkVersionStudio({
   const handleCreateVersion = async () => {
     try {
       setIsSavingDraft(true);
-      const artifact = JSON.parse(artifactJson) as Record<string, unknown>;
+      let parsedJson: unknown;
+      try {
+        parsedJson = JSON.parse(artifactJson);
+      } catch {
+        toast.error("Framework JSON is invalid");
+        return;
+      }
+      const artifactResult = expertFrameworkSchema.safeParse(parsedJson);
+      if (!artifactResult.success) {
+        toast.error(
+          artifactResult.error.issues[0]?.message ?? "Framework JSON is invalid",
+        );
+        return;
+      }
       const result = await fetchJson<{ success: true; data: FrameworkVersion }>(
-        `/api/learning/expert/assets/${framework.id}/versions`,
+        `/api/learning/expert/frameworks/${framework.id}/versions`,
         {
           method: "POST",
           body: JSON.stringify({
-            artifact,
+            artifact: artifactResult.data,
             notes: notes.trim() || undefined,
           }),
         },
@@ -88,7 +102,7 @@ export function ExpertFrameworkVersionStudio({
   const handleActivateVersion = async (versionId: string) => {
     try {
       setIsActivatingVersionId(versionId);
-      await fetchJson(`/api/learning/expert/assets/${framework.id}/activate`, {
+      await fetchJson(`/api/learning/expert/frameworks/${framework.id}/activate`, {
         method: "POST",
         body: JSON.stringify({ versionId }),
       });

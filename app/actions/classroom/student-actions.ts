@@ -9,13 +9,12 @@ import { ensureClassroomOwnerAccess, requireTeachingSession, revalidateLearningU
 
 const inviteStudentSchema = z.object({
   classroomId: z.string().min(1),
-  fullName: z.string().trim().min(2),
   email: z.string().email(),
 });
 
 const bulkInviteStudentsSchema = z.object({
   classroomId: z.string().min(1),
-  students: z.array(z.object({ fullName: z.string().trim().min(2), email: z.string().email() })).min(1),
+  students: z.array(z.object({ email: z.string().email() })).min(1),
 });
 
 const respondToInvitationSchema = z.object({
@@ -32,7 +31,6 @@ export async function inviteStudentToClassroomAction(input: unknown): Promise<Ac
     const result = await StudentService.inviteManagedStudentToClassroom({
       classroomId: body.classroomId,
       invitedByUserId: session.user.id,
-      fullName: body.fullName,
       email: body.email,
     });
     revalidateLearningUi();
@@ -45,6 +43,23 @@ export async function bulkInviteStudentsToClassroomAction(input: unknown): Promi
     const body = validateInput(input, bulkInviteStudentsSchema);
     const { session } = await requireTeachingSession();
     await ensureClassroomOwnerAccess(session.user.id, body.classroomId);
+
+    // 1. Perform pre-validation to detect staff accounts, self-invites, or existing members
+    const validation = await StudentService.validateStudentsForInvitation({
+      classroomId: body.classroomId,
+      invitedByUserId: session.user.id,
+      emails: body.students.map((s) => s.email),
+    });
+
+    if (validation.invalid.length > 0) {
+      return { 
+        success: false, 
+        error: {
+          code: "VALIDATION_FAILED", 
+          data: validation
+        }
+      };
+    }
 
     const result = await StudentService.bulkInviteStudents({
       classroomId: body.classroomId,

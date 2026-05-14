@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api/error-contract";
 
 import { getDb } from "@/db";
-import { learningTeacherChatSessions } from "@/db/schema";
+import { teacherStudentChatSessions } from "@/db/schema";
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { resolveTeacherStudentAccess } from "@/lib/learning/teacher-route-access";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
@@ -15,11 +15,11 @@ export async function GET(
 ) {
   try {
     const session = await getVerifiedSession();
-    const { studentId } = await params;
+    const { studentId: classroomStudentId } = await params;
 
     const accessResult = await resolveTeacherStudentAccess({
       teacherUserId: session.user.id,
-      classroomStudentId: studentId,
+      classroomStudentId,
     });
 
     if (accessResult.error === "NOT_FOUND") {
@@ -32,20 +32,20 @@ export async function GET(
 
     const sessions = await getDb()
       .select({
-        id: learningTeacherChatSessions.id,
-        title: learningTeacherChatSessions.title,
-        language: learningTeacherChatSessions.language,
-        createdAt: learningTeacherChatSessions.createdAt,
-        updatedAt: learningTeacherChatSessions.updatedAt,
+        id: teacherStudentChatSessions.id,
+        title: teacherStudentChatSessions.title,
+        language: teacherStudentChatSessions.language,
+        createdAt: teacherStudentChatSessions.createdAt,
+        updatedAt: teacherStudentChatSessions.updatedAt,
       })
-      .from(learningTeacherChatSessions)
+      .from(teacherStudentChatSessions)
       .where(
         and(
-          eq(learningTeacherChatSessions.classroomStudentId, studentId),
-          eq(learningTeacherChatSessions.userId, session.user.id),
+          eq(teacherStudentChatSessions.classroomStudentId, classroomStudentId),
+          eq(teacherStudentChatSessions.teacherUserId, session.user.id),
         ),
       )
-      .orderBy(desc(learningTeacherChatSessions.updatedAt));
+      .orderBy(desc(teacherStudentChatSessions.updatedAt));
 
     return NextResponse.json({ sessions });
   } catch (error) {

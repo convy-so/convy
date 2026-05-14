@@ -8,6 +8,13 @@
       "when": 1778525107758,
       "tag": "0000_nifty_wendigo",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778784030784,
+      "tag": "0001_modern_flatman",
+      "breakpoints": true
     }
   ]
 }

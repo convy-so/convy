@@ -3,6 +3,7 @@
 import { count, desc, eq} from "drizzle-orm";
 import { headers } from "next/headers";
 import { nanoid } from "nanoid";
+import { z } from "zod";
 
 import { getDb } from "@/db";
 import {
@@ -15,7 +16,7 @@ import { getVerifiedSession } from "@/lib/auth/dal";
 import { isExpert } from "@/lib/auth/dal";
 import { getPlatformRole } from "@/lib/auth/dal";
 import { type AuthSessionWithUser } from "@/lib/auth";
-import { indexFewShotExample } from "@/lib/ai/few-shot-library";
+import { prepareFewShotExampleIndex } from "@/lib/ai/few-shot-library";
 import type { CoreAiFeature } from "@/lib/ai/types";
 import { countExpertEvalDatasets } from "@/lib/learning/expert-eval-storage";
 import { withErrorHandling, ActionResult, UnauthorizedError, NotFoundError } from "@/lib/action-wrapper";
@@ -24,6 +25,44 @@ import { InferSelectModel } from "drizzle-orm";
 export type GuidancePack = InferSelectModel<typeof expertGuidancePacks>;
 export type GuidanceVersion = InferSelectModel<typeof expertGuidanceVersions>;
 export type FewShotExample = InferSelectModel<typeof fewShotExamples>;
+
+const jsonObjectSchema = z.record(z.string(), z.unknown());
+
+const createGuidancePackInputSchema = z.object({
+  feature: z.string().min(1),
+  artifactType: z.string().min(1),
+  name: z.string().trim().min(1),
+  description: z.string().trim().nullable().optional(),
+  targetScope: z.string().trim().min(1).optional(),
+  metadata: jsonObjectSchema.optional(),
+});
+
+const createGuidanceVersionInputSchema = z.object({
+  packId: z.string().min(1),
+  artifact: jsonObjectSchema,
+  notes: z.string().trim().nullable().optional(),
+});
+
+const activateGuidanceVersionInputSchema = z.object({
+  packId: z.string().min(1),
+  versionId: z.string().min(1),
+});
+
+const createFewShotExampleInputSchema = z.object({
+  feature: z.string().min(1),
+  tags: z.array(z.string().min(1)).default([]),
+  content: jsonObjectSchema,
+  isActive: z.boolean().optional(),
+});
+
+function isUniqueViolation(error: unknown): error is { code: string } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "23505"
+  );
+}
 
 async function requireAiOpsSession(authHeaders?: Headers | string | null) {
   let cookieHeader: string | null = null;
@@ -138,20 +177,21 @@ export async function createExpertGuidancePack(input: {
   metadata?: Record<string, unknown>;
 }): Promise<ActionResult<GuidancePack>> {
   return withErrorHandling(async () => {
+    const body = createGuidancePackInputSchema.parse(input);
     const session = await requireAiOpsSession();
     const [pack] = await getDb()
       .insert(expertGuidancePacks)
       .values({
         id: nanoid(),
-        feature: input.feature,
-        artifactType: input.artifactType,
+        feature: body.feature,
+        artifactType: body.artifactType,
         status: "draft",
-        name: input.name,
-        description: input.description ?? null,
-        targetScope: input.targetScope ?? "global",
+        name: body.name,
+        description: body.description ?? null,
+        targetScope: body.targetScope ?? "global",
         createdByUserId: session.user.id,
         activeVersionId: null,
-        metadata: input.metadata ?? {},
+        metadata: body.metadata ?? {},
         createdAt: new Date(),
         updatedAt: new Date(),
       })
@@ -167,45 +207,61 @@ export async function createExpertGuidanceVersion(input: {
   notes?: string | null;
 }): Promise<ActionResult<GuidanceVersion>> {
   return withErrorHandling(async () => {
+    const body = createGuidanceVersionInputSchema.parse(input);
     const session = await requireAiOpsSession();
     const pack = await getDb().query.expertGuidancePacks.findFirst({
-      where: eq(expertGuidancePacks.id, input.packId),
+      where: eq(expertGuidancePacks.id, body.packId),
     });
 
     if (!pack) {
       throw new NotFoundError("Guidance pack not found");
     }
 
-    const existingVersions = await getDb().query.expertGuidanceVersions.findMany({
-      where: eq(expertGuidanceVersions.packId, input.packId),
-      orderBy: [desc(expertGuidanceVersions.version)],
-      limit: 1,
-    });
-    const nextVersion = (existingVersions[0]?.version ?? 0) + 1;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const version = await getDb().transaction(async (tx) => {
+          const existingVersions = await tx.query.expertGuidanceVersions.findMany({
+            where: eq(expertGuidanceVersions.packId, body.packId),
+            orderBy: [desc(expertGuidanceVersions.version)],
+            limit: 1,
+          });
+          const nextVersion = (existingVersions[0]?.version ?? 0) + 1;
 
-    const [version] = await getDb()
-      .insert(expertGuidanceVersions)
-      .values({
-        id: nanoid(),
-        packId: input.packId,
-        version: nextVersion,
-        status: "draft",
-        artifact: input.artifact,
-        notes: input.notes ?? null,
-        createdByUserId: session.user.id,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning();
+          const [createdVersion] = await tx
+            .insert(expertGuidanceVersions)
+            .values({
+              id: nanoid(),
+              packId: body.packId,
+              version: nextVersion,
+              status: "draft",
+              artifact: body.artifact,
+              notes: body.notes ?? null,
+              createdByUserId: session.user.id,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .returning();
 
-    await getDb()
-      .update(expertGuidancePacks)
-      .set({
-        updatedAt: new Date(),
-      })
-      .where(eq(expertGuidancePacks.id, input.packId));
+          await tx
+            .update(expertGuidancePacks)
+            .set({
+              updatedAt: new Date(),
+            })
+            .where(eq(expertGuidancePacks.id, body.packId));
 
-    return { success: true, data: version };
+          return createdVersion;
+        });
+
+        return { success: true, data: version };
+      } catch (error) {
+        if (isUniqueViolation(error) && attempt < 2) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw new Error("Could not allocate a unique guidance version number.");
   }, "createExpertGuidanceVersion");
 }
 
@@ -214,37 +270,40 @@ export async function activateExpertGuidanceVersion(input: {
   versionId: string;
 }): Promise<ActionResult<{ packId: string; versionId: string; status: "approved" }>> {
   return withErrorHandling(async () => {
+    const body = activateGuidanceVersionInputSchema.parse(input);
     await requireAiOpsSession();
 
     const version = await getDb().query.expertGuidanceVersions.findFirst({
-      where: eq(expertGuidanceVersions.id, input.versionId),
+      where: eq(expertGuidanceVersions.id, body.versionId),
     });
-    if (!version || version.packId !== input.packId) {
+    if (!version || version.packId !== body.packId) {
       throw new NotFoundError("Guidance version not found");
     }
 
-    await getDb()
-      .update(expertGuidanceVersions)
-      .set({
-        status: "approved",
-        updatedAt: new Date(),
-      })
-      .where(eq(expertGuidanceVersions.id, input.versionId));
+    await getDb().transaction(async (tx) => {
+      await tx
+        .update(expertGuidanceVersions)
+        .set({
+          status: "approved",
+          updatedAt: new Date(),
+        })
+        .where(eq(expertGuidanceVersions.id, body.versionId));
 
-    await getDb()
-      .update(expertGuidancePacks)
-      .set({
-        activeVersionId: input.versionId,
-        status: "approved",
-        updatedAt: new Date(),
-      })
-      .where(eq(expertGuidancePacks.id, input.packId));
+      await tx
+        .update(expertGuidancePacks)
+        .set({
+          activeVersionId: body.versionId,
+          status: "approved",
+          updatedAt: new Date(),
+        })
+        .where(eq(expertGuidancePacks.id, body.packId));
+    });
 
     return {
       success: true,
       data: {
-        packId: input.packId,
-        versionId: input.versionId,
+        packId: body.packId,
+        versionId: body.versionId,
         status: "approved" as const,
       },
     };
@@ -272,28 +331,29 @@ export async function createExpertFewShotExample(input: {
   isActive?: boolean;
 }): Promise<ActionResult<FewShotExample>> {
   return withErrorHandling(async () => {
+    const body = createFewShotExampleInputSchema.parse(input);
     const session = await requireAiOpsSession();
+    const { retrievalContent, embedding } = await prepareFewShotExampleIndex({
+      feature: body.feature,
+      tags: body.tags,
+      content: body.content,
+    });
+
     const [example] = await getDb()
       .insert(fewShotExamples)
       .values({
         id: nanoid(),
-        feature: input.feature,
-        tags: input.tags,
-        content: input.content,
-        isActive: input.isActive ?? true,
+        feature: body.feature,
+        tags: body.tags,
+        retrievalContent,
+        content: body.content,
+        isActive: body.isActive ?? true,
         createdByUserId: session.user.id,
+        embedding,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
       .returning();
-
-    // Kick off embedding + retrieval content indexing immediately
-    await indexFewShotExample({
-      id: example.id,
-      feature: input.feature,
-      tags: input.tags,
-      content: input.content,
-    });
 
     return { success: true, data: example };
   }, "createExpertFewShotExample");

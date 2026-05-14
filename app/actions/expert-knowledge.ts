@@ -2,19 +2,36 @@
 
 import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import { getDb } from "@/db";
 import { expertCrystallizations } from "@/db/schema/learning";
 import { getVerifiedSession } from "@/lib/auth/dal";
 import { isExpert } from "@/lib/auth/dal";
-import type { ExpertHeuristic } from "@/lib/learning/types";
-import { withErrorHandling, ActionResult, UnauthorizedError } from "@/lib/action-wrapper";
+import {
+  expertHeuristicSchema,
+  type ExpertHeuristic,
+} from "@/lib/learning/types";
+import {
+  withErrorHandling,
+  ActionResult,
+  UnauthorizedError,
+  validateInput,
+} from "@/lib/action-wrapper";
 import { InferSelectModel } from "drizzle-orm";
 import { learningTopics } from "@/db/schema/learning";
 
 export type ExpertCrystallizationWithTopic = InferSelectModel<typeof expertCrystallizations> & {
   topic: InferSelectModel<typeof learningTopics> | null;
 };
+
+const approveCrystallizationSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().trim().min(1),
+  heuristic: expertHeuristicSchema,
+  relevanceScope: z.enum(["general", "framework_specific"]),
+  notes: z.string().optional(),
+});
 
 export async function listDraftCrystallizations(): Promise<ActionResult<ExpertCrystallizationWithTopic[]>> {
   return withErrorHandling(async () => {
@@ -42,23 +59,25 @@ export async function approveCrystallization(params: {
   notes?: string;
 }): Promise<ActionResult<void>> {
   return withErrorHandling(async () => {
+    const body = validateInput(params, approveCrystallizationSchema);
     const session = await getVerifiedSession();
     if (!session || !isExpert(session.user)) {
       throw new UnauthorizedError();
     }
+    const normalizedHeuristic = expertHeuristicSchema.parse(body.heuristic);
 
     await getDb()
       .update(expertCrystallizations)
       .set({
-        title: params.title,
-        heuristic: params.heuristic,
-        notes: params.notes,
-        relevanceScope: params.relevanceScope,
+        title: body.title,
+        heuristic: normalizedHeuristic,
+        notes: body.notes,
+        relevanceScope: body.relevanceScope,
         status: "approved",
         approvedByUserId: session.user.id,
         approvedAt: new Date(),
       })
-      .where(eq(expertCrystallizations.id, params.id));
+      .where(eq(expertCrystallizations.id, body.id));
 
     revalidatePath("/[locale]/expert/knowledge", "page");
     return { success: true, data: undefined };
@@ -67,6 +86,7 @@ export async function approveCrystallization(params: {
 
 export async function rejectCrystallization(id: string): Promise<ActionResult<void>> {
   return withErrorHandling(async () => {
+    const crystallizationId = validateInput(id, z.string().min(1));
     const session = await getVerifiedSession();
     if (!session || !isExpert(session.user)) {
       throw new UnauthorizedError();
@@ -78,7 +98,7 @@ export async function rejectCrystallization(id: string): Promise<ActionResult<vo
         status: "archived",
         updatedAt: new Date(),
       })
-      .where(eq(expertCrystallizations.id, id));
+      .where(eq(expertCrystallizations.id, crystallizationId));
 
     revalidatePath("/[locale]/expert/knowledge", "page");
     return { success: true, data: undefined };

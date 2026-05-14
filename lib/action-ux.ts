@@ -34,7 +34,7 @@ export function getFriendlyActionError(
 function translateCode(code: string, fallback?: string): string {
   switch (code) {
     case "VALIDATION_ERROR":
-      return "Please check your input and try again.";
+      return fallback || "Please check your input and try again.";
     case "UNAUTHORIZED":
     case "UNAUTHENTICATED":
       return "You need to log in to do that.";

@@ -4,6 +4,10 @@ import { z } from "zod";
 
 import { resolveUiLocaleForContentCreation } from "@/lib/i18n/resolve-locale";
 import * as TopicService from "@/lib/learning/topic-service";
+import {
+  learningOutcomeDefinitionSchema,
+  topicSourceBoundarySchema,
+} from "@/lib/learning/types";
 import { getDb } from "@/db";
 import { learningTopics } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -19,8 +23,8 @@ const createLearningTopicSchema = z.object({
   subject: z.string().trim().optional(),
   subjectKey: z.string().trim().optional(),
   subjectLabel: z.string().trim().optional(),
-  learningOutcomes: z.array(z.any()).min(1),
-  sourceBoundary: z.any().optional(),
+  learningOutcomes: z.array(learningOutcomeDefinitionSchema).min(1),
+  sourceBoundary: topicSourceBoundarySchema.optional(),
   contentLocale: appLocaleSchema.optional(),
 });
 
@@ -34,6 +38,12 @@ export async function createLearningTopicAction(input: unknown): Promise<ActionR
     const body = validateInput(input, createLearningTopicSchema);
     const { session } = await requireTeachingSession();
     await ensureClassroomOwnerAccess(session.user.id, body.classroomId);
+    const normalizedLearningOutcomes = body.learningOutcomes.map((outcome) =>
+      learningOutcomeDefinitionSchema.parse(outcome),
+    );
+    const normalizedSourceBoundary = topicSourceBoundarySchema.parse(
+      body.sourceBoundary ?? {},
+    );
 
     const contentLocale = await resolveUiLocaleForContentCreation({ explicitLocale: body.contentLocale ?? null, session });
     const result = await TopicService.createLearningTopic({
@@ -45,8 +55,8 @@ export async function createLearningTopicAction(input: unknown): Promise<ActionR
       subjectKey: body.subjectKey,
       subjectLabel: body.subjectLabel,
       contentLocale,
-      learningOutcomes: body.learningOutcomes,
-      sourceBoundary: body.sourceBoundary,
+      learningOutcomes: normalizedLearningOutcomes,
+      sourceBoundary: normalizedSourceBoundary,
     });
 
     revalidateLearningUi();

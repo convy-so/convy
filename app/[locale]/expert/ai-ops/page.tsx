@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, inArray } from "drizzle-orm";
 
 import { ExpertAiOpsConsole } from "@/components/expert/expert-ai-ops-console";
 import { getAiOpsOverview } from "@/app/actions/ai-ops";
@@ -12,16 +12,19 @@ export default async function ExpertAiOpsPage() {
       orderBy: [desc(expertGuidancePacks.updatedAt)],
     }),
   ]);
+  const packIds = packs.map((pack) => pack.id);
+  const versions =
+    packIds.length > 0
+      ? await getDb().query.expertGuidanceVersions.findMany({
+          where: inArray(expertGuidanceVersions.packId, packIds),
+          orderBy: [desc(expertGuidanceVersions.version)],
+        })
+      : [];
 
-  const versionsEntries = await Promise.all(
-    packs.map(async (pack) => {
-      const versions = await getDb().query.expertGuidanceVersions.findMany({
-        where: eq(expertGuidanceVersions.packId, pack.id),
-        orderBy: [desc(expertGuidanceVersions.version)],
-      });
-      return [pack.id, versions] as const;
-    }),
-  );
+  const versionsEntries = packs.map((pack) => [
+    pack.id,
+    versions.filter((version) => version.packId === pack.id),
+  ] as const);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">

@@ -9,7 +9,7 @@ import {
   expertFrameworkVersions,
   expertRuntimeModels,
 } from "@/db/schema";
-import { createDefaultDeepFramework } from "@/lib/learning/framework-packages";
+import { createDefaultDeepFramework } from "@/lib/learning/framework-presets";
 import type { ExpertTutorRuntimeModel } from "@/lib/learning/types";
 import { expertTutorRuntimeModelSchema } from "@/lib/learning/types";
 
@@ -17,56 +17,58 @@ export async function ensureTopicFramework(params: {
   topicId: string;
   classroomId?: string | null;
 }) {
-  const existing = await getDb().query.expertFrameworks.findFirst({
-    where: eq(expertFrameworks.topicId, params.topicId),
-  });
+  return await getDb().transaction(async (tx) => {
+    const existing = await tx.query.expertFrameworks.findFirst({
+      where: eq(expertFrameworks.topicId, params.topicId),
+    });
 
-  if (existing) {
-    return existing;
-  }
+    if (existing) {
+      return existing;
+    }
 
-  const [framework] = await getDb()
-    .insert(expertFrameworks)
-    .values({
-      id: nanoid(),
-      topicId: params.topicId,
-      classroomId: params.classroomId ?? null,
-      name: "DEEP",
-      description:
-        "Default seeded framework. Experts can edit, replace, or delete it.",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .returning();
+    const [framework] = await tx
+      .insert(expertFrameworks)
+      .values({
+        id: nanoid(),
+        topicId: params.topicId,
+        classroomId: params.classroomId ?? null,
+        name: "DEEP",
+        description:
+          "Default seeded framework. Experts can edit, replace, or delete it.",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
 
-  const defaultFramework = createDefaultDeepFramework();
-  const [version] = await getDb()
-    .insert(expertFrameworkVersions)
-    .values({
-      id: nanoid(),
-      frameworkId: framework.id,
-      version: 1,
-      status: "published",
-      seedSource: "deep_default",
-      framework: defaultFramework,
-      publishedAt: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .returning();
+    const defaultFramework = createDefaultDeepFramework();
+    const [version] = await tx
+      .insert(expertFrameworkVersions)
+      .values({
+        id: nanoid(),
+        frameworkId: framework.id,
+        version: 1,
+        status: "published",
+        seedSource: "deep_default",
+        framework: defaultFramework,
+        publishedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
 
-  await getDb()
-    .update(expertFrameworks)
-    .set({
+    await tx
+      .update(expertFrameworks)
+      .set({
+        activeVersionId: version.id,
+        updatedAt: new Date(),
+      })
+      .where(eq(expertFrameworks.id, framework.id));
+
+    return {
+      ...framework,
       activeVersionId: version.id,
-      updatedAt: new Date(),
-    })
-    .where(eq(expertFrameworks.id, framework.id));
-
-  return {
-    ...framework,
-    activeVersionId: version.id,
-  };
+    };
+  });
 }
 
 export async function getActiveFrameworkVersion(topicId: string) {

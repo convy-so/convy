@@ -2,13 +2,6 @@ import { z } from "zod";
 import { getFriendlyActionError } from "@/lib/action-ux";
 
 import { learningSessionStateSchema, teacherProgressReportSchema } from "@/lib/learning/types";
-import {
-  assessmentQuestionTypeSchema,
-  curriculumFrameworkKeySchema,
-  reasoningGoalSchema,
-  subjectCompetencySchema,
-  transferExpectationSchema,
-} from "@/lib/learning/subject-packages";
 import { appLocales } from "@/lib/i18n/config";
 
 const classroomSchema = z.object({
@@ -209,12 +202,12 @@ const teacherPatternResponseSchema = z.object({
 
 export type LearningMeData = z.infer<typeof learningMeSchema>;
 
-const studentPatternResponseSchema = z.object({
+const classroomStudentPatternResponseSchema = z.object({
   success: z.literal(true),
   data: z.array(patternSchema),
 });
 
-export const studentOverviewSchema = z.object({
+export const classroomStudentOverviewSchema = z.object({
   success: z.literal(true),
   data: z.object({
     student: z.object({
@@ -297,9 +290,13 @@ export const topicOverviewSchema = z.object({
   }),
 });
 
-export type StudentPatternResponse = z.infer<typeof studentPatternResponseSchema>;
+export type ClassroomStudentPatternResponse = z.infer<
+  typeof classroomStudentPatternResponseSchema
+>;
 export type TeacherPatternResponse = z.infer<typeof teacherPatternResponseSchema>;
-export type StudentOverviewResponse = z.infer<typeof studentOverviewSchema>;
+export type ClassroomStudentOverviewResponse = z.infer<
+  typeof classroomStudentOverviewSchema
+>;
 export type TopicOverviewResponse = z.infer<typeof topicOverviewSchema>;
 export type OnboardingStateResponse = z.infer<typeof onboardingStateSchema>;
 export type TutoringSessionResponse = z.infer<typeof tutoringSessionSchema>;
@@ -319,28 +316,6 @@ const activationValidationSchema = z.object({
     })
     .optional(),
   expiresAt: z.string().optional(),
-});
-
-const bulkInviteStudentsResponseSchema = z.object({
-  success: z.literal(true),
-  data: z.object({
-    invited: z.array(
-      z.object({
-        id: z.string(),
-        classroomId: z.string(),
-        fullName: z.string(),
-        email: z.string().email(),
-        inviteStatus: z.string(),
-      }),
-    ),
-    failed: z.array(
-      z.object({
-        fullName: z.string(),
-        email: z.string().email(),
-        error: z.string(),
-      }),
-    ),
-  }),
 });
 
 const classroomAssignedSurveyProgressSchema = z.object({
@@ -433,54 +408,6 @@ export async function fetchTeacherClassrooms() {
   );
 }
 
-export async function acceptClassroomInvitation(invitationId: string) {
-  return await parseResponse(
-    await fetch(`/api/learning/invitations/${invitationId}/accept`, {
-      method: "POST",
-      credentials: "include",
-    }),
-    z.object({ success: z.literal(true) }),
-  );
-}
-
-export async function rejectClassroomInvitation(invitationId: string) {
-  return await parseResponse(
-    await fetch(`/api/learning/invitations/${invitationId}/reject`, {
-      method: "POST",
-      credentials: "include",
-    }),
-    z.object({ success: z.literal(true) }),
-  );
-}
-
-export async function createClassroom(input: {
-  title: string;
-  description?: string;
-  subject?: string;
-  gradeLabel: string;
-  defaultContentLocale?: (typeof appLocales)[number];
-}) {
-  return await parseResponse(
-    await fetch("/api/learning/classrooms", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    }),
-    z.object({
-      success: z.literal(true),
-      data: z.object({
-        id: z.string(),
-        title: z.string(),
-        gradeBand: z.string(),
-        gradeLabel: z.string(),
-        accessLevel: z.literal("owner"),
-        defaultContentLocale: z.enum(appLocales),
-      }),
-    }),
-  );
-}
-
 export async function fetchClassroomStudents(classroomId: string) {
   return await parseResponse(
     await fetch(`/api/learning/classrooms/${classroomId}/students`, {
@@ -490,98 +417,12 @@ export async function fetchClassroomStudents(classroomId: string) {
   );
 }
 
-export async function inviteStudent(input: {
-  classroomId: string;
-  fullName: string;
-  email: string;
-}) {
-  return await parseResponse(
-    await fetch(`/api/learning/classrooms/${input.classroomId}/students`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    }),
-    z.object({
-      success: z.literal(true),
-      data: z.object({
-        id: z.string(),
-        classroomId: z.string(),
-        fullName: z.string(),
-        email: z.string().email(),
-        inviteStatus: z.string(),
-      }),
-    }),
-  );
-}
-
-export async function inviteStudentsBulk(input: {
-  classroomId: string;
-  students: Array<{
-    fullName: string;
-    email: string;
-  }>;
-}) {
-  return await parseResponse(
-    await fetch(`/api/learning/classrooms/${input.classroomId}/students`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ students: input.students }),
-    }),
-    bulkInviteStudentsResponseSchema,
-  );
-}
-
 export async function fetchClassroomTopics(classroomId: string) {
   return await parseResponse(
     await fetch(`/api/learning/classrooms/${classroomId}/topics`, {
       credentials: "include",
     }),
     z.object({ success: z.literal(true), data: z.array(topicSchema) }),
-  );
-}
-
-export async function createTopic(input: {
-  classroomId: string;
-  title: string;
-  description?: string;
-  subject?: string;
-  subjectKey?: string;
-  subjectLabel?: string;
-  learningOutcomes: Array<{
-    id?: string;
-    title: string;
-    description: string;
-    evidenceSignals?: string[];
-    masteryThreshold?: number;
-    competencyTargets?: Array<z.infer<typeof subjectCompetencySchema>>;
-    reasoningGoals?: Array<z.infer<typeof reasoningGoalSchema>>;
-    misconceptionTags?: string[];
-    questionModes?: Array<z.infer<typeof assessmentQuestionTypeSchema>>;
-    transferExpectation?: z.infer<typeof transferExpectationSchema>;
-    curriculumFrameworkKey?: z.infer<typeof curriculumFrameworkKeySchema>;
-  }>;
-  sourceBoundary?: Record<string, unknown>;
-  contentLocale?: (typeof appLocales)[number];
-}) {
-  return await parseResponse(
-    await fetch(`/api/learning/classrooms/${input.classroomId}/topics`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    }),
-    z.object({
-      success: z.literal(true),
-      data: z.object({
-        id: z.string(),
-        classroomId: z.string(),
-        title: z.string(),
-        learningOutcomeCount: z.number(),
-        contentLocale: z.enum(appLocales),
-      }),
-    }),
   );
 }
 
@@ -634,54 +475,6 @@ export async function fetchLearningInterventions(input: {
   );
 }
 
-export async function createLearningIntervention(input: {
-  classroomId: string;
-  classroomStudentId: string;
-  topicId?: string;
-  interventionType: "reteach" | "check_in" | "practice" | "family_follow_up";
-  priority: "low" | "medium" | "high";
-  title: string;
-  notes?: string;
-  dueAt?: string;
-}) {
-  return await parseResponse(
-    await fetch("/api/learning/interventions", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    }),
-    z.object({
-      success: z.literal(true),
-      data: learningInterventionSchema,
-    }),
-  );
-}
-
-export async function updateLearningIntervention(input: {
-  interventionId: string;
-  status: "planned" | "in_progress" | "completed" | "dismissed";
-  notes?: string;
-  dueAt?: string;
-}) {
-  return await parseResponse(
-    await fetch(`/api/learning/interventions/${input.interventionId}`, {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        status: input.status,
-        notes: input.notes,
-        dueAt: input.dueAt,
-      }),
-    }),
-    z.object({
-      success: z.literal(true),
-      data: learningInterventionSchema,
-    }),
-  );
-}
-
 export async function uploadTopicMaterial(input: {
   topicId: string;
   file: File;
@@ -716,24 +509,6 @@ export async function fetchTopicReadiness(topicId: string) {
       credentials: "include",
     }),
     z.object({ success: z.literal(true), data: readinessSchema }),
-  );
-}
-
-export async function updateTopicStatus(topicId: string, status: "draft" | "active" | "paused" | "archived") {
-  return await parseResponse(
-    await fetch(`/api/learning/topics/${topicId}/status`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    }),
-    z.object({
-      success: z.literal(true),
-      data: z.object({
-        id: z.string(),
-        status: z.string(),
-      }),
-    }),
   );
 }
 
@@ -781,8 +556,13 @@ export async function fetchTopicReports(topicId: string) {
   );
 }
 
-export async function fetchTopicQuestions(topicId: string, studentId?: string) {
-  const query = studentId ? `?studentId=${encodeURIComponent(studentId)}` : "";
+export async function fetchTopicQuestions(
+  topicId: string,
+  classroomStudentId?: string,
+) {
+  const query = classroomStudentId
+    ? `?classroomStudentId=${encodeURIComponent(classroomStudentId)}`
+    : "";
   return await parseResponse(
     await fetch(`/api/learning/topics/${topicId}/questions${query}`, {
       credentials: "include",
@@ -808,9 +588,9 @@ export async function fetchTopicQuestions(topicId: string, studentId?: string) {
   );
 }
 
-export async function fetchStudentPatterns(studentId: string) {
+export async function fetchClassroomStudentPatterns(classroomStudentId: string) {
   return await parseResponse(
-    await fetch(`/api/learning/students/${studentId}/patterns`, {
+    await fetch(`/api/learning/students/${classroomStudentId}/patterns`, {
       credentials: "include",
     }),
     teacherPatternResponseSchema,
@@ -820,7 +600,7 @@ export async function fetchStudentPatterns(studentId: string) {
 export async function fetchMyPatterns() {
   return await parseResponse(
     await fetch("/api/learning/me/patterns", { credentials: "include" }),
-    studentPatternResponseSchema,
+    classroomStudentPatternResponseSchema,
   );
 }
 

@@ -22,5 +22,5 @@ export {
   answerTeacherStudentQuestionAction,
   askOutOfSessionQuestionAction,
   completeTutoringSessionAction,
-  persistTeacherChatSessionAction,
+  saveTeacherStudentChatSessionAction,
 } from "./classroom/tutoring-actions";

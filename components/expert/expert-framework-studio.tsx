@@ -83,7 +83,7 @@ export function ExpertFrameworkStudio({
           topicId: string;
           activeVersionId: string | null;
         };
-      }>("/api/learning/expert/assets", {
+      }>("/api/learning/expert/frameworks", {
         method: "POST",
         body: JSON.stringify({
           topicId,

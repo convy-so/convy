@@ -17,11 +17,11 @@ import {
 } from "@/lib/validation/survey-schemas";
 
 import {
-  buildSurveyPublicPath,
   invalidateSurveyCaches,
   requireSurveyActionSession,
   requireSurveyWithPermission,
 } from "./shared";
+import { buildSurveyPublicPath } from "@/lib/surveys/utils";
 
 /**
  * Update survey settings (only if it's in draft or sample_review status)
@@ -128,8 +128,10 @@ export async function setSurveyCustomSlugAction(
 
     await getDb()
       .update(surveys)
-      .set({ customSlug: body.slug })
+      .set({ customSlug: body.slug, updatedAt: new Date() })
       .where(eq(surveys.id, survey.id));
+
+    await invalidateSurveyCaches(session.user.id);
 
     return {
       success: true,
@@ -159,8 +161,10 @@ export async function clearSurveyCustomSlugAction(
 
     await getDb()
       .update(surveys)
-      .set({ customSlug: null })
+      .set({ customSlug: null, updatedAt: new Date() })
       .where(eq(surveys.id, survey.id));
+
+    await invalidateSurveyCaches(session.user.id);
 
     return { success: true, data: { success: true } };
   }, "clearSurveyCustomSlugAction");

@@ -1,7 +1,7 @@
 import { TeacherStudentDetailPage } from "@/components/learning/teacher-student-detail-page";
 import {
-  getStudentOverviewData,
-  getStudentPatternData,
+  getClassroomStudentOverviewData,
+  getClassroomStudentPatternData,
 } from "@/lib/server/app-queries";
 
 export default async function LearningStudentDetailPage({
@@ -9,10 +9,10 @@ export default async function LearningStudentDetailPage({
 }: {
   params: Promise<{ studentId: string }>;
 }) {
-  const { studentId } = await params;
+  const { studentId: classroomStudentId } = await params;
   const [overview, patterns] = await Promise.all([
-    getStudentOverviewData(studentId),
-    getStudentPatternData(studentId),
+    getClassroomStudentOverviewData(classroomStudentId),
+    getClassroomStudentPatternData(classroomStudentId),
   ]);
 
   return (

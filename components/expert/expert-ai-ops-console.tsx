@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { z } from "zod";
 import { BrainCircuit, CheckCircle2, Layers3, Loader2, Plus, Save } from "lucide-react";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
@@ -74,6 +75,8 @@ const ARTIFACT_OPTIONS = [
   "rubric_set",
 ] as const;
 
+const jsonObjectSchema = z.record(z.string(), z.unknown());
+
 export function ExpertAiOpsConsole({
   overview,
   packs,
@@ -135,17 +138,22 @@ export function ExpertAiOpsConsole({
 
     try {
       setIsCreatingVersion(true);
-      let artifact: Record<string, unknown>;
+      let parsedJson: unknown;
       try {
-        artifact = JSON.parse(artifactJson) as Record<string, unknown>;
+        parsedJson = JSON.parse(artifactJson);
       } catch {
         toast.error("Artifact JSON is invalid");
+        return;
+      }
+      const artifactResult = jsonObjectSchema.safeParse(parsedJson);
+      if (!artifactResult.success) {
+        toast.error("Artifact JSON must be an object.");
         return;
       }
 
       const result = await createExpertGuidanceVersion({
         packId: selectedPack.id,
-        artifact,
+        artifact: artifactResult.data,
         notes: versionNotes.trim() || null,
       });
 

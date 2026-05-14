@@ -7,7 +7,7 @@ import { getDb } from "@/db";
 import { learningSessions, expertRuntimeModels } from "@/db/schema/learning";
 
 import { requireExpertSession } from "@/lib/learning/expert-route-guard";
-import { resolveTeacherExpertAnchor } from "@/lib/learning/expert-access";
+import { resolveExpertReviewAnchor } from "@/lib/learning/expert-access";
 import {
   createExpertReviewCase,
   listExpertReviewCases,
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     if ("error" in expert) return expert.error;
     const { session } = expert;
     const body = createReviewCaseSchema.parse(await request.json());
-    const anchor = await resolveTeacherExpertAnchor(session.user.id, body);
+    const anchor = await resolveExpertReviewAnchor(body);
     if (!anchor) {
       return apiError(
         "NOT_FOUND",

@@ -23,6 +23,7 @@ export type ActionErrorPayload = {
   code: ActionErrorCode | string;
   message?: string;
   details?: Record<string, string[] | undefined>;
+  data?: unknown;
 };
 
 export type ActionResult<T = void> =

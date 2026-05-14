@@ -78,6 +78,8 @@ export async function previewAssessmentQuestionForTopic(params: {
   retrievedContext: string[];
   runtimeContext?: TutoringRuntimeContext;
   currentStageLabel?: string | null;
+  questionType?: string;
+  difficulty?: string;
 }) {
   return await generateStructuredOutput({
     schema: assessmentPreviewSchema,
@@ -85,6 +87,8 @@ export async function previewAssessmentQuestionForTopic(params: {
       topicTitle: params.topicTitle,
       currentStageLabel: params.currentStageLabel,
       retrievedContext: params.retrievedContext,
+      questionType: params.questionType,
+      difficulty: params.difficulty,
     }),
   });
 }

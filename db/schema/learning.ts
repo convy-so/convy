@@ -32,7 +32,7 @@ import type {
 } from "@/lib/learning/types";
 import { defaultLearningSessionState } from "@/lib/learning/types";
 
-export type LearningTeacherChatSessionMessage = {
+export type TeacherStudentChatMessageRecord = {
   id?: string;
   role: string;
   content?: string;
@@ -454,7 +454,7 @@ export const learningEvidenceEmbeddings = pgTable(
   ],
 );
 
-export const learningTeacherChatSessions = pgTable(
+export const teacherStudentChatSessions = pgTable(
   "learning_teacher_chat_sessions",
   {
     id: text("id").primaryKey(),
@@ -462,19 +462,19 @@ export const learningTeacherChatSessions = pgTable(
     classroomStudentId: text("classroom_student_id")
       .notNull()
       .references(() => classroomStudents.id, { onDelete: "cascade" }),
-    userId: text("user_id")
+    teacherUserId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     language: text("language").default("en").notNull(),
     title: text("title").notNull().default("New Chat"),
     messages: jsonb("messages")
-      .$type<LearningTeacherChatSessionMessage[]>()
+      .$type<TeacherStudentChatMessageRecord[]>()
       .notNull()
       .default([]),
   },
   (table) => [
     index("learning_teacher_chat_sessions_student_idx").on(table.classroomStudentId),
-    index("learning_teacher_chat_sessions_user_idx").on(table.userId),
+    index("learning_teacher_chat_sessions_user_idx").on(table.teacherUserId),
   ],
 );
 
@@ -1217,15 +1217,15 @@ export const learningEvidenceEmbeddingsRelations = relations(
   }),
 );
 
-export const learningTeacherChatSessionsRelations = relations(
-  learningTeacherChatSessions,
+export const teacherStudentChatSessionsRelations = relations(
+  teacherStudentChatSessions,
   ({ one }) => ({
     classroomStudent: one(classroomStudents, {
-      fields: [learningTeacherChatSessions.classroomStudentId],
+      fields: [teacherStudentChatSessions.classroomStudentId],
       references: [classroomStudents.id],
     }),
-    user: one(users, {
-      fields: [learningTeacherChatSessions.userId],
+    teacherUser: one(users, {
+      fields: [teacherStudentChatSessions.teacherUserId],
       references: [users.id],
     }),
   }),

@@ -9,7 +9,7 @@ import {
   learningTopics,
 } from "@/db/schema";
 
-export async function getTeacherOwnedTopic(userId: string, topicId: string) {
+export async function getExpertAccessibleTopic(topicId: string) {
   const topic = await getDb().query.learningTopics.findFirst({
     where: eq(learningTopics.id, topicId),
     with: {
@@ -24,7 +24,7 @@ export async function getTeacherOwnedTopic(userId: string, topicId: string) {
   return topic;
 }
 
-export async function getTeacherOwnedFramework(userId: string, frameworkId: string) {
+export async function getExpertAccessibleFramework(frameworkId: string) {
   const framework = await getDb().query.expertFrameworks.findFirst({
     where: eq(expertFrameworks.id, frameworkId),
     with: {
@@ -44,10 +44,7 @@ export async function getTeacherOwnedFramework(userId: string, frameworkId: stri
   return framework;
 }
 
-export async function getTeacherOwnedClassroomStudent(
-  userId: string,
-  classroomStudentId: string,
-) {
+export async function getExpertAccessibleClassroomStudent(classroomStudentId: string) {
   const classroomStudent = await getDb().query.classroomStudents.findFirst({
     where: eq(classroomStudents.id, classroomStudentId),
     with: {
@@ -62,7 +59,7 @@ export async function getTeacherOwnedClassroomStudent(
   return classroomStudent;
 }
 
-export async function getTeacherOwnedLearningSession(userId: string, sessionId: string) {
+export async function getExpertAccessibleLearningSession(sessionId: string) {
   const session = await getDb().query.learningSessions.findFirst({
     where: eq(learningSessions.id, sessionId),
     with: {
@@ -81,10 +78,7 @@ export async function getTeacherOwnedLearningSession(userId: string, sessionId: 
   return session;
 }
 
-export async function getTeacherOwnedLearningInteraction(
-  userId: string,
-  interactionId: string,
-) {
+export async function getExpertAccessibleLearningInteraction(interactionId: string) {
   const interaction = await getDb().query.learningInteractions.findFirst({
     where: eq(learningInteractions.id, interactionId),
     with: {
@@ -107,17 +101,14 @@ export async function getTeacherOwnedLearningInteraction(
   return interaction;
 }
 
-export async function resolveTeacherExpertAnchor(
-  userId: string,
-  params: {
-    topicId?: string | null;
-    classroomStudentId?: string | null;
-    sessionId?: string | null;
-    interactionId?: string | null;
-  },
-) {
+export async function resolveExpertReviewAnchor(params: {
+  topicId?: string | null;
+  classroomStudentId?: string | null;
+  sessionId?: string | null;
+  interactionId?: string | null;
+}) {
   if (params.topicId) {
-    const topic = await getTeacherOwnedTopic(userId, params.topicId);
+    const topic = await getExpertAccessibleTopic(params.topicId);
     if (!topic) return null;
     return {
       topicId: topic.id,
@@ -128,8 +119,7 @@ export async function resolveTeacherExpertAnchor(
   }
 
   if (params.classroomStudentId) {
-    const classroomStudent = await getTeacherOwnedClassroomStudent(
-      userId,
+    const classroomStudent = await getExpertAccessibleClassroomStudent(
       params.classroomStudentId,
     );
     if (!classroomStudent) return null;
@@ -142,7 +132,7 @@ export async function resolveTeacherExpertAnchor(
   }
 
   if (params.sessionId) {
-    const session = await getTeacherOwnedLearningSession(userId, params.sessionId);
+    const session = await getExpertAccessibleLearningSession(params.sessionId);
     if (!session) return null;
     return {
       topicId: params.topicId ?? session.topicId ?? null,
@@ -153,8 +143,7 @@ export async function resolveTeacherExpertAnchor(
   }
 
   if (params.interactionId) {
-    const interaction = await getTeacherOwnedLearningInteraction(
-      userId,
+    const interaction = await getExpertAccessibleLearningInteraction(
       params.interactionId,
     );
     if (!interaction) return null;
