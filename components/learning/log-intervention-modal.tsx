@@ -3,12 +3,13 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Loader2, Sparkles, AlignLeft, Calendar, Check, ChevronDown } from "lucide-react";
-import { createLearningIntervention } from "@/lib/api/learning";
+import { createLearningInterventionAction } from "@/app/actions/classroom";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
 import toast from "react-hot-toast";
 import { InputField } from "@/components/auth/input-field";
 import { cn } from "@/lib/utils";
+import { getFriendlyActionError } from "@/lib/action-ux";
 
 type InterventionType = "reteach" | "check_in" | "practice" | "family_follow_up";
 type InterventionPriority = "low" | "medium" | "high";
@@ -73,7 +74,7 @@ export function LogInterventionModal({
         setIsSubmitting(true);
 
         try {
-            await createLearningIntervention({
+            const result = await createLearningInterventionAction({
                 classroomId,
                 classroomStudentId: studentId,
                 topicId: topicId ?? undefined,
@@ -83,6 +84,9 @@ export function LogInterventionModal({
                 notes: notes.trim() || undefined,
                 dueAt: dueAt || undefined,
             });
+            if (!result.success) {
+                throw new Error(getFriendlyActionError(result.error));
+            }
 
             toast.success(`Intervention logged for ${studentName}`);
             await queryClient.invalidateQueries({

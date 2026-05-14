@@ -5,7 +5,7 @@ import { z } from "zod";
 import * as InterventionService from "@/lib/learning/intervention-service";
 import { ActionResult, validateInput, withErrorHandling } from "@/lib/action-wrapper";
 
-import { ensureClassroomOwnerAccess, requireTeachingSession } from "./shared";
+import { ensureClassroomOwnerAccess, requireTeachingSession, revalidateLearningUi } from "./shared";
 
 const learningInterventionSchema = z.object({
   classroomId: z.string().min(1),
@@ -25,15 +25,6 @@ const learningInterventionUpdateSchema = z.object({
   dueAt: z.string().optional(),
 });
 
-export async function getLearningInterventionsAction(input: { classroomId: string; topicId?: string; classroomStudentId?: string; }): Promise<ActionResult<unknown>> {
-  return withErrorHandling(async () => {
-    const { session } = await requireTeachingSession();
-    await ensureClassroomOwnerAccess(session.user.id, input.classroomId);
-    const data = await InterventionService.listInterventions(input);
-    return { success: true, data };
-  }, "getLearningInterventionsAction");
-}
-
 export async function createLearningInterventionAction(input: unknown): Promise<ActionResult<unknown>> {
   return withErrorHandling(async () => {
     const body = validateInput(input, learningInterventionSchema);
@@ -41,6 +32,7 @@ export async function createLearningInterventionAction(input: unknown): Promise<
     await ensureClassroomOwnerAccess(session.user.id, body.classroomId);
 
     const result = await InterventionService.createIntervention({ ...body, createdByUserId: session.user.id });
+    revalidateLearningUi();
     return { success: true, data: result };
   }, "createLearningInterventionAction");
 }
@@ -51,6 +43,7 @@ export async function updateLearningInterventionAction(input: unknown): Promise<
     await requireTeachingSession();
 
     const result = await InterventionService.updateIntervention(body);
+    revalidateLearningUi();
     return { success: true, data: result };
   }, "updateLearningInterventionAction");
 }

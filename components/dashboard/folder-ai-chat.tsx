@@ -6,14 +6,9 @@ import { Sparkles, Send, X,ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MarkdownMessage } from "@/components/ui/markdown-message";
 
-import { InferSelectModel } from "drizzle-orm";
-import { folders, surveys } from "@/db/schema";
-
-type Folder = InferSelectModel<typeof folders>;
-type Survey = InferSelectModel<typeof surveys>;
-
-type FolderWithSurveys = Folder & {
-    surveys: Survey[];
+type FolderWithSurveys = {
+    name: string;
+    surveys: Array<{ id: string }>;
     stats?: {
         totalSurveys: number;
         totalResponses: number;

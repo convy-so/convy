@@ -3,13 +3,17 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Loader2, Users, Mail, MailPlus, UploadCloud, AlertCircle } from "lucide-react";
-import { inviteStudent, inviteStudentsBulk } from "@/lib/api/learning";
+import {
+    bulkInviteStudentsToClassroomAction,
+    inviteStudentToClassroomAction,
+} from "@/app/actions/classroom";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
 import toast from "react-hot-toast";
 import { InputField } from "@/components/auth/input-field";
 import { TextareaField } from "@/components/auth/textarea-field";
 import { cn } from "@/lib/utils";
+import { getFriendlyActionError } from "@/lib/action-ux";
 
 type InviteStudentModalProps = {
     isOpen: boolean;
@@ -84,11 +88,14 @@ export function InviteStudentModal({
         setError(null);
 
         try {
-            await inviteStudent({
+            const result = await inviteStudentToClassroomAction({
                 classroomId,
                 fullName: fullName.trim(),
                 email: email.trim(),
             });
+            if (!result.success) {
+                throw new Error(getFriendlyActionError(result.error));
+            }
 
             toast.success("Invitation sent");
             await queryClient.invalidateQueries({
@@ -111,13 +118,20 @@ export function InviteStudentModal({
 
         try {
             const students = parseBulkInviteInput(bulkInput);
-            const result = await inviteStudentsBulk({
+            const result = await bulkInviteStudentsToClassroomAction({
                 classroomId,
                 students,
             });
+            if (!result.success) {
+                throw new Error(getFriendlyActionError(result.error));
+            }
 
-            const invitedCount = result.data.invited.length;
-            const failedCount = result.data.failed.length;
+            const payload = result.data as {
+                invited: Array<unknown>;
+                failed: Array<unknown>;
+            };
+            const invitedCount = payload.invited.length;
+            const failedCount = payload.failed.length;
 
             if (invitedCount > 0 && failedCount === 0) {
                 toast.success(`${invitedCount} students invited`);

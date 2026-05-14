@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { getDb } from "@/db";
 import { surveys } from "@/db/schema";
+import { SURVEY_LIMITS } from "@/lib/config";
 import {
   assertState,
   validateInput,
@@ -52,6 +53,23 @@ export async function updateSurveyAction(
       updateData.participantLimit = body.participantLimit;
     }
     if (body.language !== undefined) updateData.language = body.language;
+    if (body.isVoice !== undefined) {
+      if (body.isVoice && !survey.isVoice) {
+        const existingVoiceSurveys = await getDb()
+          .select({ id: surveys.id })
+          .from(surveys)
+          .where(and(eq(surveys.userId, session.user.id), eq(surveys.isVoice, true)));
+
+        assertState(
+          existingVoiceSurveys.length < SURVEY_LIMITS.MAX_VOICE_SURVEYS_PER_SCOPE,
+          `Limit reached: You can only have ${SURVEY_LIMITS.MAX_VOICE_SURVEYS_PER_SCOPE} voice surveys in your account`,
+        );
+      }
+      updateData.isVoice = body.isVoice;
+    }
+
+    assertState(Object.keys(updateData).length > 0, "No valid fields to update");
+    updateData.updatedAt = new Date();
 
     await getDb().update(surveys).set(updateData).where(eq(surveys.id, body.id));
     await invalidateSurveyCaches(session.user.id);

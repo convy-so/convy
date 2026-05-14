@@ -823,6 +823,55 @@ export const expertRuntimeModels = pgTable(
   ],
 );
 
+export const expertEvalDatasets = pgTable(
+  "expert_eval_datasets",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    presetKey: text("preset_key").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    status: text("status").default("ready").notNull(),
+    family: text("family").notNull(),
+    subjectKey: text("subject_key"),
+    caseCount: integer("case_count").default(0).notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  },
+  (table) => [
+    unique("expert_eval_datasets_preset_key_unique").on(table.presetKey),
+    index("expert_eval_datasets_family_idx").on(table.family),
+    check(
+      "expert_eval_datasets_status_check",
+      sql`${table.status} in ('draft', 'ready', 'archived')`,
+    ),
+  ],
+);
+
+export const expertEvalCases = pgTable(
+  "expert_eval_cases",
+  {
+    id: text("id").primaryKey(),
+    ...timestamps,
+    datasetId: text("dataset_id")
+      .notNull()
+      .references(() => expertEvalDatasets.id, { onDelete: "cascade" }),
+    caseKey: text("case_key").notNull(),
+    ordinal: integer("ordinal").notNull(),
+    prompt: text("prompt").notNull(),
+    expectedBehavior: text("expected_behavior").notNull(),
+    referenceAnswer: text("reference_answer"),
+    evaluationFocus: text("evaluation_focus").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  },
+  (table) => [
+    index("expert_eval_cases_dataset_idx").on(table.datasetId),
+    unique("expert_eval_cases_dataset_case_key_unique").on(
+      table.datasetId,
+      table.caseKey,
+    ),
+  ],
+);
+
 export const studentModels = pgTable(
   "student_models",
   {
@@ -1345,6 +1394,23 @@ export const expertRuntimeModelsRelations = relations(
     publishedBy: one(users, {
       fields: [expertRuntimeModels.publishedByUserId],
       references: [users.id],
+    }),
+  }),
+);
+
+export const expertEvalDatasetsRelations = relations(
+  expertEvalDatasets,
+  ({ many }) => ({
+    cases: many(expertEvalCases),
+  }),
+);
+
+export const expertEvalCasesRelations = relations(
+  expertEvalCases,
+  ({ one }) => ({
+    dataset: one(expertEvalDatasets, {
+      fields: [expertEvalCases.datasetId],
+      references: [expertEvalDatasets.id],
     }),
   }),
 );

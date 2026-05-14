@@ -17,6 +17,7 @@ import { getPlatformRole } from "@/lib/auth/dal";
 import { type AuthSessionWithUser } from "@/lib/auth";
 import { indexFewShotExample } from "@/lib/ai/few-shot-library";
 import type { CoreAiFeature } from "@/lib/ai/types";
+import { countExpertEvalDatasets } from "@/lib/learning/expert-eval-storage";
 import { withErrorHandling, ActionResult, UnauthorizedError, NotFoundError } from "@/lib/action-wrapper";
 import { InferSelectModel } from "drizzle-orm";
 
@@ -93,8 +94,9 @@ export async function getAiOpsOverview(authHeaders?: Headers | string | null): P
   return withErrorHandling(async () => {
     const session = await requireAiOpsSession(authHeaders);
 
-    const [guidancePacks] = await Promise.all([
+    const [guidancePacksResult, evalDatasetCount] = await Promise.all([
       getDb().select({ value: count() }).from(expertGuidancePacks),
+      countExpertEvalDatasets(),
     ]);
 
     return {
@@ -104,8 +106,8 @@ export async function getAiOpsOverview(authHeaders?: Headers | string | null): P
         totalRuns: 0,
         weeklyRuns: 0,
         failedRuns: 0,
-        evalDatasetCount: 0,
-        guidancePackCount: guidancePacks[0]?.value ?? 0,
+        evalDatasetCount,
+        guidancePackCount: guidancePacksResult[0]?.value ?? 0,
         failureModeCount: 0,
         featureBreakdown: [],
       },

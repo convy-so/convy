@@ -9,7 +9,7 @@ import {
   resolveRespondentAccess,
 } from "@/lib/privacy/respondent";
 import { resolveTrustedNodeClientIp } from "@/lib/security/client-ip";
-import { getPlatformRole, type PlatformRole, AuthError as DalAuthError } from "@/lib/auth/dal";
+import { getPlatformRole, type PlatformRole, AuthError as DalAuthError } from "@/lib/auth/roles";
 import { assertPermission } from "@/lib/auth/policy";
 
 type WebsocketPrincipal = {

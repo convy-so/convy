@@ -1,32 +1,26 @@
-"use server";
-
-import {
+export {
   createClassroomAction,
-  getTeacherClassroomsAction,
-  getClassroomAssignedSurveyProgressAction,
 } from "./classroom/classroom-actions";
 
-import {
+export {
   inviteStudentToClassroomAction,
   bulkInviteStudentsToClassroomAction,
+  respondToInvitationAction,
 } from "./classroom/student-actions";
 
-import { createLearningTopicAction } from "./classroom/topic-actions";
+export {
+  createLearningTopicAction,
+  updateTopicStatusAction,
+} from "./classroom/topic-actions";
 
-import {
-  getLearningInterventionsAction,
+export {
   createLearningInterventionAction,
   updateLearningInterventionAction,
 } from "./classroom/intervention-actions";
 
 export {
-  createClassroomAction,
-  getTeacherClassroomsAction,
-  getClassroomAssignedSurveyProgressAction,
-  inviteStudentToClassroomAction,
-  bulkInviteStudentsToClassroomAction,
-  createLearningTopicAction,
-  getLearningInterventionsAction,
-  createLearningInterventionAction,
-  updateLearningInterventionAction,
-};
+  answerTeacherStudentQuestionAction,
+  askOutOfSessionQuestionAction,
+  completeTutoringSessionAction,
+  persistTeacherChatSessionAction,
+} from "./classroom/tutoring-actions";

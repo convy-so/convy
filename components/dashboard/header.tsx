@@ -3,12 +3,9 @@
 import Image from "next/image";
 import { Search, LogOut, Settings, User as UserIcon, Bell } from "lucide-react";
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
 import { useRouter, Link } from "@/i18n/routing";
 import { markNotificationAsRead } from "@/app/actions/notifications";
-import { fetchNotifications as fetchNotificationsAPI } from "@/lib/api/notifications";
-import { queryKeys } from "@/lib/query-keys";
 import toast from "react-hot-toast";
 
 import { useTranslations } from "next-intl";
@@ -21,30 +18,27 @@ type NotificationListItem = {
   message: string;
   createdAt: string | Date;
   read: boolean;
+  link?: string | null;
 };
 
-export function DashboardHeader() {
+export function DashboardHeader({
+  initialNotifications,
+}: {
+  initialNotifications: NotificationListItem[];
+}) {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
   const router = useRouter();
   const t = useTranslations("Header");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-
-  // Fetch notifications using React Query
-  const { data: notifications = [], isLoading } = useQuery<NotificationListItem[]>({
-    queryKey: queryKeys.notifications.all(),
-    queryFn: fetchNotificationsAPI,
-  });
+  const [notifications, setNotifications] = useState(initialNotifications);
+  const isLoading = false;
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const handleMarkAsRead = async (id: string) => {
-    const previousNotifications =
-      queryClient.getQueryData<NotificationListItem[]>(queryKeys.notifications.all()) ?? [];
-
-    queryClient.setQueryData(
-      queryKeys.notifications.all(),
+    const previousNotifications = notifications;
+    setNotifications(
       previousNotifications.map((notification) =>
         notification.id === id
           ? { ...notification, read: true }
@@ -57,7 +51,7 @@ export function DashboardHeader() {
       return;
     }
 
-    queryClient.setQueryData(queryKeys.notifications.all(), previousNotifications);
+    setNotifications(previousNotifications);
     toast.error(getFriendlyActionError(result.error));
   };
 

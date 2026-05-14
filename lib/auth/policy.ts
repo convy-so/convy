@@ -1,6 +1,4 @@
-import "server-only";
-
-import { AuthError, getPlatformRole, type PlatformRole } from "@/lib/auth/dal";
+import { AuthError, getPlatformRole, type PlatformRole } from "./roles";
 
 export type AuthorizablePrincipal = {
   role?: string | null;

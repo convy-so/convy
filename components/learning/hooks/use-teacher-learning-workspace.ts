@@ -6,6 +6,11 @@ import toast from "react-hot-toast";
 
 import { useRouter } from "@/i18n/routing";
 import {
+  updateLearningInterventionAction,
+  updateTopicStatusAction,
+} from "@/app/actions/classroom";
+import { createSurveyDraftAction } from "@/app/actions/survey";
+import {
   fetchClassroomAssignedSurveys,
   fetchClassroomStudents,
   fetchClassroomTopics,
@@ -16,14 +21,15 @@ import {
   fetchTopicQuestions,
   fetchTopicReadiness,
   fetchTopicReports,
-  updateTopicStatus,
-  updateLearningIntervention,
   uploadTopicMaterial,
 } from "@/lib/api/learning";
-import { createSurveyDraft } from "@/lib/api/surveys";
 import { queryKeys } from "@/lib/query-keys";
+import { getFriendlyActionError } from "@/lib/action-ux";
+import type { getTeacherLearningWorkspaceInitialData } from "@/lib/server/app-queries";
 
-export function useTeacherLearningWorkspace() {
+export function useTeacherLearningWorkspace(
+  initialData: Awaited<ReturnType<typeof getTeacherLearningWorkspaceInitialData>>,
+) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(null);
@@ -33,6 +39,8 @@ export function useTeacherLearningWorkspace() {
   const classroomsQuery = useQuery({
     queryKey: queryKeys.learning.classrooms,
     queryFn: fetchTeacherClassrooms,
+    initialData: initialData.initialClassrooms,
+    staleTime: 30_000,
   });
 
   const classrooms = useMemo(() => classroomsQuery.data?.data ?? [], [classroomsQuery.data]);
@@ -54,6 +62,13 @@ export function useTeacherLearningWorkspace() {
       return fetchClassroomStudents(selectedAccessibleClassroomId);
     },
     enabled: Boolean(selectedAccessibleClassroomId),
+    initialData:
+      initialData.initialStudents &&
+      selectedAccessibleClassroomId ===
+        (initialData.initialClassrooms.data[0]?.id ?? null)
+        ? initialData.initialStudents
+        : undefined,
+    staleTime: 30_000,
   });
   const topicsQuery = useQuery({
     queryKey: selectedAccessibleClassroomId
@@ -66,6 +81,13 @@ export function useTeacherLearningWorkspace() {
       return fetchClassroomTopics(selectedAccessibleClassroomId);
     },
     enabled: Boolean(selectedAccessibleClassroomId),
+    initialData:
+      initialData.initialTopics &&
+      selectedAccessibleClassroomId ===
+        (initialData.initialClassrooms.data[0]?.id ?? null)
+        ? initialData.initialTopics
+        : undefined,
+    staleTime: 30_000,
   });
 
   const students = useMemo(() => studentsQuery.data?.data ?? [], [studentsQuery.data]);
@@ -84,6 +106,12 @@ export function useTeacherLearningWorkspace() {
       return fetchTopicMaterials(selectedTopic.id);
     },
     enabled: Boolean(selectedTopic),
+    initialData:
+      initialData.initialMaterials &&
+      selectedTopic?.id === (initialData.initialTopics?.data[0]?.id ?? null)
+        ? initialData.initialMaterials
+        : undefined,
+    staleTime: 30_000,
   });
   const readinessQuery = useQuery({
     queryKey: selectedTopic ? queryKeys.learning.readiness(selectedTopic.id) : ["learningReadiness", "idle"],
@@ -94,6 +122,12 @@ export function useTeacherLearningWorkspace() {
       return fetchTopicReadiness(selectedTopic.id);
     },
     enabled: Boolean(selectedTopic),
+    initialData:
+      initialData.initialReadiness &&
+      selectedTopic?.id === (initialData.initialTopics?.data[0]?.id ?? null)
+        ? initialData.initialReadiness
+        : undefined,
+    staleTime: 30_000,
   });
   const reportsQuery = useQuery({
     queryKey: selectedTopic ? queryKeys.learning.reports(selectedTopic.id) : ["learningReports", "idle"],
@@ -104,6 +138,12 @@ export function useTeacherLearningWorkspace() {
       return fetchTopicReports(selectedTopic.id);
     },
     enabled: Boolean(selectedTopic),
+    initialData:
+      initialData.initialReportsPayload &&
+      selectedTopic?.id === (initialData.initialTopics?.data[0]?.id ?? null)
+        ? initialData.initialReportsPayload
+        : undefined,
+    staleTime: 30_000,
   });
   const questionsQuery = useQuery({
     queryKey: selectedTopic ? queryKeys.learning.questions(selectedTopic.id) : ["learningQuestions", "idle"],
@@ -114,6 +154,12 @@ export function useTeacherLearningWorkspace() {
       return fetchTopicQuestions(selectedTopic.id);
     },
     enabled: Boolean(selectedTopic),
+    initialData:
+      initialData.initialQuestions &&
+      selectedTopic?.id === (initialData.initialTopics?.data[0]?.id ?? null)
+        ? initialData.initialQuestions
+        : undefined,
+    staleTime: 30_000,
   });
   const studentPatternsQuery = useQuery({
     queryKey: selectedStudent ? queryKeys.learning.studentPatterns(selectedStudent.id) : ["learningStudentPatterns", "idle"],
@@ -124,6 +170,12 @@ export function useTeacherLearningWorkspace() {
       return fetchStudentPatterns(selectedStudent.id);
     },
     enabled: Boolean(selectedStudent),
+    initialData:
+      initialData.initialStudentPatterns &&
+      selectedStudent?.id === (initialData.initialStudents?.data[0]?.id ?? null)
+        ? initialData.initialStudentPatterns
+        : undefined,
+    staleTime: 30_000,
   });
   const assignedSurveysQuery = useQuery({
     queryKey: selectedAccessibleClassroomId
@@ -136,6 +188,13 @@ export function useTeacherLearningWorkspace() {
       return fetchClassroomAssignedSurveys(selectedAccessibleClassroomId);
     },
     enabled: Boolean(selectedAccessibleClassroomId),
+    initialData:
+      initialData.initialAssignedSurveys &&
+      selectedAccessibleClassroomId ===
+        (initialData.initialClassrooms.data[0]?.id ?? null)
+        ? initialData.initialAssignedSurveys
+        : undefined,
+    staleTime: 30_000,
   });
   const interventionsQuery = useQuery({
     queryKey:
@@ -157,6 +216,15 @@ export function useTeacherLearningWorkspace() {
       });
     },
     enabled: Boolean(selectedAccessibleClassroomId && selectedStudent),
+    initialData:
+      initialData.initialInterventions &&
+      selectedAccessibleClassroomId ===
+        (initialData.initialClassrooms.data[0]?.id ?? null) &&
+      selectedStudent?.id === (initialData.initialStudents?.data[0]?.id ?? null) &&
+      (selectedTopic?.id ?? null) === (initialData.initialTopics?.data[0]?.id ?? null)
+        ? initialData.initialInterventions
+        : undefined,
+    staleTime: 30_000,
   });
 
   const uploadMaterialMutation = useMutation({
@@ -173,8 +241,19 @@ export function useTeacherLearningWorkspace() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to upload material"),
   });
   const updateTopicStatusMutation = useMutation({
-    mutationFn: ({ topicId, status }: { topicId: string; status: "draft" | "active" | "paused" | "archived" }) =>
-      updateTopicStatus(topicId, status),
+    mutationFn: async ({
+      topicId,
+      status,
+    }: {
+      topicId: string;
+      status: "draft" | "active" | "paused" | "archived";
+    }) => {
+      const result = await updateTopicStatusAction({ topicId, status });
+      if (!result.success) {
+        throw new Error(getFriendlyActionError(result.error));
+      }
+      return result.data;
+    },
     onSuccess: async () => {
       toast.success("Topic status updated");
       if (selectedAccessibleClassroomId) {
@@ -184,11 +263,16 @@ export function useTeacherLearningWorkspace() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to update topic"),
   });
   const createClassSurveyMutation = useMutation({
-    mutationFn: async (classroomId: string) =>
-      createSurveyDraft({
+    mutationFn: async (classroomId: string) => {
+      const result = await createSurveyDraftAction({
         deliveryMode: "classroom_assigned",
         classroomId,
-      }),
+      });
+      if (!result.success) {
+        throw new Error(getFriendlyActionError(result.error));
+      }
+      return result.data;
+    },
     onSuccess: async (data) => {
       toast.success("Class-linked survey draft created");
       await queryClient.invalidateQueries({ queryKey: queryKeys.surveys.all(null) });
@@ -200,7 +284,18 @@ export function useTeacherLearningWorkspace() {
       ),
   });
   const updateInterventionMutation = useMutation({
-    mutationFn: updateLearningIntervention,
+    mutationFn: async (input: {
+      interventionId: string;
+      status: "planned" | "in_progress" | "completed" | "dismissed";
+      notes?: string;
+      dueAt?: string;
+    }) => {
+      const result = await updateLearningInterventionAction(input);
+      if (!result.success) {
+        throw new Error(getFriendlyActionError(result.error));
+      }
+      return result.data;
+    },
     onSuccess: async () => {
       toast.success("Intervention updated");
       if (selectedAccessibleClassroomId && selectedStudent) {

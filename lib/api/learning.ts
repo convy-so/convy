@@ -14,8 +14,8 @@ import { appLocales } from "@/lib/i18n/config";
 const classroomSchema = z.object({
   id: z.string(),
   title: z.string(),
-  description: z.string(),
-  subject: z.string(),
+  description: z.string().nullable(),
+  subject: z.string().nullable(),
   defaultContentLocale: z.enum(appLocales),
   gradeBand: z.string(),
   gradeLabel: z.string(),
@@ -114,7 +114,7 @@ const classroomInvitationSchema = z.object({
   expiresAt: z.string().nullable(),
 });
 
-const learningMeSchema = z.discriminatedUnion("role", [
+export const learningMeSchema = z.discriminatedUnion("role", [
   z.object({
     role: z.literal("student"),
     student: z.array(learningStudentMembershipSchema),
@@ -131,7 +131,7 @@ const onboardingMessageSchema = z.object({
   id: z.string(),
   role: z.string(),
   content: z.string(),
-  metadata: z.record(z.string(), z.unknown()).default({}),
+  metadata: z.record(z.string(), z.unknown()).nullable().optional(),
   createdAt: z.union([z.string(), z.date()]).optional(),
 });
 
@@ -214,7 +214,7 @@ const studentPatternResponseSchema = z.object({
   data: z.array(patternSchema),
 });
 
-const studentOverviewSchema = z.object({
+export const studentOverviewSchema = z.object({
   success: z.literal(true),
   data: z.object({
     student: z.object({
@@ -272,7 +272,7 @@ const studentOverviewSchema = z.object({
   }),
 });
 
-const topicOverviewSchema = z.object({
+export const topicOverviewSchema = z.object({
   success: z.literal(true),
   data: z.object({
     topic: z.object({
@@ -296,6 +296,13 @@ const topicOverviewSchema = z.object({
     activeStudentCount: z.number(),
   }),
 });
+
+export type StudentPatternResponse = z.infer<typeof studentPatternResponseSchema>;
+export type TeacherPatternResponse = z.infer<typeof teacherPatternResponseSchema>;
+export type StudentOverviewResponse = z.infer<typeof studentOverviewSchema>;
+export type TopicOverviewResponse = z.infer<typeof topicOverviewSchema>;
+export type OnboardingStateResponse = z.infer<typeof onboardingStateSchema>;
+export type TutoringSessionResponse = z.infer<typeof tutoringSessionSchema>;
 
 const activationValidationSchema = z.object({
   valid: z.boolean(),
@@ -422,7 +429,7 @@ async function parseResponse<T>(
 export async function fetchLearningMe() {
   return await parseResponse(
     await fetch("/api/learning/me", { credentials: "include" }),
-    learningMeSchema,
+    learningMeSchema
   );
 }
 
@@ -817,28 +824,10 @@ export async function fetchStudentPatterns(studentId: string) {
   );
 }
 
-export async function fetchStudentOverview(studentId: string) {
-  return await parseResponse(
-    await fetch(`/api/learning/students/${studentId}/overview`, {
-      credentials: "include",
-    }),
-    studentOverviewSchema,
-  );
-}
-
 export async function fetchMyPatterns() {
   return await parseResponse(
     await fetch("/api/learning/me/patterns", { credentials: "include" }),
     studentPatternResponseSchema,
-  );
-}
-
-export async function fetchTopicOverview(topicId: string) {
-  return await parseResponse(
-    await fetch(`/api/learning/topics/${topicId}/overview`, {
-      credentials: "include",
-    }),
-    topicOverviewSchema,
   );
 }
 
@@ -866,58 +855,6 @@ export async function fetchTutoringSession(
       },
     ),
     z.object({ success: z.literal(true), data: tutoringSessionSchema }),
-  );
-}
-
-export async function completeTutoringSession(input: {
-  topicId: string;
-  sessionId: string;
-  language?: (typeof appLocales)[number];
-}) {
-  return await parseResponse(
-    await fetch(`/api/learning/topics/${input.topicId}/chat/complete`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: input.sessionId,
-        language: input.language,
-      }),
-    }),
-    z.object({
-      success: z.literal(true),
-      data: z.object({
-        sessionId: z.string(),
-        status: z.string(),
-        reportQueued: z.boolean().optional(),
-        alreadyCompleted: z.boolean().optional(),
-      }),
-    }),
-  );
-}
-
-export async function askOutOfSessionQuestion(input: {
-  topicId: string;
-  message: string;
-  language?: (typeof appLocales)[number];
-}) {
-  return await parseResponse(
-    await fetch(`/api/learning/topics/${input.topicId}/questions`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: input.message,
-        language: input.language,
-      }),
-    }),
-    z.object({
-      success: z.literal(true),
-      data: z.object({
-        classification: z.enum(["on_topic", "near_topic", "off_topic"]),
-        response: z.string(),
-      }),
-    }),
   );
 }
 

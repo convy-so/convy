@@ -41,6 +41,7 @@ export const updateSurveySchema = z.object({
     .max(50, "Maximum participant limit is 50")
     .optional(),
   language: z.enum(appLocales).optional(),
+  isVoice: z.boolean().optional(),
 });
 
 export type UpdateSurveyInput = z.infer<typeof updateSurveySchema>;
