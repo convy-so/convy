@@ -7,9 +7,8 @@ import { surveys, surveyCreationConversations, surveyBriefs } from "@/db/schema/
 import { platformFeedback } from "@/db/schema/feedback";
 import { classroomStudents, classrooms, learningTopics, learningSessions } from "@/db/schema/learning";
 import { sql, eq, gte, desc, count, sum } from "drizzle-orm";
-import { headers } from "next/headers";
 
-import { resolveAdminSessionEmail } from "@/lib/admin/session";
+import { requireRole } from "@/lib/auth/dal";
 import { withErrorHandling, ActionResult, UnauthorizedError, ActionError } from "@/lib/action-wrapper";
 
 export type AdminStats = {
@@ -100,24 +99,12 @@ function toUsageCostData(rows: Record<string, unknown>[]): UsageCostData[] {
 }
 
 async function checkAdmin(authHeaders?: Headers | string | null) {
-  let finalHeaders: Headers;
-
-  if (authHeaders instanceof Headers) {
-    finalHeaders = authHeaders;
-  } else if (typeof authHeaders === "string") {
-    finalHeaders = new Headers();
-    finalHeaders.append("cookie", authHeaders);
-  } else {
-    finalHeaders = await headers();
-  }
-
-  const cookieStr = finalHeaders.get("cookie") || "";
-  const email = await resolveAdminSessionEmail(cookieStr);
-  if (!email) {
+  try {
+    const session = await requireRole("admin", authHeaders);
+    return { email: session.user.email };
+  } catch {
     throw new UnauthorizedError("Admin access required");
   }
-
-  return { email };
 }
 
 export async function getAdminStats(authHeaders?: Headers | string | null): Promise<ActionResult<AdminStats>> {

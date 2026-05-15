@@ -5,7 +5,6 @@ import { type UIMessage } from "ai";
 import {
   Brain,
   ClipboardList,
-  Keyboard,
   Loader2,
   MessageSquare,
   Mic,
@@ -13,11 +12,9 @@ import {
   Sparkles,
   ChevronDown,
   Check,
-  X,
   UserCircle,
   GraduationCap,
   ArrowRight,
-  Clock,
   LayoutDashboard,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -25,10 +22,6 @@ import toast from "react-hot-toast";
 import { Link } from "@/i18n/routing";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAudioTranscription } from "@/hooks/use-audio-transcription";
-import {
-  appLocaleLabels,
-  appLocales,
-} from "@/lib/i18n/config";
 import { useStudentLearningWorkspace } from "@/components/learning/hooks/use-student-learning-workspace";
 import type { LearningMeData } from "@/lib/api/learning";
 import type {
@@ -70,47 +63,6 @@ function getUIMessageText(message: UIMessage) {
   );
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function getTutorMediaMetadata(metadata: Record<string, unknown>) {
-  const tutorMedia = metadata.tutorMedia;
-  if (!isRecord(tutorMedia)) return null;
-
-  const assetType = tutorMedia.assetType;
-  const title = tutorMedia.title;
-  const mediaUrl = tutorMedia.mediaUrl;
-  const reason = tutorMedia.reason;
-  const expectedBenefit = tutorMedia.expectedBenefit;
-  if (
-    (assetType !== "image" && assetType !== "video") ||
-    typeof title !== "string" ||
-    typeof mediaUrl !== "string" ||
-    typeof reason !== "string" ||
-    typeof expectedBenefit !== "string"
-  ) {
-    return null;
-  }
-
-  return {
-    assetType,
-    title,
-    description: typeof tutorMedia.description === "string" ? tutorMedia.description : null,
-    mediaUrl,
-    thumbnailUrl: typeof tutorMedia.thumbnailUrl === "string" ? tutorMedia.thumbnailUrl : null,
-    reason,
-    expectedBenefit,
-  };
-}
-
-function formatPhaseLabel(value: string) {
-  return value
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 function formatDate(value: string | Date | null | undefined) {
   if (!value) return "Not yet";
   return new Intl.DateTimeFormat(undefined, {
@@ -149,7 +101,6 @@ export function StudentLearningHome({
   const {
     memberships,
     selectedStudyLanguage,
-    setSelectedStudyLanguage,
     setSelectedMembershipId,
     selectedMembership,
     availableSurveys,
@@ -158,18 +109,14 @@ export function StudentLearningHome({
     tutoringSessionQuery,
     onboardingChatMessages,
     sendOnboardingMessage,
-    onboardingChatStatus,
     tutoringChatMessages,
     sendTutoringChatMessage,
-    tutoringChatStatus,
     outOfSessionMutation,
     completeTutoringMutation,
     outOfSessionReply,
     setOutOfSessionReply,
     selectedTopic,
-    currentStageId,
     patterns,
-    strongestPattern,
     membershipCount,
     invitations,
     acceptInvitationMutation,
@@ -190,26 +137,18 @@ export function StudentLearningHome({
   const [onboardingInput, setOnboardingInput] = useState("");
   const [sessionInput, setSessionInput] = useState("");
   const [questionInput, setQuestionInput] = useState("");
-  const [inputMode, setInputMode] = useState<"text" | "voice">("text");
 
-  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
-  const [isClassDropdownOpen, setIsClassDropdownOpen] = useState(false);
   const [isTopicDropdownOpen, setIsTopicDropdownOpen] = useState(false);
 
-  const langDropdownRef = useRef<HTMLDivElement>(null);
-  const classDropdownRef = useRef<HTMLDivElement>(null);
   const topicDropdownRef = useRef<HTMLDivElement>(null);
 
   const {
     isSupported: isVoiceInputSupported,
     activeTarget: transcriptionTarget,
     startTranscription,
-    stopRecording: stopDictation,
   } = useAudioTranscription({
     onError: (message) => toast.error(message),
   });
-
-  const isVoiceInputMode = inputMode === "voice";
 
   const liveMessages = useMemo<LiveMessage[]>(
     () =>
@@ -241,12 +180,6 @@ export function StudentLearningHome({
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (langDropdownRef.current && event.target instanceof Node && !langDropdownRef.current.contains(event.target)) {
-        setIsLangDropdownOpen(false);
-      }
-      if (classDropdownRef.current && event.target instanceof Node && !classDropdownRef.current.contains(event.target)) {
-        setIsClassDropdownOpen(false);
-      }
       if (topicDropdownRef.current && event.target instanceof Node && !topicDropdownRef.current.contains(event.target)) {
         setIsTopicDropdownOpen(false);
       }
@@ -524,7 +457,7 @@ export function StudentLearningHome({
                                   placeholder="Reply to the tutor..."
                                   className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-100 outline-none transition-all shadow-sm"
                                 />
-                                {isVoiceInputMode && isVoiceInputSupported && (
+                                {isVoiceInputSupported && (
                                   <button
                                     type="button"
                                     onClick={() => startTranscription({ target: "student-session", language: "multi", onTranscript: (t) => setSessionInput((c) => appendTranscript(c, t)) })}

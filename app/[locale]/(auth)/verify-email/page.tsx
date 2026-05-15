@@ -32,6 +32,7 @@ function VerifyEmailContent() {
     : (params.locale ?? "en");
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
+  const callbackURL = searchParams.get("callbackURL");
   const t = useTranslations('Auth.VerifyEmail');
 
   const [email, setEmail] = useState<string | null>(null);
@@ -53,12 +54,13 @@ function VerifyEmailContent() {
         try {
           await authClient.verifyEmail({
             query: {
-              token: token
+              token,
+              callbackURL: callbackURL ?? `/${locale}/auth/continue`,
             },
             fetchOptions: {
               onSuccess: () => {
                 toast.success(t('SuccessToast'));
-                router.push("/dashboard");
+                router.push("/auth/continue");
               },
               onError: (ctx) => {
                 setIsVerifying(false);
@@ -75,7 +77,7 @@ function VerifyEmailContent() {
 
       verify();
     }
-  }, [token, router, searchParams, t]);
+  }, [callbackURL, locale, router, searchParams, t, token]);
 
   const handleResendVerification = async () => {
     if (!email) return;
@@ -84,7 +86,7 @@ function VerifyEmailContent() {
     try {
       await authClient.sendVerificationEmail({
         email,
-        callbackURL: `/${locale}/dashboard`
+        callbackURL: callbackURL ?? `/${locale}/auth/continue`
       });
       toast.success(t('ResendSuccess'));
     } catch (error) {

@@ -5,6 +5,8 @@ import {
   getPlatformFeedbackItems,
   updatePlatformFeedbackStatus,
 } from "@/app/actions/admin";
+import { getLocalizedAdminAppPath } from "@/lib/auth/admin-path";
+import { normalizeAppLocale } from "@/lib/i18n/config";
 
 type FeedbackStatus = "open" | "reviewing" | "resolved" | "dismissed";
 
@@ -21,11 +23,17 @@ export default async function AdminFeedbackPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  const appLocale = normalizeAppLocale(locale);
   const cookieHeader = (await headers()).get("cookie");
   const result = await getPlatformFeedbackItems(cookieHeader);
   const items = result.success ? result.data : [];
 
-  const validStatuses: FeedbackStatus[] = ["open", "reviewing", "resolved", "dismissed"];
+  const validStatuses: FeedbackStatus[] = [
+    "open",
+    "reviewing",
+    "resolved",
+    "dismissed",
+  ];
 
   async function setFeedbackStatus(formData: FormData) {
     "use server";
@@ -36,9 +44,12 @@ export default async function AdminFeedbackPage({
       return;
     }
 
-    const result = await updatePlatformFeedbackStatus(feedbackId, rawStatus as FeedbackStatus);
+    const result = await updatePlatformFeedbackStatus(
+      feedbackId,
+      rawStatus as FeedbackStatus,
+    );
     if (result.success) {
-      revalidatePath(`/${locale}/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/feedback`);
+      revalidatePath(getLocalizedAdminAppPath(appLocale, "/feedback"));
     } else {
       console.error("[AdminFeedback] setFeedbackStatus failed:", result.error);
     }
@@ -98,9 +109,7 @@ export default async function AdminFeedbackPage({
                         item.userEmail ||
                         "Unknown"}
                     </span>
-                    <span>
-                      {new Date(item.createdAt).toLocaleString()}
-                    </span>
+                    <span>{new Date(item.createdAt).toLocaleString()}</span>
                   </div>
                 </div>
 

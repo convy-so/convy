@@ -3,13 +3,6 @@ import fs from "fs";
 const p = "app/[locale]/student/classes/student-classes-client.tsx";
 let s = fs.readFileSync(p, "utf8");
 
-const block = [
-  '        <motionlessCardInvitesBlock />'.replace(
-    "<motionlessCardInvitesBlock />",
-    '<div className="space-y-4">',
-  ),
-].join("\n");
-
 // STOP - use only this:
 const inviteBlock = [
   '        <div className="space-y-4">',

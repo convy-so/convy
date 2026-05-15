@@ -1,11 +1,10 @@
 import { apiError, apiUnhandledError } from "@/lib/api/error-contract";
-import { getDb } from "@/db";
-import { users } from "@/db/schema/auth";
-import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth/dal";
 import { isAdmin } from "@/lib/auth/dal";
 import { auth } from "@/lib/auth";
+import { normalizeIdentityEmail } from "@/lib/auth/auth-intent";
+import { provisionUserRole } from "@/lib/auth/role-provisioning";
 
 export async function POST(req: Request) {
     try {
@@ -15,8 +14,9 @@ export async function POST(req: Request) {
         }
 
         const { name, email } = await req.json();
+        const normalizedEmail = typeof email === "string" ? normalizeIdentityEmail(email) : "";
 
-        if (!name || !email) {
+        if (!name || !normalizedEmail) {
             return apiError("VALIDATION_ERROR", "Name and email are required");
         }
 
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
         const res = await auth.api.signUpEmail({
             body: {
                 name,
-                email,
+                email: normalizedEmail,
                 password: tempPassword,
             }
         });
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
         }
 
         // Elevate to expert
-        await getDb().update(users).set({ role: "expert" }).where(eq(users.id, res.user.id));
+        await provisionUserRole({ userId: res.user.id, role: "expert" });
 
         return NextResponse.json({ success: true, userId: res.user.id });
     } catch (error) {

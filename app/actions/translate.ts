@@ -1,8 +1,6 @@
 "use server";
 
-import { getCurrentSession } from "@/lib/auth/dal";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
+import { getCurrentSession, requireVerifiedSession } from "@/lib/auth/dal";
 import { getDb } from "@/db";
 import { users } from "@/db/schema/auth";
 import { eq } from "drizzle-orm";
@@ -16,9 +14,7 @@ import { withErrorHandling, ActionResult, UnauthorizedError } from "@/lib/action
  */
 export async function updateUserLanguage(language: AppLocale): Promise<ActionResult<void>> {
   return withErrorHandling(async () => {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
+    const session = await requireVerifiedSession();
 
     if (!session?.user) {
       throw new UnauthorizedError();

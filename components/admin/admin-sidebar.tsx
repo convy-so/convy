@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";
+import { getAdminAppPath } from "@/lib/auth/admin-path";
 import toast from "react-hot-toast";
 
 export function AdminSidebar() {
@@ -20,13 +21,13 @@ export function AdminSidebar() {
     const router = useRouter();
 
     const navigation = [
-        { name: "Overview", href: "/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI", icon: LayoutDashboard },
-        { name: "AI Ops", href: "/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/ai-ops", icon: ShieldCheck },
-        { name: "User Management", href: "/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/manage-users", icon: UserCog2 },
-        { name: "Learning Topics", href: "/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/surveys", icon: MessageSquare },
-        { name: "Student Feedback", href: "/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/feedback", icon: Inbox },
-        { name: "Usage & Costs", href: "/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/usage", icon: Database },
-        { name: "User Growth", href: "/5Yeo2xyqejRrN9bhz8FqWRPITkRXGZEM4Yma2eV3UI/users", icon: Users },
+        { name: "Overview", href: getAdminAppPath(), icon: LayoutDashboard },
+        { name: "AI Ops", href: getAdminAppPath("/ai-ops"), icon: ShieldCheck },
+        { name: "User Management", href: getAdminAppPath("/manage-users"), icon: UserCog2 },
+        { name: "Learning Topics", href: getAdminAppPath("/surveys"), icon: MessageSquare },
+        { name: "Student Feedback", href: getAdminAppPath("/feedback"), icon: Inbox },
+        { name: "Usage & Costs", href: getAdminAppPath("/usage"), icon: Database },
+        { name: "User Growth", href: getAdminAppPath("/users"), icon: Users },
     ];
 
     const handleSignOut = async () => {

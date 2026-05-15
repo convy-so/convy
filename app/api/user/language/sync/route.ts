@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { normalizeAppLocale } from "@/lib/i18n/config";
 import { env } from "@/lib/env";
+import { sanitizeReturnTo } from "@/lib/auth/redirect";
+import { logAuthAuditEvent } from "@/lib/auth/audit";
 
 /**
  * GET /api/user/language/sync
@@ -13,7 +15,16 @@ import { env } from "@/lib/env";
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const locale = normalizeAppLocale(searchParams.get("locale"));
-  const redirectTo = searchParams.get("redirect") || "/dashboard";
+  const requestedRedirect = searchParams.get("redirect");
+  const redirectTo = sanitizeReturnTo(requestedRedirect) || "/dashboard";
+
+  if (requestedRedirect && !sanitizeReturnTo(requestedRedirect)) {
+    logAuthAuditEvent("unsafe_redirect_target", {
+      route: "/api/user/language/sync",
+      requestedReturnTo: requestedRedirect,
+      locale,
+    });
+  }
 
   const response = NextResponse.redirect(new URL(redirectTo, request.url));
 

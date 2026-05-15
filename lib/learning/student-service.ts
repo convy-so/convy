@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
 import { classroomInvitations, classrooms, classroomStudents, users } from "@/db/schema";
+import { logAuthAuditEvent } from "@/lib/auth/audit";
 import { EmailService } from "@/lib/email-service";
 import { ValidationError } from "@/lib/action-wrapper";
 
@@ -62,6 +63,12 @@ export async function validateStudentsForInvitation(params: {
     });
 
     if (existingUser && existingUser.role !== "student") {
+      logAuthAuditEvent("staff_invitation_blocked", {
+        classroomId: params.classroomId,
+        invitedEmail: email,
+        currentRole: existingUser.role,
+        userId: existingUser.id,
+      });
       console.log(`[student-service] validateStudentsForInvitation: ${email} → BLOCKED (staff_account, role=${existingUser.role})`);
       invalid.push({ email, reason: "staff_account" });
       continue;
@@ -314,13 +321,56 @@ export async function respondToInvitation(params: {
   const invitation = await getDb().query.classroomInvitations.findFirst({
     where: eq(classroomInvitations.id, params.invitationId),
   });
-  if (!invitation || invitation.status !== PENDING_INVITE_STATUS) {
+  if (!invitation) {
+    throw new Error("Invitation not found.");
+  }
+
+  if (invitation.status !== PENDING_INVITE_STATUS) {
+    const isIdempotentAccept =
+      params.decision === "accepted" &&
+      invitation.status === "accepted" &&
+      invitation.acceptedByUserId === params.userId;
+    const isIdempotentReject =
+      params.decision === "rejected" && invitation.status === "rejected";
+
+    if (isIdempotentAccept || isIdempotentReject) {
+      logAuthAuditEvent("invite_acceptance_replay", {
+        invitationId: params.invitationId,
+        userId: params.userId,
+        decision: params.decision,
+        currentStatus: invitation.status,
+      });
+      console.warn("[student-service] respondToInvitation: idempotent replay", {
+        invitationId: params.invitationId,
+        userId: params.userId,
+        decision: params.decision,
+        currentStatus: invitation.status,
+      });
+      return;
+    }
+
     throw new Error("Invitation not found or no longer pending.");
   }
 
   const user = await getDb().query.users.findFirst({ where: eq(users.id, params.userId) });
   if (!user || user.email.trim().toLowerCase() !== invitation.invitedEmail) {
+    logAuthAuditEvent("invite_email_mismatch", {
+      invitationId: params.invitationId,
+      invitedEmail: invitation.invitedEmail,
+      currentEmail: user?.email?.trim().toLowerCase() ?? null,
+      userId: params.userId,
+    });
     throw new Error("Invitation email does not match the signed-in user.");
+  }
+  if (user.role !== "student") {
+    logAuthAuditEvent("staff_invitation_blocked", {
+      invitationId: params.invitationId,
+      invitedEmail: invitation.invitedEmail,
+      currentEmail: user.email.trim().toLowerCase(),
+      currentRole: user.role,
+      userId: params.userId,
+    });
+    throw new Error("Only student accounts may accept classroom invitations.");
   }
 
   const now = new Date();
@@ -343,6 +393,32 @@ export async function respondToInvitation(params: {
       .returning({ id: classroomInvitations.id });
 
     if (!updatedInvitation) {
+      const latestInvitation = await tx.query.classroomInvitations.findFirst({
+        where: eq(classroomInvitations.id, params.invitationId),
+      });
+
+      const isIdempotentAccept =
+        params.decision === "accepted" &&
+        latestInvitation?.status === "accepted" &&
+        latestInvitation.acceptedByUserId === params.userId;
+      const isIdempotentReject =
+        params.decision === "rejected" && latestInvitation?.status === "rejected";
+
+      if (isIdempotentAccept || isIdempotentReject) {
+        logAuthAuditEvent("invite_acceptance_replay", {
+          invitationId: params.invitationId,
+          userId: params.userId,
+          decision: params.decision,
+          currentStatus: latestInvitation?.status ?? null,
+        });
+        console.warn("[student-service] respondToInvitation: conflict resolved as replay", {
+          invitationId: params.invitationId,
+          userId: params.userId,
+          decision: params.decision,
+        });
+        return;
+      }
+
       throw new Error("Invitation not found or no longer pending.");
     }
 
@@ -357,7 +433,10 @@ export async function respondToInvitation(params: {
     const existingMembership = await tx.query.classroomStudents.findFirst({
       where: and(
         eq(classroomStudents.classroomId, invitation.classroomId),
-        eq(classroomStudents.userId, params.userId),
+        or(
+          eq(classroomStudents.userId, params.userId),
+          eq(classroomStudents.email, invitation.invitedEmail),
+        ),
       ),
     });
 
@@ -379,7 +458,23 @@ export async function respondToInvitation(params: {
         userId: params.userId,
         classroomId: invitation.classroomId,
       });
+      return;
     }
+
+    if (existingMembership.userId && existingMembership.userId !== params.userId) {
+      throw new Error("That invitation has already been claimed by another account.");
+    }
+
+    await tx
+      .update(classroomStudents)
+      .set({
+        userId: params.userId,
+        fullName: user.name ?? user.email,
+        email: invitation.invitedEmail,
+        inviteStatus: "accepted",
+        updatedAt: now,
+      })
+      .where(eq(classroomStudents.id, existingMembership.id));
   });
 
   console.log("[student-service] respondToInvitation: DONE", {

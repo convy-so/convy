@@ -56,7 +56,6 @@ export async function POST(request: Request) {
   try {
     const expert = await requireExpertSession();
     if ("error" in expert) return expert.error;
-    const { session } = expert;
     const body = createFrameworkSchema.parse(await request.json());
     const topic = await getExpertAccessibleTopic(body.topicId);
     if (!topic) {

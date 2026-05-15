@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
 import { Eye, EyeOff, Mail, Lock } from "lucide-react";
@@ -13,12 +13,22 @@ import { SubmitButton } from "@/components/auth/submit-button";
 import { LoadingOverlay } from "@/components/auth/loading-overlay";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
+import { prepareAuthIntent } from "@/lib/auth/intent-client";
+
+function buildVerifyEmailHref(locale: string, email: string) {
+  const params = new URLSearchParams({
+    email,
+    callbackURL: `/${locale}/auth/continue`,
+  });
+  return `/verify-email?${params.toString()}`;
+}
 
 export default function SignInPage() {
   const params = useParams<{ locale?: string | string[] }>();
   const locale = Array.isArray(params.locale)
     ? (params.locale[0] ?? "en")
     : (params.locale ?? "en");
+  const searchParams = useSearchParams();
   const router = useRouter();
   const t = useTranslations('Auth.SignIn');
   const [showPassword, setShowPassword] = useState(false);
@@ -29,21 +39,33 @@ export default function SignInPage() {
     password: "",
     rememberMe: true,
   });
+  const invitationId = searchParams.get("invitationId");
+  const isInviteFlow = Boolean(invitationId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
+      const callbackURL = await prepareAuthIntent({
+        kind: isInviteFlow ? "invite-signin" : "plain-signin",
+        desiredRole: isInviteFlow ? "student" : null,
+        invitationId,
+        returnTo: invitationId ? `/${locale}/invite/${invitationId}` : null,
+        locale,
+        preserveInviteIntent: true,
+      });
+
       await authClient.signIn.email({
         email: formData.email,
         password: formData.password,
         rememberMe: formData.rememberMe,
+        callbackURL,
         fetchOptions: {
           onSuccess: () => {
             toast.success(t('Success'));
             setIsRedirecting(true);
-            router.push("/dashboard");
+            router.push("/auth/continue");
           },
           onError: (ctx) => {
             const msg = ctx.error.message || "";
@@ -58,7 +80,7 @@ export default function SignInPage() {
                 sessionStorage.setItem('verification_email', formData.email);
               }
               toast.error(msg || "Please verify your email first.");
-              router.push("/verify-email");
+              router.push(buildVerifyEmailHref(locale, formData.email));
             } else {
               toast.error(msg);
             }
@@ -73,9 +95,18 @@ export default function SignInPage() {
   };
 
   const handleGoogleSignIn = async () => {
+    const callbackURL = await prepareAuthIntent({
+      kind: isInviteFlow ? "invite-signin" : "plain-signin",
+      desiredRole: isInviteFlow ? "student" : null,
+      invitationId,
+      returnTo: invitationId ? `/${locale}/invite/${invitationId}` : null,
+      locale,
+      preserveInviteIntent: true,
+    });
+
     await authClient.signIn.social({
       provider: "google",
-      callbackURL: `/${locale}/dashboard`
+      callbackURL
     });
   };
 

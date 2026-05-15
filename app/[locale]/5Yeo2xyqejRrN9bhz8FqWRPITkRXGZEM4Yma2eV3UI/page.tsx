@@ -1,12 +1,13 @@
 import { Suspense } from "react";
+
 import {
   getAdminStats,
   getUserGrowthData,
   getUsageCostData,
   getUsageTypeBreakdown,
 } from "@/app/actions/admin";
-import { StatsCard } from "@/components/admin/stats-card";
 import { GrowthChart } from "@/components/admin/growth-chart";
+import { StatsCard } from "@/components/admin/stats-card";
 import { UsageTypeChart } from "@/components/admin/usage-type-chart";
 
 export default async function AdminOverviewPage({
@@ -27,11 +28,11 @@ export default async function AdminOverviewPage({
 
       <Suspense
         fallback={
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-pulse">
+          <div className="grid grid-cols-1 gap-6 animate-pulse md:grid-cols-2 lg:grid-cols-4">
             {[1, 2, 3, 4].map((i) => (
               <div
                 key={i}
-                className="h-24 bg-gray-100 rounded-2xl border border-gray-100"
+                className="h-24 rounded-2xl border border-gray-100 bg-gray-100"
               />
             ))}
           </div>
@@ -40,14 +41,14 @@ export default async function AdminOverviewPage({
         <StatsGridSection />
       </Suspense>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900 mb-6">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm lg:col-span-2">
+          <h3 className="mb-6 text-lg font-semibold text-gray-900">
             User Growth &amp; Costs
           </h3>
           <Suspense
             fallback={
-              <div className="h-80 flex items-center justify-center bg-gray-50 rounded-xl animate-pulse">
+              <div className="flex h-80 items-center justify-center rounded-xl bg-gray-50 animate-pulse">
                 Loading data...
               </div>
             }
@@ -56,13 +57,13 @@ export default async function AdminOverviewPage({
           </Suspense>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900 mb-6">
+        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+          <h3 className="mb-6 text-lg font-semibold text-gray-900">
             Usage Breakdown
           </h3>
           <Suspense
             fallback={
-              <div className="h-80 flex items-center justify-center bg-gray-50 rounded-xl animate-pulse">
+              <div className="flex h-80 items-center justify-center rounded-xl bg-gray-50 animate-pulse">
                 Loading data...
               </div>
             }
@@ -83,27 +84,22 @@ async function GrowthByDateSection() {
 
   if (!userGrowthResult.success || !usageCostsResult.success) {
     return (
-      <div className="h-80 flex items-center justify-center text-sm text-gray-400">
+      <div className="flex h-80 items-center justify-center text-sm text-gray-400">
         Failed to load growth data.
       </div>
     );
   }
 
-  const userGrowth = userGrowthResult.data;
-  const usageCosts = usageCostsResult.data;
-
-  const data = userGrowth.map((ug) => {
-    const ugDate = ug.date;
-    const count = ug.count;
-    const costEntry = usageCosts.find((c) => c.date === ugDate);
+  const data = userGrowthResult.data.map((ug) => {
+    const costEntry = usageCostsResult.data.find((c) => c.date === ug.date);
     const costVal =
       costEntry && typeof costEntry.cost === "number" ? costEntry.cost : 0;
     return {
-      date: new Date(ugDate).toLocaleDateString(undefined, {
+      date: new Date(ug.date).toLocaleDateString(undefined, {
         month: "short",
         day: "numeric",
       }),
-      newUsers: count,
+      newUsers: ug.count,
       cost: parseFloat(costVal.toFixed(2)),
     };
   });
@@ -116,22 +112,17 @@ async function UsageBreakdownSection() {
 
   if (!result.success) {
     return (
-      <div className="h-80 flex items-center justify-center text-sm text-gray-400">
+      <div className="flex h-80 items-center justify-center text-sm text-gray-400">
         Failed to load usage breakdown.
       </div>
     );
   }
 
-  const data = result.data.map((b) => {
-    const typeStr = b.type || "unknown";
-    const costStr = b.totalCost || "0";
-    const itemCount = b.count;
-    return {
-      name: typeStr.replace("llm_", "").toUpperCase(),
-      value: parseFloat(costStr),
-      count: itemCount,
-    };
-  });
+  const data = result.data.map((b) => ({
+    name: (b.type || "unknown").replace("llm_", "").toUpperCase(),
+    value: parseFloat(b.totalCost || "0"),
+    count: b.count,
+  }));
 
   return <UsageTypeChart data={data} />;
 }
@@ -149,10 +140,8 @@ async function StatsGridSection() {
 
   const stats = result.data;
 
-  if (!stats) return null;
-
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
       <StatsCard
         title="Total Usage Cost"
         value={`$${parseFloat(stats.totalUsageCost).toFixed(2)}`}

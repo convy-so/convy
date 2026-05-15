@@ -34,7 +34,6 @@ export async function GET(request: Request) {
   try {
     const expert = await requireExpertSession();
     if ("error" in expert) return expert.error;
-    const { session } = expert;
 
     const { searchParams } = new URL(request.url);
     const topicId = searchParams.get("topicId");

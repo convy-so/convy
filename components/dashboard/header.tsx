@@ -14,6 +14,10 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { getFriendlyActionError } from "@/lib/action-ux";
 import { cn } from "@/lib/utils";
 
+type ViewerAccessHeader = {
+  authRole: "student" | "teacher" | "expert" | "admin";
+};
+
 type NotificationListItem = {
   id: string;
   title: string;
@@ -25,8 +29,10 @@ type NotificationListItem = {
 
 export function DashboardHeader({
   initialNotifications,
+  viewerAccess,
 }: {
   initialNotifications: NotificationListItem[];
+  viewerAccess: ViewerAccessHeader;
 }) {
   const { user } = useAuth();
   const router = useRouter();
@@ -69,7 +75,7 @@ export function DashboardHeader({
     });
   };
 
-  const isStudent = user?.role === "student";
+  const isStudent = viewerAccess.authRole === "student";
   const selectedClassroomId = searchParams.get("classroomId");
   const profileHref = isStudent
     ? selectedClassroomId

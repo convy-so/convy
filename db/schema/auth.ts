@@ -1,12 +1,13 @@
 import {
   boolean,
+  check,
   index,
   pgTable,
   text,
   timestamp,
   unique,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { timestamps } from "./common";
 import { userRoleEnum } from "./enums";
 export { users, accounts, sessions, verificationTokens, accountsRelations, sessionsRelations };
@@ -20,7 +21,7 @@ const users = pgTable(
     emailVerified: boolean("email_verified").default(false).notNull(),
     name: text("name").notNull(),
     image: text("image"),
-    role: userRoleEnum("role").default("student").notNull(),
+    role: userRoleEnum("role").notNull(),
     banned: boolean("banned").default(false).notNull(),
     banReason: text("ban_reason"),
     banExpires: timestamp("ban_expires", {
@@ -30,7 +31,10 @@ const users = pgTable(
     uiLocale: text("ui_locale").default("en"),
     preferredLanguage: text("preferred_language").default("en"),
   },
-  (table) => [unique("users_email_unique").on(table.email)]
+  (table) => [
+    unique("users_email_unique").on(table.email),
+    check("users_email_lowercase_check", sql`lower(${table.email}) = ${table.email}`),
+  ]
 );
 
 const accounts = pgTable(

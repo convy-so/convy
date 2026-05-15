@@ -1,6 +1,6 @@
 import { env } from "@/lib/env";
 import { enqueueEmail } from "@/lib/queue";
-import type { AppLocale } from "@/lib/i18n/config";
+import { defaultAppLocale, type AppLocale } from "@/lib/i18n/config";
 
 /**
  * High-level service for dispatching emails throughout the application.
@@ -18,7 +18,10 @@ export const EmailService = {
     locale?: AppLocale;
     customUrl?: string;
   }) {
-    const inviteUrl = params.customUrl || `${env.NEXT_PUBLIC_APP_URL}/sign-up?invite=${params.invitationId}`;
+    const locale = params.locale ?? defaultAppLocale;
+    const inviteUrl =
+      params.customUrl ||
+      `${env.NEXT_PUBLIC_APP_URL}/${locale}/invite/${params.invitationId}`;
 
     return await enqueueEmail({
       type: "student-invitation",

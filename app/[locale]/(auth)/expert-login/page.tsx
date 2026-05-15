@@ -1,12 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Mail, Lock, Loader2, ShieldCheck, ArrowRight } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast";
+import { useRouter } from "@/i18n/routing";
+import { prepareAuthIntent } from "@/lib/auth/intent-client";
 
 export default function ExpertLoginPage() {
+  const params = useParams<{ locale?: string | string[] }>();
+  const locale = Array.isArray(params.locale)
+    ? (params.locale[0] ?? "en")
+    : (params.locale ?? "en");
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -19,14 +25,20 @@ export default function ExpertLoginPage() {
     setIsLoading(true);
 
     try {
+      const callbackURL = await prepareAuthIntent({
+        kind: "plain-signin",
+        locale,
+        returnTo: `/${locale}/expert`,
+      });
+
       await authClient.signIn.email({
         email: formData.email,
         password: formData.password,
+        callbackURL,
         fetchOptions: {
           onSuccess: () => {
             toast.success("Welcome back to the Expert Portal");
-            // Hardcode default 'en' locale for redirect, or extract from pathname
-            router.push("/en/expert");
+            router.push("/auth/continue");
           },
           onError: (ctx) => {
             toast.error(ctx.error.message || "Invalid credentials or unauthorized.");
