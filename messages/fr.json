@@ -309,6 +309,7 @@
                                     "tapToRetry":  "Appuyez sur l\u0027icône pour réessayer",
                                     "loadFailed":  "Échec du chargement du sondage",
                                     "voiceSurveyIntro":  "Participez à notre entretien à commande vocale. Choisissez votre langue préférée et commencez à parler naturellement.",
+                                    "voiceSurveyTitle":  "Entretien vocal",
                                     "selectLanguage":  "Choisir la langue",
                                     "startInterview":  "Commencer l\u0027entretien",
                                     "micPermissionDenied":  "L\u0027accès au microphone est requis pour ce sondage. Veuillez l\u0027activer dans les paramètres de votre navigateur pour continuer.",

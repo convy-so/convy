@@ -49,7 +49,7 @@ async function StudentLayoutContent({
     return (
         <NextIntlClientProvider messages={messages} locale={locale}>
             <AuthProvider initialSession={session}>
-                <div className="flex min-h-screen bg-[#F8F9FB]">
+                <div className="flex min-h-screen bg-[#f7f7f7]">
                     <DashboardSidebar initialLearningMe={learningMe} />
                     <div className="flex-1 flex flex-col lg:pl-72 transition-all duration-300">
                         <DashboardHeader initialNotifications={notifications} />
