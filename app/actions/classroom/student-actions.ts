@@ -5,7 +5,12 @@ import { z } from "zod";
 import * as StudentService from "@/lib/learning/student-service";
 import { ActionResult, validateInput, withErrorHandling } from "@/lib/action-wrapper";
 
-import { ensureClassroomOwnerAccess, requireTeachingSession, revalidateLearningUi } from "./shared";
+import {
+  ensureClassroomOwnerAccess,
+  requireStudentSession,
+  requireTeachingSession,
+  revalidateLearningUi,
+} from "./shared";
 
 const inviteStudentSchema = z.object({
   classroomId: z.string().min(1),
@@ -74,7 +79,7 @@ export async function bulkInviteStudentsToClassroomAction(input: unknown): Promi
 export async function respondToInvitationAction(input: unknown): Promise<ActionResult<{ success: boolean }>> {
   return withErrorHandling(async () => {
     const body = validateInput(input, respondToInvitationSchema);
-    const { session } = await requireTeachingSession();
+    const { session } = await requireStudentSession();
 
     await StudentService.respondToInvitation({
       invitationId: body.invitationId,

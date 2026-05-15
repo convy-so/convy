@@ -4,11 +4,12 @@ import { headers } from "next/headers";
 
 import { auth, type AuthSessionWithUser } from "@/lib/auth";
 import type { AppLocale } from "@/lib/i18n/config";
+import type { PlatformRole } from "./roles";
 
 const SUPPORTED_LOCALE_SET = new Set<string>(["en", "fr", "de"]);
 
 export { AuthError, type PlatformRole, type RolePrincipal } from "./roles";
-import { AuthError } from "./roles";
+import { AuthError, getPlatformRole } from "./roles";
 
 function isSupportedLocale(value: unknown): value is AppLocale {
   return typeof value === "string" && SUPPORTED_LOCALE_SET.has(value);
@@ -63,6 +64,32 @@ export async function getVerifiedSession(
   if (!session) throw new AuthError("UNAUTHENTICATED");
   if (!session.user.emailVerified) throw new AuthError("EMAIL_NOT_VERIFIED");
   return session;
+}
+
+export const requireVerifiedSession = getVerifiedSession;
+
+export async function requireRole(
+  role: PlatformRole | PlatformRole[],
+  authHeaders?: Headers | string | null,
+): Promise<AuthSessionWithUser> {
+  const session = await getVerifiedSession(authHeaders);
+  const allowed = Array.isArray(role) ? role : [role];
+  if (!allowed.includes(getPlatformRole(session.user))) {
+    throw new AuthError("FORBIDDEN");
+  }
+  return session;
+}
+
+export async function requireStudentUser(authHeaders?: Headers | string | null) {
+  return requireRole("student", authHeaders);
+}
+
+export async function requireTeacherUser(authHeaders?: Headers | string | null) {
+  return requireRole(["teacher", "admin"], authHeaders);
+}
+
+export async function requireExpertUser(authHeaders?: Headers | string | null) {
+  return requireRole(["expert", "admin"], authHeaders);
 }
 
 export {

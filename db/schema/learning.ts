@@ -88,6 +88,10 @@ export const classroomStudents = pgTable(
       table.classroomId,
       table.email,
     ),
+    uniqueIndex("classroom_students_classroom_user_unique")
+      .on(table.classroomId, table.userId)
+      .where(sql`${table.userId} is not null`),
+    check("classroom_students_email_lowercase_check", sql`lower(${table.email}) = ${table.email}`),
   ],
 );
 
@@ -123,6 +127,10 @@ export const classroomInvitations = pgTable(
     uniqueIndex("classroom_invitations_pending_unique")
       .on(table.classroomId, table.invitedEmail)
       .where(sql`${table.status} = 'pending'`),
+    check(
+      "classroom_invitations_email_lowercase_check",
+      sql`lower(${table.invitedEmail}) = ${table.invitedEmail}`,
+    ),
   ],
 );
 

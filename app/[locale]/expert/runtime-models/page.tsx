@@ -1,5 +1,5 @@
 import { desc } from "drizzle-orm";
-import { BrainCircuit, Cpu, Settings2, Sparkles, Zap } from "lucide-react";
+import { BrainCircuit, Cpu, Settings2, Zap } from "lucide-react";
 
 import { getDb } from "@/db";
 import { expertRuntimeModels } from "@/db/schema/learning";

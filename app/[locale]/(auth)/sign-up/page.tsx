@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
 import { Eye, EyeOff, Mail, Lock, User } from "lucide-react";
@@ -15,12 +15,22 @@ import { LoadingOverlay } from "@/components/auth/loading-overlay";
 import { authClient } from "@/lib/auth-client";
 import toast from "react-hot-toast"; 
 import { RoleSelector } from "@/components/auth/role-selector";
+import { prepareAuthIntent } from "@/lib/auth/intent-client";
+
+function buildVerifyEmailHref(locale: string, email: string) {
+  const params = new URLSearchParams({
+    email,
+    callbackURL: `/${locale}/auth/continue`,
+  });
+  return `/verify-email?${params.toString()}`;
+}
 
 export default function SignUpPage() {
   const params = useParams<{ locale?: string | string[] }>();
   const locale = Array.isArray(params.locale)
     ? (params.locale[0] ?? "en")
     : (params.locale ?? "en");
+  const searchParams = useSearchParams();
   const router = useRouter();
   const t = useTranslations('Auth.SignUp');
   const [showPassword, setShowPassword] = useState(false);
@@ -40,6 +50,8 @@ export default function SignUpPage() {
     number: false,
     special: false,
   });
+  const invitationId = searchParams.get("invitationId");
+  const isInviteFlow = Boolean(invitationId);
 
   const handlePasswordChange = (password: string) => {
     setFormData({ ...formData, password });
@@ -56,12 +68,20 @@ export default function SignUpPage() {
     setIsLoading(true);
 
     try {
+      const callbackURL = await prepareAuthIntent({
+        kind: isInviteFlow ? "invite-signup" : "direct-signup",
+        desiredRole: isInviteFlow ? "student" : formData.role,
+        invitationId,
+        returnTo: invitationId ? `/${locale}/invite/${invitationId}` : null,
+        locale,
+      });
+
       const result = await authClient.signUp.email({
         email: formData.email,
         password: formData.password,
         name: formData.name,
-        role: formData.role,
-        callbackURL: `/${locale}/dashboard`,
+        role: isInviteFlow ? "student" : formData.role,
+        callbackURL,
         fetchOptions: {
           onError: (ctx) => {
             toast.error(ctx.error.message);
@@ -76,12 +96,11 @@ export default function SignUpPage() {
         }
         toast.success(t('Success'));
         setIsRedirecting(true);
-        router.push("/verify-email");
+        router.push(buildVerifyEmailHref(locale, formData.email));
       } else if (result.data?.token) {
-        // This shouldn't happen with requireEmailVerification: true, but handle it
         toast.success(t('SuccessVerified'));
         setIsRedirecting(true);
-        router.push("/dashboard");
+        router.push("/auth/continue");
       }
     } catch (error) {
       console.error("[SignUp] Failed:", error);
@@ -92,9 +111,17 @@ export default function SignUpPage() {
   };
 
   const handleGoogleSignUp = async () => {
+    const callbackURL = await prepareAuthIntent({
+      kind: isInviteFlow ? "invite-signup" : "direct-signup",
+      desiredRole: isInviteFlow ? "student" : formData.role,
+      invitationId,
+      returnTo: invitationId ? `/${locale}/invite/${invitationId}` : null,
+      locale,
+    });
+
     await authClient.signIn.social({
       provider: "google",
-      callbackURL: `/${locale}/dashboard`
+      callbackURL
     });
   };
 
@@ -141,12 +168,18 @@ export default function SignUpPage() {
           required
         />
 
-        <div className="pt-1">
-          <RoleSelector 
-            value={formData.role} 
-            onChange={(role) => setFormData({ ...formData, role })} 
-          />
-        </div>
+        {!isInviteFlow ? (
+          <div className="pt-1">
+            <RoleSelector 
+              value={formData.role} 
+              onChange={(role) => setFormData({ ...formData, role })} 
+            />
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+            This invitation creates a student account for the invited classroom.
+          </div>
+        )}
 
         <div>
           <InputField

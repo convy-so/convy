@@ -1,7 +1,6 @@
 "use server";
 
 import { count, desc, eq} from "drizzle-orm";
-import { headers } from "next/headers";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 
@@ -11,11 +10,7 @@ import {
   expertGuidanceVersions,
   fewShotExamples,
 } from "@/db/schema";
-import { resolveAdminSessionEmail } from "@/lib/admin/session";
-import { getVerifiedSession } from "@/lib/auth/dal";
-import { isExpert } from "@/lib/auth/dal";
-import { getPlatformRole } from "@/lib/auth/dal";
-import { type AuthSessionWithUser } from "@/lib/auth";
+import { requireRole, getPlatformRole } from "@/lib/auth/dal";
 import { prepareFewShotExampleIndex } from "@/lib/ai/few-shot-library";
 import type { CoreAiFeature } from "@/lib/ai/types";
 import { countExpertEvalDatasets } from "@/lib/learning/expert-eval-storage";
@@ -65,59 +60,11 @@ function isUniqueViolation(error: unknown): error is { code: string } {
 }
 
 async function requireAiOpsSession(authHeaders?: Headers | string | null) {
-  let cookieHeader: string | null = null;
-
-  if (typeof authHeaders === "string") {
-    cookieHeader = authHeaders;
-  } else if (authHeaders instanceof Headers) {
-    cookieHeader = authHeaders.get("cookie");
-  } else {
-    cookieHeader = (await headers()).get("cookie");
-  }
-
-  // Allow bypass for the secret admin portal
-  if (cookieHeader) {
-    const email = await resolveAdminSessionEmail(cookieHeader);
-    if (email) {
-      const mockUser: AuthSessionWithUser["user"] = {
-        id: "admin-system",
-        email: email.toLowerCase(),
-        emailVerified: true,
-        name: "Admin",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        role: "admin",
-        banned: false,
-        banReason: null,
-        banExpires: null,
-        uiLocale: undefined,
-        preferredLanguage: undefined,
-      };
-
-      const mockSession: AuthSessionWithUser["session"] = {
-        id: "admin-system-session",
-        userId: "admin-system",
-        expiresAt: new Date(Date.now() + 3600000),
-        token: "admin-system-token",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        ipAddress: "127.0.0.1",
-        userAgent: "AdminPortal",
-      };
-
-      return {
-        user: mockUser,
-        session: mockSession,
-      };
-    }
-  }
-
-  const session = await getVerifiedSession(cookieHeader);
-  if (!isExpert(session.user)) {
+  try {
+    return await requireRole(["expert", "admin"], authHeaders);
+  } catch {
     throw new UnauthorizedError("Expert or admin access required");
   }
-
-  return session;
 }
 
 export async function getAiOpsOverview(authHeaders?: Headers | string | null): Promise<ActionResult<{

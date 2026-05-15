@@ -4,8 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { ExpertSidebar } from "@/components/expert/expert-sidebar";
-import { isExpert } from "@/lib/auth/dal";
-import { getVerifiedSession } from "@/lib/auth/dal";
+import { requireExpertUser } from "@/lib/auth/dal";
 
 export default function ExpertLayout(props: {
   children: React.ReactNode;
@@ -33,9 +32,9 @@ async function ExpertLayoutContent({
 }) {
   const { locale } = await params;
   const cookieHeader = (await headers()).get("cookie");
-  const session = await getVerifiedSession(cookieHeader).catch(() => null);
+  const session = await requireExpertUser(cookieHeader).catch(() => null);
 
-  if (!session || !isExpert(session.user)) {
+  if (!session) {
     redirect(`/${locale}/expert-login`);
   }
 

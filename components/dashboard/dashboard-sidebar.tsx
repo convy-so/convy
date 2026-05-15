@@ -33,6 +33,10 @@ import { queryKeys } from "@/lib/query-keys";
 import { fetchLearningMe } from "@/lib/api/learning";
 import { classroomInitials } from "@/lib/student-course-accents";
 
+type ViewerAccessNav = {
+  authRole: "student" | "teacher" | "expert" | "admin";
+};
+
 function isNavHrefActive(pathname: string, href: string) {
   if (pathname === href) return true;
   if (href !== "/" && pathname.startsWith(`${href}/`)) return true;
@@ -41,8 +45,10 @@ function isNavHrefActive(pathname: string, href: string) {
 
 export function DashboardSidebar({
   initialLearningMe,
+  viewerAccess,
 }: {
   initialLearningMe: LearningMeData;
+  viewerAccess: ViewerAccessNav;
 }) {
   const { user } = useAuth();
   const pathname = usePathname();
@@ -59,8 +65,8 @@ export function DashboardSidebar({
     retry: false
   });
 
-  const isStudent = user?.role === "student" || learningMeQuery.data?.role === "student";
-  const isAdminOrExpert = user?.role === "admin" || user?.role === "expert";
+  const isStudent = viewerAccess.authRole === "student" || learningMeQuery.data?.role === "student";
+  const isAdminOrExpert = viewerAccess.authRole === "admin" || viewerAccess.authRole === "expert";
 
   const memberships = learningMeQuery.data?.role === "student" ? learningMeQuery.data.student : [];
   const studentProgressHref = selectedClassroomId

@@ -3,15 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { getDb } from "@/db";
 import { notifications } from "@/db/schema";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { eq, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { ActionResult, withErrorHandling, UnauthorizedError, NotFoundError } from "@/lib/action-wrapper";
+import { requireVerifiedSession } from "@/lib/auth/dal";
 
 export async function markNotificationAsRead(id: string): Promise<ActionResult<void>> {
     return withErrorHandling(async () => {
-        const session = await auth.api.getSession({ headers: await headers() });
+        const session = await requireVerifiedSession();
         if (!session) throw new UnauthorizedError();
 
         const updatedRows = await getDb()
@@ -31,7 +30,7 @@ export async function markNotificationAsRead(id: string): Promise<ActionResult<v
 
 export async function markAllNotificationsAsRead(): Promise<ActionResult<number>> {
     return withErrorHandling(async () => {
-        const session = await auth.api.getSession({ headers: await headers() });
+        const session = await requireVerifiedSession();
         if (!session) throw new UnauthorizedError();
 
         const updatedRows = await getDb()

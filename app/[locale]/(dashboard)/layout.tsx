@@ -1,4 +1,4 @@
-import { getCurrentSession } from "@/lib/auth/dal";
+import { requireVerifiedSession } from "@/lib/auth/dal";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { DashboardHeader } from "@/components/dashboard/header";
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
@@ -8,8 +8,10 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
+import { getLocalizedAdminAppPath } from "@/lib/auth/admin-path";
+import { normalizeAppLocale } from "@/lib/i18n/config";
 import { resolvePreferredUiLocale } from "@/lib/i18n/resolve-locale";
-import { getPlatformRole } from "@/lib/auth/dal";
+import { resolveViewerAccess } from "@/lib/auth/viewer-access";
 import { getLearningMeData, getNotificationsForCurrentUser } from "@/lib/server/app-queries";
 
 export default function DashboardLayout({
@@ -38,22 +40,27 @@ async function DashboardLayoutContent({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  const appLocale = normalizeAppLocale(locale);
   const authHeaders = await headers();
-  const session = await getCurrentSession(authHeaders);
+  const session = await requireVerifiedSession(authHeaders);
+  const viewerAccess = await resolveViewerAccess(session);
 
-  if (session?.user) {
-    const role = getPlatformRole(session.user);
-    
-    // Safety check: redirect students away from teacher dashboard area
-    if (role === "student") {
-      redirect(`/${locale}/student/dashboard`);
-    }
+  if (viewerAccess.authRole === "student") {
+    redirect(`/${locale}/student/dashboard`);
+  }
 
-    const preferredLocale = await resolvePreferredUiLocale(session);
+  if (viewerAccess.authRole === "expert") {
+    redirect(`/${locale}/expert`);
+  }
 
-    if (preferredLocale !== locale) {
-      redirect(`/api/user/language/sync?locale=${preferredLocale}&redirect=/${preferredLocale}/dashboard`);
-    }
+  if (viewerAccess.authRole === "admin") {
+    redirect(getLocalizedAdminAppPath(appLocale));
+  }
+
+  const preferredLocale = await resolvePreferredUiLocale(session);
+
+  if (preferredLocale !== locale) {
+    redirect(`/api/user/language/sync?locale=${preferredLocale}&redirect=/${preferredLocale}/dashboard`);
   }
 
   const messages = await getMessages();
@@ -66,9 +73,9 @@ async function DashboardLayoutContent({
     <NextIntlClientProvider messages={messages} locale={locale}>
       <AuthProvider initialSession={session}>
       <div className="min-h-screen bg-[#FAFAFA]">
-        <DashboardSidebar initialLearningMe={learningMe} />
+        <DashboardSidebar initialLearningMe={learningMe} viewerAccess={viewerAccess} />
         <div className="lg:pl-72 transition-all duration-300 flex flex-col min-h-screen">
-          <DashboardHeader initialNotifications={notifications} />
+          <DashboardHeader initialNotifications={notifications} viewerAccess={viewerAccess} />
           <main className="flex-1 p-4 lg:p-6">
             <Suspense fallback={
               <div className="flex items-center justify-center min-h-[50vh]">

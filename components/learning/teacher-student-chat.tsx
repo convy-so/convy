@@ -182,7 +182,7 @@ export function TeacherStudentChat({
       const nextMessages = [...optimisticMessages, assistantMessage];
       await persistSession(nextMessages);
       setMessages(nextMessages);
-    } catch (error) {
+    } catch {
       setMessages(previousMessages);
       setInput(normalized);
     } finally {

@@ -1,10 +1,18 @@
 import { betterAuth, InferSession, InferUser } from "better-auth";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
+import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
-import { authSchema } from "@/db/schema";
+import { authSchema, users } from "@/db/schema";
+import {
+  normalizeIdentityEmail,
+  readAuthIntentFromRequestHeaders,
+  validateSignupIntent,
+} from "@/lib/auth/auth-intent";
+import { logAuthAuditEvent } from "@/lib/auth/audit";
 import { env } from "@/lib/env";
 import type { AppLocale } from "@/lib/i18n/config";
 import { defaultAppLocale, isAppLocale } from "@/lib/i18n/config";
@@ -42,24 +50,96 @@ export const auth = betterAuth({
     updateAge: 60 * 60 * 24,
   },
   hooks: {
-    before: async (ctx) => {
-      if (ctx.request?.url?.includes("/sign-up/email")) {
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path === "/sign-up/email") {
+        const rawIntent = await readAuthIntentFromRequestHeaders(ctx.request?.headers ?? null);
+        let intent;
+        try {
+          intent = validateSignupIntent(rawIntent);
+        } catch (error) {
+          logAuthAuditEvent("invalid_auth_intent", {
+            path: ctx.path,
+            reason: error instanceof Error ? error.message : "Unknown auth intent failure",
+            hasIntent: Boolean(rawIntent),
+            kind: rawIntent?.kind ?? null,
+            desiredRole: rawIntent?.desiredRole ?? null,
+            invitationId: rawIntent?.invitationId ?? null,
+          });
+          throw new APIError("BAD_REQUEST", {
+            message: "Missing or invalid authentication intent.",
+          });
+        }
         const body = ctx.body;
         if (isMutableRecord(body)) {
-          const role = Reflect.get(body, "role");
-          if (typeof role === "string") {
-            Reflect.set(body, "initialRole", role);
+          Reflect.set(body, "initialRole", intent.desiredRole);
+          if (typeof Reflect.get(body, "email") === "string") {
+            Reflect.set(body, "email", normalizeIdentityEmail(String(Reflect.get(body, "email"))));
           }
           Reflect.deleteProperty(body, "role");
         }
       }
-      return { context: ctx };
-    }
+
+      if (ctx.path === "/sign-in/email" || ctx.path === "/send-verification-email") {
+        const body = ctx.body;
+        if (isMutableRecord(body) && typeof Reflect.get(body, "email") === "string") {
+          Reflect.set(body, "email", normalizeIdentityEmail(String(Reflect.get(body, "email"))));
+        }
+      }
+
+      if (ctx.path === "/sign-in/social") {
+        const intent = await readAuthIntentFromRequestHeaders(ctx.request?.headers ?? null);
+        if (!intent) {
+          logAuthAuditEvent("invalid_auth_intent", {
+            path: ctx.path,
+            reason: "Missing authentication intent for social sign-in.",
+          });
+          throw new APIError("BAD_REQUEST", {
+            message: "Missing authentication intent.",
+          });
+        }
+      }
+    }),
+    after: createAuthMiddleware(async (ctx) => {
+      if (!ctx.path.startsWith("/callback/")) {
+        return;
+      }
+
+      const intent = await readAuthIntentFromRequestHeaders(ctx.request?.headers ?? null);
+      if (!intent || intent.kind !== "direct-signup" || intent.desiredRole !== "teacher") {
+        return;
+      }
+
+      const returned = ctx.context.returned as { user?: { id?: string } } | undefined;
+      const userId = returned?.user?.id;
+      if (!userId) {
+        return;
+      }
+
+      const user = await getDb().query.users.findFirst({
+        where: eq(users.id, userId),
+      });
+
+      if (!user || user.role !== "student") {
+        return;
+      }
+
+      if (Date.now() - user.createdAt.getTime() > 60_000) {
+        return;
+      }
+
+      await getDb()
+        .update(users)
+        .set({
+          role: "teacher",
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, userId));
+    }),
   },
   plugins: [
     admin({
       adminRoles: ["admin"],
-      defaultRole: "teacher",
+      defaultRole: "student",
       adminUserIds: env.ADMIN_USER_IDS,
     }),
     nextCookies(),
@@ -151,23 +231,32 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (user) => {
+          if (typeof user.email === "string") {
+            user.email = normalizeIdentityEmail(user.email);
+          }
+
           if (user.email && env.ADMIN_EMAILS.includes(user.email.toLowerCase())) {
             throw new Error("Admin emails cannot be registered as normal users.");
           }
 
           if (user.initialRole) {
-             user.role = user.initialRole;
+            user.role = user.initialRole;
           }
 
           if (user.role === "expert" || user.role === "admin") {
-             throw new Error("Privileged accounts must be provisioned by an administrator.");
+            logAuthAuditEvent("role_assignment_rejected", {
+              path: "/sign-up/email",
+              attemptedRole: user.role,
+              email: user.email ?? null,
+            });
+            throw new Error("Privileged accounts must be provisioned by an administrator.");
           }
 
           return { data: user };
-        }
-      }
-    }
-  }
+        },
+      },
+    },
+  },
 });
 
 type BaseAuthUser = InferUser<typeof auth>;
