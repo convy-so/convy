@@ -86,3 +86,47 @@ export async function respondToInvitationAction(input: unknown): Promise<ActionR
     return { success: true, data: { success: true } };
   }, "respondToInvitationAction");
 }
+
+const resendInvitationSchema = z.object({
+  invitationId: z.string().min(1),
+  classroomId: z.string().min(1),
+});
+
+export async function resendStudentInvitationAction(input: unknown): Promise<ActionResult<{ email: string }>> {
+  return withErrorHandling(async () => {
+    const body = validateInput(input, resendInvitationSchema);
+    const { session } = await requireTeachingSession();
+    await ensureClassroomOwnerAccess(session.user.id, body.classroomId);
+
+    const result = await StudentService.resendStudentInvitation({
+      invitationId: body.invitationId,
+      classroomId: body.classroomId,
+      requestedByUserId: session.user.id,
+    });
+    revalidateLearningUi();
+    return { success: true, data: { email: result.email } };
+  }, "resendStudentInvitationAction");
+}
+
+const cancelInvitationSchema = z.object({
+  invitationId: z.string().min(1),
+  classroomId: z.string().min(1),
+});
+
+export async function cancelStudentInvitationAction(input: unknown): Promise<ActionResult<{ success: boolean }>> {
+  return withErrorHandling(async () => {
+    const body = validateInput(input, cancelInvitationSchema);
+    const { session } = await requireTeachingSession();
+    await ensureClassroomOwnerAccess(session.user.id, body.classroomId);
+
+    await StudentService.cancelStudentInvitation({
+      invitationId: body.invitationId,
+      classroomId: body.classroomId,
+      requestedByUserId: session.user.id,
+    });
+
+    revalidateLearningUi();
+    return { success: true, data: { success: true } };
+  }, "cancelStudentInvitationAction");
+}
+

@@ -11,7 +11,7 @@ import { VerificationEmail } from "@/components/emails/verification";
 import { PasswordResetEmail } from "@/components/emails/password-reset";
 import { SecondaryVerificationEmail } from "@/components/emails/secondary-verification";
 import { SurveyDeletedEmail } from "@/components/emails/survey-deleted";
-import { StudentActivationEmail } from "@/components/emails/student-activation";
+import { StudentInvitationEmail } from "@/components/emails/student-invitation";
 import { defaultAppLocale, normalizeAppLocale } from "@/lib/i18n/config";
 import { env } from "@/lib/env";
 
@@ -29,7 +29,7 @@ const jobDataSchema = z.object({
     "password-reset",
     "secondary-verification",
     "survey-deleted",
-    "student-activation",
+    "student-invitation",
   ]),
   email: z.string().email(),
   url: z.string(),
@@ -61,7 +61,7 @@ function getLocalizedEmailCopy(locale: ReturnType<typeof getMetadataLocale>) {
       resetSubject: string;
       secondaryVerificationSubject: string;
       surveyDeletedSubject: string;
-      studentActivationSubject: (classroomName: string) => string;
+      studentInvitationSubject: (classroomName: string) => string;
     }
   > = {
     en: {
@@ -69,24 +69,24 @@ function getLocalizedEmailCopy(locale: ReturnType<typeof getMetadataLocale>) {
       resetSubject: "Reset your Convyy password",
       secondaryVerificationSubject: "Verify your secondary email address",
       surveyDeletedSubject: "Your survey has been deleted",
-      studentActivationSubject: (classroomName: string) =>
-        `Activate your learning account for ${classroomName}`,
+      studentInvitationSubject: (classroomName: string) =>
+        `You have been invited to join ${classroomName}`,
     },
     fr: {
       verificationSubject: "Verifiez votre compte Convyy",
       resetSubject: "Reinitialisez votre mot de passe Convyy",
       secondaryVerificationSubject: "Verifiez votre adresse e-mail secondaire",
       surveyDeletedSubject: "Votre sondage a ete supprime",
-      studentActivationSubject: (classroomName: string) =>
-        `Activez votre compte d'apprentissage pour ${classroomName}`,
+      studentInvitationSubject: (classroomName: string) =>
+        `Vous avez été invité à rejoindre ${classroomName}`,
     },
     de: {
       verificationSubject: "Bestaetige dein Convyy-Konto",
       resetSubject: "Setze dein Convyy-Passwort zurueck",
       secondaryVerificationSubject: "Bestaetige deine zusaetzliche E-Mail-Adresse",
       surveyDeletedSubject: "Deine Umfrage wurde geloescht",
-      studentActivationSubject: (classroomName: string) =>
-        `Aktiviere dein Lernkonto fuer ${classroomName}`,
+      studentInvitationSubject: (classroomName: string) =>
+        `Du wurdest eingeladen, ${classroomName} beizutreten`,
     },
   };
 
@@ -101,6 +101,15 @@ const emailWorker = new Worker<EmailJobData>(
     const metadata = validatedData.metadata;
     const locale = getMetadataLocale(metadata);
     const localizedCopy = getLocalizedEmailCopy(locale);
+
+    console.log(`[email-worker] Processing job`, {
+      jobId: job.id,
+      type,
+      email,
+      locale,
+      idempotencyKey,
+      attempt: job.attemptsMade + 1,
+    });
 
     await job.updateProgress(30);
 
@@ -133,18 +142,17 @@ const emailWorker = new Worker<EmailJobData>(
           name,
         }),
       );
-    } else if (type === "student-activation") {
+    } else if (type === "student-invitation") {
       const classroomName = getMetadataText(
         metadata,
         "classroomName",
         "your class",
       );
-      subject = localizedCopy.studentActivationSubject(classroomName);
+      subject = localizedCopy.studentInvitationSubject(classroomName);
       html = await render(
-        React.createElement(StudentActivationEmail, {
-          studentName: name || "there",
+        React.createElement(StudentInvitationEmail, {
           classroomName,
-          activationLink: url,
+          inviteLink: url,
         }),
       );
     } else {
@@ -152,6 +160,15 @@ const emailWorker = new Worker<EmailJobData>(
     }
 
     await job.updateProgress(50);
+
+    console.log(`[email-worker] Calling Resend API`, {
+      jobId: job.id,
+      type,
+      to: email,
+      from: env.RESEND_FROM_EMAIL,
+      subject,
+      idempotencyKey: idempotencyKey ?? "(none)",
+    });
 
     const result = await resend.emails.send(
       {
@@ -168,10 +185,27 @@ const emailWorker = new Worker<EmailJobData>(
     );
 
     if (result.error) {
-      throw new Error(`Failed to send email: ${result.error.message}`);
+      // Log the full Resend error object so we can debug it locally
+      console.error(`[email-worker] Resend API returned an error`, {
+        jobId: job.id,
+        type,
+        to: email,
+        resendError: result.error,
+        // Resend errors have a `name` and `message` field
+        errorName: (result.error as { name?: string }).name,
+        errorMessage: result.error.message,
+      });
+      throw new Error(`Resend rejected the email: [${(result.error as { name?: string }).name ?? "unknown"}] ${result.error.message}`);
     }
 
     await job.updateProgress(100);
+
+    console.log(`[email-worker] Email sent successfully`, {
+      jobId: job.id,
+      type,
+      to: email,
+      resendMessageId: result.data?.id,
+    });
 
     return {
       type,
@@ -192,12 +226,32 @@ const emailWorker = new Worker<EmailJobData>(
   },
 );
 
-emailWorker.on("completed", () => {});
+emailWorker.on("completed", (job, result) => {
+  console.log(`[email-worker] Job completed`, {
+    jobId: job.id,
+    type: result?.type,
+    to: result?.email,
+    resendMessageId: result?.messageId,
+  });
+});
 
 emailWorker.on("failed", (job, err) => {
+  console.error(`[email-worker] Job FAILED`, {
+    jobId: job?.id,
+    jobName: job?.name,
+    type: job?.data?.type,
+    to: job?.data?.email,
+    attempt: job?.attemptsMade,
+    maxAttempts: job?.opts?.attempts,
+    errorMessage: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? err.stack : undefined,
+  });
+
   Sentry.logger.error("Email worker job failed", {
     service: "email-worker",
     job_id: job?.id ?? "",
+    job_type: job?.data?.type ?? "",
+    recipient: job?.data?.email ?? "",
     error_message: err instanceof Error ? err.message : String(err),
   });
 });

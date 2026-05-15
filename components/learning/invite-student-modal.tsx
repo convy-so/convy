@@ -34,9 +34,11 @@ type ValidationResult = {
   valid: string[];
   invalid: {
     email: string;
-    reason: "self" | "staff_account" | "already_member";
+    reason: "self" | "staff_account" | "already_member" | "already_invited";
   }[];
 };
+
+type BulkFailedResult = Array<{ email: string; error: string }>;
 
 function parseBulkInviteInput(raw: string) {
   const students = raw
@@ -80,6 +82,8 @@ export function InviteStudentModal({
   const [error, setError] = useState<string | null>(null);
   const [validationResult, setValidationResult] =
     useState<ValidationResult | null>(null);
+  const [bulkFailedResult, setBulkFailedResult] =
+    useState<BulkFailedResult | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -91,6 +95,7 @@ export function InviteStudentModal({
     setBulkInput("");
     setError(null);
     setValidationResult(null);
+    setBulkFailedResult(null);
   };
 
   const handleClose = () => {
@@ -159,29 +164,43 @@ export function InviteStudentModal({
 
       const payload = result.data as {
         invited: Array<unknown>;
-        failed: Array<unknown>;
+        failed: BulkFailedResult;
       };
       const invitedCount = payload.invited.length;
       const failedCount = payload.failed.length;
 
       if (invitedCount > 0 && failedCount === 0) {
-        toast.success(`${invitedCount} students invited`);
-      } else if (invitedCount > 0) {
-        toast.success(`${invitedCount} invited, ${failedCount} failed`);
+        toast.success(`${invitedCount} student${invitedCount === 1 ? "" : "s"} invited successfully`);
+        // All good — close immediately
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.learning.students(classroomId),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.learning.assignedSurveys(classroomId),
+          }),
+        ]);
+        resetForm();
+        onClose();
+        return;
+      } else if (invitedCount > 0 && failedCount > 0) {
+        toast.success(`${invitedCount} invited`);
+        // Show a breakdown of what failed instead of silently dismissing
+        setBulkFailedResult(payload.failed);
+        setIsSubmitting(false);
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.learning.students(classroomId),
+          }),
+        ]);
+        return;
       } else {
-        toast.error("No students were imported");
+        toast.error("No students were invited. See details below.");
+        setBulkFailedResult(payload.failed);
+        setIsSubmitting(false);
+        return;
       }
 
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.learning.students(classroomId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.learning.assignedSurveys(classroomId),
-        }),
-      ]);
-      resetForm();
-      onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid roster format");
     } finally {
@@ -322,18 +341,27 @@ export function InviteStudentModal({
                         {validationResult.invalid.map((item, idx) => (
                           <div
                             key={idx}
-                            className="px-3 py-2 text-xs flex items-center justify-between border-b border-rose-100 last:border-0"
+                            className="px-3 py-2 border-b border-rose-100 last:border-0"
                           >
-                            <span className="font-mono text-rose-700">
-                              {item.email}
-                            </span>
-                            <span className="text-[10px] bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full font-bold uppercase">
-                              {item.reason === "staff_account"
-                                ? "Staff Account"
-                                : item.reason === "self"
-                                  ? "Your Email"
-                                  : "Already Member"}
-                            </span>
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="font-mono text-xs text-rose-700 truncate">
+                                {item.email}
+                              </span>
+                              <span className="text-[10px] bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full font-bold uppercase shrink-0">
+                                {item.reason === "staff_account"
+                                  ? "Staff Account"
+                                  : item.reason === "self"
+                                    ? "Your Email"
+                                    : item.reason === "already_invited"
+                                      ? "Already Invited"
+                                      : "Already Member"}
+                              </span>
+                            </div>
+                            {item.reason === "already_invited" && (
+                              <p className="mt-1 text-[10px] text-rose-400 font-medium leading-relaxed italic">
+                                Active invitation exists. Use the &lsquo;Pending&rsquo; list in the directory to resend.
+                              </p>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -360,6 +388,33 @@ export function InviteStudentModal({
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+            ) : bulkFailedResult ? (
+              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="p-4 bg-rose-50 rounded-2xl border border-rose-100">
+                  <div className="flex gap-3 items-start">
+                    <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-semibold text-rose-900 text-sm">
+                        Some invitations failed
+                      </h4>
+                      <p className="text-rose-700 text-xs mt-1 font-medium">
+                        The following {bulkFailedResult.length} email{bulkFailedResult.length === 1 ? "" : "s"} could not be invited.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-rose-50/50 rounded-xl border border-rose-100 overflow-hidden">
+                  {bulkFailedResult.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="px-3 py-2.5 border-b border-rose-100 last:border-0"
+                    >
+                      <span className="font-mono text-xs text-rose-700 block">{item.email}</span>
+                      <span className="text-[11px] text-rose-500 mt-0.5 block">{item.error}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             ) : mode === "single" ? (
@@ -394,12 +449,16 @@ export function InviteStudentModal({
             <button
               type="button"
               onClick={
-                validationResult ? () => setValidationResult(null) : handleClose
+                validationResult
+                  ? () => setValidationResult(null)
+                  : bulkFailedResult
+                    ? handleClose
+                    : handleClose
               }
               disabled={isSubmitting}
               className="px-3 py-2 text-sm font-medium text-[#696969] transition-colors hover:text-[#292929]"
             >
-              {validationResult ? "Back to Edit" : "Cancel"}
+              {validationResult ? "Back to Edit" : bulkFailedResult ? "Close" : "Cancel"}
             </button>
 
             {validationResult ? (

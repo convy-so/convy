@@ -51,7 +51,7 @@ export interface EmailJobData {
     | "password-reset"
     | "secondary-verification"
     | "survey-deleted"
-    | "student-activation";
+    | "student-invitation";
   email: string;
   url: string;
   name?: string | null;
@@ -253,13 +253,40 @@ function buildEmailIdempotencyKey(data: EmailJobData) {
 
 export async function enqueueEmail(data: EmailJobData) {
   const idempotencyKey = buildEmailIdempotencyKey(data);
-  return await getEmailQueue().add(`send-${data.type}`, {
+
+  console.log("[queue] enqueueEmail: enqueueing job", {
+    type: data.type,
+    email: data.email,
+    idempotencyKey,
+  });
+
+  const job = await getEmailQueue().add(`send-${data.type}`, {
     ...data,
     idempotencyKey,
   }, {
     jobId: idempotencyKey,
     priority: 1,
   });
+
+  if (!job) {
+    // BullMQ returns null when a job with the same jobId already exists in the queue.
+    // This means the email was silently deduplicated — no new job was enqueued.
+    console.warn("[queue] enqueueEmail: job was SILENTLY DEDUPLICATED by BullMQ — a job with this idempotencyKey already exists in the queue", {
+      type: data.type,
+      email: data.email,
+      idempotencyKey,
+    });
+    return null;
+  }
+
+  console.log("[queue] enqueueEmail: job enqueued", {
+    type: data.type,
+    email: data.email,
+    jobId: job.id,
+    idempotencyKey,
+  });
+
+  return job;
 }
 
 export async function enqueueImageUpload(data: ImageUploadJobData) {

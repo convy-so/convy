@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt, or, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { getDb } from "@/db";
@@ -23,7 +23,7 @@ function normalizeStudentInviteInput(input: { email: string }) {
 
 export type InvitationValidationError = {
   email: string;
-  reason: "self" | "staff_account" | "already_member";
+  reason: "self" | "staff_account" | "already_member" | "already_invited";
 };
 
 export async function validateStudentsForInvitation(params: {
@@ -31,6 +31,13 @@ export async function validateStudentsForInvitation(params: {
   invitedByUserId: string;
   emails: string[];
 }) {
+  console.log("[student-service] validateStudentsForInvitation called", {
+    classroomId: params.classroomId,
+    invitedByUserId: params.invitedByUserId,
+    emailCount: params.emails.length,
+    emails: params.emails,
+  });
+
   const inviter = await getDb().query.users.findFirst({
     where: eq(users.id, params.invitedByUserId),
   });
@@ -38,12 +45,13 @@ export async function validateStudentsForInvitation(params: {
   const normalizedInviterEmail = inviter?.email.trim().toLowerCase();
   const normalizedEmails = params.emails.map((e) => e.trim().toLowerCase());
 
-  // 1. Check for self-invites
   const invalid: InvitationValidationError[] = [];
   const valid: string[] = [];
 
   for (const email of normalizedEmails) {
+    // 1. Check for self-invites
     if (email === normalizedInviterEmail) {
+      console.log(`[student-service] validateStudentsForInvitation: ${email} → BLOCKED (self-invite)`);
       invalid.push({ email, reason: "self" });
       continue;
     }
@@ -54,11 +62,12 @@ export async function validateStudentsForInvitation(params: {
     });
 
     if (existingUser && existingUser.role !== "student") {
+      console.log(`[student-service] validateStudentsForInvitation: ${email} → BLOCKED (staff_account, role=${existingUser.role})`);
       invalid.push({ email, reason: "staff_account" });
       continue;
     }
 
-    // 3. Check if already a member of THIS classroom
+    // 3. Check if already an accepted member of THIS classroom
     const existingMembership = await getDb().query.classroomStudents.findFirst({
       where: and(
         eq(classroomStudents.classroomId, params.classroomId),
@@ -67,19 +76,53 @@ export async function validateStudentsForInvitation(params: {
     });
 
     if (existingMembership) {
+      console.log(`[student-service] validateStudentsForInvitation: ${email} → BLOCKED (already_member)`);
       invalid.push({ email, reason: "already_member" });
       continue;
     }
 
+    // 4. Check if there is already a non-expired PENDING invitation for this email in this classroom.
+    //    Expired invitations are treated as gone — re-inviting is allowed.
+    const now = new Date();
+    const existingPendingInvitation = await getDb().query.classroomInvitations.findFirst({
+      where: and(
+        eq(classroomInvitations.classroomId, params.classroomId),
+        eq(classroomInvitations.invitedEmail, email),
+        eq(classroomInvitations.status, PENDING_INVITE_STATUS),
+        // Only block if NOT expired: expiresAt is null (no expiry set) OR expiresAt is in the future
+        or(
+          isNull(classroomInvitations.expiresAt),
+          gt(classroomInvitations.expiresAt, now),
+        ),
+      ),
+    });
+
+    if (existingPendingInvitation) {
+      const expiresLabel = existingPendingInvitation.expiresAt
+        ? existingPendingInvitation.expiresAt.toISOString()
+        : "never";
+      console.log(`[student-service] validateStudentsForInvitation: ${email} → BLOCKED (already_invited, invitationId=${existingPendingInvitation.id}, expiresAt=${expiresLabel})`);
+      invalid.push({ email, reason: "already_invited" });
+      continue;
+    }
+
+    console.log(`[student-service] validateStudentsForInvitation: ${email} → VALID`);
     valid.push(email);
   }
+
+  console.log("[student-service] validateStudentsForInvitation result", {
+    classroomId: params.classroomId,
+    valid,
+    invalidCount: invalid.length,
+    invalid,
+  });
 
   return { valid, invalid };
 }
 
 /**
  * Invite a student email to a classroom.
- * This no longer provisions managed accounts. Invitations are accepted by self-registered users.
+ * Invitations are accepted by self-registered users via the sign-up flow.
  */
 export async function inviteManagedStudentToClassroom(params: {
   classroomId: string;
@@ -90,6 +133,12 @@ export async function inviteManagedStudentToClassroom(params: {
     email: params.email,
   });
 
+  console.log("[student-service] inviteManagedStudentToClassroom: START", {
+    classroomId: params.classroomId,
+    invitedByUserId: params.invitedByUserId,
+    email: normalizedEmail,
+  });
+
   const validation = await validateStudentsForInvitation({
     classroomId: params.classroomId,
     invitedByUserId: params.invitedByUserId,
@@ -98,6 +147,10 @@ export async function inviteManagedStudentToClassroom(params: {
 
   if (validation.invalid.length > 0) {
     const error = validation.invalid[0];
+    console.warn("[student-service] inviteManagedStudentToClassroom: validation blocked", {
+      email: normalizedEmail,
+      reason: error.reason,
+    });
     if (error.reason === "self") {
       throw new ValidationError("You cannot invite yourself to your own classroom.");
     }
@@ -107,19 +160,25 @@ export async function inviteManagedStudentToClassroom(params: {
     if (error.reason === "already_member") {
       throw new ValidationError("That student email is already attached to this classroom.");
     }
+    if (error.reason === "already_invited") {
+      throw new ValidationError("An active invitation already exists for this email.");
+    }
   }
 
-  // 0. Fetch classroom details for the email
+  // Fetch classroom details for the email
   const classroom = await getDb().query.classrooms.findFirst({
     where: eq(classrooms.id, params.classroomId),
   });
 
   if (!classroom) {
+    console.error("[student-service] inviteManagedStudentToClassroom: classroom not found", {
+      classroomId: params.classroomId,
+    });
     throw new Error("Classroom not found.");
   }
 
-  // Ensure no active pending invitation already exists.
-  const pendingInvitation = await getDb().query.classroomInvitations.findFirst({
+  // Check for an existing PENDING invitation (including expired ones that weren't caught by the validator's block)
+  const existingInvitation = await getDb().query.classroomInvitations.findFirst({
     where: and(
       eq(classroomInvitations.classroomId, params.classroomId),
       eq(classroomInvitations.invitedEmail, normalizedEmail),
@@ -127,39 +186,92 @@ export async function inviteManagedStudentToClassroom(params: {
     ),
   });
 
-  if (pendingInvitation) {
-    throw new ValidationError("An active invitation already exists for this email.");
+  let invitationId = nanoid();
+  const now = new Date();
+  const INVITATION_TTL_DAYS = 7;
+  const expiresAt = new Date(now.getTime() + INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+  if (existingInvitation) {
+    // If we are here, it means validateStudentsForInvitation didn't block it (so it's expired)
+    // or we're in a race condition. We'll update the existing record to avoid unique index conflict.
+    invitationId = existingInvitation.id;
+    console.log("[student-service] inviteManagedStudentToClassroom: updating existing expired invitation", {
+      invitationId,
+      email: normalizedEmail,
+    });
+
+    await getDb()
+      .update(classroomInvitations)
+      .set({
+        invitedByUserId: params.invitedByUserId,
+        expiresAt,
+        createdAt: now, // Reset to now so it appears at the top of the list
+        updatedAt: now,
+      })
+      .where(eq(classroomInvitations.id, invitationId));
+  } else {
+    // No existing pending invite, safe to insert new record
+    console.log("[student-service] inviteManagedStudentToClassroom: creating NEW invitation record", {
+      invitationId,
+      classroomId: params.classroomId,
+      email: normalizedEmail,
+    });
+
+    await getDb().insert(classroomInvitations).values({
+      id: invitationId,
+      classroomId: params.classroomId,
+      invitedByUserId: params.invitedByUserId,
+      invitedEmail: normalizedEmail,
+      status: PENDING_INVITE_STATUS,
+      expiresAt,
+      createdAt: now,
+      updatedAt: now,
+    });
   }
 
-  const studentId = nanoid();
-  const now = new Date();
-
-  // 3. Create invitation record (seat/membership is created on acceptance).
-  await getDb().insert(classroomInvitations).values({
-    id: studentId,
-    classroomId: params.classroomId,
-    invitedByUserId: params.invitedByUserId,
-    invitedEmail: normalizedEmail,
-    status: PENDING_INVITE_STATUS,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  // 4. Dispatch the activation email
+  // Dispatch the invitation email
   try {
-    await EmailService.sendStudentActivationEmail({
+    const job = await EmailService.sendStudentInvitationEmail({
       email: normalizedEmail,
-      invitationId: studentId,
+      invitationId: invitationId,
       classroomName: classroom.title,
     });
+
+    if (!job) {
+      // BullMQ returns null when a job with the same jobId already exists (deduplication).
+      // The DB record was created but no new email job was enqueued.
+      console.warn("[student-service] inviteManagedStudentToClassroom: email job was DEDUPLICATED by BullMQ (job already exists in queue)", {
+        invitationId: invitationId,
+        email: normalizedEmail,
+        classroomId: params.classroomId,
+      });
+    } else {
+      console.log("[student-service] inviteManagedStudentToClassroom: email job enqueued successfully", {
+        invitationId: invitationId,
+        email: normalizedEmail,
+        jobId: job.id,
+      });
+    }
   } catch (error) {
-    // We log the error but don't fail the whole action, 
-    // as the record is already in the DB and can be resent later if needed.
-    console.error("Failed to enqueue activation email:", error);
+    // We log the error but don't fail the whole action,
+    // as the record is in the DB and can be resent later if needed.
+    console.error("[student-service] inviteManagedStudentToClassroom: FAILED to enqueue invitation email", {
+      invitationId: invitationId,
+      email: normalizedEmail,
+      classroomId: params.classroomId,
+      classroomName: classroom.title,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
   }
 
+  console.log("[student-service] inviteManagedStudentToClassroom: DONE", {
+    invitationId: invitationId,
+    email: normalizedEmail,
+  });
+
   return {
-    id: studentId,
+    id: invitationId,
     classroomId: params.classroomId,
     email: normalizedEmail,
     inviteStatus: PENDING_INVITE_STATUS,
@@ -179,8 +291,11 @@ export async function listPendingInvitationsForUser(userId: string) {
       with: { classroom: true },
     });
   } catch (error) {
-    // Log error but don't break the whole dashboard for invitations
-    console.error("Failed to list pending invitations:", error);
+    console.error("[student-service] listPendingInvitationsForUser: failed to list pending invitations", {
+      userId,
+      email: normalizedEmail,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return [];
   }
 }
@@ -190,6 +305,12 @@ export async function respondToInvitation(params: {
   userId: string;
   decision: "accepted" | "rejected";
 }) {
+  console.log("[student-service] respondToInvitation: START", {
+    invitationId: params.invitationId,
+    userId: params.userId,
+    decision: params.decision,
+  });
+
   const invitation = await getDb().query.classroomInvitations.findFirst({
     where: eq(classroomInvitations.id, params.invitationId),
   });
@@ -226,6 +347,10 @@ export async function respondToInvitation(params: {
     }
 
     if (params.decision !== "accepted") {
+      console.log("[student-service] respondToInvitation: invitation rejected", {
+        invitationId: params.invitationId,
+        userId: params.userId,
+      });
       return;
     }
 
@@ -249,18 +374,36 @@ export async function respondToInvitation(params: {
         createdAt: now,
         updatedAt: now,
       });
+      console.log("[student-service] respondToInvitation: classroomStudents seat created", {
+        invitationId: params.invitationId,
+        userId: params.userId,
+        classroomId: invitation.classroomId,
+      });
     }
+  });
+
+  console.log("[student-service] respondToInvitation: DONE", {
+    invitationId: params.invitationId,
+    decision: params.decision,
   });
 }
 
 /**
- * Bulk invite students to a classroom
+ * Bulk invite students to a classroom.
+ * Each student is invited sequentially. Failures are collected and returned.
  */
 export async function bulkInviteStudents(params: {
   classroomId: string;
   invitedByUserId: string;
   students: Array<{ email: string }>;
 }) {
+  console.log("[student-service] bulkInviteStudents: START", {
+    classroomId: params.classroomId,
+    invitedByUserId: params.invitedByUserId,
+    studentCount: params.students.length,
+    emails: params.students.map((s) => s.email),
+  });
+
   const seenEmails = new Set<string>();
   const invited: StudentInviteResult[] = [];
   const failed: Array<{ email: string; error: string }> = [];
@@ -271,6 +414,9 @@ export async function bulkInviteStudents(params: {
     });
 
     if (seenEmails.has(normalizedEmail)) {
+      console.warn("[student-service] bulkInviteStudents: duplicate email in batch, skipping", {
+        email: normalizedEmail,
+      });
       failed.push({
         email: normalizedEmail,
         error: "Duplicate email in this import batch.",
@@ -281,19 +427,174 @@ export async function bulkInviteStudents(params: {
     seenEmails.add(normalizedEmail);
 
     try {
+      console.log(`[student-service] bulkInviteStudents: inviting ${normalizedEmail}...`);
       const result = await inviteManagedStudentToClassroom({
         classroomId: params.classroomId,
         invitedByUserId: params.invitedByUserId,
         email: student.email,
       });
+      console.log(`[student-service] bulkInviteStudents: ${normalizedEmail} → SUCCESS (invitationId=${result.id})`);
       invited.push(result);
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to invite student.";
+      console.error(`[student-service] bulkInviteStudents: ${normalizedEmail} → FAILED`, {
+        email: normalizedEmail,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       failed.push({
         email: normalizedEmail,
-        error: error instanceof Error ? error.message : "Failed to invite student.",
+        error: errorMessage,
       });
     }
   }
 
+  console.log("[student-service] bulkInviteStudents: DONE", {
+    classroomId: params.classroomId,
+    invitedCount: invited.length,
+    failedCount: failed.length,
+    invited: invited.map((i) => i.email),
+    failed,
+  });
+
   return { invited, failed };
 }
+
+/**
+ * Resend the invitation email to a student who already has a pending invitation.
+ * Does NOT create a new invitation record — re-queues the email using the same
+ * existing invitationId so the student's original sign-up link remains valid.
+ * Also extends the invitation's expiry by another 7 days.
+ */
+export async function resendStudentInvitation(params: {
+  invitationId: string;
+  classroomId: string;
+  requestedByUserId: string;
+}) {
+  console.log("[student-service] resendStudentInvitation: START", {
+    invitationId: params.invitationId,
+    classroomId: params.classroomId,
+  });
+
+  const invitation = await getDb().query.classroomInvitations.findFirst({
+    where: and(
+      eq(classroomInvitations.id, params.invitationId),
+      eq(classroomInvitations.classroomId, params.classroomId),
+      eq(classroomInvitations.status, PENDING_INVITE_STATUS),
+    ),
+    with: { classroom: true },
+  });
+
+  if (!invitation) {
+    throw new ValidationError("Invitation not found or is no longer pending.");
+  }
+
+  const classroom = invitation.classroom;
+  if (!classroom) {
+    throw new Error("Classroom not found for this invitation.");
+  }
+
+  // Extend the expiry window by another 7 days from now
+  const INVITATION_TTL_DAYS = 7;
+  const newExpiresAt = new Date(Date.now() + INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+  await getDb()
+    .update(classroomInvitations)
+    .set({ expiresAt: newExpiresAt, updatedAt: new Date() })
+    .where(eq(classroomInvitations.id, params.invitationId));
+
+  console.log("[student-service] resendStudentInvitation: extended expiry, re-queuing email", {
+    invitationId: params.invitationId,
+    email: invitation.invitedEmail,
+    newExpiresAt,
+  });
+
+  try {
+    const job = await EmailService.sendStudentInvitationEmail({
+      email: invitation.invitedEmail,
+      invitationId: params.invitationId,
+      classroomName: classroom.title,
+    });
+
+    if (!job) {
+      // BullMQ deduplicated — a job for this exact payload is already waiting.
+      // That's fine; the student will receive the email once the existing job processes.
+      console.warn("[student-service] resendStudentInvitation: email job was DEDUPLICATED (already in queue)", {
+        invitationId: params.invitationId,
+        email: invitation.invitedEmail,
+      });
+    } else {
+      console.log("[student-service] resendStudentInvitation: email job enqueued", {
+        invitationId: params.invitationId,
+        email: invitation.invitedEmail,
+        jobId: job.id,
+      });
+    }
+  } catch (error) {
+    console.error("[student-service] resendStudentInvitation: FAILED to enqueue email", {
+      invitationId: params.invitationId,
+      email: invitation.invitedEmail,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error("Failed to queue the invitation email. Please try again.");
+  }
+
+  return {
+    invitationId: params.invitationId,
+    email: invitation.invitedEmail,
+    newExpiresAt,
+  };
+}
+
+/**
+ * Cancel a pending invitation so the teacher can re-invite the same email address.
+ * The student's original sign-up link will no longer work after cancellation.
+ */
+export async function cancelStudentInvitation(params: {
+  invitationId: string;
+  classroomId: string;
+  requestedByUserId: string;
+}) {
+  console.log("[student-service] cancelStudentInvitation: START", {
+    invitationId: params.invitationId,
+    classroomId: params.classroomId,
+  });
+
+  const [updated] = await getDb()
+    .update(classroomInvitations)
+    .set({ status: "cancelled", updatedAt: new Date() })
+    .where(
+      and(
+        eq(classroomInvitations.id, params.invitationId),
+        eq(classroomInvitations.classroomId, params.classroomId),
+        eq(classroomInvitations.status, PENDING_INVITE_STATUS),
+      ),
+    )
+    .returning({ id: classroomInvitations.id });
+
+  if (!updated) {
+    throw new ValidationError("Invitation not found or is no longer pending.");
+  }
+
+  console.log("[student-service] cancelStudentInvitation: DONE", { invitationId: params.invitationId });
+  return { invitationId: params.invitationId };
+}
+
+/**
+ * List all pending non-expired invitations for a classroom (for the teacher's directory view).
+ */
+export async function listPendingClassroomInvitations(params: { classroomId: string }) {
+  const now = new Date();
+  return await getDb().query.classroomInvitations.findMany({
+    where: and(
+      eq(classroomInvitations.classroomId, params.classroomId),
+      eq(classroomInvitations.status, PENDING_INVITE_STATUS),
+      or(
+        isNull(classroomInvitations.expiresAt),
+        gt(classroomInvitations.expiresAt, now),
+      ),
+    ),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
+  });
+}
+
