@@ -1,10 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import Image from "next/image";
 import { type UIMessage } from "ai";
 import {
-  BookOpen,
   Brain,
   ClipboardList,
   Keyboard,
@@ -15,24 +13,34 @@ import {
   Sparkles,
   ChevronDown,
   Check,
+  X,
   UserCircle,
+  GraduationCap,
+  ArrowRight,
+  Clock,
+  LayoutDashboard,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Link } from "@/i18n/routing";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAudioTranscription } from "@/hooks/use-audio-transcription";
 import {
   appLocaleLabels,
   appLocales,
 } from "@/lib/i18n/config";
 import { useStudentLearningWorkspace } from "@/components/learning/hooks/use-student-learning-workspace";
-import { MetricTile } from "@/components/learning/metric-tile";
 import type { LearningMeData } from "@/lib/api/learning";
 import type {
   getOnboardingStateData,
   getStudentLearningWorkspaceInitialData,
 } from "@/lib/server/app-queries";
+import { StudentClassHubPanel } from "@/components/learning/student-class-hub-panel";
+import { StudentInvitationCard } from "@/components/learning/student-invitation-card";
+import { StudentCourseCard } from "@/components/student/student-course-card";
+import { StatsCard } from "@/components/dashboard/stats-card";
+import { useAuth } from "@/components/providers/auth-provider";
+import { cn } from "@/lib/utils";
 
 type StudentLearningMeData = Extract<LearningMeData, { role: "student" }> & {
   invitations?: Array<{
@@ -116,6 +124,12 @@ function appendTranscript(currentValue: string, transcript: string) {
   return trimmedCurrent ? `${trimmedCurrent} ${transcript}`.trim() : transcript;
 }
 
+function firstNameFromDisplayName(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  return trimmed.split(/\s+/)[0] ?? null;
+}
+
 export function StudentLearningHome({
   learningMe,
   initialPatterns,
@@ -131,6 +145,7 @@ export function StudentLearningHome({
     ReturnType<typeof getStudentLearningWorkspaceInitialData>
   >["initialTutoringSession"];
 }) {
+  const { user } = useAuth();
   const {
     memberships,
     selectedStudyLanguage,
@@ -166,15 +181,21 @@ export function StudentLearningHome({
     initialTutoringSession,
   });
 
+  const greetingFirstName =
+    firstNameFromDisplayName(learningMe.student[0]?.fullName) ??
+    firstNameFromDisplayName(user?.name) ??
+    firstNameFromDisplayName(user?.email?.split("@")[0]) ??
+    "there";
+
   const [onboardingInput, setOnboardingInput] = useState("");
   const [sessionInput, setSessionInput] = useState("");
   const [questionInput, setQuestionInput] = useState("");
   const [inputMode, setInputMode] = useState<"text" | "voice">("text");
-  
+
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [isClassDropdownOpen, setIsClassDropdownOpen] = useState(false);
   const [isTopicDropdownOpen, setIsTopicDropdownOpen] = useState(false);
-  
+
   const langDropdownRef = useRef<HTMLDivElement>(null);
   const classDropdownRef = useRef<HTMLDivElement>(null);
   const topicDropdownRef = useRef<HTMLDivElement>(null);
@@ -234,557 +255,354 @@ export function StudentLearningHome({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  if (!memberships.length) {
-    return (
-      <div className="mx-auto max-w-7xl px-4 py-20">
-        <div className="rounded-2xl border border-slate-100 bg-white p-12 text-center">
-          <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center mx-auto mb-4 border border-slate-100">
-            <BookOpen className="w-6 h-6 text-slate-300" />
-          </div>
-          <h1 className="text-xl font-medium text-slate-900">No classroom access</h1>
-          <p className="mt-2 text-sm font-medium text-slate-500 max-w-md mx-auto leading-relaxed">
-            Your teacher needs to invite you to a classroom before learning topics will appear here.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-slate-50/20 pb-20 pt-10">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-        
-        {/* Header Section */}
-        <div className="space-y-12">
-          {invitations.length > 0 && (
-            <motion.div 
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="rounded-[2rem] border border-blue-100 bg-gradient-to-br from-blue-50/50 to-white p-6 shadow-sm"
-            >
-              <div className="flex items-center gap-3 mb-4">
-                 <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
-                    <Check className="w-4 h-4" />
-                 </div>
-                 <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
-                   New Classroom Invitations
-                 </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {invitations.map((invitation) => (
-                  <div
-                    key={invitation.id}
-                    className="flex flex-col gap-4 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm"
-                  >
-                    <div>
-                      <p className="text-sm font-bold text-slate-900">{invitation.classroomTitle}</p>
-                      <p className="text-xs font-medium text-slate-500 mt-0.5">{invitation.invitedEmail}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => acceptInvitationMutation.mutate(invitation.id)}
-                        className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-500 transition-all disabled:opacity-60"
-                        disabled={acceptInvitationMutation.isPending || rejectInvitationMutation.isPending}
-                      >
-                        Accept
-                      </button>
-                      <button
-                        onClick={() => rejectInvitationMutation.mutate(invitation.id)}
-                        className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-60"
-                        disabled={acceptInvitationMutation.isPending || rejectInvitationMutation.isPending}
-                      >
-                        Decline
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
+    <div className="min-h-screen bg-[#f7f7f7] pb-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10 pt-6 sm:pt-8">
 
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-10">
-            <motion.div 
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="space-y-6 max-w-2xl"
-            >
-              <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-blue-600 border border-blue-100 shadow-sm shadow-blue-100/50">
-                <Sparkles className="h-3 w-3" />
-                Adaptive Learning Space
-              </div>
-              <h1 className="text-5xl font-bold text-slate-900 md:text-7xl tracking-tight leading-[1.05]">
-                Hello, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-violet-600">{learningMe.student[0]?.fullName?.split(' ')[0] ?? 'Explorer'}</span>.
-              </h1>
-              <p className="text-xl font-medium text-slate-500 leading-relaxed max-w-xl">
-                Ready to continue your journey? Your AI tutor has prepared some new insights for you.
-              </p>
-            </motion.div>
-            
-            {selectedTopic && (
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="flex-shrink-0"
-              >
-                 <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-2xl shadow-slate-200/40 flex flex-col items-center gap-5 min-w-[240px] relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50/30 rounded-full -mr-16 -mt-16 blur-2xl" />
-                    <div className="relative w-24 h-24">
-                      <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                        <path className="text-slate-50" strokeWidth="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                        <motion.path 
-                          initial={{ pathLength: 0 }}
-                          animate={{ pathLength: Math.max(0.1, tutoringSessionQuery.data?.data.sessionState.turnCount ? Math.min(1, tutoringSessionQuery.data?.data.sessionState.turnCount / 20) : 0.1) }}
-                          transition={{ duration: 1, ease: "easeOut" }}
-                          className="text-blue-500" 
-                          strokeWidth="3" 
-                          strokeLinecap="round" 
-                          stroke="currentColor" 
-                          fill="none" 
-                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" 
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-2xl font-bold text-slate-900 leading-none">{tutoringSessionQuery.data?.data.sessionState.turnCount ?? 0}</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-1">Turns</span>
-                      </div>
-                    </div>
-                    <div className="text-center relative z-10">
-                      <div className="text-sm font-bold text-slate-900 truncate max-w-[180px]">{selectedTopic.title}</div>
-                      <div className="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-2 px-3 py-1 bg-blue-50 rounded-full border border-blue-100">
-                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                        Live Session
-                      </div>
-                    </div>
-                 </div>
-              </motion.div>
+        {/* Welcome Section */}
+        <div className="flex flex-col gap-6">
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+              <Sparkles className="h-3.5 w-3.5 text-gray-500" />
+              Today&apos;s learning
+            </div>
+            <h1 className="text-3xl font-semibold tracking-tight text-gray-900 sm:text-4xl">
+              Hi, {greetingFirstName}!
+            </h1>
+            <p className="max-w-lg text-[15px] leading-relaxed text-gray-600">
+              Pick a course below, then continue where you left off.
+            </p>
+          </div>
+
+          <div className="grid w-full max-w-md grid-cols-2 gap-3 sm:max-w-lg">
+            <StatsCard
+              title="Courses"
+              value={membershipCount}
+              icon={<GraduationCap className="h-5 w-5" />}
+              iconColor="bg-gray-100 text-gray-700 border border-gray-200"
+              description="Enrolled"
+            />
+            {patterns.length > 0 && (
+              <StatsCard
+                title="Insights"
+                value={patterns.length}
+                icon={<Brain className="h-5 w-5" />}
+                iconColor="bg-gray-100 text-gray-700 border border-gray-200"
+                description="Signals"
+              />
             )}
           </div>
+        </div>
 
-          {/* Control Bar */}
-          <div className="flex flex-col lg:flex-row items-center gap-4 p-4 rounded-2xl bg-white border border-slate-100">
-            {/* Classroom Dropdown */}
-            <div className="relative flex-1 w-full" ref={classDropdownRef}>
-              <div className="text-[10px] font-medium uppercase tracking-widest text-slate-400 px-1 mb-1.5">Classroom</div>
-              <button
-                onClick={() => setIsClassDropdownOpen(!isClassDropdownOpen)}
-                className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/50 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-200 transition-all"
-              >
-                <span className="truncate">{selectedMembership?.classroom.title ?? "Select Classroom"}</span>
-                <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isClassDropdownOpen ? "rotate-180" : ""}`} />
-              </button>
-              
-              {isClassDropdownOpen && (
-                <div className="absolute top-full left-0 mt-2 w-full z-50 bg-white border border-slate-100 rounded-xl overflow-hidden py-1 shadow-sm">
-                  {memberships.map((membership) => (
-                    <button
-                      key={membership.classroomStudentId}
-                      onClick={() => {
-                        setSelectedMembershipId(membership.classroomStudentId);
-                        setSelectedTopicId(membership.topics[0]?.id ?? null);
-                        setOutOfSessionReply(null);
-                        setIsClassDropdownOpen(false);
-                      }}
-                      className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-slate-500 hover:bg-slate-50 transition-colors text-left"
-                    >
-                      <div>
-                        <div className={selectedMembership?.classroomStudentId === membership.classroomStudentId ? "text-slate-900" : "text-slate-700"}>{membership.classroom.title}</div>
-                        <div className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">{membership.classroom.gradeLabel}</div>
-                      </div>
-                      {selectedMembership?.classroomStudentId === membership.classroomStudentId && <Check className="h-4 w-4 text-slate-900 flex-shrink-0" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Topic Dropdown */}
-            <div className="relative flex-1 w-full" ref={topicDropdownRef}>
-              <div className="text-[10px] font-medium uppercase tracking-widest text-slate-400 px-1 mb-1.5">Topic</div>
-              <button
-                onClick={() => setIsTopicDropdownOpen(!isTopicDropdownOpen)}
-                className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/50 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-200 transition-all"
-              >
-                <span className="truncate">{selectedTopic?.title ?? "Select Topic"}</span>
-                <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isTopicDropdownOpen ? "rotate-180" : ""}`} />
-              </button>
-              
-              {isTopicDropdownOpen && (
-                <div className="absolute top-full left-0 mt-2 w-full z-50 bg-white border border-slate-100 rounded-xl overflow-hidden py-1 shadow-sm">
-                  {selectedMembership?.topics.length ? selectedMembership.topics.map((topic) => (
-                    <button
-                      key={topic.id}
-                      onClick={() => {
-                        setSelectedTopicId(topic.id);
-                        setOutOfSessionReply(null);
-                        setIsTopicDropdownOpen(false);
-                      }}
-                      className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-slate-500 hover:bg-slate-50 transition-colors text-left"
-                    >
-                      <div className="truncate pr-4">
-                        <div className={effectiveSelectedTopicId === topic.id ? "text-slate-900" : "text-slate-700 truncate"}>{topic.title}</div>
-                        <div className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">{topic.subjectLabel ?? "Focus"}</div>
-                      </div>
-                      {effectiveSelectedTopicId === topic.id && <Check className="h-4 w-4 text-slate-900 flex-shrink-0" />}
-                    </button>
-                  )) : (
-                    <div className="px-4 py-3 text-sm text-slate-400 italic">No topics available</div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="hidden lg:block w-px h-12 bg-slate-100 mx-2"></div>
-
-            {/* Controls (Language & Input Mode) */}
-            <div className="flex items-center gap-4 w-full lg:w-auto">
-              <div className="relative flex-1 lg:w-40" ref={langDropdownRef}>
-                <div className="text-[10px] font-medium uppercase tracking-widest text-slate-400 px-1 mb-1.5">Language</div>
-                <button
-                  onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
-                  className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/50 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-200 transition-all"
-                >
-                  <span className="truncate">{appLocaleLabels[selectedStudyLanguage]}</span>
-                  <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isLangDropdownOpen ? "rotate-180" : ""}`} />
-                </button>
-                
-                {isLangDropdownOpen && (
-                  <div className="absolute top-full right-0 mt-2 w-full z-50 bg-white border border-slate-100 rounded-xl overflow-hidden py-1 shadow-sm">
-                    {appLocales.map((language) => (
-                      <button
-                        key={language}
-                        onClick={() => {
-                          setSelectedStudyLanguage(language);
-                          setIsLangDropdownOpen(false);
-                        }}
-                        className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-slate-500 hover:bg-slate-50 transition-colors text-left"
-                      >
-                        <span className={selectedStudyLanguage === language ? "text-slate-900" : "text-slate-700"}>
-                          {appLocaleLabels[language]}
-                        </span>
-                        {selectedStudyLanguage === language && <Check className="h-4 w-4 text-slate-900 flex-shrink-0" />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <div className="text-[10px] font-medium uppercase tracking-widest text-slate-400 px-1 mb-1.5">Input</div>
-                <div className="inline-flex h-[46px] items-center rounded-xl bg-slate-50/50 p-1 border border-slate-100">
-                  <button 
-                    onClick={() => { stopDictation(); setInputMode("text"); }} 
-                    className={`h-full px-3 flex items-center justify-center rounded-lg transition-all ${inputMode === "text" ? "bg-white text-slate-900 border border-slate-100 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}
-                  >
-                    <Keyboard className="h-4 w-4" />
-                  </button>
-                  <button 
-                    onClick={() => setInputMode("voice")} 
-                    className={`h-full px-3 flex items-center justify-center rounded-lg transition-all ${inputMode === "voice" ? "bg-white text-slate-900 border border-slate-100 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}
-                  >
-                    <Mic className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
+        {/* The Grid: Classrooms & Invitations */}
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-900 text-white shadow-sm">
+                <GraduationCap className="h-5 w-5" />
+              </span>
+              Your courses
+            </h2>
           </div>
 
-          <div className="grid gap-6 grid-cols-2 lg:grid-cols-4">
-            <MetricTile label="Enrollment" value={String(membershipCount)} helper="Joined classes" color="blue" />
-            <MetricTile label="Availability" value={String(selectedMembership?.topics.length ?? 0)} helper="Ready topics" color="violet" />
-            <MetricTile label="Your Patterns" value={String(patterns.length)} helper="Cognitive insights" color="emerald" accent={strongestPattern ? "Active" : undefined} />
-            <MetricTile label="Current Phase" value={currentStageId ? formatPhaseLabel(currentStageId) : "Ready"} helper="Session status" color="amber" accent={currentStageId ? "Live" : undefined} />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* 1. Invitations Cards (Priority) */}
+            {invitations.map((invitation) => (
+              <StudentInvitationCard
+                key={invitation.id}
+                invitation={invitation}
+                onAccept={() => acceptInvitationMutation.mutate(invitation.id)}
+                onDecline={() => rejectInvitationMutation.mutate(invitation.id)}
+                acceptPending={
+                  acceptInvitationMutation.isPending &&
+                  acceptInvitationMutation.variables === invitation.id
+                }
+                declinePending={
+                  rejectInvitationMutation.isPending &&
+                  rejectInvitationMutation.variables === invitation.id
+                }
+              />
+            ))}
+
+            {/* 2. Classroom Cards */}
+            {memberships.map((membership) => {
+              const isActive = selectedMembership?.classroomStudentId === membership.classroomStudentId;
+              return (
+                <StudentCourseCard
+                  key={membership.classroomStudentId}
+                  membership={membership}
+                  isActive={isActive}
+                  variant="selectable"
+                  onSelect={() => {
+                    setSelectedMembershipId(membership.classroomStudentId);
+                    setSelectedTopicId(membership.topics[0]?.id ?? null);
+                    setOutOfSessionReply(null);
+                  }}
+                />
+              );
+            })}
+
+            {/* 3. Empty State Card */}
+            {memberships.length === 0 && invitations.length === 0 && (
+              <div className="col-span-full flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-[#e5e5e5] bg-white py-20 text-center shadow-[0_4px_0_0_#e5e5e5]">
+                 <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#eefbd6]">
+                    <GraduationCap className="h-8 w-8 text-[#58cc02]" />
+                 </div>
+                 <h3 className="text-lg font-extrabold text-[#3c3c3c]">No courses yet</h3>
+                 <p className="mt-2 max-w-sm px-4 text-sm font-medium leading-relaxed text-[#777777]">When your teacher adds you to a class, it will show up here. Check back soon.</p>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="space-y-12">
-          
-
-          <div className="space-y-12">
-            {selectedMembership?.needsOnboarding ? (
-              <div className="bg-white rounded-2xl border border-slate-100 p-10 space-y-10">
-                <div className="space-y-3">
-                  <h2 className="text-2xl font-medium text-slate-900">Onboarding</h2>
-                  <p className="text-sm font-medium text-slate-500 leading-relaxed max-w-xl">
-                    Help the tutor understand how you process information to create a truly personalized learning journey.
-                  </p>
-                </div>
-                
-                <div className="space-y-6 max-h-[500px] overflow-y-auto p-8 bg-slate-50/50 rounded-2xl border border-slate-100">
-                  {onboardingMessages.map((message) => (
-                    <div 
-                      key={message.id} 
-                      className={`max-w-[85%] rounded-xl px-5 py-4 text-sm font-medium leading-relaxed ${
-                        message.role === "assistant" 
-                        ? "bg-white text-slate-600 border border-slate-100" 
-                        : "ml-auto bg-slate-900 text-white border border-slate-900 shadow-sm"
-                      }`}
-                    >
-                      {message.content}
-                    </div>
-                  ))}
-                </div>
-                
-                <form 
-                  className="flex gap-4" 
-                  onSubmit={(e) => { 
-                    e.preventDefault(); 
-                    if (!onboardingInput.trim()) return; 
-                    sendOnboardingMessage({ text: onboardingInput.trim() }); 
-                    setOnboardingInput(""); 
-                  }}
-                >
-                  <input 
-                    value={onboardingInput} 
-                    onChange={(e) => setOnboardingInput(e.target.value)} 
-                    placeholder="Type your message..." 
-                    className="flex-1 rounded-xl border border-slate-100 bg-slate-50/50 px-5 py-4 text-sm font-medium outline-none transition focus:border-slate-300 focus:bg-white" 
-                  />
-                  <button 
-                    type="submit" 
-                    disabled={onboardingChatStatus !== "ready" || !onboardingInput.trim()} 
-                    className="p-4 bg-slate-900 text-white rounded-xl transition-all hover:bg-slate-800 disabled:opacity-50"
-                  >
-                    <Send className="h-5 w-5" />
-                  </button>
-                </form>
-              </div>
-            ) : (
-              <div className="space-y-12">
-                <div className="bg-white rounded-2xl border border-slate-100 p-10 space-y-10">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-2">
-                      <h2 className="text-2xl font-medium text-slate-900">{selectedTopic?.title ?? "Learning Session"}</h2>
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        <span className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">Active Session</span>
-                      </div>
-                    </div>
-                    {selectedTopic && tutoringSessionQuery.data?.data.sessionId && (
-                      <button 
-                        onClick={() => completeTutoringMutation.mutate()} 
-                        className="text-[10px] font-medium uppercase text-slate-400 hover:text-slate-900 transition-colors border border-slate-100 rounded-lg px-4 py-2 hover:bg-slate-50"
-                      >
-                        Finish
-                      </button>
-                    )}
+        {/* Selected Classroom Content (Session Area) */}
+        <AnimatePresence mode="wait">
+          {selectedMembership && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-8 overflow-visible"
+            >
+              {/* Header for Active Area */}
+              <div className="relative z-40 flex flex-col gap-4 border-b border-gray-200 py-4 sm:flex-row sm:items-center">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-900 text-white shadow-sm">
+                   <LayoutDashboard className="h-5 w-5" />
                   </div>
+                  <div className="min-w-0">
+                   <h2 className="truncate text-xl font-semibold text-gray-900">{selectedMembership.classroom.title}</h2>
+                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Study workspace</p>
+                  </div>
+                </div>
+                
+                {/* Topic Switcher */}
+                <div className="relative z-50 flex w-full flex-1 items-center justify-end sm:ml-auto sm:w-auto">
+                   <div className="relative w-full sm:w-auto" ref={topicDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => setIsTopicDropdownOpen(!isTopicDropdownOpen)}
+                        className="flex w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-left text-sm font-semibold text-gray-900 shadow-sm transition-colors hover:bg-gray-50 sm:min-w-[200px]"
+                      >
+                        <span className="truncate">{selectedTopic?.title ?? "Choose topic"}</span>
+                        <ChevronDown className={cn("h-4 w-4 shrink-0 text-gray-500 transition-transform", isTopicDropdownOpen && "rotate-180")} />
+                      </button>
+                      {isTopicDropdownOpen && (
+                        <div className="absolute right-0 top-full z-[100] mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg animate-in fade-in zoom-in-95 duration-150 sm:w-64">
+                          {selectedMembership.topics.map(topic => (
+                            <button
+                              type="button"
+                              key={topic.id}
+                              onClick={() => {
+                                setSelectedTopicId(topic.id);
+                                setOutOfSessionReply(null);
+                                setIsTopicDropdownOpen(false);
+                              }}
+                              className={cn(
+                                "flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium transition-colors",
+                                effectiveSelectedTopicId === topic.id ? "bg-gray-100 text-gray-900" : "text-gray-600 hover:bg-gray-50",
+                              )}
+                            >
+                              <span className="truncate">{topic.title}</span>
+                              {effectiveSelectedTopicId === topic.id && <Check className="h-4 w-4 shrink-0 text-gray-700" />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                   </div>
+                </div>
+              </div>
 
-                  {selectedTopic ? (
-                    <div className="space-y-10">
-                      <div className="space-y-6 max-h-[600px] overflow-y-auto p-10 bg-slate-50/50 rounded-2xl border border-slate-100 custom-scrollbar">
-                        {liveMessages.map((message) => (
-                          <div key={message.id} className="space-y-6">
-                            <div className={`flex items-start gap-4 ${message.role === "assistant" ? "justify-start" : "justify-end"}`}>
-                              {message.role === "assistant" && (
-                                <div className="flex-shrink-0 w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-100 ring-4 ring-blue-50">
-                                  <Sparkles className="w-5 h-5 text-white" />
-                                </div>
-                              )}
-                              <div 
-                                className={`max-w-[80%] rounded-[1.5rem] px-6 py-4 text-sm font-medium leading-relaxed ${
-                                  message.role === "assistant" 
-                                  ? "bg-white text-slate-700 border border-slate-100 shadow-sm rounded-tl-none" 
-                                  : "bg-slate-900 text-white border border-slate-900 shadow-lg shadow-slate-200/50 rounded-tr-none"
-                                }`}
-                              >
-                                {message.content}
-                              </div>
-                              {message.role === "user" && (
-                                <div className="flex-shrink-0 w-10 h-10 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center">
-                                  <UserCircle className="w-6 h-6 text-slate-400" />
-                                </div>
-                              )}
-                            </div>
-                            
-                            {message.role === "assistant" && (() => {
-                              const media = getTutorMediaMetadata(message.metadata);
-                              if (!media) return null;
-                              return (
-                                <div className="ml-14 max-w-[85%] rounded-[2rem] border border-slate-100 bg-white p-8 space-y-6 shadow-sm">
-                                  <div className="flex items-center gap-3">
-                                     <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
-                                        <BookOpen className="w-4 h-4" />
-                                     </div>
-                                     <h4 className="text-base font-bold text-slate-900 tracking-tight">{media.title}</h4>
-                                  </div>
-                                  <div className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 shadow-inner">
-                                    {media.assetType === "image" 
-                                      ? <Image src={media.mediaUrl} width={800} height={450} className="w-full h-auto object-cover max-h-[450px]" alt={media.title} /> 
-                                      : <video controls className="w-full h-auto max-h-[450px] bg-black"><source src={media.mediaUrl} /></video>
-                                    }
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-6">
-                                    <div className="p-5 rounded-2xl bg-slate-50/50 space-y-2 border border-slate-100/50">
-                                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Purpose</div>
-                                      <p className="text-xs text-slate-600 font-medium leading-relaxed">{media.reason}</p>
-                                    </div>
-                                    <div className="p-5 rounded-2xl bg-slate-50/50 space-y-2 border border-slate-100/50">
-                                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Expected Outcome</div>
-                                      <p className="text-xs text-slate-600 font-medium leading-relaxed">{media.expectedBenefit}</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        ))}
+              <div className="relative z-10">
+                <StudentClassHubPanel
+                  membership={selectedMembership}
+                  selectedTopicId={effectiveSelectedTopicId}
+                  onSelectTopic={(id) => {
+                    setSelectedTopicId(id);
+                    setOutOfSessionReply(null);
+                  }}
+                />
+              </div>
+
+              {/* Learning Hub Content (Onboarding or Session) */}
+              <div className="relative z-10 grid grid-cols-1 gap-8 lg:grid-cols-3">
+                {/* Main Interaction Area */}
+                <div className="lg:col-span-2 space-y-8">
+                  {selectedMembership.needsOnboarding ? (
+                    <div className="bg-white rounded-[2rem] border border-slate-100 p-8 shadow-sm">
+                      <div className="flex items-center gap-4 mb-8">
+                         <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                            <Brain className="w-6 h-6" />
+                         </div>
+                         <div>
+                            <h3 className="text-xl font-bold text-slate-900">Setting up your AI profile</h3>
+                            <p className="text-sm text-slate-500 font-medium">This helps me adapt to how you learn best.</p>
+                         </div>
                       </div>
 
-                      <form 
-                        className="flex gap-4" 
-                        onSubmit={(e) => { 
-                          e.preventDefault(); 
-                          if (!sessionInput.trim()) return; 
-                          sendTutoringChatMessage({ text: sessionInput.trim() }); 
-                          setSessionInput(""); 
-                        }}
-                      >
-                        <div className="flex-1 relative group">
-                          <input 
-                            value={sessionInput} 
-                            onChange={(e) => setSessionInput(e.target.value)} 
-                            placeholder="Message the tutor..." 
-                            className="w-full rounded-xl border border-slate-100 bg-slate-50/50 px-5 py-4 text-sm font-medium outline-none transition focus:border-slate-300 focus:bg-white pr-14" 
-                          />
-                          {isVoiceInputMode && isVoiceInputSupported && (
-                            <button 
-                              type="button" 
-                              onClick={() => startTranscription({ target: "student-session", language: "multi", onTranscript: (t) => setSessionInput((c) => appendTranscript(c, t)) })} 
-                              className={`absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-all ${transcriptionTarget === "student-session" ? "text-red-500 bg-red-50 animate-pulse" : "text-slate-400 hover:text-slate-900"}`}
-                            >
-                              <Mic className="h-5 w-5" />
-                            </button>
-                          )}
-                        </div>
-                        <button 
-                          type="submit" 
-                          disabled={tutoringChatStatus !== "ready" || !sessionInput.trim()} 
-                          className="p-4 bg-slate-900 text-white rounded-xl transition-all hover:bg-slate-800 disabled:opacity-50"
-                        >
-                          <Send className="h-5 w-5" />
-                        </button>
+                      <div className="space-y-4 mb-6 max-h-[400px] overflow-y-auto px-2 custom-scrollbar">
+                         {onboardingMessages.map(msg => (
+                           <div key={msg.id} className={cn(
+                             "max-w-[85%] px-5 py-4 rounded-2xl text-sm font-medium leading-relaxed",
+                             msg.role === "assistant" ? "bg-slate-50 text-slate-700 rounded-tl-none border border-slate-100" : "ml-auto bg-slate-900 text-white rounded-tr-none shadow-md"
+                           )}>
+                             {msg.content}
+                           </div>
+                         ))}
+                      </div>
+
+                      <form className="flex gap-3" onSubmit={(e) => {
+                        e.preventDefault();
+                        if (!onboardingInput.trim()) return;
+                        sendOnboardingMessage({ text: onboardingInput.trim() });
+                        setOnboardingInput("");
+                      }}>
+                         <input
+                           value={onboardingInput}
+                           onChange={e => setOnboardingInput(e.target.value)}
+                           placeholder="Tell me about your learning style..."
+                           className="flex-1 bg-slate-50 border-none rounded-xl px-5 py-3.5 text-sm font-bold focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+                         />
+                         <button className="w-12 h-12 bg-slate-900 text-white rounded-xl flex items-center justify-center hover:bg-slate-800 transition-all shadow-lg shadow-slate-100">
+                            <Send className="w-5 h-5" />
+                         </button>
                       </form>
                     </div>
                   ) : (
-                    <div className="py-32 text-center bg-slate-50/30 rounded-2xl border border-dashed border-slate-100 flex flex-col items-center">
-                      <div className="w-14 h-14 rounded-2xl bg-white border border-slate-100 flex items-center justify-center mb-6">
-                        <Sparkles className="w-7 h-7 text-slate-100" />
-                      </div>
-                      <p className="text-xs font-medium text-slate-300 uppercase tracking-widest max-w-[240px] leading-relaxed">
-                        Select a topic to begin your session
-                      </p>
+                    <div className="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-xl shadow-slate-200/40">
+                       <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Active Session</span>
+                          </div>
+                          {selectedTopic && tutoringSessionQuery.data?.data.sessionId && (
+                            <button 
+                              onClick={() => completeTutoringMutation.mutate()}
+                              className="text-[10px] font-bold uppercase text-slate-400 hover:text-red-500 transition-colors"
+                            >
+                              End Session
+                            </button>
+                          )}
+                       </div>
+
+                       <div className="h-[500px] overflow-y-auto p-8 space-y-8 custom-scrollbar">
+                          {liveMessages.map((message) => (
+                            <div key={message.id} className="space-y-6">
+                              <div className={cn("flex items-start gap-4", message.role === "assistant" ? "justify-start" : "justify-end")}>
+                                {message.role === "assistant" && (
+                                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-indigo-100 shrink-0">
+                                    <Sparkles className="w-5 h-5 text-white" />
+                                  </div>
+                                )}
+                                <div className={cn(
+                                  "max-w-[80%] px-6 py-4 rounded-[1.5rem] text-sm font-medium leading-relaxed shadow-sm",
+                                  message.role === "assistant" ? "bg-white text-slate-700 border border-slate-100 rounded-tl-none" : "bg-slate-900 text-white rounded-tr-none"
+                                )}>
+                                  {message.content}
+                                </div>
+                                {message.role === "user" && (
+                                  <div className="w-10 h-10 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                                    <UserCircle className="w-6 h-6 text-slate-400" />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                       </div>
+
+                       <div className="p-6 bg-slate-50/30 border-t border-slate-100">
+                          <form className="flex gap-4" onSubmit={(e) => {
+                            e.preventDefault();
+                            if (!sessionInput.trim()) return;
+                            sendTutoringChatMessage({ text: sessionInput.trim() });
+                            setSessionInput("");
+                          }}>
+                             <div className="flex-1 relative group">
+                                <input
+                                  value={sessionInput}
+                                  onChange={e => setSessionInput(e.target.value)}
+                                  placeholder="Reply to the tutor..."
+                                  className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-100 outline-none transition-all shadow-sm"
+                                />
+                                {isVoiceInputMode && isVoiceInputSupported && (
+                                  <button
+                                    type="button"
+                                    onClick={() => startTranscription({ target: "student-session", language: "multi", onTranscript: (t) => setSessionInput((c) => appendTranscript(c, t)) })}
+                                    className={cn("absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-xl transition-all", transcriptionTarget === "student-session" ? "text-red-500 bg-red-50 animate-pulse" : "text-slate-300 hover:text-slate-900")}
+                                  >
+                                    <Mic className="h-5 w-5" />
+                                  </button>
+                                )}
+                             </div>
+                             <button className="px-6 bg-slate-900 text-white rounded-2xl flex items-center justify-center hover:bg-slate-800 transition-all shadow-lg shadow-slate-100">
+                                <Send className="w-5 h-5" />
+                             </button>
+                          </form>
+                       </div>
                     </div>
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-10">
-                  <div className="bg-white rounded-2xl border border-slate-100 p-10 space-y-8">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 bg-blue-50/50 rounded-xl text-blue-500 border border-blue-100/50">
-                        <ClipboardList className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <h3 className="text-base font-medium text-slate-900">Pulse Checks</h3>
-                        <p className="text-[9px] font-medium text-slate-400 uppercase mt-1">Class Assessments</p>
-                      </div>
+                {/* Sidebar Info Area */}
+                <div className="space-y-8">
+                  {/* Pulse Checks Card */}
+                  <div className="bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm">
+                    <div className="flex items-center gap-3 mb-6">
+                       <div className="p-2.5 bg-sky-50 rounded-xl text-sky-600 border border-sky-100">
+                          <ClipboardList className="w-5 h-5" />
+                       </div>
+                       <h3 className="font-bold text-slate-900">Pulse Checks</h3>
                     </div>
-                    <div className="space-y-4">
-                      {availableSurveys.length ? availableSurveys.map((s) => (
-                        <div key={s.id} className="flex items-center justify-between p-5 rounded-xl bg-slate-50/50 border border-transparent hover:border-slate-100 hover:bg-white transition-all">
-                          <div className="space-y-1">
-                            <div className="text-xs font-medium text-slate-700">{s.title}</div>
-                            <div className="text-[9px] font-medium text-slate-400 uppercase tracking-widest">{formatDate(s.createdAt)}</div>
-                          </div>
-                          <Link 
-                            href={`/s/${s.shareableLink}/respond`} 
-                            className="text-[10px] font-medium px-5 py-2.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all"
-                          >
-                            Enter
-                          </Link>
-                        </div>
-                      )) : <div className="text-[10px] font-medium text-slate-300 py-10 text-center uppercase tracking-widest">Clear for now</div>}
+                    <div className="space-y-3">
+                       {availableSurveys.length > 0 ? availableSurveys.map(s => (
+                         <Link key={s.id} href={`/s/${s.shareableLink}/respond`} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:border-sky-300 hover:bg-sky-50/30 transition-all group">
+                            <div className="min-w-0">
+                               <p className="text-sm font-bold text-slate-700 truncate">{s.title}</p>
+                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{formatDate(s.createdAt)}</p>
+                            </div>
+                            <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-sky-500 transition-transform group-hover:translate-x-1" />
+                         </Link>
+                       )) : (
+                         <p className="text-xs font-bold text-slate-300 uppercase tracking-widest text-center py-6">No pending checks</p>
+                       )}
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-2xl border border-slate-100 p-10 space-y-8">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 bg-violet-50/50 rounded-xl text-violet-500 border border-violet-100/50">
-                        <Brain className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <h3 className="text-base font-medium text-slate-900">Patterns</h3>
-                        <p className="text-[9px] font-medium text-slate-400 uppercase mt-1">Learning Insights</p>
-                      </div>
+                  {/* Knowledge Probe Card */}
+                  <div className="bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm">
+                    <div className="flex items-center gap-3 mb-6">
+                       <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-600 border border-emerald-100">
+                          <MessageSquare className="w-5 h-5" />
+                       </div>
+                       <h3 className="font-bold text-slate-900 text-sm">Knowledge Probe</h3>
                     </div>
-                    <div className="space-y-4">
-                      {strongestPattern ? patterns.slice(0, 3).map((p, i) => (
-                        <div key={i} className="group relative p-6 rounded-2xl bg-gradient-to-br from-violet-50/50 to-white border border-violet-100 hover:shadow-lg hover:shadow-violet-200/20 transition-all cursor-default">
-                          <div className="absolute top-4 right-4 text-violet-300 group-hover:text-violet-500 transition-colors">
-                            <Brain className="w-4 h-4 opacity-20" />
-                          </div>
-                          <div className="text-[11px] font-bold text-violet-600 uppercase tracking-wider mb-2">{p.scopeType}</div>
-                          <p className="text-sm font-medium text-slate-600 italic leading-relaxed">
-                            &ldquo;{p.studentSummary}&rdquo;
-                          </p>
-                        </div>
-                      )) : (
-                        <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-4 rounded-2xl border border-dashed border-slate-100 bg-slate-50/30">
-                           <div className="p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
-                              <Loader2 className="w-5 h-5 text-slate-200 animate-spin" />
-                           </div>
-                           <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest leading-relaxed">
-                             Gathering cognitive evidence...
-                           </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-2xl border border-slate-100 p-10 space-y-8">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-emerald-50/50 rounded-xl text-emerald-500 border border-emerald-100/50">
-                      <MessageSquare className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-medium text-slate-900">Knowledge Probe</h3>
-                      <p className="text-[9px] font-medium text-slate-400 uppercase mt-1">Quick Q&A</p>
-                    </div>
-                  </div>
-                  <div className="space-y-8">
-                    <form 
-                      className="flex gap-4" 
-                      onSubmit={(e) => { 
-                        e.preventDefault(); 
-                        if (!effectiveSelectedTopicId || !questionInput.trim()) return; 
-                        outOfSessionMutation.mutate({ topicId: effectiveSelectedTopicId, message: questionInput.trim(), language: selectedStudyLanguage }, { onSuccess: () => setQuestionInput("") }); 
-                      }}
-                    >
-                      <input 
-                        value={questionInput} 
-                        onChange={(e) => setQuestionInput(e.target.value)} 
-                        placeholder="Type a quick question..." 
-                        className="flex-1 rounded-xl border border-slate-100 bg-slate-50/50 px-5 py-4 text-sm font-medium outline-none transition focus:border-slate-200 focus:bg-white" 
-                      />
-                      <button 
-                        type="submit" 
-                        disabled={outOfSessionMutation.isPending || !questionInput.trim()} 
-                        className="p-4 bg-slate-900 text-white rounded-xl transition-all hover:bg-slate-800"
-                      >
-                        {outOfSessionMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-                      </button>
+                    <form className="space-y-4" onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!effectiveSelectedTopicId || !questionInput.trim()) return;
+                      outOfSessionMutation.mutate({ topicId: effectiveSelectedTopicId, message: questionInput.trim(), language: selectedStudyLanguage }, { onSuccess: () => setQuestionInput("") });
+                    }}>
+                       <textarea
+                         value={questionInput}
+                         onChange={e => setQuestionInput(e.target.value)}
+                         placeholder="Quick question about the topic?"
+                         className="w-full bg-slate-50 border-none rounded-xl p-4 text-sm font-bold placeholder:text-slate-300 focus:ring-2 focus:ring-emerald-100 outline-none transition-all resize-none h-24"
+                       />
+                       <button className="w-full bg-slate-900 text-white rounded-xl py-3 text-xs font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2">
+                          {outOfSessionMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                          Ask Tutor
+                       </button>
                     </form>
                     {outOfSessionReply && (
-                      <div className="p-8 rounded-xl bg-emerald-50/50 border border-emerald-100/50 text-xs font-medium text-slate-600 leading-relaxed italic">
+                      <div className="mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-100 text-[11px] font-medium text-slate-600 leading-relaxed italic">
                         {outOfSessionReply}
                       </div>
                     )}
                   </div>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

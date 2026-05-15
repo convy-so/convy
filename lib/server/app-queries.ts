@@ -24,7 +24,7 @@ import {
   surveys,
   topicMaterials,
 } from "@/db/schema";
-import { getCurrentSession, getVerifiedSession } from "@/lib/auth/dal";
+import { getCurrentSession, getPlatformRole, getVerifiedSession } from "@/lib/auth/dal";
 import { env } from "@/lib/env";
 import { listStudentMemberships, getTeacherTopicAccess } from "@/lib/learning/access";
 import * as ClassroomService from "@/lib/learning/classroom-service";
@@ -109,17 +109,28 @@ export const getLearningMeData = cache(async (): Promise<LearningMeData> => {
   ]);
 
   if (memberships.length === 0) {
+    const learnerPersona = getPlatformRole(session.user) === "student";
+    const serializedInvitations = invitations.map((invitation) => ({
+      id: invitation.id,
+      classroomId: invitation.classroomId,
+      classroomTitle: invitation.classroom?.title ?? "Classroom",
+      invitedEmail: invitation.invitedEmail,
+      status: invitation.status,
+      expiresAt: invitation.expiresAt?.toISOString() ?? null,
+    }));
+
+    if (learnerPersona) {
+      return {
+        role: "student",
+        student: [],
+        invitations: serializedInvitations,
+      };
+    }
+
     return {
       role: "non-student",
       student: null,
-      invitations: invitations.map((invitation) => ({
-        id: invitation.id,
-        classroomId: invitation.classroomId,
-        classroomTitle: invitation.classroom?.title ?? "Classroom",
-        invitedEmail: invitation.invitedEmail,
-        status: invitation.status,
-        expiresAt: invitation.expiresAt?.toISOString() ?? null,
-      })),
+      invitations: serializedInvitations,
     };
   }
 

@@ -309,6 +309,7 @@
                                     "tapToRetry":  "Zum Wiederholen auf das Symbol tippen",
                                     "loadFailed":  "Umfrage konnte nicht geladen werden",
                                     "voiceSurveyIntro":  "Nehmen Sie an unserem sprachgesteuerten Interview teil. Wählen Sie Ihre bevorzugte Sprache und sprechen Sie ganz natürlich.",
+                                    "voiceSurveyTitle":  "Sprachinterview",
                                     "selectLanguage":  "Sprache wählen",
                                     "startInterview":  "Interview starten",
                                     "micPermissionDenied":  "Der Zugriff auf das Mikrofon ist für diese Umfrage erforderlich. Bitte aktivieren Sie ihn in Ihren Browservoreinstellungen, um fortzufahren.",

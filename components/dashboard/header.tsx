@@ -11,6 +11,7 @@ import toast from "react-hot-toast";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/providers/auth-provider";
 import { getFriendlyActionError } from "@/lib/action-ux";
+import { cn } from "@/lib/utils";
 
 type NotificationListItem = {
   id: string;
@@ -66,19 +67,43 @@ export function DashboardHeader({
     });
   };
 
+  const isStudent = user?.role === "student";
+  const profileHref = isStudent ? "/student/profile" : "/dashboard/profile";
+  const settingsHref = isStudent ? "/student/settings" : "/dashboard/settings";
+  const notificationsHref = isStudent ? "/student/notifications" : "/dashboard/notifications";
+
   return (
-    <header className="h-16 border-b border-[#EAEAEA] bg-white pl-16 pr-6 lg:px-6 flex items-center justify-between sticky top-0 z-10 transition-all duration-300">
+    <header
+      className={cn(
+        "h-16 border-b pl-16 pr-6 lg:px-6 flex items-center justify-between sticky top-0 z-10 transition-all duration-300",
+        isStudent
+          ? "border-[#e5e5e5] bg-[#ffffff] shadow-[0_1px_0_rgba(0,0,0,0.04)]"
+          : "border-[#EAEAEA] bg-white",
+      )}
+    >
       <div className="flex items-center gap-4 lg:hidden">
-        <span className="font-semibold text-[#292929]">Convyy</span>
+        <span className={cn("font-bold", isStudent ? "text-[#3c3c3c]" : "font-semibold text-[#292929]")}>
+          Convyy
+        </span>
       </div>
 
       <div className="flex-1 max-w-md hidden lg:block">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search
+            className={cn(
+              "absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4",
+              isStudent ? "text-[#afafaf]" : "text-gray-400",
+            )}
+          />
           <input
             type="text"
             placeholder={t("Search")}
-            className="w-full pl-10 pr-4 py-2 rounded-xl bg-gray-50 border-none text-sm focus:ring-2 focus:ring-gray-200 transition-all outline-none"
+            className={cn(
+              "w-full pl-10 pr-4 py-2.5 rounded-2xl border text-sm transition-all outline-none",
+              isStudent
+                ? "border-[#e5e5e5] bg-[#f7f7f7] text-[#3c3c3c] placeholder:text-[#afafaf] focus:border-[#58cc02] focus:ring-2 focus:ring-[#b7eb8f]"
+                : "rounded-xl bg-gray-50 border-none focus:ring-2 focus:ring-gray-200",
+            )}
           />
         </div>
       </div>
@@ -148,7 +173,7 @@ export function DashboardHeader({
                   <button
                     onClick={() => {
                       setIsNotificationsOpen(false);
-                      router.push("/dashboard/notifications");
+                      router.push(notificationsHref);
                     }}
                     className="text-xs text-gray-600 hover:text-gray-900 font-medium w-full text-center py-1"
                   >
@@ -181,7 +206,14 @@ export function DashboardHeader({
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold">
+                  <div
+                    className={cn(
+                      "w-full h-full flex items-center justify-center text-white text-xs font-bold",
+                      isStudent
+                        ? "bg-gradient-to-br from-[#58cc02] to-[#43c000]"
+                        : "bg-gradient-to-br from-purple-500 to-indigo-600",
+                    )}
+                  >
                     {user.name?.charAt(0).toUpperCase()}
                   </div>
                 )}
@@ -201,7 +233,7 @@ export function DashboardHeader({
                   </div>
 
                   <Link
-                    href="/dashboard/profile"
+                    href={profileHref}
                     onClick={() => setIsDropdownOpen(false)}
                     className="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                   >
@@ -209,7 +241,7 @@ export function DashboardHeader({
                     {t("Profile")}
                   </Link>
                   <Link
-                    href="/dashboard/settings"
+                    href={settingsHref}
                     onClick={() => setIsDropdownOpen(false)}
                     className="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                   >

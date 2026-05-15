@@ -3,7 +3,6 @@
 import { Loader2 } from "lucide-react";
 
 import type { LearningMeData } from "@/lib/api/learning";
-import { GlassPanel } from "@/components/learning/glass-panel";
 import { TeacherLearningHome } from "@/components/learning/teacher-learning-home";
 import { StudentLearningHome } from "@/components/learning/student-learning-home";
 import type {
@@ -35,20 +34,22 @@ export function LearningHub({
 
   if (!learningMe) {
     return (
-      <div className="mx-auto max-w-[1200px] px-6 py-12">
-        <GlassPanel className="px-6 py-8">
-          <h1 className="text-xl font-semibold tracking-tight text-slate-950">
+      <div className="mx-auto max-w-7xl px-6 py-12">
+        <div className="bg-white rounded-3xl border border-slate-200 px-8 py-12 shadow-sm text-center">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-950">
             Learning hub unavailable
           </h1>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            We could not load the learning state.
+          <p className="mt-3 text-slate-600 font-medium max-w-md mx-auto">
+            We could not load your learning state. Please try refreshing the page or contact support if the issue persists.
           </p>
-        </GlassPanel>
+        </div>
       </div>
     );
   }
 
-  if (learningMe.role === "student") {
+  const isStudent = learningMe.role === "student";
+
+  if (isStudent) {
     return (
       <StudentLearningHome
         learningMe={{ ...learningMe, invitations: learningMe.invitations ?? [] }}
