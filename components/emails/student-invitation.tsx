@@ -14,7 +14,7 @@ export const StudentInvitationEmail = ({
 
   return (
     <BaseLayout previewText={previewText}>
-      <Text style={globalStyles.h1}>You've been invited!</Text>
+      <Text style={globalStyles.h1}>You&apos;ve been invited!</Text>
 
       <Text style={globalStyles.text}>
         Your teacher has invited you to join <strong>{classroomName}</strong>.

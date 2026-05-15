@@ -90,6 +90,7 @@ export function useStudentLearningWorkspace({
   const locale = useLocale();
   const searchParams = useSearchParams();
   const classroomId = searchParams.get("classroomId");
+  const requestedTopicId = searchParams.get("topicId");
 
   const [selectedStudyLanguage, setSelectedStudyLanguage] = useState<AppLocale>(
     isAppLocale(locale) ? locale : "en",
@@ -134,7 +135,9 @@ export function useStudentLearningWorkspace({
   );
   const effectiveSelectedTopicId = availableTopics.some((topic) => topic.id === selectedTopicId)
     ? selectedTopicId
-    : (availableTopics[0]?.id ?? null);
+    : availableTopics.some((topic) => topic.id === requestedTopicId)
+      ? requestedTopicId
+      : (availableTopics[0]?.id ?? null);
   const [outOfSessionReply, setOutOfSessionReply] = useState<string | null>(null);
 
   const onboardingQuery = useQuery({

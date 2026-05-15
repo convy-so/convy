@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { Search, LogOut, Settings, User as UserIcon, Bell } from "lucide-react";
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { useRouter, Link } from "@/i18n/routing";
 import { markNotificationAsRead } from "@/app/actions/notifications";
@@ -29,6 +30,7 @@ export function DashboardHeader({
 }) {
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const t = useTranslations("Header");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -68,7 +70,12 @@ export function DashboardHeader({
   };
 
   const isStudent = user?.role === "student";
-  const profileHref = isStudent ? "/student/profile" : "/dashboard/profile";
+  const selectedClassroomId = searchParams.get("classroomId");
+  const profileHref = isStudent
+    ? selectedClassroomId
+      ? `/student/profile?classroomId=${selectedClassroomId}`
+      : "/student/profile"
+    : "/dashboard/profile";
   const settingsHref = isStudent ? "/student/settings" : "/dashboard/settings";
   const notificationsHref = isStudent ? "/student/notifications" : "/dashboard/notifications";
 
