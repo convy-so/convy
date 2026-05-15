@@ -31,7 +31,10 @@ import * as ClassroomService from "@/lib/learning/classroom-service";
 import * as InterventionService from "@/lib/learning/intervention-service";
 import { getOnboardingState } from "@/lib/learning/onboarding-route-service";
 import { buildClassroomTopicReportSummary } from "@/lib/learning/reporting";
-import { listPendingInvitationsForUser } from "@/lib/learning/student-service";
+import {
+  listPendingInvitationsForUser,
+  listPendingClassroomInvitations,
+} from "@/lib/learning/student-service";
 import {
   resolveTeacherClassroomAccess,
   resolveTeacherStudentAccess,
@@ -537,23 +540,34 @@ export async function getClassroomStudentsData(classroomId: string) {
     throw new Error("Unauthorized");
   }
 
-  const students = await getDb().query.classroomStudents.findMany({
-    where: eq(classroomStudents.classroomId, accessResult.classroom.id),
-    with: {
-      interestProfile: true,
-    },
-  });
+  const [students, pendingInvitations] = await Promise.all([
+    getDb().query.classroomStudents.findMany({
+      where: eq(classroomStudents.classroomId, accessResult.classroom.id),
+      with: {
+        interestProfile: true,
+      },
+    }),
+    listPendingClassroomInvitations({ classroomId: accessResult.classroom.id }),
+  ]);
 
   return {
     success: true as const,
-    data: students.map((student) => ({
-      id: student.id,
-      fullName: student.fullName,
-      email: student.email,
-      inviteStatus: student.inviteStatus,
-      onboardingStatus: student.onboardingStatus,
-      profileLastUpdated: student.interestProfile?.profile.lastUpdated ?? null,
-    })),
+    data: {
+      students: students.map((student) => ({
+        id: student.id,
+        fullName: student.fullName,
+        email: student.email,
+        inviteStatus: student.inviteStatus,
+        onboardingStatus: student.onboardingStatus,
+        profileLastUpdated: student.interestProfile?.profile.lastUpdated ?? null,
+      })),
+      pendingInvitations: pendingInvitations.map((inv) => ({
+        id: inv.id,
+        email: inv.invitedEmail,
+        expiresAt: inv.expiresAt?.toISOString() ?? null,
+        createdAt: inv.createdAt?.toISOString() ?? null,
+      })),
+    },
   };
 }
 
@@ -988,7 +1002,7 @@ export async function getTeacherLearningWorkspaceInitialData() {
       ])
     : [undefined, undefined, undefined];
 
-  const initialClassroomStudentId = initialStudents?.data[0]?.id ?? null;
+  const initialClassroomStudentId = initialStudents?.data.students[0]?.id ?? null;
   const initialTopicId = initialTopics?.data[0]?.id ?? null;
 
   const [

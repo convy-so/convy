@@ -16,6 +16,8 @@ import {
   PlusIcon,
   ChevronDown,
   Check,
+  RefreshCw,
+  Trash2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -73,6 +75,7 @@ export function TeacherLearningHome(
     selectedAccessibleClassroomId,
     canManageStudents,
     students,
+    pendingInvitations,
     topics,
     selectedStudent,
     selectedTopic,
@@ -84,6 +87,8 @@ export function TeacherLearningHome(
     updateTopicStatusMutation,
     createClassSurveyMutation,
     updateInterventionMutation,
+    resendInvitationMutation,
+    cancelInvitationMutation,
     reports,
     questions,
     interventions,
@@ -293,6 +298,50 @@ export function TeacherLearningHome(
                           <Users className="w-6 h-6 text-slate-200" />
                         </div>
                         <p className="text-slate-400 font-medium text-sm">No students enrolled</p>
+                      </div>
+                    )}
+
+                    {pendingInvitations.length > 0 && (
+                      <div className="pt-6 border-t border-slate-100">
+                        <div className="flex items-center gap-2 mb-4 text-[10px] font-medium text-slate-400 uppercase tracking-widest px-1">
+                          <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                          Pending Invitations
+                        </div>
+                        <div className="space-y-3">
+                          {pendingInvitations.map((inv) => (
+                            <div
+                              key={inv.id}
+                              className="w-full rounded-xl border border-slate-50 bg-slate-50/30 p-4 flex items-center justify-between gap-4 group"
+                            >
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium text-slate-700 truncate">{inv.email}</div>
+                                <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                                  Invited {inv.createdAt ? new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(inv.createdAt)) : "Unknown Date"}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  type="button"
+                                  onClick={() => resendInvitationMutation.mutate(inv)}
+                                  disabled={resendInvitationMutation.isPending}
+                                  className="p-1.5 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-sky-600 hover:border-sky-100 transition-all disabled:opacity-50"
+                                  title="Resend Invitation"
+                                >
+                                  <RefreshCw className={`w-3.5 h-3.5 ${resendInvitationMutation.isPending ? 'animate-spin' : ''}`} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => cancelInvitationMutation.mutate(inv)}
+                                  disabled={cancelInvitationMutation.isPending}
+                                  className="p-1.5 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-rose-600 hover:border-rose-100 transition-all disabled:opacity-50"
+                                  title="Cancel Invitation"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>

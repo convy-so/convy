@@ -30,6 +30,15 @@ const classroomStudentSchema = z.object({
   profileLastUpdated: z.string().nullable(),
 });
 
+const pendingInvitationSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  expiresAt: z.string().nullable(),
+  createdAt: z.string().nullable(),
+});
+
+export type PendingInvitation = z.infer<typeof pendingInvitationSchema>;
+
 const topicSchema = z
   .object({
     id: z.string(),
@@ -413,7 +422,13 @@ export async function fetchClassroomStudents(classroomId: string) {
     await fetch(`/api/learning/classrooms/${classroomId}/students`, {
       credentials: "include",
     }),
-    z.object({ success: z.literal(true), data: z.array(classroomStudentSchema) }),
+    z.object({
+      success: z.literal(true),
+      data: z.object({
+        students: z.array(classroomStudentSchema),
+        pendingInvitations: z.array(pendingInvitationSchema),
+      }),
+    }),
   );
 }
 
@@ -624,7 +639,7 @@ export async function fetchTutoringSession(
     await fetch(
       `/api/learning/topics/${topicId}/chat${searchParams.size ? `?${searchParams.toString()}` : ""}`,
       {
-      credentials: "include",
+        credentials: "include",
       },
     ),
     z.object({ success: z.literal(true), data: tutoringSessionSchema }),

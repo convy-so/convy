@@ -9,6 +9,10 @@ import {
   updateLearningInterventionAction,
   updateTopicStatusAction,
 } from "@/app/actions/classroom";
+import {
+  resendStudentInvitationAction,
+  cancelStudentInvitationAction,
+} from "@/app/actions/classroom/student-actions";
 import { createSurveyDraftAction } from "@/app/actions/survey";
 import {
   fetchClassroomAssignedSurveys,
@@ -23,6 +27,7 @@ import {
   fetchTopicReports,
   uploadTopicMaterial,
 } from "@/lib/api/learning";
+import type { PendingInvitation } from "@/lib/api/learning";
 import { queryKeys } from "@/lib/query-keys";
 import { getFriendlyActionError } from "@/lib/action-ux";
 import type { getTeacherLearningWorkspaceInitialData } from "@/lib/server/app-queries";
@@ -92,7 +97,14 @@ export function useTeacherLearningWorkspace(
     staleTime: 30_000,
   });
 
-  const students = useMemo(() => studentsQuery.data?.data ?? [], [studentsQuery.data]);
+  const students = useMemo(
+    () => studentsQuery.data?.data.students ?? [],
+    [studentsQuery.data],
+  );
+  const pendingInvitations = useMemo(
+    () => studentsQuery.data?.data.pendingInvitations ?? [],
+    [studentsQuery.data],
+  );
   const topics = useMemo(() => topicsQuery.data?.data ?? [], [topicsQuery.data]);
   const selectedStudent =
     students.find((student) => student.id === selectedClassroomStudentId) ??
@@ -178,7 +190,7 @@ export function useTeacherLearningWorkspace(
     enabled: Boolean(selectedStudent),
     initialData:
       initialData.initialClassroomStudentPatterns &&
-      selectedStudent?.id === (initialData.initialStudents?.data[0]?.id ?? null)
+      selectedStudent?.id === (initialData.initialStudents?.data.students[0]?.id ?? null)
         ? initialData.initialClassroomStudentPatterns
         : undefined,
     staleTime: 30_000,
@@ -226,7 +238,7 @@ export function useTeacherLearningWorkspace(
       initialData.initialInterventions &&
       selectedAccessibleClassroomId ===
         (initialData.initialClassrooms.data[0]?.id ?? null) &&
-      selectedStudent?.id === (initialData.initialStudents?.data[0]?.id ?? null) &&
+      selectedStudent?.id === (initialData.initialStudents?.data.students[0]?.id ?? null) &&
       (selectedTopic?.id ?? null) === (initialData.initialTopics?.data[0]?.id ?? null)
         ? initialData.initialInterventions
         : undefined,
@@ -320,6 +332,49 @@ export function useTeacherLearningWorkspace(
       ),
   });
 
+  const resendInvitationMutation = useMutation({
+    mutationFn: async (invitation: PendingInvitation) => {
+      if (!selectedAccessibleClassroomId) throw new Error("No classroom selected");
+      const result = await resendStudentInvitationAction({
+        invitationId: invitation.id,
+        classroomId: selectedAccessibleClassroomId,
+      });
+      if (!result.success) {
+        throw new Error(getFriendlyActionError(result.error));
+      }
+      return result.data;
+    },
+    onSuccess: (data) => {
+      toast.success(`Invitation resent to ${data?.email ?? "student"}`);
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Failed to resend invitation"),
+  });
+
+  const cancelInvitationMutation = useMutation({
+    mutationFn: async (invitation: PendingInvitation) => {
+      if (!selectedAccessibleClassroomId) throw new Error("No classroom selected");
+      const result = await cancelStudentInvitationAction({
+        invitationId: invitation.id,
+        classroomId: selectedAccessibleClassroomId,
+      });
+      if (!result.success) {
+        throw new Error(getFriendlyActionError(result.error));
+      }
+      return result.data;
+    },
+    onSuccess: async () => {
+      toast.success("Invitation cancelled");
+      if (selectedAccessibleClassroomId) {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.learning.students(selectedAccessibleClassroomId),
+        });
+      }
+    },
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : "Failed to cancel invitation"),
+  });
+
   const reportsPayload = reportsQuery.data?.data ?? null;
   const reports = reportsPayload?.reports ?? [];
   const questions = questionsQuery.data?.data ?? [];
@@ -345,6 +400,7 @@ export function useTeacherLearningWorkspace(
     studentsQuery,
     topicsQuery,
     students,
+    pendingInvitations,
     topics,
     selectedStudent,
     selectedTopic,
@@ -359,6 +415,8 @@ export function useTeacherLearningWorkspace(
     updateTopicStatusMutation,
     createClassSurveyMutation,
     updateInterventionMutation,
+    resendInvitationMutation,
+    cancelInvitationMutation,
     reportsPayload,
     reports,
     questions,

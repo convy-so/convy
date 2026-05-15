@@ -8,9 +8,9 @@ import type { AppLocale } from "@/lib/i18n/config";
  */
 export const EmailService = {
   /**
-   * Sends an invitation/activation email to a student.
+   * Sends an invitation email to a student.
    */
-  async sendStudentActivationEmail(params: {
+  async sendStudentInvitationEmail(params: {
     email: string;
     invitationId: string;
     classroomName: string;
@@ -18,12 +18,12 @@ export const EmailService = {
     locale?: AppLocale;
     customUrl?: string;
   }) {
-    const activationUrl = params.customUrl || `${env.NEXT_PUBLIC_APP_URL}/learning/activate?token=${params.invitationId}`;
+    const inviteUrl = params.customUrl || `${env.NEXT_PUBLIC_APP_URL}/sign-up?invite=${params.invitationId}`;
 
     return await enqueueEmail({
-      type: "student-activation",
+      type: "student-invitation",
       email: params.email.trim().toLowerCase(),
-      url: activationUrl,
+      url: inviteUrl,
       name: params.studentName,
       metadata: {
         classroomName: params.classroomName,
