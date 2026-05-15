@@ -4,7 +4,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { surveyConversations } from "@/db/schema";
-import { getVerifiedSession } from "@/lib/auth/dal";
+import { getPlatformRole, getVerifiedSession } from "@/lib/auth/dal";
 import { listStudentMemberships } from "@/lib/learning/access";
 import { listPendingInvitationsForUser } from "@/lib/learning/student-service";
 import { handleLearningRouteError } from "@/lib/learning/route-errors";
@@ -18,9 +18,10 @@ export async function GET() {
     ]);
 
     if (memberships.length === 0) {
+      const learnerPersona = getPlatformRole(session.user) === "student";
       return NextResponse.json({
-        role: session.user.role === "student" ? "student" : "non-student",
-        student: session.user.role === "student" ? [] : null,
+        role: learnerPersona ? "student" : "non-student",
+        student: learnerPersona ? [] : null,
         invitations: invitations.map((invitation) => ({
           id: invitation.id,
           classroomId: invitation.classroomId,

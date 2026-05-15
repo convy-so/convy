@@ -2,8 +2,15 @@ import { getVerifiedSession } from "@/lib/auth/dal";
 import { getDb } from "@/db";
 import { classroomStudents, studentProgressReports, studentModels, studentModelSnapshots } from "@/db/schema/learning";
 import { desc, eq, and } from "drizzle-orm";
-import { TrendingUp, Award, BrainCircuit, Target, AlertCircle, ChevronLeft } from "lucide-react";
+import { TrendingUp, Award, Target, AlertCircle, ChevronLeft, Sparkles, Lightbulb, Map } from "lucide-react";
 import { Link } from "@/i18n/routing";
+import { cn } from "@/lib/utils";
+
+function masteryLabelForStudent(level: string) {
+    if (level === "generative") return { text: "Strong — can use this in new situations", short: "Strong", tone: "good" as const };
+    if (level === "applied") return { text: "Getting there — you can use it with support", short: "Practice more", tone: "mid" as const };
+    return { text: "Still building — keep studying this idea", short: "Building", tone: "low" as const };
+}
 
 export default async function StudentProgressPage(props: {
     searchParams: Promise<{ classroomId?: string }>;
@@ -52,68 +59,84 @@ export default async function StudentProgressPage(props: {
 
     return (
         <div className="space-y-8">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                     {classroomId && (
-                        <Link href="/student/classes" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 uppercase tracking-widest mb-3 hover:text-indigo-700 transition-colors">
-                            <ChevronLeft className="w-3.5 h-3.5" />
-                            Back to Classes
+                        <Link href="/student/classes" className="mb-3 inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wide text-[#43c000] hover:text-[#3c7f0a] transition-colors">
+                            <ChevronLeft className="h-3.5 w-3.5" />
+                            All courses
                         </Link>
                     )}
-                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-                        {selectedProfile ? `${selectedProfile.classroom.title} Progress` : 'My Progress'}
+                    <div className="mb-2 inline-flex w-fit items-center gap-2 rounded-full border-2 border-[#bceb9c] bg-[#eefbd6] px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-[#3c7f0a]">
+                        <Award className="h-3.5 w-3.5 text-[#58cc02]" />
+                        Progress
+                    </div>
+                    <h1 className="text-3xl font-extrabold tracking-tight text-[#3c3c3c] sm:text-4xl">
+                        {selectedProfile ? `${selectedProfile.classroom.title}` : "My progress"}
                     </h1>
-                    <p className="text-slate-500 text-lg mt-1 font-medium">Review your test scores, quizzes, and estimated understanding.</p>
+                    <p className="mt-2 max-w-xl text-[15px] font-medium leading-relaxed text-[#777777]">
+                        Mastery scores and your understanding map update as you learn.
+                    </p>
                 </div>
                 {studentProfiles.length > 1 && !classroomId && (
-                    <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-2 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-amber-500" />
-                        <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Multiple Classes Found</span>
+                    <div className="flex items-center gap-2 rounded-2xl border-2 border-[#ffd875] bg-[#fff4d4] px-4 py-2.5">
+                        <AlertCircle className="h-4 w-4 shrink-0 text-[#9a6b00]" />
+                        <span className="text-[11px] font-extrabold uppercase tracking-wide text-[#9a6b00]">Pick a class from My classes for details</span>
                     </div>
                 )}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* AI Estimates Panel */}
-                <div className="lg:col-span-1 space-y-6">
-                    <div className="bg-white rounded-[2rem] border border-slate-100 p-8 shadow-sm">
-                        <div className="flex items-center gap-3 mb-8">
-                            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100">
-                                <BrainCircuit className="w-5 h-5" />
+            <div className="flex flex-col gap-8">
+                {/* Skill map — shown first; quiz results below on all screen sizes */}
+                <div className="space-y-6">
+                    <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                        <div className="mb-6 flex items-start gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+                                <Map className="h-5 w-5" aria-hidden />
                             </div>
-                            <h2 className="text-lg font-bold text-slate-900">Understanding Map</h2>
+                            <div>
+                                <h2 className="text-lg font-semibold text-gray-900">Your skill map</h2>
+                                <p className="mt-1 text-sm text-gray-600">
+                                    A simple picture of how well you know each main idea. It updates as you learn and answer questions.
+                                </p>
+                            </div>
                         </div>
 
                         {latestModel && latestModel.knowledgeStateModel && latestModel.knowledgeStateModel.length > 0 ? (
                             <div className="space-y-6">
                                 {latestModel.knowledgeStateModel.map((node: any) => {
                                     const pct = node.masteryLevel === 'generative' ? 100 : node.masteryLevel === 'applied' ? 66 : 33;
+                                    const label = masteryLabelForStudent(String(node.masteryLevel));
                                     return (
-                                        <div key={node.conceptKey} className="space-y-3">
-                                            <div className="flex items-center justify-between text-xs">
-                                                <span className="font-bold text-slate-700 uppercase tracking-wider">{node.title}</span>
+                                        <div key={node.conceptKey} className="space-y-3 rounded-xl border border-gray-100 bg-gray-50/50 p-4">
+                                            <div className="flex items-start justify-between gap-2 text-sm">
+                                                <span className="flex items-start gap-2 font-medium text-gray-900">
+                                                    <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-hidden />
+                                                    <span>{node.title}</span>
+                                                </span>
                                                 <span className={cn(
-                                                    "px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter border",
-                                                    node.masteryLevel === 'generative' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
-                                                    node.masteryLevel === 'applied' ? 'bg-blue-50 text-blue-600 border-blue-100' : 
-                                                    'bg-slate-50 text-slate-500 border-slate-100'
+                                                    "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                                                    label.tone === "good" && "border-emerald-200 bg-emerald-50 text-emerald-800",
+                                                    label.tone === "mid" && "border-sky-200 bg-sky-50 text-sky-800",
+                                                    label.tone === "low" && "border-gray-200 bg-white text-gray-600",
                                                 )}>
-                                                    {node.masteryLevel}
+                                                    {label.short}
                                                 </span>
                                             </div>
-                                            <div className="h-2.5 w-full bg-slate-50 rounded-full overflow-hidden border border-slate-100">
+                                            <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-200">
                                                 <div 
                                                     className={cn(
                                                         "h-full rounded-full transition-all duration-500",
-                                                        node.masteryLevel === 'generative' ? 'bg-emerald-500' : 'bg-indigo-500'
+                                                        label.tone === "good" ? "bg-emerald-500" : label.tone === "mid" ? "bg-sky-500" : "bg-gray-400"
                                                     )} 
                                                     style={{ width: `${pct}%` }}
                                                 />
                                             </div>
+                                            <p className="text-xs leading-relaxed text-gray-600">{label.text}</p>
                                             {node.misconceptions?.length > 0 && (
-                                                <p className="text-[11px] text-amber-600 font-medium flex items-start gap-1.5 mt-1.5 italic bg-amber-50/50 p-2 rounded-lg border border-amber-100/50">
-                                                    <AlertCircle className="w-3.5 h-3.5 shrink-0" /> 
-                                                    {node.misconceptions[0]}
+                                                <p className="flex items-start gap-2 rounded-lg border border-amber-100 bg-amber-50/80 p-2 text-xs text-amber-900">
+                                                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> 
+                                                    <span><span className="font-semibold">Tip: </span>{node.misconceptions[0]}</span>
                                                 </p>
                                             )}
                                         </div>
@@ -121,81 +144,79 @@ export default async function StudentProgressPage(props: {
                                 })}
                             </div>
                         ) : (
-                            <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                                <AlertCircle className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest px-4">
-                                    Learning map forming...
+                            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/60 px-4 py-10 text-center">
+                                <Sparkles className="mx-auto mb-3 h-9 w-9 text-violet-400" aria-hidden />
+                                <p className="text-sm font-semibold text-gray-900">We&apos;re still learning about your skills</p>
+                                <p className="mx-auto mt-2 max-w-xs text-xs leading-relaxed text-gray-600">
+                                    After a few lessons or quizzes, a map of your strengths will appear here so you can see what you&apos;ve mastered and what to review next.
                                 </p>
                             </div>
                         )}
                     </div>
                 </div>
 
-                {/* Progress Reports (Scores & Quizzes) */}
-                <div className="lg:col-span-2 space-y-6">
+                {/* Quiz & lesson results */}
+                <div className="space-y-6">
                     <div className="flex items-center justify-between px-1">
-                        <h2 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                            <Award className="w-4 h-4 text-emerald-500" />
-                            Mastery Records
+                        <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                            <Award className="h-4 w-4 text-amber-500" aria-hidden />
+                            Quiz &amp; lesson results
                         </h2>
-                        <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">{progressReports.length} Reports</span>
+                        <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium tabular-nums text-gray-600">{progressReports.length}</span>
                     </div>
 
                     {progressReports.length > 0 ? (
-                        <div className="grid gap-6">
+                        <div className="grid gap-4">
                             {progressReports.map((report) => (
-                                <div key={report.id} className="bg-white rounded-[2rem] border border-slate-100 p-8 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 group">
-                                    <div className="flex items-start justify-between">
-                                        <div className="space-y-1">
-                                            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.15em]">{report.topic?.subjectLabel || 'General'}</span>
-                                            <h3 className="text-xl font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                                                {report.topic?.title || "Topic Assessment"}
+                                <div key={report.id} className="group rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-colors hover:border-gray-300">
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="min-w-0 space-y-1">
+                                            <span className="text-xs font-medium text-gray-500">{report.topic?.subjectLabel || "General"}</span>
+                                            <h3 className="text-lg font-semibold text-gray-900 transition-colors group-hover:text-gray-700">
+                                                {report.topic?.title || "Topic check-in"}
                                             </h3>
-                                            <div className="flex items-center gap-3 mt-1">
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                                                    <Target className="w-3 h-3" />
-                                                    Assessment
-                                                </span>
-                                                <span className="w-1 h-1 rounded-full bg-slate-200" />
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                                    {new Date(report.createdAt).toLocaleDateString()}
-                                                </span>
+                                            <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                                                <Target className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                                <span>Assessment</span>
+                                                <span className="text-gray-300">·</span>
+                                                <span>{new Date(report.createdAt).toLocaleDateString()}</span>
                                             </div>
                                         </div>
-                                        <div className="flex flex-col items-end">
-                                            <div className="relative">
-                                                <span className="text-4xl font-black text-slate-900 tracking-tighter relative z-10">
-                                                    {report.masteryPercent}%
+                                        <div className="flex shrink-0 flex-col items-end">
+                                            <div className="flex h-16 w-16 flex-col items-center justify-center rounded-xl border border-gray-200 bg-gray-50">
+                                                <span className="text-xl font-bold tabular-nums tracking-tight text-gray-900">
+                                                    {report.masteryPercent}
+                                                    <span className="text-sm font-semibold">%</span>
                                                 </span>
-                                                <div className="absolute -inset-2 bg-indigo-50 rounded-lg -rotate-3 scale-110 opacity-0 group-hover:opacity-100 transition-opacity" />
                                             </div>
-                                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">Mastery Score</span>
+                                            <span className="mt-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-500">Score</span>
                                         </div>
                                     </div>
 
                                     {report.report?.studentSummary && (
-                                        <div className="mt-6 pt-6 border-t border-slate-50">
+                                        <div className="mt-5 border-t border-gray-100 pt-5">
                                             <div className="flex items-start gap-3">
-                                                <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
-                                                    <BrainCircuit className="w-4 h-4 text-slate-400" />
+                                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-600">
+                                                    <Sparkles className="h-4 w-4" aria-hidden />
                                                 </div>
-                                                <p className="text-sm text-slate-600 leading-relaxed font-medium italic">
-                                                    &ldquo;{report.report.studentSummary}&rdquo;
+                                                <p className="text-sm leading-relaxed text-gray-700">
+                                                    <span className="font-medium text-gray-900">In plain words: </span>
+                                                    {report.report.studentSummary}
                                                 </p>
                                             </div>
                                         </div>
                                     )}
 
                                     {report.report?.identifiedGaps && report.report.identifiedGaps.length > 0 && (
-                                        <div className="mt-6 bg-amber-50/50 rounded-2xl p-5 border border-amber-100/50">
-                                            <h4 className="text-[10px] font-black text-amber-700 flex items-center gap-2 mb-3 uppercase tracking-widest">
-                                                <AlertCircle className="w-3.5 h-3.5" />
-                                                Growth Opportunities
+                                        <div className="mt-5 rounded-xl border border-amber-100 bg-amber-50/40 p-4">
+                                            <h4 className="mb-3 flex items-center gap-2 text-xs font-semibold text-amber-900">
+                                                <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                                Good topics to review next
                                             </h4>
-                                            <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                            <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
                                                 {report.report.identifiedGaps.map((gap: string, idx: number) => (
-                                                    <li key={idx} className="flex items-center gap-2 text-xs font-bold text-amber-800 bg-white/60 px-3 py-2 rounded-xl border border-amber-100/40">
-                                                        <div className="w-1 h-1 rounded-full bg-amber-400" />
+                                                    <li key={idx} className="flex items-start gap-2 rounded-lg border border-amber-100/60 bg-white/80 px-3 py-2 text-xs text-amber-950">
+                                                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" aria-hidden />
                                                         {gap}
                                                     </li>
                                                 ))}
@@ -206,13 +227,13 @@ export default async function StudentProgressPage(props: {
                             ))}
                         </div>
                     ) : (
-                        <div className="bg-white rounded-[3rem] border border-slate-100 p-20 text-center flex flex-col items-center shadow-sm">
-                            <div className="w-20 h-20 rounded-3xl bg-slate-50 flex items-center justify-center mb-6 border border-slate-100">
-                                <TrendingUp className="w-10 h-10 text-slate-200" />
+                        <div className="flex flex-col items-center rounded-2xl border border-dashed border-gray-200 bg-gray-50/50 px-6 py-16 text-center">
+                            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl border border-gray-200 bg-white">
+                                <TrendingUp className="h-7 w-7 text-gray-300" aria-hidden />
                             </div>
-                            <h3 className="text-xl font-bold text-slate-900">No mastery records yet</h3>
-                            <p className="text-slate-500 max-w-sm mx-auto mt-2 font-medium">
-                                Complete your first tutoring session or quiz to unlock your personalized progress reports.
+                            <h3 className="text-lg font-semibold text-gray-900">No scores yet</h3>
+                            <p className="mx-auto mt-2 max-w-sm text-sm text-gray-600">
+                                Complete a tutoring chat or assigned check-in. Your results will show up here with a short explanation.
                             </p>
                         </div>
                     )}
@@ -220,8 +241,4 @@ export default async function StudentProgressPage(props: {
             </div>
         </div>
     );
-}
-
-function cn(...inputs: any[]) {
-    return inputs.filter(Boolean).join(" ");
 }

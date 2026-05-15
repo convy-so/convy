@@ -241,6 +241,7 @@
                                     "hideText":  "Hide transcript",
                                     "showText":  "Show transcript",
                                     "voiceSurveyIntro":  "Join our voice-powered interview. Choose your preferred language and start speaking naturally.",
+                                    "voiceSurveyTitle":  "Voice interview",
                                     "selectLanguage":  "Select Language",
                                     "startInterview":  "Start Interview",
                                     "micPermissionDenied":  "Microphone access is required for this survey. Please enable it in your browser settings to continue.",

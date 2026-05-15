@@ -1,10 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import Image from "next/image";
 import { type UIMessage } from "ai";
 import {
-  BookOpen,
   Brain,
   ClipboardList,
   Keyboard,
@@ -32,9 +30,12 @@ import {
   appLocales,
 } from "@/lib/i18n/config";
 import { useStudentLearningWorkspace } from "@/components/learning/hooks/use-student-learning-workspace";
-import { MetricTile } from "@/components/learning/metric-tile";
 import type { LearningMeData } from "@/lib/api/learning";
-import { GlassPanel } from "@/components/learning/glass-panel";
+import { StudentClassHubPanel } from "@/components/learning/student-class-hub-panel";
+import { StudentInvitationCard } from "@/components/learning/student-invitation-card";
+import { StudentCourseCard } from "@/components/student/student-course-card";
+import { StatsCard } from "@/components/dashboard/stats-card";
+import { useAuth } from "@/components/providers/auth-provider";
 import { cn } from "@/lib/utils";
 
 type StudentLearningMeData = Extract<LearningMeData, { role: "student" }> & {
@@ -119,7 +120,14 @@ function appendTranscript(currentValue: string, transcript: string) {
   return trimmedCurrent ? `${trimmedCurrent} ${transcript}`.trim() : transcript;
 }
 
+function firstNameFromDisplayName(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  return trimmed.split(/\s+/)[0] ?? null;
+}
+
 export function StudentLearningHome({ learningMe }: { learningMe: StudentLearningMeData }) {
+  const { user } = useAuth();
   const {
     memberships,
     selectedStudyLanguage,
@@ -149,6 +157,12 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
     acceptInvitationMutation,
     rejectInvitationMutation,
   } = useStudentLearningWorkspace({ learningMe });
+
+  const greetingFirstName =
+    firstNameFromDisplayName(learningMe.student[0]?.fullName) ??
+    firstNameFromDisplayName(user?.name) ??
+    firstNameFromDisplayName(user?.email?.split("@")[0]) ??
+    "there";
 
   const [onboardingInput, setOnboardingInput] = useState("");
   const [sessionInput, setSessionInput] = useState("");
@@ -219,147 +233,100 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F8F9FB] pb-20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10 pt-8">
+    <div className="min-h-screen bg-[#f7f7f7] pb-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10 pt-6 sm:pt-8">
         
         {/* Welcome Section */}
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sky-600 font-semibold text-xs uppercase tracking-widest">
-              <Sparkles className="w-3.5 h-3.5" />
-              Learning Dashboard
+        <div className="flex flex-col gap-6">
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+              <Sparkles className="h-3.5 w-3.5 text-gray-500" />
+              Today&apos;s learning
             </div>
-            <h1 className="text-4xl font-bold text-slate-900 tracking-tight">
-              Hello, {learningMe.student[0]?.fullName?.split(' ')[0] ?? 'Explorer'} 👋
+            <h1 className="text-3xl font-semibold tracking-tight text-gray-900 sm:text-4xl">
+              Hi, {greetingFirstName}!
             </h1>
-            <p className="text-slate-500 font-medium">Here's what's happening in your classrooms today.</p>
+            <p className="max-w-lg text-[15px] leading-relaxed text-gray-600">
+              Pick a course below, then continue where you left off.
+            </p>
           </div>
 
-          <div className="flex items-center gap-3">
-             {/* Simple Metric Overview */}
-             <div className="flex items-center gap-6 px-6 py-3 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Classes</span>
-                  <span className="text-xl font-bold text-slate-900">{membershipCount}</span>
-                </div>
-                <div className="w-px h-8 bg-slate-100" />
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Insights</span>
-                  <span className="text-xl font-bold text-slate-900">{patterns.length}</span>
-                </div>
-             </div>
+          <div className="grid w-full max-w-md grid-cols-2 gap-3 sm:max-w-lg">
+            <StatsCard
+              title="Courses"
+              value={membershipCount}
+              icon={<GraduationCap className="h-5 w-5" />}
+              iconColor="bg-gray-100 text-gray-700 border border-gray-200"
+              description="Enrolled"
+            />
+            {patterns.length > 0 && (
+              <StatsCard
+                title="Insights"
+                value={patterns.length}
+                icon={<Brain className="h-5 w-5" />}
+                iconColor="bg-gray-100 text-gray-700 border border-gray-200"
+                description="Signals"
+              />
+            )}
           </div>
         </div>
 
         {/* The Grid: Classrooms & Invitations */}
         <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <GraduationCap className="w-5 h-5 text-indigo-500" />
-              My Learning Journey
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-900 text-white shadow-sm">
+                <GraduationCap className="h-5 w-5" />
+              </span>
+              Your courses
             </h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* 1. Invitations Cards (Priority) */}
             {invitations.map((invitation) => (
-              <GlassPanel key={invitation.id} className="p-6 border-amber-100 bg-amber-50/30 group relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-amber-200/20 rounded-full -mr-12 -mt-12 blur-2xl" />
-                <div className="flex flex-col h-full gap-4 relative z-10">
-                  <div className="flex items-start justify-between">
-                    <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center shadow-sm border border-amber-100 text-amber-600">
-                      <Sparkles className="w-6 h-6" />
-                    </div>
-                    <span className="px-2 py-1 rounded-full bg-amber-100 text-[10px] font-bold text-amber-700 uppercase tracking-wider border border-amber-200">
-                      New Invite
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-lg leading-tight">{invitation.classroomTitle}</h3>
-                    <p className="text-xs text-slate-500 font-medium mt-1 uppercase tracking-wide">Classroom Invitation</p>
-                  </div>
-                  <div className="flex gap-2 mt-auto pt-2">
-                    <button
-                      onClick={() => acceptInvitationMutation.mutate(invitation.id)}
-                      className="flex-1 bg-slate-900 text-white rounded-xl py-2.5 text-xs font-bold hover:bg-slate-800 transition-all shadow-sm"
-                      disabled={acceptInvitationMutation.isPending}
-                    >
-                      Accept
-                    </button>
-                    <button
-                      onClick={() => rejectInvitationMutation.mutate(invitation.id)}
-                      className="flex-1 bg-white border border-slate-200 text-slate-600 rounded-xl py-2.5 text-xs font-bold hover:bg-slate-50 transition-all"
-                      disabled={rejectInvitationMutation.isPending}
-                    >
-                      Decline
-                    </button>
-                  </div>
-                </div>
-              </GlassPanel>
+              <StudentInvitationCard
+                key={invitation.id}
+                invitation={invitation}
+                onAccept={() => acceptInvitationMutation.mutate(invitation.id)}
+                onDecline={() => rejectInvitationMutation.mutate(invitation.id)}
+                acceptPending={
+                  acceptInvitationMutation.isPending &&
+                  acceptInvitationMutation.variables === invitation.id
+                }
+                declinePending={
+                  rejectInvitationMutation.isPending &&
+                  rejectInvitationMutation.variables === invitation.id
+                }
+              />
             ))}
 
             {/* 2. Classroom Cards */}
             {memberships.map((membership) => {
               const isActive = selectedMembership?.classroomStudentId === membership.classroomStudentId;
               return (
-                <GlassPanel 
-                  key={membership.classroomStudentId} 
-                  className={cn(
-                    "p-6 transition-all duration-300 group cursor-pointer hover:shadow-xl hover:-translate-y-1",
-                    isActive ? "ring-2 ring-indigo-500 border-indigo-100 shadow-indigo-100/50" : "hover:border-slate-200"
-                  )}
-                  onClick={() => {
+                <StudentCourseCard
+                  key={membership.classroomStudentId}
+                  membership={membership}
+                  isActive={isActive}
+                  variant="selectable"
+                  onSelect={() => {
                     setSelectedMembershipId(membership.classroomStudentId);
                     setSelectedTopicId(membership.topics[0]?.id ?? null);
                     setOutOfSessionReply(null);
                   }}
-                >
-                  <div className="flex flex-col h-full gap-5">
-                    <div className="flex items-start justify-between">
-                      <div className={cn(
-                        "w-12 h-12 rounded-xl flex items-center justify-center shadow-sm border transition-colors",
-                        isActive ? "bg-indigo-600 text-white border-indigo-500" : "bg-white text-slate-400 border-slate-100 group-hover:text-slate-900"
-                      )}>
-                        <BookOpen className="w-6 h-6" />
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{membership.classroom.gradeLabel}</span>
-                        {membership.needsOnboarding && (
-                          <span className="px-2 py-0.5 rounded-full bg-blue-50 text-[9px] font-bold text-blue-600 uppercase tracking-tighter border border-blue-100">
-                            Setup Needed
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-slate-900 text-lg leading-tight group-hover:text-indigo-600 transition-colors">{membership.classroom.title}</h3>
-                      <div className="flex items-center gap-2 mt-2">
-                        <div className="flex -space-x-1.5">
-                           {[1,2,3].map(i => <div key={i} className="w-5 h-5 rounded-full bg-slate-100 border-2 border-white ring-1 ring-slate-50" />)}
-                        </div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{membership.topics.length} Topics Available</span>
-                      </div>
-                    </div>
-                    <div className="mt-auto flex items-center justify-between pt-2">
-                      <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5 uppercase tracking-widest">
-                        <Clock className="w-3.5 h-3.5" />
-                        {membership.topics[0]?.subjectLabel ?? "General"}
-                      </span>
-                      <ArrowRight className={cn("w-5 h-5 transition-transform", isActive ? "text-indigo-500 translate-x-1" : "text-slate-300 group-hover:text-slate-600")} />
-                    </div>
-                  </div>
-                </div>
+                />
               );
             })}
 
             {/* 3. Empty State Card */}
             {memberships.length === 0 && invitations.length === 0 && (
-              <div className="col-span-full py-20 bg-white rounded-3xl border border-dashed border-slate-200 flex flex-col items-center justify-center text-center">
-                 <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center mb-4">
-                    <GraduationCap className="w-8 h-8 text-slate-300" />
+              <div className="col-span-full flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-[#e5e5e5] bg-white py-20 text-center shadow-[0_4px_0_0_#e5e5e5]">
+                 <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#eefbd6]">
+                    <GraduationCap className="h-8 w-8 text-[#58cc02]" />
                  </div>
-                 <h3 className="text-lg font-bold text-slate-900">Waiting for access</h3>
-                 <p className="text-slate-500 text-sm max-w-xs mt-2 font-medium">Your teacher will invite you to a classroom. Once accepted, your learning journey begins here.</p>
+                 <h3 className="text-lg font-extrabold text-[#3c3c3c]">No courses yet</h3>
+                 <p className="mt-2 max-w-sm px-4 text-sm font-medium leading-relaxed text-[#777777]">When your teacher adds you to a class, it will show up here. Check back soon.</p>
               </div>
             )}
           </div>
@@ -372,32 +339,36 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="space-y-8"
+              className="space-y-8 overflow-visible"
             >
               {/* Header for Active Area */}
-              <div className="flex items-center gap-4 py-4 border-b border-slate-100">
-                <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white">
-                   <LayoutDashboard className="w-5 h-5" />
-                </div>
-                <div>
-                   <h2 className="text-xl font-bold text-slate-900">{selectedMembership.classroom.title}</h2>
-                   <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest">Learning Workspace</p>
+              <div className="relative z-40 flex flex-col gap-4 border-b border-gray-200 py-4 sm:flex-row sm:items-center">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-900 text-white shadow-sm">
+                   <LayoutDashboard className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                   <h2 className="truncate text-xl font-semibold text-gray-900">{selectedMembership.classroom.title}</h2>
+                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Study workspace</p>
+                  </div>
                 </div>
                 
-                {/* Topic Switcher - Minimalist version of the previous control bar */}
-                <div className="ml-auto flex items-center gap-3">
-                   <div className="relative" ref={topicDropdownRef}>
+                {/* Topic Switcher */}
+                <div className="relative z-50 flex w-full flex-1 items-center justify-end sm:ml-auto sm:w-auto">
+                   <div className="relative w-full sm:w-auto" ref={topicDropdownRef}>
                       <button
+                        type="button"
                         onClick={() => setIsTopicDropdownOpen(!isTopicDropdownOpen)}
-                        className="flex items-center gap-3 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
+                        className="flex w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-left text-sm font-semibold text-gray-900 shadow-sm transition-colors hover:bg-gray-50 sm:min-w-[200px]"
                       >
-                        {selectedTopic?.title ?? "Choose Topic"}
-                        <ChevronDown className={cn("w-4 h-4 transition-transform", isTopicDropdownOpen && "rotate-180")} />
+                        <span className="truncate">{selectedTopic?.title ?? "Choose topic"}</span>
+                        <ChevronDown className={cn("h-4 w-4 shrink-0 text-gray-500 transition-transform", isTopicDropdownOpen && "rotate-180")} />
                       </button>
                       {isTopicDropdownOpen && (
-                        <div className="absolute top-full right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 z-50 py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                        <div className="absolute right-0 top-full z-[100] mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg animate-in fade-in zoom-in-95 duration-150 sm:w-64">
                           {selectedMembership.topics.map(topic => (
                             <button
+                              type="button"
                               key={topic.id}
                               onClick={() => {
                                 setSelectedTopicId(topic.id);
@@ -405,12 +376,12 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
                                 setIsTopicDropdownOpen(false);
                               }}
                               className={cn(
-                                "w-full px-4 py-3 text-left text-sm font-bold flex items-center justify-between transition-colors",
-                                effectiveSelectedTopicId === topic.id ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50"
+                                "flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium transition-colors",
+                                effectiveSelectedTopicId === topic.id ? "bg-gray-100 text-gray-900" : "text-gray-600 hover:bg-gray-50",
                               )}
                             >
-                              {topic.title}
-                              {effectiveSelectedTopicId === topic.id && <Check className="w-4 h-4" />}
+                              <span className="truncate">{topic.title}</span>
+                              {effectiveSelectedTopicId === topic.id && <Check className="h-4 w-4 shrink-0 text-gray-700" />}
                             </button>
                           ))}
                         </div>
@@ -419,8 +390,19 @@ export function StudentLearningHome({ learningMe }: { learningMe: StudentLearnin
                 </div>
               </div>
 
+              <div className="relative z-10">
+                <StudentClassHubPanel
+                  membership={selectedMembership}
+                  selectedTopicId={effectiveSelectedTopicId}
+                  onSelectTopic={(id) => {
+                    setSelectedTopicId(id);
+                    setOutOfSessionReply(null);
+                  }}
+                />
+              </div>
+
               {/* Learning Hub Content (Onboarding or Session) */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="relative z-10 grid grid-cols-1 gap-8 lg:grid-cols-3">
                 {/* Main Interaction Area */}
                 <div className="lg:col-span-2 space-y-8">
                   {selectedMembership.needsOnboarding ? (

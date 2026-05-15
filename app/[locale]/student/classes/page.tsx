@@ -29,13 +29,15 @@ export default async function StudentClassesPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2 text-indigo-600 font-bold text-xs uppercase tracking-[0.2em]">
-          <GraduationCap className="w-4 h-4" />
-          Academic Management
+      <div className="flex flex-col gap-2">
+        <div className="inline-flex w-fit items-center gap-2 rounded-full border-2 border-[#bceb9c] bg-[#eefbd6] px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-[#3c7f0a]">
+          <GraduationCap className="h-3.5 w-3.5 text-[#58cc02]" />
+          Courses
         </div>
-        <h1 className="text-4xl font-black text-slate-900 tracking-tight">My Classes</h1>
-        <p className="text-slate-500 font-medium text-lg">Manage your active classroom memberships and performance records.</p>
+        <h1 className="text-3xl font-extrabold tracking-tight text-[#3c3c3c] sm:text-4xl">My classes</h1>
+        <p className="max-w-xl text-[15px] font-medium leading-relaxed text-[#777777]">
+          Open a course to learn, or review your progress and scores anytime.
+        </p>
       </div>
 
       <Suspense fallback={

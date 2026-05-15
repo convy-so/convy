@@ -24,7 +24,7 @@ import {
   surveys,
   topicMaterials,
 } from "@/db/schema";
-import { getCurrentSession, getVerifiedSession } from "@/lib/auth/dal";
+import { getCurrentSession, getPlatformRole, getVerifiedSession } from "@/lib/auth/dal";
 import { env } from "@/lib/env";
 import { listStudentMemberships, getTeacherTopicAccess } from "@/lib/learning/access";
 import * as ClassroomService from "@/lib/learning/classroom-service";
@@ -106,9 +106,10 @@ export const getLearningMeData = cache(async (): Promise<LearningMeData> => {
   ]);
 
   if (memberships.length === 0) {
+    const learnerPersona = getPlatformRole(session.user) === "student";
     return {
-      role: session.user.role === "student" ? "student" : "non-student",
-      student: session.user.role === "student" ? [] : null,
+      role: learnerPersona ? "student" : "non-student",
+      student: learnerPersona ? [] : null,
       invitations: invitations.map((invitation) => ({
         id: invitation.id,
         classroomId: invitation.classroomId,
